@@ -27,11 +27,13 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@types/uuid": "^10.0.0",
     "better-sqlite3": "^11.0.0",
     "chokidar": "^3.5.3",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "grammy": "^1.35.0",
+    "jsep": "^1.4.0",
     "node-cron": "^3.0.3",
     "openai": "^4.80.0",
     "pino": "^8.17.2",
