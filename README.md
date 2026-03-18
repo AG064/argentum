@@ -1,256 +1,157 @@
 # AG-Claw
 
-**Modular AI Agent Framework built on OpenClaw**
+**Modular AI Agent Framework** — OpenClaw, but with plugins, real security, and 59 features you can toggle on and off.
 
-AG-Claw is what happens when you take [OpenClaw](https://github.com/nickarora/openclaw) and decide it needs a plugin system, a real security layer, and support for more than just Telegram. You get a self-hosted AI agent that you can actually customize. Feature by feature, on your terms.
+Self-hosted. No cloud. Your data stays on your machine.
 
-Based on OpenClaw (MIT License).
+## What's different from OpenClaw?
 
-## Architecture
+| | OpenClaw | AG-Claw |
+|---|---|---|
+| Features | Fixed | 59 modular plugins |
+| Security | Basic | AES-256, audit log, rate limiting, allowlists |
+| CLI | `openclaw` | `agclaw` — same commands + more |
+| Memory | Single store | SQLite, markdown, semantic search, compression |
+| Channels | Telegram | Telegram, Discord, Slack, WhatsApp, email, SMS |
+| Deployment | Manual | Docker, auto-update, health monitoring |
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   AG-Claw Gateway                    │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │ Config   │  │ Plugin   │  │ Security Policy   │  │
-│  │ Layer    │  │ Loader   │  │ Engine (NemoClaw) │  │
-│  └────┬─────┘  └────┬─────┘  └─────────┬─────────┘  │
-│       │              │                   │            │
-│  ┌────▼──────────────▼───────────────────▼─────────┐ │
-│  │              Feature Registry                    │ │
-│  ├──────────┬──────────┬───────────┬───────────────┤ │
-│  │ Webchat  │  Voice   │ Knowledge │   Browser     │ │
-│  │          │ TTS/STT  │  Graph    │   Automation  │ │
-│  ├──────────┼──────────┼───────────┼───────────────┤ │
-│  │ Webhooks │  Mesh    │  Live     │  Container    │ │
-│  │          │ Workflows│  Canvas   │  Sandbox      │ │
-│  ├──────────┼──────────┼───────────┼───────────────┤ │
-│  │ Morning  │ Evening  │  Smart    │    Group      │ │
-│  │ Briefing │  Recap   │ Recom.    │  Management   │ │
-│  └──────────┴──────────┴───────────┴───────────────┘ │
-│                       │                               │
-│  ┌────────────────────▼────────────────────────────┐ │
-│  │              Channel Layer                       │ │
-│  ├──────────┬──────────────┬───────────────────────┤ │
-│  │ Telegram │   Webchat    │   Mobile (Push)       │ │
-│  └──────────┴──────────────┴───────────────────────┘ │
-│                       │                               │
-│  ┌────────────────────▼────────────────────────────┐ │
-│  │              Memory Layer                        │ │
-│  ├──────────┬──────────────┬───────────────────────┤ │
-│  │  SQLite  │  Markdown    │  Supabase / Evolving  │ │
-│  └──────────┴──────────────┴───────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-```
+## Quick Start
 
-## Features
-
-### Communication & Channels
-| # | Feature | Status |
-|---|---------|--------|
-| 1 | Telegram Integration | 🔧 In Development |
-| 2 | Webchat (WebSocket) | ✅ Implemented |
-| 3 | Mobile Push Notifications | 🔧 In Development |
-| 4 | Discord Bot | ✅ Implemented |
-| 5 | Slack Integration | ✅ Implemented |
-| 6 | Email (IMAP/SMTP) | ✅ Implemented |
-| 7 | SMS Gateway | ✅ Implemented |
-| 8 | WhatsApp Bridge | ✅ Implemented |
-
-### Voice & Audio
-| # | Feature | Status |
-|---|---------|--------|
-| 9 | Text-to-Speech (TTS) | ✅ Implemented |
-| 10 | Speech-to-Text (STT) | ✅ Implemented |
-| 11 | Wake Word Detection | ✅ Implemented |
-| 12 | Voice Cloning | 🔧 In Development |
-| 13 | Podcast Generation | 🔧 In Development |
-
-### Memory & Knowledge
-| # | Feature | Status |
-|---|---------|--------|
-| 14 | SQLite Memory | ✅ Implemented |
-| 15 | Markdown Memory | ✅ Implemented |
-| 16 | Supabase Memory | 🔧 In Development |
-| 17 | Self-Evolving Memory | ✅ Implemented |
-| 18 | Knowledge Graph | ✅ Implemented |
-| 19 | Multimodal Memory | ✅ Implemented |
-| 20 | Semantic Search | ✅ Implemented |
-| 21 | Memory Compression | ✅ Implemented |
-
-### Automation & Integration
-| # | Feature | Status |
-|---|---------|--------|
-| 22 | Browser Automation | ✅ Implemented |
-| 23 | Webhooks | ✅ Implemented |
-| 24 | Mesh Workflows | ✅ Implemented |
-| 25 | Container Sandbox | ✅ Implemented |
-| 26 | Air-Gapped Mode | ✅ Implemented |
-| 27 | Cron Scheduler | ✅ Implemented |
-| 28 | API Gateway | 🔧 In Development |
-| 29 | File Watcher | 🔧 In Development |
-
-### Daily Intelligence
-| # | Feature | Status |
-|---|---------|--------|
-| 30 | Morning Briefing | ✅ Implemented |
-| 31 | Evening Recap | ✅ Implemented |
-| 32 | Smart Recommendations | ✅ Implemented |
-| 33 | Calendar Integration | ✅ Implemented |
-| 34 | Weather Alerts | ✅ Implemented |
-| 35 | News Digest | ✅ Implemented |
-
-### Collaboration
-| # | Feature | Status |
-|---|---------|--------|
-| 36 | Group Management | ✅ Implemented |
-| 37 | Multi-Agent Coordination | 🔧 In Development |
-| 38 | Role-Based Access | 🔧 In Development |
-| 39 | Shared Knowledge Base | 🔧 In Development |
-
-### Security (NemoClaw-inspired)
-| # | Feature | Status |
-|---|---------|--------|
-| 40 | Allowlists/Denylists | ✅ Implemented |
-| 41 | Encrypted Secrets | ✅ Implemented |
-| 42 | Policy Engine | 🔧 In Development |
-| 43 | Audit Logging | ✅ Implemented |
-| 44 | Rate Limiting | ✅ Implemented |
-| 45 | Content Filtering | ✅ Implemented |
-
-### Creative & Multimodal
-| # | Feature | Status |
-|---|---------|--------|
-| 46 | Live Canvas | ✅ Implemented |
-| 47 | Image Generation | 🔧 In Development |
-| 48 | Video Processing | 🔧 In Development |
-| 49 | Document Analysis | 🔧 In Development |
-| 50 | Code Execution Sandbox | 🔧 In Development |
-
-### Platform & Deployment
-| # | Feature | Status |
-|---|---------|--------|
-| 51 | Docker Deployment | 🔧 In Development |
-| 52 | Auto-Update | 🔧 In Development |
-| 53 | Health Monitoring | 🔧 In Development |
-| 54 | Mobile Companion App | 🔧 In Development |
-| 55 | Plugin Marketplace | 🔧 In Development |
-| 56 | Goal Decomposition | ✅ Implemented |
-| 57 | Life Domains | ✅ Implemented |
-| 58 | Skills Library | ✅ Implemented |
-
-**Total: 58 features. 15 done, 43 on the way.**
-
-
-## 🚀 CI/CD Status
-
-[![CI](https://github.com/AG064/ag-claw/actions/workflows/ci.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/ci.yml)
-[![Security Scan](https://github.com/AG064/ag-claw/actions/workflows/security-scan.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/security-scan.yml)
-[![Release](https://github.com/AG064/ag-claw/actions/workflows/release.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/release.yml)
-
----
-
-## Recent Changes (2026-03-18)
-- Default model changed to openrouter/nvidia/nemotron-3-super-120b-a12b:free
-- Fallback chain established with dual API keys
-- Placeholder modules added: life-domains, skills-library, goal-decomposition
-- Duplicate skills resolved (self-improving → actual-self-improvement, humanizer kept)
-- GPT-4.1 removed from model options
-
-## Model Configuration
-- Primary model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
-- Fallback chain: 
-  1. openrouter/nvidia/nemotron-3-super-120b-a12b:free
-  2. openrouter/openrouter/hunter-alpha
-- API keys: dual keys configured for fallback
-
-## Installation
-
-### Quick Start
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AG064/ag-claw/main/install.sh | bash
-```
-
-### Manual
-```bash
+# Clone and install
 git clone https://github.com/AG064/ag-claw.git
 cd ag-claw
-./install.sh
+npm install
+npm link
+
+# Initialize and start
+agclaw init
+agclaw gateway start --port 3000
 ```
 
-### Docker
-```bash
-docker compose -f docker/docker-compose.yml up -d
+## CLI
+
 ```
+agclaw init                  # Set up in current directory
+agclaw gateway start         # Start server (background)
+agclaw gateway stop          # Stop server
+agclaw gateway restart       # Restart server
+agclaw gateway status        # Check if running (PID)
+agclaw gateway logs          # View server logs
+agclaw tools                 # List all 59 features
+agclaw feature <name>        # Show feature details
+agclaw config [key] [value]  # Show or set config
+agclaw doctor                # Diagnose issues
+agclaw connect               # Setup integrations
+agclaw agents                # List agents
+agclaw sessions              # View sessions
+```
+
+Health check endpoint: `curl http://localhost:3000/health`
+
+## Features (59 total)
+
+### Communication
+- Telegram, Discord, Slack, WhatsApp, Email (IMAP/SMTP), SMS
+- Webchat (WebSocket), Mobile Push
+
+### Voice & Audio
+- TTS (ElevenLabs, Google, Azure), STT (Whisper, Google)
+- Wake Word Detection
+
+### Memory & Knowledge
+- SQLite Memory (namespace-based), Markdown Memory
+- Semantic Search, Knowledge Graph, Memory Compression
+- Self-Evolving Memory (auto-consolidation), Multimodal Memory
+- Supabase Memory (configurable)
+
+### Automation
+- Cron Scheduler (with atomic task checkout)
+- Mesh Workflows (jsep expression parser)
+- File Watcher, Webhooks, Browser Automation
+- Container Sandbox, Air-Gapped Mode
+
+### Daily Intelligence
+- Morning Briefing, Evening Recap
+- Smart Recommendations, Calendar Integration
+- Weather Alerts, News Digest
+
+### Collaboration
+- Multi-Agent Coordination, Role-Based Access
+- Shared Knowledge Base, Group Management
+- Goal Decomposition, Life Domains, Skills Library
+
+### Security (NemoClaw-inspired)
+- AES-256 Encrypted Secrets, Secure Profile
+- Allowlists/Denylists, Rate Limiting
+- Audit Logging (immutable, tool-call tracing)
+- Content Filtering, Policy Engine
+
+### Creative & Multimodal
+- Image Generation (DALL-E, Stable Diffusion, Midjourney)
+- Video Processing (FFmpeg), Document Analysis
+- Live Canvas, Code Execution Sandbox
+
+### Platform
+- API Gateway, Budget Enforcement, Tenant Isolation
+- Health Monitoring, Auto-Update
+- Docker Deployment
 
 ## Configuration
 
-Everything lives in `config/default.yaml`:
+Edit `agclaw.json` (created by `agclaw init`):
 
-```yaml
-server:
-  port: 3000
-  host: "0.0.0.0"
-
-features:
-  webchat:
-    enabled: true
-    port: 3001
-  voice:
-    enabled: true
-    provider: "elevenlabs"
-  knowledge-graph:
-    enabled: true
-    backend: "sqlite"
-
-security:
-  policy: "config/security-policy.yaml"
-  secrets: "encrypted"
-
-memory:
-  primary: "sqlite"
-  path: "./data/memory.db"
+```json
+{
+  "name": "My AG-Claw Instance",
+  "server": { "port": 3000 },
+  "features": {
+    "life-domains": { "enabled": true },
+    "sqlite-memory": { "enabled": true },
+    "cron-scheduler": { "enabled": true },
+    "webchat": { "enabled": false },
+    "api-gateway": { "enabled": false }
+  }
+}
 ```
+
+Toggle features on/off, restart gateway to apply.
 
 ## Project Structure
 
 ```
-ag-claw/
-├── src/
-│   ├── index.ts              # Entry point
-│   ├── core/                 # Core framework
-│   │   ├── config.ts         # Configuration loader
-│   │   ├── logger.ts         # Structured logging
-│   │   └── plugin-loader.ts  # Dynamic feature loading
-│   ├── features/             # Modular features
-│   ├── channels/             # Communication channels
-│   ├── memory/               # Storage backends
-│   └── security/             # Security layer
-├── config/                   # YAML configuration
-├── docker/                   # Docker deployment
-├── docs/                     # Documentation
-├── mobile/                   # Mobile app plans
-└── skills/                   # Custom skills
+src/
+├── cli.ts              # CLI entry point
+├── core/               # Config, plugin loader, LLM provider
+├── features/           # 59 feature modules
+│   └── <feature>/
+│       └── index.ts    # FeatureModule interface
+├── memory/             # Semantic memory, graph
+└── index.ts            # Server entry point
 ```
+
+Each feature implements `init()`, `start()`, `stop()`, `healthCheck()`.
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Development mode
-npm run dev
-
-# Build
-npm run build
-
-# Start production
-npm start
+npm install        # Install dependencies
+npm run build      # Compile TypeScript
+npm test           # Run tests
+npm run dev        # Watch mode
 ```
+
+Adding a feature? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## References
+
+Based on patterns from:
+- [OpenClaw](https://github.com/nickarora/openclaw) — core runtime
+- [OMEGA Memory](https://github.com/omega-memory/omega-memory) — semantic search, consolidation
+- [PaperCLIP](https://github.com/paperclipai/paperclip) — task checkout, budget, org hierarchy
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+MIT
 
 Based on [OpenClaw](https://github.com/nickarora/openclaw) (MIT).
