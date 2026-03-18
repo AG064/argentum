@@ -23,6 +23,17 @@ export interface FilterRule {
   created_at: number;
 }
 
+/** Raw rule as stored in SQLite (enabled as integer) */
+interface RawFilterRule {
+  id: string;
+  type: 'profanity' | 'pii' | 'custom';
+  name: string;
+  pattern: string;
+  enabled: number;
+  replacement: string | null;
+  created_at: number;
+}
+
 /** Content check result */
 export interface ContentCheckResult {
   clean: boolean;
@@ -291,9 +302,7 @@ class ContentFilteringFeature implements FeatureModule {
    * @returns Array of custom rules
    */
   listRules(): FilterRule[] {
-    const rows = this.db.prepare('SELECT * FROM rules WHERE type = "custom" ORDER BY created_at DESC').all() as Array<
-      Omit<FilterRule, 'pattern'> & { pattern: string; enabled: number }
-    >;
+    const rows = this.db.prepare('SELECT * FROM rules WHERE type = "custom" ORDER BY created_at DESC').all() as RawFilterRule[];
 
     return rows.map(r => ({
       id: r.id,
@@ -327,18 +336,20 @@ class ContentFilteringFeature implements FeatureModule {
   }
 
   /** Get custom rule by ID (from DB) */
-  private getCustomRule(id: string): (FilterRule & { pattern: RegExp }) | undefined {
-    const row = this.db.prepare('SELECT * FROM rules WHERE id = ? AND enabled = 1').get(id) as
-      | Omit<FilterRule, 'pattern'> & { pattern: string; enabled: number }
-      | undefined;
+  private getCustomRule(id: string): FilterRule | undefined {
+    const row = this.db.prepare('SELECT * FROM rules WHERE id = ? AND enabled = 1').get(id) as RawFilterRule | undefined;
 
     if (!row) return undefined;
 
     try {
       return {
-        ...row,
-        pattern: new RegExp(row.pattern),
+        id: row.id,
+        type: row.type,
+        name: row.name,
+        pattern: row.pattern,
         enabled: row.enabled === 1,
+        replacement: row.replacement ?? undefined,
+        created_at: row.created_at,
       };
     } catch {
       return undefined;

@@ -86,7 +86,7 @@ class TtsEngineFeature implements FeatureModule {
   private defaultVoice: string = '';
 
   // Cache
-  private cacheDir: string;
+  private cacheDir!: string;
   private cacheIndex: Map<string, { path: string; voice: string; format: AudioFormat; size: number; created: number }> = new Map();
 
   constructor() {
@@ -94,7 +94,7 @@ class TtsEngineFeature implements FeatureModule {
       cacheDir: './data/tts-cache',
       maxCacheSizeMB: 1000,
       defaultProvider: 'elevenlabs',
-      defaultVoiceId: undefined,
+      defaultVoiceId: '',
       defaultFormat: 'mp3',
     };
   }

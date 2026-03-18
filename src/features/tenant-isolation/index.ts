@@ -40,7 +40,7 @@ class TenantIsolationFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const tenants = this.db.prepare('SELECT COUNT(*) as c FROM tenants').get().c as number;
+    const tenants = (this.db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c as number;
     return { healthy: true, details: { tenantCount: tenants } };
   }
 

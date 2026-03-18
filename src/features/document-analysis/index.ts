@@ -7,7 +7,7 @@
  */
 
 import { mkdirSync, existsSync, statSync, readFileSync, read } from 'fs';
-import { dirname, resolve, extname, basename } from 'path';
+import { dirname, resolve, extname, basename, join } from 'path';
 import Database from 'better-sqlite3';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 

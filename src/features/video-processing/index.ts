@@ -5,7 +5,7 @@
  * and metadata retrieval. Gracefully degrades if ffmpeg is not available.
  */
 
-import { mkdirSync, existsSync, unlink } from 'fs';
+import { mkdirSync, existsSync, unlink, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { exec as execOriginal } from 'child_process';
 import { promisify } from 'util';
@@ -224,8 +224,8 @@ class VideoProcessingFeature implements FeatureModule {
       const { stdout, stderr } = await exec(cmd, { timeout: 3600000 }); // 1hr timeout
 
       // Read output directory to find generated frames
-      const files = require('fs').readdirSync(outputDir).filter(f => f.startsWith('frame_') && f.endsWith(`.${format}`)).sort();
-      const framePaths = files.map(f => join(outputDir, f));
+      const files = readdirSync(outputDir).filter((f: string) => f.startsWith('frame_') && f.endsWith(`.${format}`)).sort();
+      const framePaths = files.map((f: string) => join(outputDir, f));
 
       this.logJobComplete(jobId, true, { frameCount: framePaths.length });
 

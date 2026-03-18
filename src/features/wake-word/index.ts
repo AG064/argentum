@@ -65,7 +65,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
   private db!: Database.Database;
   private wakeWords: WakeWord[] = [];
   private running: boolean = false;
-  private defaultSensitivity: number;
+  private defaultSensitivity!: number;
 
   // Event types
   static readonly EVENT_DETECTED = 'detected';

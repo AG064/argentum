@@ -56,7 +56,7 @@ class SecureProfileFeature implements FeatureModule {
           this.key = crypto.createHash('sha256').update(this.key).digest();
         }
       } catch (e) {
-        this.ctx.logger.error('Failed to parse master key: %s', String(e));
+        this.ctx.logger.error('Failed to parse master key: ' + String(e));
         this.key = null;
       }
     }
@@ -114,7 +114,7 @@ class SecureProfileFeature implements FeatureModule {
       const json = this.decrypt(blob);
       return JSON.parse(json.toString('utf8')) as Record<string, SecureProfileRecord>;
     } catch (e) {
-      this.ctx.logger.error('Failed to load secure profiles: %s', String(e));
+      this.ctx.logger.error('Failed to load secure profiles');
       return {};
     }
   }

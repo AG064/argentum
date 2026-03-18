@@ -140,10 +140,10 @@ class SlackIntegrationFeature implements FeatureModule {
 
     // Check environment variables if not set
     if (!this.botToken && process.env[this.config.tokenEnvVar]) {
-      this.botToken = process.env[this.config.tokenEnvVar];
+      const tok = process.env[this.config.tokenEnvVar]; if (tok) this.botToken = tok;
     }
     if (!this.signingSecret && process.env[this.config.secretEnvVar]) {
-      this.signingSecret = process.env[this.config.secretEnvVar];
+      const sec = process.env[this.config.secretEnvVar]; if (sec) this.signingSecret = sec;
     }
   }
 
