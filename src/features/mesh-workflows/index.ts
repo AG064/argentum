@@ -81,6 +81,64 @@ export interface DecomposedGoal {
  * Decomposes goals into subtasks, builds dependency graphs,
  * executes steps with checkpoint/resume, and reports progress.
  */
+import jsep from 'jsep';
+
+// Evaluate parsed AST node
+function evalNode(node: any, vars: Record<string, unknown>): any {
+  switch (node.type) {
+    case 'BinaryExpression': {
+      const left = evalNode(node.left, vars);
+      const right = evalNode(node.right, vars);
+      switch (node.operator) {
+        case '+': return left + right;
+        case '-': return left - right;
+        case '*': return left * right;
+        case '/': return left / right;
+        case '>': return left > right;
+        case '<': return left < right;
+        case '>=': return left >= right;
+        case '<=': return left <= right;
+        case '==': return left == right;
+        case '!=': return left != right;
+        case '===': return left === right;
+        case '!==': return left !== right;
+      }
+      throw new Error('Unsupported operator: ' + node.operator);
+    }
+    case 'LogicalExpression': {
+      if (node.operator === '&&') return evalNode(node.left, vars) && evalNode(node.right, vars);
+      if (node.operator === '||') return evalNode(node.left, vars) || evalNode(node.right, vars);
+      throw new Error('Unsupported logical operator: ' + node.operator);
+    }
+    case 'UnaryExpression': {
+      const val = evalNode(node.argument, vars);
+      if (node.operator === '!') return !val;
+      if (node.operator === '+') return +val;
+      if (node.operator === '-') return -val;
+      throw new Error('Unsupported unary operator: ' + node.operator);
+    }
+    case 'Identifier': {
+      const name = node.name;
+      if (Object.prototype.hasOwnProperty.call(vars, name)) return vars[name as keyof typeof vars];
+      return undefined;
+    }
+    case 'Literal': return node.value;
+    case 'MemberExpression': {
+      const obj = evalNode(node.object, vars);
+      const prop = node.computed ? evalNode(node.property, vars) : node.property.name;
+      return obj ? obj[prop] : undefined;
+    }
+    default: throw new Error('Unsupported node type: ' + node.type);
+  }
+}
+
+function evaluateCondition(condition: string, vars: Record<string, unknown> = {}): boolean {
+  if (!condition || typeof condition !== 'string') return false;
+  const ast = jsep(condition);
+  const val = evalNode(ast, vars);
+  return !!val;
+}
+
 class MeshWorkflowsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mesh-workflows',
@@ -117,14 +175,14 @@ class MeshWorkflowsFeature implements FeatureModule {
     });
     this.registerStepHandler('condition', async (step, vars) => {
       const condition = step.config.condition as string;
-      // Simple condition evaluation
+      // Safe condition evaluation using jsep
       try {
-        // TODO: Replace with safe expression evaluator (e.g., using a parser or limited DSL)
-        // const result = new Function('vars', `with(vars) { return ${condition}; }`)(vars);
-        // For now, condition evaluation is disabled (returns false) due to security risk.
-        const result = false;
+        const result = evaluateCondition(condition, vars as Record<string, unknown>);
         return { result: !!result, nextStep: result ? step.nextSteps[0] : step.nextSteps[1] };
-      } catch { return { result: false }; }
+      } catch (err) {
+        this.ctx.logger.warn('Condition evaluation failed', { condition, error: err instanceof Error ? err.message : String(err) });
+        return { result: false };
+      }
     });
     this.ctx.logger.info('Mesh Workflows active', { maxConcurrent: this.config.maxConcurrent });
   }
