@@ -7,7 +7,7 @@
 
 import express, { Request, Response, Router, Handler } from 'express';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
-import rateLimiting from './rate-limit-client';
+import rateLimiting from '../rate-limiting';
 
 /** API Gateway configuration */
 export interface ApiGatewayConfig {
