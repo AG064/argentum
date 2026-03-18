@@ -142,6 +142,14 @@ Based on OpenClaw (MIT License).
 **Total: 58 features. 15 done, 43 on the way.**
 
 
+## 🚀 CI/CD Status
+
+[![CI](https://github.com/AG064/ag-claw/actions/workflows/ci.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/ci.yml)
+[![Security Scan](https://github.com/AG064/ag-claw/actions/workflows/security-scan.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/security-scan.yml)
+[![Release](https://github.com/AG064/ag-claw/actions/workflows/release.yml/badge.svg)](https://github.com/AG064/ag-claw/actions/workflows/release.yml)
+
+---
+
 ## Recent Changes (2026-03-18)
 - Default model changed to openrouter/nvidia/nemotron-3-super-120b-a12b:free
 - Fallback chain established with dual API keys
