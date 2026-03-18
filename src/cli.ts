@@ -69,15 +69,22 @@ function cmdHelp(): void {
   print('    agclaw <command> [options]');
   print('');
   print('  \x1b[1mCommands:\x1b[0m');
-  print('    init              Initialize AG-Claw in current directory');
-  print('    start [--port N]  Start AG-Claw server (default port: 3000)');
-  print('    status            Show system and feature status');
-  print('    features          List all available features');
-  print('    feature <name>    Show feature details');
+  print('    init                  Initialize AG-Claw in current directory');
+  print('    start [--port N]      Start AG-Claw server (default port: 3000)');
+  print('    status                Show system and feature status');
+  print('    features              List all available features');
+  print('    feature <name>        Show feature details');
   print('    config [key] [value]  Show or set configuration');
-  print('    doctor            Diagnose setup issues');
-  print('    version           Show version');
-  print('    help              Show this help');
+  print('    doctor                Diagnose setup issues');
+  print('    connect               Setup connections to external services');
+  print('    agents                List/run agents');
+  print('    tools                 List available tools');
+  print('    sessions              View active sessions');
+  print('    watch <path>          Watch for file changes');
+  print('    gateway [cmd]         Manage gateway (status|start|stop|restart|logs)');
+  print('    plugins               List all plugins');
+  print('    version               Show version');
+  print('    help                  Show this help');
   print('');
   print('  \x1b[1mExamples:\x1b[0m');
   print('    agclaw init');
@@ -545,6 +552,169 @@ async function cmdWatch(): Promise<void> {
   info('Enable it in config and restart AG-Claw server');
 }
 
+async function cmdGateway(): Promise<void> {
+  const subcommand = args[1] || 'status';
+  const workDir = getWorkDir();
+  const pidFile = path.join(workDir, 'data', '.gateway.pid');
+
+  const getPid = (): number | null => {
+    try {
+      if (fs.existsSync(pidFile)) {
+        const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+        // Check if process is running
+        try {
+          process.kill(pid, 0);
+          return pid;
+        } catch {
+          fs.unlinkSync(pidFile);
+          return null;
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  switch (subcommand) {
+    case 'status': {
+      banner();
+      const pid = getPid();
+      if (pid) {
+        success(`Gateway running (PID: ${pid})`);
+        info(`PID file: ${pidFile}`);
+      } else {
+        info('Gateway not running');
+      }
+      break;
+    }
+
+    case 'start': {
+      banner();
+      if (getPid()) {
+        warn('Gateway already running');
+        return;
+      }
+      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1], 10) : 3000;
+      info(`Starting AG-Claw gateway on port ${port}...`);
+
+      // Spawn gateway as background process
+      const { spawn } = await import('child_process');
+      const gatewayPath = path.join(__dirname, 'cli.js');
+      const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+        detached: true,
+        stdio: ['ignore',
+          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+        ],
+        cwd: workDir,
+      });
+      child.unref();
+
+      // Write PID
+      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+      fs.writeFileSync(pidFile, String(child.pid));
+      success(`Gateway started (PID: ${child.pid})`);
+      info(`Log: ${path.join(workDir, 'data', 'gateway.log')}`);
+      info(`Stop: agclaw gateway stop`);
+      break;
+    }
+
+    case 'stop': {
+      banner();
+      const pid = getPid();
+      if (!pid) {
+        info('Gateway not running');
+        return;
+      }
+      info(`Stopping gateway (PID: ${pid})...`);
+      try {
+        process.kill(pid, 'SIGTERM');
+        fs.unlinkSync(pidFile);
+        success('Gateway stopped');
+      } catch (err) {
+        error(`Failed to stop: ${(err as Error).message}`);
+      }
+      break;
+    }
+
+    case 'restart': {
+      banner();
+      const pid = getPid();
+      if (pid) {
+        info(`Stopping gateway (PID: ${pid})...`);
+        try { process.kill(pid, 'SIGTERM'); } catch {}
+        // Wait a moment
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1], 10) : 3000;
+      info(`Restarting AG-Claw gateway on port ${port}...`);
+
+      const { spawn } = await import('child_process');
+      const gatewayPath = path.join(__dirname, 'cli.js');
+      const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+        detached: true,
+        stdio: ['ignore',
+          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+        ],
+        cwd: workDir,
+      });
+      child.unref();
+
+      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+      fs.writeFileSync(pidFile, String(child.pid));
+      success(`Gateway restarted (PID: ${child.pid})`);
+      break;
+    }
+
+    case 'logs': {
+      const logFile = path.join(workDir, 'data', 'gateway.log');
+      if (!fs.existsSync(logFile)) {
+        info('No log file found');
+        return;
+      }
+      const lines = args.includes('-n') ? parseInt(args[args.indexOf('-n') + 1], 10) : 50;
+      const logContent = fs.readFileSync(logFile, 'utf8');
+      const logLines = logContent.split('\n').slice(-lines);
+      print(logLines.join('\n'));
+      break;
+    }
+
+    default:
+      error(`Unknown gateway command: ${subcommand}`);
+      print('Usage: agclaw gateway [status|start|stop|restart|logs]');
+  }
+}
+
+async function cmdPlugins(): Promise<void> {
+  banner();
+  info('Plugin management');
+  print('');
+
+  const featuresDir = path.join(__dirname, 'src', 'features');
+  if (!fs.existsSync(featuresDir)) {
+    error('Features directory not found');
+    return;
+  }
+
+  const features = fs.readdirSync(featuresDir)
+    .filter(f => fs.existsSync(path.join(featuresDir, f, 'index.js')))
+    .sort();
+
+  for (const name of features) {
+    try {
+      const feature = require(path.join(featuresDir, name, 'index.js')).default;
+      const state = feature?.init ? '✓' : '✗';
+      print(`  ${state} ${name}`);
+    } catch {
+      print(`  ? ${name}`);
+    }
+  }
+
+  print('');
+  print(`  Total: ${features.length} plugins`);
+  info('Enable/disable in agclaw.json [features]');
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -600,6 +770,12 @@ async function main(): Promise<void> {
       break;
     case 'watch':
       await cmdWatch();
+      break;
+    case 'gateway':
+      await cmdGateway();
+      break;
+    case 'plugins':
+      await cmdPlugins();
       break;
     default:
       error(`Unknown command: ${command}`);
