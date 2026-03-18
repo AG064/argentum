@@ -111,11 +111,11 @@ Based on OpenClaw (MIT License).
 ### Security (NemoClaw-inspired)
 | # | Feature | Status |
 |---|---------|--------|
-| 40 | Allowlists/Denylists | 🔧 In Development |
-| 41 | Encrypted Secrets | 🔧 In Development |
+| 40 | Allowlists/Denylists | ✅ Implemented |
+| 41 | Encrypted Secrets | ✅ Implemented |
 | 42 | Policy Engine | 🔧 In Development |
-| 43 | Audit Logging | 🔧 In Development |
-| 44 | Rate Limiting | 🔧 In Development |
+| 43 | Audit Logging | ✅ Implemented |
+| 44 | Rate Limiting | ✅ Implemented |
 | 45 | Content Filtering | 🔧 In Development |
 
 ### Creative & Multimodal
