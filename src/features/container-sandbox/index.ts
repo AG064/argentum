@@ -169,11 +169,36 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   // Image
   args.push(config.image);
 
-  // WARNING: Using 'sh -c' to execute shell commands. This can be dangerous if
-  // the command contains untrusted input, leading to command injection. Ensure
-  // commands are sanitized or run in a properly sandboxed environment.
-  // Shell command
-  args.push('sh', '-c', command);
+  // Validate and split command into argv (no shell interpretation)
+  const dangerous = /[;|&`$\(\)\{\}]/;
+  if (dangerous.test(command)) {
+    throw new Error('Command contains forbidden characters');
+  }
+
+  // Whitelist common allowed base commands
+  const whitelist = new Set(['ls','cat','echo','grep','find','node','python','npm','curl','wget','stat','du','df','ps','whoami','id']);
+
+  // Simple split respecting quotes
+  const parts: string[] = [];
+  const re = /("[^"]*"|'[^']*'|\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(command)) !== null) {
+    let p = m[0];
+    if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+      p = p.slice(1, -1);
+    }
+    parts.push(p);
+  }
+  if (parts.length === 0) parts.push('sh','-c','');
+
+  // Check base command against whitelist
+  const base = parts[0];
+  if (!whitelist.has(base)) {
+    throw new Error('Command not allowed');
+  }
+
+  // Append command parts as argv (docker will run them directly, no shell)
+  for (const p of parts) args.push(p);
 
   return args;
 }
