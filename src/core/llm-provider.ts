@@ -62,12 +62,13 @@ export class OpenRouterProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
   private fallbackModels: string[];
-  private baseUrl = 'https://openrouter.ai/api/v1';
+  private baseUrl: string;
 
-  constructor(apiKey: string, model: string, fallbackModels: string[] = []) {
+  constructor(apiKey: string, model: string, fallbackModels: string[] = [], baseUrl?: string) {
     this.apiKey = apiKey;
     this.model = model;
     this.fallbackModels = fallbackModels;
+    this.baseUrl = baseUrl ?? 'https://openrouter.ai/api/v1';
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
@@ -281,6 +282,13 @@ export function createLLMProvider(config: {
         throw new Error('ANTHROPIC_API_KEY environment variable is required');
       }
       return new AnthropicProvider(apiKey, model);
+    }
+    case 'nvidia': {
+      const apiKey = process.env.NVIDIA_API_KEY ?? process.env.AGCLAW_NVIDIA_KEY;
+      if (!apiKey) {
+        throw new Error('NVIDIA_API_KEY or AGCLAW_NVIDIA_KEY environment variable is required');
+      }
+      return new OpenRouterProvider(apiKey, model ?? 'deepseek-ai/deepseek-v3.2', fallbackModels, 'https://integrate.api.nvidia.com/v1');
     }
     default:
       throw new Error(`Unknown LLM provider: ${provider}`);
