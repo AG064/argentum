@@ -69,14 +69,14 @@ Based on OpenClaw (MIT License).
 ### Memory & Knowledge
 | # | Feature | Status |
 |---|---------|--------|
-| 14 | SQLite Memory | 🔧 In Development |
-| 15 | Markdown Memory | 🔧 In Development |
+| 14 | SQLite Memory | ✅ Implemented |
+| 15 | Markdown Memory | ✅ Implemented |
 | 16 | Supabase Memory | 🔧 In Development |
 | 17 | Self-Evolving Memory | 🔧 In Development |
 | 18 | Knowledge Graph | ✅ Implemented |
 | 19 | Multimodal Memory | ✅ Implemented |
-| 20 | Semantic Search | 🔧 In Development |
-| 21 | Memory Compression | 🔧 In Development |
+| 20 | Semantic Search | ✅ Implemented |
+| 21 | Memory Compression | ✅ Implemented |
 
 ### Automation & Integration
 | # | Feature | Status |
@@ -85,8 +85,8 @@ Based on OpenClaw (MIT License).
 | 23 | Webhooks | ✅ Implemented |
 | 24 | Mesh Workflows | ✅ Implemented |
 | 25 | Container Sandbox | ✅ Implemented |
-| 26 | Air-Gapped Mode | 🔧 In Development |
-| 27 | Cron Scheduler | 🔧 In Development |
+| 26 | Air-Gapped Mode | ✅ Implemented |
+| 27 | Cron Scheduler | ✅ Implemented |
 | 28 | API Gateway | 🔧 In Development |
 | 29 | File Watcher | 🔧 In Development |
 
@@ -96,9 +96,9 @@ Based on OpenClaw (MIT License).
 | 30 | Morning Briefing | ✅ Implemented |
 | 31 | Evening Recap | ✅ Implemented |
 | 32 | Smart Recommendations | ✅ Implemented |
-| 33 | Calendar Integration | 🔧 In Development |
-| 34 | Weather Alerts | 🔧 In Development |
-| 35 | News Digest | 🔧 In Development |
+| 33 | Calendar Integration | ✅ Implemented |
+| 34 | Weather Alerts | ✅ Implemented |
+| 35 | News Digest | ✅ Implemented |
 
 ### Collaboration
 | # | Feature | Status |
