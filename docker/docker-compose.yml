@@ -11,10 +11,9 @@ services:
       - ag-claw-data:/app/data
       - ag-claw-memory:/app/memory
       - ../config:/app/config:ro
-    env_file:
-      - ../.env
     environment:
       - NODE_ENV=production
+      - AGCLAW_WORKDIR=/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]

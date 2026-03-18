@@ -7,3 +7,4 @@ memory/
 logs/
 .env
 *.enc.json
+.env
