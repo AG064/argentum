@@ -1,0 +1,407 @@
+import Cron from 'node-cron';
+import Database from 'better-sqlite3';
+import { mkdirSync, existsSync } from 'fs';
+import { dirname, resolve } from 'path';
+import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface CronJob {
+  id: string;
+  name: string;
+  cronExpr: string;
+  handlerId: string; // Reference to registered handler
+  enabled: boolean;
+  lastRun: number | null;
+  lastError: string | null;
+  createdAt: number;
+}
+
+export interface JobRun {
+  jobId: string;
+  startedAt: number;
+  completedAt: number | null;
+  success: boolean;
+  error: string | null;
+}
+
+export interface CronSchedulerConfig {
+  enabled: boolean;
+  dbPath: string;
+  timezone?: string;
+  maxJobs: number;
+}
+
+export type CronHandler = (jobId: string) => Promise<void> | void;
+
+// ─── Feature ─────────────────────────────────────────────────────────────────
+
+class CronSchedulerFeature implements FeatureModule {
+  readonly meta: FeatureMeta = {
+    name: 'cron-scheduler',
+    version: '0.1.0',
+    description: 'Cron-like job scheduler with persistent storage and custom handlers',
+    dependencies: [],
+  };
+
+  private config: CronSchedulerConfig = {
+    enabled: false,
+    dbPath: './data/cron-scheduler.db',
+    maxJobs: 500,
+  };
+  private ctx!: FeatureContext;
+  private db!: Database.Database;
+  private jobs: Map<string, CronJob> = new Map();
+  private handlers: Map<string, CronHandler> = new Map();
+  private cronJobs: Map<string, Cron> = new Map(); // jobId -> Cron instance
+  private schedulerStartTime: number = 0;
+
+  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
+    this.ctx = context;
+    this.config = { ...this.config, ...(config as Partial<CronSchedulerConfig>) };
+    this.initDatabase();
+    this.loadJobsFromDb();
+  }
+
+  async start(): Promise<void> {
+    this.schedulerStartTime = Date.now();
+
+    // Schedule all enabled jobs
+    for (const job of this.jobs.values()) {
+      if (job.enabled) {
+        this.scheduleJob(job);
+      }
+    }
+
+    this.ctx.logger.info('Cron scheduler active', {
+      scheduledJobs: this.jobs.size,
+      enabledJobs: Array.from(this.jobs.values()).filter(j => j.enabled).length,
+      timezone: this.config.timezone || 'local',
+    });
+  }
+
+  async stop(): Promise<void> {
+    // Stop all cron jobs
+    for (const [jobId, cron] of this.cronJobs.entries()) {
+      cron.stop();
+    }
+    this.cronJobs.clear();
+    this.db?.close();
+  }
+
+  async healthCheck(): Promise<HealthStatus> {
+    const totalJobs = this.jobs.size;
+    const enabledJobs = Array.from(this.jobs.values()).filter(j => j.enabled).length;
+    const registeredHandlers = this.handlers.size;
+    const recentlyFailed = this.getRecentlyFailed(15 * 60 * 1000); // last 15 min
+
+    return {
+      healthy: true,
+      details: {
+        totalJobs,
+        enabledJobs,
+        registeredHandlers,
+        recentlyFailed,
+        uptime: Date.now() - this.schedulerStartTime,
+      },
+    };
+  }
+
+  // ─── Handler Registration ─────────────────────────────────────────────────
+
+  /** Register a handler function that can be called by jobs */
+  registerHandler(handlerId: string, handler: CronHandler): void {
+    if (this.handlers.has(handlerId)) {
+      this.ctx.logger.warn('Handler overwritten', { handlerId });
+    }
+    this.handlers.set(handlerId, handler);
+    this.ctx.logger.debug('Handler registered', { handlerId });
+  }
+
+  /** Unregister a handler */
+  unregisterHandler(handlerId: string): boolean {
+    const result = this.handlers.delete(handlerId);
+    if (result) {
+      this.ctx.logger.debug('Handler unregistered', { handlerId });
+    }
+    return result;
+  }
+
+  // ─── Job Management ───────────────────────────────────────────────────────
+
+  /** Add a new cron job */
+  async addJob(name: string, cronExpr: string, handlerId: string, enabled: boolean = true): Promise<CronJob> {
+    if (this.jobs.size >= this.config.maxJobs) {
+      throw new Error(`Max job limit reached: ${this.config.maxJobs}`);
+    }
+
+    // Validate cron expression
+    if (!Cron.validate(cronExpr)) {
+      throw new Error(`Invalid cron expression: ${cronExpr}`);
+    }
+
+    // Check if handler exists
+    if (!this.handlers.has(handlerId)) {
+      throw new Error(`Handler not found: ${handlerId}`);
+    }
+
+    const id = `job:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+    const now = Date.now();
+
+    const job: CronJob = {
+      id,
+      name,
+      cronExpr,
+      handlerId,
+      enabled,
+      lastRun: null,
+      lastError: null,
+      createdAt: now,
+    };
+
+    // Save to DB
+    this.db.prepare(
+      `INSERT INTO jobs (id, name, cron_expr, handler_id, enabled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(id, name, cronExpr, handlerId, enabled ? 1 : 0, now);
+
+    this.jobs.set(id, job);
+
+    // Schedule if enabled
+    if (enabled) {
+      this.scheduleJob(job);
+    }
+
+    this.ctx.logger.info('Job added', { jobId: id, name, cronExpr, handlerId, enabled });
+    return job;
+  }
+
+  /** Remove a job */
+  async removeJob(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+
+    // Stop cron if running
+    const cron = this.cronJobs.get(jobId);
+    if (cron) {
+      cron.stop();
+      this.cronJobs.delete(jobId);
+    }
+
+    // Remove from DB
+    this.db.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    this.jobs.delete(jobId);
+
+    this.ctx.logger.info('Job removed', { jobId, name: job.name });
+    return true;
+  }
+
+  /** List all jobs */
+  listJobs(): CronJob[] {
+    return Array.from(this.jobs.values());
+  }
+
+  /** Get job by ID */
+  async getJob(jobId: string): Promise<CronJob | null> {
+    return this.jobs.get(jobId) ?? null;
+  }
+
+  /** Enable a job */
+  async enableJob(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+
+    job.enabled = true;
+    this.db.prepare('UPDATE jobs SET enabled = 1 WHERE id = ?').run(jobId);
+    this.scheduleJob(job);
+
+    this.ctx.logger.debug('Job enabled', { jobId });
+    return true;
+  }
+
+  /** Disable a job */
+  async disableJob(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+
+    job.enabled = false;
+    this.db.prepare('UPDATE jobs SET enabled = 0 WHERE id = ?').run(jobId);
+
+    // Stop cron if running
+    const cron = this.cronJobs.get(jobId);
+    if (cron) {
+      cron.stop();
+      this.cronJobs.delete(jobId);
+    }
+
+    this.ctx.logger.debug('Job disabled', { jobId });
+    return true;
+  }
+
+  /** Run a job immediately (bypassing schedule) */
+  async runJob(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      this.ctx.logger.warn('Job not found for immediate run', { jobId });
+      return false;
+    }
+
+    const handler = this.handlers.get(job.handlerId);
+    if (!handler) {
+      this.ctx.logger.error('Handler not found for job', { jobId, handlerId: job.handlerId });
+      return false;
+    }
+
+    this.ctx.logger.info('Running job manually', { jobId, name: job.name });
+    await this.executeHandler(job, handler);
+    return true;
+  }
+
+  /** Trigger a job run by name */
+  async triggerJobByName(name: string): Promise<number> {
+    let triggered = 0;
+    for (const job of this.jobs.values()) {
+      if (job.name === name && job.enabled) {
+        await this.runJob(job.id);
+        triggered++;
+      }
+    }
+    return triggered;
+  }
+
+  // ─── Scheduling ───────────────────────────────────────────────────────────
+
+  private scheduleJob(job: CronJob): void {
+    if (this.cronJobs.has(job.id)) {
+      this.cronJobs.get(job.id)!.stop();
+    }
+
+    const cron = new Cron(job.cronExpr, async () => {
+      const handler = this.handlers.get(job.handlerId);
+      if (!handler) {
+        this.ctx.logger.error('Handler not found during cron execution', { jobId: job.id, handlerId: job.handlerId });
+        return;
+      }
+      await this.executeHandler(job, handler);
+    }, {
+      timezone: this.config.timezone,
+      scheduled: true,
+    });
+
+    this.cronJobs.set(job.id, cron);
+  }
+
+  private async executeHandler(job: CronJob, handler: CronHandler): Promise<void> {
+    const startTime = Date.now();
+    let success = false;
+    let error: string | null = null;
+
+    try {
+      await handler(job.id);
+      success = true;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      this.ctx.logger.error('Job handler failed', { jobId: job.id, error });
+    } finally {
+      const endTime = Date.now();
+
+      // Update job last run
+      job.lastRun = endTime;
+      if (!success) {
+        job.lastError = error || 'Unknown error';
+      }
+      this.db.prepare(
+        'UPDATE jobs SET last_run = ?, last_error = ? WHERE id = ?'
+      ).run(endTime, error, job.id);
+
+      // Record run in history
+      this.db.prepare(
+        `INSERT INTO job_runs (job_id, started_at, completed_at, success, error)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(job.id, startTime, endTime, success ? 1 : 0, error);
+    }
+  }
+
+  // ─── Queries ───────────────────────────────────────────────────────────────
+
+  private getRecentlyFailed(withinMs: number): number {
+    const cutoff = Date.now() - withinMs;
+    const count = this.db.prepare(
+      'SELECT COUNT(*) as c FROM job_runs WHERE started_at >= ? AND success = 0'
+    ).get(cutoff).c;
+    return count;
+  }
+
+  async getJobRuns(jobId: string, limit: number = 50): Promise<JobRun[]> {
+    const rows = this.db.prepare(
+      'SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?'
+    ).all(jobId, limit);
+
+    return rows.map((row: any) => ({
+      jobId: row.job_id,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      success: Boolean(row.success),
+      error: row.error,
+    }));
+  }
+
+  // ─── Database ─────────────────────────────────────────────────────────────
+
+  private initDatabase(): void {
+    const fullPath = resolve(this.config.dbPath);
+    if (!existsSync(dirname(fullPath))) {
+      mkdirSync(dirname(fullPath), { recursive: true });
+    }
+
+    this.db = new Database(fullPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        cron_expr TEXT NOT NULL,
+        handler_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_run INTEGER,
+        last_error TEXT,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS job_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        success INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_jobs_enabled ON jobs(enabled);
+      CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id);
+      CREATE INDEX IF NOT EXISTS idx_job_runs_started ON job_runs(started_at);
+    `);
+  }
+
+  private loadJobsFromDb(): void {
+    const rows = this.db.prepare('SELECT * FROM jobs').all() as any[];
+    for (const row of rows) {
+      const job: CronJob = {
+        id: row.id,
+        name: row.name,
+        cronExpr: row.cron_expr,
+        handlerId: row.handler_id,
+        enabled: Boolean(row.enabled),
+        lastRun: row.last_run,
+        lastError: row.last_error,
+        createdAt: row.created_at,
+      };
+      this.jobs.set(job.id, job);
+    }
+  }
+}
+
+export default new CronSchedulerFeature();
