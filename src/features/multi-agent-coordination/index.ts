@@ -92,7 +92,8 @@ class MultiAgentCoordinationFeature implements FeatureModule {
     const idleAgents = Array.from(this.agents.values()).filter(a => a.status === 'idle').length;
     const busyAgents = Array.from(this.agents.values()).filter(a => a.status === 'busy').length;
     const offlineAgents = Array.from(this.agents.values()).filter(a => a.status === 'offline').length;
-    const pendingTasks = this.db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'pending'").get().c;
+    const pendingTasks = this.db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'pending'").get() as { c: number };
+    const pendingCount = pendingTasks.c;
 
     return {
       healthy: true,
@@ -101,7 +102,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
         idleAgents,
         busyAgents,
         offlineAgents,
-        pendingTasks,
+        pendingTasks: pendingCount,
       },
     };
   }

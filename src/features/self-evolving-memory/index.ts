@@ -84,7 +84,7 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   async start(): Promise<void> {
     if (this.config.autoEvolve) {
       this.timer = setInterval(() => {
-        this.runConsolidation().catch(err => {
+        this.consolidate().catch((err: Error) => {
           this.ctx.logger.error('Auto-consolidation failed', { error: err instanceof Error ? err.message : String(err) });
         });
       }, this.config.evolveIntervalMs);

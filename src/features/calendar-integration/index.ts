@@ -95,7 +95,7 @@ class CalendarIntegrationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const count = this.db.prepare('SELECT COUNT(*) as c FROM events').get<{ c: number }>().c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM events').get() as { c: number }).c;
       return {
         healthy: true,
         message: 'Calendar DB accessible',
@@ -237,15 +237,7 @@ class CalendarIntegrationFeature implements FeatureModule {
       for (const rem of data.reminders) {
         const remId = rem.id ?? `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         // Determine reminder time
-        let remTime: number;
-        if (rem.time instanceof Date) {
-          remTime = rem.time.getTime();
-        } else if (typeof rem.time === 'number') {
-          remTime = rem.time;
-        } else {
-          // Default: event start time minus default reminder minutes
-          remTime = startTime - this.config.defaultReminderMinutes * 60 * 1000;
-        }
+        const remTime: number = rem.time || (startTime - this.config.defaultReminderMinutes * 60 * 1000);
         remStmt.run(remId, id, remTime, rem.triggered ? 1 : 0, rem.method ?? 'notification');
       }
     }
@@ -381,15 +373,7 @@ class CalendarIntegrationFeature implements FeatureModule {
     if (!event) return null;
 
     const id = `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let time: number;
-    if (reminder.time instanceof Date) {
-      time = reminder.time.getTime();
-    } else if (typeof reminder.time === 'number') {
-      time = reminder.time;
-    } else {
-      // Default: event start time minus default reminder minutes
-      time = event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
-    }
+    const time: number = reminder.time || (event.startTime - this.config.defaultReminderMinutes * 60 * 1000);
 
     const stmt = this.db.prepare('INSERT INTO reminders (id, event_id, time, triggered, method) VALUES (?, ?, ?, ?, ?)');
     stmt.run(id, eventId, time, reminder.triggered ? 1 : 0, reminder.method ?? 'notification');
