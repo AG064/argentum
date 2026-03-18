@@ -241,6 +241,39 @@ class RoleBasedAccessFeature implements FeatureModule {
     return false;
   }
 
+  // ─── Org / Delegation ─────────────────────────────────────────────────────
+
+  /** Set manager (parent) for a user in the org hierarchy */
+  async setManager(userId: string, managerId: string | null, roleId?: string): Promise<void> {
+    if (managerId === userId) throw new Error('User cannot be their own manager');
+    const now = Date.now();
+    this.db.prepare(
+      `INSERT OR REPLACE INTO org_hierarchy (user_id, parent_id, role_id) VALUES (?, ?, ?)`
+    ).run(userId, managerId, roleId ?? null);
+    this.ctx.logger.info('Manager set', { userId, managerId });
+  }
+
+  /** Get direct reports for a manager */
+  async getReports(managerId: string): Promise<string[]> {
+    const rows = this.db.prepare('SELECT user_id FROM org_hierarchy WHERE parent_id = ?').all(managerId) as any[];
+    return rows.map(r => r.user_id);
+  }
+
+  /** Delegate a task from one user to another (records delegation) */
+  async delegateTask(fromUser: string, toUser: string, taskId?: string): Promise<string> {
+    const id = `del:${Date.now()}:${Math.random().toString(36).substr(2, 8)}`;
+    this.db.prepare('INSERT INTO delegations (id, from_user, to_user, task_id, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(id, fromUser, toUser, taskId ?? null, Date.now());
+    this.ctx.logger.info('Task delegated', { id, fromUser, toUser, taskId });
+    return id;
+  }
+
+  /** Get delegations for a user */
+  async getDelegations(userId: string): Promise<any[]> {
+    const rows = this.db.prepare('SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC').all(userId, userId) as any[];
+    return rows;
+  }
+
   // ─── Database ─────────────────────────────────────────────────────────────
 
   private initDatabase(): void {
@@ -268,11 +301,28 @@ class RoleBasedAccessFeature implements FeatureModule {
         FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS org_hierarchy (
+        user_id TEXT PRIMARY KEY,
+        parent_id TEXT,
+        role_id TEXT,
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS delegations (
+        id TEXT PRIMARY KEY,
+        from_user TEXT NOT NULL,
+        to_user TEXT NOT NULL,
+        task_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id);
+      CREATE INDEX IF NOT EXISTS idx_org_parent ON org_hierarchy(parent_id);
     `);
   }
 
   private loadRolesFromDb(): void {
+    const rows = this.db.prepare('SELECT * FROM roles').all();
     const rows = this.db.prepare('SELECT * FROM roles').all();
     for (const row of rows as any[]) {
       const role: Role = {
