@@ -82,6 +82,15 @@ function cmdHelp(): void {
   print('    config [key] [value]  Show or set configuration');
   print('    doctor                Diagnose setup issues');
   print('    onboard               Interactive setup wizard');
+  print('    session list          List sessions');
+  print('    session create <name> Create a session');
+  print('    session show <id>     View session messages');
+  print('    session search <q>    Search messages');
+  print('    backup create         Create backup');
+  print('    backup list           List backups');
+  print('    backup restore <name> Restore from backup');
+  print('    memory search <q>     Search memory');
+  print('    memory list           List namespaces');
   print('    skill list            List installed skills');
   print('    skill search <query>  Search ClawHub for skills');
   print('    skill install <slug>  Install a skill from ClawHub');
@@ -921,6 +930,225 @@ async function cmdPlugins(): Promise<void> {
   info('Enable/disable in agclaw.json [features]');
 }
 
+async function cmdBackup(): Promise<void> {
+  const subcommand = args[1] || 'create';
+  const workDir = getWorkDir();
+  const backupDir = path.join(workDir, 'backups');
+
+  switch (subcommand) {
+    case 'create':
+    case 'now': {
+      banner();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupPath = path.join(backupDir, `backup-${timestamp}`);
+      fs.mkdirSync(backupPath, { recursive: true });
+
+      info('Creating backup...');
+      let count = 0;
+
+      // Backup config
+      const configPath = path.join(workDir, 'agclaw.json');
+      if (fs.existsSync(configPath)) {
+        fs.copyFileSync(configPath, path.join(backupPath, 'agclaw.json'));
+        count++;
+      }
+
+      // Backup .env
+      const envPath = path.join(workDir, '.env');
+      if (fs.existsSync(envPath)) {
+        fs.copyFileSync(envPath, path.join(backupPath, '.env'));
+        count++;
+      }
+
+      // Backup all .db files from data/
+      const dataDir = path.join(workDir, 'data');
+      if (fs.existsSync(dataDir)) {
+        const backupDataDir = path.join(backupPath, 'data');
+        fs.mkdirSync(backupDataDir, { recursive: true });
+        const dbs = fs.readdirSync(dataDir).filter(f => f.endsWith('.db'));
+        for (const db of dbs) {
+          fs.copyFileSync(path.join(dataDir, db), path.join(backupDataDir, db));
+          count++;
+        }
+      }
+
+      // Create manifest
+      fs.writeFileSync(path.join(backupPath, 'manifest.json'), JSON.stringify({
+        timestamp: new Date().toISOString(),
+        version: '0.2.0',
+        files: count,
+      }, null, 2));
+
+      success(`Backup created: ${backupPath}`);
+      print(`  Files: ${count}`);
+      break;
+    }
+
+    case 'list':
+    case 'ls': {
+      banner();
+      if (!fs.existsSync(backupDir)) {
+        info('No backups found');
+        return;
+      }
+      const backups = fs.readdirSync(backupDir).filter(f => f.startsWith('backup-')).sort().reverse();
+      if (backups.length === 0) {
+        info('No backups found');
+        return;
+      }
+      info(`Backups (${backups.length}):`);
+      for (const b of backups) {
+        const manifestPath = path.join(backupDir, b, 'manifest.json');
+        let info_ = '';
+        if (fs.existsSync(manifestPath)) {
+          const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          info_ = ` | ${m.files} files`;
+        }
+        print(`  • ${b}${info_}`);
+      }
+      break;
+    }
+
+    case 'restore': {
+      const name = args[2];
+      if (!name) {
+        error('Usage: agclaw backup restore <backup-name>');
+        return;
+      }
+      const backupPath = path.join(backupDir, name);
+      if (!fs.existsSync(backupPath)) {
+        error(`Backup '${name}' not found`);
+        return;
+      }
+      banner();
+      info(`Restoring from: ${name}`);
+
+      // Restore config
+      const configBackup = path.join(backupPath, 'agclaw.json');
+      if (fs.existsSync(configBackup)) {
+        fs.copyFileSync(configBackup, path.join(workDir, 'agclaw.json'));
+        print('  ✓ agclaw.json');
+      }
+
+      // Restore .env
+      const envBackup = path.join(backupPath, '.env');
+      if (fs.existsSync(envBackup)) {
+        fs.copyFileSync(envBackup, path.join(workDir, '.env'));
+        print('  ✓ .env');
+      }
+
+      // Restore databases
+      const dataBackup = path.join(backupPath, 'data');
+      if (fs.existsSync(dataBackup)) {
+        const dataDir = path.join(workDir, 'data');
+        fs.mkdirSync(dataDir, { recursive: true });
+        for (const f of fs.readdirSync(dataBackup)) {
+          fs.copyFileSync(path.join(dataBackup, f), path.join(dataDir, f));
+          print(`  ✓ data/${f}`);
+        }
+      }
+
+      success('Restore complete');
+      info('Restart gateway: agclaw gateway restart');
+      break;
+    }
+
+    default:
+      error(`Unknown backup command: ${subcommand}`);
+      print('  agclaw backup [create|list|restore]');
+  }
+}
+
+async function cmdMemory(): Promise<void> {
+  const subcommand = args[1] || 'search';
+  const dbPath = path.join(getWorkDir(), 'data', 'sqlite-memory.db');
+
+  if (!fs.existsSync(dbPath)) {
+    error('Memory database not found. Enable sqlite-memory feature first.');
+    return;
+  }
+
+  const Database = require('better-sqlite3');
+  const db = new Database(dbPath, { readonly: true });
+
+  switch (subcommand) {
+    case 'search': {
+      const query = args.slice(2).join(' ');
+      if (!query) { error('Usage: agclaw memory search <query>'); db.close(); return; }
+      banner();
+      info(`Searching: "${query}"`);
+      print('');
+
+      // Try FTS5 first, fallback to LIKE
+      let results: any[] = [];
+      try {
+        results = db.prepare(
+          "SELECT key, value, namespace, updated_at FROM kv_fts WHERE kv_fts MATCH ? LIMIT 10"
+        ).all(query);
+      } catch {
+        results = db.prepare(
+          "SELECT key, value, namespace, updated_at FROM kv_store WHERE value LIKE ? OR key LIKE ? ORDER BY updated_at DESC LIMIT 10"
+        ).all(`%${query}%`, `%${query}%`);
+      }
+
+      if (results.length === 0) {
+        info('No results found');
+        db.close();
+        return;
+      }
+      for (const r of results) {
+        const value = (r.value || '').slice(0, 100).replace(/\n/g, ' ');
+        print(`  \x1b[1m[${r.namespace}]\x1b[0m ${r.key}`);
+        print(`    ${value}`);
+      }
+      db.close();
+      break;
+    }
+
+    case 'list': {
+      banner();
+      // List all namespaces
+      const namespaces = db.prepare("SELECT DISTINCT namespace FROM kv_store ORDER BY namespace").all() as any[];
+      if (namespaces.length === 0) {
+        info('Memory is empty');
+        db.close();
+        return;
+      }
+      info('Memory namespaces:');
+      for (const ns of namespaces) {
+        const count = (db.prepare("SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?").get(ns.namespace) as any).c;
+        print(`  • ${ns.namespace}: ${count} entries`);
+      }
+      db.close();
+      break;
+    }
+
+    case 'export': {
+      const ns = args[2];
+      banner();
+      let query = 'SELECT * FROM kv_store';
+      const params: any[] = [];
+      if (ns) {
+        query += ' WHERE namespace = ?';
+        params.push(ns);
+      }
+      query += ' ORDER BY updated_at DESC LIMIT 100';
+      const rows = db.prepare(query).all(...params) as any[];
+
+      const exportPath = path.join(getWorkDir(), 'data', `memory-export-${ns || 'all'}.json`);
+      fs.writeFileSync(exportPath, JSON.stringify(rows, null, 2));
+      success(`Exported ${rows.length} entries to: ${exportPath}`);
+      db.close();
+      break;
+    }
+
+    default:
+      error(`Unknown memory command: ${subcommand}`);
+      print('  agclaw memory [search|list|export]');
+      db.close();
+  }
+}
+
 async function cmdOnboard(): Promise<void> {
   const readline = require('readline');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -1407,6 +1635,12 @@ async function main(): Promise<void> {
     case 'session':
     case 'sessions':
       await cmdSessions();
+      break;
+    case 'backup':
+      await cmdBackup();
+      break;
+    case 'memory':
+      await cmdMemory();
       break;
     case 'onboard':
     case 'setup':
