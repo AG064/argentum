@@ -48,7 +48,7 @@ Based on OpenClaw (MIT License).
 ### Communication & Channels
 | # | Feature | Status |
 |---|---------|--------|
-| 1 | Telegram Integration | ✅ Implemented |
+| 1 | Telegram Integration | 🔧 In Development |
 | 2 | Webchat (WebSocket) | ✅ Implemented |
 | 3 | Mobile Push Notifications | 🔧 In Development |
 | 4 | Discord Bot | 🔧 In Development |
@@ -60,8 +60,8 @@ Based on OpenClaw (MIT License).
 ### Voice & Audio
 | # | Feature | Status |
 |---|---------|--------|
-| 9 | Text-to-Speech (TTS) | ✅ Implemented |
-| 10 | Speech-to-Text (STT) | ✅ Implemented |
+| 9 | Text-to-Speech (TTS) | 🔧 In Development |
+| 10 | Speech-to-Text (STT) | 🔧 In Development |
 | 11 | Wake Word Detection | 🔧 In Development |
 | 12 | Voice Cloning | 🔧 In Development |
 | 13 | Podcast Generation | 🔧 In Development |
@@ -69,9 +69,9 @@ Based on OpenClaw (MIT License).
 ### Memory & Knowledge
 | # | Feature | Status |
 |---|---------|--------|
-| 14 | SQLite Memory | ✅ Implemented |
-| 15 | Markdown Memory | ✅ Implemented |
-| 16 | Supabase Memory | ✅ Implemented |
+| 14 | SQLite Memory | 🔧 In Development |
+| 15 | Markdown Memory | 🔧 In Development |
+| 16 | Supabase Memory | 🔧 In Development |
 | 17 | Self-Evolving Memory | 🔧 In Development |
 | 18 | Knowledge Graph | ✅ Implemented |
 | 19 | Multimodal Memory | ✅ Implemented |
@@ -85,7 +85,7 @@ Based on OpenClaw (MIT License).
 | 23 | Webhooks | ✅ Implemented |
 | 24 | Mesh Workflows | ✅ Implemented |
 | 25 | Container Sandbox | ✅ Implemented |
-| 26 | Air-Gapped Mode | ✅ Implemented |
+| 26 | Air-Gapped Mode | 🔧 In Development |
 | 27 | Cron Scheduler | 🔧 In Development |
 | 28 | API Gateway | 🔧 In Development |
 | 29 | File Watcher | 🔧 In Development |
@@ -111,9 +111,9 @@ Based on OpenClaw (MIT License).
 ### Security (NemoClaw-inspired)
 | # | Feature | Status |
 |---|---------|--------|
-| 40 | Allowlists/Denylists | ✅ Implemented |
-| 41 | Encrypted Secrets | ✅ Implemented |
-| 42 | Policy Engine | ✅ Implemented |
+| 40 | Allowlists/Denylists | 🔧 In Development |
+| 41 | Encrypted Secrets | 🔧 In Development |
+| 42 | Policy Engine | 🔧 In Development |
 | 43 | Audit Logging | 🔧 In Development |
 | 44 | Rate Limiting | 🔧 In Development |
 | 45 | Content Filtering | 🔧 In Development |
@@ -130,13 +130,31 @@ Based on OpenClaw (MIT License).
 ### Platform & Deployment
 | # | Feature | Status |
 |---|---------|--------|
-| 51 | Docker Deployment | ✅ Implemented |
+| 51 | Docker Deployment | 🔧 In Development |
 | 52 | Auto-Update | 🔧 In Development |
 | 53 | Health Monitoring | 🔧 In Development |
 | 54 | Mobile Companion App | 🔧 In Development |
 | 55 | Plugin Marketplace | 🔧 In Development |
+| 56 | Goal Decomposition | ✅ Implemented |
+| 57 | Life Domains | ✅ Implemented |
+| 58 | Skills Library | ✅ Implemented |
 
-**Total: 55 features. 22 done, 33 on the way.**
+**Total: 58 features. 15 done, 43 on the way.**
+
+
+## Recent Changes (2026-03-18)
+- Default model changed to openrouter/nvidia/nemotron-3-super-120b-a12b:free
+- Fallback chain established with dual API keys
+- Placeholder modules added: life-domains, skills-library, goal-decomposition
+- Duplicate skills resolved (self-improving → actual-self-improvement, humanizer kept)
+- GPT-4.1 removed from model options
+
+## Model Configuration
+- Primary model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+- Fallback chain: 
+  1. openrouter/nvidia/nemotron-3-super-120b-a12b:free
+  2. openrouter/openrouter/hunter-alpha
+- API keys: dual keys configured for fallback
 
 ## Installation
 
