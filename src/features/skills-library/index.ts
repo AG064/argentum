@@ -1,166 +1,182 @@
 /**
- * Skills Library Feature
+ * Skills Library Feature (SQLite)
  *
- * Collects, saves and reuses successful skills, plans and code patterns.
- * Allows fast lookup for agent to reapply previously successful workflows or solutions.
- *
- * WARNING: This feature stores arbitrary code snippets. If such code is executed
- * without proper sandboxing or review, it may introduce security vulnerabilities.
- * Only store and retrieve code from trusted sources, and consider static analysis
- * or sandboxed execution before running stored code.
+ * Stores skill records with simple versioning using better-sqlite3.
+ * Note: code is stored as text only and never executed by this module.
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
+import Database from 'better-sqlite3';
+import { mkdirSync, existsSync } from 'fs';
+import { dirname, resolve } from 'path';
+import { randomUUID } from 'crypto';
 import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
-
-// ─── Types ───────────────────────────────────────────────────────────────
 
 export interface SkillRecord {
   id: string;
   name: string;
-  summary: string;
-  tags: string[];
+  version: string;
+  description: string;
   code: string;
-  description?: string;
-  source?: string;
+  tags: string[];
+  author?: string;
   createdAt: number;
   updatedAt: number;
-  successCount: number;
-  usageHistory: Array<{ usedAt: number; context: string }>;
 }
 
 export interface SkillsLibraryConfig {
   enabled: boolean;
+  dbPath: string;
   storageDir: string;
 }
 
-// ─── Feature Core ────────────────────────────────────────────────────────
-
 const DEFAULT_CONFIG: SkillsLibraryConfig = {
   enabled: false,
-  storageDir: './data/skills-library',
+  dbPath: './data/skills-library.db',
+  storageDir: './data/skills-storage',
 };
 
 class SkillsLibraryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skills-library',
     version: '0.1.0',
-    description: 'Knowledge base of successful skills, code, agent routines',
+    description: 'Library of agent skills with versioning (SQLite)',
     dependencies: [],
   };
 
   private config: SkillsLibraryConfig = { ...DEFAULT_CONFIG };
   private ctx!: FeatureContext;
+  private db!: Database.Database;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = { ...this.config, ...(config as Partial<SkillsLibraryConfig>) };
-    this.ensureStorage();
+    this.initDatabase();
   }
 
-  async start(): Promise<void> {
-    this.ensureStorage();
-  }
-
-  async stop(): Promise<void> { /* nothing needed */ }
+  async start(): Promise<void> { /* nothing */ }
+  async stop(): Promise<void> { this.db?.close(); }
 
   async healthCheck(): Promise<HealthStatus> {
-    const skillCount = this.listSkills().length;
-    return { healthy: true, details: { totalSkills: skillCount } };
+    const count = (this.db.prepare('SELECT COUNT(*) as c FROM skills').get() as { c: number }).c;
+    return { healthy: true, details: { totalSkills: count } };
   }
 
-  // ── Skill Storage Helpers ──────────────────────────────────────────────
+  // ── Core API required by task ─────────────────────────────────────────
 
-  private ensureStorage(): void {
-    const dir = resolve(this.config.storageDir);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-      this.ctx.logger?.info('Created skills library storage', { dir });
-    }
-  }
-
-  private skillPath(id: string): string {
-    return resolve(this.config.storageDir, `${id}.json`);
-  }
-
-  // ─── Core API ──────────────────────────────────────────────────────────
-
-  /** Save new skill to library */
-  addSkill(skill: Omit<SkillRecord, 'id' | 'createdAt' | 'updatedAt' | 'successCount' | 'usageHistory'>): SkillRecord {
-    const id = uuidv4();
+  registerSkill(payload: {
+    name: string;
+    version?: string;
+    description?: string;
+    code: string;
+    tags?: string[];
+    author?: string;
+  }): SkillRecord {
+    const id = randomUUID();
     const now = Date.now();
-    const record: SkillRecord = {
-      ...skill,
+    const version = payload.version ?? '1.0.0';
+
+    this.db.prepare(
+      `INSERT INTO skills (id, name, version, description, code, tags, author, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, payload.name, version, payload.description ?? '', payload.code, JSON.stringify(payload.tags ?? []), payload.author ?? '', now, now);
+
+    const rec: SkillRecord = {
       id,
+      name: payload.name,
+      version,
+      description: payload.description ?? '',
+      code: payload.code,
+      tags: payload.tags ?? [],
+      author: payload.author,
       createdAt: now,
       updatedAt: now,
-      successCount: 1,
-      usageHistory: [],
     };
-    writeFileSync(this.skillPath(id), JSON.stringify(record, null, 2), 'utf8');
-    return record;
+
+    this.ctx.logger?.info('Skill registered', { id, name: rec.name, version: rec.version });
+    return rec;
   }
 
   getSkill(id: string): SkillRecord | null {
-    try {
-      return JSON.parse(readFileSync(this.skillPath(id), 'utf8')) as SkillRecord;
-    } catch {
-      return null;
-    }
+    const row = this.db.prepare('SELECT * FROM skills WHERE id = ?').get(id) as any | undefined;
+    if (!row) return null;
+    return this.rowToSkill(row);
   }
 
   listSkills(): SkillRecord[] {
-    const dir = resolve(this.config.storageDir);
-    if (!existsSync(dir)) return [];
-    return readdirSync(dir)
-      .filter(f => f.endsWith('.json'))
-      .map(f => {
-        try { return JSON.parse(readFileSync(join(dir, f), 'utf8')) as SkillRecord; }
-        catch { return null; }
-      })
-      .filter(Boolean) as SkillRecord[];
+    const rows = this.db.prepare('SELECT * FROM skills ORDER BY updated_at DESC').all() as any[];
+    return rows.map(r => this.rowToSkill(r));
   }
 
-  /** Search skills by tag or name */
   searchSkills(query: string): SkillRecord[] {
-    const q = query.toLowerCase();
-    return this.listSkills().filter(skill =>
-      skill.name.toLowerCase().includes(q) ||
-      skill.tags.some(t => t.toLowerCase().includes(q))
-    );
+    const q = `%${query.toLowerCase()}%`;
+    const rows = this.db.prepare(
+      `SELECT * FROM skills WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(tags) LIKE ? ORDER BY updated_at DESC LIMIT 100`
+    ).all(q, q, q) as any[];
+    return rows.map(r => this.rowToSkill(r));
   }
 
-  /** Record usage of a skill */
-  recordUsage(id: string, context: string): void {
-    const skill = this.getSkill(id);
-    if (!skill) return;
-    skill.successCount++;
-    skill.usageHistory.push({ usedAt: Date.now(), context });
-    skill.updatedAt = Date.now();
-    writeFileSync(this.skillPath(id), JSON.stringify(skill, null, 2), 'utf8');
-  }
+  updateSkill(id: string, patch: Partial<Omit<SkillRecord, 'id' | 'createdAt'>>): SkillRecord | null {
+    const existing = this.getSkill(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...patch, updatedAt: Date.now() } as SkillRecord;
 
-  updateSkill(id: string, patch: Partial<Omit<SkillRecord, 'id'>>): SkillRecord | null {
-    const skill = this.getSkill(id);
-    if (!skill) return null;
-    const updated = { ...skill, ...patch, updatedAt: Date.now() };
-    writeFileSync(this.skillPath(id), JSON.stringify(updated, null, 2), 'utf8');
+    this.db.prepare(
+      `UPDATE skills SET name = ?, version = ?, description = ?, code = ?, tags = ?, author = ?, updated_at = ? WHERE id = ?`
+    ).run(updated.name, updated.version, updated.description, updated.code, JSON.stringify(updated.tags), updated.author ?? '', updated.updatedAt, id);
+
+    this.ctx.logger?.info('Skill updated', { id });
     return updated;
   }
 
   removeSkill(id: string): boolean {
-    try {
-      const path = this.skillPath(id);
-      if (existsSync(path)) {
-        require('fs').unlinkSync(path);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    const res = this.db.prepare('DELETE FROM skills WHERE id = ?').run(id);
+    return res.changes > 0;
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────
+
+  private initDatabase(): void {
+    const full = resolve(this.config.dbPath);
+    const dir = dirname(full);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    this.db = new Database(full);
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        code TEXT DEFAULT '',
+        tags TEXT DEFAULT '[]',
+        author TEXT DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name);
+      CREATE INDEX IF NOT EXISTS idx_skills_updated ON skills(updated_at DESC);
+    `);
+  }
+
+  private rowToSkill(row: any): SkillRecord {
+    return {
+      id: row.id,
+      name: row.name,
+      version: row.version,
+      description: row.description,
+      code: row.code,
+      tags: this.safeParse(row.tags),
+      author: row.author || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private safeParse(s: string): string[] {
+    try { return JSON.parse(s); } catch { return []; }
   }
 }
 
