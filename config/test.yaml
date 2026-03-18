@@ -1,0 +1,37 @@
+server:
+  port: 3001
+  host: "127.0.0.1"
+  cors:
+    enabled: true
+    origins: ["*"]
+
+logging:
+  level: info
+  format: pretty
+
+features:
+  life-domains:
+    enabled: true
+    dbPath: "./data/life-domains.db"
+  skills-library:
+    enabled: true
+    dbPath: "./data/skills-library.db"
+  goal-decomposition:
+    enabled: true
+    dbPath: "./data/goals.db"
+  mesh-workflows:
+    enabled: true
+  container-sandbox:
+    enabled: true
+    dockerImage: "ag-claw-sandbox:latest"
+  webchat:
+    enabled: true
+    port: 3002
+  webhooks:
+    enabled: true
+  voice:
+    enabled: false
+
+memory:
+  primary: "sqlite"
+  path: "./data/memory.db"
