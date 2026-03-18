@@ -37,6 +37,15 @@ export interface AuditEntry {
   details?: Record<string, unknown>;
 }
 
+/** Local resource information */
+export interface LocalResource {
+  type: 'model' | 'embedding' | 'data' | 'config';
+  path: string;
+  size: number;
+  available: boolean;
+  lastModified?: number;
+}
+
 /**
  * Air-Gapped feature — fully offline operation mode.
  *
@@ -46,7 +55,7 @@ export interface AuditEntry {
 class AirGappedFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'air-gapped',
-    version: '0.1.0',
+    version: '0.2.0',
     description: 'Fully offline operation mode with local models',
     dependencies: [],
   };
@@ -98,6 +107,64 @@ class AirGappedFeature implements FeatureModule {
         networkPolicy: this.networkPolicy,
       },
     };
+  }
+
+  /** Enable air-gapped mode (block all external requests) */
+  async enable(): Promise<void> {
+    this.config.enabled = true;
+    this.active = true;
+    this.setNetworkPolicy({
+      allowExternalApi: false,
+      allowDns: false,
+      allowNtp: false,
+    });
+    this.ctx.logger.info('Air-gapped mode enabled - all external requests blocked');
+  }
+
+  /** Disable air-gapped mode (allow external requests) */
+  async disable(): Promise<void> {
+    this.config.enabled = false;
+    this.active = false;
+    this.ctx.logger.info('Air-gapped mode disabled - external requests allowed');
+  }
+
+  /** Check if air-gapped mode is currently active */
+  isAirGapped(): boolean {
+    return this.active && this.config.enabled;
+  }
+
+  /** Get list of available local resources (models, data, configs) */
+  async getLocalResources(): Promise<LocalResource[]> {
+    const resources: LocalResource[] = [];
+    const { existsSync, lstatSync } = await import('fs');
+
+    const checkPath = (type: LocalResource['type'], path: string): void => {
+      try {
+        const fullPath = resolve(this.config.localModelPath, '..', path);
+        if (existsSync(fullPath)) {
+          const stat = lstatSync(fullPath);
+          resources.push({
+            type,
+            path: fullPath,
+            size: stat.size,
+            available: true,
+            lastModified: stat.mtimeMs,
+          });
+        }
+      } catch {
+        // Path doesn't exist or inaccessible
+      }
+    };
+
+    // Check local model path
+    checkPath('model', this.config.localModelPath);
+    checkPath('embedding', this.config.localEmbeddingPath);
+
+    // Add known local data directories
+    checkPath('data', 'data');
+    checkPath('config', 'config');
+
+    return resources;
   }
 
   /** Check if a network request is allowed */
