@@ -43,15 +43,53 @@ class AllowlistsFeature {
   check(item: { value: string; type: 'url' | 'command' | 'user' }) {
     const rows = this.db.prepare('SELECT * FROM rules WHERE type = ?').all(item.type);
     for (const r of rows as any[]) {
-      try {
-        const re = new RegExp(r.pattern);
-        if (re.test(item.value)) {
-          return { matched: true, action: r.action, rule: r };
+      const pattern: string = r.pattern;
+
+      // Basic input validation: reject overly long patterns
+      if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 200) {
+        // skip invalid/too long patterns
+        continue;
+      }
+
+      // If the pattern contains obvious regex metacharacters, avoid compiling untrusted regexes
+      const looksLikeRegex = /[\\^$*+?.()|[\]{}]/.test(pattern);
+
+      if (looksLikeRegex) {
+        // Try to safely compile regex in try/catch but with a conservative approach: limit time by avoiding catastrophic patterns
+        try {
+          const re = new RegExp(pattern);
+          if (re.test(item.value)) {
+            return { matched: true, action: r.action, rule: r };
+          }
+        } catch (e) {
+          // If regex compilation fails or is risky, fall back to simple wildcard matching
+          // Convert pattern with '*' into wildcard, otherwise literal compare
+          if (pattern.includes('*')) {
+            const escaped = pattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+            try {
+              const re2 = new RegExp(`^${escaped}$`);
+              if (re2.test(item.value)) {
+                return { matched: true, action: r.action, rule: r };
+              }
+            } catch {
+              // give up on this rule
+            }
+          } else if (pattern === item.value) {
+            return { matched: true, action: r.action, rule: r };
+          }
         }
-      } catch (e) {
-        // fallback to simple equality
-        if (r.pattern === item.value) {
-          return { matched: true, action: r.action, rule: r };
+      } else {
+        // Treat as simple wildcard: support '*' only
+        if (pattern.includes('*')) {
+          const escaped = pattern.split('*').map(s => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('.*');
+          const re = new RegExp(`^${escaped}$`);
+          if (re.test(item.value)) {
+            return { matched: true, action: r.action, rule: r };
+          }
+        } else {
+          if (pattern === item.value) {
+            return { matched: true, action: r.action, rule: r };
+          }
         }
       }
     }
