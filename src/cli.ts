@@ -70,18 +70,27 @@ function cmdHelp(): void {
   print('');
   print('  \x1b[1mCommands:\x1b[0m');
   print('    init                  Initialize AG-Claw in current directory');
-  print('    start [--port N]      Start AG-Claw server (default port: 3000)');
+  print('    gateway start         Start AG-Claw server (background)');
+  print('    gateway stop          Stop AG-Claw server');
+  print('    gateway restart       Restart AG-Claw server');
+  print('    gateway status        Check if server is running');
+  print('    gateway logs          View server logs');
   print('    status                Show system and feature status');
   print('    features              List all available features');
   print('    feature <name>        Show feature details');
   print('    config [key] [value]  Show or set configuration');
   print('    doctor                Diagnose setup issues');
-  print('    connect               Setup connections to external services');
-  print('    agents                List/run agents');
-  print('    tools                 List available tools');
-  print('    sessions              View active sessions');
-  print('    watch <path>          Watch for file changes');
-  print('    gateway [cmd]         Manage gateway (status|start|stop|restart|logs)');
+  print('    skill list            List installed skills');
+  print('    skill search <query>  Search ClawHub for skills');
+  print('    skill install <slug>  Install a skill from ClawHub');
+  print('    skill uninstall <name> Uninstall a skill');
+  print('    skill update [name]   Update skills');
+  print('    skill explore         Browse latest skills');
+  print('    skill info <slug>     Inspect a skill');
+  print('    skill publish <path>  Publish your skill');
+  print('    telegram status       Telegram bot status');
+  print('    telegram config       Show Telegram config template');
+  print('    connect               Setup integrations');
   print('    plugins               List all plugins');
   print('    version               Show version');
   print('    help                  Show this help');
@@ -717,137 +726,203 @@ async function cmdPlugins(): Promise<void> {
 
 async function cmdSkill(): Promise<void> {
   const subcommand = args[1] || 'list';
-  const skillsDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
+  const { execSync } = require('child_process');
+  const workDir = getWorkDir();
+
+  // Default skills dir: OpenClaw workspace
+  const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+  const clawhubWorkDir = process.env.AGCLAW_WORKDIR || defaultWorkDir;
+
+  const runClawhub = (cmd: string): string => {
+    try {
+      return execSync(`clawhub ${cmd} --workdir "${clawhubWorkDir}" --no-input`, {
+        encoding: 'utf8',
+        timeout: 30000,
+        env: { ...process.env, CLAWHUB_WORKDIR: clawhubWorkDir },
+      });
+    } catch (err: any) {
+      return err.stdout || err.stderr || err.message;
+    }
+  };
 
   switch (subcommand) {
-    case 'list': {
+    case 'list':
+    case 'ls': {
       banner();
-      info('Available skills:');
+      info('Installed skills:');
       print('');
-      if (!fs.existsSync(skillsDir)) {
-        error('Skills directory not found: ' + skillsDir);
-        return;
-      }
-      const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      for (const entry of entries) {
-        const skillPath = path.join(skillsDir, entry.name);
-        const mdPath = path.join(skillPath, 'SKILL.md');
-        let desc = '';
-        if (fs.existsSync(mdPath)) {
-          const lines = fs.readFileSync(mdPath, 'utf8').split('\n');
-          for (const line of lines) {
-            const t = line.trim();
-            if (t && !t.startsWith('#') && !t.startsWith('---')) {
-              desc = t.slice(0, 80);
-              break;
-            }
-          }
-        }
-        const scriptsDir = path.join(skillPath, 'scripts');
-        const scripts = fs.existsSync(scriptsDir)
-          ? fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f))
-          : [];
-        const scriptsStr = scripts.length > 0 ? ` [${scripts.length} scripts]` : '';
-        print(`  \x1b[1m${entry.name}\x1b[0m${scriptsStr}`);
-        if (desc) print(`    ${desc}`);
-      }
-      print('');
-      print(`  Total: ${entries.length} skills`);
+      const result = runClawhub('list');
+      print(result);
       break;
     }
 
-    case 'run': {
-      const skillName = args[2];
-      if (!skillName) {
-        error('Usage: agclaw skill run <name> [script] [args...]');
+    case 'search': {
+      const query = args.slice(2).join(' ');
+      if (!query) {
+        error('Usage: agclaw skill search <query>');
         return;
       }
-      const skillPath = path.join(skillsDir, skillName);
-      if (!fs.existsSync(skillPath)) {
-        error(`Skill '${skillName}' not found`);
+      banner();
+      info(`Searching for: ${query}`);
+      print('');
+      const result = runClawhub(`search "${query}"`);
+      print(result);
+      break;
+    }
+
+    case 'install':
+    case 'add': {
+      const slug = args[2];
+      if (!slug) {
+        error('Usage: agclaw skill install <skill-slug>');
         return;
       }
-      const scriptName = args[3];
-      if (!scriptName) {
-        // Show available scripts
-        const scriptsDir = path.join(skillPath, 'scripts');
-        if (!fs.existsSync(scriptsDir)) {
-          info('No scripts directory');
+      banner();
+      info(`Installing: ${slug}`);
+      print('');
+      const result = runClawhub(`install ${slug}`);
+      print(result);
+      if (!result.includes('error')) {
+        success(`Skill '${slug}' installed`);
+      }
+      break;
+    }
+
+    case 'uninstall':
+    case 'remove':
+    case 'rm': {
+      const slug = args[2];
+      if (!slug) {
+        error('Usage: agclaw skill uninstall <skill-slug>');
+        return;
+      }
+      banner();
+      info(`Uninstalling: ${slug}`);
+      const result = runClawhub(`uninstall ${slug}`);
+      print(result);
+      break;
+    }
+
+    case 'update':
+    case 'upgrade': {
+      const slug = args[2];
+      banner();
+      if (slug) {
+        info(`Updating: ${slug}`);
+      } else {
+        info('Updating all installed skills...');
+      }
+      const result = runClawhub(slug ? `update ${slug}` : 'update');
+      print(result);
+      break;
+    }
+
+    case 'explore': {
+      banner();
+      info('Browse latest skills from ClawHub:');
+      print('');
+      const result = runClawhub('explore');
+      print(result);
+      break;
+    }
+
+    case 'info':
+    case 'inspect': {
+      const slug = args[2];
+      if (!slug) {
+        error('Usage: agclaw skill info <skill-slug>');
+        return;
+      }
+      banner();
+      info(`Inspecting: ${slug}`);
+      print('');
+      const result = runClawhub(`inspect ${slug}`);
+      print(result);
+      break;
+    }
+
+    case 'publish': {
+      const skillPath = args[2] || '.';
+      banner();
+      info(`Publishing: ${skillPath}`);
+      const result = runClawhub(`publish "${skillPath}"`);
+      print(result);
+      break;
+    }
+
+    case 'star': {
+      const slug = args[2];
+      if (!slug) {
+        error('Usage: agclaw skill star <skill-slug>');
+        return;
+      }
+      runClawhub(`star ${slug}`);
+      success(`Starred: ${slug}`);
+      break;
+    }
+
+    case 'unstar': {
+      const slug = args[2];
+      if (!slug) {
+        error('Usage: agclaw skill unstar <skill-slug>');
+        return;
+      }
+      runClawhub(`unstar ${slug}`);
+      success(`Unstarred: ${slug}`);
+      break;
+    }
+
+    case 'sync': {
+      banner();
+      info('Syncing local skills with ClawHub...');
+      const result = runClawhub('sync');
+      print(result);
+      break;
+    }
+
+    default:
+      // Treat as "run" — execute a script from an installed skill
+      {
+        const skillName = subcommand;
+        const skillsDir = path.join(clawhubWorkDir, 'skills');
+        const skillPath = path.join(skillsDir, skillName);
+        if (!fs.existsSync(skillPath)) {
+          error(`Unknown command or skill: ${skillName}`);
+          print('');
+          print('  agclaw skill [list|search|install|uninstall|update|explore|info|publish|star|sync]');
           return;
         }
-        const scripts = fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f));
-        if (scripts.length === 0) {
-          info('No runnable scripts');
+        const scriptName = args[2];
+        if (!scriptName) {
+          const scriptsDir = path.join(skillPath, 'scripts');
+          if (fs.existsSync(scriptsDir)) {
+            const scripts = fs.readdirSync(scriptsDir).filter((f: string) => /\.(sh|js|py|ts)$/.test(f));
+            if (scripts.length) {
+              info(`Scripts in ${skillName}:`);
+              for (const s of scripts) print(`  • ${s}`);
+            }
+          }
           return;
         }
-        info(`Available scripts in ${skillName}:`);
-        for (const s of scripts) print(`  • ${s}`);
-        return;
-      }
-      // Run script
-      const scriptPath = path.join(skillPath, 'scripts', scriptName);
-      if (!fs.existsSync(scriptPath)) {
-        error(`Script '${scriptName}' not found in '${skillName}'`);
-        return;
-      }
-      const scriptArgs = args.slice(4);
-      try {
-        const { execSync } = require('child_process');
+        const scriptPath = path.join(skillPath, 'scripts', scriptName);
+        if (!fs.existsSync(scriptPath)) {
+          error(`Script '${scriptName}' not found`);
+          return;
+        }
+        const scriptArgs = args.slice(3);
         let cmd: string;
         if (scriptName.endsWith('.sh')) cmd = `bash "${scriptPath}"`;
         else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
         else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
         else cmd = `npx tsx "${scriptPath}"`;
         if (scriptArgs.length) cmd += ' ' + scriptArgs.map((a: string) => `"${a}"`).join(' ');
-
-        info(`Running: ${cmd}`);
-        print('');
-        const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
-        print(result);
-      } catch (err: any) {
-        error(`Script failed: ${err.message}`);
-      }
-      break;
-    }
-
-    case 'info': {
-      const skillName = args[2];
-      if (!skillName) {
-        error('Usage: agclaw skill info <name>');
-        return;
-      }
-      banner();
-      const skillPath = path.join(skillsDir, skillName);
-      if (!fs.existsSync(skillPath)) {
-        error(`Skill '${skillName}' not found`);
-        return;
-      }
-      info(`Skill: ${skillName}`);
-      const mdPath = path.join(skillPath, 'SKILL.md');
-      if (fs.existsSync(mdPath)) {
-        print('');
-        // Print first 30 lines of SKILL.md
-        const lines = fs.readFileSync(mdPath, 'utf8').split('\n').slice(0, 30);
-        print(lines.join('\n'));
-      }
-      const scriptsDir = path.join(skillPath, 'scripts');
-      if (fs.existsSync(scriptsDir)) {
-        const scripts = fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f));
-        if (scripts.length) {
-          print('');
-          info(`Scripts (${scripts.length}):`);
-          for (const s of scripts) print(`  • ${s}`);
+        try {
+          const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
+          print(result);
+        } catch (err: any) {
+          error(err.message);
         }
       }
-      break;
-    }
-
-    default:
-      error(`Unknown skill command: ${subcommand}`);
-      print('Usage: agclaw skill [list|run|info]');
   }
 }
 
