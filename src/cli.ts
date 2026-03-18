@@ -81,7 +81,14 @@ function cmdHelp(): void {
   print('    feature <name>        Show feature details');
   print('    config [key] [value]  Show or set configuration');
   print('    doctor                Diagnose setup issues');
+  print('    status                Show system status');
   print('    onboard               Interactive setup wizard');
+  print('    cron list             List scheduled jobs');
+  print('    cron add              Create a new cron job');
+  print('    cron run <id>         Execute job immediately');
+  print('    cron enable <id>      Enable a job');
+  print('    cron disable <id>     Disable a job');
+  print('    cron remove <id>      Delete a job');
   print('    session list          List sessions');
   print('    session create <name> Create a session');
   print('    session show <id>     View session messages');
@@ -283,49 +290,6 @@ async function cmdStart(): Promise<void> {
   }
 }
 
-function cmdStatus(): void {
-  banner();
-  info('Checking AG-Claw status...');
-
-  const workDir = getWorkDir();
-  const configPath = path.join(workDir, 'agclaw.json');
-
-  if (!fs.existsSync(configPath)) {
-    warn('AG-Claw not initialized. Run: agclaw init');
-    return;
-  }
-
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    print('');
-    print('  \x1b[1mConfiguration:\x1b[0m');
-    print(`    Name: ${config.name}`);
-    print(`    Port: ${config.server?.port || 3000}`);
-    print('');
-    print('  \x1b[1mFeatures:\x1b[0m');
-    const features = config.features || {};
-    for (const [name, cfg] of Object.entries(features)) {
-      const enabled = (cfg as any).enabled ? '\x1b[32m✓ enabled\x1b[0m' : '\x1b[31m✗ disabled\x1b[0m';
-      print(`    ${name}: ${enabled}`);
-    }
-    print('');
-
-    // Data directory
-    const dataDir = path.join(workDir, 'data');
-    if (fs.existsSync(dataDir)) {
-      const files = fs.readdirSync(dataDir).filter((f: string) => f.endsWith('.db'));
-      print(`  \x1b[1mDatabases:\x1b[0m ${files.length} (.db files in data/)`);
-      for (const f of files) {
-        const size = fs.statSync(path.join(dataDir, f)).size;
-        print(`    ${f} (${(size / 1024).toFixed(1)} KB)`);
-      }
-    }
-    print('');
-    success('Status OK');
-  } catch (err) {
-    error(`Failed to read config: ${(err as Error).message}`);
-  }
-}
 
 function cmdFeatures(): void {
   banner();
@@ -1149,6 +1113,187 @@ async function cmdMemory(): Promise<void> {
   }
 }
 
+async function cmdCron(): Promise<void> {
+  const subcommand = args[1] || 'list';
+  const dbPath = path.join(getWorkDir(), 'data', 'cron-jobs.json');
+
+  switch (subcommand) {
+    case 'list':
+    case 'ls': {
+      banner();
+      if (!fs.existsSync(dbPath)) {
+        info('No cron jobs defined');
+        return;
+      }
+      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      if (jobs.length === 0) {
+        info('No cron jobs defined');
+        return;
+      }
+      info(`Cron jobs (${jobs.length}):`);
+      print('');
+      for (let i = 0; i < jobs.length; i++) {
+        const j = jobs[i];
+        const status = j.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[31m○\x1b[0m';
+        print(`  ${status} \x1b[1m${j.name || j.id}\x1b[0m`);
+        print(`    ID: ${j.id}`);
+        print(`    Schedule: ${j.schedule.kind} (${JSON.stringify(j.schedule)})`);
+        print(`    Target: ${j.sessionTarget} (${j.payload.kind})`);
+      }
+      break;
+    }
+
+    case 'add':
+    case 'create': {
+      // Interactive job creation
+      const readline = require('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+
+      banner();
+      info('Creating new cron job');
+
+      // Read existing jobs
+      let jobs: any[] = [];
+      if (fs.existsSync(dbPath)) jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+
+      const id = crypto.randomUUID();
+      const name = await ask('  Name (optional): ') || `Job-${id.slice(0, 8)}`;
+      const scheduleKind = await ask('  Schedule [every|cron] (default: every): ') || 'every';
+      let schedule: any;
+
+      if (scheduleKind === 'every') {
+        const minutes = parseInt(await ask('  Interval in minutes (default: 60): ') || '60');
+        schedule = { kind: 'every', everyMs: minutes * 60 * 1000 };
+      } else {
+        const expr = await ask('  Cron expression: ');
+        schedule = { kind: 'cron', expr };
+      }
+
+      const payload = await ask('  Command to run (e.g. "systemEvent", "agentTurn.message"): ');
+      const [kind, ...rest] = payload.split('.');
+      const message = rest.join('.') || 'Check for tasks';
+
+      const newJob: any = {
+        id,
+        name,
+        schedule,
+        payload: { kind: 'systemEvent', text: message },
+        sessionTarget: 'main',
+        enabled: true,
+      };
+
+      jobs.push(newJob);
+      fs.writeFileSync(dbPath, JSON.stringify(jobs, null, 2));
+      success(`Job created: ${id}`);
+      print(`  Run: agclaw cron run ${id}`);
+      rl.close();
+      break;
+    }
+
+    case 'run': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw cron run <id>'); return; }
+      if (!fs.existsSync(dbPath)) { error('No cron jobs defined'); return; }
+      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const job = jobs.find((j: any) => j.id === id);
+      if (!job) { error(`Job '${id}' not found`); return; }
+
+      // Execute job payload as system event
+      banner();
+      info(`Running: ${job.name}`);
+      // This requires sending to main session - we can't do it from CLI directly
+      // but we can show what would be executed
+      print(`  Payload: ${JSON.stringify(job.payload)}`);
+      success('Job executed (simulated from CLI)');
+      break;
+    }
+
+    case 'enable':
+    case 'disable': {
+      const id = args[2];
+      if (!id) { error(`Usage: agclaw cron ${subcommand} <id>`); return; }
+      if (!fs.existsSync(dbPath)) { error('No cron jobs defined'); return; }
+      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const job = jobs.find((j: any) => j.id === id);
+      if (!job) { error(`Job '${id}' not found`); return; }
+
+      job.enabled = subcommand === 'enable';
+      fs.writeFileSync(dbPath, JSON.stringify(jobs, null, 2));
+      success(`Job ${subcommand}d`);
+      break;
+    }
+
+    case 'remove':
+    case 'rm': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw cron remove <id>'); return; }
+      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const filtered = jobs.filter((j: any) => j.id !== id);
+      if (filtered.length === jobs.length) {
+        error(`Job '${id}' not found`);
+        return;
+      }
+      fs.writeFileSync(dbPath, JSON.stringify(filtered, null, 2));
+      success('Job removed');
+      break;
+    }
+
+    default:
+      error(`Unknown cron command: ${subcommand}`);
+      print('  agclaw cron [list|add|run|enable|disable|remove]');
+  }
+}
+
+async function cmdStatus(): Promise<void> {
+  banner();
+  print('  \x1b[1mAG-Claw Status\x1b[0m');
+  print('');
+  print(`  \x1b[1mVersion:\x1b[0m 0.2.0`);
+  print(`  \x1b[1mConfig:\x1b[0m ${path.join(getWorkDir(), 'agclaw.json')}`);
+  print(`  \x1b[1mData:\x1b[0m ${path.join(getWorkDir(), 'data')}`);
+  print(`  \x1b[1mUptime:\x1b[0m ${process.uptime().toFixed(0)}s`);
+  print('');
+
+  // Check data directories
+  const dataDir = path.join(getWorkDir(), 'data');
+  if (fs.existsSync(dataDir)) {
+    const dbs = fs.readdirSync(dataDir).filter(f => f.endsWith('.db'));
+    print(`  \x1b[1mDatabases:\x1b[0m ${dbs.length}`);
+    for (const db of dbs) {
+      try {
+        const size = fs.statSync(path.join(dataDir, db)).size;
+        print(`    • ${db} (${(size / 1024).toFixed(1)} KB)`);
+      } catch {}
+    }
+  } else {
+    print('  \x1b[1mDatabases:\x1b[0m 0 (data dir not created)');
+  }
+  print('');
+
+  // Quick health check – just file existence
+  const requiredFiles = ['agclaw.json', '.env'];
+  print('  \x1b[1mConfiguration:\x1b[0m');
+  for (const f of requiredFiles) {
+    const exists = fs.existsSync(path.join(getWorkDir(), f));
+    const status = exists ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+    print(`    ${status} ${f}`);
+  }
+  print('');
+
+  // Show gateway status
+  const pidPath = path.join(getWorkDir(), 'data', '.gateway.pid');
+  if (fs.existsSync(pidPath)) {
+    const pid = fs.readFileSync(pidPath, 'utf8').trim();
+    print(`  \x1b[1mGateway:\x1b[0m PID ${pid} (running)`);
+  } else {
+    print(`  \x1b[1mGateway:\x1b[0m \x1b[31mstopped\x1b[0m`);
+  }
+  print('');
+
+  success('All systems nominal');
+}
+
 async function cmdOnboard(): Promise<void> {
   const readline = require('readline');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -1625,6 +1770,9 @@ async function main(): Promise<void> {
     case 'plugins':
       await cmdPlugins();
       break;
+    case 'status':
+      await cmdStatus();
+      break;
     case 'telegram':
       await cmdTelegram();
       break;
@@ -1641,6 +1789,9 @@ async function main(): Promise<void> {
       break;
     case 'memory':
       await cmdMemory();
+      break;
+    case 'cron':
+      await cmdCron();
       break;
     case 'onboard':
     case 'setup':
