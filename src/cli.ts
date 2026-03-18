@@ -715,6 +715,142 @@ async function cmdPlugins(): Promise<void> {
   info('Enable/disable in agclaw.json [features]');
 }
 
+async function cmdSkill(): Promise<void> {
+  const subcommand = args[1] || 'list';
+  const skillsDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
+
+  switch (subcommand) {
+    case 'list': {
+      banner();
+      info('Available skills:');
+      print('');
+      if (!fs.existsSync(skillsDir)) {
+        error('Skills directory not found: ' + skillsDir);
+        return;
+      }
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const entry of entries) {
+        const skillPath = path.join(skillsDir, entry.name);
+        const mdPath = path.join(skillPath, 'SKILL.md');
+        let desc = '';
+        if (fs.existsSync(mdPath)) {
+          const lines = fs.readFileSync(mdPath, 'utf8').split('\n');
+          for (const line of lines) {
+            const t = line.trim();
+            if (t && !t.startsWith('#') && !t.startsWith('---')) {
+              desc = t.slice(0, 80);
+              break;
+            }
+          }
+        }
+        const scriptsDir = path.join(skillPath, 'scripts');
+        const scripts = fs.existsSync(scriptsDir)
+          ? fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f))
+          : [];
+        const scriptsStr = scripts.length > 0 ? ` [${scripts.length} scripts]` : '';
+        print(`  \x1b[1m${entry.name}\x1b[0m${scriptsStr}`);
+        if (desc) print(`    ${desc}`);
+      }
+      print('');
+      print(`  Total: ${entries.length} skills`);
+      break;
+    }
+
+    case 'run': {
+      const skillName = args[2];
+      if (!skillName) {
+        error('Usage: agclaw skill run <name> [script] [args...]');
+        return;
+      }
+      const skillPath = path.join(skillsDir, skillName);
+      if (!fs.existsSync(skillPath)) {
+        error(`Skill '${skillName}' not found`);
+        return;
+      }
+      const scriptName = args[3];
+      if (!scriptName) {
+        // Show available scripts
+        const scriptsDir = path.join(skillPath, 'scripts');
+        if (!fs.existsSync(scriptsDir)) {
+          info('No scripts directory');
+          return;
+        }
+        const scripts = fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f));
+        if (scripts.length === 0) {
+          info('No runnable scripts');
+          return;
+        }
+        info(`Available scripts in ${skillName}:`);
+        for (const s of scripts) print(`  • ${s}`);
+        return;
+      }
+      // Run script
+      const scriptPath = path.join(skillPath, 'scripts', scriptName);
+      if (!fs.existsSync(scriptPath)) {
+        error(`Script '${scriptName}' not found in '${skillName}'`);
+        return;
+      }
+      const scriptArgs = args.slice(4);
+      try {
+        const { execSync } = require('child_process');
+        let cmd: string;
+        if (scriptName.endsWith('.sh')) cmd = `bash "${scriptPath}"`;
+        else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
+        else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
+        else cmd = `npx tsx "${scriptPath}"`;
+        if (scriptArgs.length) cmd += ' ' + scriptArgs.map((a: string) => `"${a}"`).join(' ');
+
+        info(`Running: ${cmd}`);
+        print('');
+        const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
+        print(result);
+      } catch (err: any) {
+        error(`Script failed: ${err.message}`);
+      }
+      break;
+    }
+
+    case 'info': {
+      const skillName = args[2];
+      if (!skillName) {
+        error('Usage: agclaw skill info <name>');
+        return;
+      }
+      banner();
+      const skillPath = path.join(skillsDir, skillName);
+      if (!fs.existsSync(skillPath)) {
+        error(`Skill '${skillName}' not found`);
+        return;
+      }
+      info(`Skill: ${skillName}`);
+      const mdPath = path.join(skillPath, 'SKILL.md');
+      if (fs.existsSync(mdPath)) {
+        print('');
+        // Print first 30 lines of SKILL.md
+        const lines = fs.readFileSync(mdPath, 'utf8').split('\n').slice(0, 30);
+        print(lines.join('\n'));
+      }
+      const scriptsDir = path.join(skillPath, 'scripts');
+      if (fs.existsSync(scriptsDir)) {
+        const scripts = fs.readdirSync(scriptsDir).filter(f => /\.(sh|js|py|ts)$/.test(f));
+        if (scripts.length) {
+          print('');
+          info(`Scripts (${scripts.length}):`);
+          for (const s of scripts) print(`  • ${s}`);
+        }
+      }
+      break;
+    }
+
+    default:
+      error(`Unknown skill command: ${subcommand}`);
+      print('Usage: agclaw skill [list|run|info]');
+  }
+}
+
 async function cmdTelegram(): Promise<void> {
   const subcommand = args[1] || 'status';
   banner();
@@ -871,6 +1007,10 @@ async function main(): Promise<void> {
       break;
     case 'telegram':
       await cmdTelegram();
+      break;
+    case 'skill':
+    case 'skills':
+      await cmdSkill();
       break;
     default:
       error(`Unknown command: ${command}`);
