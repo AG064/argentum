@@ -18,9 +18,38 @@ class AuditLogFeature {
         action TEXT NOT NULL,
         actor TEXT,
         details TEXT,
-        ip TEXT
+        ip TEXT,
+        immutable INTEGER NOT NULL DEFAULT 1
       );
     `).run();
+
+    this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS tool_calls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        actor TEXT,
+        tool TEXT NOT NULL,
+        input TEXT,
+        output TEXT,
+        success INTEGER,
+        meta TEXT
+      );
+    `).run();
+
+    this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        actor TEXT,
+        decision TEXT NOT NULL,
+        reason TEXT,
+        meta TEXT
+      );
+    `).run();
+
+    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)').run();
+    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool)').run();
+    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON decisions(timestamp)').run();
   }
 
   start() {}
@@ -29,8 +58,25 @@ class AuditLogFeature {
 
   log(action: string, details: Record<string, any> | string, actor?: string, ip?: string) {
     const t = Date.now();
-    const stmt = this.db.prepare('INSERT INTO audit_log (timestamp, action, actor, details, ip) VALUES (?, ?, ?, ?, ?)');
+    const stmt = this.db.prepare('INSERT INTO audit_log (timestamp, action, actor, details, ip, immutable) VALUES (?, ?, ?, ?, ?, 1)');
     stmt.run(t, action, actor || null, typeof details === 'string' ? details : JSON.stringify(details), ip || null);
+    return { timestamp: t };
+  }
+
+  logToolCall(tool: string, input: any, output: any, actor?: string, success: boolean = true, meta?: any) {
+    const t = Date.now();
+    this.db.prepare('INSERT INTO tool_calls (timestamp, actor, tool, input, output, success, meta) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(t, actor || null, tool, JSON.stringify(input || null), JSON.stringify(output || null), success ? 1 : 0, meta ? JSON.stringify(meta) : null);
+    // Also add a summary into audit_log for quick searches
+    this.log('tool_call', { tool, success, meta }, actor);
+    return { timestamp: t };
+  }
+
+  logDecision(decision: string, reason: string, actor?: string, meta?: any) {
+    const t = Date.now();
+    this.db.prepare('INSERT INTO decisions (timestamp, actor, decision, reason, meta) VALUES (?, ?, ?, ?, ?)')
+      .run(t, actor || null, decision, reason, meta ? JSON.stringify(meta) : null);
+    this.log('decision', { decision, reason, meta }, actor);
     return { timestamp: t };
   }
 
