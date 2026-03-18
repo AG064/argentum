@@ -49,7 +49,7 @@ class RateLimitingFeature implements FeatureModule {
         timestamp INTEGER NOT NULL
       );
     `).run();
-    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_rate_key_ts ON rate_windows(key, timestamp)')..run();
+    this.db.prepare('CREATE INDEX IF NOT EXISTS idx_rate_key_ts ON rate_windows(key, timestamp)').run();
   }
 
   async start(): Promise<void> {
