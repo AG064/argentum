@@ -154,15 +154,44 @@ class WebhooksFeature implements FeatureModule {
     }
   }
 
+  private isInternalHostname(host: string): boolean {
+    if (!host) return false;
+    const h = host.toLowerCase();
+    if (h === 'localhost' || h === '::1') return true;
+    if (h.endsWith('.local')) return true;
+    // IPv4 checks
+    const parts = h.split('.');
+    if (parts.length === 4) {
+      const [a,b] = parts.map(p => parseInt(p,10));
+      if (a === 127) return true;
+      if (a === 10) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 169 && b === 254) return true;
+      if (a === 172 && b >=16 && b <=31) return true;
+    }
+    return false;
+  }
+
+  private validateUrl(u: string): boolean {
+    try {
+      const parsed = new URL(u);
+      const host = parsed.hostname;
+      if (this.isInternalHostname(host)) return false;
+      return true;
+    } catch { return false; }
+  }
+
   /** Deliver webhook with retry logic */
   private async deliverWithRetry(sub: WebhookSubscription, event: WebhookEvent, attempt = 1): Promise<void> {
     try {
+      if (!this.validateUrl(sub.url)) {
+        this.ctx.logger.warn('Blocked webhook delivery to internal or invalid URL', { url: sub.url });
+        return;
+      }
+
       const body = JSON.stringify(event);
       const signature = createHmac('sha256', sub.secret).update(body).digest('hex');
 
-      // WARNING: SSRF risk! The subscriber URL (sub.url) may be user-controlled.
-      // Fetching arbitrary URLs can expose internal services or data. Validate
-      // URLs against an allowlist or use safe outbound networking practices.
       const response = await fetch(sub.url, {
         method: 'POST',
         headers: {
