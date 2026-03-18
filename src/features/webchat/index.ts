@@ -372,15 +372,28 @@ class WebchatFeature implements FeatureModule {
     allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
     uploadDir: './uploads',
   };
+  private authToken: string | null = null;
   private ctx!: FeatureContext;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = { ...this.config, ...(config as Partial<WebchatConfig>) };
+    // Optional auth token for simple bearer authentication
+    this.authToken = (config as any).authToken ?? null;
   }
 
   async start(): Promise<void> {
     this.httpServer = new HttpServer((req: IncomingMessage, res: ServerResponse) => {
+      // Basic auth check for HTTP endpoints if authToken is set
+      const authHeader = req.headers['authorization'];
+      if (this.authToken) {
+        if (!authHeader || (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`) {
+          res.writeHead(401);
+          res.end('Unauthorized');
+          return;
+        }
+      }
+
       // Serve HTML UI
       if (req.url === '/' || req.url?.startsWith('/?')) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -407,15 +420,24 @@ class WebchatFeature implements FeatureModule {
     this.server = new WebSocketServer({ server: this.httpServer, path: '/ws' });
 
     this.server.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+      // WebSocket token check
+      const wsUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const token = wsUrl.searchParams.get('token');
+      if (this.authToken && token !== this.authToken) {
+        // Close with application-defined code 4001 for auth failure
+        ws.close(4001, 'Unauthorized');
+        this.ctx.logger.warn('WebSocket connection rejected due to invalid token');
+        return;
+      }
       if (this.clients.size >= this.config.maxConnections) {
         ws.close(1013, 'Server at capacity');
         return;
       }
 
       const clientId = this.generateId();
-      const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
-      const roomId = url.searchParams.get('room') ?? 'default';
-      const userId = url.searchParams.get('user') ?? `anon-${clientId}`;
+      const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const roomId = parsedUrl.searchParams.get('room') ?? 'default';
+      const userId = parsedUrl.searchParams.get('user') ?? `anon-${clientId}`;
 
       const client: Client = { ws, userId, roomId, username: userId, connectedAt: Date.now(), typing: false };
       this.clients.set(clientId, client);
