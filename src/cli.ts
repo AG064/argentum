@@ -80,6 +80,7 @@ function cmdHelp(): void {
   print('    feature <name>        Show feature details');
   print('    config [key] [value]  Show or set configuration');
   print('    doctor                Diagnose setup issues');
+  print('    onboard               Interactive setup wizard');
   print('    skill list            List installed skills');
   print('    skill search <query>  Search ClawHub for skills');
   print('    skill install <slug>  Install a skill from ClawHub');
@@ -724,6 +725,126 @@ async function cmdPlugins(): Promise<void> {
   info('Enable/disable in agclaw.json [features]');
 }
 
+async function cmdOnboard(): Promise<void> {
+  const readline = require('readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+
+  banner();
+  print('  \x1b[1mWelcome to AG-Claw!\x1b[0m');
+  print('  This wizard will set up your agent.');
+  print('');
+
+  const config: any = {
+    $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
+    name: 'My AG-Claw Instance',
+    version: '1.0.0',
+    server: { port: 3000, host: '0.0.0.0' },
+    features: {},
+    llm: { provider: 'nvidia', model: 'deepseek-ai/deepseek-v3.2' },
+  };
+
+  // Step 1: Instance name
+  print('  \x1b[1mStep 1: Instance\x1b[0m');
+  const name = await ask('  Name your instance (default: My AG-Claw): ');
+  if (name.trim()) config.name = name.trim();
+  print('');
+
+  // Step 2: LLM Provider
+  print('  \x1b[1mStep 2: LLM Provider\x1b[0m');
+  print('  Available providers:');
+  print('    1. OpenRouter (needs API key)');
+  print('    2. NVIDIA (free models, needs API key)');
+  print('    3. Google Gemini (free tier)');
+  print('    4. Anthropic (needs API key)');
+  print('    5. Skip (configure later)');
+  const providerChoice = await ask('  Choose (1-5, default: 2): ');
+  const providers: Record<string, { provider: string; model: string; keyEnv: string }> = {
+    '1': { provider: 'openrouter', model: 'auto', keyEnv: 'OPENROUTER_API_KEY' },
+    '2': { provider: 'nvidia', model: 'deepseek-ai/deepseek-v3.2', keyEnv: 'NVIDIA_API_KEY' },
+    '3': { provider: 'google', model: 'gemini-2.5-flash', keyEnv: 'GOOGLE_API_KEY' },
+    '4': { provider: 'anthropic', model: 'claude-sonnet-4-20250514', keyEnv: 'ANTHROPIC_API_KEY' },
+  };
+  const chosen = providers[providerChoice.trim()] || providers['2'];
+  config.llm = { provider: chosen.provider, model: chosen.model };
+
+  if (providerChoice.trim() !== '5') {
+    const apiKey = await ask(`  ${chosen.keyEnv} (or press Enter to skip): `);
+    if (apiKey.trim()) {
+      // Write to .env
+      const envPath = path.join(getWorkDir(), '.env');
+      const envLine = `${chosen.keyEnv}=${apiKey.trim()}\n`;
+      fs.appendFileSync(envPath, envLine);
+      success(`Saved ${chosen.keyEnv} to .env`);
+    }
+  }
+  print('');
+
+  // Step 3: Telegram
+  print('  \x1b[1mStep 3: Telegram (optional)\x1b[0m');
+  const setupTg = await ask('  Set up Telegram bot? (y/N): ');
+  if (setupTg.toLowerCase() === 'y') {
+    const botToken = await ask('  Bot token: ');
+    if (botToken.trim()) {
+      const userId = await ask('  Your Telegram user ID (e.g. tg:123456): ');
+      config.features.telegram = {
+        enabled: true,
+        botToken: botToken.trim(),
+        allowFrom: userId.trim() ? [userId.trim()] : [],
+        dmPolicy: 'pairing',
+        groupPolicy: 'allowlist',
+      };
+      success('Telegram configured');
+    }
+  }
+  print('');
+
+  // Step 4: Features
+  print('  \x1b[1mStep 4: Core Features\x1b[0m');
+  print('  Enabling recommended features...');
+  const defaults = [
+    'life-domains', 'skills-library', 'goal-decomposition',
+    'sqlite-memory', 'cron-scheduler', 'audit-log',
+    'knowledge-graph', 'webhooks', 'file-watcher',
+  ];
+  for (const f of defaults) {
+    config.features[f] = { enabled: true };
+  }
+  print(`  ✓ ${defaults.length} features enabled`);
+  print('');
+
+  // Step 5: Port
+  print('  \x1b[1mStep 5: Server\x1b[0m');
+  const port = await ask('  Server port (default: 3000): ');
+  if (port.trim() && !isNaN(parseInt(port))) {
+    config.server.port = parseInt(port);
+  }
+  print('');
+
+  // Save config
+  const configPath = path.join(getWorkDir(), 'agclaw.json');
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  success('Configuration saved to agclaw.json');
+
+  // Create data dir
+  const dataDir = path.join(getWorkDir(), 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  success('Data directory ready');
+
+  rl.close();
+
+  print('');
+  print('  \x1b[1mSetup complete!\x1b[0m');
+  print('');
+  print('  Next steps:');
+  print(`    agclaw gateway start --port ${config.server.port}`);
+  print('    agclaw status');
+  print('    agclaw skill search <query>');
+  print('');
+}
+
 async function cmdSkill(): Promise<void> {
   const subcommand = args[1] || 'list';
   const { execSync } = require('child_process');
@@ -1086,6 +1207,11 @@ async function main(): Promise<void> {
     case 'skill':
     case 'skills':
       await cmdSkill();
+      break;
+    case 'onboard':
+    case 'setup':
+    case 'configure':
+      await cmdOnboard();
       break;
     default:
       error(`Unknown command: ${command}`);
