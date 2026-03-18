@@ -161,9 +161,26 @@ class ApiGatewayFeature implements FeatureModule {
     methodEndpoints.push(endpoint);
     this.endpoints.set(method, methodEndpoints);
 
-    // Register with Express
-    const appMethod = this.app[method.toLowerCase()] as typeof this.app.get;
-    appMethod(normalizedPath, handler);
+    // Register with Express using explicit methods
+    switch (method.toUpperCase()) {
+      case 'GET':
+        this.app.get(normalizedPath, handler);
+        break;
+      case 'POST':
+        this.app.post(normalizedPath, handler);
+        break;
+      case 'PUT':
+        this.app.put(normalizedPath, handler);
+        break;
+      case 'DELETE':
+        this.app.delete(normalizedPath, handler);
+        break;
+      case 'PATCH':
+        this.app.patch(normalizedPath, handler);
+        break;
+      default:
+        throw new Error(`Unsupported HTTP method: ${method}`);
+    }
 
     this.ctx.logger.debug('Endpoint registered', {
       method: endpoint.method,
@@ -289,21 +306,33 @@ class ApiGatewayFeature implements FeatureModule {
       return;
     }
 
+    // Ensure rate limiting config exists
+    const rl = this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
+
     // Rate limit by API key or IP
-    const key = this.config.rateLimit?.byApiKey && req.headers['x-api-key']
-      ? (req.headers['x-api-key'] as string)
-      : req.ip;
+    let key: string;
+    if (rl.byApiKey) {
+      const apiKeyHeader = req.headers['x-api-key'];
+      const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+      if (apiKey) {
+        key = apiKey;
+      } else {
+        key = req.ip ?? 'unknown';
+      }
+    } else {
+      key = req.ip ?? 'unknown';
+    }
 
     // Use rate-limiting feature
     try {
-      const result = rateLimiting.check(key, this.config.rateLimit.max, this.config.rateLimit.windowMs);
+      const result = rateLimiting.check(key, rl.max, rl.windowMs);
 
       if (!result.allowed) {
         res.status(429).json({
           error: 'Too many requests',
-          retryAfter: Math.ceil(this.config.rateLimit.windowMs / 1000),
-          limit: this.config.rateLimit.max,
-          window: this.config.rateLimit.windowMs,
+          retryAfter: Math.ceil(rl.windowMs / 1000),
+          limit: rl.max,
+          window: rl.windowMs,
         });
         return;
       }
@@ -323,8 +352,9 @@ class ApiGatewayFeature implements FeatureModule {
       return next();
     }
 
-    // Check for API key
-    const apiKey = req.headers['x-api-key'] as string;
+    // Check for API key (handle string[] case)
+    const apiKeyHeader = req.headers['x-api-key'];
+    const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
     if (!apiKey) {
       res.status(401).json({ error: 'Unauthorized', message: 'API key required' });
       return;
@@ -336,9 +366,11 @@ class ApiGatewayFeature implements FeatureModule {
     }
 
     // Update last used
-    const token = this.apiTokens.get(apiKey)!;
-    token.lastUsed = Date.now();
-    this.apiTokens.set(apiKey, token);
+    const token = this.apiTokens.get(apiKey);
+    if (token) {
+      token.lastUsed = Date.now();
+      this.apiTokens.set(apiKey, token);
+    }
 
     next();
   }

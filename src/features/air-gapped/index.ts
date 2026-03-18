@@ -6,6 +6,7 @@
  */
 
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { resolve } from 'path';
 
 /** Air-gapped configuration */
 export interface AirGappedConfig {

@@ -88,8 +88,8 @@ class NewsDigestFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const sources = this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get().c as number;
-      const articles = this.db.prepare('SELECT COUNT(*) as c FROM articles').get().c as number;
+      const sources = this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get<{ c: number }>().c;
+      const articles = this.db.prepare('SELECT COUNT(*) as c FROM articles').get<{ c: number }>().c;
       return {
         healthy: true,
         message: 'News Digest OK',
@@ -313,8 +313,8 @@ class NewsDigestFeature implements FeatureModule {
       const link = linkMatch ? linkMatch[1].trim() : null;
 
       const title = getTag('title');
-      const description = getTag('description');
-      const content = getTag('content:encoded') || getTag('content');
+      const description = getTag('description') ?? undefined;
+      const content = (getTag('content:encoded') || getTag('content')) ?? undefined;
 
       // Parse pubDate
       const pubDateStr = getTag('pubDate');
@@ -324,8 +324,8 @@ class NewsDigestFeature implements FeatureModule {
         items.push({
           title,
           link,
-          description,
-          content,
+          description: description ?? undefined,
+          content: content ?? undefined,
           publishedAt,
         });
       }
@@ -354,8 +354,8 @@ class NewsDigestFeature implements FeatureModule {
       const link = linkMatch ? linkMatch[1] : null;
 
       const title = getTag('title');
-      const summary = getTag('summary');
-      const content = getTag('content');
+      const summary = getTag('summary') ?? undefined;
+      const content = getTag('content') ?? undefined;
 
       // Parse updated or published
       const updatedStr = getTag('updated') || getTag('published');

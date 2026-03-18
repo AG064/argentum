@@ -21,12 +21,19 @@ export interface FileWatcherConfig {
   };
 }
 
-/** Watch entry */
-export interface WatchEntry {
+/** Public watch info (returned by listWatches) */
+export interface WatchInfo {
   id: string;
   path: string;
   pattern?: string | RegExp | (string | RegExp)[];
-  callback: (event: 'change' | 'create' | 'delete' | 'add' | 'unlink', filePath: string) => void;
+}
+
+/** Internal watch entry with active watcher */
+interface InternalWatchEntry {
+  id: string;
+  path: string;
+  pattern?: string | RegExp | (string | RegExp)[];
+  userCallback: (event: 'change' | 'create' | 'delete', filePath: string) => void;
   watcher: FSWatcher;
 }
 
@@ -54,7 +61,7 @@ class FileWatcherFeature implements FeatureModule {
     },
   };
   private ctx!: FeatureContext;
-  private watches: Map<string, WatchEntry> = new Map();
+  private watches: Map<string, InternalWatchEntry> = new Map();
   private active = false;
   private watchCounter = 0;
 
@@ -107,19 +114,19 @@ class FileWatcherFeature implements FeatureModule {
       awaitWriteFinish: this.config.awaitWriteFinish,
     });
 
-    const entry: WatchEntry = {
+    const entry: InternalWatchEntry = {
       id,
       path,
       pattern: pattern as string | RegExp | (string | RegExp)[] | undefined,
-      callback: callback ?? (() => {}),
+      userCallback: callback ?? (() => {}),
       watcher,
     };
 
-    // Set up event listeners
+    // Set up event listeners: map chokidar events to user events
     watcher
-      .on('add', (filePath) => entry.callback('create', filePath))
-      .on('change', (filePath) => entry.callback('change', filePath))
-      .on('unlink', (filePath) => entry.callback('delete', filePath))
+      .on('add', (filePath) => entry.userCallback('create', filePath))
+      .on('change', (filePath) => entry.userCallback('change', filePath))
+      .on('unlink', (filePath) => entry.userCallback('delete', filePath))
       .on('error', (error) => {
         this.ctx.logger.error('File watcher error', {
           id,
@@ -164,7 +171,7 @@ class FileWatcherFeature implements FeatureModule {
   }
 
   /** List all active watches */
-  listWatches(): WatchEntry[] {
+  listWatches(): WatchInfo[] {
     return Array.from(this.watches.values()).map(entry => ({
       id: entry.id,
       path: entry.path,
