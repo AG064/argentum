@@ -115,7 +115,10 @@ class DiscordBotFeature implements FeatureModule {
 
     // Also check env var if token not set
     if (!this.token && process.env[this.config.tokenEnvVar]) {
-      this.token = process.env[this.config.tokenEnvVar];
+      const envToken = process.env[this.config.tokenEnvVar];
+      if (envToken) {
+        this.token = envToken;
+      }
     }
   }
 
@@ -312,7 +315,7 @@ class DiscordBotFeature implements FeatureModule {
     return rows.map(r => ({
       id: r.id,
       channelId: r.channel_id,
-      guildId: r.guild_id,
+      guildId: r.guild_id ?? undefined,
       author: {
         id: r.author_id,
         username: r.author_username,

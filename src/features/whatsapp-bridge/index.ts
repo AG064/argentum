@@ -110,6 +110,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
   private db!: Database.Database;
   private apiToken: string = '';
   private phoneNumberId: string = '';
+  private businessId: string = '';
   private webhookSecret: string = '';
   private autoAck: boolean = true;
   private messageHandlers: Array<(msg: WhatsAppMessage) => Promise<void>> = [];
@@ -197,7 +198,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
     this.apiToken = apiToken;
     this.phoneNumberId = phoneNumberId;
     this.webhookSecret = webhookSecret ?? '';
-    this.businessId = businessId;
+    this.businessId = (businessId ?? '') as string;
 
     const value = JSON.stringify({
       apiToken: this.apiToken,
@@ -256,7 +257,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
       status: 'sent',
     };
 
-    this.logMessage(message);
+    this.logMessage({ ...message, direction: 'outbound' });
     this.ctx.logger.info('WhatsApp message sent (stub)', { to, type, messageId: msgId });
 
     return message;

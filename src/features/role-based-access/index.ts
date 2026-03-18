@@ -323,7 +323,6 @@ class RoleBasedAccessFeature implements FeatureModule {
 
   private loadRolesFromDb(): void {
     const rows = this.db.prepare('SELECT * FROM roles').all();
-    const rows = this.db.prepare('SELECT * FROM roles').all();
     for (const row of rows as any[]) {
       const role: Role = {
         id: row.id,

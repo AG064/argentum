@@ -26,6 +26,20 @@ export interface EmailAccount {
   created_at: number;
 }
 
+/** Raw account as stored in SQLite (secure and enabled as integers) */
+interface RawEmailAccount {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  secure: number;
+  username: string;
+  password_encrypted: string;
+  password_iv: string;
+  enabled: number;
+  created_at: number;
+}
+
 /** Email message (preview) */
 export interface EmailMessage {
   id: string;
@@ -91,7 +105,7 @@ class EmailIntegrationFeature implements FeatureModule {
   private config: Required<EmailIntegrationConfig>;
   private ctx!: FeatureContext;
   private db!: Database.Database;
-  private encryptionKey: Buffer;
+  private encryptionKey!: Buffer;
 
   // Encryption algorithm
   private readonly ALGORITHM = 'aes-256-gcm';
@@ -100,7 +114,7 @@ class EmailIntegrationFeature implements FeatureModule {
   constructor() {
     this.config = {
       dbPath: './data/email-integration.db',
-      encryptionKey: undefined,
+      encryptionKey: '',
       maxConnections: 5,
       defaultImapPort: 993,
       defaultSmtpPort: 587,
@@ -215,9 +229,7 @@ class EmailIntegrationFeature implements FeatureModule {
    * @returns Array of accounts (passwords encrypted, not decrypted)
    */
   listAccounts(): EmailAccount[] {
-    const rows = this.db.prepare('SELECT * FROM accounts ORDER BY name').all() as Array<
-      Omit<EmailAccount, 'passwordEncrypted' | 'passwordIV'> & { password_encrypted: string; password_iv: string; secure: number; enabled: number }
-    >;
+    const rows = this.db.prepare('SELECT * FROM accounts ORDER BY name').all() as RawEmailAccount[];
 
     return rows.map(r => ({
       id: r.id,
@@ -237,9 +249,7 @@ class EmailIntegrationFeature implements FeatureModule {
    * Get a specific account by ID.
    */
   getAccount(id: string): EmailAccount | null {
-    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as
-      | Omit<EmailAccount, 'passwordEncrypted' | 'passwordIV'> & { password_encrypted: string; password_iv: string; secure: number; enabled: number }
-      | undefined;
+    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as RawEmailAccount | undefined;
 
     if (!row) return null;
 
@@ -360,6 +370,7 @@ class EmailIntegrationFeature implements FeatureModule {
       from: row.from_addr,
       to: row.to_addrs.split(','),
       date: row.date,
+      snippet: row.body.substring(0, 150) + (row.body.length > 150 ? '...' : ''),
       body: row.body,
       bodyHtml: row.body_html,
       attachments: row.attachments ? JSON.parse(row.attachments) : [],

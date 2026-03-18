@@ -80,7 +80,7 @@ class SmsGatewayFeature implements FeatureModule {
   constructor() {
     this.config = {
       dbPath: './data/sms-gateway.db',
-      defaultProvider: null,
+      defaultProvider: '',
       maxLogEntries: 10000,
     };
   }
@@ -390,4 +390,3 @@ class SmsGatewayFeature implements FeatureModule {
 export default new SmsGatewayFeature();
 
 // Also export provider interface for external plugin authors
-export type { SmsProvider };

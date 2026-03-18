@@ -5,7 +5,7 @@
  * Provides image caching, upscaling, and variations.
  */
 
-import { mkdirSync, existsSync, writeFile, unlink } from 'fs';
+import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import crypto from 'crypto';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
@@ -70,7 +70,7 @@ class ImageGenerationFeature implements FeatureModule {
   private ctx!: FeatureContext;
   private provider: ImageProvider = 'dalle';
   private apiKeys: Map<ImageProvider, string> = new Map();
-  private cacheDir: string;
+  private cacheDir!: string;
   private cacheIndex: Map<string, GeneratedImage> = new Map();
 
   constructor() {
@@ -79,7 +79,7 @@ class ImageGenerationFeature implements FeatureModule {
       maxCacheSizeMB: 10000,
       defaultProvider: 'dalle',
       defaultSize: '1024x1024',
-      apiKeys: {},
+      apiKeys: {} as Record<string, string>,
     };
   }
 
@@ -120,7 +120,7 @@ class ImageGenerationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const cacheSizeMB = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + img.metadata?.size ?? 0, 0) / (1024 * 1024);
+      const cacheSizeMB = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0), 0) / (1024 * 1024);
       const imageCount = this.cacheIndex.size;
 
       return {
@@ -174,7 +174,7 @@ class ImageGenerationFeature implements FeatureModule {
       throw new Error('Prompt cannot be empty');
     }
 
-    const cacheKey = this.generateCacheKey(prompt, size, style, seed, request.provider ?? this.provider);
+    const cacheKey = this.generateCacheKey(prompt, size, style, seed, this.provider);
 
     // Check cache
     const cached = this.cacheIndex.get(cacheKey);
@@ -198,7 +198,7 @@ class ImageGenerationFeature implements FeatureModule {
     }
 
     // Create a placeholder image file (in real impl, would be binary PNG/JPG)
-    const placeholder = `[IMAGE GENERATION STUB]\nProvider: ${request.provider ?? this.provider}\nPrompt: ${prompt}\nSize: ${size}\nStyle: ${style ?? 'default'}\n`;
+    const placeholder = `[IMAGE GENERATION STUB]\nProvider: ${this.provider}\nPrompt: ${prompt}\nSize: ${size}\nStyle: ${style ?? 'default'}\n`;
     writeFileSync(filepath, placeholder);
 
     const stats = require('fs').statSync(filepath);
@@ -210,7 +210,7 @@ class ImageGenerationFeature implements FeatureModule {
       prompt,
       size,
       style,
-      provider: request.provider ?? this.provider,
+      provider: this.provider,
       createdAt: Date.now(),
       metadata: {
         size: sizeBytes,
@@ -390,7 +390,7 @@ class ImageGenerationFeature implements FeatureModule {
    * Get cache statistics.
    */
   getCacheStats(): { images: number; sizeMB: number } {
-    const size = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + (img.metadata?.size ?? 0), 0);
+    const size = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0), 0);
     return {
       images: this.cacheIndex.size,
       sizeMB: size / (1024 * 1024),

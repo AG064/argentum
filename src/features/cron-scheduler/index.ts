@@ -359,7 +359,7 @@ class CronSchedulerFeature implements FeatureModule {
 
       // persist any session state optionally provided by handler via running_tasks.session_state
       try {
-        const row = this.db.prepare('SELECT session_state FROM running_tasks WHERE job_id = ?').get(job.id);
+        const row = this.db.prepare('SELECT session_state FROM running_tasks WHERE job_id = ?').get(job.id) as any;
         if (row && row.session_state) {
           // store as last_error field for visibility (placeholder) or a dedicated sessions table
           this.db.prepare('UPDATE jobs SET last_error = ? WHERE id = ?').run(`session:${row.session_state}`, job.id);
