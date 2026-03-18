@@ -162,6 +162,10 @@ function cmdInit(): void {
       logging: {
         level: 'info',
       },
+      llm: {
+        providers: {},
+        default: '',
+      },
     };
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     success('Created agclaw.json');
@@ -1310,7 +1314,11 @@ async function cmdOnboard(): Promise<void> {
     version: '1.0.0',
     server: { port: 3000, host: '0.0.0.0' },
     features: {},
-    llm: { provider: 'nvidia', model: 'deepseek-ai/deepseek-v3.2' },
+    llm: {
+      providers: {},
+      default: '',
+      fallback: [],
+    },
   };
 
   // Step 1: Instance name
@@ -1321,31 +1329,61 @@ async function cmdOnboard(): Promise<void> {
 
   // Step 2: LLM Provider
   print('  \x1b[1mStep 2: LLM Provider\x1b[0m');
-  print('  Available providers:');
-  print('    1. OpenRouter (needs API key)');
-  print('    2. NVIDIA (free models, needs API key)');
-  print('    3. Google Gemini (free tier)');
-  print('    4. Anthropic (needs API key)');
-  print('    5. Skip (configure later)');
-  const providerChoice = await ask('  Choose (1-5, default: 2): ');
-  const providers: Record<string, { provider: string; model: string; keyEnv: string }> = {
-    '1': { provider: 'openrouter', model: 'auto', keyEnv: 'OPENROUTER_API_KEY' },
-    '2': { provider: 'nvidia', model: 'deepseek-ai/deepseek-v3.2', keyEnv: 'NVIDIA_API_KEY' },
-    '3': { provider: 'google', model: 'gemini-2.5-flash', keyEnv: 'GOOGLE_API_KEY' },
-    '4': { provider: 'anthropic', model: 'claude-sonnet-4-20250514', keyEnv: 'ANTHROPIC_API_KEY' },
-  };
-  const chosen = providers[providerChoice.trim()] || providers['2'];
-  config.llm = { provider: chosen.provider, model: chosen.model };
+  print('  Choose a provider or add your own OpenAI-compatible API.');
+  print('');
+  print('  Presets:');
+  print('    1. OpenRouter    — openrouter.ai/api/v1');
+  print('    2. NVIDIA        — integrate.api.nvidia.com (free models)');
+  print('    3. Google Gemini — generativelanguage.googleapis.com');
+  print('    4. Anthropic     — api.anthropic.com');
+  print('    5. OpenAI        — api.openai.com');
+  print('    6. Custom        — your own base_url');
+  print('');
+  const providerChoice = await ask('  Choose (1-6, default: 2): ');
 
-  if (providerChoice.trim() !== '5') {
-    const apiKey = await ask(`  ${chosen.keyEnv} (or press Enter to skip): `);
-    if (apiKey.trim()) {
-      // Write to .env
-      const envPath = path.join(getWorkDir(), '.env');
-      const envLine = `${chosen.keyEnv}=${apiKey.trim()}\n`;
-      fs.appendFileSync(envPath, envLine);
-      success(`Saved ${chosen.keyEnv} to .env`);
-    }
+  interface Preset { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }
+  const presets: Record<string, Preset> = {
+    '1': { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
+    '2': { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
+    '3': { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
+    '4': { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    '5': { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
+  };
+
+  let preset: Preset;
+  if (providerChoice.trim() === '6') {
+    // Custom provider
+    const custName = await ask('  Provider name: ');
+    const custUrl = await ask('  Base URL: ');
+    const custModel = await ask('  Default model: ');
+    const custApi = await ask('  API style [openai|anthropic] (default: openai): ') || 'openai';
+    const custKeyEnv = await ask('  API key env var (e.g. MY_API_KEY): ');
+    preset = { name: custName.trim() || 'custom', base_url: custUrl.trim(), api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY', api: custApi, model: custModel.trim() };
+  } else {
+    preset = presets[providerChoice.trim()] || presets['2'];
+  }
+
+  config.llm.providers[preset.name] = {
+    base_url: preset.base_url,
+    api_key_env: preset.api_key_env,
+    api: preset.api as any,
+    models: [preset.model],
+    ...(preset.headers ? { headers: preset.headers } : {}),
+  };
+  config.llm.default = preset.name;
+
+  // Ask for API key
+  const apiKey = await ask(`  ${preset.api_key_env} (or press Enter to skip): `);
+  if (apiKey.trim()) {
+    const envPath = path.join(getWorkDir(), '.env');
+    fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
+    success(`Saved ${preset.api_key_env} to .env`);
+  }
+
+  // Ask for additional models
+  const addModels = await ask('  Add fallback models (comma-separated, or Enter to skip): ');
+  if (addModels.trim()) {
+    config.llm.providers[preset.name].models.push(...addModels.trim().split(',').map((m: string) => m.trim()));
   }
   print('');
 

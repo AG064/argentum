@@ -378,13 +378,11 @@ class AGClaw {
 
     // Initialize LLM provider
     try {
-      const modelConfig = (this.config as Record<string, unknown>).model as Record<string, unknown> | undefined;
+      const llmConfig = (this.config as Record<string, unknown>).llm as any;
       this.llmProvider = createLLMProvider({
-        provider: modelConfig?.provider as string | undefined,
-        model: modelConfig?.defaultModel as string | undefined,
-        fallbackModels: modelConfig?.fallbackModel ? [modelConfig.fallbackModel as string] : [],
+        llm: llmConfig,
       });
-      this.logger.info(`LLM provider initialized: ${this.llmProvider.name}`);
+      this.logger.info(`LLM provider initialized: ${this.llmProvider.name} (${this.llmProvider.model})`);
     } catch (err) {
       this.logger.warn('LLM provider not configured, agent will have limited capabilities', {
         error: err instanceof Error ? err.message : String(err),
@@ -392,6 +390,8 @@ class AGClaw {
       // Create a stub provider for testing
       this.llmProvider = {
         name: 'stub',
+        model: 'none',
+        baseUrl: '',
         async chat(_messages: Message[]): Promise<LLMResponse> {
           return {
             content: 'I am running in stub mode. Please configure OPENROUTER_API_KEY or ANTHROPIC_API_KEY to enable full capabilities.',

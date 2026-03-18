@@ -1,17 +1,16 @@
 /**
- * AG-Claw LLM Provider Interface & Implementations
+ * AG-Claw LLM Provider — Fully Configurable
  *
- * Defines the LLM provider contract and implements OpenRouter API integration.
+ * All providers are defined in agclaw.json. No hardcoded providers.
+ * Any OpenAI-compatible API can be added by setting base_url + api_key.
  */
 
 import { createLogger } from './logger';
 
 const logger = createLogger();
 
-/** Message role types */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
-/** Chat message */
 export interface Message {
   role: MessageRole;
   content: string;
@@ -20,60 +19,84 @@ export interface Message {
   tool_calls?: ToolCall[];
 }
 
-/** Tool call from LLM */
 export interface ToolCall {
   id: string;
   type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
+  function: { name: string; arguments: string };
 }
 
-/** Tool definition for LLM */
 export interface ToolDefinition {
   type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
+  function: { name: string; description: string; parameters: Record<string, unknown> };
 }
 
-/** LLM response */
 export interface LLMResponse {
   content?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-  usage: {
-    prompt: number;
-    completion: number;
-  };
+  usage: { prompt: number; completion: number };
 }
 
-/** LLM provider interface */
 export interface LLMProvider {
   readonly name: string;
+  readonly model: string;
+  readonly baseUrl: string;
   chat(messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse>;
 }
 
-/** OpenRouter provider implementation */
-export class OpenRouterProvider implements LLMProvider {
-  readonly name = 'openrouter';
-  private apiKey: string;
-  private model: string;
-  private fallbackModels: string[];
-  private baseUrl: string;
+// ─── Provider Config (from agclaw.json) ─────────────────────────────────────
 
-  constructor(apiKey: string, model: string, fallbackModels: string[] = [], baseUrl?: string) {
-    this.apiKey = apiKey;
-    this.model = model;
-    this.fallbackModels = fallbackModels;
-    this.baseUrl = baseUrl ?? 'https://openrouter.ai/api/v1';
+export interface ProviderConfig {
+  /** Base URL for the API (OpenAI-compatible) */
+  base_url: string;
+  /** API key, or env var name if api_key_env is set */
+  api_key?: string;
+  /** Environment variable containing the API key (alternative to api_key) */
+  api_key_env?: string;
+  /** API style — "openai" (default) or "anthropic" */
+  api?: 'openai' | 'anthropic';
+  /** Models available from this provider */
+  models: string[];
+  /** Optional extra headers (e.g. HTTP-Referer for OpenRouter) */
+  headers?: Record<string, string>;
+}
+
+export interface LLMConfig {
+  /** Provider configurations */
+  providers: Record<string, ProviderConfig>;
+  /** Default provider name */
+  default: string;
+  /** Fallback chain — list of "provider/model" pairs */
+  fallback?: string[];
+}
+
+// ─── OpenAI-Compatible Provider ──────────────────────────────────────────────
+
+class OpenAICompatibleProvider implements LLMProvider {
+  readonly name: string;
+  readonly model: string;
+  readonly baseUrl: string;
+  private apiKey: string;
+  private fallbackModels: string[];
+  private extraHeaders: Record<string, string>;
+
+  constructor(config: {
+    name: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    fallbackModels?: string[];
+    extraHeaders?: Record<string, string>;
+  }) {
+    this.name = config.name;
+    this.baseUrl = config.baseUrl;
+    this.apiKey = config.apiKey;
+    this.model = config.model;
+    this.fallbackModels = config.fallbackModels ?? [];
+    this.extraHeaders = config.extraHeaders ?? {};
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
     const modelsToTry = [this.model, ...this.fallbackModels];
-
     let lastError: Error | null = null;
 
     for (const model of modelsToTry) {
@@ -85,7 +108,7 @@ export class OpenRouterProvider implements LLMProvider {
       }
     }
 
-    throw lastError ?? new Error('All LLM models failed');
+    throw lastError ?? new Error('All models failed');
   }
 
   private async callModel(model: string, messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
@@ -107,20 +130,21 @@ export class OpenRouterProvider implements LLMProvider {
       body.tool_choice = 'auto';
     }
 
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+      ...this.extraHeaders,
+    };
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/AG064/ag-claw',
-        'X-Title': 'AG-Claw',
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+      throw new Error(`API error (${response.status}): ${errorText}`);
     }
 
     const data = await response.json() as {
@@ -134,16 +158,11 @@ export class OpenRouterProvider implements LLMProvider {
           }>;
         };
       }>;
-      usage?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-      };
+      usage?: { prompt_tokens: number; completion_tokens: number };
     };
 
     const choice = data.choices[0];
-    if (!choice) {
-      throw new Error('No response choices from OpenRouter');
-    }
+    if (!choice) throw new Error('No response choices');
 
     const result: LLMResponse = {
       usage: {
@@ -152,23 +171,13 @@ export class OpenRouterProvider implements LLMProvider {
       },
     };
 
-    if (choice.message.content) {
-      result.content = choice.message.content;
-    }
+    if (choice.message.content) result.content = choice.message.content;
 
-    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+    if (choice.message.tool_calls?.length) {
       result.toolCalls = choice.message.tool_calls.map(tc => {
-        let parsedArgs: Record<string, unknown>;
-        try {
-          parsedArgs = JSON.parse(tc.function.arguments);
-        } catch {
-          parsedArgs = {};
-        }
-        return {
-          id: tc.id,
-          name: tc.function.name,
-          arguments: parsedArgs,
-        };
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(tc.function.arguments); } catch { /* ignore */ }
+        return { id: tc.id, name: tc.function.name, arguments: args };
       });
     }
 
@@ -176,36 +185,33 @@ export class OpenRouterProvider implements LLMProvider {
   }
 }
 
-/** Anthropic Claude provider (direct API) */
-export class AnthropicProvider implements LLMProvider {
-  readonly name = 'anthropic';
-  private apiKey: string;
-  private model: string;
+// ─── Anthropic Provider ──────────────────────────────────────────────────────
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-20250514') {
-    this.apiKey = apiKey;
-    this.model = model;
+class AnthropicProvider implements LLMProvider {
+  readonly name: string;
+  readonly model: string;
+  readonly baseUrl = 'https://api.anthropic.com';
+  private apiKey: string;
+
+  constructor(config: { name: string; apiKey: string; model: string }) {
+    this.name = config.name;
+    this.apiKey = config.apiKey;
+    this.model = config.model;
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
-    // Separate system message from conversation
     const systemMsg = messages.find(m => m.role === 'system');
     const conversation = messages.filter(m => m.role !== 'system');
 
     const body: Record<string, unknown> = {
       model: this.model,
       max_tokens: 4096,
-      messages: conversation.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
+      messages: conversation.map(m => ({ role: m.role, content: m.content })),
     };
 
-    if (systemMsg) {
-      body.system = systemMsg.content;
-    }
+    if (systemMsg) body.system = systemMsg.content;
 
-    if (tools && tools.length > 0) {
+    if (tools?.length) {
       body.tools = tools.map(t => ({
         name: t.function.name,
         description: t.function.description,
@@ -213,7 +219,7 @@ export class AnthropicProvider implements LLMProvider {
       }));
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'x-api-key': this.apiKey,
@@ -241,12 +247,10 @@ export class AnthropicProvider implements LLMProvider {
     };
 
     const textParts = data.content.filter(c => c.type === 'text');
-    if (textParts.length > 0) {
-      result.content = textParts.map(c => c.text).join('\n');
-    }
+    if (textParts.length) result.content = textParts.map(c => c.text).join('\n');
 
     const toolUses = data.content.filter(c => c.type === 'tool_use');
-    if (toolUses.length > 0) {
+    if (toolUses.length) {
       result.toolCalls = toolUses.map(tc => ({
         id: tc.id ?? '',
         name: tc.name ?? '',
@@ -258,39 +262,107 @@ export class AnthropicProvider implements LLMProvider {
   }
 }
 
-/** Create LLM provider from config */
+// ─── Config-Driven Factory ───────────────────────────────────────────────────
+
+/**
+ * Create provider from config. No hardcoded providers.
+ *
+ * Config format in agclaw.json:
+ * {
+ *   "llm": {
+ *     "providers": {
+ *       "nvidia": {
+ *         "base_url": "https://integrate.api.nvidia.com/v1",
+ *         "api_key_env": "NVIDIA_API_KEY",
+ *         "api": "openai",
+ *         "models": ["deepseek-ai/deepseek-v3.2"]
+ *       },
+ *       "anthropic": {
+ *         "base_url": "https://api.anthropic.com",
+ *         "api_key_env": "ANTHROPIC_API_KEY",
+ *         "api": "anthropic",
+ *         "models": ["claude-sonnet-4-20250514"]
+ *       }
+ *     },
+ *     "default": "nvidia",
+ *     "fallback": ["nvidia/deepseek-ai/deepseek-v3.2", "openrouter/auto"]
+ *   }
+ * }
+ */
 export function createLLMProvider(config: {
+  llm?: LLMConfig;
   provider?: string;
   model?: string;
   fallbackModels?: string[];
 }): LLMProvider {
-  const provider = config.provider ?? 'openrouter';
-  const model = config.model ?? 'anthropic/claude-sonnet-4-20250514';
-  const fallbackModels = config.fallbackModels ?? [];
+  const llmConfig = config.llm;
 
-  switch (provider) {
-    case 'openrouter': {
-      const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AGCLAW_OPENROUTER_KEY;
-      if (!apiKey) {
-        throw new Error('OPENROUTER_API_KEY or AGCLAW_OPENROUTER_KEY environment variable is required');
-      }
-      return new OpenRouterProvider(apiKey, model, fallbackModels);
+  // If llm config is provided, use config-driven approach
+  if (llmConfig?.providers) {
+    const providerName = config.provider ?? llmConfig.default ?? Object.keys(llmConfig.providers)[0];
+    const providerConfig = llmConfig.providers[providerName];
+
+    if (!providerConfig) {
+      throw new Error(`Provider '${providerName}' not found in config. Available: ${Object.keys(llmConfig.providers).join(', ')}`);
     }
-    case 'anthropic': {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error('ANTHROPIC_API_KEY environment variable is required');
-      }
-      return new AnthropicProvider(apiKey, model);
+
+    const model = config.model ?? providerConfig.models?.[0] ?? 'default';
+
+    // Resolve API key
+    let apiKey: string | undefined;
+    if (providerConfig.api_key) {
+      apiKey = providerConfig.api_key;
+    } else if (providerConfig.api_key_env) {
+      apiKey = process.env[providerConfig.api_key_env];
     }
-    case 'nvidia': {
-      const apiKey = process.env.NVIDIA_API_KEY ?? process.env.AGCLAW_NVIDIA_KEY;
-      if (!apiKey) {
-        throw new Error('NVIDIA_API_KEY or AGCLAW_NVIDIA_KEY environment variable is required');
-      }
-      return new OpenRouterProvider(apiKey, model ?? 'deepseek-ai/deepseek-v3.2', fallbackModels, 'https://integrate.api.nvidia.com/v1');
+    if (!apiKey) {
+      const envHint = providerConfig.api_key_env ? ` Set ${providerConfig.api_key_env} or api_key in agclaw.json` : ' Set api_key or api_key_env in agclaw.json';
+      throw new Error(`No API key for provider '${providerName}'.${envHint}`);
     }
-    default:
-      throw new Error(`Unknown LLM provider: ${provider}`);
+
+    // Collect fallback models from fallback chain config
+    const fallbackModels: string[] = [];
+    if (config.fallbackModels?.length) {
+      fallbackModels.push(...config.fallbackModels);
+    } else if (llmConfig.fallback) {
+      for (const entry of llmConfig.fallback) {
+        const [prov, mod] = entry.split('/');
+        if (prov === providerName && mod && mod !== model) {
+          fallbackModels.push(mod);
+        }
+      }
+    }
+
+    const api = providerConfig.api ?? 'openai';
+
+    if (api === 'anthropic') {
+      return new AnthropicProvider({
+        name: providerName,
+        apiKey,
+        model,
+      });
+    }
+
+    return new OpenAICompatibleProvider({
+      name: providerName,
+      baseUrl: providerConfig.base_url,
+      apiKey,
+      model,
+      fallbackModels,
+      extraHeaders: providerConfig.headers,
+    });
   }
+
+  // Fallback: legacy direct params (for backwards compat)
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('No LLM config found. Run: agclaw onboard');
+  }
+  return new OpenAICompatibleProvider({
+    name: 'legacy',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKey,
+    model: config.model ?? 'auto',
+    fallbackModels: config.fallbackModels,
+  });
 }
