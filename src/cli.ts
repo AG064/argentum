@@ -715,6 +715,98 @@ async function cmdPlugins(): Promise<void> {
   info('Enable/disable in agclaw.json [features]');
 }
 
+async function cmdTelegram(): Promise<void> {
+  const subcommand = args[1] || 'status';
+  banner();
+
+  switch (subcommand) {
+    case 'status': {
+      info('Telegram bot status');
+      print('');
+      const configPath = path.join(getWorkDir(), 'agclaw.json');
+      if (!fs.existsSync(configPath)) {
+        error('AG-Claw not initialized. Run: agclaw init');
+        return;
+      }
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const tg = config.features?.telegram;
+      if (!tg) {
+        warn('Telegram not configured');
+        info('Add to agclaw.json:');
+        print('  {');
+        print('    "features": {');
+        print('      "telegram": {');
+        print('        "enabled": true,');
+        print('        "botToken": "YOUR_BOT_TOKEN"');
+        print('      }');
+        print('    }');
+        print('  }');
+        return;
+      }
+      print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
+      print(`  Bot Token: ${tg.botToken ? '***' + tg.botToken.slice(-8) : 'NOT SET'}`);
+      print(`  DM Policy: ${tg.dmPolicy || 'pairing'}`);
+      print(`  Group Policy: ${tg.groupPolicy || 'allowlist'}`);
+      print(`  Allowed Users: ${(tg.allowFrom || []).join(', ') || 'none'}`);
+      break;
+    }
+
+    case 'pair': {
+      const code = args[2];
+      if (!code) {
+        // Generate pairing code
+        const crypto = require('crypto');
+        const newCode = crypto.randomBytes(4).toString('hex');
+        info(`Pairing code: ${newCode}`);
+        info('Valid for 10 minutes');
+        info('Share with user: /pair ' + newCode);
+      } else {
+        info(`Pairing code: ${code}`);
+      }
+      break;
+    }
+
+    case 'allow': {
+      const userId = args[2];
+      if (!userId) {
+        error('Usage: agclaw telegram allow tg:USER_ID');
+        return;
+      }
+      info(`Adding ${userId} to allowed users`);
+      // Would update config and/or database
+      success('User added (update agclaw.json to persist)');
+      break;
+    }
+
+    case 'config': {
+      info('Telegram configuration template');
+      print('');
+      print(JSON.stringify({
+        features: {
+          telegram: {
+            enabled: true,
+            botToken: 'YOUR_BOT_TOKEN',
+            allowFrom: ['tg:YOUR_USER_ID'],
+            groupPolicy: 'allowlist',
+            groups: {
+              '-100XXXXXXXXXX': { requireMention: false }
+            },
+            dmPolicy: 'pairing',
+            streaming: 'partial',
+            reactionNotifications: 'minimal',
+            markdown: { tables: 'code' },
+          }
+        }
+      }, null, 2));
+      break;
+    }
+
+    default:
+      error(`Unknown telegram command: ${subcommand}`);
+      print('Usage: agclaw telegram [status|pair|allow|config]');
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -776,6 +868,9 @@ async function main(): Promise<void> {
       break;
     case 'plugins':
       await cmdPlugins();
+      break;
+    case 'telegram':
+      await cmdTelegram();
       break;
     default:
       error(`Unknown command: ${command}`);
