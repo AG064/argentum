@@ -119,7 +119,10 @@ class MeshWorkflowsFeature implements FeatureModule {
       const condition = step.config.condition as string;
       // Simple condition evaluation
       try {
-        const result = new Function('vars', `with(vars) { return ${condition}; }`)(vars);
+        // TODO: Replace with safe expression evaluator (e.g., using a parser or limited DSL)
+        // const result = new Function('vars', `with(vars) { return ${condition}; }`)(vars);
+        // For now, condition evaluation is disabled (returns false) due to security risk.
+        const result = false;
         return { result: !!result, nextStep: result ? step.nextSteps[0] : step.nextSteps[1] };
       } catch { return { result: false }; }
     });

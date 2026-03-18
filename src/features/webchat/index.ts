@@ -8,8 +8,6 @@
 
 import { Server as HttpServer, IncomingMessage, ServerResponse } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 /** Webchat configuration */
@@ -346,6 +344,10 @@ connect();
 
 /**
  * Webchat feature — full-featured web UI with WebSocket messaging.
+ *
+ * WARNING: This implementation lacks authentication. Any client can connect,
+ * send messages, and access chat history. Use only in trusted environments
+ * or implement proper access controls before exposing publicly.
  */
 class WebchatFeature implements FeatureModule {
   readonly meta: FeatureMeta = {

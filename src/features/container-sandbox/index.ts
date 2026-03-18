@@ -13,7 +13,7 @@
 
 import { spawn } from 'child_process';
 import { resolve } from 'path';
-import { createLogger, Logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -169,6 +169,9 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   // Image
   args.push(config.image);
 
+  // WARNING: Using 'sh -c' to execute shell commands. This can be dangerous if
+  // the command contains untrusted input, leading to command injection. Ensure
+  // commands are sanitized or run in a properly sandboxed environment.
   // Shell command
   args.push('sh', '-c', command);
 

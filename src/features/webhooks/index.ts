@@ -5,8 +5,8 @@
  * retry logic, and event routing.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 import { createHmac } from 'crypto';
+import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 /** Webhook configuration */
 export interface WebhooksConfig {
@@ -160,6 +160,9 @@ class WebhooksFeature implements FeatureModule {
       const body = JSON.stringify(event);
       const signature = createHmac('sha256', sub.secret).update(body).digest('hex');
 
+      // WARNING: SSRF risk! The subscriber URL (sub.url) may be user-controlled.
+      // Fetching arbitrary URLs can expose internal services or data. Validate
+      // URLs against an allowlist or use safe outbound networking practices.
       const response = await fetch(sub.url, {
         method: 'POST',
         headers: {

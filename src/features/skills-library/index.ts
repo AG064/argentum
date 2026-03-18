@@ -3,11 +3,16 @@
  *
  * Collects, saves and reuses successful skills, plans and code patterns.
  * Allows fast lookup for agent to reapply previously successful workflows or solutions.
+ *
+ * WARNING: This feature stores arbitrary code snippets. If such code is executed
+ * without proper sandboxing or review, it may introduce security vulnerabilities.
+ * Only store and retrieve code from trusted sources, and consider static analysis
+ * or sandboxed execution before running stored code.
  */
 
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
-import { join, resolve, dirname } from 'path';
+import { join, resolve } from 'path';
 import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────
