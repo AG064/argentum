@@ -218,7 +218,7 @@ class VoiceFeature implements FeatureModule {
     }
 
     const formData = new FormData();
-    const blob = new Blob([audio], { type: `audio/${format}` });
+    const blob = new Blob([new Uint8Array(audio)], { type: `audio/${format}` });
     formData.append('file', blob, `audio.${format}`);
     formData.append('model', 'whisper-1');
 
