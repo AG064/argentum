@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import * as crypto from 'crypto';
 
 /**
  * AG-Claw CLI
@@ -541,10 +542,205 @@ async function cmdTools(): Promise<void> {
 }
 
 async function cmdSessions(): Promise<void> {
-  banner();
-  info('Active sessions (placeholder)');
-  print('');
-  success('Session management available via multi-agent-coordination and checkpoint features');
+  const subcommand = args[1] || 'list';
+  const dbPath = path.join(getWorkDir(), 'data', 'sessions.db');
+
+  // Lazy load database
+  const getDb = () => {
+    if (!fs.existsSync(dbPath)) {
+      // Create minimal DB
+      const dir = path.dirname(dbPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const Database = require('better-sqlite3');
+      const db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New Session',
+          created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+          model TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active',
+          tags TEXT DEFAULT '[]', metadata TEXT DEFAULT '{}'
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+          id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL,
+          content TEXT NOT NULL, timestamp INTEGER NOT NULL,
+          tool_calls TEXT, metadata TEXT DEFAULT '{}'
+        );
+      `);
+      return db;
+    }
+    const Database = require('better-sqlite3');
+    return new Database(dbPath);
+  };
+
+  switch (subcommand) {
+    case 'list':
+    case 'ls': {
+      banner();
+      const db = getDb();
+      const sessions = db.prepare("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT 20").all() as any[];
+      if (sessions.length === 0) {
+        info('No sessions yet. Create one with: agclaw session create');
+        db.close();
+        return;
+      }
+      info(`Sessions (${sessions.length}):`);
+      print('');
+      for (const s of sessions) {
+        const msgs = (db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(s.id) as any).c;
+        const ago = formatAgo(s.updated_at);
+        const status = s.status === 'active' ? '\x1b[32m●\x1b[0m' : '\x1b[33m○\x1b[0m';
+        print(`  ${status} \x1b[1m${s.title}\x1b[0m`);
+        print(`    ID: ${s.id.slice(0, 8)}... | Messages: ${msgs} | Updated: ${ago}`);
+      }
+      print('');
+      db.close();
+      break;
+    }
+
+    case 'create':
+    case 'new': {
+      banner();
+      const title = args.slice(2).join(' ') || 'New Session';
+      const db = getDb();
+      const id = crypto.randomUUID();
+      const now = Date.now();
+      db.prepare('INSERT INTO sessions (id, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?)')
+        .run(id, title, now, now, 'active');
+      success(`Session created: ${id}`);
+      print(`  Title: ${title}`);
+      db.close();
+      break;
+    }
+
+    case 'show':
+    case 'view': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw session show <id>'); return; }
+      banner();
+      const db = getDb();
+      // Find by prefix
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+
+      info(`Session: ${session.title}`);
+      print(`  ID: ${session.id}`);
+      print(`  Status: ${session.status}`);
+      print(`  Created: ${new Date(session.created_at).toLocaleString()}`);
+      print(`  Updated: ${new Date(session.updated_at).toLocaleString()}`);
+
+      const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(session.id) as any[];
+      print(`  Messages: ${messages.length}`);
+      print('');
+
+      for (const msg of messages.slice(-10)) { // Last 10 messages
+        const roleColor = msg.role === 'user' ? '\x1b[36m' : msg.role === 'assistant' ? '\x1b[32m' : '\x1b[33m';
+        const content = msg.content.slice(0, 150).replace(/\n/g, ' ');
+        print(`  ${roleColor}${msg.role}\x1b[0m: ${content}`);
+      }
+      if (messages.length > 10) {
+        print(`  ... and ${messages.length - 10} more messages`);
+      }
+      db.close();
+      break;
+    }
+
+    case 'delete':
+    case 'rm': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw session delete <id>'); return; }
+      const db = getDb();
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      db.prepare("UPDATE sessions SET status = 'deleted' WHERE id = ?").run(session.id);
+      success(`Session '${session.title}' deleted`);
+      db.close();
+      break;
+    }
+
+    case 'archive': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw session archive <id>'); return; }
+      const db = getDb();
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      db.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(session.id);
+      success(`Session '${session.title}' archived`);
+      db.close();
+      break;
+    }
+
+    case 'search': {
+      const query = args.slice(2).join(' ');
+      if (!query) { error('Usage: agclaw session search <query>'); return; }
+      banner();
+      const db = getDb();
+      const results = db.prepare(
+        'SELECT m.session_id, m.content, m.role, m.timestamp, s.title FROM messages m JOIN sessions s ON m.session_id = s.id WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT 10'
+      ).all(`%${query}%`) as any[];
+
+      if (results.length === 0) {
+        info('No results found');
+        db.close();
+        return;
+      }
+      info(`Found ${results.length} results for "${query}":`);
+      print('');
+      for (const r of results) {
+        const content = r.content.slice(0, 100).replace(/\n/g, ' ');
+        print(`  \x1b[1m${r.title}\x1b[0m [${r.role}]`);
+        print(`    ${content}...`);
+        print(`    Session: ${r.session_id.slice(0, 8)}...`);
+      }
+      db.close();
+      break;
+    }
+
+    case 'export': {
+      const id = args[2];
+      if (!id) { error('Usage: agclaw session export <id>'); return; }
+      const db = getDb();
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(session.id) as any[];
+      const exportData = { session, messages };
+      const exportPath = path.join(getWorkDir(), 'data', `session-${session.id.slice(0, 8)}.json`);
+      fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
+      success(`Exported to: ${exportPath}`);
+      db.close();
+      break;
+    }
+
+    case 'stats': {
+      banner();
+      const db = getDb();
+      const total = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
+      const active = (db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get() as any).c;
+      const messages = (db.prepare('SELECT COUNT(*) as c FROM messages').get() as any).c;
+      print(`  Total sessions: ${total}`);
+      print(`  Active: ${active}`);
+      print(`  Archived: ${total - active}`);
+      print(`  Total messages: ${messages}`);
+      print(`  Avg messages/session: ${total > 0 ? Math.round(messages / total) : 0}`);
+      db.close();
+      break;
+    }
+
+    default:
+      error(`Unknown session command: ${subcommand}`);
+      print('  agclaw session [list|create|show|delete|archive|search|export|stats]');
+  }
+}
+
+function formatAgo(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 async function cmdWatch(): Promise<void> {
@@ -1207,6 +1403,10 @@ async function main(): Promise<void> {
     case 'skill':
     case 'skills':
       await cmdSkill();
+      break;
+    case 'session':
+    case 'sessions':
+      await cmdSessions();
       break;
     case 'onboard':
     case 'setup':
