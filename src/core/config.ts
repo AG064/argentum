@@ -119,9 +119,27 @@ const CronSchedulerConfigSchema = FeatureToggleSchema.extend({
   maxJobs: z.number().default(500),
 }).default({});
 
+/** LLM provider configuration schema */
+export const LLMProviderConfigSchema = z.object({
+  base_url: z.string().url(),
+  api_key: z.string().optional(),
+  api_key_env: z.string().optional(),
+  api: z.enum(['openai', 'anthropic']).default('openai'),
+  models: z.array(z.string()).min(1),
+  headers: z.record(z.string()).optional(),
+});
+
+/** LLM configuration schema */
+export const LLMConfigSchema = z.object({
+  providers: z.record(LLMProviderConfigSchema).default({}),
+  default: z.string().default(''),
+  fallback: z.array(z.string()).optional(),
+}).default({ providers: {}, default: '' });
+
 /** Root configuration schema */
 export const ConfigSchema = z.object({
   server: ServerConfigSchema.default({}),
+  llm: LLMConfigSchema.default({}),
   features: z.object({
     webchat: WebchatConfigSchema.default({}),
     voice: VoiceConfigSchema.default({}),
