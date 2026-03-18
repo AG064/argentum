@@ -104,14 +104,22 @@ const DEFAULT_DOMAINS = [
 // ─── Classification Keywords ─────────────────────────────────────────────────
 
 const DOMAIN_KEYWORDS: Record<string, string[]> = {
-  Work: ['meeting', 'deadline', 'project', 'client', 'manager', 'sprint', 'deploy', 'code', 'review', 'standup', 'jira', 'pull request', 'merge', 'release'],
-  Health: ['exercise', 'workout', 'gym', 'run', 'sleep', 'diet', 'doctor', 'medication', 'yoga', 'meditation', 'steps', 'calories', 'water'],
-  Finance: ['budget', 'expense', 'income', 'invest', 'stock', 'crypto', 'savings', 'rent', 'salary', 'tax', 'invoice', 'payment', 'bank'],
-  Relationships: ['friend', 'family', 'partner', 'date', 'birthday', 'call', 'visit', 'dinner', 'party', 'together', 'anniversary'],
-  Learning: ['learn', 'study', 'course', 'tutorial', 'book', 'read', 'practice', 'exam', 'certification', 'skill', 'language', 'lesson'],
-  Projects: ['build', 'create', 'prototype', 'side project', 'weekend', 'hobby', '3d', 'print', 'arduino', 'raspberry pi'],
-  Home: ['clean', 'repair', 'furniture', 'kitchen', 'garden', 'laundry', 'grocery', 'shopping', 'appliance', 'decoration'],
-  Creative: ['write', 'draw', 'paint', 'compose', 'photo', 'video', 'edit', 'design', 'sketch', 'music', 'story', 'poem'],
+  Work: ['meeting', 'deadline', 'project', 'client', 'manager', 'sprint', 'deploy', 'code', 'review', 'standup', 'jira', 'pull request', 'merge', 'release',
+         'встреча', 'дедлайн', 'проект', 'клиент', 'менеджер', 'спринт', 'код', 'ревью', 'релиз', 'работа', 'офис', 'задача', 'коллега', 'начальник', 'совещание', 'отпуск'],
+  Health: ['exercise', 'workout', 'gym', 'run', 'sleep', 'diet', 'doctor', 'medication', 'yoga', 'meditation', 'steps', 'calories', 'water',
+           'спортзал', 'спорт', 'тренировка', 'бег', 'сон', 'диета', 'врач', 'доктор', 'йога', 'медитация', 'здоровье', 'калории', 'вода', 'лекарство', 'больница', 'анализы'],
+  Finance: ['budget', 'expense', 'income', 'invest', 'stock', 'crypto', 'savings', 'rent', 'salary', 'tax', 'invoice', 'payment', 'bank',
+            'бюджет', 'расход', 'доход', 'инвестиции', 'акции', 'крипто', 'сбережения', 'аренда', 'зарплата', 'налог', 'счёт', 'оплата', 'банк', 'деньги', 'карта', 'долг'],
+  Relationships: ['friend', 'family', 'partner', 'date', 'birthday', 'call', 'visit', 'dinner', 'party', 'together', 'anniversary',
+                  'друг', 'семья', 'партнёр', 'парень', 'девушка', 'день рождения', 'звонок', 'визит', 'ужин', 'вечеринка', 'вместе', 'годовщина', 'мама', 'папа', 'брат', 'сестра'],
+  Learning: ['learn', 'study', 'course', 'tutorial', 'book', 'read', 'practice', 'exam', 'certification', 'skill', 'language', 'lesson',
+             'учить', 'учиться', 'курс', 'учебник', 'книга', 'читать', 'практика', 'экзамен', 'сертификат', 'навык', 'язык', 'урок', 'лекция', 'домашка', 'школа', 'университет'],
+  Projects: ['build', 'create', 'prototype', 'side project', 'weekend', 'hobby', '3d', 'print', 'arduino', 'raspberry pi',
+             'создать', 'построить', 'прототип', 'хобби', 'выходные', 'проект', '3d', 'печать', 'самоделка', 'конструктор'],
+  Home: ['clean', 'repair', 'furniture', 'kitchen', 'garden', 'laundry', 'grocery', 'shopping', 'appliance', 'decoration',
+         'убрать', 'починить', 'мебель', 'кухня', 'сад', 'стирка', 'покупки', 'магазин', 'техника', 'декор', 'дом', 'квартира', 'ремонт'],
+  Creative: ['write', 'draw', 'paint', 'compose', 'photo', 'video', 'edit', 'design', 'sketch', 'music', 'story', 'poem',
+             'писать', 'рисовать', 'рисунок', 'композиция', 'фото', 'видео', 'монтаж', 'дизайн', 'эскиз', 'музыка', 'история', 'стих', 'творчество', 'арт'],
 };
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
