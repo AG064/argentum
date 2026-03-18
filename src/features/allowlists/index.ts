@@ -42,7 +42,7 @@ class AllowlistsFeature {
 
   check(item: { value: string; type: 'url' | 'command' | 'user' }) {
     const rows = this.db.prepare('SELECT * FROM rules WHERE type = ?').all(item.type);
-    for (const r of rows) {
+    for (const r of rows as any[]) {
       try {
         const re = new RegExp(r.pattern);
         if (re.test(item.value)) {

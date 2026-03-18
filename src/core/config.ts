@@ -71,6 +71,54 @@ const SecurityConfigSchema = z.object({
   allowlistMode: z.enum(['strict', 'permissive']).default('permissive'),
 });
 
+/** Multi-Agent Coordination config */
+const MultiAgentCoordinationConfigSchema = FeatureToggleSchema.extend({
+  dbPath: z.string().default('./data/multi-agent-coordination.db'),
+  heartbeatIntervalMs: z.number().default(30_000),
+  offlineTimeoutMs: z.number().default(60_000),
+  maxAgents: z.number().default(100),
+}).default({});
+
+/** Role-Based Access config */
+const RoleBasedAccessConfigSchema = FeatureToggleSchema.extend({
+  dbPath: z.string().default('./data/role-based-access.db'),
+  defaultRole: z.string().default('viewer'),
+}).default({});
+
+/** Shared Knowledge Base config */
+const SharedKnowledgeBaseConfigSchema = FeatureToggleSchema.extend({
+  dbPath: z.string().default('./data/shared-knowledge-base.db'),
+  maxArticles: z.number().default(10_000),
+  maxVersionsPerArticle: z.number().default(20),
+}).default({});
+
+/** Health Monitoring config */
+const HealthMonitoringConfigSchema = FeatureToggleSchema.extend({
+  collectionIntervalMs: z.number().default(30_000),
+  diskCheckPath: z.string().default('/'),
+  cpuWarningThreshold: z.number().default(80),
+  memoryWarningThreshold: z.number().default(80),
+  diskWarningThreshold: z.number().default(80),
+}).default({});
+
+/** Auto-Update config */
+const AutoUpdateConfigSchema = FeatureToggleSchema.extend({
+  dbPath: z.string().default('./data/auto-update.db'),
+  repoOwner: z.string().default('AG064'),
+  repoName: z.string().default('ag-claw'),
+  checkIntervalHours: z.number().default(24),
+  autoApply: z.boolean().default(false),
+  backupBeforeUpdate: z.boolean().default(true),
+  backupPath: z.string().default('./data/backups'),
+}).default({});
+
+/** Cron Scheduler config */
+const CronSchedulerConfigSchema = FeatureToggleSchema.extend({
+  dbPath: z.string().default('./data/cron-scheduler.db'),
+  timezone: z.string().optional(),
+  maxJobs: z.number().default(500),
+}).default({});
+
 /** Root configuration schema */
 export const ConfigSchema = z.object({
   server: ServerConfigSchema.default({}),
@@ -114,6 +162,12 @@ export const ConfigSchema = z.object({
       requiredApprovers: z.number().default(1),
       approvers: z.array(z.string()).default([]),
     }).default({}),
+    'multi-agent-coordination': MultiAgentCoordinationConfigSchema.default({}),
+    'role-based-access': RoleBasedAccessConfigSchema.default({}),
+    'shared-knowledge-base': SharedKnowledgeBaseConfigSchema.default({}),
+    'health-monitoring': HealthMonitoringConfigSchema.default({}),
+    'auto-update': AutoUpdateConfigSchema.default({}),
+    'cron-scheduler': CronSchedulerConfigSchema.default({}),
   }).default({}),
   memory: MemoryConfigSchema.default({}),
   security: SecurityConfigSchema.default({}),

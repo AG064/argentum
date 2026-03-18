@@ -1,9 +1,5 @@
-import { cpus, totalmem, freemem, arch, platform, release, versions } from 'os';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { cpus, totalmem, freemem, arch, platform, release, version } from 'os';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
-
-const execAsync = promisify(exec);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -257,7 +253,7 @@ class HealthMonitoringFeature implements FeatureModule {
       const cpuModel = cpus()[0]?.model || 'Unknown';
 
       // Get load average
-      const loadAvg = await promisify(require('os').loadavg)();
+      const loadAvg = require('os').loadavg() as number[];
 
       // Estimate CPU usage (this is simplified)
       // In production, use a proper library like 'os-cpu'
@@ -333,7 +329,7 @@ class HealthMonitoringFeature implements FeatureModule {
     };
 
     this.alerts.push(alert);
-    this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info']('Alert raised', alert);
+    this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info']('Alert raised', alert as any);
   }
 }
 

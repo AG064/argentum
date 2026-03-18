@@ -87,7 +87,7 @@ class MemoryCompressionFeature implements FeatureModule {
       const stats = this.getStats();
       return {
         healthy: true,
-        details: stats,
+        details: { ...stats } as Record<string, unknown>,
       };
     } catch (err) {
       return {
@@ -194,7 +194,7 @@ class MemoryCompressionFeature implements FeatureModule {
           key: row.key,
           value: row.value,
           archived_at: now,
-          reason: toDelete.has(row.rowid) && valueGroups.get(row.value)!.size > 1 ? 'duplicate' : 'merged',
+          reason: toDelete.has(row.rowid) && valueGroups.get(row.value)!.length > 1 ? 'duplicate' : 'merged',
         });
         deleteStmt.run(row.rowid);
       }
@@ -211,7 +211,7 @@ class MemoryCompressionFeature implements FeatureModule {
       duplicatesMerged,
       similarMerged,
       entriesBefore,
-      entriesAfter: this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(namespace) as { c: number },
+      entriesAfter: (this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(namespace) as { c: number }).c,
     };
   }
 

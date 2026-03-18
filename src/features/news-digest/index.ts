@@ -88,8 +88,8 @@ class NewsDigestFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const sources = this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get<{ c: number }>().c;
-      const articles = this.db.prepare('SELECT COUNT(*) as c FROM articles').get<{ c: number }>().c;
+      const sources = (this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get() as { c: number }).c;
+      const articles = (this.db.prepare('SELECT COUNT(*) as c FROM articles').get() as { c: number }).c;
       return {
         healthy: true,
         message: 'News Digest OK',

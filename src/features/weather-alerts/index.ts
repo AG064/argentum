@@ -108,7 +108,7 @@ class WeatherAlertsFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const count = this.db.prepare('SELECT COUNT(*) as c FROM weather_alerts').get<{ c: number }>().c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM weather_alerts').get() as { c: number }).c;
       return {
         healthy: true,
         message: 'Weather Alerts OK',

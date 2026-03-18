@@ -1,6 +1,6 @@
 import { mkdirSync, existsSync, copyFileSync, unlinkSync, readdirSync, statSync, renameSync } from 'fs';
 import { dirname, resolve, join } from 'path';
-import { fetch } from 'undici'; // Using undici for Node 18+ fetch polyfill if needed
+
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ class AutoUpdateFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const lastCheckAge = Date.now() - this.lastCheck;
-    const hasLatest = this.latestRelease && this.isNewerVersion(this.latestRelease.version, this.currentVersion);
+    const hasLatest = this.latestRelease && this.isNewerVersion(this.latestRelease!.version, this.currentVersion);
 
     return {
       healthy: true,
@@ -175,7 +175,7 @@ class AutoUpdateFeature implements FeatureModule {
       }
     }
 
-    this.ctx.logger.info('Applying update', { from: this.currentVersion, to: this.latestRelease.version });
+    this.ctx.logger.info('Applying update', { from: this.currentVersion, to: this.latestRelease!.version });
 
     try {
       if (this.config.backupBeforeUpdate) {
@@ -190,12 +190,12 @@ class AutoUpdateFeature implements FeatureModule {
       // 4. Replace files atomically
       // 5. Restart service
 
-      await this.recordUpdate(this.latestRelease.version, true, 'Update applied successfully');
+      await this.recordUpdate(this.latestRelease!.version, true, 'Update applied successfully');
 
-      this.ctx.logger.info('Update applied', { version: this.latestRelease.version });
+      this.ctx.logger.info('Update applied', { version: this.latestRelease!.version });
       return {
         success: true,
-        version: this.latestRelease.version,
+        version: this.latestRelease!.version,
         message: 'Update applied successfully',
         rollbackAvailable: true,
       };
@@ -352,7 +352,7 @@ class AutoUpdateFeature implements FeatureModule {
       mkdirSync(dirname(fullPath), { recursive: true });
     }
 
-    this.db = new Database(fullPath);
+    this.db = new (require('better-sqlite3'))(fullPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
 

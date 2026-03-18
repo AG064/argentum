@@ -67,8 +67,10 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const articleCount = this.db.prepare("SELECT COUNT(*) as c FROM articles WHERE current = 1").get().c;
-    const versionCount = this.db.prepare('SELECT COUNT(*) as c FROM article_versions').get().c;
+    const articleRow = this.db.prepare("SELECT COUNT(*) as c FROM articles WHERE current = 1").get() as { c: number };
+    const articleCount = articleRow.c;
+    const versionRow = this.db.prepare('SELECT COUNT(*) as c FROM article_versions').get() as { c: number };
+    const versionCount = versionRow.c;
 
     return {
       healthy: true,
@@ -107,7 +109,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     this.updateFts(id, title, content, tags);
 
     this.ctx.logger.info('Article added', { articleId: id, title, tags, createdBy });
-    return this.getArticle(id)!;
+    return (await this.getArticle(id))!;
   }
 
   /** Get article by ID */
@@ -135,7 +137,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   }
 
   /** Update an article (creates new version) */
-  async updateArticle(id: string, title?: string, content?: string, tags?: string[], updatedBy: string): Promise<Article | null> {
+  async updateArticle(id: string, updatedBy: string, title?: string, content?: string, tags?: string[]): Promise<Article | null> {
     const existing = this.db.prepare('SELECT * FROM articles WHERE id = ? AND current = 1').get(id) as any;
     if (!existing) {
       throw new Error(`Article not found: ${id}`);
@@ -245,7 +247,9 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
       const likePatterns = tags.map(t => `%"${t}"%`);
       const placeholders = likePatterns.map(() => '?').join(' OR ');
       const query = `SELECT * FROM articles WHERE current = 1 AND (${placeholders}) LIMIT ?`;
-      rows.push(...this.db.prepare(query, ...likePatterns, limit).all());
+      const stmt = this.db.prepare(query);
+      const newRows = stmt.all(...likePatterns, limit) as any[];
+      rows.push(...newRows);
     }
 
     return rows.map(row => this.mapArticleRow(row));

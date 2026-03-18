@@ -80,9 +80,10 @@ class MarkdownMemoryFeature implements FeatureModule {
   write(filename: string, content: string, metadata?: Record<string, string>, tags?: string[]): string {
     const entry = this.storage.save({
       filename,
+      title: filename,
       content,
-      metadata,
-      tags,
+      metadata: metadata || {},
+      tags: tags || [],
     });
     this.ctx.logger.debug('Markdown written', { filename });
     return entry;
@@ -113,6 +114,7 @@ class MarkdownMemoryFeature implements FeatureModule {
 
     this.storage.save({
       filename,
+      title: filename,
       content: newContent,
       tags: entry.tags,
       metadata: entry.metadata,

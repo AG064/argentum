@@ -46,7 +46,7 @@ class EncryptedSecretsFeature {
   }
 
   get(key: string) {
-    const row = this.db.prepare('SELECT * FROM secrets WHERE key = ?').get(key);
+    const row = this.db.prepare('SELECT iv, authTag, encryptedValue FROM secrets WHERE key = ?').get(key) as { iv: string; authTag: string; encryptedValue: string } | undefined;
     if (!row) return null;
     const iv = Buffer.from(row.iv, 'hex');
     const authTag = Buffer.from(row.authTag, 'hex');

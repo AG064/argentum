@@ -1,4 +1,4 @@
-import Cron from 'node-cron';
+import cron from 'node-cron';
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -53,7 +53,7 @@ class CronSchedulerFeature implements FeatureModule {
   private db!: Database.Database;
   private jobs: Map<string, CronJob> = new Map();
   private handlers: Map<string, CronHandler> = new Map();
-  private cronJobs: Map<string, Cron> = new Map(); // jobId -> Cron instance
+  private cronJobs: Map<string, any> = new Map(); // jobId -> cron job instance
   private schedulerStartTime: number = 0;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
@@ -136,7 +136,7 @@ class CronSchedulerFeature implements FeatureModule {
     }
 
     // Validate cron expression
-    if (!Cron.validate(cronExpr)) {
+    if (!cron.validate(cronExpr)) {
       throw new Error(`Invalid cron expression: ${cronExpr}`);
     }
 
@@ -276,7 +276,7 @@ class CronSchedulerFeature implements FeatureModule {
       this.cronJobs.get(job.id)!.stop();
     }
 
-    const cron = new Cron(job.cronExpr, async () => {
+    const cronJob = cron.schedule(job.cronExpr, async () => {
       const handler = this.handlers.get(job.handlerId);
       if (!handler) {
         this.ctx.logger.error('Handler not found during cron execution', { jobId: job.id, handlerId: job.handlerId });
@@ -288,7 +288,7 @@ class CronSchedulerFeature implements FeatureModule {
       scheduled: true,
     });
 
-    this.cronJobs.set(job.id, cron);
+    this.cronJobs.set(job.id, cronJob);
   }
 
   private async executeHandler(job: CronJob, handler: CronHandler): Promise<void> {
@@ -326,9 +326,9 @@ class CronSchedulerFeature implements FeatureModule {
 
   private getRecentlyFailed(withinMs: number): number {
     const cutoff = Date.now() - withinMs;
-    const count = this.db.prepare(
+    const count = (this.db.prepare(
       'SELECT COUNT(*) as c FROM job_runs WHERE started_at >= ? AND success = 0'
-    ).get(cutoff).c;
+    ).get(cutoff) as { c: number }).c;
     return count;
   }
 
