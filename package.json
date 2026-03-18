@@ -4,9 +4,15 @@
   "description": "Modular AI agent framework with Agentic Tool Loop",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "agclaw": "bin/agclaw.js"
+  },
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
+    "postbuild": "chmod +x bin/agclaw.js || true",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/cli.js start",
+    "cli": "node dist/cli.js",
     "dev": "tsx watch src/index.ts",
     "lint": "eslint src/ --ext .ts",
     "test": "jest --config jest.config.js",
