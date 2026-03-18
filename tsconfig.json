@@ -5,7 +5,11 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node","jest"]
+    "types": ["node","jest"],
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist"
   },
-  "include": ["src/**/*.ts","tests/**/*.ts"]
+  "include": ["src/**/*.ts","tests/**/*.ts"],
+  "exclude": ["src/features/browser-automation/**/*.ts"]
 }
