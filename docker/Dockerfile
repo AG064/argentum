@@ -47,13 +47,13 @@ RUN mkdir -p data memory logs && \
 USER agclaw
 
 # Ports:
-#   18789 - AG-Claw gateway HTTP
-#   3001  - Webchat WebSocket
-EXPOSE 18789 3001
+#   3000 - AG-Claw gateway HTTP
+#   3001 - Webchat WebSocket
+EXPOSE 3000 3001
 
 # Health check against the gateway
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:18789/health || exit 1
+  CMD wget -qO- http://localhost:3000/health || exit 1
 
 # Run
 CMD ["node", "dist/index.js"]
