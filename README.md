@@ -51,18 +51,18 @@ Based on OpenClaw (MIT License).
 | 1 | Telegram Integration | 🔧 In Development |
 | 2 | Webchat (WebSocket) | ✅ Implemented |
 | 3 | Mobile Push Notifications | 🔧 In Development |
-| 4 | Discord Bot | 🔧 In Development |
-| 5 | Slack Integration | 🔧 In Development |
-| 6 | Email (IMAP/SMTP) | 🔧 In Development |
-| 7 | SMS Gateway | 🔧 In Development |
-| 8 | WhatsApp Bridge | 🔧 In Development |
+| 4 | Discord Bot | ✅ Implemented |
+| 5 | Slack Integration | ✅ Implemented |
+| 6 | Email (IMAP/SMTP) | ✅ Implemented |
+| 7 | SMS Gateway | ✅ Implemented |
+| 8 | WhatsApp Bridge | ✅ Implemented |
 
 ### Voice & Audio
 | # | Feature | Status |
 |---|---------|--------|
-| 9 | Text-to-Speech (TTS) | 🔧 In Development |
-| 10 | Speech-to-Text (STT) | 🔧 In Development |
-| 11 | Wake Word Detection | 🔧 In Development |
+| 9 | Text-to-Speech (TTS) | ✅ Implemented |
+| 10 | Speech-to-Text (STT) | ✅ Implemented |
+| 11 | Wake Word Detection | ✅ Implemented |
 | 12 | Voice Cloning | 🔧 In Development |
 | 13 | Podcast Generation | 🔧 In Development |
 
@@ -72,7 +72,7 @@ Based on OpenClaw (MIT License).
 | 14 | SQLite Memory | ✅ Implemented |
 | 15 | Markdown Memory | ✅ Implemented |
 | 16 | Supabase Memory | 🔧 In Development |
-| 17 | Self-Evolving Memory | 🔧 In Development |
+| 17 | Self-Evolving Memory | ✅ Implemented |
 | 18 | Knowledge Graph | ✅ Implemented |
 | 19 | Multimodal Memory | ✅ Implemented |
 | 20 | Semantic Search | ✅ Implemented |
@@ -116,7 +116,7 @@ Based on OpenClaw (MIT License).
 | 42 | Policy Engine | 🔧 In Development |
 | 43 | Audit Logging | ✅ Implemented |
 | 44 | Rate Limiting | ✅ Implemented |
-| 45 | Content Filtering | 🔧 In Development |
+| 45 | Content Filtering | ✅ Implemented |
 
 ### Creative & Multimodal
 | # | Feature | Status |
