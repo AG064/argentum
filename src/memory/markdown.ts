@@ -43,7 +43,13 @@ export class MarkdownMemory {
   /** Parse a markdown file into an entry */
   private parseMarkdown(filename: string): MarkdownEntry | null {
     try {
-      const fullPath = join(this.basePath, filename);
+      // Prevent path traversal: resolve and ensure file stays within basePath
+      const fullPath = resolve(this.basePath, filename);
+      if (!fullPath.startsWith(this.basePath + '/')) {
+        // allow exact match if equals basePath file
+        if (fullPath !== this.basePath) return null;
+      }
+
       const raw = readFileSync(fullPath, 'utf-8');
 
       // Parse YAML frontmatter
@@ -73,7 +79,7 @@ export class MarkdownMemory {
         }
       }
 
-      const stat = require('fs').statSync(join(this.basePath, filename));
+      const stat = require('fs').statSync(fullPath);
       return {
         filename,
         title,
@@ -107,8 +113,19 @@ export class MarkdownMemory {
   /** Store or update a memory entry */
   save(entry: Omit<MarkdownEntry, 'filename' | 'createdAt' | 'updatedAt'> & { filename?: string }): string {
     this.init();
-    const filename = entry.filename ?? `${Date.now()}-${this.sanitize(entry.title)}.md`;
-    const fullPath = join(this.basePath, filename);
+    let filename = entry.filename ?? `${Date.now()}-${this.sanitize(entry.title)}.md`;
+
+    // Basic validation: filename should not contain path separators and be reasonably short
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      throw new Error('Invalid filename');
+    }
+    if (filename.length > 255) throw new Error('Filename too long');
+
+    const fullPath = resolve(this.basePath, filename);
+    if (!fullPath.startsWith(this.basePath + '/')) {
+      throw new Error('Invalid filename path');
+    }
+
     const exists = existsSync(fullPath);
     const existing = exists ? this.parseMarkdown(filename) : null;
 
@@ -130,14 +147,17 @@ export class MarkdownMemory {
 
   /** Retrieve a memory entry by filename */
   get(filename: string): MarkdownEntry | null {
-    const fullPath = join(this.basePath, filename);
+    // Validate path and prevent traversal
+    const fullPath = resolve(this.basePath, filename);
+    if (!fullPath.startsWith(this.basePath + '/')) return null;
     if (!existsSync(fullPath)) return null;
     return this.parseMarkdown(filename);
   }
 
   /** Delete a memory entry */
   delete(filename: string): boolean {
-    const fullPath = join(this.basePath, filename);
+    const fullPath = resolve(this.basePath, filename);
+    if (!fullPath.startsWith(this.basePath + '/')) return false;
     if (!existsSync(fullPath)) return false;
     unlinkSync(fullPath);
     return true;
