@@ -48,7 +48,9 @@ class CronSchedulerFeature implements FeatureModule {
     enabled: false,
     dbPath: './data/cron-scheduler.db',
     maxJobs: 500,
-  };
+    // maximum concurrent handler executions across all jobs
+    maxConcurrentRuns: 5,
+  } as any;
   private ctx!: FeatureContext;
   private db!: Database.Database;
   private jobs: Map<string, CronJob> = new Map();
@@ -296,7 +298,42 @@ class CronSchedulerFeature implements FeatureModule {
     let success = false;
     let error: string | null = null;
 
+    // --- Atomic checkout: try to claim the job in running_tasks. If another process claimed it, skip.
     try {
+      const insert = this.db.prepare('INSERT INTO running_tasks (job_id, started_at) VALUES (?, ?)');
+      insert.run(job.id, Date.now());
+    } catch (e) {
+      // UNIQUE constraint failed -> another worker is running it
+      this.ctx.logger.info('Job checkout failed, already running elsewhere', { jobId: job.id });
+      return;
+    }
+
+    // --- Concurrency check: ensure we don't exceed maxConcurrentRuns
+    const runningCount = (this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get() as any).c || 0;
+    if (runningCount > (this.config as any).maxConcurrentRuns) {
+      this.ctx.logger.warn('Concurrency limit reached, skipping job', { jobId: job.id, runningCount });
+      // release claim
+      this.db.prepare('DELETE FROM running_tasks WHERE job_id = ?').run(job.id);
+      return;
+    }
+
+    // --- Budget enforcement hook (optional)
+    try {
+      const budgetService: any = (this.ctx as any).services?.budget;
+      if (budgetService && typeof budgetService.checkJobBudget === 'function') {
+        const ok = await budgetService.checkJobBudget(job.id);
+        if (!ok) {
+          this.ctx.logger.warn('Job skipped due to budget enforcement', { jobId: job.id });
+          this.db.prepare('DELETE FROM running_tasks WHERE job_id = ?').run(job.id);
+          return;
+        }
+      }
+    } catch (e) {
+      this.ctx.logger.error('Budget check failed, proceeding cautiously', { err: e });
+    }
+
+    try {
+      // Run handler
       await handler(job.id);
       success = true;
     } catch (err) {
@@ -319,6 +356,20 @@ class CronSchedulerFeature implements FeatureModule {
         `INSERT INTO job_runs (job_id, started_at, completed_at, success, error)
          VALUES (?, ?, ?, ?, ?)`
       ).run(job.id, startTime, endTime, success ? 1 : 0, error);
+
+      // persist any session state optionally provided by handler via running_tasks.session_state
+      try {
+        const row = this.db.prepare('SELECT session_state FROM running_tasks WHERE job_id = ?').get(job.id);
+        if (row && row.session_state) {
+          // store as last_error field for visibility (placeholder) or a dedicated sessions table
+          this.db.prepare('UPDATE jobs SET last_error = ? WHERE id = ?').run(`session:${row.session_state}`, job.id);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // release claim
+      this.db.prepare('DELETE FROM running_tasks WHERE job_id = ?').run(job.id);
     }
   }
 
@@ -379,6 +430,17 @@ class CronSchedulerFeature implements FeatureModule {
         error TEXT,
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
       );
+
+      -- running_tasks is used to perform atomic checkouts and limit concurrency
+      CREATE TABLE IF NOT EXISTS running_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL UNIQUE,
+        started_at INTEGER NOT NULL,
+        session_state TEXT,
+        FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_running_tasks_started ON running_tasks(started_at);
 
       CREATE INDEX IF NOT EXISTS idx_jobs_enabled ON jobs(enabled);
       CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id);
