@@ -1,354 +1,526 @@
 # Tutorial 2: Memory Management
 
-*Estimated time: 20 minutes*
+AG-Claw has a sophisticated multi-layered memory system. This tutorial covers each layer in depth, shows how to work with them directly, and explains the automation that keeps memory useful over time.
 
-AG-Claw has one of the most sophisticated memory systems of any agent framework. This tutorial explains exactly how it works and how to use it to build agents that remember, learn, and improve over time.
+**Estimated time:** 20 minutes  
+**Prerequisites:** A running AG-Claw instance (from [Tutorial 1](./01-first-agent.md))
 
 ---
 
 ## The Four Memory Layers
 
-AG-Claw uses four distinct memory systems, each optimized for a different purpose:
+AG-Claw organizes memory into four layers, each with a specific role:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: Semantic Memory         (fast, searchable, abundant)  │
-│  Stores: conversations, decisions, lessons, errors, preferences│
-│  Backend: SQLite + embeddings                                    │
-├─────────────────────────────────────────────────────────────────┤
-│  Layer 2: Knowledge Graph          (structured, relational)       │
-│  Stores: entities, relationships, facts                           │
-│  Backend: SQLite with graph traversal                            │
-├─────────────────────────────────────────────────────────────────┤
-│  Layer 3: Markdown Memory          (human-readable, persistent)  │
-│  Stores: notes, documentation, long-term facts                   │
-│  Backend: Files on disk, watched for changes                     │
-├─────────────────────────────────────────────────────────────────┤
-│  Layer 4: Self-Evolving Memory     (compressed, abstracted)      │
-│  Stores: consolidated summaries of old memories                   │
-│  Backend: Automatic consolidation process                          │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Layer | Technology | Purpose | Lifetime |
+|---|---|---|---|
+| **Session** | In-memory | Current conversation context | Until session ends |
+| **Semantic** | SQLite + FTS5 | Facts, indexed by meaning | Permanent until purged |
+| **Knowledge Graph** | SQLite + graph | Entity relationships | Permanent until purged |
+| **Markdown** | Files on disk | Human-readable reference | Permanent, file-managed |
+
+Messages flow through all layers during processing. Understanding each one helps you use and debug the system effectively.
 
 ---
 
-## Layer 1: Semantic Memory
+## Layer 1: Session Memory
 
-The primary working memory. Every interaction, decision, lesson, and error gets stored here.
-
-### Memory Types
-
-| Type | When it's used | Example |
-|---|---|---|
-| `decision` | You make a choice about something | "We agreed to use PostgreSQL" |
-| `lesson` | You learned something valuable | "Never run `rm -rf /` on a production server" |
-| `error` | Something went wrong and you fixed it | "The API was returning 500 because of a missing index" |
-| `preference` | User's personal preference | "Aleksey prefers Rust over Go" |
-| `general` | Anything else worth remembering | Meeting notes, facts, context |
-
-### Auto-Capture
-
-AG-Claw automatically detects and stores important information from your messages. When you say something like:
-
-- "Remember that..." → stored as `general`
-- "We decided to..." → stored as `decision`
-- "I learned that..." → stored as `lesson`
-- "The bug was caused by..." → stored as `error`
-- "I prefer..." → stored as `preference`
-
-The auto-capture feature parses your messages and extracts these patterns automatically.
-
-### Manual Memory Operations
-
-```bash
-# Store something manually
-agclaw memory store "decision" "Use feature flags instead of branches for gradual rollouts"
-
-# Search memory
-agclaw memory search "feature flags"
-
-# View recent memories
-agclaw memory recent --limit 10
-
-# View memory statistics
-agclaw memory stats
-# Output:
-# Total entries: 1543
-# By type:
-#   decision: 234
-#   lesson: 567
-#   error: 89
-#   preference: 123
-#   general: 530
-```
-
-### Using Memory as an Agent Tool
-
-The agent can use memory tools directly during conversation:
-
-```
-User: What errors have we hit in the API?
-Agent: [calls memory_search with query="API errors"]
-     Found 2 relevant entries:
-     [error] API returned 500 due to missing index on user_id column (2026-03-20)
-     [error] Rate limiter was blocking legitimate requests after the last deploy (2026-03-18)
-
-User: Good. And what decisions did we make about the database?
-Agent: [calls memory_search with type="decision", query="database"]
-     Found 3 decisions:
-     [decision] Use PostgreSQL as primary database (2026-03-15)
-     [decision] Add Redis for caching session data (2026-03-16)
-     [decision] Run database migrations at startup, not deployment (2026-03-18)
-```
-
----
-
-## Layer 2: Knowledge Graph
-
-The knowledge graph stores entities and their relationships as a graph structure. This enables reasoning about connections between facts.
-
-### What Gets Stored
-
-- **Nodes**: People, projects, companies, technologies, concepts
-- **Edges**: Relationships between nodes (`works_at`, `depends_on`, `uses`, `created_by`)
-
-### Example Graph
-
-```
-(User) ──(created)──► (Project: AG-Claw)
-   │                      │
-   │                      ├──(uses)──► (Technology: TypeScript)
-   │                      │
-   │                      ├──(uses)──► (Technology: SQLite)
-   │                      │
-   │                      └──(developed_by)──► (Person: AG064)
-```
-
-### Querying the Graph
-
-```bash
-# View graph statistics
-agclaw memory graph stats
-# Output:
-# Nodes: 342
-# Edges: 891
-# Most connected: AG-Claw (12 connections)
-
-# Export the graph
-agclaw memory graph export > graph.json
-```
-
-### How the Graph Updates
-
-When semantic memory stores a new entry, the knowledge graph feature analyzes it:
-
-1. Extracts named entities (people, places, technologies)
-2. Identifies relationships between entities
-3. Creates or updates graph nodes and edges
-4. Links new information to existing knowledge
-
-This means the graph grows smarter over time as the agent processes more information.
-
----
-
-## Layer 3: Markdown Memory
-
-Markdown memory stores human-readable notes as `.md` files on disk. This layer is for information you want to:
-
-- Keep permanently
-- Edit manually
-- Have version-controlled in git
-- Share with other tools
+Session memory holds the current conversation. It's maintained in RAM during a session and persisted to `data/sessions.db` when the session ends or on checkpoint intervals.
 
 ### How It Works
 
-Create or edit files in the `memory/` directory:
+When you send a message with a known `userId`, the agent retrieves that user's recent conversation history and includes it in the LLM context. This is what makes multi-turn conversations work.
 
 ```bash
-# The memory directory
-ls memory/
+# Start a conversation
+curl -X POST http://localhost:18789/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "I am learning TypeScript", "userId": "alice"}'
+# sessionId: sess_abc123
 
-# memory/projects.md
-# memory/people.md
-# memory/notes.md
+# Continue the conversation — session is automatically loaded
+curl -X POST http://localhost:18789/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What should I learn next?", "userId": "alice"}'
+# The agent knows you are learning TypeScript
 ```
 
-Example `memory/projects.md`:
-
-```markdown
-# Projects
-
-## AG-Claw
-- Type: AI Agent Framework
-- Status: Active development
-- Lead: AG064
-- Tech: TypeScript, SQLite, Claude
-- URL: https://github.com/AG064/ag-claw
-
-## Personal Website
-- Type: Static site (Astro)
-- Status: Completed
-- URL: https://example.com
-```
-
-The markdown-memory feature watches these files for changes and automatically updates the agent's context when relevant files are modified.
-
-### Integrating with Agent
-
-The agent can read markdown memory files when relevant to the conversation:
-
-```
-User: What projects are we working on?
-Agent: [calls read_file on memory/projects.md]
-     Based on your project notes, you're working on:
-     1. AG-Claw — an AI agent framework (active)
-     2. Personal Website — static site (completed)
-```
-
----
-
-## Layer 4: Self-Evolving Memory
-
-Over time, semantic memory accumulates thousands of entries. The self-evolving memory feature periodically consolidates old entries to keep the system efficient.
-
-### How Consolidation Works
-
-When the memory exceeds `compressionThreshold` (default: 10,000 entries):
-
-1. **Analysis**: Identifies clusters of related entries
-2. **Abstraction**: Replaces multiple specific entries with generalized summaries
-3. **Pruning**: Removes low-value or redundant entries
-4. **Preservation**: Keeps the essential information in condensed form
-
-### Example
-
-Before consolidation (12 separate entries):
-- "Meeting with Bob about API design — use REST" (Mar 1)
-- "Bob confirmed REST is the right choice" (Mar 2)
-- "Discussed REST with Bob, agreed on /api/v1 prefix" (Mar 3)
-- ... (9 more similar entries)
-
-After consolidation (1 abstracted entry):
-- "Decided on REST API with /api/v1 prefix. Bob was involved in the decision." (Mar 1-15)
-
-### Configuring Consolidation
+### Session Configuration
 
 ```json
 {
   "features": {
-    "self-evolving-memory": {
+    "sessions": {
       "enabled": true,
-      "compressionThreshold": 10000,
-      "consolidationIntervalHours": 24,
-      "minEntriesBeforeConsolidation": 5000
+      "maxHistory": 50,       // Max messages per session
+      "checkpointInterval": 5  // Persist every N messages
     }
   }
 }
 ```
 
-### Checkpoint System
-
-For long-running tasks, use checkpoints to save progress:
+### Managing Sessions
 
 ```bash
-# Agent calls memory_checkpoint during a complex task
-Agent: memory_checkpoint(taskId="refactor-auth-2026", state={
-  "step": 3,
-  "completed": ["login-form", "session-store"],
-  "current": "token-validation",
-  "remaining": ["refresh-token", "logout"]
-})
+# List all sessions
+agclaw sessions list
 
-# Later, resume from the checkpoint
-Agent: memory_resume(taskId="refactor-auth-2026")
-# Returns: { step: 3, completed: [...], current: "token-validation", ... }
+# View a specific session
+agclaw sessions view sess_abc123
+
+# Clear a session (reset conversation)
+agclaw sessions clear sess_abc123
+
+# Export session as JSON
+agclaw sessions export sess_abc123 > conversation.json
 ```
 
 ---
 
-## Using Memory Effectively
+## Layer 2: Semantic Memory
 
-### Best Practices
+Semantic memory stores facts and information in SQLite with full-text search. Entries are indexed so the agent can find relevant context even when search terms don't exactly match stored text.
 
-1. **Be explicit when storing important information**
-   Instead of hoping auto-capture catches something:
-   ```
-   User: Remember to always run tests before pushing.
-   Agent: [calls memory_store with type="lesson", content="Always run tests before pushing"]
-   ```
+### Storing Memories Explicitly
 
-2. **Use the right memory type**
-   Don't store everything as `general`. Use `decision`, `lesson`, `error`, and `preference` types — they make searching more precise.
+```bash
+curl -X POST http://localhost:18789/memory/store \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Aleksey prefers dark mode in his IDE",
+    "tags": ["preference", "development"],
+    "userId": "alice"
+  }'
+```
 
-3. **Query with natural language**
-   The semantic search understands context:
-   ```
-   agclaw memory search "things that went wrong with the database migration"
-   ```
-
-4. **Let the graph build naturally**
-   You don't need to manually populate the knowledge graph. It grows as you use memory — just store semantic entries and the graph feature will extract entities and relationships.
-
-5. **Use markdown for permanent knowledge**
-   Facts that shouldn't change (like project details, team structure) belong in markdown memory, not semantic memory.
-
-### Memory in Multi-Agent Setups
-
-When running multiple agents, memory can be shared or isolated:
+Response:
 
 ```json
 {
-  "agents": [
-    {
-      "id": "coding-assistant",
-      "memory": { "shared": false, "namespace": "coding" }
-    },
-    {
-      "id": "research-assistant",
-      "memory": { "shared": false, "namespace": "research" }
-    },
-    {
-      "id": "coordinator",
-      "memory": { "shared": true }
-    }
-  ]
+  "success": true,
+  "data": {
+    "id": "mem_abc123",
+    "createdAt": "2026-03-23T10:00:00Z"
+  }
 }
 ```
 
-The coordinator agent can see all memories, while specialized agents only see their own namespace.
+### Searching Semantic Memory
+
+```bash
+# Basic search
+curl "http://localhost:18789/memory/search?q=dark%20mode"
+
+# With limit and threshold
+curl "http://localhost:18789/memory/search?q=preferences&limit=5&threshold=0.7"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "results": [
+      {
+        "id": "mem_abc123",
+        "content": "Aleksey prefers dark mode in his IDE",
+        "score": 0.94,
+        "createdAt": "2026-03-23T10:00:00Z",
+        "tags": ["preference", "development"]
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+### How the Agent Uses It
+
+When processing a message, the agent queries semantic memory for relevant context. The `self-evolving-memory` feature also automatically captures facts from conversations. For example, if you say:
+
+> "I just started an internship at Binarwelt"
+
+AG-Claw automatically captures this as a memory entry with tags `["fact", "work", "internship"]`.
+
+### Memory Tags
+
+Tags help organize and filter memories. Use them when storing explicitly:
+
+```bash
+curl -X POST http://localhost:18789/memory/store \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Deadline for the project is March 30th",
+    "tags": ["deadline", "project"],
+    "userId": "alice"
+  }'
+```
+
+Query by tag:
+
+```bash
+curl "http://localhost:18789/memory/search?q=deadline&tags=project"
+```
 
 ---
 
-## Troubleshooting Memory Issues
+## Layer 3: Knowledge Graph
 
-### Memory search returns no results
+The knowledge graph stores entities and their relationships as a directed graph. This enables the agent to reason about connected facts.
 
-1. Check that `semantic-search` is enabled
-2. Verify entries exist: `agclaw memory stats`
-3. Try a broader query: `agclaw memory search "the"`
-4. Store a test entry: `agclaw memory store "test" "testing memory"`
+### Entities and Relations
 
-### Too many duplicate entries
+An entity is a node with a type and properties:
 
-The consolidation feature should handle this. If it's not running:
-1. Check that `self-evolving-memory` is enabled
-2. Verify `compressionThreshold` is set appropriately
-3. Manually trigger consolidation: check feature health
+```json
+{
+  "id": "entity_001",
+  "type": "person",
+  "name": "Aleksey",
+  "properties": {
+    "location": "Narva, Estonia",
+    "timezone": "Europe/Tallinn"
+  }
+}
+```
 
-### Memory slowing down the agent
+A relation is a directed edge between entities:
 
-1. Reduce `messageHistory` in webchat config (fewer conversation messages in memory)
-2. Increase `compressionThreshold` to trigger consolidation sooner
-3. Disable features you don't use (they may be storing unnecessary data)
+```json
+{
+  "from": "entity_001",
+  "type": "works_at",
+  "to": "entity_002"
+}
+```
+
+### How the Graph Builds
+
+The agent automatically extracts entities and relations from conversations. When you say:
+
+> "I work at kood in Jõhvi"
+
+AG-Claw creates:
+- Entity: `kood` (type: organization)
+- Entity: `Aleksey` (type: person)
+- Relation: Aleksey → `works_at` → kood
+
+### Querying the Graph
+
+```bash
+# Get all info about a specific entity
+curl "http://localhost:18789/memory/graph?entity=Aleksey"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "entities": [
+      {
+        "id": "entity_001",
+        "type": "person",
+        "name": "Aleksey",
+        "properties": {
+          "location": "Narva, Estonia",
+          "timezone": "Europe/Tallinn"
+        }
+      }
+    ],
+    "relations": [
+      { "from": "entity_001", "type": "works_at", "to": "entity_002" },
+      { "from": "entity_001", "type": "speaks", "to": "entity_003" },
+      { "from": "entity_001", "type": "interested_in", "to": "entity_004" }
+    ]
+  }
+}
+```
+
+### Manual Graph Operations
+
+Add an entity directly:
+
+```bash
+curl -X POST http://localhost:18789/memory/graph/entity \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AG-Claw",
+    "type": "project",
+    "properties": {
+      "version": "0.2.0",
+      "language": "TypeScript"
+    }
+  }'
+```
+
+Add a relation:
+
+```bash
+curl -X POST http://localhost:18789/memory/graph/relation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "entity_001",
+    "type": "created",
+    "to": "entity_005"
+  }'
+```
+
+### Graph Traversal
+
+The knowledge graph supports traversal queries. Find all people who work at the same place as Aleksey:
+
+```bash
+curl "http://localhost:18789/memory/graph/traverse?from=entity_001&type=works_at&depth=1"
+```
+
+---
+
+## Layer 4: Markdown Memory
+
+Markdown files on disk serve as a manually curated, human-readable memory layer. AG-Claw watches the `data/memory/` directory and automatically loads any `.md` files into context.
+
+### Creating Memory Files
+
+```bash
+mkdir -p data/memory
+
+cat > data/memory/personal-context.md << 'EOF'
+# Personal Context
+
+## About Aleksey
+- Full-stack developer learning TypeScript
+- Based in Narva, Estonia
+- Available for remote work
+- timezone: Europe/Tallinn
+
+## Current Projects
+- Building an AI agent framework (AG-Claw)
+- Job search for programming positions
+
+## Skills
+- TypeScript, JavaScript, Java, Python
+- Linux, Docker, Git
+- Russian (native), English (B2-C1), Estonian (B1-B2)
+
+## Goals for 2026
+- Find a programming job
+- Learn Rust
+- Contribute to open source
+EOF
+```
+
+Changes to this file are picked up immediately — no restart needed.
+
+### How Markdown Memory Integrates
+
+The `markdown-memory` feature parses these files and injects relevant sections into the agent's context. It's particularly useful for:
+- Facts that should never be forgotten or compressed away
+- Manually curated context from other systems
+- Long-term goals and preferences
+
+### Memory File Naming
+
+Files are processed alphabetically. Use prefixes to control load order:
+
+```
+data/memory/
+├── 00-identity.md      # Loaded first — core identity
+├── 01-preferences.md   # User preferences
+├── 02-projects.md      # Current projects
+└── 03-goals.md         # Goals and aspirations
+```
+
+---
+
+## Self-Evolving Memory
+
+The `self-evolving-memory` feature automates memory maintenance. It runs in the background and handles three tasks:
+
+### 1. Consolidation
+
+When semantic memory gets large, similar entries are merged:
+
+```
+Before: 100 entries about "project meetings"
+After:  3 consolidated entries about project meetings
+```
+
+This keeps context window usage manageable without losing information.
+
+### 2. Pattern Discovery
+
+The feature scans for recurring themes and creates summary entries:
+
+```
+Pattern detected: "weekly project sync every Monday"
+Summary created: "User has recurring Monday meetings"
+```
+
+### 3. Relevance Decay
+
+Low-relevance entries that haven't been accessed in a while gradually lose priority:
+
+```json
+{
+  "feature": {
+    "self-evolving-memory": {
+      "enabled": true,
+      "consolidationThreshold": 500,
+      "decayAfterDays": 30,
+      "minRelevanceScore": 0.2
+    }
+  }
+}
+```
+
+---
+
+## Memory Statistics and Maintenance
+
+### View Statistics
+
+```bash
+agclaw memory stats
+```
+
+Output:
+
+```
+Semantic Memory:  1247 entries
+Knowledge Graph:   342 entities, 891 relations
+Markdown Files:      4 files loaded
+Session Memory:      8 active sessions
+Compression ratio:   73%
+```
+
+### Purge Old Entries
+
+```bash
+# Remove memories older than a date
+agclaw memory purge --before 2026-01-01
+
+# Purge by tag
+agclaw memory purge --tag temporary
+
+# Show what would be purged without actually deleting
+agclaw memory purge --before 2026-01-01 --dry-run
+```
+
+### Export and Import
+
+Export all memories for backup or migration:
+
+```bash
+agclaw memory export --format json > memories-backup-$(date +%Y%m%d).json
+```
+
+Import:
+
+```bash
+agclaw memory import memories-backup-20260318.json
+```
+
+---
+
+## Debugging Memory
+
+### Check What the Agent Retrieves
+
+Enable debug logging to see memory queries:
+
+```bash
+AGCLAW_LOG_LEVEL=debug agclaw gateway start
+```
+
+Look for log lines like:
+
+```
+[memory] Searching semantic: query="TypeScript" limit=5 threshold=0.6
+[memory] Retrieved 3 results (score >= 0.6)
+[memory] Graph query: entity=Aleksey depth=2
+[memory] Graph results: 4 entities, 7 relations
+```
+
+### Verify a Memory Was Stored
+
+```bash
+curl "http://localhost:18789/memory/search?q=Aleksey%20TypeScript"
+```
+
+### Check Knowledge Graph Consistency
+
+```bash
+# List entities of a specific type
+curl "http://localhost:18789/memory/graph?type=person"
+
+# Find orphaned entities (entities with no relations)
+curl "http://localhost:18789/memory/graph?orphans=true"
+```
+
+---
+
+## Configuration Reference
+
+Full memory configuration in `agclaw.json`:
+
+```json
+{
+  "memory": {
+    "primary": "sqlite",
+    "path": "./data",
+    "selfEvolving": true,
+    "compressionThreshold": 50000
+  },
+  "features": {
+    "sqlite-memory": {
+      "enabled": true
+    },
+    "semantic-search": {
+      "enabled": true,
+      "indexOnStartup": true
+    },
+    "markdown-memory": {
+      "enabled": true,
+      "watchPath": "./data/memory",
+      "maxFileSize": 1048576
+    },
+    "self-evolving-memory": {
+      "enabled": true,
+      "consolidationIntervalHours": 6,
+      "consolidationThreshold": 500,
+      "decayAfterDays": 30,
+      "minRelevanceScore": 0.2
+    },
+    "knowledge-graph": {
+      "enabled": true,
+      "autoExtract": true,
+      "maxEntities": 10000
+    },
+    "sessions": {
+      "enabled": true,
+      "maxHistory": 50,
+      "checkpointInterval": 5
+    }
+  }
+}
+```
+
+---
+
+## What You Learned
+
+- The four memory layers and their roles
+- How session memory enables multi-turn conversations
+- How to store, search, and manage semantic memories
+- How the knowledge graph builds entity relationships automatically
+- How to use Markdown files as a manually curated memory layer
+- How self-evolving memory automates consolidation and decay
+- How to debug and maintain your memory system
 
 ---
 
 ## Next Steps
 
-- **[Tutorial 3: Skill Development](./03-skill-development.md)** — Create custom tools that interact with memory or add new capabilities
-- **[Tutorial 4: Deployment](./04-deployment.md)** — Deploy with Docker and configure for production
-- **[Tutorial 5: Advanced Patterns](./05-advanced-patterns.md)** — Multi-agent coordination, mesh workflows
-
----
-
-*Questions? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues).*
+- **[Tutorial 3: Channels and Integrations](./tutorials/03-channels.md)** — Connect your agent to Discord, Slack, Email, and more
+- **[Developer Guide: Creating a New Feature](../DEVELOPER_GUIDE.md#5-how-to-add-a-new-feature)** — Build custom memory processors
+- **[API Reference: Memory Endpoints](../API.md#3-rest-endpoints)** — Complete endpoint documentation
