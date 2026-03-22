@@ -1,140 +1,113 @@
 # API Reference
 
-Complete reference for the AG-Claw REST API, WebSocket events, environment variables, and configuration schema.
+Complete REST API and WebSocket reference for AG-Claw Gateway.
 
 ---
 
-## Table of Contents
+## Base URL
 
-1. [REST API Overview](#1-rest-api-overview)
-2. [Authentication](#2-authentication)
-3. [REST Endpoints](#3-rest-endpoints)
-4. [WebSocket Events](#4-websocket-events)
-5. [Error Codes](#5-error-codes)
-6. [Environment Variables](#6-environment-variables)
-7. [Configuration Schema](#7-configuration-schema)
+```
+http://localhost:3000    # Default port
+http://localhost:18789   # Default from config
+```
+
+All endpoints return JSON. All request bodies must be `Content-Type: application/json`.
 
 ---
 
-## 1. REST API Overview
+## Authentication
 
-AG-Claw runs an HTTP gateway on port 18789 by default. All endpoints return JSON. The base URL for local development:
-
-```
-http://localhost:18789
-```
-
-In production, set `server.host` to your domain and use a reverse proxy (nginx, Caddy) with HTTPS.
-
-### Request Format
-
-For `POST` and `PATCH` endpoints, send JSON:
-
-```bash
-curl -X POST http://localhost:18789/chat \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"message": "Hello", "userId": "alice"}'
-```
-
-### Response Format
-
-All responses follow this shape:
+Currently uses token-based auth via the `Authorization` header. Set the token in `agclaw.json`:
 
 ```json
 {
-  "success": true,
-  "data": { ... },
-  "error": null
-}
-```
-
-On failure:
-
-```json
-{
-  "success": false,
-  "data": null,
-  "error": {
-    "code": "RATE_LIMITED",
-    "message": "Too many requests. Retry after 30 seconds."
+  "security": {
+    "apiToken": "your-secret-token"
   }
 }
 ```
 
----
+Include it in requests:
 
-## 2. Authentication
-
-Currently, AG-Claw uses a simple bearer token scheme. Set the token in `agclaw.json`:
-
-```json
-{
-  "server": {
-    "auth": {
-      "token": "your-secret-token"
-    }
-  }
-}
+```
+Authorization: Bearer <token>
 ```
 
-Pass it on every request:
-
-```bash
-curl -H "Authorization: Bearer <token>" http://localhost:18789/health
-```
-
-For production, put AG-Claw behind a reverse proxy that handles OAuth2/OIDC authentication.
+For local development, the token is optional (set `security.auth: false` to disable).
 
 ---
 
-## 3. REST Endpoints
+## REST Endpoints
 
 ### Health & Status
 
 #### `GET /health`
 
-Health check. Returns system status and active feature count.
+Health check endpoint. Returns status of the gateway and all active features.
 
-```bash
-curl http://localhost:18789/health
-```
+**Response `200 OK`:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "status": "ok",
-    "version": "0.2.0",
-    "uptime": 3600,
-    "features": "12/59 active",
-    "memory": {
-      "semantic": 1247,
-      "knowledge_graph": 342,
-      "sessions": 8
-    }
+  "status": "ok",
+  "version": "0.2.0",
+  "uptime": 3600,
+  "node": "v20.19.0",
+  "features": {
+    "total": 59,
+    "active": 12,
+    "unhealthy": []
   },
-  "error": null
+  "memory": {
+    "entries": 1542,
+    "lastConsolidation": "2026-03-22T08:00:00Z"
+  }
 }
 ```
+
+**Response `503 Service Unavailable`** (when features are unhealthy):
+
+```json
+{
+  "status": "degraded",
+  "features": {
+    "unhealthy": ["mesh-workflows"]
+  }
+}
+```
+
+---
 
 #### `GET /metrics`
 
 Prometheus-compatible metrics endpoint.
 
-```bash
-curl http://localhost:18789/metrics
-```
-
-Returns text in Prometheus exposition format:
+**Response `200 OK`:**
 
 ```
 # HELP agclaw_messages_total Total messages processed
 # TYPE agclaw_messages_total counter
-agclaw_messages_total 4821
-# HELP agclaw_tool_calls_total Tool invocations
+agclaw_messages_total{channel="telegram"} 1542
+agclaw_messages_total{channel="webchat"} 238
+
+# HELP agclaw_tool_calls_total Total tool invocations
 # TYPE agclaw_tool_calls_total counter
-agclaw_tool_calls_total{model="claude-sonnet-4",tool="read"} 1203
+agclaw_tool_calls_total{tool="web_search"} 89
+agclaw_tool_calls_total{tool="memory_search"} 312
+
+# HELP agclaw_llm_tokens_total Total LLM tokens used
+# TYPE agclaw_llm_tokens_total counter
+agclaw_llm_tokens_total{type="prompt"} 456789
+agclaw_llm_tokens_total{type="completion"} 123456
+
+# HELP agclaw_memory_entries_total Memory entries by type
+# TYPE agclaw_memory_entries_total gauge
+agclaw_memory_entries_total{type="decision"} 234
+agclaw_memory_entries_total{type="lesson"} 567
+
+# HELP agclaw_features_active Number of active features
+# TYPE agclaw_features_active gauge
+agclaw_features_active 12
 ```
 
 ---
@@ -143,71 +116,103 @@ agclaw_tool_calls_total{model="claude-sonnet-4",tool="read"} 1203
 
 #### `POST /chat`
 
-Send a message to the agent. This is the main interaction endpoint.
+Send a message to the agent and receive a response.
 
-**Request body:**
-
-```typescript
-{
-  message: string;       // The user's message (required)
-  userId: string;       // User identifier (required)
-  sessionId?: string;   // Continue existing session (optional)
-  model?: string;       // Override default model (optional)
-  temperature?: number; // Override default temperature (optional)
-  maxTokens?: number;   // Override max tokens (optional)
-  stream?: boolean;     // Enable streaming response (default: false)
-}
-```
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:18789/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What is the weather in Tallinn?", "userId": "alice"}'
-```
-
-**Response:**
+**Request:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "reply": "The current weather in Tallinn is partly cloudy, 12°C...",
-    "sessionId": "sess_abc123",
-    "model": "anthropic/claude-sonnet-4-20250514",
-    "tokens": { "prompt": 142, "completion": 87, "total": 229 },
-    "toolCalls": [],
-    "latencyMs": 1243
-  },
-  "error": null
+  "message": "What decisions have we made about the API design?",
+  "userId": "user-123",
+  "sessionId": "session-456",
+  "channel": "webchat",
+  "context": {
+    "customKey": "customValue"
+  }
 }
 ```
 
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | string | Yes | The user's message |
+| `userId` | string | Yes | Unique user identifier |
+| `sessionId` | string | No | Conversation session ID (auto-generated if omitted) |
+| `channel` | string | No | Channel source (default: `api`) |
+| `context` | object | No | Additional context passed to the agent |
+
+**Response `200 OK`:**
+
+```json
+{
+  "response": "Based on your memory, you made three key decisions about the API design...",
+  "sessionId": "session-456",
+  "toolCalls": [
+    {
+      "tool": "memory_search",
+      "arguments": { "query": "API design decisions" },
+      "result": "Found 3 entries..."
+    }
+  ],
+  "tokens": {
+    "prompt": 1243,
+    "completion": 342,
+    "total": 1585
+  },
+  "latencyMs": 2341
+}
+```
+
+**Response `400 Bad Request`:**
+
+```json
+{
+  "error": "INVALID_REQUEST",
+  "message": "Field 'message' is required",
+  "details": { "field": "message" }
+}
+```
+
+**Response `429 Too Many Requests`:**
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "Rate limit exceeded. Try again in 30 seconds.",
+  "retryAfter": 30
+}
+```
+
+---
+
 #### `POST /chat/stream`
 
-Streaming version. Uses Server-Sent Events (SSE). Each event is a JSON fragment:
+Streaming chat response via Server-Sent Events.
 
-```bash
-curl -X POST http://localhost:18789/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Explain quantum computing", "userId": "alice"}'
-```
+**Request:** Same as `POST /chat`.
 
-Events:
+**Response:** `Content-Type: text/event-stream`
 
 ```
-event: token
-data: {"token": "Quantum"}
+event: start
+data: {"sessionId": "session-456"}
 
 event: token
-data: {"token": " computing"}
+data: {"content": "Based"}
+
+event: token
+data: {"content": " on your"}
+
+event: token
+data: {"content": " memory,"}
 
 event: tool_call
-data: {"tool": "web_search", "input": {"query": "quantum computing basics"}}
+data: {"tool": "memory_search", "arguments": {"query": "API"}}
+
+event: tool_result
+data: {"tool": "memory_search", "result": "Found 3 entries..."}
 
 event: done
-data: {"totalTokens": 1842}
+data: {"tokens": {"prompt": 1243, "completion": 342, "total": 1585}}
 ```
 
 ---
@@ -220,82 +225,128 @@ Search semantic memory.
 
 **Query parameters:**
 
-| Parameter | Type | Description |
-|---|---|---|
-| `q` | string | Search query (required) |
-| `limit` | number | Max results (default: 10) |
-| `threshold` | number | Similarity threshold 0-1 (default: 0.6) |
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `q` | string | — | Search query (required) |
+| `limit` | number | 5 | Max results |
+| `type` | string | all | Filter by type: `decision`, `lesson`, `error`, `preference`, `general` |
+| `userId` | string | all | Filter by user |
 
-```bash
-curl "http://localhost:18789/memory/search?q=project%20meetings&limit=5"
+**Example:**
+
 ```
+GET /memory/search?q=API+design&limit=5&type=decision
+```
+
+**Response `200 OK`:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "results": [
-      {
-        "id": "mem_001",
-        "content": "Weekly project sync every Monday at 10:00",
-        "score": 0.92,
-        "createdAt": "2026-03-20T14:30:00Z"
+  "results": [
+    {
+      "id": "mem_abc123",
+      "type": "decision",
+      "content": "Use REST over GraphQL for the public API",
+      "createdAt": "2026-03-20T10:30:00Z",
+      "accessedAt": "2026-03-23T01:00:00Z",
+      "accessCount": 5,
+      "metadata": {
+        "source": "telegram:123456"
       }
-    ],
-    "total": 1
-  }
+    }
+  ],
+  "total": 1,
+  "query": "API design",
+  "latencyMs": 23
 }
 ```
+
+---
 
 #### `POST /memory/store`
 
 Store a new memory entry.
 
-**Request body:**
-
-```typescript
-{
-  content: string;       // Memory text (required)
-  userId?: string;       // Associated user (optional)
-  tags?: string[];       // Categorization tags (optional)
-  metadata?: object;     // Arbitrary key-value data (optional)
-}
-```
-
-```bash
-curl -X POST http://localhost:18789/memory/store \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Aleksey prefers morning meetings", "tags": ["preference", "schedule"]}'
-```
-
-#### `GET /memory/graph`
-
-Query the knowledge graph.
-
-```bash
-curl "http://localhost:18789/memory/graph?entity=aleksey"
-```
+**Request:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "entities": [
-      { "id": "entity_001", "type": "person", "name": "Aleksey", "properties": {} }
-    ],
-    "relations": [
-      { "from": "entity_001", "type": "prefers", "to": "entity_002" }
-    ]
+  "type": "decision",
+  "content": "Use PostgreSQL as the primary database",
+  "userId": "user-123",
+  "metadata": {
+    "project": "backend",
+    "priority": "high"
   }
 }
 ```
 
-#### `DELETE /memory/entry/:id`
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | One of: `decision`, `lesson`, `error`, `preference`, `general` |
+| `content` | string | Yes | The memory content |
+| `userId` | string | No | Associated user ID |
+| `metadata` | object | No | Additional key-value metadata |
 
-Delete a memory entry by ID.
+**Response `201 Created`:**
 
-```bash
-curl -X DELETE http://localhost:18789/memory/entry/mem_001
+```json
+{
+  "id": "mem_def456",
+  "type": "decision",
+  "content": "Use PostgreSQL as the primary database",
+  "createdAt": "2026-03-23T01:30:00Z",
+  "metadata": {
+    "project": "backend",
+    "priority": "high"
+  }
+}
+```
+
+---
+
+#### `GET /memory/recent`
+
+Get recent memory entries.
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | number | 10 | Max results (max 100) |
+| `type` | string | all | Filter by type |
+
+**Response `200 OK`:**
+
+```json
+{
+  "entries": [
+    {
+      "id": "mem_def456",
+      "type": "decision",
+      "content": "Use PostgreSQL as the primary database",
+      "createdAt": "2026-03-23T01:30:00Z",
+      "accessedAt": "2026-03-23T01:30:00Z",
+      "accessCount": 1
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+#### `DELETE /memory/:id`
+
+Delete a memory entry.
+
+**Response `200 OK`:**
+
+```json
+{
+  "deleted": true,
+  "id": "mem_def456"
+}
 ```
 
 ---
@@ -306,42 +357,126 @@ curl -X DELETE http://localhost:18789/memory/entry/mem_001
 
 List all configured agents.
 
-```bash
-curl http://localhost:18789/agents
-```
+**Response `200 OK`:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "agents": [
-      { "id": "default", "name": "AG-Claw Assistant", "active": true }
-    ]
-  }
+  "agents": [
+    {
+      "id": "default",
+      "name": "AG-Claw Assistant",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "tools": ["web_search", "read_file", "write_file", "run_command", "memory_search"],
+      "status": "active"
+    }
+  ],
+  "active": "default"
 }
 ```
 
-#### `POST /agents`
+---
 
-Create a new agent profile.
+#### `GET /agents/:id`
 
-```bash
-curl -X POST http://localhost:18789/agents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "coding-assistant",
-    "systemPrompt": "You are an expert programmer...",
-    "model": "anthropic/claude-sonnet-4-20250514"
-  }'
+Get details of a specific agent.
+
+**Response `200 OK`:**
+
+```json
+{
+  "id": "default",
+  "name": "AG-Claw Assistant",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "systemPrompt": "You are a helpful AI assistant...",
+  "maxIterations": 10,
+  "temperature": 0.7,
+  "tools": ["web_search", "read_file", "write_file", "run_command", "memory_search"],
+  "status": "active",
+  "sessions": 1542,
+  "totalMessages": 8934
+}
 ```
 
-#### `PATCH /agents/:id`
+---
 
-Update an agent's configuration.
+### Sessions
 
-#### `DELETE /agents/:id`
+#### `GET /sessions`
 
-Delete an agent.
+List conversation sessions.
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `userId` | string | all | Filter by user |
+| `limit` | number | 20 | Max results |
+| `offset` | number | 0 | Pagination offset |
+
+**Response `200 OK`:**
+
+```json
+{
+  "sessions": [
+    {
+      "id": "session-456",
+      "userId": "user-123",
+      "channel": "telegram",
+      "messageCount": 42,
+      "createdAt": "2026-03-20T10:30:00Z",
+      "lastMessageAt": "2026-03-23T01:00:00Z",
+      "tokens": {
+        "prompt": 45678,
+        "completion": 12345
+      }
+    }
+  ],
+  "total": 156,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+---
+
+#### `GET /sessions/:id`
+
+Get a specific session with full message history.
+
+**Response `200 OK`:**
+
+```json
+{
+  "id": "session-456",
+  "userId": "user-123",
+  "channel": "telegram",
+  "createdAt": "2026-03-20T10:30:00Z",
+  "lastMessageAt": "2026-03-23T01:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What should we use for the API?",
+      "timestamp": "2026-03-23T01:00:00Z"
+    },
+    {
+      "role": "assistant",
+      "content": "I recommend REST for its simplicity...",
+      "timestamp": "2026-03-23T01:00:01Z",
+      "toolCalls": [
+        {
+          "tool": "memory_search",
+          "arguments": { "query": "API decisions" },
+          "result": "Found 2 entries"
+        }
+      ]
+    }
+  ],
+  "tokens": {
+    "prompt": 45678,
+    "completion": 12345
+  }
+}
+```
 
 ---
 
@@ -349,41 +484,88 @@ Delete an agent.
 
 #### `GET /features`
 
-List all available features with their status.
+List all available features.
 
-```bash
-curl http://localhost:18789/features
-```
+**Response `200 OK`:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "features": [
-      { "name": "audit-log", "enabled": true, "version": "0.1.0" },
-      { "name": "sqlite-memory", "enabled": true, "version": "0.1.0" },
-      { "name": "telegram", "enabled": false, "version": "0.1.0" }
-    ],
-    "total": 59,
-    "active": 12
-  }
+  "features": [
+    {
+      "name": "sqlite-memory",
+      "version": "0.1.0",
+      "description": "SQLite-backed semantic memory",
+      "state": "active",
+      "enabled": true,
+      "dependencies": []
+    },
+    {
+      "name": "knowledge-graph",
+      "version": "0.1.0",
+      "description": "Entity relationship graph",
+      "state": "active",
+      "enabled": true,
+      "dependencies": ["sqlite-memory"]
+    }
+  ],
+  "total": 59,
+  "active": 12
 }
 ```
+
+---
 
 #### `POST /features/:name`
 
 Enable or disable a feature.
 
-```bash
-# Enable
-curl -X POST http://localhost:18789/features/semantic-search \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true}'
+**Request:**
 
-# Disable
-curl -X POST http://localhost:18789/features/semantic-search \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false}'
+```json
+{
+  "action": "enable"
+}
+```
+
+Valid actions: `enable`, `disable`
+
+**Response `200 OK`:**
+
+```json
+{
+  "name": "webchat",
+  "state": "active",
+  "previousState": "disabled",
+  "message": "Feature enabled successfully"
+}
+```
+
+---
+
+#### `GET /features/:name`
+
+Get details of a specific feature.
+
+**Response `200 OK`:**
+
+```json
+{
+  "name": "sqlite-memory",
+  "version": "0.1.0",
+  "description": "SQLite-backed semantic memory",
+  "state": "active",
+  "enabled": true,
+  "dependencies": [],
+  "config": {
+    "path": "./data/memory.db",
+    "enabled": true
+  },
+  "health": {
+    "healthy": true,
+    "message": "Database accessible",
+    "lastCheck": "2026-03-23T01:00:00Z"
+  }
+}
 ```
 
 ---
@@ -392,388 +574,251 @@ curl -X POST http://localhost:18789/features/semantic-search \
 
 #### `GET /config`
 
-Get the current full configuration (secrets redacted).
+Get current configuration (secrets masked).
 
-```bash
-curl http://localhost:18789/config
-```
-
-#### `PATCH /config`
-
-Update configuration values. Supports dot-notation keys.
-
-```bash
-curl -X PATCH http://localhost:18789/config \
-  -H "Content-Type: application/json" \
-  -d '{"agent.maxIterations": 15, "model.temperature": 0.5}'
-```
-
-Changes take effect immediately (hot-reload).
-
----
-
-### Sessions
-
-#### `GET /sessions`
-
-List recent conversation sessions.
-
-```bash
-curl "http://localhost:18789/sessions?limit=10"
-```
-
-#### `GET /sessions/:id`
-
-Get a session's full message history.
-
-#### `DELETE /sessions/:id`
-
-Clear a session's history.
-
----
-
-## 4. WebSocket Events
-
-AG-Claw supports real-time communication via WebSocket at `/ws`.
-
-### Connecting
-
-```javascript
-const ws = new WebSocket('ws://localhost:18789/ws?token=your-token');
-
-ws.on('open', () => {
-  console.log('Connected to AG-Claw');
-});
-
-ws.on('message', (data) => {
-  const event = JSON.parse(data);
-  console.log('Event:', event);
-});
-```
-
-### Client to Server Messages
-
-#### `{ type: "chat", message: string, userId: string }`
-
-Send a chat message over WebSocket.
-
-```json
-{ "type": "chat", "message": "Hello!", "userId": "alice" }
-```
-
-#### `{ type: "ping" }`
-
-Keepalive ping. Server responds with `pong`.
-
-### Server to Client Events
-
-#### `{ type: "token", data: string }`
-
-Streamed token from the model.
-
-```json
-{ "type": "token", "data": "The weather" }
-```
-
-#### `{ type: "tool_call", data: { tool: string, input: object } }`
-
-Model requested a tool execution.
-
-```json
-{ "type": "tool_call", "data": { "tool": "web_search", "input": { "query": "..." } } }
-```
-
-#### `{ type: "tool_result", id: string, result: string }`
-
-Tool execution result.
-
-```json
-{ "type": "tool_result", "id": "call_001", "result": "13°C, partly cloudy" }
-```
-
-#### `{ type: "done", reply: string, tokens: object }`
-
-Final response complete.
-
-```json
-{ "type": "done", "reply": "The weather is nice today.", "tokens": { "total": 342 } }
-```
-
-#### `{ type: "pong" }`
-
-Response to client ping.
-
-#### `{ type: "error", message: string }`
-
-Error occurred.
-
----
-
-## 5. Error Codes
-
-| Code | HTTP Status | Description |
-|---|---|---|
-| `INVALID_REQUEST` | 400 | Malformed request body or missing required fields |
-| `UNAUTHORIZED` | 401 | Missing or invalid auth token |
-| `FORBIDDEN` | 403 | Action not permitted by policy |
-| `NOT_FOUND` | 404 | Resource does not exist |
-| `RATE_LIMITED` | 429 | Too many requests. Check `Retry-After` header |
-| `MODEL_UNAVAILABLE` | 502 | LLM provider is down. Try fallback model |
-| `TOOL_EXECUTION_FAILED` | 500 | A tool call threw an exception |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
-
----
-
-## 6. Environment Variables
-
-These variables are read at startup. Set them in `.env` or your shell.
-
-| Variable | Type | Default | Description |
-|---|---|---|---|
-| `OPENROUTER_API_KEY` | string | — | OpenRouter API key for model access |
-| `ANTHROPIC_API_KEY` | string | — | Anthropic API key (alternative to OpenRouter) |
-| `OPENAI_API_KEY` | string | — | OpenAI key for Whisper STT, DALL-E image gen |
-| `AGCLAW_PORT` | number | `18789` | Gateway HTTP port |
-| `AGCLAW_HOST` | string | `0.0.0.0` | Gateway bind address |
-| `AGCLAW_DB_PATH` | string | `./data/agclaw.db` | SQLite database path |
-| `AGCLAW_CONFIG_PATH` | string | `./agclaw.json` | Config file path |
-| `AGCLAW_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `AGCLAW_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
-| `AGCLAW_TELEGRAM_TOKEN` | string | — | Telegram bot token |
-| `AGCLAW_FCM_KEY` | string | — | Firebase Cloud Messaging key for mobile push |
-| `AGCLAW_SESSION_SECRET` | string | auto-generated | Secret for session encryption |
-| `SUPABASE_URL` | string | — | Supabase project URL (for cloud memory) |
-| `SUPABASE_KEY` | string | — | Supabase anon key |
-| `NODE_ENV` | string | `development` | Environment: `development` or `production` |
-
----
-
-## 7. Configuration Schema
-
-The `agclaw.json` configuration file follows this JSON Schema:
+**Response `200 OK`:**
 
 ```json
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AGClawConfig",
-  "type": "object",
-  "properties": {
-    "name": {
-      "type": "string",
-      "description": "Instance display name",
-      "default": "AG-Claw"
-    },
-    "version": {
-      "type": "string",
-      "description": "Config format version",
-      "const": "0.2.0"
-    },
-    "server": {
-      "type": "object",
-      "properties": {
-        "port": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 18789,
-          "description": "HTTP gateway port"
-        },
-        "host": {
-          "type": "string",
-          "default": "0.0.0.0",
-          "description": "Bind address"
-        },
-        "cors": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean", "default": false },
-            "origins": { "type": "array", "items": { "type": "string" }, "default": [] }
-          }
-        },
-        "rateLimit": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean", "default": true },
-            "windowMs": { "type": "integer", "default": 60000 },
-            "maxRequests": { "type": "integer", "default": 100 }
-          }
-        },
-        "auth": {
-          "type": "object",
-          "properties": {
-            "token": { "type": "string", "description": "Bearer token for API auth" }
-          }
-        }
-      }
-    },
-    "agent": {
-      "type": "object",
-      "properties": {
-        "name": { "type": "string", "default": "AG-Claw Assistant" },
-        "systemPrompt": { "type": "string" },
-        "maxIterations": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 },
-        "temperature": { "type": "number", "minimum": 0, "maximum": 2, "default": 0.7 },
-        "tools": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Enabled tool names"
-        }
-      }
-    },
-    "model": {
-      "type": "object",
-      "properties": {
-        "provider": {
-          "type": "string",
-          "enum": ["openrouter", "anthropic", "openai"],
-          "default": "openrouter"
-        },
-        "defaultModel": { "type": "string" },
-        "fallbackModel": { "type": "string" },
-        "maxTokens": { "type": "integer", "minimum": 1, "default": 8192 },
-        "temperature": { "type": "number", "minimum": 0, "maximum": 2, "default": 0.7 },
-        "retryAttempts": { "type": "integer", "minimum": 0, "default": 3 },
-        "retryDelayMs": { "type": "integer", "minimum": 0, "default": 1000 }
-      },
-      "required": ["provider", "defaultModel"]
-    },
-    "features": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "enabled": { "type": "boolean" },
-          "_extends": { "type": "string", "description": "Path to feature config file" }
-        }
-      },
-      "default": {}
-    },
-    "channels": {
-      "type": "object",
-      "properties": {
-        "telegram": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "token": { "type": "string" },
-            "allowedUsers": { "type": "array", "items": { "type": "integer" } }
-          }
-        },
-        "webchat": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "port": { "type": "integer" },
-            "maxConnections": { "type": "integer", "default": 100 }
-          }
-        },
-        "discord": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "token": { "type": "string" },
-            "guildId": { "type": "string" }
-          }
-        }
-      }
-    },
-    "memory": {
-      "type": "object",
-      "properties": {
-        "primary": {
-          "type": "string",
-          "enum": ["sqlite", "markdown", "supabase"],
-          "default": "sqlite"
-        },
-        "path": { "type": "string", "default": "./data" },
-        "selfEvolving": { "type": "boolean", "default": true },
-        "compressionThreshold": { "type": "integer", "default": 50000 },
-        "supabaseUrl": { "type": "string" },
-        "supabaseKey": { "type": "string" }
-      }
-    },
-    "security": {
-      "type": "object",
-      "properties": {
-        "policy": {
-          "type": "string",
-          "enum": ["permissive", "strict"],
-          "default": "permissive"
-        },
-        "secrets": {
-          "type": "string",
-          "enum": ["encrypted", "plain"],
-          "default": "encrypted"
-        },
-        "auditLog": { "type": "boolean", "default": true },
-        "allowlistMode": {
-          "type": "string",
-          "enum": ["permissive", "strict"],
-          "default": "permissive"
-        }
-      }
-    },
-    "backup": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "intervalHours": { "type": "integer", "default": 24 },
-        "retentionDays": { "type": "integer", "default": 7 },
-        "path": { "type": "string", "default": "./backups" }
-      }
-    }
+  "name": "My AG-Claw",
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0"
+  },
+  "model": {
+    "provider": "openrouter",
+    "defaultModel": "anthropic/claude-sonnet-4-20250514"
+  },
+  "security": {
+    "apiToken": "********"
   }
 }
 ```
 
-Example `agclaw.json`:
+---
+
+#### `PATCH /config`
+
+Update configuration at runtime. Only certain keys are hot-reloadable.
+
+**Request:**
 
 ```json
 {
-  "name": "AG-Claw",
-  "version": "0.2.0",
-  "server": {
-    "port": 18789,
-    "host": "0.0.0.0",
-    "cors": { "enabled": true, "origins": ["https://yourdomain.com"] },
-    "rateLimit": { "enabled": true, "windowMs": 60000, "maxRequests": 100 }
-  },
-  "agent": {
-    "name": "AG-Claw Assistant",
-    "maxIterations": 10,
-    "temperature": 0.7
-  },
-  "model": {
-    "provider": "openrouter",
-    "defaultModel": "anthropic/claude-sonnet-4-20250514",
-    "fallbackModel": "openai/gpt-4o",
-    "maxTokens": 8192,
-    "temperature": 0.7,
-    "retryAttempts": 3
-  },
+  "name": "Updated Name",
   "features": {
-    "audit-log": { "enabled": true },
-    "sqlite-memory": { "enabled": true },
-    "semantic-search": { "enabled": true },
-    "morning-briefing": { "enabled": true },
-    "cron-scheduler": { "enabled": true }
-  },
-  "memory": {
-    "primary": "sqlite",
-    "path": "./data",
-    "selfEvolving": true,
-    "compressionThreshold": 50000
-  },
-  "security": {
-    "policy": "permissive",
-    "secrets": "encrypted",
-    "auditLog": true
-  },
-  "backup": {
-    "enabled": true,
-    "intervalHours": 24,
-    "retentionDays": 7,
-    "path": "./backups"
+    "webchat": { "enabled": true }
   }
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "updated": ["name", "features.webchat"],
+  "restartRequired": ["features.webchat"],
+  "message": "Configuration updated. Restart required for webchat."
+}
+```
+
+---
+
+### Webhooks
+
+#### `POST /webhooks/incoming/:feature`
+
+Receive an incoming webhook for a specific feature.
+
+**Request:** Feature-specific payload
+
+**Response `200 OK`:**
+
+```json
+{
+  "received": true,
+  "feature": "webhooks",
+  "processed": true
+}
+```
+
+---
+
+## WebSocket Events
+
+AG-Claw supports real-time communication via WebSocket at `/ws`.
+
+### Connection
+
+```javascript
+const ws = new WebSocket('ws://localhost:3000/ws?token=your-token');
+
+// Receive welcome
+ws.on('open', () => {
+  ws.send(JSON.stringify({ type: 'auth', token: 'your-token' }));
+});
+```
+
+### Client → Server Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `auth` | `{ token: string }` | Authenticate the connection |
+| `chat` | `{ message: string, userId: string, sessionId?: string }` | Send a chat message |
+| `ping` | `{}` | Keepalive ping |
+
+### Server → Client Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `auth_ok` | `{ userId: string }` | Authentication successful |
+| `auth_error` | `{ message: string }` | Authentication failed |
+| `chat_start` | `{ sessionId: string }` | Chat processing started |
+| `chat_token` | `{ content: string }` | Streaming response token |
+| `chat_tool_call` | `{ tool: string, arguments: object }` | Tool being executed |
+| `chat_tool_result` | `{ tool: string, result: string }` | Tool execution result |
+| `chat_done` | `{ response: string, tokens: object }` | Response complete |
+| `chat_error` | `{ message: string }` | Error during processing |
+| `pong` | `{}` | Pong response to ping |
+| `memory_updated` | `{ id: string, type: string }` | New memory stored |
+| `feature_status` | `{ name: string, state: string }` | Feature state changed |
+
+---
+
+## Environment Variables
+
+| Variable | Type | Description |
+|---|---|---|
+| `OPENROUTER_API_KEY` | string | OpenRouter API key |
+| `ANTHROPIC_API_KEY` | string | Anthropic API key |
+| `OPENAI_API_KEY` | string | OpenAI API key |
+| `AGCLAW_TELEGRAM_TOKEN` | string | Telegram bot token |
+| `AGCLAW_FCM_KEY` | string | Firebase Cloud Messaging key |
+| `AGCLAW_DB_PATH` | string | Path to main SQLite DB |
+| `AGCLAW_PORT` | number | Gateway HTTP port |
+| `AGCLAW_HOST` | string | Gateway bind address |
+| `AGCLAW_LOG_LEVEL` | string | Log level: `debug`, `info`, `warn`, `error` |
+| `AGCLAW_LOG_FORMAT` | string | Log format: `json`, `pretty` |
+| `AGCLAW_API_TOKEN` | string | API authentication token |
+| `SUPABASE_URL` | string | Supabase project URL |
+| `SUPABASE_KEY` | string | Supabase anon key |
+| `AGCLAW_SQL_LOG` | string | Set to `debug` to log SQL queries |
+
+---
+
+## Error Codes
+
+All API errors return a JSON body:
+
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Human-readable description",
+  "details": { }
+}
+```
+
+| HTTP Status | Error Code | Description |
+|---|---|---|
+| `400` | `INVALID_REQUEST` | Missing or malformed request fields |
+| `400` | `VALIDATION_ERROR` | Request passed validation but business logic rejected it |
+| `401` | `UNAUTHORIZED` | Missing or invalid authentication token |
+| `403` | `FORBIDDEN` | Authenticated but not authorized for this action |
+| `404` | `NOT_FOUND` | Resource does not exist |
+| `409` | `CONFLICT` | Resource already exists or state conflict |
+| `422` | `UNPROCESSABLE` | Request is well-formed but cannot be processed |
+| `429` | `RATE_LIMITED` | Too many requests; check `retryAfter` |
+| `500` | `INTERNAL_ERROR` | Unexpected server error |
+| `503` | `FEATURE_UNAVAILABLE` | Required feature is disabled or unhealthy |
+
+---
+
+## Configuration Schema
+
+Full TypeScript interface in `src/core/config.ts`. Key structure:
+
+```typescript
+interface AGClawConfig {
+  // Instance identity
+  name: string;
+
+  // HTTP server
+  server: {
+    port: number;
+    host: string;
+    cors: {
+      enabled: boolean;
+      origins: string[];
+    };
+    rateLimit: {
+      enabled: boolean;
+      windowMs: number;
+      maxRequests: number;
+    };
+  };
+
+  // LLM configuration
+  model: {
+    provider: 'openrouter' | 'anthropic' | 'openai';
+    defaultModel: string;
+    fallbackModel?: string;
+    maxTokens: number;
+    temperature: number;
+    retryAttempts: number;
+    retryDelayMs: number;
+  };
+
+  // Feature toggles
+  features: Record<string, {
+    enabled: boolean;
+    [key: string]: unknown;
+  }>;
+
+  // Communication channels
+  channels: {
+    telegram?: {
+      enabled: boolean;
+      token?: string;
+      allowedUsers?: number[];
+      allowedChats?: number[];
+    };
+    webchat?: {
+      enabled: boolean;
+      port: number;
+      maxConnections: number;
+      messageHistory: number;
+    };
+    discord?: {
+      enabled: boolean;
+      token?: string;
+    };
+  };
+
+  // Memory backends
+  memory: {
+    primary: 'sqlite' | 'markdown' | 'supabase';
+    path: string;
+    selfEvolving: boolean;
+    compressionThreshold: number;
+    supabaseUrl?: string;
+    supabaseKey?: string;
+  };
+
+  // Security settings
+  security: {
+    policy: string;
+    secrets: 'encrypted' | 'plain';
+    auditLog: boolean;
+    allowlistMode: 'permissive' | 'strict';
+    apiToken?: string;
+  };
+
+  // Backup settings
+  backup?: {
+    enabled: boolean;
+    intervalHours: number;
+    retentionDays: number;
+    path: string;
+  };
 }
 ```
