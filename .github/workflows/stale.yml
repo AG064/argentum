@@ -1,0 +1,122 @@
+name: Stale Issues & PRs
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Operation mode'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - dry-run
+          - close-only
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: stale-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stale-issues:
+    name: Mark Stale Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.operation != 'close-only'
+    steps:
+      - name: Mark stale issues
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-label: 'status: stale'
+          stale-issue-message: |
+            👋 Hey there! This issue has been open for a while now.
+
+            Is this still something that needs to be addressed, or has it been resolved?
+            If it's something you're still working on, feel free to leave a comment here
+            to let us know it's not abandoned.
+
+            If you believe this is no longer relevant, please feel free to close this issue.
+            If the issue is indeed stale, it will be closed automatically in the next 14 days.
+
+            Thanks for helping keep things organized! 🙏
+          days-before-stale: 60
+          days-before-close: 14
+          only-labels: ''
+          remove-stale-when-updated: true
+          debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
+          operations-per-run: 100
+
+  stale-prs:
+    name: Mark Stale PRs
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.operation != 'close-only'
+    steps:
+      - name: Mark stale PRs
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-pr-label: 'status: stale'
+          stale-pr-message: |
+            👋 Hi there! This PR has been marked as stale.
+
+            Is this still a work in progress, or are you ready for review?
+            If you're still actively working on this, that's great!
+
+            If there's been no activity for a while and you're waiting on feedback,
+            let us know and we'll give it the attention it deserves.
+
+            If this PR is no longer being pursued, please feel free to close it.
+            It will be closed automatically in 14 days if there's no further activity.
+
+            Thanks for your contributions! 🙏
+          days-before-stale: 30
+          days-before-close: 14
+          remove-stale-when-updated: true
+          debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
+          operations-per-run: 100
+          start-date: '2024-01-01Z00:00:00Z'  # Don't mark old PRs as stale
+
+  close-stale:
+    name: Close Stale Items
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.operation == 'close-only' || github.event.inputs.operation == 'full'
+    steps:
+      - name: Close stale issues
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-label: 'status: stale'
+          close-issue-message: |
+            👋 This issue has been automatically closed because it has been stale
+            for 14 days with no activity.
+
+            If you believe this was closed in error or you want to revive the discussion,
+            please feel free to reopen it with a comment.
+
+            Thanks for understanding! The AG-Claw team
+          days-before-stale: 0
+          days-before-close: 0
+          debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
+          operations-per-run: 50
+
+  stale-summary:
+    name: Stale Summary
+    runs-on: ubuntu-latest
+    needs: [stale-issues, stale-prs]
+    if: always() && github.event_name == 'schedule'
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Stale Bot Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Issues check: ${{ needs.stale-issues.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- PRs check: ${{ needs.stale-prs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Last run: $(date -u)" >> $GITHUB_STEP_SUMMARY

@@ -1,102 +1,134 @@
 # Contributing to AG-Claw
 
-Thank you for your interest in contributing! AG-Claw is an open-source modular AI agent framework.
+Thank you for your interest in contributing to AG-Claw! This document provides guidelines and instructions for contributing.
 
-## Getting Started
+## 🎯 Ways to Contribute
 
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/ag-claw.git`
-3. Install dependencies: `npm install`
-4. Build: `npm run build`
-5. Run tests: `npm test`
+- 🐛 Report bugs
+- ✨ Suggest new features
+- 📚 Improve documentation
+- 🔧 Submit pull requests
+- 🧪 Write tests
+- 🌐 Translate into other languages
 
-## Project Structure
+## 🚀 Getting Started
 
-```
-src/
-├── cli.ts              # CLI entry point
-├── core/               # Core framework (config, plugin-loader, LLM provider)
-├── features/           # Feature modules (each in its own directory)
-│   └── <feature>/
-│       └── index.ts    # Feature implementation (FeatureModule interface)
-├── memory/             # Memory systems (semantic, graph)
-└── index.ts            # Main entry point
-```
+### 1. Fork the Repository
 
-## Adding a New Feature
-
-1. Create `src/features/<your-feature>/index.ts`
-2. Implement the `FeatureModule` interface:
-
-```typescript
-import { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/types';
-
-class YourFeature implements FeatureModule {
-  readonly meta: FeatureMeta = {
-    name: 'your-feature',
-    version: '0.1.0',
-    description: 'What your feature does',
-    dependencies: [],  // other features this depends on
-  };
-
-  private ctx!: FeatureContext;
-
-  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
-    this.ctx = context;
-    // Initialize your feature
-  }
-
-  async start(): Promise<void> {
-    // Start your feature
-  }
-
-  async stop(): Promise<void> {
-    // Cleanup
-  }
-
-  async healthCheck(): Promise<HealthStatus> {
-    return { healthy: true, details: {} };
-  }
-}
-
-export default new YourFeature();
-```
-
-3. Add your feature to `README.md` feature table
-4. Add tests in `tests/<your-feature>.test.ts`
-5. Submit a PR
-
-## Running Locally
+Fork the repository on GitHub and clone your fork locally:
 
 ```bash
-# Build
-npm run build
-
-# Run CLI
-node dist/cli.js help
-
-# Start gateway
-node dist/cli.js gateway start --port 3000
-
-# Run tests
-npm test
+git clone https://github.com/YOUR_USERNAME/ag-claw.git
+cd ag-claw
 ```
 
-## Code Style
+### 2. Install Dependencies
 
-- TypeScript with strict mode
-- 2-space indentation
-- Semicolons required
-- Use `async/await` over raw Promises
-- Features should be self-contained (own SQLite tables, own logic)
+```bash
+npm install
+```
 
-## Security
+### 3. Create a Branch
 
-- Never log API keys or secrets
-- Use parameterized SQL queries (never concatenate user input)
-- Validate all external input
-- Report security issues privately to security@agclaw.dev
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/your-bug-fix
+```
 
-## License
+## 📝 Coding Standards
+
+### Code Style
+
+We use ESLint and Prettier for code formatting:
+
+```bash
+# Check formatting
+npm run format:check
+
+# Fix formatting issues
+npm run format
+```
+
+### TypeScript
+
+- Use strict TypeScript mode
+- Avoid `any` type
+- Provide proper types for all functions and variables
+- Document complex logic with comments
+
+### Commit Messages
+
+We follow Conventional Commits:
+
+```
+feat: add new feature
+fix: resolve bug
+docs: update documentation
+style: formatting changes
+refactor: code refactoring
+test: add tests
+chore: maintenance tasks
+```
+
+Example:
+```
+feat: add WebSocket support for real-time agent communication
+
+Adds WebSocket endpoint for monitoring agent activity in real-time.
+Includes connection pooling and automatic reconnection logic.
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run specific test suite
+npm run test:unit
+npm run test:integration
+```
+
+### Writing Tests
+
+- Write tests for all new features
+- Ensure all tests pass before submitting PR
+- Aim for meaningful test coverage
+
+## 🔍 Making Changes
+
+1. Make your changes in your feature branch
+2. Add or update tests as needed
+3. Ensure code follows our style guidelines
+4. Write clear commit messages
+5. Push to your fork and submit a pull request
+
+## 📬 Pull Request Process
+
+1. Fill out the PR template completely
+2. Request review from maintainers
+3. Address any feedback
+4. Once approved, your PR will be merged
+
+## 🔒 Security
+
+If you discover a security vulnerability, please DO NOT open a public issue. Instead, email us privately or see [SECURITY.md](./SECURITY.md).
+
+## 📜 License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
+
+## 🙏 Thank You
+
+Every contribution is appreciated. Thank you for making AG-Claw better!
+
+## 📞 Getting Help
+
+- 📖 Check [docs/](docs/) for documentation
+- 💬 Join our [Telegram channel](https://t.me/agclaw)
+- 🐛 Open an issue for bugs
+- ✨ Submit feature requests

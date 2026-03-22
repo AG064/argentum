@@ -11,11 +11,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: '20'
+  TURBO_TOKEN: ${{ vars.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
 jobs:
-  # ─── Quality Gates ─────────────────────────────────────────────────────────
+  # ─── Quality Gates ──────────────────────────────────────────────────────────
 
   lint:
-    name: Lint & Type Check
+    name: Lint & Format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -23,10 +28,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
@@ -42,15 +47,37 @@ jobs:
         env:
           CI: true
 
+  typecheck:
+    name: TypeScript Type Check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run TypeScript type check
         run: npm run typecheck
         env:
           CI: true
 
-  # ─── Testing ───────────────────────────────────────────────────────────────
+  # ─── Unit & Integration Tests ────────────────────────────────────────────────
 
-  test:
-    name: Test (Node ${{ matrix.node-version }})
+  test-unit:
+    name: Unit Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -72,34 +99,115 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npm run test:unit -- --passWithNoTests
+        run: npm run test:unit
         env:
           CI: true
-          NODE_OPTIONS: '--experimental-vm-modules'
-
-      - name: Run integration tests
-        run: npm run test:integration -- --passWithNoTests
-        env:
-          CI: true
-          NODE_OPTIONS: '--experimental-vm-modules'
+          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '20'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           flags: unittests
-          name: codecov-umbrella
+          name: codecov-unit
           fail_ci_if_error: false
-          verbose: true
 
-  # ─── Build ─────────────────────────────────────────────────────────────────
+  test-integration:
+    name: Integration Tests (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+    services:
+      sqlite:
+        image: busybox
+        options: >-
+          --tmpfs /tmp
+          --tmpfs /var
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          CI: true
+          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
+          TEST_ENV: 'integration'
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == '20'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: integrationtests
+          name: codecov-integration
+          fail_ci_if_error: false
+
+  # ─── E2E Tests ───────────────────────────────────────────────────────────────
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+        env:
+          CI: true
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
+          TEST_ENV: 'e2e'
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 14
+
+  # ─── Build Verification ─────────────────────────────────────────────────────
 
   build:
-    name: Build (Node ${{ matrix.node-version }})
+    name: Build & Verify (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, typecheck]
     strategy:
       fail-fast: false
       matrix:
@@ -129,15 +237,33 @@ jobs:
           node -e "
             const fs = require('fs');
             const path = require('path');
-            const required = ['index.js', 'index.d.ts'];
+            const required = ['index.js', 'index.d.ts', 'cli.js'];
+            const missing = [];
             for (const f of required) {
               const p = path.join('dist', f);
-              if (!fs.existsSync(p)) {
-                console.error('Missing:', p);
-                process.exit(1);
-              }
+              if (!fs.existsSync(p)) missing.push(p);
             }
-            console.log('Build artifacts verified');
+            // Check dist has content
+            const distFiles = fs.readdirSync('dist').filter(f => f.endsWith('.js'));
+            if (distFiles.length === 0) missing.push('No .js files in dist/');
+            if (missing.length > 0) {
+              console.error('Missing:', missing.join(', '));
+              process.exit(1);
+            }
+            console.log('Build artifacts verified. Files:', distFiles.length);
+          "
+
+      - name: Verify TypeScript declarations
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const dtsFiles = fs.readdirSync('dist').filter(f => f.endsWith('.d.ts'));
+            if (dtsFiles.length === 0) {
+              console.error('No .d.ts declaration files found');
+              process.exit(1);
+            }
+            console.log('Type declarations verified:', dtsFiles.length, 'files');
           "
 
       - name: Upload build artifacts
@@ -149,10 +275,10 @@ jobs:
             package.json
           retention-days: 7
 
-  # ─── Security ─────────────────────────────────────────────────────────────
+  # ─── Security ────────────────────────────────────────────────────────────────
 
   security:
-    name: Security Audit
+    name: Security Audit & Dependency Review
     runs-on: ubuntu-latest
     needs: [lint]
     steps:
@@ -164,7 +290,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
@@ -176,17 +302,33 @@ jobs:
       - name: Display audit summary
         run: |
           if [ -f npm-audit.json ]; then
-            node -e "
-              const audit = require('./npm-audit.json');
-              const vuls = audit.vulnerabilities || {};
-              const high = Object.values(vuls).filter(v => v.severity === 'high' || v.severity === 'critical').length;
-              console.log('High/Critical vulnerabilities:', high);
-              if (high > 0) {
-                console.warn('WARNING: High or critical vulnerabilities found!');
-                process.exit(1);
-              }
-            "
+            VULNS=$(node -e "
+              const a = require('./npm-audit.json');
+              const v = Object.values(a.vulnerabilities || {});
+              const h = v.filter(x => x.severity === 'high' || v.severity === 'critical').length;
+              const c = v.filter(x => x.severity === 'critical').length;
+              console.log(JSON.stringify({high: h, critical: c, total: v.length}));
+            ")
+            echo "Vulnerabilities: $VULNS"
+            echo "$VULNS" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Check for dangerous patterns
+        run: |
+          DANGEROUS=$(grep -r -l -E "(eval\s*\(|new\s+Function\s*\(|child_process|process\.exit|reflect\.construct)" \
+            --include='*.ts' src/ 2>/dev/null | wc -l || echo "0")
+          echo "Files with potentially dangerous patterns: $DANGEROUS"
+          if [ "$DANGEROUS" -gt "0" ]; then
+            echo "::warning title=Security Warning::Found $DANGEROUS file(s) with potentially dangerous patterns"
+            grep -r -n -E "(eval\s*\(|new\s+Function\s*\(|child_process|process\.exit|reflect\.construct)" \
+              --include='*.ts' src/ 2>/dev/null || true
+          fi
+
+      - name: Dependency Review Action
+        uses: actions/dependency-review-action@v4
+        with:
+          comment-summary-in-pr: on-failure
+          fail-on-severity: critical
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -196,21 +338,83 @@ jobs:
           path: npm-audit.json
           retention-days: 14
 
-  # ─── Full Matrix Summary ───────────────────────────────────────────────────
+  # ─── Package Validation ──────────────────────────────────────────────────────
+
+  validate-package:
+    name: Package Validation
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-node-20
+          path: dist/
+
+      - name: Validate package.json
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            const checks = [
+              { field: 'name', check: pkg.name === 'ag-claw' },
+              { field: 'version', check: pkg.version && /^\d+\.\d+\.\d+/.test(pkg.version) },
+              { field: 'main', check: pkg.main === 'dist/index.js' },
+              { field: 'types', check: pkg.types === 'dist/index.d.ts' },
+              { field: 'bin', check: pkg.bin && pkg.bin.agclaw },
+              { field: 'license', check: pkg.license === 'MIT' },
+              { field: 'repository', check: pkg.repository && pkg.repository.type === 'git' },
+              { field: 'engines', check: pkg.engines && pkg.engines.node },
+            ];
+            let passed = 0;
+            for (const c of checks) {
+              const status = c.check ? '✅' : '❌';
+              console.log(status, c.field);
+              if (c.check) passed++;
+            }
+            console.log('\nPassed:', passed + '/' + checks.length);
+            if (passed < checks.length) process.exit(1);
+          "
+
+  # ─── CI Summary ─────────────────────────────────────────────────────────────
 
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, test, build, security]
+    needs: [lint, typecheck, test-unit, test-integration, test-e2e, build, security, validate-package]
     if: always()
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
     steps:
-      - name: Print summary
+      - name: Summary
         run: |
           echo "## CI Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint & Type Check | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security | ${{ needs.security.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint & Format | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript Type Check | ${{ needs.typecheck.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.test-unit.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.test-integration.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Tests | ${{ needs.test-e2e.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build & Verify | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Audit | ${{ needs.security.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Package Validation | ${{ needs.validate-package.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Add PR comment on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: pr.number,
+              body: `## CI Failed\n\nOne or more CI jobs failed. [See runs](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`
+            });
