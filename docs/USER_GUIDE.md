@@ -1,6 +1,6 @@
 # User Guide
 
-A comprehensive guide to operating AG-Claw in production and daily use. This document covers architecture, configuration, memory management, security, deployment, and more.
+A comprehensive guide to operating AG-Claw in production and daily use. This document covers architecture, configuration, memory management, security, deployment, monitoring, and more.
 
 ---
 
@@ -26,7 +26,7 @@ A comprehensive guide to operating AG-Claw in production and daily use. This doc
 AG-Claw is built around three principles:
 
 1. **Modularity over monolith** — every capability is a feature module you can enable or disable independently
-2. **Memory as a first-class citizen** — the agent doesn't just process messages; it remembers, learns, and evolves
+2. **Memory as a first-class citizen** — the agent does not just process messages; it remembers, learns, and evolves
 3. **Security by default** — encryption, audit logging, and policy enforcement are baked in, not bolted on
 
 ### System Diagram
@@ -79,7 +79,7 @@ AG-Claw is built around three principles:
 | **Agent** | `src/index.ts` (class `Agent`) | Agentic Tool Loop — orchestrates LLM + tools + memory |
 | **LLM Provider** | `src/core/llm-provider.ts` | Abstraction over OpenRouter, Anthropic, OpenAI |
 | **Memory** | `src/memory/` | Semantic search, knowledge graph, SQLite persistence |
-| **Channels** | `src/channels/` | Protocol adapters (Telegram, Discord, Webchat) |
+| **Channels** | `src/channels/` | Protocol adapters (Telegram, Discord, Webchat, SMS, Email) |
 | **Features** | `src/features/*/index.ts` | 59 individual modules |
 | **Security** | `src/security/` | Policy engine, encrypted secrets, allowlists |
 
@@ -87,15 +87,27 @@ AG-Claw is built around three principles:
 
 When a user sends a message, AG-Claw processes it through this loop:
 
-1. **Message received** — channel adapter normalizes the input
-2. **Security check** — allowlists, rate limiting, content filtering
-3. **Auto-capture** — feature detects decisions, lessons, errors in the message
+1. **Message received** — channel adapter normalizes the input into a standard `Message` format
+2. **Security check** — allowlists, rate limiting, content filtering enforced
+3. **Auto-capture** — feature detects decisions, lessons, errors in the message automatically
 4. **LLM call** — message sent to the model with conversation history and available tools
-5. **Tool execution** — if the model calls a tool, it executes and results are fed back
-6. **Memory update** — semantic memory stores the interaction; knowledge graph updates
+5. **Tool execution** — if the model calls a tool, it executes and results are fed back into the context
+6. **Memory update** — semantic memory stores the interaction; knowledge graph updates entity relationships
 7. **Response** — final text returned to the user via the channel adapter
 
-The loop runs up to 10 iterations per message to handle complex multi-step tasks.
+The loop runs up to 10 iterations per message to handle complex multi-step tasks. You can configure this with `agent.maxIterations`.
+
+### Feature System
+
+Each feature is a self-contained module in `src/features/<name>/index.ts`. Features are independent and configurable. They can:
+- Expose tools to the LLM
+- Run background jobs on a schedule
+- React to events in the system
+- Store and retrieve data
+
+Enabled features are listed in `agclaw.json` under the `features` key. You can enable or disable any feature without touching code.
+
+Current feature count: **59 features** including audit logging, semantic search, cron scheduling, morning briefings, mesh workflows, encrypted secrets, goal tracking, and many more.
 
 ---
 
@@ -103,7 +115,7 @@ The loop runs up to 10 iterations per message to handle complex multi-step tasks
 
 ### Creating Your First Agent
 
-After `agclaw init`, your agent is ready to use. The default configuration creates a general-purpose agent. To customize:
+After running `agclaw init`, your agent is ready to use. The default configuration creates a general-purpose agent with sensible defaults. To customize:
 
 ```bash
 # View current configuration
@@ -112,31 +124,55 @@ agclaw config
 # Set a custom agent name
 agclaw config name "My Personal Assistant"
 
-# Set a custom system prompt (via environment)
-export AGCLAW_SYSTEM_PROMPT="You are a helpful coding assistant..."
+# Set a custom system prompt
+agclaw config agent.systemPrompt "You are a helpful coding assistant..."
+
+# Show full config as JSON
+cat agclaw.json
+```
+
+The first time you start, the agent will guide you through setting up your API key. You can also set it as an environment variable before starting:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-...
+agclaw gateway start
 ```
 
 ### Managing Multiple Agents
 
-AG-Claw supports multiple agent profiles. Create a new agent:
+AG-Claw supports multiple agent profiles for different use cases. Create a specialized agent:
 
 ```bash
-# Create a named agent profile
+# Create a coding-focused agent
 agclaw agents create --name "coding-assistant" \
-  --system-prompt "You are an expert programmer..." \
+  --system-prompt "You are an expert programmer specializing in TypeScript and Python..." \
   --model "anthropic/claude-sonnet-4-20250514"
 ```
 
-List agents:
+List all configured agents:
 
 ```bash
 agclaw agents list
 ```
 
-Switch between agents:
+Output:
+
+```
+NAME                MODEL                           ACTIVE
+default             claude-sonnet-4-20250514        yes
+coding-assistant    claude-sonnet-4-20250514        no
+```
+
+Switch to a different agent:
 
 ```bash
 agclaw agents use "coding-assistant"
+```
+
+Delete an agent profile:
+
+```bash
+agclaw agents delete "coding-assistant"
 ```
 
 ### Agent Configuration
@@ -158,283 +194,336 @@ Key agent settings in `agclaw.json`:
     "fallbackModel": "openai/gpt-4o",
     "maxTokens": 8192,
     "temperature": 0.7,
-    "retryAttempts": 3
+    "retryAttempts": 3,
+    "retryDelayMs": 1000
   }
 }
 ```
 
 ### Conversation Sessions
 
-AG-Claw maintains conversation history per user:
+AG-Claw maintains conversation history per user in `data/sessions.db`. Sessions include full message history, tool calls made, and LLM usage statistics.
 
 ```bash
 # View recent sessions
 agclaw sessions list
 
-# View a specific session
+# View a specific session's full history
 agclaw sessions view <session-id>
 
-# Clear a session
+# Clear a session's history (keeps the user, resets conversation)
 agclaw sessions clear <session-id>
+
+# Export a session as JSON
+agclaw sessions export <session-id> > session.json
 ```
 
-Sessions are stored in `data/sessions.db` and include full message history, tool calls, and LLM usage stats.
+Sessions are useful for:
+- Continuing long conversations across restarts
+- Analyzing how the agent approaches certain problems
+- Auditing what information was provided to the model
+
+### Changing Models
+
+You can override the default model per request via the API, or permanently via config:
+
+```bash
+# Use a different model for this session
+agclaw config model.defaultModel "openai/gpt-4o"
+
+# Restart to apply
+agclaw gateway restart
+```
+
+Available providers:
+- **OpenRouter** — Recommended. Access to 100+ models including Claude, GPT-4, Llama, Mistral
+- **Anthropic** — Direct API access to Claude models
+- **OpenAI** — GPT-4, GPT-4o, GPT-3.5 Turbo
 
 ---
 
 ## 3. Memory System Explained
 
-AG-Claw has a multi-layered memory architecture. Each layer serves a different purpose.
+AG-Claw has a multi-layered memory architecture. Each layer serves a different purpose, from short-term context to long-term knowledge.
 
 ### Memory Layers
 
 ```
 ┌────────────────────────────────────────────┐
-│           Semantic Memory                  │  ← Fast, keyword + vector search
-│     (SQLite + embedding models)            │     Used every conversation
+│           Semantic Memory                  │  ← Fast, keyword + vector-style search
+│     (SQLite + embedding models)             │     Used every conversation
 ├────────────────────────────────────────────┤
 │           Knowledge Graph                  │  ← Entity relationships
-│    (nodes + edges, graph traversal)       │     Used for reasoning
+│    (nodes + edges, graph traversal)         │     Used for reasoning
 ├────────────────────────────────────────────┤
 │         Markdown Memory                    │  ← Human-readable notes
-│      (files on disk, watched)             │     Used for long-term facts
+│      (files on disk, watched)              │     Used for long-term facts
 ├────────────────────────────────────────────┤
-│         Self-Evolving Memory               │  ← Auto-consolidation
-│  (periodic compression + abstraction)     │     Keeps memory efficient
+│          Session Memory                   │  ← Current conversation
+│        (in-memory, per session)            │     Used for context window
 └────────────────────────────────────────────┘
 ```
 
 ### Semantic Memory
 
-The primary working memory. Stores interactions, learnings, decisions.
+The primary memory layer. Stores facts, conversations, and learned information in SQLite with full-text search.
 
 ```bash
-# Store a memory manually
-agclaw memory store "decision" "Use PostgreSQL for the main database"
+# Store something explicitly
+curl -X POST http://localhost:18789/memory/store \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Aleksey is learning TypeScript", "tags": ["person", "learning"]}'
 
 # Search memory
-agclaw memory search "database decisions"
-
-# View recent memories
-agclaw memory recent --limit 10
-
-# Memory statistics
-agclaw memory stats
+curl "http://localhost:18789/memory/search?q=Aleksey%20TypeScript"
 ```
 
-Via the agent tool `memory_search`:
-
-```
-User: What decisions did we make about the API design?
-Agent: Let me check... [calls memory_search tool]
-     Found 3 relevant memories:
-     [decision] Use REST over GraphQL for the public API (accessed 5x)
-     [decision] Version all endpoints under /api/v1/ prefix (accessed 3x)
-     [decision] Use JWT tokens with 1-hour expiry (accessed 2x)
-```
+Key characteristics:
+- Automatic indexing by the `self-evolving-memory` feature
+- Entries tagged and categorized automatically
+- Configurable compression when entries exceed threshold
+- Persistent across restarts (SQLite)
 
 ### Knowledge Graph
 
-Stores entities and their relationships. Enables reasoning about connections.
+Stores entities and their relationships. Enables reasoning about connected facts.
 
 ```bash
-# View knowledge graph stats
-agclaw memory graph stats
-
-# Export graph
-agclaw memory graph export > graph.json
+# Query by entity
+curl "http://localhost:18789/memory/graph?entity=aleksey"
 ```
 
-### Memory Compression
-
-When semantic memory exceeds the compression threshold (default: 10,000 entries), the self-evolving-memory feature automatically:
-
-1. Identifies related entries
-2. Consolidates them into higher-level abstractions
-3. Deletes redundant entries
-4. Preserves the essential information in condensed form
-
-Configure it:
-
-```json
-{
-  "features": {
-    "self-evolving-memory": {
-      "enabled": true,
-      "compressionThreshold": 10000,
-      "consolidationIntervalHours": 24
-    }
-  }
-}
+Example knowledge graph entry:
+```
+Entity: Aleksey (type: person)
+  - works_at: kood/jõhvi (type: educational_institution)
+  - speaks: Russian, English, Estonian
+  - interested_in: programming, AI, space, photography
 ```
 
-### Checkpointing
+The graph is updated automatically as the agent processes messages and detects entities.
 
-Save and resume long-running tasks:
+### Markdown Memory
+
+Flat files on disk in the `data/memory/` directory. Watched by a file watcher — changes are picked up immediately without restart.
 
 ```bash
-# Save a checkpoint (via agent tool)
-Agent: memory_checkpoint(taskId="build-2024-01", state={...})
+# Create a memory file
+cat > data/memory/facts.md << 'EOF'
+# Facts about Aleksey
 
-# Resume
-Agent: memory_resume(taskId="build-2024-01")
+## Preferences
+- Morning person
+- Prefers dark mode
+- Uses Arch Linux
+
+## Goals
+- Find a programming job by end of 2026
+- Learn Rust
+EOF
 ```
+
+Markdown files are parsed and integrated into the agent's context. This is useful for:
+- Manually curated facts
+- Notes from other systems
+- Information that should survive memory compression
+
+### Memory Management
+
+```bash
+# Show memory statistics
+agclaw memory stats
+
+# Clear old entries (before a certain date)
+agclaw memory purge --before 2026-01-01
+
+# Export all memories
+agclaw memory export > memories.json
+
+# Import memories
+agclaw memory import memories.json
+```
+
+The `self-evolving-memory` feature automatically:
+- Consolidates similar memories to save space
+- Discovers patterns in stored information
+- Applies configurable decay to low-relevance entries
 
 ---
 
 ## 4. Skills and How to Use Them
 
-Skills are reusable capability packages that extend what your agent can do. AG-Claw ships with a built-in skills library.
+Skills are reusable capability packs that extend what your agent can do. They live in the `skills/` directory and can be installed, updated, and removed independently of the core framework.
 
 ### Built-in Skills
 
-| Skill | What it does |
+AG-Claw ships with several skills already installed:
+
+| Skill | What It Does |
 |---|---|
-| `web_search` | Search the web via DuckDuckGo |
-| `get_current_time` | Return current date/time |
-| `read_file` | Read a file from disk |
-| `write_file` | Write content to a file |
-| `run_command` | Execute a shell command |
-| `memory_search` | Search semantic memory |
-| `memory_store` | Store a new memory |
-| `memory_checkpoint` | Save a task checkpoint |
-| `memory_resume` | Resume a checkpointed task |
+| `weather` | Current weather and forecasts via wttr.in or Open-Meteo |
+| `summarize` | Summarize URLs, PDFs, images, audio, YouTube videos |
+| `gog` | Google Workspace: Gmail, Calendar, Drive, Sheets, Docs |
+| `xurl` | Twitter/X API: post, reply, search, DMs, media |
+| `himalaya` | CLI email client via IMAP/SMTP |
+| `telegram` | Telegram Bot API workflows |
 
-### Installing Additional Skills
-
-Browse the skills library:
+### Listing Installed Skills
 
 ```bash
 agclaw skills list
 ```
 
-Install a skill:
+Output:
+
+```
+NAME                VERSION   ENABLED
+summarize           1.0.0     yes
+weather             1.0.0     yes
+gog                 1.0.0     yes
+xurl                1.0.0     yes
+```
+
+### Installing New Skills
 
 ```bash
-agclaw skills install <skill-name>
+# Install from a URL or local path
+agclaw skills install https://github.com/example/skill-repo
+
+# Install from ClawHub marketplace
+agclaw skill install my-skill
 ```
 
 ### Creating Custom Skills
 
-Create `src/features/skills-library/<my-skill>/index.ts`:
+See the [Developer Guide](./DEVELOPER_GUIDE.md#7-how-to-create-a-new-skill) for the full process. In brief:
 
-```typescript
-import { SkillModule } from '../../types';
+1. Create `skills/my-skill/SKILL.md`
+2. Write `skills/my-skill/src/index.ts` with your logic
+3. Add metadata for CLI integration
 
-const mySkill: SkillModule = {
-  name: 'my-skill',
-  version: '0.1.0',
-  description: 'Does something useful',
+### Invoking Skills
 
-  tools: [{
-    name: 'my_tool',
-    description: 'Does something useful',
-    parameters: {
-      input: { type: 'string', required: true }
-    },
-    execute: async (params) => {
-      return `Processed: ${params.input}`;
-    }
-  }],
+Skills are typically invoked by the agent when relevant, but you can also call them directly:
 
-  init: async () => {},
-  start: async () => {},
-  stop: async () => {},
-};
-
-export default mySkill;
-```
-
-Register it in `config/default.yaml` or `agclaw.json`:
-
-```json
-{
-  "features": {
-    "skills-library": {
-      "enabled": true,
-      "skills": ["my-skill"]
-    }
-  }
-}
+```bash
+agclaw skills run weather --location "Tallinn"
 ```
 
 ---
 
 ## 5. Security Best Practices
 
-### Essential Security Steps
+AG-Claw includes multiple security layers. Below are recommended practices for production deployments.
 
-**1. Never commit API keys to git**
+### Enable Strict Mode
 
-Use environment variables, not hardcoded tokens:
+Start with `security.policy: "strict"` in `agclaw.json`:
 
-```bash
-# Good
-export OPENROUTER_API_KEY=sk-or-v1-...
-
-# Bad — will end up on GitHub
-echo '"token": "sk-or-v1-..."' >> agclaw.json
+```json
+{
+  "security": {
+    "policy": "strict",
+    "auditLog": true,
+    "allowlistMode": "strict"
+  }
+}
 ```
 
-Add `agclaw.json` to `.gitignore`:
+In strict mode, all actions that are not explicitly allowed are denied. In permissive mode (default), everything is allowed unless blocked by a rule.
 
-```gitignore
-agclaw.json
-data/
-*.db
-.env
-```
+### User Allowlisting
 
-**2. Use encrypted secrets storage**
-
-```bash
-# Encrypt a secret
-agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
-```
-
-**3. Configure allowlists**
-
-Restrict Telegram access to specific user IDs:
+Limit access to specific users by their platform ID:
 
 ```json
 {
   "channels": {
     "telegram": {
+      "enabled": true,
+      "token": "...",
       "allowedUsers": [123456789, 987654321]
     }
   }
 }
 ```
 
-**4. Enable rate limiting**
+This prevents unauthorized users from interacting with your agent even if they know the Telegram bot token.
+
+### Encrypted Secrets
+
+AG-Claw encrypts secrets at rest using AES-256-GCM. Set a secret key:
+
+```bash
+export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+Never commit API keys to version control. Use environment variables or the encrypted secrets feature:
+
+```bash
+# Store a secret securely
+agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
+
+# List stored secrets (values hidden)
+agclaw secrets list
+```
+
+### Audit Logging
+
+Enable the audit log to track all actions:
 
 ```json
 {
   "security": {
+    "auditLog": true
+  }
+}
+```
+
+View audit logs:
+
+```bash
+agclaw audit list --limit 50
+agclaw audit search --actor alice --since 2026-03-22
+```
+
+The audit log is stored in `data/agclaw.db` in an immutable table — entries cannot be deleted or modified after the fact.
+
+### Rate Limiting
+
+Protect against abuse with built-in rate limiting:
+
+```json
+{
+  "server": {
     "rateLimit": {
+      "enabled": true,
       "windowMs": 60000,
-      "maxRequests": 30
+      "maxRequests": 100
     }
   }
 }
 ```
 
-**5. Review audit logs regularly**
+This limits each IP to 100 requests per minute to the HTTP API.
 
-```bash
-agclaw audit log --last 24h
+### Content Filtering
+
+The `content-filtering` feature scans messages and tool outputs for sensitive data patterns. Enable it:
+
+```json
+{
+  "features": {
+    "content-filtering": { "enabled": true }
+  }
+}
 ```
 
-### Security Features Reference
-
-| Feature | File | Purpose |
-|---|---|---|
-| Encrypted secrets | `src/security/encrypted-secrets.ts` | AES-256 encryption for API keys |
-| Policy engine | `src/security/policy-engine.ts` | YAML-defined security policies |
-| Allowlists | `src/security/allowlists.ts` | User/chat whitelist |
-| Rate limiting | `src/features/rate-limiting/` | Per-user request throttling |
-| Audit logging | `src/features/audit-log/` | Immutable tool-call records |
-| Content filtering | `src/features/content-filtering/` | Input sanitization |
+It automatically redacts:
+- API keys and tokens
+- Credit card numbers
+- Social security numbers
+- Email addresses and phone numbers
 
 ---
 
@@ -444,69 +533,99 @@ agclaw audit log --last 24h
 
 ```bash
 npm install
-npm run build
-npm start
+npm link
+agclaw init
+agclaw gateway start
 ```
+
+That's the entire setup. The gateway runs at `http://localhost:18789`.
 
 ### Docker (Recommended for Production)
 
-```bash
-# Build the image
-npm run docker:build
-
-# Start containers
-npm run docker:up
-
-# View logs
-docker compose -f docker/docker-compose.yml logs -f
-
-# Stop
-npm run docker:down
-```
-
-### Docker Compose Configuration
-
-Edit `docker/docker-compose.yml` for your environment:
-
-```yaml
-services:
-  ag-claw:
-    image: ag-claw:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - AGCLAW_PORT=3000
-    volumes:
-      - ./data:/app/data
-      - ./agclaw.json:/app/agclaw.json:ro
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-```
-
-### VPS Deployment
-
-1. SSH into your VPS
-2. Install Docker: `curl -fsSL get.docker.com | bash`
-3. Clone the repo: `git clone https://github.com/AG064/ag-claw.git`
-4. Copy `.env` file with your API keys
-5. Run `npm run docker:build && npm run docker:up`
-6. Set up a reverse proxy (nginx/Caddy) for HTTPS
-7. Point your domain to the VPS
-
-### Health Monitoring
-
-AG-Claw exposes a health endpoint:
+A production-ready Docker setup is included:
 
 ```bash
-curl http://localhost:3000/health
+cd ag-claw/docker
+cp .env.example .env  # fill in your API keys
+docker compose up -d
 ```
 
-The `health-monitoring` feature runs periodic checks on all active features and alerts if any become unhealthy.
+The Docker setup includes:
+- AG-Claw gateway container
+- Health check endpoint
+- Volume mounts for data persistence
+- Restart policy
+
+### Systemd Service (Linux)
+
+For bare-metal Linux servers, create a systemd unit:
+
+```ini
+# /etc/systemd/system/agclaw.service
+[Unit]
+Description=AG-Claw AI Agent
+After=network.target
+
+[Service]
+Type=simple
+User=ag064
+WorkingDirectory=/home/ag064/ag-claw
+ExecStart=/home/ag064/ag-claw/bin/agclaw.js gateway start
+Restart=always
+RestartSec=5
+Environment=OPENROUTER_API_KEY=sk-or-v1-...
+Environment=AGCLAW_PORT=18789
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable agclaw
+sudo systemctl start agclaw
+sudo systemctl status agclaw
+```
+
+### Reverse Proxy Setup
+
+For production, put AG-Claw behind nginx or Caddy with HTTPS:
+
+```nginx
+# /etc/nginx/sites-available/agclaw
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### Environment-Specific Configuration
+
+Use environment variables to override config for different environments:
+
+```bash
+# Production
+AGCLAW_LOG_LEVEL=warn
+AGCLAW_PORT=18789
+NODE_ENV=production
+
+# Development
+AGCLAW_LOG_LEVEL=debug
+AGCLAW_PORT=3000
+NODE_ENV=development
+```
 
 ---
 
@@ -514,10 +633,22 @@ The `health-monitoring` feature runs periodic checks on all active features and 
 
 ### Log Levels
 
-Configure via `agclaw.json` or `AGCLAW_LOG_LEVEL`:
+Set via `AGCLAW_LOG_LEVEL` or `agclaw.json`:
 
 ```bash
 export AGCLAW_LOG_LEVEL=debug  # debug, info, warn, error
+```
+
+In development, use `pretty` format for human-readable output:
+
+```bash
+export AGCLAW_LOG_FORMAT=pretty
+```
+
+In production, use `json` format for structured log aggregation:
+
+```bash
+export AGCLAW_LOG_FORMAT=json
 ```
 
 ### Viewing Logs
@@ -529,16 +660,19 @@ agclaw gateway logs
 # Filter by level
 agclaw gateway logs --level error
 
-# Follow mode
+# Follow mode (like tail -f)
 agclaw gateway logs --follow
 
-# Export logs
+# Export logs to file
 agclaw gateway logs --export ./logs/$(date +%Y%m%d).log
+
+# Last 100 lines
+agclaw gateway logs --lines 100
 ```
 
 ### Structured Log Format
 
-Logs are output as JSON in production (`format: json`) and pretty-printed in development (`format: pretty`):
+JSON logs are structured for easy parsing by log aggregators:
 
 ```json
 {
@@ -546,22 +680,72 @@ Logs are output as JSON in production (`format: json`) and pretty-printed in dev
   "time": "2026-03-23T01:00:00.000Z",
   "feature": "agent",
   "msg": "Processing message",
+  "userId": "alice",
+  "sessionId": "sess_abc123",
   "length": 142
 }
 ```
 
-### Metrics Endpoint
+### Prometheus Metrics
 
 ```bash
-curl http://localhost:3000/metrics
+curl http://localhost:18789/metrics
 ```
 
-Returns prometheus-compatible metrics including:
-- `agclaw_messages_total` — total messages processed
-- `agclaw_tool_calls_total` — tool invocations by name
-- `agclaw_llm_tokens_total` — tokens used (prompt + completion)
-- `agclaw_memory_entries_total` — entries in semantic memory
-- `agclaw_features_active` — number of active features
+Returns Prometheus-compatible metrics:
+
+```
+# HELP agclaw_messages_total Total messages processed
+# TYPE agclaw_messages_total counter
+agclaw_messages_total 4821
+
+# HELP agclaw_tool_calls_total Tool invocations
+# TYPE agclaw_tool_calls_total counter
+agclaw_tool_calls_total{model="claude-sonnet-4",tool="read"} 1203
+agclaw_tool_calls_total{model="claude-sonnet-4",tool="web_search"} 387
+
+# HELP agclaw_llm_tokens_total Tokens used
+# TYPE agclaw_llm_tokens_total counter
+agclaw_llm_tokens_total{prompt_or_completion="prompt"} 892340
+agclaw_llm_tokens_total{prompt_or_completion="completion"} 412850
+
+# HELP agclaw_memory_entries_total Memory entries
+# TYPE agclaw_memory_entries_total gauge
+agclaw_memory_entries_total 1247
+
+# HELP agclaw_features_active Currently active features
+# TYPE agclaw_features_active gauge
+agclaw_features_active 12
+```
+
+### Health Checks
+
+```bash
+# Quick health check
+curl http://localhost:18789/health
+
+# Detailed status
+agclaw status
+```
+
+### Debugging Feature Issues
+
+List all features with their health status:
+
+```bash
+agclaw features list --verbose
+```
+
+Output:
+
+```
+NAME                    STATUS      HEALTH        VERSION
+sqlite-memory           active      ok            0.1.0
+semantic-search         active      ok            0.1.0
+audit-log               active      ok            0.1.0
+telegram                inactive    -             0.1.0
+morning-briefing         active      ok            0.1.0
+```
 
 ---
 
@@ -570,30 +754,34 @@ Returns prometheus-compatible metrics including:
 ### Manual Backup
 
 ```bash
-# AG-Claw creates timestamped backups
+# List existing backups
 ls ./backups/
 
-# Create a manual backup
+# Create a manual backup now
 agclaw backup create
 
-# Restore from backup
+# Restore from a specific backup
 agclaw backup restore backup-2026-03-18T18-58-44
 ```
 
 ### What Gets Backed Up
 
-- `data/agclaw.db` — main SQLite database
-- `data/semantic-memory.db` — semantic memory
-- `data/knowledge.db` — knowledge graph
-- `data/sessions.db` — conversation sessions
-- `data/skills-library.db` — installed skills
-- `data/goals.db` — goals and decomposition
-- `data/life-domains.db` — life domains
-- `agclaw.json` — configuration
+AG-Claw backs up all critical data files:
+
+| File | Description |
+|---|---|
+| `data/agclaw.db` | Main SQLite database (audit log, decisions) |
+| `data/semantic-memory.db` | Semantic memory entries |
+| `data/knowledge.db` | Knowledge graph |
+| `data/sessions.db` | Conversation sessions |
+| `data/skills-library.db` | Installed skills |
+| `data/goals.db` | Goals and decomposition |
+| `data/life-domains.db` | Life domain tracking |
+| `agclaw.json` | Configuration |
 
 ### Automated Backups
 
-Configure in `agclaw.json`:
+Enable in `agclaw.json`:
 
 ```json
 {
@@ -606,12 +794,39 @@ Configure in `agclaw.json`:
 }
 ```
 
-### Disaster Recovery
+Backups run on the schedule you specify. Old backups beyond `retentionDays` are automatically cleaned up.
 
-1. Stop the gateway: `agclaw gateway stop`
-2. Restore files from backup: `agclaw backup restore <backup-name>`
-3. Restart: `agclaw gateway start`
-4. Verify: `curl http://localhost:3000/health`
+### Disaster Recovery Procedure
+
+1. Stop the gateway cleanly:
+   ```bash
+   agclaw gateway stop
+   ```
+
+2. Restore files from a known-good backup:
+   ```bash
+   agclaw backup restore <backup-name>
+   ```
+
+3. Verify the restore:
+   ```bash
+   agclaw gateway start
+   curl http://localhost:18789/health
+   ```
+
+4. Check session continuity:
+   ```bash
+   agclaw sessions list
+   ```
+
+5. Confirm memory is intact:
+   ```bash
+   agclaw memory stats
+   ```
+
+### Migration Between Machines
+
+Copy the `data/` directory and `agclaw.json` to the new machine. Ensure the same `AGCLAW_SESSION_SECRET` is set to decrypt any encrypted secrets. Then run `agclaw gateway start`.
 
 ---
 
@@ -619,19 +834,22 @@ Configure in `agclaw.json`:
 
 See the full [API Reference](./API.md) for complete REST endpoint documentation, WebSocket events, error codes, and configuration schema.
 
-Quick reference:
+Quick reference for common endpoints:
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/health` | GET | Health check |
-| `/metrics` | GET | Prometheus metrics |
-| `/chat` | POST | Send a message |
-| `/memory/search` | GET | Search memory |
-| `/memory/store` | POST | Store a memory entry |
-| `/agents` | GET | List agents |
-| `/features` | GET | List all features |
-| `/features/:name` | POST | Enable/disable feature |
-| `/config` | GET/PATCH | View/update config |
+| `/health` | GET | Health check with version and feature count |
+| `/metrics` | GET | Prometheus-compatible metrics |
+| `/chat` | POST | Send a message to the agent |
+| `/chat/stream` | POST | Streaming response (Server-Sent Events) |
+| `/memory/search` | GET | Search semantic memory |
+| `/memory/store` | POST | Store a new memory entry |
+| `/memory/graph` | GET | Query the knowledge graph |
+| `/agents` | GET/POST | List or create agents |
+| `/features` | GET | List all features with status |
+| `/features/:name` | POST | Enable or disable a feature |
+| `/config` | GET/PATCH | View or update configuration |
+| `/sessions` | GET | List recent sessions |
 
 ---
 
@@ -642,19 +860,33 @@ Quick reference:
 ```typescript
 interface AGClawConfig {
   name: string;                          // Instance name
+  version: string;                       // Config format version (const: "0.2.0")
+
   server: {
-    port: number;                        // Gateway port (default: 18789)
-    host: string;                        // Bind address (default: 0.0.0.0)
+    port: number;                         // Gateway port (default: 18789)
+    host: string;                         // Bind address (default: 0.0.0.0)
     cors: {
       enabled: boolean;
       origins: string[];
     };
     rateLimit: {
       enabled: boolean;
-      windowMs: number;
-      maxRequests: number;
+      windowMs: number;                   // Time window in ms
+      maxRequests: number;                // Max requests per window
+    };
+    auth: {
+      token?: string;                     // Bearer token for API auth
     };
   };
+
+  agent: {
+    name: string;                         // Display name
+    systemPrompt?: string;                 // Override default system prompt
+    maxIterations: number;                 // Max tool loop iterations (default: 10)
+    temperature: number;                  // LLM temperature 0-2 (default: 0.7)
+    tools: string[];                      // Enabled tool names
+  };
+
   model: {
     provider: 'openrouter' | 'anthropic' | 'openai';
     defaultModel: string;
@@ -664,10 +896,12 @@ interface AGClawConfig {
     retryAttempts: number;
     retryDelayMs: number;
   };
+
   features: Record<string, {
     enabled: boolean;
     [key: string]: unknown;
   }>;
+
   channels: {
     telegram?: {
       enabled: boolean;
@@ -680,8 +914,18 @@ interface AGClawConfig {
       port: number;
       maxConnections: number;
     };
-    // ... other channels
+    discord?: {
+      enabled: boolean;
+      token?: string;
+      guildId?: string;
+    };
+    slack?: {
+      enabled: boolean;
+      token?: string;
+      channelId?: string;
+    };
   };
+
   memory: {
     primary: 'sqlite' | 'markdown' | 'supabase';
     path: string;
@@ -690,30 +934,51 @@ interface AGClawConfig {
     supabaseUrl?: string;
     supabaseKey?: string;
   };
+
   security: {
-    policy: string;
+    policy: 'permissive' | 'strict';
     secrets: 'encrypted' | 'plain';
     auditLog: boolean;
     allowlistMode: 'permissive' | 'strict';
+  };
+
+  backup: {
+    enabled: boolean;
+    intervalHours: number;
+    retentionDays: number;
+    path: string;
   };
 }
 ```
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|---|---|---|
-| `OPENROUTER_API_KEY` | OpenRouter API key | Yes (unless using another provider) |
-| `ANTHROPIC_API_KEY` | Anthropic API key | No |
-| `OPENAI_API_KEY` | OpenAI API key | No |
-| `AGCLAW_TELEGRAM_TOKEN` | Telegram bot token | No |
-| `AGCLAW_FCM_KEY` | Firebase Cloud Messaging | No |
-| `AGCLAW_DB_PATH` | SQLite database path | No |
-| `AGCLAW_PORT` | Gateway port | No |
-| `AGCLAW_LOG_LEVEL` | Log level | No |
-| `SUPABASE_URL` | Supabase project URL | No |
-| `SUPABASE_KEY` | Supabase anon key | No |
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `OPENROUTER_API_KEY` | string | — | OpenRouter API key (required for most models) |
+| `ANTHROPIC_API_KEY` | string | — | Anthropic API key (direct Claude access) |
+| `OPENAI_API_KEY` | string | — | OpenAI key (Whisper STT, DALL-E) |
+| `AGCLAW_PORT` | number | `18789` | Gateway HTTP port |
+| `AGCLAW_HOST` | string | `0.0.0.0` | Gateway bind address |
+| `AGCLAW_DB_PATH` | string | `./data/agclaw.db` | SQLite database path |
+| `AGCLAW_CONFIG_PATH` | string | `./agclaw.json` | Config file path |
+| `AGCLAW_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `AGCLAW_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
+| `AGCLAW_TELEGRAM_TOKEN` | string | — | Telegram bot token |
+| `AGCLAW_FCM_KEY` | string | — | Firebase Cloud Messaging key |
+| `AGCLAW_SESSION_SECRET` | string | auto-generated | Secret for session encryption |
+| `SUPABASE_URL` | string | — | Supabase project URL |
+| `SUPABASE_KEY` | string | — | Supabase anon key |
+| `NODE_ENV` | string | `development` | Environment mode |
+
+### Hot-Reload
+
+AG-Claw watches `agclaw.json` for changes and applies them without restart. For environment variable changes, a restart is required:
+
+```bash
+agclaw gateway restart
+```
 
 ---
 
-*For advanced topics like multi-agent coordination, mesh workflows, and scaling, see [Tutorial 5: Advanced Patterns](./tutorials/05-advanced-patterns.md).*
+*For tutorials and step-by-step guides, see the [tutorials directory](./tutorials/).*

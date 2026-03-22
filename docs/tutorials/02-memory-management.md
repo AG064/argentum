@@ -1,174 +1,354 @@
 # Tutorial 2: Memory Management
 
-Learn how AG-Claw's multi-layered memory system works and how to configure it for your agents.
+*Estimated time: 20 minutes*
 
-## 🧠 Memory Architecture
+AG-Claw has one of the most sophisticated memory systems of any agent framework. This tutorial explains exactly how it works and how to use it to build agents that remember, learn, and improve over time.
 
-AG-Claw uses a **three-layer memory system**:
+---
 
-1. **Episodic Memory** — Stores conversation history
-2. **Semantic Memory** — Stores facts and knowledge
-3. **Procedural Memory** — Stores skills and procedures
+## The Four Memory Layers
 
-## 📝 Episodic Memory
+AG-Claw uses four distinct memory systems, each optimized for a different purpose:
 
-Episodic memory stores conversations and interactions.
-
-### Configuration
-
-```typescript
-memory: {
-  episodic: {
-    enabled: true,
-    retention: 30, // days
-    compression: true,
-    summarize: true, // Auto-summarize old conversations
-  }
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1: Semantic Memory         (fast, searchable, abundant)  │
+│  Stores: conversations, decisions, lessons, errors, preferences│
+│  Backend: SQLite + embeddings                                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 2: Knowledge Graph          (structured, relational)       │
+│  Stores: entities, relationships, facts                           │
+│  Backend: SQLite with graph traversal                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 3: Markdown Memory          (human-readable, persistent)  │
+│  Stores: notes, documentation, long-term facts                   │
+│  Backend: Files on disk, watched for changes                     │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 4: Self-Evolving Memory     (compressed, abstracted)      │
+│  Stores: consolidated summaries of old memories                   │
+│  Backend: Automatic consolidation process                          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Query Examples
+---
 
-```typescript
-// Find recent conversations about a topic
-await agent.memory.search({
-  type: 'episodic',
-  query: 'project planning',
-  limit: 5
-});
+## Layer 1: Semantic Memory
 
-// Get conversations from specific time
-await agent.memory.getByDate({
-  type: 'episodic',
-  start: '2026-03-01',
-  end: '2026-03-15'
-});
-```
+The primary working memory. Every interaction, decision, lesson, and error gets stored here.
 
-## 📚 Semantic Memory
+### Memory Types
 
-Stores structured facts and knowledge.
+| Type | When it's used | Example |
+|---|---|---|
+| `decision` | You make a choice about something | "We agreed to use PostgreSQL" |
+| `lesson` | You learned something valuable | "Never run `rm -rf /` on a production server" |
+| `error` | Something went wrong and you fixed it | "The API was returning 500 because of a missing index" |
+| `preference` | User's personal preference | "Aleksey prefers Rust over Go" |
+| `general` | Anything else worth remembering | Meeting notes, facts, context |
 
-### Adding Facts
+### Auto-Capture
 
-```typescript
-// Add a fact
-await agent.memory.add({
-  type: 'semantic',
-  content: {
-    fact: 'The project deadline is March 30, 2026',
-    category: 'project',
-    tags: ['deadline', 'project-x']
-  }
-});
+AG-Claw automatically detects and stores important information from your messages. When you say something like:
 
-// Add a document
-await agent.memory.add({
-  type: 'semantic',
-  content: {
-    title: 'API Documentation',
-    text: 'The /api/users endpoint returns...',
-    url: 'https://docs.example.com/api'
-  }
-});
-```
+- "Remember that..." → stored as `general`
+- "We decided to..." → stored as `decision`
+- "I learned that..." → stored as `lesson`
+- "The bug was caused by..." → stored as `error`
+- "I prefer..." → stored as `preference`
 
-### Searching Semantic Memory
+The auto-capture feature parses your messages and extracts these patterns automatically.
 
-```typescript
-// Semantic search
-const results = await agent.memory.search({
-  type: 'semantic',
-  query: 'deadline information',
-  threshold: 0.8
-});
-```
-
-## 🎯 Procedural Memory
-
-Stores skills, procedures, and how-to guides.
-
-### Creating a Skill
-
-```typescript
-await agent.memory.add({
-  type: 'procedural',
-  content: {
-    name: 'Deploy Application',
-    steps: [
-      { action: 'build', command: 'npm run build' },
-      { action: 'test', command: 'npm test' },
-      { action: 'deploy', command: './scripts/deploy.sh' }
-    ],
-    prerequisites: ['Node.js 18+', 'Docker'],
-    estimatedTime: '5 minutes'
-  }
-});
-```
-
-## 🔄 Memory Synchronization
-
-Agents can share memory across sessions:
-
-```typescript
-// Enable shared memory
-memory: {
-  shared: {
-    enabled: true,
-    scope: 'team', // or 'project', 'global'
-    syncInterval: 60000 // ms
-  }
-}
-```
-
-## 🗑️ Memory Cleanup
-
-Automatic cleanup:
-
-```typescript
-memory: {
-  cleanup: {
-    enabled: true,
-    schedule: '0 3 * * *', // 3 AM daily
-    maxAge: 90, // days
-    maxSize: '500MB'
-  }
-}
-```
-
-Manual cleanup:
+### Manual Memory Operations
 
 ```bash
-agclaw memory cleanup --type episodic --older-than 30d
+# Store something manually
+agclaw memory store "decision" "Use feature flags instead of branches for gradual rollouts"
+
+# Search memory
+agclaw memory search "feature flags"
+
+# View recent memories
+agclaw memory recent --limit 10
+
+# View memory statistics
 agclaw memory stats
+# Output:
+# Total entries: 1543
+# By type:
+#   decision: 234
+#   lesson: 567
+#   error: 89
+#   preference: 123
+#   general: 530
 ```
 
-## 📊 Memory Monitoring
+### Using Memory as an Agent Tool
 
-View memory statistics:
+The agent can use memory tools directly during conversation:
+
+```
+User: What errors have we hit in the API?
+Agent: [calls memory_search with query="API errors"]
+     Found 2 relevant entries:
+     [error] API returned 500 due to missing index on user_id column (2026-03-20)
+     [error] Rate limiter was blocking legitimate requests after the last deploy (2026-03-18)
+
+User: Good. And what decisions did we make about the database?
+Agent: [calls memory_search with type="decision", query="database"]
+     Found 3 decisions:
+     [decision] Use PostgreSQL as primary database (2026-03-15)
+     [decision] Add Redis for caching session data (2026-03-16)
+     [decision] Run database migrations at startup, not deployment (2026-03-18)
+```
+
+---
+
+## Layer 2: Knowledge Graph
+
+The knowledge graph stores entities and their relationships as a graph structure. This enables reasoning about connections between facts.
+
+### What Gets Stored
+
+- **Nodes**: People, projects, companies, technologies, concepts
+- **Edges**: Relationships between nodes (`works_at`, `depends_on`, `uses`, `created_by`)
+
+### Example Graph
+
+```
+(User) ──(created)──► (Project: AG-Claw)
+   │                      │
+   │                      ├──(uses)──► (Technology: TypeScript)
+   │                      │
+   │                      ├──(uses)──► (Technology: SQLite)
+   │                      │
+   │                      └──(developed_by)──► (Person: AG064)
+```
+
+### Querying the Graph
 
 ```bash
-agclaw memory stats
+# View graph statistics
+agclaw memory graph stats
+# Output:
+# Nodes: 342
+# Edges: 891
+# Most connected: AG-Claw (12 connections)
 
-# Example output:
-# 
-# Memory Usage:
-# ├─ Episodic:   127.3 MB (1,542 conversations)
-# ├─ Semantic:    89.7 MB (3,891 facts)
-# └─ Procedural:  23.1 MB (47 skills)
-# Total:         240.1 MB
+# Export the graph
+agclaw memory graph export > graph.json
 ```
 
-## 🛠️ Troubleshooting
+### How the Graph Updates
 
-| Issue | Solution |
-|-------|----------|
-| Memory growing too large | Enable compression + auto-summarize |
-| Slow semantic search | Increase cache size |
-| Facts not being retrieved | Lower similarity threshold |
-| Memory not syncing | Check network + sync interval |
+When semantic memory stores a new entry, the knowledge graph feature analyzes it:
 
-## 📖 Next Steps
+1. Extracts named entities (people, places, technologies)
+2. Identifies relationships between entities
+3. Creates or updates graph nodes and edges
+4. Links new information to existing knowledge
 
-- [Skill Development](../03-skill-development.md) — Create reusable skills
-- [Advanced Patterns](../05-advanced-patterns.md) — Master memory patterns
+This means the graph grows smarter over time as the agent processes more information.
+
+---
+
+## Layer 3: Markdown Memory
+
+Markdown memory stores human-readable notes as `.md` files on disk. This layer is for information you want to:
+
+- Keep permanently
+- Edit manually
+- Have version-controlled in git
+- Share with other tools
+
+### How It Works
+
+Create or edit files in the `memory/` directory:
+
+```bash
+# The memory directory
+ls memory/
+
+# memory/projects.md
+# memory/people.md
+# memory/notes.md
+```
+
+Example `memory/projects.md`:
+
+```markdown
+# Projects
+
+## AG-Claw
+- Type: AI Agent Framework
+- Status: Active development
+- Lead: AG064
+- Tech: TypeScript, SQLite, Claude
+- URL: https://github.com/AG064/ag-claw
+
+## Personal Website
+- Type: Static site (Astro)
+- Status: Completed
+- URL: https://example.com
+```
+
+The markdown-memory feature watches these files for changes and automatically updates the agent's context when relevant files are modified.
+
+### Integrating with Agent
+
+The agent can read markdown memory files when relevant to the conversation:
+
+```
+User: What projects are we working on?
+Agent: [calls read_file on memory/projects.md]
+     Based on your project notes, you're working on:
+     1. AG-Claw — an AI agent framework (active)
+     2. Personal Website — static site (completed)
+```
+
+---
+
+## Layer 4: Self-Evolving Memory
+
+Over time, semantic memory accumulates thousands of entries. The self-evolving memory feature periodically consolidates old entries to keep the system efficient.
+
+### How Consolidation Works
+
+When the memory exceeds `compressionThreshold` (default: 10,000 entries):
+
+1. **Analysis**: Identifies clusters of related entries
+2. **Abstraction**: Replaces multiple specific entries with generalized summaries
+3. **Pruning**: Removes low-value or redundant entries
+4. **Preservation**: Keeps the essential information in condensed form
+
+### Example
+
+Before consolidation (12 separate entries):
+- "Meeting with Bob about API design — use REST" (Mar 1)
+- "Bob confirmed REST is the right choice" (Mar 2)
+- "Discussed REST with Bob, agreed on /api/v1 prefix" (Mar 3)
+- ... (9 more similar entries)
+
+After consolidation (1 abstracted entry):
+- "Decided on REST API with /api/v1 prefix. Bob was involved in the decision." (Mar 1-15)
+
+### Configuring Consolidation
+
+```json
+{
+  "features": {
+    "self-evolving-memory": {
+      "enabled": true,
+      "compressionThreshold": 10000,
+      "consolidationIntervalHours": 24,
+      "minEntriesBeforeConsolidation": 5000
+    }
+  }
+}
+```
+
+### Checkpoint System
+
+For long-running tasks, use checkpoints to save progress:
+
+```bash
+# Agent calls memory_checkpoint during a complex task
+Agent: memory_checkpoint(taskId="refactor-auth-2026", state={
+  "step": 3,
+  "completed": ["login-form", "session-store"],
+  "current": "token-validation",
+  "remaining": ["refresh-token", "logout"]
+})
+
+# Later, resume from the checkpoint
+Agent: memory_resume(taskId="refactor-auth-2026")
+# Returns: { step: 3, completed: [...], current: "token-validation", ... }
+```
+
+---
+
+## Using Memory Effectively
+
+### Best Practices
+
+1. **Be explicit when storing important information**
+   Instead of hoping auto-capture catches something:
+   ```
+   User: Remember to always run tests before pushing.
+   Agent: [calls memory_store with type="lesson", content="Always run tests before pushing"]
+   ```
+
+2. **Use the right memory type**
+   Don't store everything as `general`. Use `decision`, `lesson`, `error`, and `preference` types — they make searching more precise.
+
+3. **Query with natural language**
+   The semantic search understands context:
+   ```
+   agclaw memory search "things that went wrong with the database migration"
+   ```
+
+4. **Let the graph build naturally**
+   You don't need to manually populate the knowledge graph. It grows as you use memory — just store semantic entries and the graph feature will extract entities and relationships.
+
+5. **Use markdown for permanent knowledge**
+   Facts that shouldn't change (like project details, team structure) belong in markdown memory, not semantic memory.
+
+### Memory in Multi-Agent Setups
+
+When running multiple agents, memory can be shared or isolated:
+
+```json
+{
+  "agents": [
+    {
+      "id": "coding-assistant",
+      "memory": { "shared": false, "namespace": "coding" }
+    },
+    {
+      "id": "research-assistant",
+      "memory": { "shared": false, "namespace": "research" }
+    },
+    {
+      "id": "coordinator",
+      "memory": { "shared": true }
+    }
+  ]
+}
+```
+
+The coordinator agent can see all memories, while specialized agents only see their own namespace.
+
+---
+
+## Troubleshooting Memory Issues
+
+### Memory search returns no results
+
+1. Check that `semantic-search` is enabled
+2. Verify entries exist: `agclaw memory stats`
+3. Try a broader query: `agclaw memory search "the"`
+4. Store a test entry: `agclaw memory store "test" "testing memory"`
+
+### Too many duplicate entries
+
+The consolidation feature should handle this. If it's not running:
+1. Check that `self-evolving-memory` is enabled
+2. Verify `compressionThreshold` is set appropriately
+3. Manually trigger consolidation: check feature health
+
+### Memory slowing down the agent
+
+1. Reduce `messageHistory` in webchat config (fewer conversation messages in memory)
+2. Increase `compressionThreshold` to trigger consolidation sooner
+3. Disable features you don't use (they may be storing unnecessary data)
+
+---
+
+## Next Steps
+
+- **[Tutorial 3: Skill Development](./03-skill-development.md)** — Create custom tools that interact with memory or add new capabilities
+- **[Tutorial 4: Deployment](./04-deployment.md)** — Deploy with Docker and configure for production
+- **[Tutorial 5: Advanced Patterns](./05-advanced-patterns.md)** — Multi-agent coordination, mesh workflows
+
+---
+
+*Questions? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues).*
