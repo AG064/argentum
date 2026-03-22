@@ -64,7 +64,7 @@ export class TimeoutError extends Error {
 }
 
 export async function timeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const wrapper = new Promise<T>((_, reject) => {
     timer = setTimeout(() => reject(new TimeoutError(ms)), ms);
   });

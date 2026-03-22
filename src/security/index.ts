@@ -112,7 +112,7 @@ export class SecurityManager extends EventEmitter {
       }
 
       // Verify signature
-      const [header, payload, signature] = parts;
+      const [header, payload, signature] = parts as [string, string, string];
       const expectedSig = createHmac('sha256', this.jwtSecret)
         .update(`${header}.${payload}`)
         .digest('base64url');
@@ -228,14 +228,14 @@ export class SecurityManager extends EventEmitter {
     context: { agentId?: string; userId?: string; ip?: string } = {}
   ): void {
     if (!this.config.auditLog.enabled) return;
-    if (!this.config.auditLog.events.includes(event) && !this.config.auditLog.events.includes('*')) return;
+    const allowedEvents = this.config.auditLog.events as string[]; if (allowedEvents.length > 0 && !allowedEvents.includes(event) && !allowedEvents.includes('*')) return;
 
     const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
       event,
       ...context,
       details,
-      success: details.success !== false,
+      success: (details['success'] as boolean) !== false,
     };
 
     this.auditLog.push(entry);
@@ -324,7 +324,7 @@ export function createSecurityManager(config?: Partial<SecurityConfig>): Securit
   const defaultConfig: SecurityConfig = {
     authentication: {
       enabled: false,
-      jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
+      jwtSecret: process.env['JWT_SECRET'] || 'change-me-in-production',
       tokenExpiry: 3600,
       refreshTokenExpiry: 86400 * 7,
     },
@@ -345,7 +345,7 @@ export function createSecurityManager(config?: Partial<SecurityConfig>): Securit
     auditLog: {
       enabled: true,
       retentionDays: 30,
-      events: ['*'],
+      events: ['*'] as unknown as AuditEvent[],
     },
     cors: {
       enabled: true,
