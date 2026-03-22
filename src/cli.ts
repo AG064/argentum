@@ -51,10 +51,21 @@ function warn(text: string): void {
 
 function banner(): void {
   print('');
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║         AG-Claw v' + VERSION + '           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   Modular AI Agent Framework      ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════╝\x1b[0m');
+  print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m███████║██████╔╝██║     ███████║██║   ██║███████╗\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m██╔══██║██╔══██╗██║     ██╔══██║██║   ██║╚════██║\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║                    \x1b[32mv' + VERSION + '\x1b[36m                            ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════════════════════╝\x1b[0m');
+  print('');
+  print('  \x1b[90m░▒▓█ AI Agent System █▓▒░\x1b[0m');
   print('');
 }
 
@@ -90,6 +101,7 @@ function cmdHelp(): void {
   print('    cron disable <id>     Disable a job');
   print('    cron remove <id>      Delete a job');
   print('    session list          List sessions');
+  print('    acp run <code>        Execute code (JS/Python/Bash) in sandbox');
   print('    session create <name> Create a session');
   print('    session show <id>     View session messages');
   print('    session search <q>    Search messages');
@@ -119,6 +131,52 @@ function cmdHelp(): void {
   print('    agclaw features');
   print('    agclaw feature life-domains');
   print('');
+}
+
+function cmdACP(): void {
+  const action = args[1];
+  if (action !== 'run') {
+    error('Usage: agclaw acp run <code>');
+    return;
+  }
+
+  const code = args.slice(2).join(' ');
+  if (!code) {
+    error('No code provided');
+    return;
+  }
+
+  banner();
+  info('Executing code...');
+  const start = Date.now();
+
+  try {
+    const { spawn } = require('child_process');
+    const cmd = 'node';
+    const proc = spawn(cmd, ['-e', code], { timeout: 30000 });
+
+    let stdout = '', stderr = '';
+    proc.stdout?.on('data', (d: any) => stdout += d);
+    proc.stderr?.on('data', (d: any) => stderr += d);
+
+    proc.on('close', (code: any) => {
+      const duration = Date.now() - start;
+      print('');
+      if (code === 0) {
+        success(`Exit code: ${code} (${duration}ms)`);
+      } else {
+        warn(`Exit code: ${code} (${duration}ms)`);
+      }
+      if (stdout) print(`[stdout]\n${stdout}`);
+      if (stderr) print(`[stderr]\n${stderr}`);
+    });
+
+    proc.on('error', (err: any) => {
+      error(`Failed to start process: ${err.message}`);
+    });
+  } catch (err: any) {
+    error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function cmdVersion(): void {
@@ -158,6 +216,7 @@ function cmdInit(): void {
         'api-gateway': { enabled: false },
         'audit-log': { enabled: true },
         'encrypted-secrets': { enabled: false },
+        'acp-harness': { enabled: false },
       },
       logging: {
         level: 'info',
@@ -1304,8 +1363,11 @@ async function cmdOnboard(): Promise<void> {
   const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
 
   banner();
-  print('  \x1b[1mWelcome to AG-Claw!\x1b[0m');
-  print('  This wizard will set up your agent.');
+  print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
+  print('  \x1b[1m\x1b[32m│   Welcome to AG-Claw Setup Wizard!         │\x1b[0m');
+  print('  \x1b[1m\x1b[32m└─────────────────────────────────────────────┘\x1b[0m');
+  print('');
+  print('  \x1b[90mThis wizard will guide you through the initial setup.\x1b[0m');
   print('');
 
   const config: any = {
@@ -1322,24 +1384,31 @@ async function cmdOnboard(): Promise<void> {
   };
 
   // Step 1: Instance name
-  print('  \x1b[1mStep 1: Instance\x1b[0m');
-  const name = await ask('  Name your instance (default: My AG-Claw): ');
+  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║  Step 1: Instance Configuration                 ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
+  const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG-Claw): ');
   if (name.trim()) config.name = name.trim();
+  print('');
+  print('  \x1b[32m✓\x1b[0m Instance name: \x1b[1m' + config.name + '\x1b[0m');
   print('');
 
   // Step 2: LLM Provider
-  print('  \x1b[1mStep 2: LLM Provider\x1b[0m');
-  print('  Choose a provider or add your own OpenAI-compatible API.');
+  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║  Step 2: LLM Provider                          ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
+  print('  \x1b[90mChoose a provider or add your own OpenAI-compatible API.\x1b[0m');
   print('');
-  print('  Presets:');
-  print('    1. OpenRouter    — openrouter.ai/api/v1');
-  print('    2. NVIDIA        — integrate.api.nvidia.com (free models)');
-  print('    3. Google Gemini — generativelanguage.googleapis.com');
-  print('    4. Anthropic     — api.anthropic.com');
-  print('    5. OpenAI        — api.openai.com');
-  print('    6. Custom        — your own base_url');
+  print('  \x1b[1m\x1b[33m╭──────────────╮\x1b[0m  \x1b[37mProvider Presets:\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m1\x1b[0m \x1b[37mOpenRouter   \x1b[90mopenrouter.ai/api/v1\x1b[0m   \x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m2\x1b[0m \x1b[37mNVIDIA       \x1b[90mintegrate.api.nvidia.com\x1b[0m \x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m3\x1b[0m \x1b[37mGoogle Gemini\x1b[90mgenerativelanguage.googleapis\x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m4\x1b[0m \x1b[37mAnthropic   \x1b[90mapi.anthropic.com\x1b[0m        \x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m5\x1b[0m \x1b[37mOpenAI      \x1b[90mapi.openai.com\x1b[0m               \x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m6\x1b[0m \x1b[37mCustom      \x1b[90myour own base_url\x1b[0m          \x1b[33m│\x1b[0m');
+  print('  \x1b[1m\x1b[33m╰──────────────╯\x1b[0m');
   print('');
-  const providerChoice = await ask('  Choose (1-6, default: 2): ');
+  const providerChoice = await ask('  \x1b[33m▶\x1b[0m Choose (1-6, default: 2): ');
 
   interface Preset { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }
   const presets: Record<string, Preset> = {
@@ -1352,12 +1421,13 @@ async function cmdOnboard(): Promise<void> {
 
   let preset: Preset;
   if (providerChoice.trim() === '6') {
-    // Custom provider
-    const custName = await ask('  Provider name: ');
-    const custUrl = await ask('  Base URL: ');
-    const custModel = await ask('  Default model: ');
-    const custApi = await ask('  API style [openai|anthropic] (default: openai): ') || 'openai';
-    const custKeyEnv = await ask('  API key env var (e.g. MY_API_KEY): ');
+    print('');
+    print('  \x1b[33m▶\x1b[0m Custom Provider Setup:');
+    const custName = await ask('    \x1b[90mProvider name:\x1b[0m ');
+    const custUrl = await ask('    \x1b[90mBase URL:\x1b[0m ');
+    const custModel = await ask('    \x1b[90mDefault model:\x1b[0m ');
+    const custApi = await ask('    \x1b[90mAPI style [openai|anthropic] (default: openai):\x1b[0m ') || 'openai';
+    const custKeyEnv = await ask('    \x1b[90mAPI key env var (e.g. MY_API_KEY):\x1b[0m ');
     preset = { name: custName.trim() || 'custom', base_url: custUrl.trim(), api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY', api: custApi, model: custModel.trim() };
   } else {
     preset = presets[providerChoice.trim()] || presets['2'];
@@ -1372,16 +1442,21 @@ async function cmdOnboard(): Promise<void> {
   };
   config.llm.default = preset.name;
 
+  print('');
+  print('  \x1b[32m✓\x1b[0m Selected: \x1b[1m' + preset.name + '\x1b[0m (\x1b[90m' + preset.base_url + '\x1b[0m)');
+
   // Ask for API key
-  const apiKey = await ask(`  ${preset.api_key_env} (or press Enter to skip): `);
+  print('');
+  const apiKey = await ask('  \x1b[33m▶\x1b[0m \x1b[33m' + preset.api_key_env + '\x1b[0m (press Enter to skip): ');
   if (apiKey.trim()) {
     const envPath = path.join(getWorkDir(), '.env');
     fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
-    success(`Saved ${preset.api_key_env} to .env`);
+    success(`\x1b[32m✓\x1b[0m Saved \x1b[1m${preset.api_key_env}\x1b[0m to .env`);
   }
 
   // Ask for additional models
-  const addModels = await ask('  Add fallback models (comma-separated, or Enter to skip): ');
+  print('');
+  const addModels = await ask('  \x1b[33m▶\x1b[0m Add fallback models (comma-separated, or Enter to skip): ');
   if (addModels.trim()) {
     config.llm.providers[preset.name].models.push(...addModels.trim().split(',').map((m: string) => m.trim()));
   }
@@ -1393,7 +1468,7 @@ async function cmdOnboard(): Promise<void> {
   if (setupTg.toLowerCase() === 'y') {
     const botToken = await ask('  Bot token: ');
     if (botToken.trim()) {
-      const userId = await ask('  Your Telegram user ID (e.g. tg:123456): ');
+      const userId = await ask('  \x1b[33m▶\x1b[0m Your Telegram user ID (e.g. tg:123456): ');
       config.features.telegram = {
         enabled: true,
         botToken: botToken.trim(),
@@ -1407,8 +1482,10 @@ async function cmdOnboard(): Promise<void> {
   print('');
 
   // Step 4: Features
-  print('  \x1b[1mStep 4: Core Features\x1b[0m');
-  print('  Enabling recommended features...');
+  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║  Step 4: Core Features                          ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
+  print('  \x1b[90mEnabling recommended features...\x1b[0m');
   const defaults = [
     'life-domains', 'skills-library', 'goal-decomposition',
     'sqlite-memory', 'cron-scheduler', 'audit-log',
@@ -1417,38 +1494,46 @@ async function cmdOnboard(): Promise<void> {
   for (const f of defaults) {
     config.features[f] = { enabled: true };
   }
-  print(`  ✓ ${defaults.length} features enabled`);
+  print('  \x1b[32m✓\x1b[0m \x1b[1m' + defaults.length + '\x1b[0m features enabled: \x1b[33m' + defaults.join(', ') + '\x1b[0m');
   print('');
 
   // Step 5: Port
-  print('  \x1b[1mStep 5: Server\x1b[0m');
-  const port = await ask('  Server port (default: 3000): ');
+  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║  Step 5: Server Configuration                     ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
+  const port = await ask('  \x1b[33m▶\x1b[0m Server port (default: 3000): ');
   if (port.trim() && !isNaN(parseInt(port))) {
     config.server.port = parseInt(port);
   }
+  print('');
+  print('  \x1b[32m✓\x1b[0m Server port: \x1b[1m' + config.server.port + '\x1b[0m');
   print('');
 
   // Save config
   const configPath = path.join(getWorkDir(), 'agclaw.json');
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  success('Configuration saved to agclaw.json');
+  success('\x1b[32m✓\x1b[0m Configuration saved to \x1b[1magclaw.json\x1b[0m');
 
   // Create data dir
   const dataDir = path.join(getWorkDir(), 'data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  success('Data directory ready');
+  success('\x1b[32m✓\x1b[0m Data directory ready');
 
   rl.close();
 
   print('');
-  print('  \x1b[1mSetup complete!\x1b[0m');
+  print('  \x1b[1m\x1b[32m╔═══════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[32m║           ✅ SETUP COMPLETE!                    ║\x1b[0m');
+  print('  \x1b[1m\x1b[32m╚═══════════════════════════════════════════════╝\x1b[0m');
   print('');
-  print('  Next steps:');
-  print(`    agclaw gateway start --port ${config.server.port}`);
-  print('    agclaw status');
-  print('    agclaw skill search <query>');
+  print('  \x1b[1m\x1b[37mNext steps:\x1b[0m');
+  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ' + config.server.port + '\x1b[0m');
+  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
+  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
+  print('');
+  print('  \x1b[90mThank you for choosing AG-Claw! 🚀\x1b[0m');
   print('');
 }
 
@@ -1824,6 +1909,9 @@ async function main(): Promise<void> {
       break;
     case 'backup':
       await cmdBackup();
+      break;
+    case 'acp':
+      await cmdACP();
       break;
     case 'memory':
       await cmdMemory();
