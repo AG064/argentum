@@ -1,0 +1,8 @@
+/**
+ * Integration tests — components working together with real infrastructure.
+ *
+ * These tests may hit real databases, file system, or external APIs
+ * (mocked or in a sandboxed environment).
+ *
+ * Run with: npm run test:integration
+ */

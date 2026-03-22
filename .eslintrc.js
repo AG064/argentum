@@ -1,0 +1,186 @@
+/**
+ * ESLint Configuration for AG-Claw
+ *
+ * Targets TypeScript with strict rules, JSDoc enforcement,
+ * and plugin-based rules for import/order, promise correctness, etc.
+ */
+module.exports = {
+  root: true,
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+    project: './tsconfig.json',
+    tsconfigRootDir: __dirname,
+  },
+  plugins: ['@typescript-eslint', 'import', 'jest'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended-type-checked',
+    'plugin:@typescript-eslint/strict',
+    'plugin:import/recommended',
+    'plugin:import/typescript',
+    'plugin:jest/recommended',
+  ],
+  settings: {
+    'import/resolver': {
+      typescript: {
+        project: './tsconfig.json',
+        alwaysTryTypes: true,
+      },
+    },
+  },
+  rules: {
+    // ── TypeScript ──────────────────────────────────────────────────────────
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-non-null-assertion': 'off',
+    '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+    '@typescript-eslint/no-require-imports': 'error',
+    '@typescript-eslint/no-use-before-define': ['error', { functions: false, classes: true, variables: true }],
+    '@typescript-eslint/no-floating-promises': 'error',
+    '@typescript-eslint/await-thenable': 'error',
+    '@typescript-eslint/prefer-optional-chain': 'error',
+    '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'with-especification' }],
+    '@typescript-eslint/no-dynamic-delete': 'warn',
+    '@typescript-eslint/consistent-type-imports': [
+      'error',
+      { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+    ],
+
+    // ── Imports ──────────────────────────────────────────────────────────────
+    'import/order': [
+      'error',
+      {
+        groups: [
+          'builtin',
+          'external',
+          'internal',
+          ['parent', 'sibling'],
+          'index',
+          'object',
+          'type',
+        ],
+        pathGroups: [
+          { pattern: '{@clack/prompts,chalk,consola,debug,pino}', group: 'external', position: 'before' },
+          { pattern: '{./,../}*.js', group: 'sibling', position: 'after' },
+          { pattern: '{./,../}*.ts', group: 'sibling', position: 'after' },
+          { pattern: '{./types,./types/**}', group: 'internal', position: 'before' },
+        ],
+        alphabetize: { order: 'asc', caseInsensitive: false },
+        'newlines-between': 'always',
+        warnOnUnassignedImports: true,
+      },
+    ],
+    'import/no-default-export': 'error',
+    'import/no-cycle': ['error', { maxDepth: 3 }],
+    'import/no-self-import': 'error',
+    'import/no-useless-path-segments': 'error',
+    'import/first': 'error',
+    'import/newline-after-import': ['error', { count: 1 }],
+    'import/no-extraneous-dependencies': [
+      'error',
+      { devDependencies: ['tests/**', 'scripts/**', '**/*.test.ts', '**/*.spec.ts'] },
+    ],
+
+    // ── General ─────────────────────────────────────────────────────────────
+    'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
+    'no-process-exit': 'error',
+    'no-throw-literal': 'error',
+    'prefer-const': 'error',
+    'prefer-destructuring': ['error', { VariableDeclaration: { array: false }, object: true }],
+    'prefer-object-spread': 'error',
+    'prefer-template': 'error',
+    'object-shorthand': 'error',
+    'quote-props': ['error', 'as-needed'],
+    'array-callback-return': 'error',
+    'consistent-return': 'error',
+    'default-case': 'error',
+    'default-case-last': 'error',
+    'dot-notation': ['error', { allowPattern: '^[_a-z][_a-zA-Z0-9]*$' }],
+    'eqeqeq': ['error', 'always'],
+    'no-alert': 'error',
+    'no-caller': 'error',
+    'no-eval': 'error',
+    'no-extend-native': 'error',
+    'no-extra-bind': 'error',
+    'no-extra-label': 'error',
+    'no-global-assign': 'error',
+    'no-labels': 'error',
+    'no-lone-blocks': 'error',
+    'no-loop-func': 'error',
+    'no-multi-assign': 'error',
+    'no-new': 'error',
+    'no-new-func': 'error',
+    'no-new-wrappers': 'error',
+    'no-octal-escape': 'error',
+    'no-param-reassign': 'error',
+    'no-proto': 'error',
+    'no-redeclare': 'error',
+    'no-return-assign': ['error', 'always'],
+    'no-script-url': 'error',
+    'no-self-compare': 'error',
+    'no-sequences': 'error',
+    'no-shadow': 'off', // TypeScript handles this
+    'no-sync': 'off',
+    'no-unused-expressions': ['error', { allowShortCircuit: true, allowTernary: true }],
+    'no-useless-call': 'error',
+    'no-useless-catch': 'error',
+    'no-useless-concat': 'error',
+    'no-useless-escape': 'error',
+    'no-useless-return': 'error',
+    'no-void': ['error', { allowAsStatement: true }],
+    'no-with': 'error',
+    'require-await': 'error',
+    'yoda': 'error',
+
+    // ── Jest ────────────────────────────────────────────────────────────────
+    'jest/no-disabled-tests': 'warn',
+    'jest/no-focused-tests': 'error',
+    'jest/no-identical-title': 'error',
+    'jest/valid-expect': 'error',
+    'jest/expect-expect': ['error', { assertFunctionNames: ['expect', 'assert.*', 'should.*'] }],
+  },
+  overrides: [
+    {
+      files: ['*.js', '*.mjs', '*.cjs'],
+      rules: {
+        '@typescript-eslint/no-require-imports': 'off',
+        '@typescript-eslint/no-var-requires': 'off',
+        '@typescript-eslint/consistent-type-imports': 'off',
+        'import/no-default-export': 'off',
+      },
+    },
+    {
+      files: ['tests/**/*.ts', 'tests/**/*.js', '**/*.test.ts', '**/*.spec.ts'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-assignment': 'off',
+        '@typescript-eslint/no-unsafe-return': 'off',
+        '@typescript-eslint/unbound-method': 'off',
+        'import/no-extraneous-dependencies': 'off',
+      },
+    },
+    {
+      files: ['scripts/**/*.ts', 'scripts/**/*.js'],
+      rules: {
+        'no-console': 'off',
+        'import/no-extraneous-dependencies': 'off',
+      },
+    },
+    {
+      files: ['bin/**/*.js'],
+      rules: {
+        'no-console': 'off',
+        '@typescript-eslint/no-require-imports': 'off',
+        'import/no-default-export': 'off',
+      },
+    },
+  ],
+  reportUnusedDisableDirectives: true,
+  ignorePatterns: ['dist/', 'node_modules/', '.git/', 'coverage/', '*.js', '!.eslintrc.js'],
+};

@@ -1,0 +1,8 @@
+/**
+ * Unit tests — fast, isolated, no I/O.
+ *
+ * Each test file should cover a single module or unit of logic.
+ * Mock all external dependencies (database, network, file system).
+ *
+ * Run with: npm run test:unit
+ */

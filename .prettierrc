@@ -1,0 +1,38 @@
+{
+  "$schema": "https://prettier.io/schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "quoteProps": "consistent",
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "singleAttributePerLine": false,
+  "overrides": [
+    {
+      "files": "*.md",
+      "options": {
+        "printWidth": 80,
+        "proseWrap": "preserve"
+      }
+    },
+    {
+      "files": "*.{json,yaml,yml}",
+      "options": {
+        "printWidth": 120,
+        "tabWidth": 2,
+        "singleQuote": false
+      }
+    },
+    {
+      "files": ".editorconfig",
+      "options": {
+        "parser": "yaml"
+      }
+    }
+  ]
+}

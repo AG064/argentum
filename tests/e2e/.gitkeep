@@ -1,0 +1,8 @@
+/**
+ * End-to-end tests — full application flow from external input to output.
+ *
+ * These tests start the application and simulate real user interactions
+ * through the supported channels (Telegram, Webchat, etc.).
+ *
+ * Run with: npm run test:e2e
+ */
