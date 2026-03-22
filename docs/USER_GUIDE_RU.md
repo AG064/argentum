@@ -1,6 +1,6 @@
 # Руководство пользователя
 
-Полное руководство по эксплуатации AG-Claw в продакшене и повседневном использовании. Этот документ охватывает архитектуру, конфигурацию, управление памятью, безопасность, развёртывание и многое другое.
+Подробное руководство по эксплуатации AG-Claw в продакшене и в повседневном использовании. Этот документ охватывает архитектуру, конфигурацию, управление памятью, безопасность, развёртывание, мониторинг и многое другое.
 
 ---
 
@@ -14,56 +14,56 @@
 6. [Варианты развёртывания](#6-варианты-развёртывания)
 7. [Мониторинг и логирование](#7-мониторинг-и-логирование)
 8. [Резервное копирование и восстановление](#8-резервное-копирование-и-восстановление)
-9. [Справочник API](#9-справочник-api)
-10. [Справочник конфигурации](#10-справочник-конфигурации)
+9. [Справочник по API](#9-справочник-по-api)
+10. [Справочник по конфигурации](#10-справочник-по-конфигурации)
 
 ---
 
 ## 1. Обзор архитектуры
 
-### Философия дизайна
+### Философия проектирования
 
 AG-Claw построен на трёх принципах:
 
-1. **Модульность вместо монолита** — каждая возможность представляет собой модуль-функцию, который можно независимо включать или выключать
+1. **Модульность важнее монолита** — каждая возможность представляет собой модуль, который можно независимо включить или выключить
 2. **Память как полноценный гражданин** — агент не просто обрабатывает сообщения; он запоминает, учится и развивается
-3. **Безопасность по умолчанию** — шифрование, логирование аудита и применение политик встроены изначально
+3. **Безопасность по умолчанию** — шифрование, аудитлог и политики безопасности встроены, а не прикручены потом
 
-### Схема системы
+### Диаграмма системы
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        Ваша инфраструктура                        │
+│                        Инфраструктура                            │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐    │
-│   │                    AG-Claw Gateway                      │    │
-│   │                        :18789                            │    │
+│   │                   AG-Claw Gateway                        │    │
+│   │                       :18789                             │    │
 │   ├───────────────┬────────────────────┬────────────────────┤    │
-│   │  Каналы       │   Модули функций   │   Ядро             │    │
+│   │  Каналы        │   Функциональные модули │   Ядро           │    │
 │   │               │                    │                     │    │
-│   │  • Telegram    │  • sqlite-memory  │  • Plugin Loader  │    │
-│   │  • Discord     │  • semantic-search│  • LLM Provider    │    │
-│   │  • Webchat     │  • cron-scheduler  │  • Config Manager  │    │
-│   │  • Slack       │  • morning-brief   │  • Logger         │    │
-│   │  • WhatsApp    │  • audit-log       │  • Security Layer │    │
-│   │  • Email       │  • mesh-workflows  │                    │    │
-│   │  • SMS         │  • ... (ещё 53)    │                    │    │
+│   │  • Telegram    │  • sqlite-memory  │  • Plugin Loader   │    │
+│   │  • Discord     │  • semantic-search │  • LLM Provider    │    │
+│   │  • Webchat     │  • cron-scheduler │  • Config Manager  │    │
+│   │  • Slack       │  • morning-brief  │  • Logger          │    │
+│   │  • WhatsApp    │  • audit-log      │  • Security Layer   │    │
+│   │  • Email       │  • mesh-workflows │                    │    │
+│   │  • SMS         │  • ... (53 ещё)   │                     │    │
 │   └───────┬───────┴────────┬──────────┴──────────┬──────────┘    │
 │           │                 │                      │               │
 │           │     ┌───────────▼────────────────────▼─────────┐     │
-│           │     │        Agentic Tool Loop                │     │
-│           │     │                                          │     │
-│           │     │  Сообщение → LLM → Вызовы инструментов → Память │
-│           │     │                                          │     │
-│           │     │  ┌─────────────────────────────────────┐ │     │
-│           │     │  │ Семантическая  │  Граф знаний     │ │     │
-│           │     │  │ память         │  Чекпоинты        │ │     │
-│           │     │  └─────────────────────────────────────┘ │     │
-│           │     └──────────────────────────────────────────┘     │
+│           │     │       Agentic Tool Loop                  │     │
+│           │     │                                           │     │
+│           │     │   Message → LLM → Tool Calls → Memory     │     │
+│           │     │                                           │     │
+│           │     │   ┌─────────────────────────────────────┐ │     │
+│           │     │   │  Semantic Memory  │  Knowledge Graph │ │     │
+│           │     │   │  SQLite Store     │  Checkpoint      │ │     │
+│           │     │   └─────────────────────────────────────┘ │     │
+│           │     └────────────────────────────────────────────┘     │
 │           │                                                       │
 │   ┌───────▼────────┐                            ┌────────────────▼┐│
-│   │   Конечные     │                            │  Внешние API   ││
-│   │ пользователи   │                            │ OpenRouter,    ││
+│   │   Конечные     │                            │  Внешние API    ││
+│   │   пользователи │                            │ OpenRouter,    ││
 │   └────────────────┘                            │ Anthropic и др ││
 │                                                  └────────────────┘│
 └──────────────────────────────────────────────────────────────────┘
@@ -71,31 +71,37 @@ AG-Claw построен на трёх принципах:
 
 ### Основные компоненты
 
-| Компонент | Файл(ы) | Назначение |
+| Компонент | Файл(ы) | Роль |
 |---|---|---|
-| **Gateway** | `src/index.ts` | HTTP-сервер, загружает все функции, управляет жизненным циклом |
-| **CLI** | `src/cli.ts` | Командный интерфейс для пользователя |
-| **Plugin Loader** | `src/core/plugin-loader.ts` | Обнаруживает, загружает, запускает и проверяет работоспособность 59 модулей |
-| **Agent** | `src/index.ts` (класс `Agent`) | Agentic Tool Loop — оркестрирует LLM + инструменты + память |
+| **Gateway** | `src/index.ts` | HTTP-сервер, загрузка всех модулей, управление жизненным циклом |
+| **CLI** | `src/cli.ts` | Командный интерфейс пользователя |
+| **Plugin Loader** | `src/core/plugin-loader.ts` | Обнаружение, загрузка, запуск и проверка работоспособности 59 модулей |
+| **Agent** | `src/index.ts` (класс `Agent`) | Agentic Tool Loop — оркестрация LLM + инструменты + память |
 | **LLM Provider** | `src/core/llm-provider.ts` | Абстракция над OpenRouter, Anthropic, OpenAI |
-| **Memory** | `src/memory/` | Семантический поиск, граф знаний, SQLite-хранилище |
-| **Channels** | `src/channels/` | Адаптеры протоколов (Telegram, Discord, Webchat) |
+| **Memory** | `src/memory/` | Семантический поиск, граф знаний, персистентность в SQLite |
+| **Channels** | `src/channels/` | Адаптеры протоколов (Telegram, Discord, Webchat, SMS, Email) |
 | **Features** | `src/features/*/index.ts` | 59 отдельных модулей |
-| **Security** | `src/security/` | Движок политик, зашифрованные секреты, списки доступа |
+| **Security** | `src/security/` | Политический движок, зашифрованные секреты, allowlist |
 
 ### Agentic Tool Loop
 
 Когда пользователь отправляет сообщение, AG-Claw обрабатывает его через следующий цикл:
 
-1. **Получение сообщения** — адаптер канала нормализует входные данные
-2. **Проверка безопасности** — списки доступа, ограничение скорости, фильтрация контента
-3. **Автозахват** — функция обнаруживает решения, уроки, ошибки в сообщении
-4. **Вызов LLM** — сообщение отправляется модели с историей разговора и доступными инструментами
-5. **Выполнение инструментов** — если модель вызывает инструмент, он выполняется, и результаты возвращаются
-6. **Обновление памяти** — семантическая память сохраняет взаимодействие; граф знаний обновляется
+1. **Сообщение получено** — адаптер канала нормализует входные данные в стандартный формат `Message`
+2. **Проверка безопасности** — применение allowlist, rate limiting, фильтрация контента
+3. **Автозахват** — модуль автоматически определяет решения, уроки, ошибки в сообщении
+4. **Вызов LLM** — сообщение отправляется модели вместе с историей разговора и доступными инструментами
+5. **Выполнение инструментов** — если модель вызывает инструмент, он выполняется и результаты возвращаются в контекст
+6. **Обновление памяти** — семантическая память сохраняет взаимодействие; граф знаний обновляет связи между сущностями
 7. **Ответ** — итоговый текст возвращается пользователю через адаптер канала
 
-Цикл выполняется до 10 итераций на сообщение для обработки сложных многошаговых задач.
+Цикл выполняется до 10 итераций на сообщение для обработки сложных многошаговых задач. Настройте это через `agent.maxIterations`.
+
+### Система модулей
+
+Каждый модуль представляет собой самодостаточный компонент в `src/features/<name>/index.ts`. Модули независимы и настраиваются через `agclaw.json`. Вы можете включать или выключать любой модуль без изменения кода.
+
+Текущее количество модулей: **59 модулей**, включая аудитлогирование, семантический поиск, планировщик задач, утренние отчёты, mesh-воркфлоры, зашифрованные секреты, отслеживание целей и многое другое.
 
 ---
 
@@ -103,51 +109,67 @@ AG-Claw построен на трёх принципах:
 
 ### Создание первого агента
 
-После `agclaw init` ваш агент готов к использованию. Конфигурация по умолчанию создаёт универсального агента. Для настройки:
+После выполнения `agclaw init` ваш агент готов к использованию. Конфигурация по умолчанию создаёт универсального агента. Для настройки:
 
 ```bash
 # Просмотр текущей конфигурации
 agclaw config
 
-# Установка имени агента
+# Установить имя агента
 agclaw config name "Мой персональный ассистент"
 
-# Установка системного промпта (через переменную окружения)
-export AGCLAW_SYSTEM_PROMPT="Вы — опытный программист..."
+# Установить системный промпт
+agclaw config agent.systemPrompt "Ты — полезный ассистент..."
+
+# Показать полную конфигурацию
+cat agclaw.json
+```
+
+При первом запуске агент поможет настроить API-ключ. Также можно задать его через переменную окружения:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-...
+agclaw gateway start
 ```
 
 ### Управление несколькими агентами
 
-AG-Claw поддерживает несколько профилей агентов. Создание нового агента:
+AG-Claw поддерживает несколько профилей агентов для разных сценариев использования:
 
 ```bash
-# Создание именованного профиля агента
+# Создать агента для программирования
 agclaw agents create --name "coding-assistant" \
-  --system-prompt "Вы — эксперт-программист..." \
+  --system-prompt "Ты — эксперт-программист, специализирующийся на TypeScript и Python..." \
   --model "anthropic/claude-sonnet-4-20250514"
 ```
 
-Список агентов:
+Список всех агентов:
 
 ```bash
 agclaw agents list
 ```
 
-Переключение между агентами:
+Переключиться на другого агента:
 
 ```bash
 agclaw agents use "coding-assistant"
 ```
 
+Удалить профиль агента:
+
+```bash
+agclaw agents delete "coding-assistant"
+```
+
 ### Конфигурация агента
 
-Основные настройки агента в `agclaw.json`:
+Ключевые параметры агента в `agclaw.json`:
 
 ```json
 {
   "agent": {
     "name": "AG-Claw Ассистент",
-    "systemPrompt": "Вы — полезный AI-ассистент...",
+    "systemPrompt": "Ты — полезный AI-ассистент...",
     "maxIterations": 10,
     "temperature": 0.7,
     "tools": ["web_search", "read_file", "write_file", "run_command"]
@@ -158,14 +180,15 @@ agclaw agents use "coding-assistant"
     "fallbackModel": "openai/gpt-4o",
     "maxTokens": 8192,
     "temperature": 0.7,
-    "retryAttempts": 3
+    "retryAttempts": 3,
+    "retryDelayMs": 1000
   }
 }
 ```
 
-### Сессии разговоров
+### Сессии разговора
 
-AG-Claw поддерживает историю разговоров для каждого пользователя:
+AG-Claw хранит историю разговоров для каждого пользователя в `data/sessions.db`. Сессии включают полную историю сообщений, вызовы инструментов и статистику использования LLM.
 
 ```bash
 # Просмотр недавних сессий
@@ -174,267 +197,297 @@ agclaw sessions list
 # Просмотр конкретной сессии
 agclaw sessions view <session-id>
 
-# Очистка сессии
+# Очистка сессии (сбрасывает разговор)
 agclaw sessions clear <session-id>
+
+# Экспорт сессии в JSON
+agclaw sessions export <session-id> > session.json
 ```
 
-Сессии хранятся в `data/sessions.db` и включают полную историю сообщений, вызовы инструментов и статистику использования LLM.
+### Смена модели
+
+```bash
+# Использовать другую модель по умолчанию
+agclaw config model.defaultModel "openai/gpt-4o"
+
+# Перезапустить для применения
+agclaw gateway restart
+```
+
+Доступные провайдеры:
+- **OpenRouter** — Рекомендуется. Доступ к 100+ моделям включая Claude, GPT-4, Llama, Mistral
+- **Anthropic** — Прямой доступ к моделям Claude
+- **OpenAI** — GPT-4, GPT-4o, GPT-3.5 Turbo
 
 ---
 
 ## 3. Система памяти
 
-AG-Claw имеет многоуровневую архитектуру памяти. Каждый слой служит своей цели.
+AG-Claw имеет многослойную архитектуру памяти. Каждый слой служит разным целям — от краткосрочного контекста до долгосрочных знаний.
 
-### Уровни памяти
+### Слои памяти
 
 ```
 ┌────────────────────────────────────────────┐
-│        Семантическая память                 │  ← Быстрый поиск по ключевым словам
-│      (SQLite + модели эмбеддингов)          │     Используется каждую сессию
+│           Семантическая память             │  ← Быстрый поиск по ключевым словам
+│     (SQLite + модели эмбеддингов)           │     Используется в каждом разговоре
 ├────────────────────────────────────────────┤
-│           Граф знаний                       │  ← Связи между сущностями
-│      (узлы + рёбра, обход графа)            │     Используется для рассуждений
+│           Граф знаний                      │  ← Связи между сущностями
+│    (узлы + рёбра, обход графа)              │     Используется для рассуждений
 ├────────────────────────────────────────────┤
-│         Markdown-память                     │  ← Понятные человеку заметки
-│         (файлы на диске, отслеживаемые)      │     Используется для долгосрочных фактов
+│         Markdown память                    │  ← Читаемые заметки
+│      (файлы на диске, отслеживаются)        │     Используется для долгосрочных фактов
 ├────────────────────────────────────────────┤
-│        Саморазвивающаяся память             │  ← Автоматическая консолидация
-│   (периодическое сжатие + абстракция)       │     Поддерживает эффективность
+│          Сессионная память                 │  ← Текущий разговор
+│        (в памяти, на сессию)               │     Используется для контекстного окна
 └────────────────────────────────────────────┘
 ```
 
 ### Семантическая память
 
-Основная рабочая память. Хранит взаимодействия, уроки, решения.
+Основной слой памяти. Хранит факты, разговоры и полученные знания в SQLite с полнотекстовым поиском.
 
 ```bash
-# Сохранить запись вручную
-agclaw memory store "decision" "Использовать PostgreSQL для основной базы данных"
+# Явно сохранить что-то
+curl -X POST http://localhost:18789/memory/store \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Алексей изучает TypeScript", "tags": ["человек", "обучение"]}'
 
 # Поиск в памяти
-agclaw memory search "решения по базе данных"
-
-# Просмотр недавних записей
-agclaw memory recent --limit 10
-
-# Статистика памяти
-agclaw memory stats
+curl "http://localhost:18789/memory/search?q=Алексей%20TypeScript"
 ```
 
-Через инструмент агента `memory_search`:
-
-```
-Пользователь: Какие решения мы приняли по дизайну API?
-Агент: Сейчас проверю... [вызывает memory_search]
-     Найдено 3 релевантные записи:
-     [decision] Использовать REST вместо GraphQL для публичного API (доступ 5x)
-     [decision] Версионировать все эндпоинты под префиксом /api/v1/ (доступ 3x)
-     [decision] Использовать JWT токены с истечением 1 час (доступ 2x)
-```
+Ключевые характеристики:
+- Автоматическая индексация модулем `self-evolving-memory`
+- Записи автоматически категоризируются и тегируются
+- Настраиваемая компрессия при превышении порога
+- Сохраняется между перезапусками (SQLite)
 
 ### Граф знаний
 
-Хранит сущности и их связи. Позволяет рассуждать о связях.
+Хранит сущности и их отношения. Позволяет делать выводы на основе связанных фактов.
 
 ```bash
-# Просмотр статистики графа знаний
-agclaw memory graph stats
-
-# Экспорт графа
-agclaw memory graph export > graph.json
+# Запрос по сущности
+curl "http://localhost:18789/memory/graph?entity=aleksey"
 ```
 
-### Сжатие памяти
-
-Когда семантическая память превышает порог сжатия (по умолчанию: 10 000 записей), функция саморазвивающейся памяти автоматически:
-
-1. Находит связанные записи
-2. Консолидирует их в абстракции более высокого уровня
-3. Удаляет избыточные записи
-4. Сохраняет существенную информацию в сжатом виде
-
-Настройка:
-
-```json
-{
-  "features": {
-    "self-evolving-memory": {
-      "enabled": true,
-      "compressionThreshold": 10000,
-      "consolidationIntervalHours": 24
-    }
-  }
-}
+Пример записи графа знаний:
+```
+Сущность: Алексей (тип: человек)
+  - работает_в: kood/jõhvi (тип: учебное_заведение)
+  - говорит_на: русский, английский, эстонский
+  - интересы: программирование, AI, космос, фотография
 ```
 
-### Чекпоинты
+Граф автоматически обновляется по мере обработки сообщений агентом.
 
-Сохранение и возобновление долгих задач:
+### Markdown память
+
+Плоские файлы на диске в каталоге `data/memory/`. Отслеживаются файловым наблюдателем — изменения подхватываются сразу без перезапуска.
 
 ```bash
-# Сохранить чекпоинт (через инструмент агента)
-Агент: memory_checkpoint(taskId="build-2024-01", state={...})
+# Создать файл памяти
+cat > data/memory/facts.md << 'EOF'
+# Факты об Алексее
 
-# Возобновить
-Агент: memory_resume(taskId="build-2024-01")
+## Предпочтения
+- Lark早起 (совенок/жаворонок)
+- Предпочитает тёмную тему
+- Использует Arch Linux
+
+## Цели
+- Найти работу программистом к концу 2026
+- Изучить Rust
+EOF
 ```
+
+Markdown-файлы парсятся и интегрируются в контекст агента. Это полезно для:
+- Вручную курируемых фактов
+- Заметок из других систем
+- Информации, которая должна переживать компрессию памяти
+
+### Управление памятью
+
+```bash
+# Показать статистику памяти
+agclaw memory stats
+
+# Очистить старые записи (до определённой даты)
+agclaw memory purge --before 2026-01-01
+
+# Экспортировать все воспоминания
+agclaw memory export > memories.json
+
+# Импортировать воспоминания
+agclaw memory import memories.json
+```
+
+Модуль `self-evolving-memory` автоматически:
+- Консолидирует похожие воспоминания для экономии места
+- Обнаруживает паттерны в хранимой информации
+- Применяет затухание к малорелевантным записям
 
 ---
 
 ## 4. Навыки и как их использовать
 
-Навыки (skills) — это многократно используемые пакеты возможностей, расширяющие то, что агент может делать. AG-Claw поставляется со встроенной библиотекой навыков.
+Навыки (skills) — это многократно используемые пакеты возможностей, которые расширяют функциональность вашего агента. Они живут в каталоге `skills/` и могут быть установлены, обновлены и удалены независимо от ядра фреймворка.
 
 ### Встроенные навыки
 
+В AG-Claw предустановлено несколько навыков:
+
 | Навык | Что делает |
 |---|---|
-| `web_search` | Поиск в интернете через DuckDuckGo |
-| `get_current_time` | Возвращает текущую дату/время |
-| `read_file` | Читает файл с диска |
-| `write_file` | Записывает контент в файл |
-| `run_command` | Выполняет shell-команду |
-| `memory_search` | Ищет в семантической памяти |
-| `memory_store` | Сохраняет новую запись в памяти |
-| `memory_checkpoint` | Сохраняет чекпоинт задачи |
-| `memory_resume` | Возобновляет задачу из чекпоинта |
+| `weather` | Текущая погода и прогнозы через wttr.in или Open-Meteo |
+| `summarize` | Резюмирование URL, PDF, изображений, аудио, YouTube |
+| `gog` | Google Workspace: Gmail, Календарь, Drive, Sheets, Docs |
+| `xurl` | Twitter/X API: публикация, ответы, поиск, DM, медиа |
+| `himalaya` | CLI email-клиент через IMAP/SMTP |
+| `telegram` | Telegram Bot API воркфлоры |
 
-### Установка дополнительных навыков
-
-Просмотр библиотеки навыков:
+### Список установленных навыков
 
 ```bash
 agclaw skills list
 ```
 
-Установка навыка:
+### Установка новых навыков
 
 ```bash
-agclaw skills install <имя-навыка>
+# Установить из URL или локального пути
+agclaw skills install https://github.com/example/skill-repo
+
+# Установить из ClawHub маркетплейса
+agclaw skill install my-skill
 ```
 
 ### Создание собственных навыков
 
-Создайте `src/features/skills-library/<мой-навык>/index.ts`:
+Подробности в [Руководстве разработчика](./DEVELOPER_GUIDE.md#7-how-to-create-a-new-skill). Кратко:
 
-```typescript
-import { SkillModule } from '../../types';
+1. Создайте `skills/my-skill/SKILL.md`
+2. Напишите `skills/my-skill/src/index.ts` с логикой
+3. Добавьте метаданные для интеграции с CLI
 
-const mySkill: SkillModule = {
-  name: 'my-skill',
-  version: '0.1.0',
-  description: 'Делает что-то полезное',
+### Вызов навыков
 
-  tools: [{
-    name: 'my_tool',
-    description: 'Делает что-то полезное',
-    parameters: {
-      input: { type: 'string', required: true }
-    },
-    execute: async (params) => {
-      return `Обработано: ${params.input}`;
-    }
-  }],
+Навыки обычно вызываются агентом автоматически, но можно вызвать и напрямую:
 
-  init: async () => {},
-  start: async () => {},
-  stop: async () => {},
-};
-
-export default mySkill;
-```
-
-Зарегистрируйте его в `config/default.yaml` или `agclaw.json`:
-
-```json
-{
-  "features": {
-    "skills-library": {
-      "enabled": true,
-      "skills": ["my-skill"]
-    }
-  }
-}
+```bash
+agclaw skills run weather --location "Таллинн"
 ```
 
 ---
 
 ## 5. Лучшие практики безопасности
 
-### Основные шаги безопасности
+AG-Claw включает несколько слоёв безопасности. Ниже — рекомендуемые практики для продакшен-развёртывания.
 
-**1. Никогда не коммитьте API-ключи в git**
+### Включите строгий режим
 
-Используйте переменные окружения, а не захардкоженные токены:
+Начните с `security.policy: "strict"` в `agclaw.json`:
 
-```bash
-# Правильно
-export OPENROUTER_API_KEY=sk-or-v1-...
-
-# Неправильно — попадёт на GitHub
-echo '"token": "sk-or-v1-..."' >> agclaw.json
+```json
+{
+  "security": {
+    "policy": "strict",
+    "auditLog": true,
+    "allowlistMode": "strict"
+  }
+}
 ```
 
-Добавьте `agclaw.json` в `.gitignore`:
+В строгом режиме все действия, не разрешённые явно, запрещены. В разрешительном режиме (по умолчанию) всё разрешено, если не заблокировано правилом.
 
-```gitignore
-agclaw.json
-data/
-*.db
-.env
-```
+### Allowlist пользователей
 
-**2. Используйте зашифрованное хранилище секретов**
-
-```bash
-# Зашифровать секрет
-agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
-```
-
-**3. Настраивайте списки доступа**
-
-Ограничьте доступ к Telegram по конкретным ID пользователей:
+Ограничьте доступ конкретным пользователям по их ID платформы:
 
 ```json
 {
   "channels": {
     "telegram": {
+      "enabled": true,
+      "token": "...",
       "allowedUsers": [123456789, 987654321]
     }
   }
 }
 ```
 
-**4. Включайте ограничение скорости**
+Это предотвращает доступ неавторизованных пользователей, даже если они знают токен Telegram-бота.
+
+### Шифрование секретов
+
+AG-Claw шифрует секреты при хранении с помощью AES-256-GCM. Задайте ключ:
+
+```bash
+export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+Никогда не коммитьте API-ключи в систему контроля версий. Используйте переменные окружения:
+
+```bash
+# Безопасно сохранить секрет
+agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
+```
+
+### Аудитлогирование
+
+Включите лог аудита для отслеживания всех действий:
 
 ```json
 {
   "security": {
+    "auditLog": true
+  }
+}
+```
+
+Просмотр логов аудита:
+
+```bash
+agclaw audit list --limit 50
+agclaw audit search --actor alice --since 2026-03-22
+```
+
+Лог аудита хранится в `data/agclaw.db` в неизменяемой таблице — записи нельзя удалить или изменить.
+
+### Rate Limiting
+
+Защититесь от злоупотреблений:
+
+```json
+{
+  "server": {
     "rateLimit": {
+      "enabled": true,
       "windowMs": 60000,
-      "maxRequests": 30
+      "maxRequests": 100
     }
   }
 }
 ```
 
-**5. Регулярно просматривайте логи аудита**
+### Фильтрация контента
 
-```bash
-agclaw audit log --last 24h
+Модуль `content-filtering` сканирует сообщения и вывод инструментов на предмет конфиденциальных данных:
+
+```json
+{
+  "features": {
+    "content-filtering": { "enabled": true }
+  }
+}
 ```
 
-### Справочник функций безопасности
-
-| Функция | Файл | Назначение |
-|---|---|---|
-| Зашифрованные секреты | `src/security/encrypted-secrets.ts` | AES-256 шифрование для API-ключей |
-| Движок политик | `src/security/policy-engine.ts` | YAML-определённые политики безопасности |
-| Списки доступа | `src/security/allowlists.ts` | Белые списки пользователей/чатов |
-| Ограничение скорости | `src/features/rate-limiting/` | Потребление запросов на пользователя |
-| Логи аудита | `src/features/audit-log/` | Неизменяемые записи вызовов инструментов |
-| Фильтрация контента | `src/features/content-filtering/` | Санитизация входных данных |
+Автоматически маскирует:
+- API-ключи и токены
+- Номера кредитных карт
+- Номера социального страхования
+- Email-адреса и телефонные номера
 
 ---
 
@@ -444,124 +497,120 @@ agclaw audit log --last 24h
 
 ```bash
 npm install
-npm run build
-npm start
+npm link
+agclaw init
+agclaw gateway start
 ```
+
+Готово. Gateway работает на `http://localhost:18789`.
 
 ### Docker (рекомендуется для продакшена)
 
 ```bash
-# Сборка образа
-npm run docker:build
-
-# Запуск контейнеров
-npm run docker:up
-
-# Просмотр логов
-docker compose -f docker/docker-compose.yml logs -f
-
-# Остановка
-npm run docker:down
+cd ag-claw/docker
+cp .env.example .env  # заполните API-ключи
+docker compose up -d
 ```
 
-### Конфигурация Docker Compose
+### Systemd (Linux)
 
-Отредактируйте `docker/docker-compose.yml` для вашего окружения:
+```ini
+# /etc/systemd/system/agclaw.service
+[Unit]
+Description=AG-Claw AI Agent
+After=network.target
 
-```yaml
-services:
-  ag-claw:
-    image: ag-claw:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - AGCLAW_PORT=3000
-    volumes:
-      - ./data:/app/data
-      - ./agclaw.json:/app/agclaw.json:ro
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+[Service]
+Type=simple
+User=ag064
+WorkingDirectory=/home/ag064/ag-claw
+ExecStart=/home/ag064/ag-claw/bin/agclaw.js gateway start
+Restart=always
+RestartSec=5
+Environment=OPENROUTER_API_KEY=sk-or-v1-...
+Environment=AGCLAW_PORT=18789
+
+[Install]
+WantedBy=multi-user.target
 ```
-
-### VPS Deployment
-
-1. Подключитесь по SSH к VPS
-2. Установите Docker: `curl -fsSL get.docker.com | bash`
-3. Клонируйте репозиторий: `git clone https://github.com/AG064/ag-claw.git`
-4. Скопируйте файл `.env` с вашими API-ключами
-5. Запустите `npm run docker:build && npm run docker:up`
-6. Настройте обратный прокси (nginx/Caddy) для HTTPS
-7. Привяжите домен к VPS
-
-### Мониторинг работоспособности
-
-AG-Claw предоставляет эндпоинт проверки здоровья:
 
 ```bash
-curl http://localhost:3000/health
+sudo systemctl enable agclaw
+sudo systemctl start agclaw
+sudo systemctl status agclaw
 ```
 
-Функция `health-monitoring` запускает периодические проверки всех активных функций и оповещает, если какая-либо становится неработоспособной.
+### Обратный прокси (nginx)
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
 
 ---
 
 ## 7. Мониторинг и логирование
 
-### Уровни логирования
-
-Настраиваются через `agclaw.json` или `AGCLAW_LOG_LEVEL`:
+### Уровни логов
 
 ```bash
 export AGCLAW_LOG_LEVEL=debug  # debug, info, warn, error
 ```
 
+В разработке используйте `pretty` формат:
+
+```bash
+export AGCLAW_LOG_FORMAT=pretty
+```
+
+В продакшене — `json`:
+
+```bash
+export AGCLAW_LOG_FORMAT=json
+```
+
 ### Просмотр логов
 
 ```bash
-# Логи шлюза в реальном времени
+# Логи gateway в реальном времени
 agclaw gateway logs
 
-# Фильтрация по уровню
+# Фильтр по уровню
 agclaw gateway logs --level error
 
 # Режим отслеживания
 agclaw gateway logs --follow
 
-# Экспорт логов
+# Экспорт
 agclaw gateway logs --export ./logs/$(date +%Y%m%d).log
 ```
 
-### Структурированный формат логов
-
-Логи выводятся как JSON в продакшене (`format: json`) и в красивом формате при разработке (`format: pretty`):
-
-```json
-{
-  "level": "info",
-  "time": "2026-03-23T01:00:00.000Z",
-  "feature": "agent",
-  "msg": "Processing message",
-  "length": 142
-}
-```
-
-### Эндпоинт метрик
+### Метрики Prometheus
 
 ```bash
-curl http://localhost:3000/metrics
+curl http://localhost:18789/metrics
 ```
 
-Возвращает метрики в формате Prometheus:
-- `agclaw_messages_total` — всего обработано сообщений
-- `agclaw_tool_calls_total` — вызовы инструментов по имени
-- `agclaw_llm_tokens_total` — использовано токенов (промпт + завершение)
-- `agclaw_memory_entries_total` — записей в семантической памяти
-- `agclaw_features_active` — количество активных функций
+### Проверка здоровья
+
+```bash
+curl http://localhost:18789/health
+```
 
 ---
 
@@ -570,10 +619,10 @@ curl http://localhost:3000/metrics
 ### Ручное резервное копирование
 
 ```bash
-# AG-Claw создаёт резервные копии с временными метками
+# Список резервных копий
 ls ./backups/
 
-# Создать резервную копию вручную
+# Создать резервную копию
 agclaw backup create
 
 # Восстановить из резервной копии
@@ -582,18 +631,17 @@ agclaw backup restore backup-2026-03-18T18-58-44
 
 ### Что входит в резервную копию
 
-- `data/agclaw.db` — основная SQLite-база
-- `data/semantic-memory.db` — семантическая память
-- `data/knowledge.db` — граф знаний
-- `data/sessions.db` — сессии разговоров
-- `data/skills-library.db` — установленные навыки
-- `data/goals.db` — цели и декомпозиция
-- `data/life-domains.db` — домены жизни
-- `agclaw.json` — конфигурация
+| Файл | Описание |
+|---|---|
+| `data/agclaw.db` | Основная база данных SQLite |
+| `data/semantic-memory.db` | Семантическая память |
+| `data/knowledge.db` | Граф знаний |
+| `data/sessions.db` | Сессии разговоров |
+| `data/skills-library.db` | Установленные навыки |
+| `data/goals.db` | Цели и декомпозиция |
+| `agclaw.json` | Конфигурация |
 
-### Автоматические резервные копии
-
-Настройка в `agclaw.json`:
+### Автоматическое резервное копирование
 
 ```json
 {
@@ -606,96 +654,87 @@ agclaw backup restore backup-2026-03-18T18-58-44
 }
 ```
 
-### Восстановление после сбоя
+### Процедура восстановления
 
-1. Остановите шлюз: `agclaw gateway stop`
-2. Восстановите файлы из резервной копии: `agclaw backup restore <название-backup>`
-3. Перезапустите: `agclaw gateway start`
-4. Проверьте: `curl http://localhost:3000/health`
+1. Остановить gateway: `agclaw gateway stop`
+2. Восстановить файлы: `agclaw backup restore <backup-name>`
+3. Запустить: `agclaw gateway start`
+4. Проверить: `curl http://localhost:18789/health`
 
 ---
 
-## 9. Справочник API
+## 9. Справочник по API
 
-Полная документация [API](./API.md) включает REST-эндпоинты, WebSocket-события, коды ошибок и схему конфигурации.
+Полная документация API доступна в [API.md](./API.md).
 
 Краткий справочник:
 
-| Эндпоинт | Метод | Описание |
+| Endpoint | Метод | Описание |
 |---|---|---|
-| `/health` | GET | Проверка работоспособности |
+| `/health` | GET | Проверка здоровья |
 | `/metrics` | GET | Метрики Prometheus |
-| `/chat` | POST | Отправить сообщение |
-| `/memory/search` | GET | Поиск в памяти |
-| `/memory/store` | POST | Сохранить запись в памяти |
-| `/agents` | GET | Список агентов |
-| `/features` | GET | Список всех функций |
-| `/features/:name` | POST | Включить/выключить функцию |
-| `/config` | GET/PATCH | Просмотр/обновление конфигурации |
+| `/chat` | POST | Отправить сообщение агенту |
+| `/chat/stream` | POST | Потоковый ответ (SSE) |
+| `/memory/search` | GET | Поиск в семантической памяти |
+| `/memory/store` | POST | Сохранить запись в память |
+| `/memory/graph` | GET | Запрос к графу знаний |
+| `/agents` | GET/POST | Список или создание агентов |
+| `/features` | GET | Список всех модулей |
+| `/config` | GET/PATCH | Просмотр или изменение конфигурации |
 
 ---
 
-## 10. Справочник конфигурации
+## 10. Справочник по конфигурации
 
-### Полная схема конфигурации
+### Основные параметры
 
-```typescript
-interface AGClawConfig {
-  name: string;                          // Имя экземпляра
-  server: {
-    port: number;                        // Порт шлюза (по умолчанию: 18789)
-    host: string;                        // Адрес привязки (по умолчанию: 0.0.0.0)
-    cors: {
-      enabled: boolean;
-      origins: string[];
-    };
-    rateLimit: {
-      enabled: boolean;
-      windowMs: number;
-      maxRequests: number;
-    };
-  };
-  model: {
-    provider: 'openrouter' | 'anthropic' | 'openai';
-    defaultModel: string;
-    fallbackModel?: string;
-    maxTokens: number;
-    temperature: number;
-    retryAttempts: number;
-    retryDelayMs: number;
-  };
-  features: Record<string, {
-    enabled: boolean;
-    [key: string]: unknown;
-  }>;
-  channels: {
-    telegram?: {
-      enabled: boolean;
-      token?: string;
-      allowedUsers?: number[];
-      allowedChats?: number[];
-    };
-    webchat?: {
-      enabled: boolean;
-      port: number;
-      maxConnections: number;
-    };
-    // ... другие каналы
-  };
-  memory: {
-    primary: 'sqlite' | 'markdown' | 'supabase';
-    path: string;
-    selfEvolving: boolean;
-    compressionThreshold: number;
-    supabaseUrl?: string;
-    supabaseKey?: string;
-  };
-  security: {
-    policy: string;
-    secrets: 'encrypted' | 'plain';
-    auditLog: boolean;
-    allowlistMode: 'permissive' | 'strict';
-  };
+```json
+{
+  "name": "AG-Claw",
+  "version": "0.2.0",
+  "server": {
+    "port": 18789,
+    "host": "0.0.0.0",
+    "cors": { "enabled": true, "origins": [] },
+    "rateLimit": { "enabled": true, "windowMs": 60000, "maxRequests": 100 }
+  },
+  "agent": {
+    "name": "AG-Claw Ассистент",
+    "maxIterations": 10,
+    "temperature": 0.7
+  },
+  "model": {
+    "provider": "openrouter",
+    "defaultModel": "anthropic/claude-sonnet-4-20250514",
+    "fallbackModel": "openai/gpt-4o",
+    "maxTokens": 8192,
+    "temperature": 0.7,
+    "retryAttempts": 3
+  },
+  "features": {
+    "audit-log": { "enabled": true },
+    "sqlite-memory": { "enabled": true },
+    "semantic-search": { "enabled": true },
+    "morning-briefing": { "enabled": true }
+  },
+  "memory": {
+    "primary": "sqlite",
+    "path": "./data",
+    "selfEvolving": true,
+    "compressionThreshold": 50000
+  },
+  "security": {
+    "policy": "permissive",
+    "secrets": "encrypted",
+    "auditLog": true,
+    "allowlistMode": "permissive"
+  },
+  "backup": {
+    "enabled": true,
+    "intervalHours": 24,
+    "retentionDays": 7,
+    "path": "./backups"
+  }
 }
 ```
 
@@ -703,17 +742,19 @@ interface AGClawConfig {
 
 | Переменная | Описание | Обязательно |
 |---|---|---|
-| `OPENROUTER_API_KEY` | API-ключ OpenRouter | Да (если не используется другой провайдер) |
-| `ANTHROPIC_API_KEY` | API-ключ Anthropic | Нет |
-| `OPENAI_API_KEY` | API-ключ OpenAI | Нет |
-| `AGCLAW_TELEGRAM_TOKEN` | Токен Telegram-бота | Нет |
-| `AGCLAW_FCM_KEY` | Ключ Firebase Cloud Messaging | Нет |
-| `AGCLAW_DB_PATH` | Путь к SQLite-базе | Нет |
-| `AGCLAW_PORT` | Порт шлюза | Нет |
+| `OPENROUTER_API_KEY` | OpenRouter API ключ | Да |
+| `ANTHROPIC_API_KEY` | Anthropic API ключ | Нет |
+| `OPENAI_API_KEY` | OpenAI API ключ | Нет |
+| `AGCLAW_PORT` | Порт gateway (по умолчанию 18789) | Нет |
+| `AGCLAW_HOST` | Адрес привязки (по умолчанию 0.0.0.0) | Нет |
+| `AGCLAW_DB_PATH` | Путь к SQLite (по умолчанию ./data/agclaw.db) | Нет |
 | `AGCLAW_LOG_LEVEL` | Уровень логирования | Нет |
+| `AGCLAW_LOG_FORMAT` | Формат логов (pretty/json) | Нет |
+| `AGCLAW_TELEGRAM_TOKEN` | Токен Telegram-бота | Нет |
+| `AGCLAW_SESSION_SECRET` | Ключ для шифрования сессий | Нет |
 | `SUPABASE_URL` | URL проекта Supabase | Нет |
-| `SUPABASE_KEY` | Anon-ключ Supabase | Нет |
+| `SUPABASE_KEY` | Anon ключ Supabase | Нет |
 
 ---
 
-*Для продвинутых тем, таких как многопользовательская координация, mesh-workflows и масштабирование, см. [Урок 5: Продвинутые паттерны](./tutorials/05-advanced-patterns_RU.md).*
+*Пошаговые руководства доступны в каталоге [tutorials](./tutorials/).*
