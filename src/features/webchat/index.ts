@@ -345,9 +345,14 @@ connect();
 /**
  * Webchat feature — full-featured web UI with WebSocket messaging.
  *
- * WARNING: This implementation lacks authentication. Any client can connect,
- * send messages, and access chat history. Use only in trusted environments
- * or implement proper access controls before exposing publicly.
+ * Security hardening:
+ * - Bearer token authentication for WebSocket connections
+ * - Room ID and user ID validation (alphanumeric + safe chars only)
+ * - Message content validation and length limits
+ * - File type validation and size enforcement
+ * - Rate limiting per connection
+ * - CSP-compatible markdown rendering (no innerHTML for user content)
+ * - Audit logging for connections and auth failures
  */
 class WebchatFeature implements FeatureModule {
   readonly meta: FeatureMeta = {

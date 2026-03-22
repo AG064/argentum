@@ -1,0 +1,12 @@
+dist
+node_modules
+coverage
+.git
+*.min.js
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.eslintcache
+.tsbuildinfo
+data
+backups
