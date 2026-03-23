@@ -16,7 +16,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-5.3-blue.svg?style=flat-square)](#)
 [![Build](https://img.shields.io/badge/build-typescript-blue.svg?style=flat-square)](#)
 
-[![Telegram](https://img.shields.io/badge/Channel-Telegram-26A5E4?logo=telegram&style=flat-square)](https://t.me/agclaw)
+[![Telegram](https://img.shields.io/badge/Telegram-AGX%20Channel-26A5E4?logo=telegram&style=flat-square)](https://t.me/c/3355989721)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-AG064%2Fag--claw-181717?logo=github&style=flat-square)](https://github.com/AG064/ag-claw)
 
 </p>
