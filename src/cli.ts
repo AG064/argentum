@@ -139,6 +139,13 @@ function cmdHelp(): void {
   print('    telegram config       Show Telegram config template');
   print('    connect               Setup integrations');
   print('    plugins               List all plugins');
+  print('    security status      Show security overview');
+  print('    security policies     Manage security policies');
+  print('    security approvals    Review pending approvals');
+  print('    security audit        View audit log');
+  print('    security credentials  Manage credentials');
+  print('    security sandbox      Show sandbox config');
+  print('    security blueprint    Blueprint management');
   print('    version               Show version');
   print('    help                  Show this help');
   print('');
@@ -2434,6 +2441,434 @@ async function cmdSkill(): Promise<void> {
   }
 }
 
+// ─── Security Commands ─────────────────────────────────────────────────────────
+
+async function cmdSecurity(): Promise<void> {
+  const subcommand = args[1] || 'status';
+  const workDir = getWorkDir();
+  const dataDir = path.join(workDir, 'data');
+  const securityDbPath = path.join(dataDir, 'security.db');
+
+  // Lazy-load security modules
+  const getSecurityModules = () => {
+    try {
+      const policyEnginePath = path.join(__dirname, 'src', 'security', 'policy-engine', 'index.js');
+      const credentialManagerPath = path.join(__dirname, 'src', 'security', 'credential-manager', 'index.js');
+      const sandboxPath = path.join(__dirname, 'src', 'security', 'sandbox', 'index.js');
+      const approvalUIPath = path.join(__dirname, 'src', 'security', 'approval-ui', 'index.js');
+      const blueprintPath = path.join(__dirname, 'src', 'security', 'blueprint', 'index.js');
+
+      const { getPolicyEngine } = require(policyEnginePath);
+      const { getCredentialManager } = require(credentialManagerPath);
+      const { getSandboxExecutor } = require(sandboxPath);
+      const { getApprovalUI } = require(approvalUIPath);
+      const { getBlueprintLoader, BlueprintLoader } = require(blueprintPath);
+
+      return {
+        getPolicyEngine,
+        getCredentialManager,
+        getSandboxExecutor,
+        getApprovalUI,
+        getBlueprintLoader,
+        BlueprintLoader,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const modules = getSecurityModules();
+
+  switch (subcommand) {
+    case 'status':
+    case 'stats': {
+      banner();
+      print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
+      print('  \x1b[1m\x1b[36m║         \x1b[33m🔒 Security Status\x1b[36m             ║\x1b[0m');
+      print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
+      print('');
+
+      if (!modules) {
+        warn('Security modules not compiled. Run: npm run build');
+        return;
+      }
+
+      const policyEngine = modules.getPolicyEngine(securityDbPath);
+      const stats = policyEngine.getStats();
+
+      print('  \x1b[1mPolicies\x1b[0m');
+      print(`    Active:  \x1b[32m${stats.policiesActive}\x1b[0m / ${stats.policiesTotal}`);
+      print(`    Pending Approvals: \x1b[33m${stats.approvalsPending}\x1b[0m`);
+      print('');
+
+      print('  \x1b[1mCredentials\x1b[0m');
+      print(`    Total:           ${stats.credentialsTotal}`);
+      print(`    Expiring Soon:   \x1b[33m${stats.credentialsExpiringSoon}\x1b[0m`);
+      print('');
+
+      print('  \x1b[1mSandbox\x1b[0m');
+      print(`    Executions:  ${stats.sandboxExecutionsTotal}`);
+      print(`    Blocked:     \x1b[31m${stats.sandboxBlockedTotal}\x1b[0m`);
+      print('');
+
+      print('  \x1b[1mAudit Log\x1b[0m');
+      print(`    Entries:     ${stats.auditEntriesTotal}`);
+      print(`    Threats:     \x1b[31m${stats.threatsDetected}\x1b[0m (24h)`);
+      print('');
+
+      const uptime = formatUptime(stats.uptime);
+      print(`  \x1b[1mUptime:\x1b[0m ${uptime}`);
+      print('');
+      break;
+    }
+
+    case 'policies':
+    case 'policy': {
+      const policySubcommand = args[2] || 'list';
+      banner();
+
+      if (!modules) {
+        warn('Security modules not compiled.'); return;
+      }
+
+      const policyEngine = modules.getPolicyEngine(securityDbPath);
+
+      if (policySubcommand === 'list' || policySubcommand === 'ls') {
+        const policies = policyEngine.getPolicies();
+        info(`Security Policies (${policies.length}):`);
+        print('');
+        if (policies.length === 0) {
+          info('No policies defined.');
+        } else {
+          print(`  \x1b[90m  ${'Name'.padEnd(25)} ${'Resource'.padEnd(25)} ${'Action'.padEnd(8)} ${'Effect'.padEnd(8)} ${'Priority'} ${'Enabled'}\x1b[0m`);
+          print('  \x1b[90m  ' + '─'.repeat(80));
+          for (const p of policies) {
+            const effectColor = p.effect === 'allow' ? '\x1b[32m' : p.effect === 'deny' ? '\x1b[31m' : '\x1b[33m';
+            const enabledIcon = p.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[31m○\x1b[0m';
+            print(`    ${p.name.padEnd(25)} ${p.resource.slice(0, 25).padEnd(25)} ${p.action.padEnd(8)} ${effectColor}${p.effect.padEnd(8)}\x1b[0m ${String(p.priority).padEnd(6)} ${enabledIcon}`);
+          }
+          print('');
+        }
+        break;
+      }
+
+      if (policySubcommand === 'add') {
+        const getArg = (flag: string) => {
+          const idx = args.indexOf(`--${flag}`);
+          return idx !== -1 ? args[idx + 1] : undefined;
+        };
+
+        const name = getArg('name');
+        const effect = getArg('effect') as 'allow' | 'deny' | 'approve';
+        const resource = getArg('resource');
+        const action = getArg('action') || '*';
+        const priority = parseInt(getArg('priority') || '0', 10);
+        const requiresApproval = args.includes('--requires-approval');
+
+        if (!name || !effect || !resource) {
+          error('Usage: agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern> [--action <action>] [--priority <n>] [--requires-approval]');
+          return;
+        }
+
+        const policy = policyEngine.addPolicy({
+          name,
+          effect,
+          resource,
+          action,
+          priority,
+          enabled: true,
+          requiresApproval,
+          approvalRisk: requiresApproval ? 'medium' : undefined,
+        });
+
+        success(`Policy '${name}' created (ID: ${policy.id.slice(0, 8)}...)`);
+        print('');
+        break;
+      }
+
+      if (policySubcommand === 'remove' || policySubcommand === 'rm') {
+        const policyId = args[3];
+        if (!policyId) { error('Usage: agclaw security policies remove <policy-id>'); return; }
+        const ok = policyEngine.removePolicy(policyId);
+        if (ok) success('Policy removed'); else error('Policy not found');
+        break;
+      }
+
+      if (policySubcommand === 'enable') {
+        const policyId = args[3];
+        if (!policyId) { error('Usage: agclaw security policies enable <policy-id>'); return; }
+        const ok = policyEngine.setPolicyEnabled(policyId, true);
+        if (ok) success('Policy enabled'); else error('Policy not found');
+        break;
+      }
+
+      if (policySubcommand === 'disable') {
+        const policyId = args[3];
+        if (!policyId) { error('Usage: agclaw security policies disable <policy-id>'); return; }
+        const ok = policyEngine.setPolicyEnabled(policyId, false);
+        if (ok) success('Policy disabled'); else error('Policy not found');
+        break;
+      }
+
+      info('Policy commands:');
+      print('  agclaw security policies list');
+      print('  agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern>');
+      print('  agclaw security policies remove <id>');
+      print('  agclaw security policies enable <id>');
+      print('  agclaw security policies disable <id>');
+      break;
+    }
+
+    case 'approvals':
+    case 'approval': {
+      const approvalSubcommand = args[2] || 'list';
+      banner();
+
+      if (!modules) {
+        warn('Security modules not compiled.'); return;
+      }
+
+      const approvalUI = modules.getApprovalUI();
+      const policyEngine = modules.getPolicyEngine(securityDbPath);
+
+      if (approvalSubcommand === 'list' || approvalSubcommand === 'ls') {
+        const pending = policyEngine.getPendingApprovals();
+        print(approvalUI.renderPendingList(pending));
+        break;
+      }
+
+      if (approvalSubcommand === 'show') {
+        const approvalId = args[3];
+        if (!approvalId) { error('Usage: agclaw security approval show <id>'); return; }
+        const approval = policyEngine.getApproval(approvalId);
+        if (!approval) { error('Approval not found'); return; }
+        print(approvalUI.renderDetail(approval));
+        break;
+      }
+
+      if (approvalSubcommand === 'approve') {
+        const approvalId = args[3];
+        if (!approvalId) { error('Usage: agclaw security approve <id>'); return; }
+        const userId = 'cli-user';
+        const result = approvalUI.handleResponse(approvalId, 'approve', userId);
+        if (result.success) success('Request approved'); else error(`Failed: ${result.error}`);
+        break;
+      }
+
+      if (approvalSubcommand === 'deny') {
+        const approvalId = args[3];
+        if (!approvalId) { error('Usage: agclaw security deny <id>'); return; }
+        const userId = 'cli-user';
+        const result = approvalUI.handleResponse(approvalId, 'deny', userId);
+        if (result.success) success('Request denied'); else error(`Failed: ${result.error}`);
+        break;
+      }
+
+      info('Approval commands:');
+      print('  agclaw security approvals list');
+      print('  agclaw security approval show <id>');
+      print('  agclaw security approve <id>');
+      print('  agclaw security deny <id>');
+      break;
+    }
+
+    case 'audit':
+    case 'log': {
+      banner();
+      if (!modules) { warn('Security modules not compiled.'); return; }
+
+      const policyEngine = modules.getPolicyEngine(securityDbPath);
+
+      const sinceIdx = args.indexOf('--since');
+      const untilIdx = args.indexOf('--until');
+      const actorIdx = args.indexOf('--actor');
+      const actionIdx = args.indexOf('--action');
+      const limitIdx = args.indexOf('--limit');
+
+      const since = sinceIdx !== -1 && args[sinceIdx + 1] ? new Date(args[sinceIdx + 1]!).getTime() : undefined;
+      const until = untilIdx !== -1 && args[untilIdx + 1] ? new Date(args[untilIdx + 1]!).getTime() : undefined;
+      const actor = actorIdx !== -1 ? args[actorIdx + 1] : undefined;
+      const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
+      const limit = limitIdx !== -1 && args[limitIdx + 1] ? parseInt(args[limitIdx + 1]!, 10) : 50;
+
+      const entries = policyEngine.queryAudit({ since, until, actor, action, limit });
+
+      info(`Audit Log (${entries.length} entries):`);
+      print('');
+
+      if (entries.length === 0) {
+        info('No audit entries found.');
+      } else {
+        print(`  \x1b[90m  ${'Time'.padEnd(20)} ${'Severity'.padEnd(8)} ${'Action'.padEnd(25)} ${'Actor'.padEnd(12)} Decision\x1b[0m`);
+        print('  \x1b[90m  ' + '─'.repeat(85));
+        for (const entry of entries) {
+          const time = new Date(entry.timestamp).toISOString().slice(0, 19).replace('T', ' ');
+          const sevColor = entry.severity === 'error' || entry.severity === 'critical' ? '\x1b[31m' :
+                           entry.severity === 'warning' ? '\x1b[33m' : '\x1b[90m';
+          const decisionStr = entry.decision ? entry.decision.padEnd(8) : '         ';
+          print(`    ${time} ${sevColor}${entry.severity.padEnd(8)}\x1b[0m ${entry.action.padEnd(25)} ${(entry.actor || '-').padEnd(12)} ${decisionStr}`);
+        }
+      }
+      print('');
+      break;
+    }
+
+    case 'credentials':
+    case 'creds': {
+      banner();
+      if (!modules) { warn('Security modules not compiled.'); return; }
+
+      const credManager = modules.getCredentialManager(securityDbPath);
+
+      if (args[2] === 'list') {
+        const creds = credManager.listCredentials();
+        info(`Credentials (${creds.length}):`);
+        print('');
+        if (creds.length === 0) {
+          info('No credentials stored.');
+        } else {
+          print(`  \x1b[90m  ${'Name'.padEnd(20)} ${'Provider'.padEnd(15)} ${'Type'.padEnd(10)} Expires\x1b[0m`);
+          print('  \x1b[90m  ' + '─'.repeat(65));
+          for (const c of creds) {
+            const expiresIn = formatExpiry(c.expiresAt);
+            const expiringSoon = c.expiresAt - Date.now() < 300000;
+            const expColor = expiringSoon ? '\x1b[33m' : '\x1b[90m';
+            print(`    ${c.name.padEnd(20)} ${c.provider.padEnd(15)} ${c.type.padEnd(10)} ${expColor}${expiresIn}\x1b[0m`);
+          }
+        }
+        print('');
+        break;
+      }
+
+      if (args[2] === 'rotate') {
+        success('Credential rotation triggered (demo)');
+        break;
+      }
+
+      info('Credential commands:');
+      print('  agclaw security credentials list');
+      print('  agclaw security credentials rotate [id]');
+      break;
+    }
+
+    case 'sandbox': {
+      banner();
+      if (!modules) { warn('Security modules not compiled.'); return; }
+
+      const sandbox = modules.getSandboxExecutor();
+      const config = sandbox.getConfig();
+
+      info('Sandbox Configuration:');
+      print('');
+      print(`  Enabled:          ${config.enabled ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
+      print(`  Network Isolation: ${config.networkIsolation ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
+      print(`  Allow Exec:       ${config.allowExec ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
+      print(`  Max Memory:       ${config.maxMemoryMb ?? 512} MB`);
+      print(`  Max CPU:          ${config.maxCpuPercent ?? 50}%`);
+      print(`  Max Exec Time:    ${config.maxExecutionTimeMs ?? 30000} ms`);
+      print('');
+      print(`  \x1b[1mAllowed Paths:\x1b[0m`);
+      for (const p of config.allowedPaths) print(`    • ${p}`);
+      print('');
+      print(`  \x1b[1mDenied Paths:\x1b[0m`);
+      for (const p of config.deniedPaths) print(`    • ${p}`);
+      print('');
+      print(`  \x1b[1mAllowed Languages:\x1b[0m ${config.allowedLanguages.join(', ')}`);
+      print('');
+
+      const stats = sandbox.getStats();
+      print(`  Executions: ${stats.executions} | Blocked: \x1b[31m${stats.blocked}\x1b[0m`);
+      print('');
+      break;
+    }
+
+    case 'blueprint': {
+      banner();
+
+      if (args[2] === 'init') {
+        const blueprintPath = path.join(homeDir(), '.ag-claw', 'blueprint.yaml');
+        if (fs.existsSync(blueprintPath)) {
+          warn(`Blueprint already exists at: ${blueprintPath}`);
+          return;
+        }
+
+        const dir = path.dirname(blueprintPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        if (modules?.BlueprintLoader) {
+          const defaultBlueprint = modules.BlueprintLoader.generateDefaultBlueprint();
+          fs.writeFileSync(blueprintPath, defaultBlueprint, 'utf-8');
+          success(`Default blueprint created: ${blueprintPath}`);
+        } else {
+          warn('Security modules not compiled. Print default blueprint:');
+          print('');
+        }
+        break;
+      }
+
+      if (args[2] === 'show') {
+        const blueprintPath = path.join(homeDir(), '.ag-claw', 'blueprint.yaml');
+        if (fs.existsSync(blueprintPath)) {
+          const content = fs.readFileSync(blueprintPath, 'utf-8');
+          print(content);
+        } else {
+          info('No blueprint found. Create with: agclaw security blueprint init');
+        }
+        break;
+      }
+
+      info('Blueprint commands:');
+      print('  agclaw security blueprint init   Create default blueprint');
+      print('  agclaw security blueprint show  Show current blueprint');
+      break;
+    }
+
+    case 'help':
+    default: {
+      banner();
+      info('AG-Claw Security Commands:');
+      print('');
+      print('  \x1b[1magclaw security status\x1b[0m                Show security overview');
+      print('  \x1b[1magclaw security policies\x1b[0m [list|add|remove|enable|disable]');
+      print('  \x1b[1magclaw security approvals\x1b[0m [list|show|approve|deny]');
+      print('  \x1b[1magclaw security audit\x1b[0m [--since <date>] [--actor <id>] [--limit <n>]');
+      print('  \x1b[1magclaw security credentials\x1b[0m [list|rotate]');
+      print('  \x1b[1magclaw security sandbox\x1b[0m                   Show sandbox config');
+      print('  \x1b[1magclaw security blueprint\x1b[0m [init|show]');
+      print('');
+      print('  \x1b[1mExamples:\x1b[0m');
+      print('    agclaw security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read');
+      print('    agclaw security approve abc-123         Approve request');
+      print('    agclaw security deny def-456          Deny request');
+      print('');
+      break;
+    }
+  }
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function formatExpiry(timestamp: number): string {
+  const diff = timestamp - Date.now();
+  if (diff <= 0) return 'expired';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function homeDir(): string {
+  return process.env.HOME || process.env.USERPROFILE || '/home/ag064';
+}
+
 async function cmdTelegram(): Promise<void> {
   const subcommand = args[1] || 'status';
   banner();
@@ -2532,45 +2967,6 @@ async function cmdTelegram(): Promise<void> {
   }
 }
 
-// ─── Security Management ─────────────────────────────────────────────────────
-
-async function cmdSecurity(): Promise<void> {
-  banner();
-  print('Security Management');
-  print('===================\n');
-
-  const subcommand = args[2];
-
-  switch (subcommand) {
-    case 'status':
-      print('Security Status: Active');
-      print('Policy Engine: Default-deny enabled');
-      print('Sandbox: Enabled');
-      print('Credential Manager: Short-lived keys enabled');
-      break;
-
-    case 'audit':
-      print('Recent security decisions logged.');
-      print('Run "agclaw security audit --since 2026-01-01" for full report.');
-      break;
-
-    case 'policies':
-      print('Available policies:');
-      print('  - allow-read-home: Allow reading from ~/.ag-claw/');
-      print('  - deny-system: Deny access to /etc/');
-      print('  - default-deny: Block all unspecified actions');
-      break;
-
-    default:
-      print('Usage: agclaw security <status|audit|policies|approve|deny>');
-      print('');
-      print('  status    Show current security status');
-      print('  audit     Show recent security decisions');
-      print('  policies  List available policies');
-      print('  approve   Approve a pending request');
-      print('  deny      Deny a pending request');
-  }
-}
 
 // ─── Self-Improving Loop ──────────────────────────────────────────────────────
 
