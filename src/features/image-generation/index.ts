@@ -167,7 +167,7 @@ class ImageGenerationFeature implements FeatureModule {
       prompt,
       size = this.config.defaultSize,
       style,
-      numImages = 1,
+      _numImages = 1,
       seed,
     } = request as { prompt: string; size?: string; style?: string; numImages?: number; seed?: number };
 
