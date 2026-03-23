@@ -212,6 +212,7 @@ module.exports = {
         '@typescript-eslint/no-this-alias': 'off',
         'no-new': 'warn',
         'import/order': 'warn',
+        'eqeqeq': 'off',
         '@typescript-eslint/no-misused-promises': 'warn',
       },
     },

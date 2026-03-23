@@ -142,7 +142,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     }
 
     const id = `ww-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const flags = caseSensitive ? '' : 'i';
+    const _flags = caseSensitive ? '' : 'i';
     const regex = this.buildRegex(word, sensitivity, caseSensitive);
 
     const wakeWord: WakeWord = {
@@ -292,7 +292,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     // In a true audio-based detector, sensitivity would be a signal threshold.
     // For text-based pattern matching, we could allow partial matches based on sensitivity.
     // Here we just use the full word.
-    const flags = caseSensitive ? '' : 'i';
+    const _flags = caseSensitive ? '' : 'i';
     return new RegExp(escaped, flags);
   }
 

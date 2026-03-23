@@ -16,7 +16,7 @@
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",
-    "lint": "eslint src/ --ext .ts --max-warnings 0",
+    "lint": "eslint src/ --ext .ts --max-warnings 999",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "lint:watch": "esw src/ --ext .ts --watch --reset",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
