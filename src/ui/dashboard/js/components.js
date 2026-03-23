@@ -355,13 +355,19 @@ const Components = {
    * Create code block
    */
   codeBlock(code, language = '') {
+    // Escape HTML entities in code content to prevent XSS
+    const escaped = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
     return `
       <div class="code-block">
         <div class="code-header">
           <span class="code-title">${language || 'code'}</span>
           <button class="code-copy" onclick="navigator.clipboard.writeText(\`${code.replace(/`/g, '\\`')}\`)">Copy</button>
         </div>
-        <pre class="code-content">${code}</pre>
+        <pre class="code-content">${escaped}</pre>
       </div>
     `;
   },
