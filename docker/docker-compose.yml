@@ -14,7 +14,7 @@ services:
     environment:
       - NODE_ENV=production
       - AGCLAW_WORKDIR=/app/data
-      - NVIDIA_API_KEY=your_nvidia_api_key_here
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-your_nvidia_api_key_here}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
