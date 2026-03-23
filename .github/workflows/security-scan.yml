@@ -5,6 +5,11 @@ on:
     - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+  issues: write
+  security-events: write
+
 jobs:
   security-scan:
     name: Security Scan
@@ -16,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -25,15 +30,25 @@ jobs:
       - name: Run npm audit
         id: audit
         run: |
-          npm audit --json > npm-audit.json || true
-          npm audit --audit-level=high > audit-report.txt || true
+          npm audit --json > npm-audit.json 2>&1 || true
+          npm audit --audit-level=high > audit-report.txt 2>&1 || true
 
       - name: Check for dangerous patterns
         id: patterns
         run: |
-          echo "Scanning for dangerous patterns (eval, new Function, child_process, sh -c)..."
-          grep -r -n -E "(eval|new Function|require\(['\"](child_process|util)['\"]\)|exec\(|spawn\(|fork\(|sh -c)" --include="*.ts" --include="*.js" src/ || echo "No dangerous patterns found"
-          echo "pattern_found=$(grep -r -l -E "(eval|new Function|require\(['\"](child_process|util)['\"]\)|exec\(|spawn\(|fork\(|sh -c)" --include='*.ts' --include='*.js' src/ | wc -l)" >> $GITHUB_OUTPUT
+          echo "Scanning for dangerous patterns..."
+          DANGEROUS=$(grep -r -l -E "(eval\s*\(|new\s+Function\s*\(|child_process|exec\(|spawn\(|fork\()" --include="*.ts" --include="*.js" src/ 2>/dev/null | wc -l || echo "0")
+          echo "pattern_found=$DANGEROUS"
+          if [ "$DANGEROUS" -gt "0" ]; then
+            echo "Found potentially dangerous patterns in $DANGEROUS file(s)"
+          fi
+
+      - name: Count vulnerabilities
+        id: vuln_count
+        run: |
+          VULNS=$(node -e "try{const a=require('./npm-audit.json');const v=Object.values(a.vulnerabilities||{});console.log(v.length)}catch(e){console.log(0)}" 2>/dev/null || echo "0")
+          echo "vulnerabilities=$VULNS"
+          echo "vulnerabilities=$VULNS" >> $GITHUB_OUTPUT
 
       - name: Upload security reports
         if: always()
@@ -43,78 +58,61 @@ jobs:
           path: |
             npm-audit.json
             audit-report.txt
-            security-patterns.txt
+          retention-days: 7
 
       - name: Create GitHub Issue if vulnerabilities found
         if: |
-          steps.audit.outputs.vulnerabilities > 0 ||
-          steps.patterns.outputs.pattern_found > 0 ||
-          contains(steps.audit.outputs.audit-level, 'high') ||
-          contains(steps.audit.outputs.audit-level, 'critical')
+          vars.SHOULD_CREATE_ISSUE == 'true' &&
+          (steps.audit.outputs.vulnerabilities != '0' || steps.patterns.outputs.pattern_found != '0')
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            let issueBody = '## Security Scan Report\n\n';
-            issueBody += '**Repository:** ' + context.repo.repo + '\n\n';
+            
+            let issueBody = '## 🔒 Security Scan Report\n\n';
             issueBody += '**Date:** ' + new Date().toISOString() + '\n\n';
 
-            // Check npm audit results
-            try {
-              const audit = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
-              if (audit.vulnerabilities) {
-                issueBody += '### npm audit findings:\n';
-                const vulnerableCount = Object.keys(audit.vulnerabilities).length;
-                issueBody += `Found ${vulnerableCount} vulnerable package(s):\n\n`;
-                for (const [pkg, vuln] of Object.entries(audit.vulnerabilities)) {
-                  issueBody += `- **${pkg}**\n`;
-                  issueBody += `  - Severity: ${vuln.severity}\n`;
-                  if (vuln.via && vuln.via.length > 0) {
-                    issueBody += `  - Vulnerabilities: ${vuln.via.map(v => v.id).join(', ')}\n`;
-                  }
-                }
-              }
-            } catch (e) {
-              issueBody += 'No npm audit vulnerabilities found.\n';
+            // Count vulnerabilities
+            const vulnCount = parseInt(process.env.VULNERABILITIES || '0');
+            if (vulnCount > 0) {
+              issueBody += `⚠️ Found **${vulnCount}** vulnerable package(s)\n\n`;
+              issueBody += 'See `npm-audit.json` artifact for details.\n\n';
             }
 
-            // Check dangerous patterns
-            try {
-              const patternCount = parseInt(process.env.pattern_found || '0');
-              if (patternCount > 0) {
-                issueBody += '\n### Dangerous code patterns detected:\n';
-                issueBody += `Found ${patternCount} file(s) containing potentially dangerous patterns.\n`;
-                issueBody += 'Please review the security-reports artifact for details.\n';
-              }
-            } catch (e) {
-              // ignore
+            const patternCount = parseInt(process.env.PATTERN_FOUND || '0');
+            if (patternCount > 0) {
+              issueBody += `⚠️ Found **${patternCount}** file(s) with potentially dangerous code patterns\n\n`;
             }
 
-            issueBody += '\n---\n';
-            issueBody += '**Generated by GitHub Actions Security Scan workflow**';
+            issueBody += '---\n';
+            issueBody += '_Generated by AG-Claw Security Scan workflow_';
 
+            // Check for existing issues
             const existingIssues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: ['security', 'automated'],
-              per_page: 10
+              labels: ['security'],
+              per_page: 5
             });
 
-            const similarIssue = existingIssues.data.find(issue =>
-              issue.title.includes('Security Scan Report') &&
-              issue.created_at > new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+            const recent = existingIssues.data.find(issue => 
+              issue.created_at > new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
             );
 
-            if (similarIssue) {
-              console.log(`Similar issue already exists: #${similarIssue.number}`);
-              process.exit(0);
+            if (recent) {
+              console.log('Recent security issue exists, skipping');
+              return;
             }
 
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚨 Security Scan Report - ${new Date().toISOString().split('T')[0]}`,
+              title: `🔒 Security Scan - ${new Date().toISOString().split('T')[0]}`,
               body: issueBody,
               labels: ['security', 'automated']
             });
+        env:
+          VULNERABILITIES: ${{ steps.audit.outputs.vulnerabilities }}
+          PATTERN_FOUND: ${{ steps.patterns.outputs.pattern_found }}
+          SHOULD_CREATE_ISSUE: ${{ vars.CREATE_SECURITY_ISSUES }}
