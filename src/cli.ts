@@ -2452,11 +2452,17 @@ async function cmdSecurity(): Promise<void> {
   // Lazy-load security modules
   const getSecurityModules = () => {
     try {
-      const policyEnginePath = path.join(__dirname, 'src', 'security', 'policy-engine', 'index.js');
-      const credentialManagerPath = path.join(__dirname, 'src', 'security', 'credential-manager', 'index.js');
-      const sandboxPath = path.join(__dirname, 'src', 'security', 'sandbox', 'index.js');
-      const approvalUIPath = path.join(__dirname, 'src', 'security', 'approval-ui', 'index.js');
-      const blueprintPath = path.join(__dirname, 'src', 'security', 'blueprint', 'index.js');
+      // Handle both dist/src/security/ (rootDir build) and dist/security/ (include build)
+      const baseDir = __dirname.includes(path.join('dist', 'src')) 
+        ? path.join(__dirname, '..') 
+        : __dirname;
+      const securityBase = path.join(baseDir, 'src', 'security');
+      
+      const policyEnginePath = path.join(securityBase, 'policy-engine', 'index.js');
+      const credentialManagerPath = path.join(securityBase, 'credential-manager', 'index.js');
+      const sandboxPath = path.join(securityBase, 'sandbox', 'index.js');
+      const approvalUIPath = path.join(securityBase, 'approval-ui', 'index.js');
+      const blueprintPath = path.join(securityBase, 'blueprint', 'index.js');
 
       const { getPolicyEngine } = require(policyEnginePath);
       const { getCredentialManager } = require(credentialManagerPath);
@@ -2472,7 +2478,7 @@ async function cmdSecurity(): Promise<void> {
         getBlueprintLoader,
         BlueprintLoader,
       };
-    } catch {
+    } catch (err) {
       return null;
     }
   };
