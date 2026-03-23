@@ -183,7 +183,7 @@ class AutoCaptureFeature implements FeatureModule {
     if (typeof data === 'string') return data;
     if (typeof data === 'object' && data !== null) {
       const obj = data as Record<string, unknown>;
-      return (obj.text ?? obj.content ?? obj.message ?? null) as string | null;
+      return (obj['text'] ?? obj['content'] ?? obj['message'] ?? null) as string | null;
     }
     return null;
   }

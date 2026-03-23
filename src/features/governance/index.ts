@@ -210,7 +210,7 @@ class GovernanceFeature implements FeatureModule {
     }
 
     const payload = this.parseJson(ticket.action_payload);
-    const rollbackData = payload._rollback as Record<string, unknown> | undefined;
+    const rollbackData = payload['_rollback'] as Record<string, unknown> | undefined;
 
     if (rollbackData) {
       this.ctx.logger.info('Rollback executed', { configId, rollbackData });

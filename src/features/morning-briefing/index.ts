@@ -125,7 +125,7 @@ class MorningBriefingFeature implements FeatureModule {
 
   /** Generate a morning briefing */
   async generateBriefing(): Promise<MorningBriefing> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0] ?? new Date().toDateString();
     const sections: BriefingSection[] = [];
 
     if (this.config.includeWeather) {

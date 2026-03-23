@@ -60,9 +60,9 @@ class MemoryCompressionFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      archiveAfterDays: (config.archiveAfterDays as number) ?? this.config.archiveAfterDays,
-      similarityThreshold: (config.similarityThreshold as number) ?? this.config.similarityThreshold,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      archiveAfterDays: (config['archiveAfterDays'] as number) ?? this.config['archiveAfterDays'],
+      similarityThreshold: (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
     };
 
     this.initDatabase();
@@ -138,7 +138,7 @@ class MemoryCompressionFeature implements FeatureModule {
 
     // For each duplicate group, keep the most recent, mark others for deletion
     const toDelete = new Set<number>();
-    for (const [value, group] of valueGroups.entries()) {
+    for (const [__value, group] of valueGroups.entries()) {
       if (group.length > 1) {
         // Sort by updated_at descending, keep first
         group.sort((a, b) => b.updated_at - a.updated_at);

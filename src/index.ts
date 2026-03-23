@@ -77,7 +77,7 @@ export class Agent {
           type: 'object',
           properties: t.parameters,
           required: Object.keys(t.parameters).filter(k =>
-            (t.parameters[k] as Record<string, unknown>)?.required === true
+            (t.parameters[k] as Record<string, unknown>)['required'] === true
           ),
         },
       },
@@ -201,7 +201,7 @@ function createBuiltinTools(): Tool[] {
         query: { type: 'string', description: 'The search query', required: true },
       },
       execute: async (params) => {
-        const query = params.query as string;
+        const query = params['query'] as string;
         if (!query) return 'Error: query parameter is required';
 
         // Use DuckDuckGo instant answer API as a lightweight search
@@ -210,9 +210,9 @@ function createBuiltinTools(): Tool[] {
             `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
           );
           const data = await response.json() as Record<string, unknown>;
-          const abstract = data.Abstract as string;
-          const heading = data.Heading as string;
-          const related = (data.RelatedTopics as Array<{ Text: string }> ?? []).slice(0, 5).map(t => t.Text).join('\n');
+          const abstract = data['Abstract'] as string;
+          const heading = data['Heading'] as string;
+          const related = (data['RelatedTopics'] as Array<{ Text: string }> ?? []).slice(0, 5).map(t => t.Text).join('\n');
 
           if (abstract) {
             return `Search result for "${query}":\n${heading ? heading + '\n' : ''}${abstract}`;
@@ -242,7 +242,7 @@ function createBuiltinTools(): Tool[] {
       },
       execute: async (params) => {
         const { readFileSync, existsSync } = await import('fs');
-        const filePath = params.path as string;
+        const filePath = params['path'] as string;
 
         if (!filePath) return 'Error: path parameter is required';
 
@@ -272,8 +272,8 @@ function createBuiltinTools(): Tool[] {
       execute: async (params) => {
         const { writeFileSync, mkdirSync } = await import('fs');
         const { dirname } = await import('path');
-        const filePath = params.path as string;
-        const content = params.content as string;
+        const filePath = params['path'] as string;
+        const content = params['content'] as string;
 
         if (!filePath || content === undefined) return 'Error: path and content parameters are required';
 
@@ -294,7 +294,7 @@ function createBuiltinTools(): Tool[] {
       },
       execute: async (params) => {
         const { execSync } = await import('child_process');
-        const cmd = params.command as string;
+        const cmd = params['command'] as string;
 
         if (!cmd) return 'Error: command parameter is required';
 
@@ -378,7 +378,7 @@ class AGClaw {
 
     // Initialize LLM provider
     try {
-      const llmConfig = (this.config as Record<string, unknown>).llm as any;
+      const llmConfig = (this.config as Record<string, unknown>)['llm'] as any;
       this.llmProvider = createLLMProvider({
         llm: llmConfig,
       });
@@ -442,11 +442,11 @@ class AGClaw {
     const channels = this.config.channels as Record<string, Record<string, unknown>> | undefined;
 
     // Start Telegram if configured
-    if (channels?.telegram?.enabled !== false) {
-      const token = (channels?.telegram?.token as string) ?? process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
+    if (channels?.['telegram']?.['enabled'] !== false) {
+      const token = (channels?.['telegram']?.['token'] as string) ?? process.env['AGCLAW_TELEGRAM_TOKEN'] ?? process.env['TELEGRAM_BOT_TOKEN'];
       if (token) {
         try {
-          await this.startTelegram(token, channels?.telegram);
+          await this.startTelegram(token, channels?.['telegram']);
         } catch (err) {
           this.logger.error('Failed to start Telegram channel', {
             error: err instanceof Error ? err.message : String(err),
@@ -458,7 +458,7 @@ class AGClaw {
     }
 
     // Webchat could be started here too
-    if (channels?.webchat?.enabled) {
+    if (channels?.['webchat']?.['enabled']) {
       this.logger.info('Webchat channel enabled (not yet implemented in entry point)');
     }
   }
@@ -469,8 +469,8 @@ class AGClaw {
       const { Bot } = await import('grammy');
       const bot = new Bot(token);
 
-      const allowedUsers = (channelConfig?.allowedUsers as number[] | undefined) ?? [];
-      const allowedChats = (channelConfig?.allowedChats as number[] | undefined) ?? [];
+      const allowedUsers = (channelConfig?.['allowedUsers'] as number[] | undefined) ?? [];
+      const allowedChats = (channelConfig?.['allowedChats'] as number[] | undefined) ?? [];
 
       // Check access
       const isAllowed = (ctx: { from?: { id: number }; chat?: { id: number } }): boolean => {
@@ -554,7 +554,7 @@ class AGClaw {
           const audioBuffer = Buffer.from(await response.arrayBuffer());
 
           // Try to transcribe with Whisper if available
-          const openaiKey = process.env.OPENAI_API_KEY;
+          const openaiKey = process.env['OPENAI_API_KEY'];
           if (openaiKey) {
             await ctx.replyWithChatAction('typing');
 
@@ -670,8 +670,8 @@ class AGClaw {
         limit: { type: 'number', description: 'Max results (default 5)' },
       },
       execute: async (params) => {
-        const query = params.query as string;
-        const limit = (params.limit as number) ?? 5;
+        const query = params['query'] as string;
+        const limit = (params['limit'] as number) ?? 5;
         const results = await self.semanticMemory.search(query, limit);
         if (results.length === 0) return 'No memories found matching your query.';
         return results.map(r =>
@@ -688,8 +688,8 @@ class AGClaw {
         content: { type: 'string', description: 'Content to remember', required: true },
       },
       execute: async (params) => {
-        const type = params.type as string;
-        const content = params.content as string;
+        const type = params['type'] as string;
+        const content = params['content'] as string;
         const id = await self.semanticMemory.store(type, content, { source: 'agent_tool' });
         return `Memory stored: ${id} (${type})`;
       },
@@ -703,8 +703,8 @@ class AGClaw {
         state: { type: 'string', description: 'JSON state to save', required: true },
       },
       execute: async (params) => {
-        const taskId = params.taskId as string;
-        const state = JSON.parse(params.state as string);
+        const taskId = params['taskId'] as string;
+        const state = JSON.parse(params['state'] as string);
         await self.semanticMemory.checkpoint(taskId, state);
         return `Checkpoint saved for task: ${taskId}`;
       },
@@ -717,7 +717,7 @@ class AGClaw {
         taskId: { type: 'string', description: 'Task identifier to resume', required: true },
       },
       execute: async (params) => {
-        const taskId = params.taskId as string;
+        const taskId = params['taskId'] as string;
         const state = await self.semanticMemory.resume(taskId);
         if (!state) return `No checkpoint found for task: ${taskId}`;
         return `Resumed task ${taskId}:\n${JSON.stringify(state, null, 2)}`;

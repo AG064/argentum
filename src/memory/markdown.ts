@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'fs';
-import { join, resolve, relative } from 'path';
+import { resolve } from 'path';
 
 /** Markdown memory entry */
 export interface MarkdownEntry {

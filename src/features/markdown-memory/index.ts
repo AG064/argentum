@@ -7,7 +7,6 @@
 
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 import { MarkdownMemory } from '../../memory/markdown';
-import { readFileSync, writeFileSync } from 'fs';
 
 /** Feature configuration */
 export interface MarkdownMemoryConfig {
@@ -41,7 +40,7 @@ class MarkdownMemoryFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      basePath: (config.basePath as string) ?? this.config.basePath,
+      basePath: (config['basePath'] as string) ?? this.config['basePath'],
     };
 
     this.storage = new MarkdownMemory(this.config.basePath);

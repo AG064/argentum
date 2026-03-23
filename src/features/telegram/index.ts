@@ -9,7 +9,7 @@
  * - Reaction support
  */
 
-import { Bot, Context, InputFile } from 'grammy';
+import { Bot, InputFile } from 'grammy';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -71,7 +71,7 @@ class TelegramFeature {
     this.config = { ...this.config, ...config } as TelegramConfig;
 
     // Initialize database
-    const dbPath = (config.dbPath as string) || './data/telegram.db';
+    const dbPath = (config['dbPath'] as string) || './data/telegram.db';
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -149,8 +149,8 @@ class TelegramFeature {
 
     // /pair command — request access
     this.bot.command('pair', async (ctx) => {
-      const args = ctx.message?.text?.split(' ').slice(1);
-      if (!args || args.length === 0) {
+      const args = ctx.message?.text?.split(' ').slice(1) ?? [];
+      if (!args[0]) {
         await ctx.reply('Usage: /pair <code>');
         return;
       }

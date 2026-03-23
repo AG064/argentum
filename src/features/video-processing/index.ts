@@ -97,10 +97,10 @@ class VideoProcessingFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      ffmpegPath: (config.ffmpegPath as string) ?? this.config.ffmpegPath,
-      outputDir: (config.outputDir as string) ?? this.config.outputDir,
-      maxConcurrentJobs: (config.maxConcurrentJobs as number) ?? this.config.maxConcurrentJobs,
-      logDir: (config.logDir as string) ?? this.config.logDir,
+      ffmpegPath: (config['ffmpegPath'] as string) ?? this.config['ffmpegPath'],
+      outputDir: (config['outputDir'] as string) ?? this.config['outputDir'],
+      maxConcurrentJobs: (config['maxConcurrentJobs'] as number) ?? this.config['maxConcurrentJobs'],
+      logDir: (config['logDir'] as string) ?? this.config['logDir'],
     };
 
     this.ffmpegPath = this.config.ffmpegPath;
@@ -153,7 +153,7 @@ class VideoProcessingFeature implements FeatureModule {
   private async verifyFfmpeg(): Promise<void> {
     try {
       const { stdout } = await exec(`${this.ffmpegPath} -version`, { timeout: 10000 });
-      const versionLine = stdout.split('\n')[0];
+      const versionLine = stdout?.split('\n')[0] ?? '';
       this.ctx.logger.info('ffmpeg found', { version: versionLine.trim() });
     } catch (err) {
       this.ctx.logger.error('ffmpeg not available', { error: err instanceof Error ? err.message : String(err) });
@@ -221,7 +221,7 @@ class VideoProcessingFeature implements FeatureModule {
       const cmd = `${this.ffmpegPath} ${args.join(' ')} -hide_banner -loglevel error`;
       this.ctx.logger.debug('Running ffmpeg', { cmd });
 
-      const { stdout, stderr } = await exec(cmd, { timeout: 3600000 }); // 1hr timeout
+      await exec(cmd, { timeout: 3600000 }); // 1hr timeout
 
       // Read output directory to find generated frames
       const files = readdirSync(outputDir).filter((f: string) => f.startsWith('frame_') && f.endsWith(`.${format}`)).sort();
@@ -337,7 +337,7 @@ class VideoProcessingFeature implements FeatureModule {
   /**
    * Convert video to another format (stub - future).
    */
-  async convert(videoPath: string, outputFormat: 'mp4' | 'webm' | 'mov'): Promise<string> {
+  async convert(_videoPath: string, _outputFormat: 'mp4' | 'webm' | 'mov'): Promise<string> {
     // Future implementation
     throw new Error('Not implemented yet');
   }
@@ -411,7 +411,7 @@ class VideoProcessingFeature implements FeatureModule {
   /** Get file extension */
   private ext(path: string): string {
     const parts = path.split('.');
-    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+    return parts.length > 1 ? (parts[parts.length - 1] ?? '').toLowerCase() : '';
   }
 }
 

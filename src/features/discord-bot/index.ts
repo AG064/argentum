@@ -86,9 +86,9 @@ class DiscordBotFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      tokenEnvVar: (config.tokenEnvVar as string) ?? this.config.tokenEnvVar,
-      defaultPrefix: (config.defaultPrefix as string) ?? this.config.defaultPrefix,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      tokenEnvVar: (config['tokenEnvVar'] as string) ?? this.config['tokenEnvVar'],
+      defaultPrefix: (config['defaultPrefix'] as string) ?? this.config['defaultPrefix'],
     };
 
     this.commandPrefix = this.config.defaultPrefix;

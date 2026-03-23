@@ -5,7 +5,7 @@ class AuditLogFeature {
   db: Database.Database;
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env['AGCLAW_DB_PATH'] || path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
     this.init();
   }

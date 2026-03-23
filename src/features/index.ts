@@ -8,4 +8,4 @@
  * Feature interfaces are defined in src/types/.
  */
 
-export type { FeatureManifest, FeatureConfig, FeatureHooks, FeatureLogger } from '../types/feature';
+export type { FeatureManifest, FeatureConfig, FeatureHooks } from '../types/feature';

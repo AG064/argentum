@@ -128,10 +128,10 @@ class ContentFilteringFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      defaultReplacement: (config.defaultReplacement as string) ?? this.config.defaultReplacement,
-      autoFilterProfanity: (config.autoFilterProfanity as boolean) ?? this.config.autoFilterProfanity,
-      enabledRuleTypes: (config.enabledRuleTypes as string[]) ?? this.config.enabledRuleTypes,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      defaultReplacement: (config['defaultReplacement'] as string) ?? this.config['defaultReplacement'],
+      autoFilterProfanity: (config['autoFilterProfanity'] as boolean) ?? this.config['autoFilterProfanity'],
+      enabledRuleTypes: (config['enabledRuleTypes'] as string[]) ?? this.config['enabledRuleTypes'],
     };
 
     this.initDatabase();
@@ -331,7 +331,7 @@ class ContentFilteringFeature implements FeatureModule {
   }
 
   /** Get built-in rule by ID */
-  private getBuiltInRule(id: string): typeof this.builtInRules[0] | undefined {
+  private _getBuiltInRule(id: string): typeof this.builtInRules[0] | undefined {
     return this.builtInRules.find(r => r.id === id);
   }
 

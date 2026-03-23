@@ -46,8 +46,8 @@ class SkillsLoaderFeature {
 
   async init(config: Record<string, unknown>, context: any): Promise<void> {
     this.ctx = context;
-    this.skillsDir = (config.skillsDir as string) ||
-      path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
+    this['skillsDir'] = (config['skillsDir'] as string) ||
+      path.join(process.env['HOME'] || '~', '.openclaw', 'workspace', 'skills');
 
     this.scanSkills();
   }

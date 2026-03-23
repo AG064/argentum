@@ -19,7 +19,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'child_process';
-import * as crypto from 'crypto';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 export interface ACPConfig {
@@ -191,8 +190,8 @@ class ACPHarnessFeature implements FeatureModule {
   }
 
   private async executeWithStream(ws: any, req: ACPExecuteRequest): Promise<void> {
-    const start = Date.now();
-    const timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
+    const _start = Date.now();
+    const _timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
 
     // For streaming, we'll just execute and send incremental updates
     // A proper implementation would stream stdout/stderr in real-time

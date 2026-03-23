@@ -64,7 +64,7 @@ class NewsDigestFeature implements FeatureModule {
   };
   private ctx!: FeatureContext;
   private db!: Database.Database;
-  private active = false;
+  private _active = false;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -73,7 +73,7 @@ class NewsDigestFeature implements FeatureModule {
 
   async start(): Promise<void> {
     this.initDb();
-    this.active = true;
+    this._active = true;
     this.ctx.logger.info('News Digest started', {
       cacheMinutes: this.config.cacheMinutes,
       maxArticles: this.config.maxArticlesPerSource,
@@ -81,7 +81,7 @@ class NewsDigestFeature implements FeatureModule {
   }
 
   async stop(): Promise<void> {
-    this.active = false;
+    this._active = false;
     this.db?.close();
     this.ctx.logger.info('News Digest stopped');
   }
@@ -305,12 +305,12 @@ class NewsDigestFeature implements FeatureModule {
 
       const getTag = (tag: string): string | null => {
         const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
-        const m = re.exec(itemXml);
-        return m ? m[1].trim() : null;
+        const m = re.exec(itemXml ?? '');
+        return (m?.[1] ?? null)?.trim() ?? null;
       };
 
-      const linkMatch = /<link[^>]*>([\s\S]*?)<\/link>/i.exec(itemXml);
-      const link = linkMatch ? linkMatch[1].trim() : null;
+      const linkMatch = /<link[^>]*>([\s\S]*?)<\/link>/i.exec(itemXml ?? '');
+      const link = (linkMatch?.[1] ?? null)?.trim() ?? null;
 
       const title = getTag('title');
       const description = getTag('description') ?? undefined;
@@ -345,13 +345,13 @@ class NewsDigestFeature implements FeatureModule {
 
       const getTag = (tag: string): string | null => {
         const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
-        const m = re.exec(entryXml);
-        return m ? m[1].trim() : null;
+        const m = re.exec(entryXml ?? '');
+        return (m?.[1] ?? null)?.trim() ?? null;
       };
 
       // For Atom, <link rel="alternate" href="..."/>
-      const linkMatch = /<link[^>]*rel="alternate"[^>]*href="([^"]+)"[^>]*>/i.exec(entryXml);
-      const link = linkMatch ? linkMatch[1] : null;
+      const linkMatch = /<link[^>]*rel="alternate"[^>]*href="([^"]+)"[^>]*>/i.exec(entryXml ?? '');
+      const link = linkMatch ? (linkMatch[1] ?? null) : null;
 
       const title = getTag('title');
       const summary = getTag('summary') ?? undefined;

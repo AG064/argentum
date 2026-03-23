@@ -127,10 +127,10 @@ class WhatsAppBridgeFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      webhookPath: (config.webhookPath as string) ?? this.config.webhookPath,
-      maxMessageHistory: (config.maxMessageHistory as number) ?? this.config.maxMessageHistory,
-      autoAck: (config.autoAck as boolean) ?? this.config.autoAck,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      webhookPath: (config['webhookPath'] as string) ?? this.config['webhookPath'],
+      maxMessageHistory: (config['maxMessageHistory'] as number) ?? this.config['maxMessageHistory'],
+      autoAck: (config['autoAck'] as boolean) ?? this.config['autoAck'],
     };
 
     this.initDatabase();
@@ -317,7 +317,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
    * @param verifySignature - Optional signature verification function (returns boolean)
    * @returns true if webhook processed successfully
    */
-  async webhook(payload: WebhookPayload, verifySignature?: (sig: string, body: string) => boolean): Promise<boolean> {
+  async webhook(payload: WebhookPayload, _verifySignature?: (sig: string, body: string) => boolean): Promise<boolean> {
     // In real implementation, verify X-Hub-Signature-256 header against webhookSecret
 
     try {

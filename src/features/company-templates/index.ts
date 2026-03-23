@@ -181,10 +181,10 @@ class CompanyTemplatesFeature implements FeatureModule {
       exportedAt: new Date().toISOString(),
       organization: {
         name,
-        timezone: ((config as Record<string, unknown>).timezone as string) ?? 'UTC',
-        locale: ((config as Record<string, unknown>).locale as string) ?? 'en',
+        timezone: ((config as Record<string, unknown>)['timezone'] as string) ?? 'UTC',
+        locale: ((config as Record<string, unknown>)['locale'] as string) ?? 'en',
         settings: scrubSecrets(
-          ((config as Record<string, unknown>).organization as Record<string, unknown>) ?? {}
+          ((config as Record<string, unknown>)['organization'] as Record<string, unknown>) ?? {}
         ) as Record<string, unknown>,
       },
       agents: this.extractAgents(config),
@@ -333,27 +333,27 @@ class CompanyTemplatesFeature implements FeatureModule {
   }
 
   private extractAgents(config: Record<string, unknown>): AgentConfig[] {
-    const agents = (config as Record<string, unknown>).agents as Record<string, unknown>[] | undefined;
+    const agents = (config as Record<string, unknown>)['agents'] as Record<string, unknown>[] | undefined;
     if (!agents) return [];
 
     return agents.map(a => ({
-      name: (a.name as string) ?? 'unnamed',
-      role: (a.role as string) ?? 'assistant',
-      model: (a.model as string) ?? 'default',
+      name: (a['name'] as string) ?? 'unnamed',
+      role: (a['role'] as string) ?? 'assistant',
+      model: (a['model'] as string) ?? 'default',
       systemPrompt: '***REDACTED***',
-      tools: (a.tools as string[]) ?? [],
-      enabled: (a.enabled as boolean) ?? true,
+      tools: (a['tools'] as string[]) ?? [],
+      enabled: (a['enabled'] as boolean) ?? true,
     }));
   }
 
   private extractSkills(config: Record<string, unknown>): SkillConfig[] {
-    const features = config.features as Record<string, Record<string, unknown>> | undefined;
+    const features = config['features'] as Record<string, Record<string, unknown>> | undefined;
     if (!features) return [];
 
     return Object.entries(features).map(([name, cfg]) => ({
       name,
-      version: (cfg.version as string) ?? '0.1.0',
-      enabled: (cfg.enabled as boolean) ?? false,
+      version: (cfg['version'] as string) ?? '0.1.0',
+      enabled: (cfg['enabled'] as boolean) ?? false,
       config: scrubSecrets(cfg) as Record<string, unknown>,
     }));
   }

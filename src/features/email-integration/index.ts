@@ -7,7 +7,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { randomBytes, createCipheriv, createDecipheriv, scrypt } from 'crypto';
+import { randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
@@ -124,11 +124,11 @@ class EmailIntegrationFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      encryptionKey: (config.encryptionKey as string) ?? this.config.encryptionKey ?? this.generateKey(),
-      maxConnections: (config.maxConnections as number) ?? this.config.maxConnections,
-      defaultImapPort: (config.defaultImapPort as number) ?? this.config.defaultImapPort,
-      defaultSmtpPort: (config.defaultSmtpPort as number) ?? this.config.defaultSmtpPort,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      encryptionKey: (config['encryptionKey'] as string) ?? this.config['encryptionKey'] ?? this.generateKey(),
+      maxConnections: (config['maxConnections'] as number) ?? this.config['maxConnections'],
+      defaultImapPort: (config['defaultImapPort'] as number) ?? this.config['defaultImapPort'],
+      defaultSmtpPort: (config['defaultSmtpPort'] as number) ?? this.config['defaultSmtpPort'],
     };
 
     this.encryptionKey = Buffer.from(this.config.encryptionKey, 'hex');
@@ -391,7 +391,7 @@ class EmailIntegrationFeature implements FeatureModule {
    */
   send(accountId: string, to: string | string[], subject: string, body: string, html?: string): boolean {
     this.validateAccount(accountId);
-    const account = this.getAccount(accountId)!;
+    const _account = this.getAccount(accountId)!;
 
     // In real implementation, would connect to SMTP and send.
     // Here we can log to database as "sent" record.
@@ -504,7 +504,7 @@ class EmailIntegrationFeature implements FeatureModule {
   }
 
   /** Decrypt password (internal use) */
-  private decrypt(encrypted: string, ivHex: string): string {
+  private _decrypt(encrypted: string, ivHex: string): string {
     const iv = Buffer.from(ivHex, 'hex');
     const decipher = createDecipheriv(this.ALGORITHM, this.encryptionKey, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');

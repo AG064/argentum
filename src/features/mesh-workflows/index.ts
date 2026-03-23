@@ -169,12 +169,12 @@ class MeshWorkflowsFeature implements FeatureModule {
   async start(): Promise<void> {
     // Register built-in handlers
     this.registerStepHandler('delay', async (step) => {
-      const ms = (step.config.duration as number) ?? 1000;
+      const ms = (step.config['duration'] as number) ?? 1000;
       await new Promise(r => setTimeout(r, ms));
       return { delayed: ms };
     });
     this.registerStepHandler('condition', async (step, vars) => {
-      const condition = step.config.condition as string;
+      const condition = step.config['condition'] as string;
       // Safe condition evaluation using jsep
       try {
         const result = evaluateCondition(condition, vars as Record<string, unknown>);
@@ -220,7 +220,7 @@ class MeshWorkflowsFeature implements FeatureModule {
   }
 
   /** Simple goal analysis — extracts subtasks from goal description */
-  private analyzeGoal(goal: string, context: Record<string, unknown>): DecomposedGoal['subtasks'] {
+  private analyzeGoal(goal: string, __context: Record<string, unknown>): DecomposedGoal['subtasks'] {
     const subtasks: DecomposedGoal['subtasks'] = [];
     const lines = goal.split(/[.\n]/).map(l => l.trim()).filter(Boolean);
 
@@ -479,18 +479,18 @@ class MeshWorkflowsFeature implements FeatureModule {
 
   /** Restore execution from checkpoint */
   async restoreFromCheckpoint(data: Record<string, unknown>): Promise<WorkflowExecution> {
-    const workflowId = data.workflowId as string;
+    const workflowId = data['workflowId'] as string;
     const workflow = this.workflows.get(workflowId);
     if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
 
     const execution: WorkflowExecution = {
-      id: data.id as string, workflowId, status: 'paused',
-      currentStep: data.currentStep as string,
-      completedSteps: (data.completedSteps as string[]) ?? [],
+      id: data['id'] as string, workflowId, status: 'paused',
+      currentStep: data['currentStep'] as string,
+      completedSteps: (data['completedSteps'] as string[]) ?? [],
       failedSteps: [],
-      variables: (data.variables as Record<string, unknown>) ?? {},
-      stepResults: new Map(data.stepResults as [string, unknown][]),
-      progress: data.progress as number, startedAt: data.startedAt as number,
+      variables: (data['variables'] as Record<string, unknown>) ?? {},
+      stepResults: new Map(data['stepResults'] as [string, unknown][]),
+      progress: data['progress'] as number, startedAt: data['startedAt'] as number,
       checkpointData: data,
     };
 

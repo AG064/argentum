@@ -6,7 +6,7 @@
  * Real API calls not implemented - structure only.
  */
 
-import { mkdirSync, existsSync, writeFile, readFile, unlink } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import crypto from 'crypto';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
@@ -102,11 +102,11 @@ class TtsEngineFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      cacheDir: (config.cacheDir as string) ?? this.config.cacheDir,
-      maxCacheSizeMB: (config.maxCacheSizeMB as number) ?? this.config.maxCacheSizeMB,
-      defaultProvider: (config.defaultProvider as TtsProvider) ?? this.config.defaultProvider,
-      defaultVoiceId: (config.defaultVoiceId as string) ?? this.config.defaultVoiceId,
-      defaultFormat: (config.defaultFormat as AudioFormat) ?? this.config.defaultFormat,
+      cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
+      maxCacheSizeMB: (config['maxCacheSizeMB'] as number) ?? this.config['maxCacheSizeMB'],
+      defaultProvider: (config['defaultProvider'] as TtsProvider) ?? this.config['defaultProvider'],
+      defaultVoiceId: (config['defaultVoiceId'] as string) ?? this.config['defaultVoiceId'],
+      defaultFormat: (config['defaultFormat'] as AudioFormat) ?? this.config['defaultFormat'],
     };
 
     this.cacheDir = this.config.cacheDir;

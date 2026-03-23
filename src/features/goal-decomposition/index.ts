@@ -111,7 +111,7 @@ class GoalDecompositionFeature implements FeatureModule {
     const map: Record<string, TaskRow & { children?: TaskRow[] }> = {};
     for (const t of all) map[t.id] = { ...t, children: [] } as any;
     for (const t of all) {
-      if (t.parent_id && map[t.parent_id]) map[t.parent_id].children!.push(map[t.id]);
+      if (t.parent_id && map[t.parent_id] && map[t.id]) map[t.parent_id]!.children!.push(map[t.id] as TaskRow & { children?: TaskRow[] });
     }
 
     return map[goalId] || null;

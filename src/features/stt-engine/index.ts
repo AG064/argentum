@@ -96,11 +96,11 @@ class SttEngineFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      defaultProvider: (config.defaultProvider as SttProvider) ?? this.config.defaultProvider,
-      defaultLanguage: (config.defaultLanguage as string) ?? this.config.defaultLanguage,
-      maxHistoryEntries: (config.maxHistoryEntries as number) ?? this.config.maxHistoryEntries,
-      cacheDir: (config.cacheDir as string) ?? this.config.cacheDir,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      defaultProvider: (config['defaultProvider'] as SttProvider) ?? this.config['defaultProvider'],
+      defaultLanguage: (config['defaultLanguage'] as string) ?? this.config['defaultLanguage'],
+      maxHistoryEntries: (config['maxHistoryEntries'] as number) ?? this.config['maxHistoryEntries'],
+      cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
     };
 
     this.provider = this.config.defaultProvider;
@@ -170,7 +170,7 @@ class SttEngineFeature implements FeatureModule {
    * @returns TranscriptionResult with text and metadata
    */
   async transcribe(request: TranscriptionRequest): Promise<TranscriptionResult> {
-    const { audioPath, language = this.config.defaultLanguage, enableTimestamps = false } = request;
+    const { audioPath, language = this.config.defaultLanguage, enableTimestamps: _enableTimestamps = false } = request;
 
     // Validate audio file exists
     if (!existsSync(audioPath)) {

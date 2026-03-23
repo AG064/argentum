@@ -233,8 +233,8 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     const rows: any[] = [];
     if (matchAll) {
       // Articles must have all tags
-      const placeholders = tags.map(() => '1').join(' AND ');
-      const query = `
+      const _placeholders = tags.map(() => '1').join(' AND ');
+      const _query = `
         SELECT * FROM articles WHERE current = 1 AND tags MATCH 'tags:(' || ? || ')' AND
         ${tags.map((_, i) => `tags MATCH 'tags:(${tags[i]})'`).join(' AND ')}
         LIMIT ?
