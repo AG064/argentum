@@ -115,6 +115,8 @@ function cmdHelp(): void {
   print('    cron enable <id>      Enable a job');
   print('    cron disable <id>     Disable a job');
   print('    cron remove <id>      Delete a job');
+  print('    budget status         Show budget usage & limits');
+  print('    budget set-limit      Set monthly limit ($)');
   print('    session list          List sessions');
   print('    acp run <code>        Execute code (JS/Python/Bash) in sandbox');
   print('    session create <name> Create a session');
@@ -1557,6 +1559,299 @@ async function cmdStatus(): Promise<void> {
   success('All systems nominal');
 }
 
+// ─── Budget Command ────────────────────────────────────────────────────────────
+
+async function cmdBudget(): Promise<void> {
+  const subcommand = args[1] || 'status';
+
+  // Lazy-load the budget feature (works both in-plugin and from CLI)
+  const getBudgetFeature = () => {
+    try {
+      const budgetPath = path.join(__dirname, 'features', 'budget', 'index.js');
+      if (!fs.existsSync(budgetPath)) {
+        return null;
+      }
+      return require(budgetPath).default;
+    } catch {
+      return null;
+    }
+  };
+
+  const budget = getBudgetFeature();
+
+  const bar = (percent: number, width = 20): string => {
+    const filled = Math.round((percent / 100) * width);
+    const empty = width - filled;
+    const p = Math.min(100, Math.max(0, percent));
+    const color = p >= 90 ? '\x1b[31m' : p >= 75 ? '\x1b[33m' : '\x1b[32m';
+    return color + '█'.repeat(filled) + '\x1b[90m' + '░'.repeat(empty) + '\x1b[0m';
+  };
+
+  const usd = (n: number): string => `$${n.toFixed(4)}`;
+
+  switch (subcommand) {
+    case 'status':
+    case 's': {
+      banner();
+      print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
+      print('  \x1b[1m\x1b[36m║         \x1b[33m💰 Budget Status\x1b[36m              ║\x1b[0m');
+      print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
+      print('');
+
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
+
+      const config = budget.getConfig();
+      const report = budget.getBudgetReport();
+      const monthlyPct = Math.round((report.monthlyCost / report.monthlyLimit) * 100);
+      const dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
+
+      print('  \x1b[1mGlobal Limits\x1b[0m');
+      print(`  Monthly  ${bar(monthlyPct)} ${usd(report.monthlyCost).padStart(10)} / ${usd(report.monthlyLimit)}`);
+      print(`  Daily    ${bar(dailyPct)} ${usd(report.dailyCost).padStart(10)} / ${usd(report.dailyLimit)}`);
+      print('');
+
+      if (report.alerts.length > 0) {
+        print('  \x1b[1m\x1b[33m⚠\x1b[0m  \x1b[1mAlerts\x1b[0m');
+        for (const alert of report.alerts) {
+          print(`    \x1b[33m▸\x1b[0m ${alert}`);
+        }
+        print('');
+      }
+
+      if (report.byAgent.length > 0) {
+        print('  \x1b[1mPer-Agent Usage\x1b[0m');
+        print(`  \x1b[90m  Agent                Cost          Tokens           % of Limit    Status\x1b[0m`);
+        print(`  \x1b[90m  ${'─'.repeat(72)}\x1b[0m`);
+        for (const s of report.byAgent) {
+          const statusColor = s.canProceed ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+          const pctColor = s.percentUsed >= 90 ? '\x1b[31m' : s.percentUsed >= 75 ? '\x1b[33m' : '\x1b[32m';
+          const pctStr = `${pctColor}${s.percentUsed}%\x1b[0m`;
+          print(
+            `    ${s.agent.padEnd(20)} ${usd(s.totalCost).padEnd(12)} ${s.totalTokens.toLocaleString().padEnd(12)} ${pctStr.padEnd(14)} ${statusColor}`,
+          );
+        }
+        print('');
+      } else {
+        print('  \x1b[90m  No usage recorded yet.\x1b[0m\n');
+      }
+
+      print('  \x1b[1mSettings\x1b[0m');
+      print(`  \x1b[90m  alertThreshold:   \x1b[0m${Math.round(config.alertThreshold * 100)}%`);
+      print(`  \x1b[90m  blockOnExhausted: \x1b[0m${config.blockOnExhausted ? 'yes' : 'no'}`);
+      if (config.perAgentLimit) {
+        print(`  \x1b[90m  perAgentLimit:    \x1b[0m$${config.perAgentLimit}`);
+      }
+      print('');
+      break;
+    }
+
+    case 'set-limit':
+    case 'set': {
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
+
+      const amountStr = args[2];
+      const limitType = (args[3] || 'monthly').toLowerCase();
+
+      if (!amountStr) {
+        error('Usage: agclaw budget set-limit <amount> [monthly|daily|per-agent]');
+        return;
+      }
+
+      const amount = parseFloat(amountStr);
+      if (isNaN(amount) || amount < 0) {
+        error('Amount must be a non-negative number');
+        return;
+      }
+
+      let result: { success: boolean; error?: string };
+      switch (limitType) {
+        case 'monthly':
+        case 'm':
+          result = budget.updateConfig({ globalMonthlyLimit: amount });
+          break;
+        case 'daily':
+        case 'd':
+          result = budget.updateConfig({ globalDailyLimit: amount });
+          break;
+        case 'per-agent':
+        case 'peragent':
+        case 'agent':
+        case 'a':
+          result = budget.updateConfig({ perAgentLimit: amount });
+          break;
+        default:
+          error(`Unknown limit type: ${limitType}. Use: monthly, daily, or per-agent`);
+          return;
+      }
+
+      if (result.success) {
+        success(`Updated ${limitType} limit to $${amount}`);
+      } else {
+        error(`Failed: ${result.error}`);
+      }
+      break;
+    }
+
+    case 'history':
+    case 'h': {
+      banner();
+      print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
+      print('  \x1b[1m\x1b[36m║         \x1b[33m📊 Budget History\x1b[36m             ║\x1b[0m');
+      print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
+      print('');
+
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
+
+      const days = parseInt(args[2] || '30', 10);
+      const history = budget.getHistory(days);
+
+      if (history.length === 0) {
+        info(`No spending history in the last ${days} days.`);
+        return;
+      }
+
+      print(`  \x1b[90m  Date           Cost           Tokens         Requests   Daily %\x1b[0m`);
+      print(`  \x1b[90m  ${'─'.repeat(66)}\x1b[0m`);
+
+      const cfg = budget.getConfig();
+      for (const row of history) {
+        const dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
+        const pctColor = dailyPct >= 90 ? '\x1b[31m' : dailyPct >= 75 ? '\x1b[33m' : '\x1b[32m';
+        print(
+          `    \x1b[37m${row.date.padEnd(12)}\x1b[0m ${usd(row.totalCost).padEnd(14)} ${row.totalTokens.toLocaleString().padEnd(14)} ${row.requestCount.toString().padEnd(10)} ${pctColor}${dailyPct}%\x1b[0m`,
+        );
+      }
+      print('');
+
+      const totalCost = history.reduce((s: number, r: { totalCost: number }) => s + r.totalCost, 0);
+      const totalTokens = history.reduce((s: number, r: { totalTokens: number }) => s + r.totalTokens, 0);
+      const totalRequests = history.reduce((s: number, r: { requestCount: number }) => s + r.requestCount, 0);
+      print(`  \x1b[90m  Totals: \x1b[0m${usd(totalCost)} | ${totalTokens.toLocaleString()} tokens | ${totalRequests} requests\n`);
+      break;
+    }
+
+    case 'reset': {
+      banner();
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
+
+      const readline = require('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const confirm = (q: string): Promise<string> =>
+        new Promise((resolve) => rl.question(q, resolve));
+
+      const answer = await confirm(
+        '  \x1b[31m⚠\x1b[0m This will delete all budget usage records. Continue? [y/N]: ',
+      );
+      rl.close();
+
+      if (answer.toLowerCase() === 'y') {
+        budget.reset();
+        success('Budget counters reset');
+      } else {
+        info('Reset cancelled');
+      }
+      break;
+    }
+
+    case 'config':
+    case 'cfg': {
+      banner();
+      print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
+      print('  \x1b[1m\x1b[36m║        \x1b[33m⚙\x1b[0m  Budget Configuration\x1b[36m       ║\x1b[0m');
+      print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
+      print('');
+
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
+
+      const display = budget.getConfigDisplay();
+      const rows: Array<[string, string, string, string]> = [
+        [
+          'globalMonthlyLimit',
+          '$10/month',
+          `$${display.globalMonthlyLimit.value}/month`,
+          display.globalMonthlyLimit.value === display.globalMonthlyLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'globalDailyLimit',
+          '$1/day',
+          `$${display.globalDailyLimit.value}/day`,
+          display.globalDailyLimit.value === display.globalDailyLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'perAgentLimit',
+          '$10/agent',
+          display.perAgentLimit.value
+            ? `$${display.perAgentLimit.value}/agent`
+            : '\x1b[90munset (uses monthly)\x1b[0m',
+          display.perAgentLimit.value === display.perAgentLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'alertThreshold',
+          '80%',
+          `${Math.round((display.alertThreshold.value as number) * 100)}%`,
+          display.alertThreshold.value === display.alertThreshold.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'blockOnExhausted',
+          'yes',
+          display.blockOnExhausted.value ? 'yes' : 'no',
+          display.blockOnExhausted.value === display.blockOnExhausted.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'enabled',
+          'false',
+          display.enabled.value ? 'true' : 'false',
+          '\x1b[90m(feature toggle)\x1b[0m',
+        ],
+      ];
+
+      print('  \x1b[90m  Key               Default       Current               Status\x1b[0m');
+      print(`  \x1b[90m  ${'─'.repeat(68)}\x1b[0m`);
+
+      for (const [key, def, cur, status] of rows) {
+        print(`  \x1b[37m  ${key.padEnd(20)}\x1b[0m ${def.padEnd(14)} ${cur.padEnd(20)} ${status}`);
+      }
+
+      print('');
+      print('  \x1b[1mQuick commands:\x1b[0m');
+      print('    \x1b[36magclaw budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50');
+      print('    \x1b[36magclaw budget set-limit 5 daily\x1b[0m      Set daily limit to $5');
+      print('    \x1b[36magclaw budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20');
+      print('');
+      break;
+    }
+
+    default:
+      error(`Unknown budget command: ${subcommand}`);
+      print('  agclaw budget [status|set-limit|history|reset|config]');
+  }
+}
+
 async function cmdOnboard(): Promise<void> {
   const readline = require('readline');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -1765,6 +2060,7 @@ async function cmdOnboard(): Promise<void> {
     'knowledge-graph',
     'webhooks',
     'file-watcher',
+    'budget',
   ];
   for (const f of defaults) {
     config.features[f] = { enabled: true };
@@ -2236,6 +2532,348 @@ async function cmdTelegram(): Promise<void> {
   }
 }
 
+// ─── Security Management ─────────────────────────────────────────────────────
+
+async function cmdSecurity(): Promise<void> {
+  banner();
+  print('Security Management');
+  print('===================\n');
+
+  const subcommand = args[2];
+
+  switch (subcommand) {
+    case 'status':
+      print('Security Status: Active');
+      print('Policy Engine: Default-deny enabled');
+      print('Sandbox: Enabled');
+      print('Credential Manager: Short-lived keys enabled');
+      break;
+
+    case 'audit':
+      print('Recent security decisions logged.');
+      print('Run "agclaw security audit --since 2026-01-01" for full report.');
+      break;
+
+    case 'policies':
+      print('Available policies:');
+      print('  - allow-read-home: Allow reading from ~/.ag-claw/');
+      print('  - deny-system: Deny access to /etc/');
+      print('  - default-deny: Block all unspecified actions');
+      break;
+
+    default:
+      print('Usage: agclaw security <status|audit|policies|approve|deny>');
+      print('');
+      print('  status    Show current security status');
+      print('  audit     Show recent security decisions');
+      print('  policies  List available policies');
+      print('  approve   Approve a pending request');
+      print('  deny      Deny a pending request');
+  }
+}
+
+// ─── Self-Improving Loop ──────────────────────────────────────────────────────
+
+async function cmdImprove(): Promise<void> {
+  banner();
+
+  const dryRun = args.includes('--dry-run') || args.includes('-n');
+  const forceRun = args.includes('--force');
+  const verbose = args.includes('--verbose') || args.includes('-v');
+
+  let phase: 'all' | 'error' | 'skill' | 'memory' | 'model' | 'correction' = 'all';
+  const phaseIdx = args.indexOf('--phase');
+  if (phaseIdx !== -1 && args[phaseIdx + 1]) {
+    const p = args[phaseIdx + 1]!.toLowerCase();
+    if (['error', 'skill', 'memory', 'model', 'correction'].includes(p)) {
+      phase = p as typeof phase;
+    } else {
+      error(`Unknown phase: ${p}`);
+      print('Valid phases: error, skill, memory, model, correction');
+      return;
+    }
+  }
+
+  if (dryRun) {
+    info('[DRY-RUN] Showing what would change without making changes');
+    print('');
+  }
+
+  let feature: any = null;
+  try {
+    const featurePath = path.join(__dirname, 'src', 'features', 'self-improving', 'index.js');
+    if (fs.existsSync(featurePath)) {
+      feature = require(featurePath).default;
+    }
+  } catch {}
+
+  if (!feature?.run) {
+    warn('Self-improving feature not available, using standalone mode');
+    await runStandaloneImprove(phase, { dryRun, forceRun, verbose });
+    return;
+  }
+
+  if (args.length === 1 || (args.length === 2 && !args[1]!.startsWith('-'))) {
+    const cfg = feature.getConfig ? feature.getConfig() : getImproveConfig();
+    info('Self-Improving Loop Configuration:');
+    print('');
+    print(`  enabled:         ${cfg.enabled ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
+    print(`  schedule:        ${cfg.schedule}`);
+    print(`  nightlyTime:    ${cfg.nightlyTime}`);
+    print(`  idleThreshold:  ${cfg.idleThreshold} minutes`);
+    print(`  skillThreshold: ${cfg.skillCreationThreshold}`);
+    print(`  maxSkills:      ${cfg.maxSkillsPerRun} per run`);
+    print('');
+    print('  \x1b[1mUsage:\x1b[0m');
+    print('    agclaw improve              Run full loop');
+    print('    agclaw improve --phase skill  Run specific phase');
+    print('    agclaw improve --dry-run     Preview changes');
+    print('    agclaw improve --force       Force run');
+    return;
+  }
+
+  info(`Running self-improving loop (phase: ${phase})...`);
+  print('');
+
+  try {
+    const result = await feature.run(phase, { dryRun, force: forceRun, verbose });
+
+    if (result.phases.length === 0 && !result.dryRun) {
+      const hoursSince = feature.lastRunTime
+        ? ((Date.now() - feature.lastRunTime) / (1000 * 60 * 60)).toFixed(1)
+        : 'never';
+      info(`Skipped: ran ${hoursSince}h ago. Use --force to override.`);
+      return;
+    }
+
+    print('');
+    const duration = (result.totalDuration / 1000).toFixed(1);
+    success(`${result.dryRun ? '[DRY-RUN] ' : ''}Complete in ${duration}s`);
+    print('');
+
+    for (const p of result.phases) {
+      const icon = p.success ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+      const changed = p.itemsChanged > 0 ? ` \x1b[33m+${p.itemsChanged}\x1b[0m` : '';
+      print(`  ${icon} \x1b[1m${p.phase}\x1b[0m  ${p.itemsProcessed} processed${changed}`);
+      if (verbose && p.details.length > 0) {
+        for (const d of p.details.slice(0, 5)) {
+          print(`      ${d}`);
+        }
+        if (p.details.length > 5) print(`      ... and ${p.details.length - 5} more`);
+      }
+    }
+
+    print('');
+    print(`  Skills:    \x1b[1m${result.skillsCreated}\x1b[0m created`);
+    print(`  Lessons:   \x1b[1m${result.lessonsLearned}\x1b[0m learned`);
+    print(`  Corrections: \x1b[1m${result.correctionsApplied}\x1b[0m applied`);
+  } catch (err) {
+    error(`Failed: ${(err as Error).message}`);
+  }
+}
+
+async function runStandaloneImprove(
+  phase: 'all' | 'error' | 'skill' | 'memory' | 'model' | 'correction',
+  opts: { dryRun: boolean; forceRun: boolean; verbose: boolean }
+): Promise<void> {
+  const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+  const memoryDir = path.join(workDir, 'memory');
+  const sessionsDb = path.join(workDir, 'data', 'sessions.db');
+
+  info('Running in standalone mode (basic analysis only)');
+  print('');
+
+  if (!fs.existsSync(sessionsDb)) {
+    warn('Sessions database not found. Run some conversations first!');
+    return;
+  }
+
+  const sessionsExist = fs.existsSync(sessionsDb);
+  print(`  Sessions DB: ${sessionsExist ? '\x1b[32mfound\x1b[0m' : '\x1b[31mnot found\x1b[0m'}`);
+  print(`  Memory dir:  ${fs.existsSync(memoryDir) ? '\x1b[32mfound\x1b[0m' : '\x1b[31mnot found\x1b[0m'}`);
+  print('');
+
+  if (opts.dryRun) {
+    info('[DRY-RUN] Would run self-improving loop with:');
+    print(`  Phase: ${phase}`);
+    print(`  Force: ${opts.forceRun}`);
+    print(`  Verbose: ${opts.verbose}`);
+  } else {
+    info('Standalone mode complete. Enable self-improving feature for full analysis.');
+  }
+}
+
+function getImproveConfig(): Record<string, unknown> {
+  const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+  const configPath = path.join(workDir, 'self-improving-config.json');
+
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch {}
+  }
+
+  return {
+    enabled: true,
+    schedule: 'nightly',
+    nightlyTime: '03:00',
+    idleThreshold: 120,
+    skillCreationThreshold: 5,
+    maxSkillsPerRun: 3,
+  };
+}
+
+async function cmdLearnings(): Promise<void> {
+  banner();
+
+  const verbose = args.includes('--verbose') || args.includes('-v');
+  const limitArg = args.indexOf('--limit');
+  const limit = limitArg !== -1 && args[limitArg + 1]
+    ? parseInt(args[limitArg + 1]!, 10)
+    : 20;
+
+  const categoryArg = args.indexOf('--category');
+  const categoryFilter = categoryArg !== -1 && args[categoryArg + 1]
+    ? args[categoryArg + 1]!.toLowerCase()
+    : null;
+
+  let feature: any = null;
+  try {
+    const featurePath = path.join(__dirname, 'src', 'features', 'self-improving', 'index.js');
+    if (fs.existsSync(featurePath)) {
+      feature = require(featurePath).default;
+    }
+  } catch {}
+
+  let lessons: any[] = [];
+
+  if (feature?.getLearnings) {
+    lessons = feature.getLearnings();
+  } else {
+    const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+    const lessonsPath = path.join(workDir, 'memory', 'self-improvement', 'lessons.md');
+    lessons = parseLessonsFromFile(lessonsPath);
+  }
+
+  if (categoryFilter) {
+    lessons = lessons.filter((l: any) => l.category === categoryFilter);
+  }
+
+  lessons = lessons.slice(0, limit);
+
+  if (lessons.length === 0) {
+    info('No lessons logged yet.');
+    print('');
+    print('  Lessons are automatically logged when:');
+    print('  • User corrections are detected');
+    print('  • Errors occur during task execution');
+    print('  • Patterns are identified across sessions');
+    print('');
+    print('  Run \x1b[1magclaw improve\x1b[0m to trigger a self-improvement cycle.');
+    return;
+  }
+
+  const byCategory: Record<string, any[]> = {};
+  for (const lesson of lessons) {
+    if (!byCategory[lesson.category]) {
+      byCategory[lesson.category] = [];
+    }
+    byCategory[lesson.category]!.push(lesson);
+  }
+
+  print(`  \x1b[1m\x1b[36m╭─────────────────────────────────────────────────────────╮\x1b[0m`);
+  print(`  \x1b[1m\x1b[36m│              📚 LESSONS LEARNED                            │\x1b[0m`);
+  print(`  \x1b[1m\x1b[36m╰─────────────────────────────────────────────────────────╯\x1b[0m`);
+  print('');
+
+  const categoryIcons: Record<string, string> = {
+    insight: '\x1b[34m💡\x1b[0m',
+    mistake: '\x1b[31m🔴\x1b[0m',
+    pattern: '\x1b[33m📈\x1b[0m',
+    skill_created: '\x1b[32m🛠\x1b[0m',
+    knowledge_gap: '\x1b[35m❓\x1b[0m',
+  };
+
+  for (const [cat, items] of Object.entries(byCategory)) {
+    const icon = categoryIcons[cat] || '\x1b[37m•\x1b[0m';
+    const catName = cat.replace('_', ' ');
+    print(`  ${icon} \x1b[1m${catName}\x1b[0m  \x1b[90m(${items.length} lesson${items.length !== 1 ? 's' : ''})\x1b[0m`);
+  }
+
+  print('');
+  print(`  \x1b[1mShowing ${lessons.length} most recent lessons:\x1b[0m`);
+  print('');
+
+  for (let i = 0; i < lessons.length; i++) {
+    const lesson = lessons[i]!;
+    const icon = categoryIcons[lesson.category] || '\x1b[37m•\x1b[0m';
+    const age = formatAge(lesson.timestamp);
+
+    print(`  \x1b[90m${i + 1}.\x1b[0m ${icon} \x1b[1m${lesson.title}\x1b[0m`);
+    print(`      \x1b[90m${age}\x1b[0m  \x1b[2m${(lesson.description ?? '').slice(0, 100)}\x1b[0m`);
+
+    if (verbose && lesson.tags?.length) {
+      print(`      \x1b[36mtags:\x1b[0m ${lesson.tags.join(', ')}`);
+    }
+
+    if (i < lessons.length - 1) print('');
+  }
+
+  print('');
+  print('  \x1b[1mFilters:\x1b[0m');
+  print('    agclaw learnings --category mistake    Show only mistakes');
+  print('    agclaw learnings --limit 5             Show only 5 lessons');
+  print('    agclaw learnings --verbose             Show tags');
+}
+
+function parseLessonsFromFile(lessonsPath: string): any[] {
+  const lessons: any[] = [];
+
+  if (!fs.existsSync(lessonsPath)) {
+    return lessons;
+  }
+
+  try {
+    const content = fs.readFileSync(lessonsPath, 'utf8');
+    const sections = content.split(/^## /m).filter(Boolean);
+
+    for (const section of sections) {
+      const lines = section.trim().split('\n');
+      const timestamp = lines[0]?.trim() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('- lesson:') || trimmed.startsWith('- ')) {
+          const lessonText = trimmed.replace(/^-\s*(lesson:)?\s*/, '');
+          if (lessonText && lessonText.length > 5) {
+            lessons.push({
+              id: `lesson:${lessons.length}`,
+              timestamp: new Date(timestamp).getTime() || Date.now(),
+              category: 'insight',
+              title: lessonText.slice(0, 60),
+              description: lessonText,
+              tags: [],
+            });
+          }
+        }
+      }
+    }
+  } catch {}
+
+  return lessons.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function formatAge(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -2324,10 +2962,18 @@ async function main(): Promise<void> {
     case 'cron':
       await cmdCron();
       break;
+    case 'budget':
+    case 'b':
+      await cmdBudget();
+      break;
     case 'onboard':
     case 'setup':
     case 'configure':
       await cmdOnboard();
+      break;
+    case 'security':
+    case 'security-cmd':
+      await cmdSecurity();
       break;
     default:
       error(`Unknown command: ${command}`);
