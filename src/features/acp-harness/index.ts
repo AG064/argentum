@@ -147,10 +147,17 @@ class ACPHarnessFeature implements FeatureModule {
         res.end(JSON.stringify(result));
       } catch (err) {
         res.statusCode = 500;
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        // Escape HTML in error message to prevent XSS if displayed in HTML context
+        const escapedError = errorMsg
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
         res.end(
           JSON.stringify({
             success: false,
-            error: err instanceof Error ? err.message : 'Unknown error',
+            error: escapedError,
             stdout: '',
             stderr: '',
             exitCode: -1,
