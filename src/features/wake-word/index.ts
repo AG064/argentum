@@ -82,9 +82,9 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      defaultSensitivity: (config.defaultSensitivity as number) ?? this.config.defaultSensitivity,
-      maxContextChars: (config.maxContextChars as number) ?? this.config.maxContextChars,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      defaultSensitivity: (config['defaultSensitivity'] as number) ?? this.config['defaultSensitivity'],
+      maxContextChars: (config['maxContextChars'] as number) ?? this.config['maxContextChars'],
     };
 
     this.defaultSensitivity = this.config.defaultSensitivity;
@@ -220,7 +220,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     if (!this.running) return [];
 
     const detections: Detection[] = [];
-    const lowerText = this.config.maxContextChars > 0 ? text.substring(0, this.config.maxContextChars * 2) : text;
+    const _lowerText = this.config.maxContextChars > 0 ? text.substring(0, this.config.maxContextChars * 2) : text;
 
     for (const word of this.wakeWords) {
       if (!word.enabled) continue;

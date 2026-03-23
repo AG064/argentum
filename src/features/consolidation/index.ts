@@ -5,9 +5,8 @@
  * Deduplication, decay, merge, and pruning of memory entries.
  */
 
-import { createHash } from 'crypto';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
-import { getSemanticMemory, MemoryResult } from '../../memory/semantic';
+import { getSemanticMemory } from '../../memory/semantic';
 
 /** Consolidation configuration */
 export interface ConsolidationConfig {

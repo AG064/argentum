@@ -5,7 +5,7 @@
  * Supports enable/disable, lifecycle hooks, and dependency resolution.
  */
 
-import { readdirSync, existsSync, statSync } from 'fs';
+import { readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
 import { Logger, featureLogger } from './logger';
 import { AGClawConfig } from './config';
@@ -135,7 +135,7 @@ export class PluginLoader {
     }
 
     const featureConfig = this.getFeatureConfig(name);
-    const enabled = featureConfig.enabled === true;
+    const enabled = featureConfig['enabled'] === true;
 
     this.features.set(name, {
       module: featureModule,

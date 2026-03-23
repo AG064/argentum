@@ -99,14 +99,14 @@ class MobilePushFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      fcmServerKey: (config.fcmServerKey as string) ?? this.config.fcmServerKey,
-      fcmSenderId: (config.fcmSenderId as string) ?? this.config.fcmSenderId,
-      apnsKeyPath: (config.apnsKeyPath as string) ?? this.config.apnsKeyPath,
-      apnsKeyId: (config.apnsKeyId as string) ?? this.config.apnsKeyId,
-      apnsTeamId: (config.apnsTeamId as string) ?? this.config.apnsTeamId,
-      apnsBundleId: (config.apnsBundleId as string) ?? this.config.apnsBundleId,
-      maxLogEntries: (config.maxLogEntries as number) ?? this.config.maxLogEntries,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      fcmServerKey: (config['fcmServerKey'] as string) ?? this.config['fcmServerKey'],
+      fcmSenderId: (config['fcmSenderId'] as string) ?? this.config['fcmSenderId'],
+      apnsKeyPath: (config['apnsKeyPath'] as string) ?? this.config['apnsKeyPath'],
+      apnsKeyId: (config['apnsKeyId'] as string) ?? this.config['apnsKeyId'],
+      apnsTeamId: (config['apnsTeamId'] as string) ?? this.config['apnsTeamId'],
+      apnsBundleId: (config['apnsBundleId'] as string) ?? this.config['apnsBundleId'],
+      maxLogEntries: (config['maxLogEntries'] as number) ?? this.config['maxLogEntries'],
     };
 
     this.initDatabase();

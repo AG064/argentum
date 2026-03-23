@@ -30,14 +30,15 @@ export {
   type HookHandler,
 } from './plugin-loader';
 
-export {
+export { createLLMProvider } from './llm-provider';
+
+export type {
   LLMProvider,
-  createLLMProvider,
-  type Message,
-  type ToolDefinition,
-  type LLMResponse,
-  type ToolCall,
-  type MessageRole,
-  type ProviderConfig,
-  type LLMConfig,
+  Message,
+  ToolDefinition,
+  LLMResponse,
+  ToolCall,
+  MessageRole,
+  ProviderConfig,
+  LLMConfig,
 } from './llm-provider';

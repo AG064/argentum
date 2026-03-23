@@ -1,4 +1,4 @@
-import { cpus, totalmem, freemem, arch, platform, release, version } from 'os';
+import { cpus, totalmem, freemem, arch, platform } from 'os';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -225,7 +225,7 @@ class HealthMonitoringFeature implements FeatureModule {
   }
 
   private getLoadAverage(): number[] {
-    return cpus().map(cpu => 0); // Placeholder - we get system load avg separately
+    return cpus().map(__cpu => 0); // Placeholder - we get system load avg separately
   }
 
   private getDiskInfo(): DiskInfo[] {
@@ -288,7 +288,7 @@ class HealthMonitoringFeature implements FeatureModule {
   private checkThresholds(): void {
     if (!this.metrics) return;
 
-    const now = Date.now();
+    const _now = Date.now();
 
     // Memory alert
     if (this.metrics.memory.usagePercent > this.config.memoryWarningThreshold) {

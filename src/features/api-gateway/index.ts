@@ -5,7 +5,7 @@
  * and endpoint management.
  */
 
-import express, { Request, Response, Router, Handler } from 'express';
+import express, { Request, Response, Handler } from 'express';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 import rateLimiting from '../rate-limiting';
 
@@ -229,7 +229,7 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Create an API token */
-  createToken(name: string, expiresInDays?: number): ApiToken {
+  createToken(name: string, _expiresInDays?: number): ApiToken {
     const key = `ak_${Date.now()}_${Math.random().toString(36).slice(2, 16)}`;
     const token: ApiToken = {
       key,
@@ -288,7 +288,7 @@ class ApiGatewayFeature implements FeatureModule {
     }
     res.status(500).json({
       error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      message: process.env['NODE_ENV'] === 'development' ? err.message : undefined,
     });
   }
 
@@ -385,7 +385,7 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Health check handler */
-  private healthCheckHandler(req: Request, res: Response): void {
+  private healthCheckHandler(_req: Request, res: Response): void {
     const endpoints = this.listEndpoints();
     res.json({
       status: 'healthy',
@@ -398,7 +398,7 @@ class ApiGatewayFeature implements FeatureModule {
   /** Register some default endpoints */
   private registerDefaultEndpoints(): void {
     // GET /api/tokens - List tokens (admin)
-    this.registerEndpoint('/tokens', 'GET', (req, res) => {
+    this.registerEndpoint('/tokens', 'GET', (_req, res) => {
       const tokens = this.listTokens().map(t => ({ name: t.name, createdAt: t.createdAt, lastUsed: t.lastUsed }));
       res.json({ tokens });
     });
@@ -417,7 +417,7 @@ class ApiGatewayFeature implements FeatureModule {
     // DELETE /api/tokens/:key - Revoke token
     this.registerEndpoint('/tokens/:key', 'DELETE', (req, res) => {
       const { key } = req.params;
-      const removed = this.revokeToken(key);
+      const removed = this.revokeToken(key ?? '');
       if (!removed) {
         res.status(404).json({ error: 'Not found', message: 'Token not found' });
         return;
@@ -426,7 +426,7 @@ class ApiGatewayFeature implements FeatureModule {
     });
 
     // GET /api/endpoints - List all registered endpoints
-    this.registerEndpoint('/endpoints', 'GET', (req, res) => {
+    this.registerEndpoint('/endpoints', 'GET', (_req, res) => {
       const endpoints = this.listEndpoints().map(e => ({
         method: e.method,
         path: e.path,

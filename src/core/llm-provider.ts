@@ -116,9 +116,9 @@ class OpenAICompatibleProvider implements LLMProvider {
       model,
       messages: messages.map(m => {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
-        if (m.name) msg.name = m.name;
-        if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
-        if (m.tool_calls) msg.tool_calls = m.tool_calls;
+        if (m.name) msg['name'] = m['name'];
+        if (m.tool_call_id) msg['tool_call_id'] = m['tool_call_id'];
+        if (m.tool_calls) msg['tool_calls'] = m['tool_calls'];
         return msg;
       }),
       max_tokens: 4096,
@@ -126,8 +126,8 @@ class OpenAICompatibleProvider implements LLMProvider {
     };
 
     if (tools && tools.length > 0) {
-      body.tools = tools;
-      body.tool_choice = 'auto';
+      body['tools'] = tools;
+      body['tool_choice'] = 'auto';
     }
 
     const headers: Record<string, string> = {
@@ -209,10 +209,10 @@ class AnthropicProvider implements LLMProvider {
       messages: conversation.map(m => ({ role: m.role, content: m.content })),
     };
 
-    if (systemMsg) body.system = systemMsg.content;
+    if (systemMsg) body['system'] = systemMsg.content;
 
     if (tools?.length) {
-      body.tools = tools.map(t => ({
+      body['tools'] = tools.map(t => ({
         name: t.function.name,
         description: t.function.description,
         input_schema: t.function.parameters,
@@ -354,7 +354,7 @@ export function createLLMProvider(config: {
   }
 
   // Fallback: legacy direct params (for backwards compat)
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env['OPENROUTER_API_KEY'];
   if (!apiKey) {
     throw new Error('No LLM config found. Run: agclaw onboard');
   }

@@ -41,7 +41,6 @@ export interface MemoryEdge {
 export class SemanticMemory {
   private db!: Database.Database;
   private initialized = false;
-  private embeddingCache: Map<string, Float32Array> = new Map();
 
   constructor(private dbPath: string = './data/semantic-memory.db') {}
 
@@ -414,14 +413,14 @@ export class SemanticMemory {
   /** Convert DB row to MemoryResult */
   private rowToResult(row: Record<string, unknown>): MemoryResult {
     return {
-      id: row.id as string,
-      type: row.type as string,
-      content: row.content as string,
-      embedding: row.embedding as Buffer | null,
-      created_at: row.created_at as number,
-      accessed_at: row.accessed_at as number,
-      access_count: row.access_count as number,
-      metadata: this.parseJson(row.metadata as string),
+      id: row['id'] as string,
+      type: row['type'] as string,
+      content: row['content'] as string,
+      embedding: row['embedding'] as Buffer | null,
+      created_at: row['created_at'] as number,
+      accessed_at: row['accessed_at'] as number,
+      access_count: row['access_count'] as number,
+      metadata: this.parseJson(row['metadata'] as string),
     };
   }
 

@@ -19,9 +19,8 @@ import 'dotenv/config';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getConfig } from './core/config';
-import { createLogger } from './core/logger';
 import { PluginLoader } from './core/plugin-loader';
-import { createServer } from 'http';
+
 
 const VERSION = '0.2.0';
 const args = process.argv.slice(2);
@@ -70,7 +69,7 @@ function banner(): void {
 }
 
 function getWorkDir(): string {
-  return process.env.AGCLAW_WORKDIR || process.cwd();
+  return process.env['AGCLAW_WORKDIR'] || process.cwd();
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -260,8 +259,7 @@ function cmdInit(): void {
 
 async function cmdStart(): Promise<void> {
   const portIdx = args.indexOf('--port');
-  const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 3000;
-  const workDir = getWorkDir();
+  const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
 
   banner();
   info(`Starting AG-Claw server on port ${port}...`);
@@ -269,7 +267,6 @@ async function cmdStart(): Promise<void> {
   try {
     const configManager = getConfig();
     const config = configManager.get();
-    const logger = createLogger({ level: 'info', format: 'pretty' });
 
     const pluginLoader = new PluginLoader(config);
     await pluginLoader.loadAll();
@@ -308,7 +305,7 @@ async function cmdStart(): Promise<void> {
       // Feature command
       if (url.pathname.startsWith('/api/feature/')) {
         const featureName = url.pathname.split('/')[3];
-        const featureState = pluginLoader.getFeatureState(featureName);
+        const featureState = pluginLoader.getFeatureState(featureName ?? '');
         if (!featureState) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: `Feature '${featureName}' not found` }));
@@ -372,7 +369,6 @@ function cmdFeatures(): void {
 
   for (const name of features) {
     // Try to read meta
-    let desc = '';
     try {
       const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
       if (fs.existsSync(distPath)) {
@@ -460,13 +456,13 @@ function cmdConfig(): void {
   const keys = key.split('.');
   let obj: any = config;
   for (let i = 0; i < keys.length - 1; i++) {
-    if (!obj[keys[i]]) obj[keys[i]] = {};
-    obj = obj[keys[i]];
+    if (!obj[keys[i] ?? '']) obj[keys[i] ?? ''] = {};
+    obj = obj[keys[i] ?? ''];
   }
   try {
-    obj[keys[keys.length - 1]] = JSON.parse(value);
+    obj[keys[keys.length - 1] ?? ''] = JSON.parse(value);
   } catch {
-    obj[keys[keys.length - 1]] = value;
+    obj[keys[keys.length - 1] ?? ''] = value;
   }
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   success(`Set ${key} = ${value}`);
@@ -835,7 +831,7 @@ async function cmdGateway(): Promise<void> {
         warn('Gateway already running');
         return;
       }
-      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1], 10) : 3000;
+      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10) : 3000;
       info(`Starting AG-Claw gateway on port ${port}...`);
 
       // Spawn gateway as background process
@@ -887,7 +883,7 @@ async function cmdGateway(): Promise<void> {
         // Wait a moment
         await new Promise(r => setTimeout(r, 1000));
       }
-      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1], 10) : 3000;
+      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10) : 3000;
       info(`Restarting AG-Claw gateway on port ${port}...`);
 
       const { spawn } = await import('child_process');
@@ -914,7 +910,7 @@ async function cmdGateway(): Promise<void> {
         info('No log file found');
         return;
       }
-      const lines = args.includes('-n') ? parseInt(args[args.indexOf('-n') + 1], 10) : 50;
+      const lines = args.includes('-n') ? parseInt(args[args.indexOf('-n') + 1] ?? '', 10) : 50;
       const logContent = fs.readFileSync(logFile, 'utf8');
       const logLines = logContent.split('\n').slice(-lines);
       print(logLines.join('\n'));
@@ -1234,8 +1230,8 @@ async function cmdCron(): Promise<void> {
       }
 
       const payload = await ask('  Command to run (e.g. "systemEvent", "agentTurn.message"): ');
-      const [kind, ...rest] = payload.split('.');
-      const message = rest.join('.') || 'Check for tasks';
+      const parts = payload.split('.');
+      const message = parts.slice(1).join('.') || 'Check for tasks';
 
       const newJob: any = {
         id,
@@ -1430,7 +1426,7 @@ async function cmdOnboard(): Promise<void> {
     const custKeyEnv = await ask('    \x1b[90mAPI key env var (e.g. MY_API_KEY):\x1b[0m ');
     preset = { name: custName.trim() || 'custom', base_url: custUrl.trim(), api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY', api: custApi, model: custModel.trim() };
   } else {
-    preset = presets[providerChoice.trim()] || presets['2'];
+    preset = presets[providerChoice.trim()] ?? presets['2']!;
   }
 
   config.llm.providers[preset.name] = {
@@ -1540,11 +1536,10 @@ async function cmdOnboard(): Promise<void> {
 async function cmdSkill(): Promise<void> {
   const subcommand = args[1] || 'list';
   const { execSync } = require('child_process');
-  const workDir = getWorkDir();
 
   // Default skills dir: OpenClaw workspace
-  const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
-  const clawhubWorkDir = process.env.AGCLAW_WORKDIR || defaultWorkDir;
+  const defaultWorkDir = path.join(process.env['HOME'] || '~', '.openclaw', 'workspace');
+  const clawhubWorkDir = process.env['AGCLAW_WORKDIR'] || defaultWorkDir;
 
   const runClawhub = (cmd: string): string => {
     try {

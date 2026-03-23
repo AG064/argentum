@@ -115,9 +115,9 @@ class SlackIntegrationFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      tokenEnvVar: (config.tokenEnvVar as string) ?? this.config.tokenEnvVar,
-      secretEnvVar: (config.secretEnvVar as string) ?? this.config.secretEnvVar,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      tokenEnvVar: (config['tokenEnvVar'] as string) ?? this.config['tokenEnvVar'],
+      secretEnvVar: (config['secretEnvVar'] as string) ?? this.config['secretEnvVar'],
     };
 
     this.initDatabase();
@@ -269,7 +269,7 @@ class SlackIntegrationFeature implements FeatureModule {
   /**
    * Send an ephemeral message (only visible to user).
    */
-  async sendEphemeral(channel: string, user: string, text: string, blocks?: unknown[]): Promise<{ ok: boolean }> {
+  async sendEphemeral(channel: string, user: string, _text: string, _blocks?: unknown[]): Promise<{ ok: boolean }> {
     // Stub implementation
     this.ctx.logger.debug('Ephemeral message (stub)', { channel, user });
     return { ok: true };
@@ -284,7 +284,7 @@ class SlackIntegrationFeature implements FeatureModule {
 
     this.logReceivedEvent(payload);
 
-    const { event, eventId, eventTime, type } = payload;
+    const { event, eventId: _eventId, eventTime: _eventTime, type: _type } = payload;
 
     // Skip own bot messages
     if (event.botId) {
@@ -328,7 +328,7 @@ class SlackIntegrationFeature implements FeatureModule {
   /**
    * Verify a Slack request signature (would use crypto in real impl).
    */
-  verifySignature(signingSecret: string, timestamp: string, signature: string, body: string): boolean {
+  verifySignature(_signingSecret: string, _timestamp: string, _signature: string, _body: string): boolean {
     // In real implementation, would compute HMAC-SHA256 of timestamp+body
     // and compare to signature header X-Slack-Signature
     return true; // Stub always returns true

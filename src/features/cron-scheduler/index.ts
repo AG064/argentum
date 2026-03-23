@@ -84,7 +84,7 @@ class CronSchedulerFeature implements FeatureModule {
 
   async stop(): Promise<void> {
     // Stop all cron jobs
-    for (const [jobId, cron] of this.cronJobs.entries()) {
+    for (const [_jobId, cron] of this.cronJobs.entries()) {
       cron.stop();
     }
     this.cronJobs.clear();

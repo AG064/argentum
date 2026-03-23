@@ -1,4 +1,4 @@
-import { mkdirSync, existsSync, copyFileSync, unlinkSync, readdirSync, statSync, renameSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync } from 'fs';
 import { dirname, resolve, join } from 'path';
 
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
@@ -167,7 +167,7 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   /** Apply update */
-  async applyUpdate(component: string = 'ag-claw'): Promise<UpdateResult> {
+  async applyUpdate(_component: string = 'ag-claw'): Promise<UpdateResult> {
     if (!this.latestRelease) {
       const release = await this.checkUpdates();
       if (!release) {
@@ -212,7 +212,7 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   /** Rollback to previous version */
-  async rollback(component: string = 'ag-claw'): Promise<UpdateResult> {
+  async rollback(_component: string = 'ag-claw'): Promise<UpdateResult> {
     this.ctx.logger.info('Rolling back update...');
 
     try {
@@ -338,7 +338,7 @@ class AutoUpdateFeature implements FeatureModule {
       throw new Error('No backups found');
     }
 
-    const latestBackup = join(backupDir, backups[0]);
+    const latestBackup = join(backupDir, backups[0] as string);
     this.ctx.logger.debug('Restoring backup', { backup: latestBackup });
 
     // Placeholder: restore files from backup

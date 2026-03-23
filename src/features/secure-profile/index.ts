@@ -39,8 +39,8 @@ class SecureProfileFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      storagePath: (config.storagePath as string) ?? this.config.storagePath,
-      envKeyName: (config.envKeyName as string) ?? this.config.envKeyName,
+      storagePath: (config['storagePath'] as string) ?? this.config['storagePath'],
+      envKeyName: (config['envKeyName'] as string) ?? this.config['envKeyName'],
     };
 
     const envKey = process.env[this.config.envKeyName];

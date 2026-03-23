@@ -6,7 +6,6 @@
  */
 
 import chokidar, { FSWatcher } from 'chokidar';
-import { EventEmitter } from 'events';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
 /** File watcher configuration */

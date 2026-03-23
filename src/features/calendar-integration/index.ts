@@ -71,7 +71,7 @@ class CalendarIntegrationFeature implements FeatureModule {
   };
   private ctx!: FeatureContext;
   private db!: Database.Database;
-  private active = false;
+  private _active = false;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -80,7 +80,7 @@ class CalendarIntegrationFeature implements FeatureModule {
 
   async start(): Promise<void> {
     this.initDb();
-    this.active = true;
+    this._active = true;
     this.ctx.logger.info('Calendar Integration started', {
       dbPath: this.config.dbPath,
       defaultReminderMinutes: this.config.defaultReminderMinutes,
@@ -88,7 +88,7 @@ class CalendarIntegrationFeature implements FeatureModule {
   }
 
   async stop(): Promise<void> {
-    this.active = false;
+    this._active = false;
     this.db?.close();
     this.ctx.logger.info('Calendar Integration stopped');
   }

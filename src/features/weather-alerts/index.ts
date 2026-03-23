@@ -167,10 +167,21 @@ class WeatherAlertsFeature implements FeatureModule {
       throw new Error(`Weather fetch failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      current_condition: Array<{
+        temp_C: string; temp_F: string; FeelsLikeC: string; FeelsLikeF: string;
+        humidity: string; windspeedKmph: string; winddir16Point: string;
+        weatherDesc: Array<{ value: string }>;
+      }>;
+      weather?: Array<{
+        date: string; mintempC: string; maxtempC: string; mintempF: string; maxtempF: string;
+        weatherDesc: Array<{ value: string }>; chanceofrain: string;
+      }>;
+    };
 
     // Parse wttr.in response
-    const current = data.current_condition[0];
+    const current = data.current_condition?.[0];
+    if (!current) throw new Error('Weather data unavailable');
     const weather: Weather = {
       location: location,
       temperature: parseInt(current.temp_C) || parseInt(current.temp_F),
@@ -178,7 +189,7 @@ class WeatherAlertsFeature implements FeatureModule {
       humidity: parseInt(current.humidity),
       windSpeed: parseInt(current.windspeedKmph),
       windDirection: current.winddir16Point,
-      description: current.weatherDesc[0].value,
+      description: current.weatherDesc?.[0]?.value || 'Unknown',
       retrievedAt: Date.now(),
     };
 

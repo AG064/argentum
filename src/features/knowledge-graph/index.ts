@@ -6,7 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
@@ -175,10 +175,10 @@ class SQLiteGraphBackend implements GraphBackend {
     const row = this.db.prepare('SELECT * FROM entities WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     if (!row) return null;
     return {
-      id: row.id as string, type: row.type as string, name: row.name as string,
-      properties: JSON.parse(row.properties as string),
-      tags: JSON.parse((row.tags as string) ?? '[]'),
-      createdAt: row.created_at as number, updatedAt: row.updated_at as number,
+      id: row['id'] as string, type: row['type'] as string, name: row['name'] as string,
+      properties: JSON.parse(row['properties'] as string),
+      tags: JSON.parse((row['tags'] as string) ?? '[]'),
+      createdAt: row['created_at'] as number, updatedAt: row['updated_at'] as number,
     };
   }
 
@@ -274,18 +274,18 @@ class SQLiteGraphBackend implements GraphBackend {
 
   private rowToEntity(row: Record<string, unknown>): Entity {
     return {
-      id: row.id as string, type: row.type as string, name: row.name as string,
-      properties: JSON.parse(row.properties as string),
-      tags: JSON.parse((row.tags as string) ?? '[]'),
-      createdAt: row.created_at as number, updatedAt: row.updated_at as number,
+      id: row['id'] as string, type: row['type'] as string, name: row['name'] as string,
+      properties: JSON.parse(row['properties'] as string),
+      tags: JSON.parse((row['tags'] as string) ?? '[]'),
+      createdAt: row['created_at'] as number, updatedAt: row['updated_at'] as number,
     };
   }
 
   private rowToRel(row: Record<string, unknown>): Relationship {
     return {
-      id: row.id as string, sourceId: row.source_id as string, targetId: row.target_id as string,
-      type: row.type as string, properties: JSON.parse(row.properties as string),
-      weight: row.weight as number, createdAt: row.created_at as number,
+      id: row['id'] as string, sourceId: row['source_id'] as string, targetId: row['target_id'] as string,
+      type: row['type'] as string, properties: JSON.parse(row['properties'] as string),
+      weight: row['weight'] as number, createdAt: row['created_at'] as number,
     };
   }
 }

@@ -246,7 +246,7 @@ class RoleBasedAccessFeature implements FeatureModule {
   /** Set manager (parent) for a user in the org hierarchy */
   async setManager(userId: string, managerId: string | null, roleId?: string): Promise<void> {
     if (managerId === userId) throw new Error('User cannot be their own manager');
-    const now = Date.now();
+    const _now = Date.now();
     this.db.prepare(
       `INSERT OR REPLACE INTO org_hierarchy (user_id, parent_id, role_id) VALUES (?, ?, ?)`
     ).run(userId, managerId, roleId ?? null);

@@ -103,11 +103,11 @@ const SUGGESTION_RULES: SuggestionRule[] = [
   {
     id: 'learn-preference',
     category: 'learning',
-    condition: (ctx, profiles) => {
+    condition: (_ctx, profiles) => {
       const learningProfiles = profiles.filter(p => p.category === 'learning');
       return learningProfiles.length > 0 && learningProfiles.every(p => p.score > 0.6);
     },
-    generate: (ctx, profiles) => {
+    generate: (_ctx, profiles) => {
       const topLearning = profiles.filter(p => p.category === 'learning').sort((a, b) => b.score - a.score)[0];
       if (!topLearning) return null;
       return {
@@ -121,8 +121,8 @@ const SUGGESTION_RULES: SuggestionRule[] = [
   {
     id: 'frequent-task',
     category: 'automation',
-    condition: (ctx, profiles) => profiles.some(p => p.eventCount > 10 && p.positiveCount / Math.max(1, p.eventCount) > 0.7),
-    generate: (ctx, profiles) => {
+    condition: (_ctx, profiles) => profiles.some(p => p.eventCount > 10 && p.positiveCount / Math.max(1, p.eventCount) > 0.7),
+    generate: (_ctx, profiles) => {
       const repetitive = profiles
         .filter(p => p.eventCount > 10 && p.positiveCount / p.eventCount > 0.7)
         .sort((a, b) => b.eventCount - a.eventCount)[0];
@@ -326,7 +326,7 @@ class SmartRecommendationsFeature implements FeatureModule {
     rec.accepted = accepted;
     rec.feedbackScore = score;
 
-    const key = rec.metadata.key as string;
+    const key = rec.metadata['key'] as string;
     if (key) {
       const profile = this.profiles.get(key);
       if (profile) {

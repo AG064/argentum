@@ -31,14 +31,14 @@ class RateLimitingFeature implements FeatureModule {
   };
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env['AGCLAW_DB_PATH'] || path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
   }
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
-    if (config.windowMs) this.config.windowMs = config.windowMs as number;
-    if (config.max) this.config.max = config.max as number;
+    if (config['windowMs']) this.config['windowMs'] = config['windowMs'] as number;
+    if (config['max']) this.config['max'] = config['max'] as number;
     this.initDb();
   }
 

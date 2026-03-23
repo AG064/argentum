@@ -86,11 +86,11 @@ class ImageGenerationFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      cacheDir: (config.cacheDir as string) ?? this.config.cacheDir,
-      maxCacheSizeMB: (config.maxCacheSizeMB as number) ?? this.config.maxCacheSizeMB,
-      defaultProvider: (config.defaultProvider as ImageProvider) ?? this.config.defaultProvider,
-      defaultSize: (config.defaultSize as string) ?? this.config.defaultSize,
-      apiKeys: (config.apiKeys as Record<ImageProvider, string>) ?? this.config.apiKeys,
+      cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
+      maxCacheSizeMB: (config['maxCacheSizeMB'] as number) ?? this.config['maxCacheSizeMB'],
+      defaultProvider: (config['defaultProvider'] as ImageProvider) ?? this.config['defaultProvider'],
+      defaultSize: (config['defaultSize'] as string) ?? this.config['defaultSize'],
+      apiKeys: (config['apiKeys'] as Record<ImageProvider, string>) ?? this.config['apiKeys'],
     };
 
     this.provider = this.config.defaultProvider;
@@ -168,7 +168,7 @@ class ImageGenerationFeature implements FeatureModule {
       style,
       numImages = 1,
       seed,
-    } = request;
+    } = request as { prompt: string; size?: string; style?: string; numImages?: number; seed?: number };
 
     if (!prompt.trim()) {
       throw new Error('Prompt cannot be empty');

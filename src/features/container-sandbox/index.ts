@@ -192,7 +192,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   if (parts.length === 0) parts.push('sh','-c','');
 
   // Check base command against whitelist
-  const base = parts[0];
+  const base = parts[0] as string;
   if (!whitelist.has(base)) {
     throw new Error('Command not allowed');
   }

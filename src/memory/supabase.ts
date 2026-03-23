@@ -56,8 +56,8 @@ export class SupabaseMemory {
 
   /** Initialize Supabase client */
   init(url?: string, key?: string): void {
-    const supabaseUrl = url ?? process.env.SUPABASE_URL;
-    const supabaseKey = key ?? process.env.SUPABASE_KEY;
+    const supabaseUrl = url ?? process.env['SUPABASE_URL'];
+    const supabaseKey = key ?? process.env['SUPABASE_KEY'];
 
     if (!supabaseUrl || !supabaseKey) {
       throw new Error('SUPABASE_URL and SUPABASE_KEY are required');

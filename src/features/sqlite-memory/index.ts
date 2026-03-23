@@ -54,8 +54,8 @@ class SQLiteMemoryFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      namespaces: (config.namespaces as string[]) ?? this.defaultNamespaces,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      namespaces: (config['namespaces'] as string[]) ?? this.defaultNamespaces,
     };
 
     this.initDatabase();

@@ -10,7 +10,7 @@
  * - Audit logging for sensitive operations
  */
 
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac as _createHmac, randomBytes } from 'crypto';
 import { z } from 'zod';
 
 // ─── Security Headers ─────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ const INTERNAL_HOSTNAME_PATTERNS = [
   /^(.*:)?fd00:/i,          // IPv6 unique local
 ];
 
-const BLOCKED_IP_RANGES = [
+const _BLOCKED_IP_RANGES = [
   '0.0.0.0/8',
   '10.0.0.0/8',
   '172.16.0.0/12',
@@ -198,7 +198,7 @@ function isPrivateIP(ip: string): boolean {
   
   if (a === 127) return true;
   if (a === 10) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
   if (a === 169 && b === 254) return true;
   if (a === 0) return true;
@@ -286,7 +286,7 @@ export function sanitizeHTML(html: string): string {
     .replace(/\s+formaction\s*=/gi, ' data-blocked-formaction=')
     .replace(/\s+xlink:href\s*=/gi, ' data-blocked-xlink=')
     // Limit img src to safe schemes only
-    .replace(/<img([^>]+)>/gi, (match, attrs) => {
+    .replace(/<img([^>]+)>/gi, (_match, attrs) => {
       const safeAttrs = attrs
         .replace(/src\s*=\s*["']?\s*javascript:/gi, 'data-blocked-src=')
         .replace(/src\s*=\s*["']?\s*data:(?!image\/(png|jpeg|jpg|gif|webp))/gi, 'data-blocked-src=');
@@ -365,7 +365,7 @@ export function validateSandboxCommand(
   }
   
   // Check base command against whitelist
-  const base = parts[0];
+  const base = parts[0] as string;
   if (!allowedCommands.has(base)) {
     return { valid: false, reason: `Command '${base}' is not allowed` };
   }

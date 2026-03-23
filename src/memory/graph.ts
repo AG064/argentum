@@ -110,13 +110,13 @@ export class MemoryGraph {
 
       if (mem) {
         result.push({
-          id: mem.id as string,
-          type: mem.type as string,
-          content: mem.content as string,
-          weight: mem.weight as number,
+          id: mem['id'] as string,
+          type: mem['type'] as string,
+          content: mem['content'] as string,
+          weight: mem['weight'] as number,
           depth: current.depth,
           relation: current.relation,
-          metadata: this.parseJson(mem.metadata as string),
+          metadata: this.parseJson(mem['metadata'] as string),
         });
       }
 
@@ -166,7 +166,6 @@ export class MemoryGraph {
         return this.reconstructPath(visited, targetId);
       }
 
-      const currentEntry = visited.get(currentId)!;
       const currentDepth = this.getPathDepth(visited, currentId);
 
       if (currentDepth >= maxDepth) continue;
@@ -205,14 +204,14 @@ export class MemoryGraph {
     `).all(id, id) as Array<Record<string, unknown>>;
 
     return rows.map(r => ({
-      id: r.id as string,
-      type: r.type as string,
-      content: r.content as string,
-      embedding: r.embedding as Buffer | null,
-      created_at: r.created_at as number,
-      accessed_at: r.accessed_at as number,
-      access_count: r.access_count as number,
-      metadata: this.parseJson(r.metadata as string),
+      id: r['id'] as string,
+      type: r['type'] as string,
+      content: r['content'] as string,
+      embedding: r['embedding'] as Buffer | null,
+      created_at: r['created_at'] as number,
+      accessed_at: r['accessed_at'] as number,
+      access_count: r['access_count'] as number,
+      metadata: this.parseJson(r['metadata'] as string),
     }));
   }
 
@@ -313,13 +312,13 @@ export class MemoryGraph {
       if (mem) {
         const entry = visited.get(currentId);
         path.unshift({
-          id: mem.id as string,
-          type: mem.type as string,
-          content: mem.content as string,
-          weight: mem.weight as number,
+          id: mem['id'] as string,
+          type: mem['type'] as string,
+          content: mem['content'] as string,
+          weight: mem['weight'] as number,
           depth,
           relation: entry?.relation,
-          metadata: this.parseJson(mem.metadata as string),
+          metadata: this.parseJson(mem['metadata'] as string),
         });
       }
 

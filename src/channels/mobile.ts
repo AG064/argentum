@@ -248,7 +248,7 @@ class MobileChannel implements FeatureModule {
 
     // List devices for user
     this.router.get('/devices/:userId', authMiddleware, (req: Request, res: Response) => {
-      const devices = this.getUserDevices(req.params.userId);
+      const devices = this.getUserDevices(req.params['userId'] ?? '');
       res.json({ devices: devices.map(d => ({ ...d, token: '***' })) }); // Mask tokens
     });
 

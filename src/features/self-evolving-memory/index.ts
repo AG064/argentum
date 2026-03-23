@@ -70,12 +70,12 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      dbPath: (config.dbPath as string) ?? this.config.dbPath,
-      autoEvolve: (config.autoEvolve as boolean) ?? this.config.autoEvolve,
-      evolveIntervalMs: (config.evolveIntervalMs as number) ?? this.config.evolveIntervalMs,
-      similarityThreshold: (config.similarityThreshold as number) ?? this.config.similarityThreshold,
-      decayRate: (config.decayRate as number) ?? this.config.decayRate,
-      weightBoost: (config.weightBoost as number) ?? this.config.weightBoost,
+      dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
+      autoEvolve: (config['autoEvolve'] as boolean) ?? this.config['autoEvolve'],
+      evolveIntervalMs: (config['evolveIntervalMs'] as number) ?? this.config['evolveIntervalMs'],
+      similarityThreshold: (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
+      decayRate: (config['decayRate'] as number) ?? this.config['decayRate'],
+      weightBoost: (config['weightBoost'] as number) ?? this.config['weightBoost'],
     };
 
     this.initDatabase();

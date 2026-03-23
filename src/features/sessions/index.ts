@@ -43,13 +43,13 @@ class SessionsFeature {
     dependencies: ['sqlite-memory'],
   };
 
-  private ctx: any = null;
+  private _ctx: any = null;
   private db: any = null;
 
   async init(config: Record<string, unknown>, context: any): Promise<void> {
-    this.ctx = context;
+    this._ctx = context;
 
-    const dbPath = (config.dbPath as string) || './data/sessions.db';
+    const dbPath = (config['dbPath'] as string) || './data/sessions.db';
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 

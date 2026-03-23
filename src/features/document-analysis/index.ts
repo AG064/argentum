@@ -6,8 +6,8 @@
  * Real PDF/DOCX parsing would require additional libraries (pdf-parse, mammoth).
  */
 
-import { mkdirSync, existsSync, statSync, readFileSync, read } from 'fs';
-import { dirname, resolve, extname, basename, join } from 'path';
+import { mkdirSync, existsSync, statSync, readFileSync } from 'fs';
+import { dirname, extname, basename, join } from 'path';
 import Database from 'better-sqlite3';
 import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 
@@ -93,9 +93,9 @@ class DocumentAnalysisFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = {
-      cacheDir: (config.cacheDir as string) ?? this.config.cacheDir,
-      maxCacheEntries: (config.maxCacheEntries as number) ?? this.config.maxCacheEntries,
-      summaryProvider: (config.summaryProvider as 'local' | 'llm') ?? this.config.summaryProvider,
+      cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
+      maxCacheEntries: (config['maxCacheEntries'] as number) ?? this.config['maxCacheEntries'],
+      summaryProvider: (config['summaryProvider'] as 'local' | 'llm') ?? this.config['summaryProvider'],
     };
 
     this.initDatabase();
