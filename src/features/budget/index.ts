@@ -217,7 +217,7 @@ class BudgetFeature implements FeatureModule {
     this.ensureDb();
     try {
       const usage = this.getMonthlyUsage();
-      const _daily = this.getDailyUsage();
+      const daily = this.getDailyUsage();
       const healthy =
         usage.totalCost < this.config.globalMonthlyLimit &&
         daily.totalCost < this.config.globalDailyLimit;
@@ -347,7 +347,7 @@ class BudgetFeature implements FeatureModule {
 
   checkBudget(agentId: string): BudgetCheckResult {
     this.ensureDb();
-    const _daily = this.getAgentDailyUsage(agentId);
+    const daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
 
     const agentLimit =
@@ -400,7 +400,7 @@ class BudgetFeature implements FeatureModule {
 
   getUsage(agentId: string): BudgetStatus {
     this.ensureDb();
-    const _daily = this.getAgentDailyUsage(agentId);
+    const daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
     const agentLimit =
       this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
@@ -428,7 +428,7 @@ class BudgetFeature implements FeatureModule {
     const byAgent: BudgetStatus[] = agents.map((a) => this.getUsage(a.agent_id));
 
     const monthly = this.getMonthlyUsage();
-    const _daily = this.getDailyUsage();
+    const daily = this.getDailyUsage();
 
     const alerts: string[] = [];
     for (const status of byAgent) {

@@ -33,7 +33,7 @@ export class ErrorAnalyzer {
 
     // Group corrections by pattern
     const patternGroups = new Map<string, UserCorrection[]>();
-    for (const corr of corrections) {
+    for (const corr of _corrections) {
       const pattern = this.categorizeCorrection(corr);
       if (!patternGroups.has(pattern)) {
         patternGroups.set(pattern, []);
