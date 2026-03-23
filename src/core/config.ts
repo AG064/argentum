@@ -149,12 +149,12 @@ export const ConfigSchema = z.object({
   llm: LLMConfigSchema.default({}),
   features: z
     .object({
-      'webchat': WebchatConfigSchema.default({}),
-      'voice': VoiceConfigSchema.default({}),
+      webchat: WebchatConfigSchema.default({}),
+      voice: VoiceConfigSchema.default({}),
       'knowledge-graph': KnowledgeGraphConfigSchema.default({}),
       'multimodal-memory': FeatureToggleSchema.default({}),
       'browser-automation': FeatureToggleSchema.default({}),
-      'webhooks': FeatureToggleSchema.default({}),
+      webhooks: FeatureToggleSchema.default({}),
       'mesh-workflows': FeatureToggleSchema.default({}),
       'live-canvas': FeatureToggleSchema.default({}),
       'container-sandbox': FeatureToggleSchema.default({}),
@@ -163,14 +163,14 @@ export const ConfigSchema = z.object({
       'evening-recap': FeatureToggleSchema.default({}),
       'smart-recommendations': FeatureToggleSchema.default({}),
       'group-management': FeatureToggleSchema.default({}),
-      'budget': FeatureToggleSchema.extend({
+      budget: FeatureToggleSchema.extend({
         monthlyLimit: z.number().default(1_000_000),
         perAgentLimits: z.record(z.number()).default({}),
         alertThreshold: z.number().default(80),
         hardStop: z.boolean().default(true),
         dbPath: z.string().default('./data/budget.db'),
       }).default({}),
-      'goals': FeatureToggleSchema.extend({
+      goals: FeatureToggleSchema.extend({
         dbPath: z.string().default('./data/goals.db'),
       }).default({}),
       'task-checkout': FeatureToggleSchema.extend({
@@ -181,7 +181,7 @@ export const ConfigSchema = z.object({
       'company-templates': FeatureToggleSchema.extend({
         templatesPath: z.string().default('./data/templates'),
       }).default({}),
-      'governance': FeatureToggleSchema.extend({
+      governance: FeatureToggleSchema.extend({
         dbPath: z.string().default('./data/governance.db'),
         autoApproveRisk: z.enum(['none', 'low', 'medium']).default('low'),
         ticketExpiryMs: z.number().default(86_400_000),

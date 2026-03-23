@@ -231,8 +231,8 @@ function cmdInit(): void {
         'goal-decomposition': { enabled: true },
         'sqlite-memory': { enabled: true },
         'cron-scheduler': { enabled: true },
-        'webchat': { enabled: false },
-        'webhooks': { enabled: false },
+        webchat: { enabled: false },
+        webhooks: { enabled: false },
         'api-gateway': { enabled: false },
         'audit-log': { enabled: true },
         'encrypted-secrets': { enabled: false },
@@ -1919,8 +1919,8 @@ async function cmdSkill(): Promise<void> {
       break;
     }
 
-    default: // Treat as "run" — execute a script from an installed skill
-    {
+    default: {
+      // Treat as "run" — execute a script from an installed skill
       const skillName = subcommand;
       const skillsDir = path.join(clawhubWorkDir, 'skills');
       const skillPath = path.join(skillsDir, skillName);

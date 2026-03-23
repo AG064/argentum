@@ -220,17 +220,15 @@ class DiscordBotFeature implements FeatureModule {
    */
   setCommandPrefix(prefix: string): void {
     this.commandPrefix = prefix;
-    this.db
-      .prepare('UPDATE config SET value = ? WHERE key = ?')
-      .run(
-        JSON.stringify({
-          token: this.token,
-          clientId: this.clientId,
-          guildId: this.guildId,
-          commandPrefix: this.commandPrefix,
-        }),
-        'discord',
-      );
+    this.db.prepare('UPDATE config SET value = ? WHERE key = ?').run(
+      JSON.stringify({
+        token: this.token,
+        clientId: this.clientId,
+        guildId: this.guildId,
+        commandPrefix: this.commandPrefix,
+      }),
+      'discord',
+    );
   }
 
   /**

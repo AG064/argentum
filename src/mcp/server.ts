@@ -186,7 +186,7 @@ export function createTool(
  * Pre-built tools for AG-Claw
  */
 export const builtInTools = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Read: createTool(
     'Read',
     'Read file contents',
@@ -198,7 +198,7 @@ export const builtInTools = {
     },
   ),
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Write: createTool(
     'Write',
     'Write file contents',
@@ -214,7 +214,7 @@ export const builtInTools = {
     },
   ),
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Edit: createTool(
     'Edit',
     'Edit file contents',
@@ -239,7 +239,7 @@ export const builtInTools = {
     },
   ),
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Bash: createTool(
     'Bash',
     'Execute bash command',
@@ -268,7 +268,7 @@ export const builtInTools = {
     },
   ),
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   Grep: createTool(
     'Grep',
     'Search pattern in files',
