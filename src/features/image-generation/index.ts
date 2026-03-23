@@ -167,9 +167,8 @@ class ImageGenerationFeature implements FeatureModule {
       prompt,
       size = this.config.defaultSize,
       style,
-      numImages = 1,
       seed,
-    } = request as { prompt: string; size?: string; style?: string; numImages?: number; seed?: number };
+    } = request as { prompt: string; size?: string; style?: string; seed?: number };
 
     if (!prompt.trim()) {
       throw new Error('Prompt cannot be empty');

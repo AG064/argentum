@@ -292,7 +292,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     // In a true audio-based detector, sensitivity would be a signal threshold.
     // For text-based pattern matching, we could allow partial matches based on sensitivity.
     // Here we just use the full word.
-    const _flags = caseSensitive ? '' : 'i';
+    const flags = caseSensitive ? '' : 'i';
     return new RegExp(escaped, flags);
   }
 
