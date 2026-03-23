@@ -320,9 +320,7 @@ class NewsDigestFeature implements FeatureModule {
   }
 
   /** Parse RSS 2.0 feed */
-  private parseRSS(
-    xml: string,
-  ): Array<{
+  private parseRSS(xml: string): Array<{
     title: string;
     link: string;
     description?: string;
@@ -375,9 +373,7 @@ class NewsDigestFeature implements FeatureModule {
   }
 
   /** Parse Atom 1.0 feed */
-  private parseAtom(
-    xml: string,
-  ): Array<{
+  private parseAtom(xml: string): Array<{
     title: string;
     link: string;
     description?: string;
