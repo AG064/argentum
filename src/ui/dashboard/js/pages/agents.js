@@ -14,7 +14,7 @@ const mockAgents = [
     successRate: 99.2,
     avgRuntime: '2.3h',
     memory: '890 MB',
-    uptime: '99.9%'
+    uptime: '99.9%',
   },
   {
     id: 'researcher',
@@ -26,7 +26,7 @@ const mockAgents = [
     successRate: 98.7,
     avgRuntime: '1.8h',
     memory: '456 MB',
-    uptime: '99.5%'
+    uptime: '99.5%',
   },
   {
     id: 'foreman',
@@ -38,7 +38,7 @@ const mockAgents = [
     successRate: 99.8,
     avgRuntime: '45m',
     memory: '234 MB',
-    uptime: '99.9%'
+    uptime: '99.9%',
   },
   {
     id: 'writer',
@@ -50,15 +50,17 @@ const mockAgents = [
     successRate: 97.4,
     avgRuntime: '1.2h',
     memory: '178 MB',
-    uptime: '98.2%'
-  }
+    uptime: '98.2%',
+  },
 ];
 
 function loadAgents() {
   const grid = document.getElementById('agentsGrid');
   if (!grid) return;
 
-  grid.innerHTML = mockAgents.map(agent => `
+  grid.innerHTML = mockAgents
+    .map(
+      (agent) => `
     <div class="agent-card" onclick="openAgentDetail('${agent.id}')">
       <div class="agent-header">
         <div class="agent-avatar">${agent.emoji}</div>
@@ -116,7 +118,9 @@ function loadAgents() {
         </button>
       </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 }
 
 async function startAgent(agentId) {

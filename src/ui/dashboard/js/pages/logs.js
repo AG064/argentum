@@ -22,7 +22,14 @@ function generateInitialLogs() {
   if (!logsBody) return;
 
   const levels = ['DEBUG', 'INFO', 'INFO', 'INFO', 'WARN', 'ERROR'];
-  const sources = ['core', 'agent:coder', 'agent:researcher', 'skills:github', 'channels:telegram', 'memory'];
+  const sources = [
+    'core',
+    'agent:coder',
+    'agent:researcher',
+    'skills:github',
+    'channels:telegram',
+    'memory',
+  ];
   const messages = [
     'Processing incoming request from client',
     'Task completed successfully',
@@ -38,7 +45,7 @@ function generateInitialLogs() {
     'Rate limit check passed',
     'Webhook received from GitHub',
     'Message queued for delivery',
-    'Session established with Telegram'
+    'Session established with Telegram',
   ];
 
   const now = Date.now();
@@ -54,7 +61,7 @@ function generateInitialLogs() {
     logs.push({ timestamp, level, source, message });
   }
 
-  logsBody.innerHTML = logs.map(log => createLogLine(log)).join('');
+  logsBody.innerHTML = logs.map((log) => createLogLine(log)).join('');
 
   // Update count
   const countEl = document.getElementById('logCount');
@@ -70,9 +77,12 @@ function startLogStream() {
   }
 
   // Generate new log entries every 2-5 seconds
-  logStreamInterval = setInterval(() => {
-    addLiveLog();
-  }, 2000 + Math.random() * 3000);
+  logStreamInterval = setInterval(
+    () => {
+      addLiveLog();
+    },
+    2000 + Math.random() * 3000,
+  );
 }
 
 function addLiveLog() {
@@ -88,7 +98,7 @@ function addLiveLog() {
     'Background job started',
     'Request validated',
     'Response serialized',
-    'Metrics collected'
+    'Metrics collected',
   ];
 
   const level = levels[Math.floor(Math.random() * levels.length)];
@@ -152,7 +162,7 @@ function filterLogsByLevel(level) {
   if (!logsBody) return;
 
   const lines = logsBody.querySelectorAll('.log-line');
-  lines.forEach(line => {
+  lines.forEach((line) => {
     const levelSpan = line.querySelector('.level');
     if (levelSpan) {
       const lineLevel = levelSpan.classList[1]; // second class is the level
@@ -174,16 +184,19 @@ function searchLogs(query) {
   const lowerQuery = query.toLowerCase();
   const lines = logsBody.querySelectorAll('.log-line');
 
-  lines.forEach(line => {
+  lines.forEach((line) => {
     const text = line.textContent.toLowerCase();
     if (text.includes(lowerQuery)) {
       line.style.display = '';
       // Highlight matching text
-      line.querySelectorAll('.message').forEach(msg => {
+      line.querySelectorAll('.message').forEach((msg) => {
         const content = msg.textContent;
         if (content.toLowerCase().includes(lowerQuery)) {
           const regex = new RegExp(`(${query})`, 'gi');
-          msg.innerHTML = content.replace(regex, '<mark style="background: var(--color-warning-muted); color: var(--color-warning);">$1</mark>');
+          msg.innerHTML = content.replace(
+            regex,
+            '<mark style="background: var(--color-warning-muted); color: var(--color-warning);">$1</mark>',
+          );
         }
       });
     } else {
@@ -196,7 +209,7 @@ function exportLogsToFile() {
   const logsBody = document.getElementById('logsBody');
   if (!logsBody) return;
 
-  const logs = Array.from(logsBody.querySelectorAll('.log-line')).map(line => {
+  const logs = Array.from(logsBody.querySelectorAll('.log-line')).map((line) => {
     return line.textContent.trim().replace(/\s+/g, ' ');
   });
 
@@ -212,7 +225,7 @@ function clearAllLogs() {
   if (!logsBody) return;
 
   logsBody.innerHTML = '';
-  
+
   const countEl = document.getElementById('logCount');
   if (countEl) {
     countEl.textContent = '0 entries';

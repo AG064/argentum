@@ -101,7 +101,7 @@ module.exports = {
     'prefer-object-spread': 'error',
     'prefer-template': 'error',
     'object-shorthand': 'error',
-    'quote-props': ['error', 'as-needed'],
+    'quote-props': 'off',
     'array-callback-return': 'error',
     'consistent-return': 'error',
     'default-case': 'error',

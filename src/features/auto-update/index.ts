@@ -278,7 +278,7 @@ class AutoUpdateFeature implements FeatureModule {
     try {
       const response = await fetch(url, {
         headers: {
-          Accept: 'application/vnd.github.v3+json',
+          'Accept': 'application/vnd.github.v3+json',
           'User-Agent': `ag-claw-updater/${this.currentVersion}`,
         },
       });

@@ -12,10 +12,13 @@ const Components = {
     if (!container) return;
 
     const icons = {
-      success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
-      error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-      warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+      success:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+      error:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+      warning:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     };
 
     const toast = document.createElement('div');
@@ -51,7 +54,13 @@ const Components = {
    */
   confirm(options) {
     return new Promise((resolve) => {
-      const { title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false } = options;
+      const {
+        title,
+        message,
+        confirmText = 'Confirm',
+        cancelText = 'Cancel',
+        danger = false,
+      } = options;
 
       const backdrop = document.createElement('div');
       backdrop.className = 'modal-backdrop open';
@@ -92,10 +101,13 @@ const Components = {
    */
   alert(title, message, type = 'info') {
     const icons = {
-      success: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-success)"><polyline points="20 6 9 17 4 12"/></svg>',
-      error: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-error)"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-      warning: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-warning)"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      info: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-info)"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+      success:
+        '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-success)"><polyline points="20 6 9 17 4 12"/></svg>',
+      error:
+        '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-error)"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+      warning:
+        '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-warning)"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      info: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-info)"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     };
 
     return new Promise((resolve) => {
@@ -137,20 +149,22 @@ const Components = {
   dropdown(trigger, items) {
     const dropdown = document.createElement('div');
     dropdown.className = 'dropdown';
-    
-    dropdown.innerHTML = `<div class="dropdown-menu">${items.map(item => {
-      if (item.divider) {
-        return '<div class="dropdown-divider"></div>';
-      }
-      return `<button class="dropdown-item ${item.danger ? 'danger' : ''}" data-action="${item.action}">${item.label}</button>`;
-    }).join('')}</div>`;
+
+    dropdown.innerHTML = `<div class="dropdown-menu">${items
+      .map((item) => {
+        if (item.divider) {
+          return '<div class="dropdown-divider"></div>';
+        }
+        return `<button class="dropdown-item ${item.danger ? 'danger' : ''}" data-action="${item.action}">${item.label}</button>`;
+      })
+      .join('')}</div>`;
 
     trigger.appendChild(dropdown);
 
     // Toggle on click
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
-      document.querySelectorAll('.dropdown.open').forEach(d => {
+      document.querySelectorAll('.dropdown.open').forEach((d) => {
         if (d !== dropdown) d.classList.remove('open');
       });
       dropdown.classList.toggle('open');
@@ -160,7 +174,7 @@ const Components = {
     dropdown.addEventListener('click', (e) => {
       const action = e.target.dataset?.action;
       if (action) {
-        const item = items.find(i => i.action === action);
+        const item = items.find((i) => i.action === action);
         if (item?.onClick) {
           item.onClick();
         }
@@ -290,7 +304,7 @@ const Components = {
       success: 'badge-success',
       warning: 'badge-warning',
       error: 'badge-error',
-      info: 'badge-info'
+      info: 'badge-info',
     };
     return `<span class="badge ${types[type]}">${text}</span>`;
   },
@@ -309,11 +323,14 @@ const Components = {
     let html = '<div class="stars">';
     for (let i = 1; i <= max; i++) {
       if (i <= rating) {
-        html += '<svg class="star" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        html +=
+          '<svg class="star" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
       } else if (i - 0.5 <= rating) {
-        html += '<svg class="star" viewBox="0 0 24 24" fill="currentColor" opacity="0.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        html +=
+          '<svg class="star" viewBox="0 0 24 24" fill="currentColor" opacity="0.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
       } else {
-        html += '<svg class="star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        html +=
+          '<svg class="star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
       }
     }
     html += '</div>';
@@ -374,7 +391,7 @@ const Components = {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
+  },
 };
 
 // Make Components globally available

@@ -8,7 +8,7 @@ const App = {
   sidebarOpen: true,
   autoScroll: true,
   theme: 'dark',
-  charts: {}
+  charts: {},
 };
 
 // Initialize application
@@ -18,23 +18,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
   console.log('[AG-Claw] Initializing dashboard...');
-  
+
   // Setup event listeners
   setupNavigation();
   setupThemeToggle();
   setupMobileMenu();
   setupKeyboardShortcuts();
   setupSearch();
-  
+
   // Initialize API
   API.init();
-  
+
   // Load initial data
   await loadDashboardData();
-  
+
   // Start real-time updates
   startRealTimeUpdates();
-  
+
   console.log('[AG-Claw] Dashboard initialized');
 }
 
@@ -44,7 +44,7 @@ async function initApp() {
 
 function setupNavigation() {
   // Sidebar nav items
-  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+  document.querySelectorAll('.nav-item[data-page]').forEach((item) => {
     item.addEventListener('click', () => {
       const page = item.dataset.page;
       navigateTo(page);
@@ -52,7 +52,7 @@ function setupNavigation() {
   });
 
   // Settings nav items
-  document.querySelectorAll('.settings-nav-item').forEach(item => {
+  document.querySelectorAll('.settings-nav-item').forEach((item) => {
     item.addEventListener('click', () => {
       const section = item.dataset.section;
       navigateToSettingsSection(section);
@@ -60,18 +60,18 @@ function setupNavigation() {
   });
 
   // Memory type filters
-  document.querySelectorAll('.memory-type').forEach(type => {
+  document.querySelectorAll('.memory-type').forEach((type) => {
     type.addEventListener('click', () => {
-      document.querySelectorAll('.memory-type').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.memory-type').forEach((t) => t.classList.remove('active'));
       type.classList.add('active');
       filterMemories(type.dataset.type);
     });
   });
 
   // Log level filters
-  document.querySelectorAll('.log-level-btn').forEach(btn => {
+  document.querySelectorAll('.log-level-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.log-level-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.log-level-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       filterLogs(btn.dataset.level);
     });
@@ -80,12 +80,12 @@ function setupNavigation() {
 
 function navigateTo(page) {
   // Update nav items
-  document.querySelectorAll('.nav-item').forEach(item => {
+  document.querySelectorAll('.nav-item').forEach((item) => {
     item.classList.toggle('active', item.dataset.page === page);
   });
 
   // Update pages
-  document.querySelectorAll('.page').forEach(p => {
+  document.querySelectorAll('.page').forEach((p) => {
     p.classList.toggle('active', p.id === `page-${page}`);
   });
 
@@ -108,7 +108,7 @@ function navigateTo(page) {
 }
 
 function navigateToSettingsSection(section) {
-  document.querySelectorAll('.settings-nav-item').forEach(item => {
+  document.querySelectorAll('.settings-nav-item').forEach((item) => {
     item.classList.toggle('active', item.dataset.section === section);
   });
 
@@ -146,9 +146,10 @@ function setTheme(theme) {
   // Update theme toggle icon
   const themeToggle = document.getElementById('themeToggle');
   if (themeToggle) {
-    themeToggle.innerHTML = theme === 'dark' 
-      ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
-      : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    themeToggle.innerHTML =
+      theme === 'dark'
+        ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+        : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
   }
 
   // Update charts for theme
@@ -249,9 +250,12 @@ function setupKeyboardShortcuts() {
 function setupSearch() {
   const globalSearch = document.getElementById('globalSearch');
   if (globalSearch) {
-    globalSearch.addEventListener('input', Components.debounce((e) => {
-      handleGlobalSearch(e.target.value);
-    }, 300));
+    globalSearch.addEventListener(
+      'input',
+      Components.debounce((e) => {
+        handleGlobalSearch(e.target.value);
+      }, 300),
+    );
 
     globalSearch.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -280,16 +284,15 @@ async function loadDashboardData() {
   try {
     // Load system stats
     updateSystemStats();
-    
+
     // Load agents
     loadAgents();
-    
+
     // Load skills
     loadSkills();
-    
+
     // Initialize charts
     initCharts();
-    
   } catch (error) {
     console.error('[App] Failed to load dashboard data:', error);
   }
@@ -301,7 +304,7 @@ async function updateSystemStats() {
     uptime: '99.9%',
     activeAgents: 4,
     cpuUsage: Math.floor(Math.random() * 40) + 10,
-    memoryUsage: (Math.random() * 2 + 0.5).toFixed(1) + ' GB'
+    memoryUsage: (Math.random() * 2 + 0.5).toFixed(1) + ' GB',
   };
 
   // Update UI
@@ -397,7 +400,7 @@ function initPerformanceChart() {
 
   const ctx = canvas.getContext('2d');
   const isDark = App.theme === 'dark';
-  
+
   // Gradient fill
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
   gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
@@ -416,16 +419,18 @@ function initPerformanceChart() {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        data,
-        borderColor: '#6366f1',
-        backgroundColor: gradient,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        borderWidth: 2
-      }]
+      datasets: [
+        {
+          data,
+          borderColor: '#6366f1',
+          backgroundColor: gradient,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -439,37 +444,37 @@ function initPerformanceChart() {
           borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
           borderWidth: 1,
           padding: 12,
-          displayColors: false
-        }
+          displayColors: false,
+        },
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { 
-            color: isDark ? '#5c6170' : '#9ca3af',
-            font: { size: 10 }
-          },
-          border: { display: false }
-        },
-        y: {
-          grid: { 
-            color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
-          },
-          ticks: { 
+          ticks: {
             color: isDark ? '#5c6170' : '#9ca3af',
             font: { size: 10 },
-            callback: (value) => value + '%'
+          },
+          border: { display: false },
+        },
+        y: {
+          grid: {
+            color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+          },
+          ticks: {
+            color: isDark ? '#5c6170' : '#9ca3af',
+            font: { size: 10 },
+            callback: (value) => value + '%',
           },
           border: { display: false },
           min: 0,
-          max: 100
-        }
+          max: 100,
+        },
       },
       interaction: {
         intersect: false,
-        mode: 'index'
-      }
-    }
+        mode: 'index',
+      },
+    },
   };
 
   // Simple chart implementation (no external library)
@@ -505,11 +510,23 @@ function initAgentChart() {
   labels.forEach((label, i) => {
     const groupX = i * barGroupWidth + 20;
     const baseY = chartHeight - 20;
-    
+
     // Stack bars
     drawBar(groupX, baseY - coderData[i] * 3, barWidth, coderData[i] * 3, '#6366f1');
-    drawBar(groupX + barWidth + gap/2, baseY - researcherData[i] * 3, barWidth, researcherData[i] * 3, '#22c55e');
-    drawBar(groupX + (barWidth + gap/2) * 2, baseY - foremanData[i] * 3, barWidth, foremanData[i] * 3, '#f59e0b');
+    drawBar(
+      groupX + barWidth + gap / 2,
+      baseY - researcherData[i] * 3,
+      barWidth,
+      researcherData[i] * 3,
+      '#22c55e',
+    );
+    drawBar(
+      groupX + (barWidth + gap / 2) * 2,
+      baseY - foremanData[i] * 3,
+      barWidth,
+      foremanData[i] * 3,
+      '#f59e0b',
+    );
   });
 }
 
@@ -546,7 +563,7 @@ function drawSimpleChart(ctx, config) {
   ctx.fillStyle = data.datasets[0].backgroundColor;
   ctx.beginPath();
   ctx.moveTo(points[0].x, padding.top + chartHeight);
-  points.forEach(p => ctx.lineTo(p.x, p.y));
+  points.forEach((p) => ctx.lineTo(p.x, p.y));
   ctx.lineTo(points[points.length - 1].x, padding.top + chartHeight);
   ctx.closePath();
   ctx.fill();
@@ -574,7 +591,7 @@ function updateChartsTheme() {
 function openAgentDetail(agentId) {
   const panel = document.getElementById('agentDetail');
   const content = document.getElementById('agentDetailContent');
-  
+
   if (!panel || !content) return;
 
   // Load agent details
@@ -678,7 +695,10 @@ function closeAgentDetail() {
 function showModal(type) {
   switch (type) {
     case 'newAgent':
-      Components.alert('Create Agent', 'Agent creation form would go here. Configure name, role, and permissions.');
+      Components.alert(
+        'Create Agent',
+        'Agent creation form would go here. Configure name, role, and permissions.',
+      );
       break;
     case 'newSkill':
       Components.alert('Add Skill', 'Skill search and installation would go here.');
@@ -726,7 +746,7 @@ function generateMockLogs() {
     'Connection established',
     'Heartbeat received',
     'Configuration updated',
-    'Scheduled job executed'
+    'Scheduled job executed',
   ];
 
   logsBody.innerHTML = '';
@@ -735,7 +755,7 @@ function generateMockLogs() {
     const level = levels[Math.floor(Math.random() * levels.length)];
     const source = sources[Math.floor(Math.random() * sources.length)];
     const message = messages[Math.floor(Math.random() * messages.length)];
-    
+
     addLogEntry(level, source, message);
   }
 
@@ -750,7 +770,7 @@ function addMockLog() {
     'Task completed',
     'Cache hit',
     'Skill executed',
-    'Heartbeat sent'
+    'Heartbeat sent',
   ];
 
   const level = levels[Math.floor(Math.random() * levels.length)];
@@ -811,7 +831,7 @@ function filterLogs(level) {
   if (!logsBody) return;
 
   const lines = logsBody.querySelectorAll('.log-line');
-  lines.forEach(line => {
+  lines.forEach((line) => {
     if (level === 'all' || line.querySelector('.level').classList.contains(level)) {
       line.style.display = '';
     } else {
@@ -824,9 +844,11 @@ function exportLogs() {
   const logsBody = document.getElementById('logsBody');
   if (!logsBody) return;
 
-  const logs = Array.from(logsBody.querySelectorAll('.log-line')).map(line => {
-    return line.textContent.trim().replace(/\s+/g, ' ');
-  }).join('\n');
+  const logs = Array.from(logsBody.querySelectorAll('.log-line'))
+    .map((line) => {
+      return line.textContent.trim().replace(/\s+/g, ' ');
+    })
+    .join('\n');
 
   Components.downloadAsFile(logs, `ag-claw-logs-${Date.now()}.txt`, 'text/plain');
   Components.toast('Logs exported', 'success');
@@ -849,12 +871,16 @@ function filterMemories(type) {
   if (!memoryList) return;
 
   const items = memoryList.querySelectorAll('.memory-item');
-  items.forEach(item => {
+  items.forEach((item) => {
     const badge = item.querySelector('.memory-item-title');
     if (badge) {
-      const badgeType = badge.classList.contains('badge-info') ? 'semantic' :
-                        badge.classList.contains('badge-warning') ? 'episodic' :
-                        badge.classList.contains('badge-success') ? 'procedural' : 'all';
+      const badgeType = badge.classList.contains('badge-info')
+        ? 'semantic'
+        : badge.classList.contains('badge-warning')
+          ? 'episodic'
+          : badge.classList.contains('badge-success')
+            ? 'procedural'
+            : 'all';
       item.style.display = type === 'all' || badgeType === type ? '' : 'none';
     }
   });

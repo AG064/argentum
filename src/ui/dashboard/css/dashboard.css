@@ -663,10 +663,18 @@
   width: 50px;
 }
 
-.log-level.info { color: var(--color-info); }
-.log-level.warn { color: var(--color-warning); }
-.log-level.error { color: var(--color-error); }
-.log-level.debug { color: var(--color-text-tertiary); }
+.log-level.info {
+  color: var(--color-info);
+}
+.log-level.warn {
+  color: var(--color-warning);
+}
+.log-level.error {
+  color: var(--color-error);
+}
+.log-level.debug {
+  color: var(--color-text-tertiary);
+}
 
 .log-message {
   color: var(--color-text-secondary);
@@ -717,7 +725,11 @@
 
 .skill-card.installed {
   border-color: var(--color-success);
-  background: linear-gradient(180deg, var(--color-success-muted) 0%, var(--color-bg-secondary) 100%);
+  background: linear-gradient(
+    180deg,
+    var(--color-success-muted) 0%,
+    var(--color-bg-secondary) 100%
+  );
 }
 
 .skill-header {
@@ -874,9 +886,18 @@
   border-radius: var(--radius-md);
 }
 
-.memory-type-icon.episodic { background: var(--color-cat-communication); color: white; }
-.memory-type-icon.semantic { background: var(--color-cat-memory); color: white; }
-.memory-type-icon.procedural { background: var(--color-cat-automation); color: white; }
+.memory-type-icon.episodic {
+  background: var(--color-cat-communication);
+  color: white;
+}
+.memory-type-icon.semantic {
+  background: var(--color-cat-memory);
+  color: white;
+}
+.memory-type-icon.procedural {
+  background: var(--color-cat-automation);
+  color: white;
+}
 
 .memory-type-icon svg {
   width: 16px;
@@ -1226,10 +1247,18 @@
   width: 60px;
 }
 
-.log-line .level.debug { color: var(--color-text-tertiary); }
-.log-line .level.info { color: var(--color-info); }
-.log-line .level.warn { color: var(--color-warning); }
-.log-line .level.error { color: var(--color-error); }
+.log-line .level.debug {
+  color: var(--color-text-tertiary);
+}
+.log-line .level.info {
+  color: var(--color-info);
+}
+.log-line .level.warn {
+  color: var(--color-warning);
+}
+.log-line .level.error {
+  color: var(--color-error);
+}
 
 .log-line .source {
   color: var(--color-accent);
@@ -1249,19 +1278,19 @@
   .overview-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .memory-layout {
     grid-template-columns: 1fr;
   }
-  
+
   .memory-sidebar {
     position: static;
   }
-  
+
   .settings-layout {
     grid-template-columns: 1fr;
   }
-  
+
   .settings-nav {
     position: static;
     display: flex;
@@ -1274,43 +1303,43 @@
   .sidebar {
     transform: translateX(-100%);
   }
-  
+
   .sidebar.open {
     transform: translateX(0);
   }
-  
+
   .main {
     margin-left: 0;
   }
-  
+
   .header {
     padding: 0 var(--space-4);
   }
-  
+
   .content {
     padding: var(--space-4);
   }
-  
+
   .page-header-content {
     flex-direction: column;
   }
-  
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .agents-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .skills-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .mobile-menu-btn {
     display: flex;
   }
-  
+
   .search-global {
     display: none;
   }
@@ -1320,16 +1349,16 @@
   .stats-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .quick-actions-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .page-actions {
     flex-direction: column;
     width: 100%;
   }
-  
+
   .page-actions .btn {
     width: 100%;
   }
@@ -1374,8 +1403,15 @@
 
 /* Pulse Animation for Status */
 @keyframes statusPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
 }
 
 .pulse {

@@ -9,7 +9,7 @@ const API = {
     baseUrl: '/api',
     wsUrl: `ws://${window.location.host}/ws`,
     reconnectDelay: 3000,
-    maxRetries: 5
+    maxRetries: 5,
   },
 
   // WebSocket connection
@@ -23,7 +23,7 @@ const API = {
     onConnect: [],
     onDisconnect: [],
     onMessage: [],
-    onError: []
+    onError: [],
   },
 
   // Subscribed topics
@@ -93,7 +93,7 @@ const API = {
 
     const delay = this.config.reconnectDelay * Math.pow(1.5, this.wsReconnectAttempts);
     console.log(`[API] Reconnecting in ${delay}ms (attempt ${this.wsReconnectAttempts + 1})`);
-    
+
     this.wsReconnectTimer = setTimeout(() => {
       this.wsReconnectAttempts++;
       this.connectWebSocket();
@@ -106,7 +106,7 @@ const API = {
   handleMessage(data) {
     try {
       const message = JSON.parse(data);
-      
+
       // Route to appropriate handler
       if (message.topic && this.handlers.onMessage.length > 0) {
         this.emit('message', message);
@@ -120,7 +120,7 @@ const API = {
    * Resubscribe to topics after reconnection
    */
   resubscribeTopics() {
-    this.subscriptions.forEach(topic => {
+    this.subscriptions.forEach((topic) => {
       this.send({ type: 'subscribe', topic });
     });
   },
@@ -180,7 +180,7 @@ const API = {
    */
   emit(event, ...args) {
     if (this.handlers[event]) {
-      this.handlers[event].forEach(handler => handler(...args));
+      this.handlers[event].forEach((handler) => handler(...args));
     }
     return this;
   },
@@ -190,11 +190,13 @@ const API = {
    */
   startHealthCheck() {
     setInterval(() => {
-      this.getHealth().then(health => {
-        this.updateSystemStatus(health);
-      }).catch(() => {
-        // System might be initializing
-      });
+      this.getHealth()
+        .then((health) => {
+          this.updateSystemStatus(health);
+        })
+        .catch(() => {
+          // System might be initializing
+        });
     }, 30000);
   },
 
@@ -218,14 +220,14 @@ const API = {
     const config = {
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers
+        ...options.headers,
       },
-      ...options
+      ...options,
     };
 
     try {
       const response = await fetch(url, config);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -250,7 +252,7 @@ const API = {
   async post(endpoint, data) {
     return this.request(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   },
 
@@ -260,7 +262,7 @@ const API = {
   async put(endpoint, data) {
     return this.request(endpoint, {
       method: 'PUT',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   },
 
@@ -508,7 +510,7 @@ const API = {
    */
   updateApiKey(name, value) {
     return this.put(`/settings/keys/${name}`, { value });
-  }
+  },
 };
 
 // Make API globally available
