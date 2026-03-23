@@ -643,6 +643,32 @@ async function cmdSessions(): Promise<void> {
           content TEXT NOT NULL, timestamp INTEGER NOT NULL,
           tool_calls TEXT, metadata TEXT DEFAULT '{}'
         );
+        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC);
+
+        -- FTS5 for cross-session search (Hermes-style)
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+          content,
+          role,
+          content='messages',
+          content_rowid='rowid'
+        );
+
+        -- Sync triggers for FTS5
+        CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+          INSERT INTO messages_fts(rowid, content, role)
+          VALUES (new.rowid, new.content, new.role);
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, content, role)
+          VALUES ('delete', old.rowid, old.content, old.role);
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, content, role)
+          VALUES ('delete', old.rowid, old.content, old.role);
+          INSERT INTO messages_fts(rowid, content, role)
+          VALUES (new.rowid, new.content, new.role);
+        END;
       `);
       return db;
     }
@@ -793,24 +819,48 @@ async function cmdSessions(): Promise<void> {
       }
       banner();
       const db = getDb();
-      const results = db
-        .prepare(
-          'SELECT m.session_id, m.content, m.role, m.timestamp, s.title FROM messages m JOIN sessions s ON m.session_id = s.id WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT 10',
-        )
-        .all(`%${query}%`) as any[];
+
+      // Use FTS5 for fast full-text search (Hermes-style)
+      let results: any[] = [];
+      try {
+        results = db
+          .prepare(
+            `SELECT m.session_id, m.content, m.role, m.timestamp, s.title, rank
+             FROM messages m
+             JOIN messages_fts fts ON m.rowid = fts.rowid
+             JOIN sessions s ON m.session_id = s.id
+             WHERE messages_fts MATCH ?
+             ORDER BY rank, m.timestamp DESC
+             LIMIT 10`,
+          )
+          .all(query) as any[];
+      } catch {
+        // Fallback to LIKE if FTS fails (e.g., invalid FTS syntax)
+        const sanitized = query.replace(/[^\w\s]/g, ' ');
+        results = db
+          .prepare(
+            `SELECT m.session_id, m.content, m.role, m.timestamp, s.title
+             FROM messages m
+             JOIN sessions s ON m.session_id = s.id
+             WHERE m.content LIKE ?
+             ORDER BY m.timestamp DESC
+             LIMIT 10`,
+          )
+          .all(`%${sanitized}%`) as any[];
+      }
 
       if (results.length === 0) {
         info('No results found');
         db.close();
         return;
       }
-      info(`Found ${results.length} results for "${query}":`);
+      info(`Found ${results.length} results for "${query}" (FTS5):`);
       print('');
       for (const r of results) {
-        const content = r.content.slice(0, 100).replace(/\n/g, ' ');
+        const content = r.content.slice(0, 120).replace(/\n/g, ' ');
         print(`  \x1b[1m${r.title}\x1b[0m [${r.role}]`);
-        print(`    ${content}...`);
-        print(`    Session: ${r.session_id.slice(0, 8)}...`);
+        print(`    ${content}${content.length >= 120 ? '...' : ''}`);
+        print(`    Session: ${r.session_id.slice(0, 8)}... | ${new Date(r.timestamp).toLocaleDateString()}`);
       }
       db.close();
       break;
@@ -1916,6 +1966,126 @@ async function cmdSkill(): Promise<void> {
       info('Syncing local skills with ClawHub...');
       const result = runClawhub('sync');
       print(result);
+      break;
+    }
+
+    /**
+     * Skills-list: Level 0 - lightweight list (Hermes-style progressive disclosure)
+     * Shows only name, description, category for minimal token cost
+     */
+    case 'skills-list':
+    case 'sl': {
+      banner();
+      info('Installed skills (Level 0 - progressive disclosure):');
+      print('');
+      // Use the skills-loader feature directly
+      try {
+        const skillsLoader = require(path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js')).default;
+        const skills = skillsLoader.skillsList();
+        if (skills.length === 0) {
+          info('No skills found');
+          return;
+        }
+        for (const s of skills) {
+          print(`  \x1b[1m${s.name}\x1b[0m [\x1b[33m${s.category}\x1b[0m] v${s.version}`);
+          print(`    ${s.description.slice(0, 80)}${s.description.length > 80 ? '...' : ''}`);
+          const extras: string[] = [];
+          if (s.hasScripts) extras.push('scripts');
+          if (s.hasReferences) extras.push('references');
+          if (extras.length) print(`    \x1b[90m${extras.join(', ')}\x1b[0m`);
+          print('');
+        }
+        print(`  Total: ${skills.length} skills`);
+        print('');
+        info('Use: agclaw skill skill-view <name>  (Level 1 - full content)');
+        info('Use: agclaw skill skill-view <name> <ref-path>  (Level 2 - specific file)');
+      } catch (err) {
+        error(`Failed to load skills: ${(err as Error).message}`);
+      }
+      break;
+    }
+
+    /**
+     * Skill-view: Level 1 (full content) or Level 2 (specific reference)
+     */
+    case 'skill-view':
+    case 'view': {
+      const skillName = args[2];
+      const refPath = args[3];
+      if (!skillName) {
+        error('Usage: agclaw skill skill-view <name> [ref-path]');
+        return;
+      }
+      banner();
+
+      try {
+        const skillsLoader = require(path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js')).default;
+
+        if (refPath) {
+          // Level 2: specific reference file
+          info(`Loading ${skillName}/${refPath} (Level 2)...`);
+          print('');
+          const content = skillsLoader.skillViewRef(skillName, refPath);
+          if (content === null) {
+            error(`Reference '${refPath}' not found in skill '${skillName}'`);
+          } else {
+            print(content);
+          }
+        } else {
+          // Level 1: full skill content
+          info(`Loading ${skillName} (Level 1 - full content)...`);
+          print('');
+          const skill = skillsLoader.skillView(skillName);
+          if (!skill) {
+            error(`Skill '${skillName}' not found`);
+            return;
+          }
+          print(`\x1b[1m=== ${skill.name} ===\x1b[0m`);
+          print(`Category: \x1b[33m${skill.category}\x1b[0m | Version: ${skill.version}`);
+          if (skill.platforms.length) print(`Platforms: ${skill.platforms.join(', ')}`);
+          print('');
+          print(`\x1b[1mDescription:\x1b[0m ${skill.description}`);
+          print('');
+          if (skill.scripts.length) {
+            print(`\x1b[1mScripts:\x1b[0m ${skill.scripts.join(', ')}`);
+          }
+          if (skill.references.length) {
+            print(`\x1b[1mReferences:\x1b[0m ${skill.references.join(', ')}`);
+            info('Use: agclaw skill skill-view <name> <ref-path>  (Level 2)');
+          }
+          print('');
+          print('\x1b[1m=== Full Content ===\x1b[0m');
+          print(skill.fullContent);
+        }
+      } catch (err) {
+        error(`Failed to load skill: ${(err as Error).message}`);
+      }
+      break;
+    }
+
+    /**
+     * Skills-hub: Search/browse skills hub (agentskills.io compatible)
+     */
+    case 'skills-hub':
+    case 'hub': {
+      const query = args.slice(2).join(' ');
+      banner();
+      info('Skills Hub (agentskills.io compatible)');
+      print('');
+      if (!query) {
+        info('Usage: agclaw skill skills-hub <search-query>');
+        info('This feature queries agentskills.io registry (future)');
+        print('');
+        print('For now, use: agclaw skill explore  (browse ClawHub)');
+        print('           agclaw skill search <q>  (search ClawHub)');
+      } else {
+        info(`Searching hub for: ${query}`);
+        print('');
+        // Future: query agentskills.io API
+        // For now, fall back to ClawHub search
+        const result = runClawhub(`search "${query}"`);
+        print(result);
+      }
       break;
     }
 
