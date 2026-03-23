@@ -33,7 +33,7 @@ export class ErrorAnalyzer {
 
     // Group corrections by pattern
     const patternGroups = new Map<string, UserCorrection[]>();
-    for (const corr of _corrections) {
+    for (const corr of corrections) {
       const pattern = this.categorizeCorrection(corr);
       if (!patternGroups.has(pattern)) {
         patternGroups.set(pattern, []);
@@ -73,7 +73,7 @@ export class ErrorAnalyzer {
    * Find user corrections from recent sessions
    */
   private async findUserCorrections(): Promise<UserCorrection[]> {
-    const corrections: UserCorrection[] = [];
+    const _corrections: UserCorrection[] = [];
 
     if (!existsSync(this.sessionsDbPath)) {
       return corrections;
@@ -245,7 +245,7 @@ export class ErrorAnalyzer {
   /**
    * Describe a pattern in human-readable form
    */
-  private describePattern(pattern: string, corrections: UserCorrection[]): string {
+  private describePattern(pattern: string, _corrections: UserCorrection[]): string {
     const count = corrections.length;
     switch (pattern) {
       case 'output_formatting':
@@ -268,7 +268,7 @@ export class ErrorAnalyzer {
   /**
    * Infer root cause from pattern
    */
-  private inferRootCause(pattern: string, corrections: UserCorrection[]): string {
+  private inferRootCause(pattern: string, _corrections: UserCorrection[]): string {
     const causes: Record<string, string> = {
       output_formatting: 'LLM may not follow output structure instructions precisely',
       wrong_answer: 'Model hallucinated or lacked sufficient context',
@@ -283,7 +283,7 @@ export class ErrorAnalyzer {
   /**
    * Extract lessons from pattern
    */
-  private extractLessons(pattern: string, corrections: UserCorrection[]): string[] {
+  private extractLessons(pattern: string, _corrections: UserCorrection[]): string[] {
     const lessons: string[] = [];
     switch (pattern) {
       case 'output_formatting':
@@ -317,7 +317,7 @@ export class ErrorAnalyzer {
   /**
    * Suggest a fix for pattern
    */
-  private suggestFix(pattern: string, corrections: UserCorrection[]): string {
+  private suggestFix(pattern: string, _corrections: UserCorrection[]): string {
     const fixes: Record<string, string> = {
       output_formatting: 'Add output_formatting to response checklist in SOUL.md',
       wrong_answer: 'Add verification step before claiming factual information',

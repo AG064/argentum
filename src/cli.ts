@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -3264,6 +3263,20 @@ async function main(): Promise<void> {
     case 'setup':
     case 'configure':
       await cmdOnboard();
+      break;
+    case 'improve':
+      await cmdImprove();
+      break;
+    case 'learnings':
+      await cmdLearnings();
+      break;
+    case 'trajectory':
+    case 'traj':
+      await cmdTrajectory();
+      break;
+    case 'org':
+    case 'org-chart':
+      await cmdOrg();
       break;
     case 'security':
     case 'security-cmd':

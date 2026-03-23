@@ -1,5 +1,5 @@
  
-// @ts-nocheck
+
 /**
  * AG-Claw Credential Manager
  *

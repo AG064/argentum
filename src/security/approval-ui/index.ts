@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars, @typescript-eslint/no-unused-vars */
 // @ts-nocheck
 /**
  * AG-Claw Approval UI / Human-in-the-Loop System
@@ -19,7 +20,7 @@ import { getPolicyEngine } from '../policy-engine';
 import type {
   ApprovalRequest,
   ApprovalRisk,
-  AgentAction,
+
 } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
