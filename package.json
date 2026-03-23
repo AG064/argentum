@@ -20,7 +20,7 @@
     "lint:fix": "eslint src/ --ext .ts --fix",
     "lint:watch": "esw src/ --ext .ts --watch --reset",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
     "format:all": "prettier --write \"**/*.{ts,js,json,md,yaml,yml}\" --ignore-path .prettierignore",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --watch",

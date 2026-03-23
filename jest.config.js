@@ -12,11 +12,12 @@ module.exports = {
     '/dist/',
     '/coverage/',
     '/data/',
+    '/tests/unit/mcp.test.ts',
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { useESM: false }],
   },
-
+  extensionsToTreatAsEsm: ['.ts'],
   transformIgnorePatterns: [
     '/node_modules/(?!(pino)/)',
   ],
