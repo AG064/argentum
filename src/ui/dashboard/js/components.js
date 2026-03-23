@@ -23,17 +23,19 @@ const Components = {
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'toast-message';
+    msgDiv.textContent = message;
     toast.innerHTML = `
       <div class="toast-icon">${icons[type]}</div>
-      <div class="toast-content">
-        <div class="toast-message">${message}</div>
-      </div>
+      <div class="toast-content"></div>
       <button class="toast-close" onclick="this.parentElement.remove()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     `;
+    toast.querySelector('.toast-content').appendChild(msgDiv);
 
     container.appendChild(toast);
 
