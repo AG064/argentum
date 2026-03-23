@@ -1,31 +1,47 @@
 # Code of Conduct
 
-## Our Pledge
+## The Short Version
 
-We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone. We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
+Be decent. Don't be a jerk. Disagreements are fine, personal attacks are not.
 
-## Our Standards
+## What This Means in Practice
 
-Examples of behavior that contributes to a positive environment:
+**OK:**
+- Disagreeing with ideas
+- Criticizing code, not people
+- Asking dumb questions (there are no dumb questions)
+- Reporting bugs honestly
+- Suggesting improvements
 
-- Using welcoming and inclusive language
-- Being respectful of differing viewpoints and experiences
-- Gracefully accepting constructive criticism
-- Focusing on what is best for the community
-- Showing empathy towards other community members
+**Not OK:**
+- Name-calling or insults
+- Doxxing anyone
+- Harassment of any kind
+- Sustained disruption of discussions
+- Anything that makes the community hostile
 
-Examples of unacceptable behavior:
+## How It Works
 
-- The use of sexualized language or imagery and unwelcome sexual attention
-- Trolling, insulting/derogatory comments, and personal or political attacks
-- Public or private harassment
-- Publishing others' private information without explicit permission
-- Other conduct which could reasonably be considered inappropriate
+If someone violates this, the response depends on the severity:
 
-## Enforcement
+- **Minor** — a private note explaining what's up
+- **Repeated or serious** — temporary or permanent exclusion
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement. All complaints will be reviewed and investigated promptly and fairly.
+This applies to GitHub issues, pull requests, Telegram channels, and anywhere else the project community exists.
+
+## Why This Exists
+
+This project is used by people of all skill levels — from students to professionals. The goal is to keep it a place where people actually want to participate, not one where beginners get shot down for asking obvious questions.
+
+## Reporting
+
+If something happens and you want to report it:
+
+- GitHub Issues — tag [@ag_064](https://github.com/AG064)
+- Telegram — [@ag_064](https://t.me/ag_064)
+
+Reports can be anonymous if you prefer.
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.
+This document is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.

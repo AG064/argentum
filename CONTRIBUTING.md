@@ -1,134 +1,128 @@
 # Contributing to AG-Claw
 
-Thank you for your interest in contributing to AG-Claw! This document provides guidelines and instructions for contributing.
+Here's the honest truth upfront: this project is maintained by one person (AG064) in their free time. Contributions are welcome, but response times may vary. That said, every PR gets read and every issue gets considered.
 
-## 🎯 Ways to Contribute
+## What Can I Help With?
 
-- 🐛 Report bugs
-- ✨ Suggest new features
-- 📚 Improve documentation
-- 🔧 Submit pull requests
-- 🧪 Write tests
-- 🌐 Translate into other languages
+**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path.
 
-## 🚀 Getting Started
+**Features** — Open an issue first to discuss before writing code. Big features might need a redesign, and it's better to find that out before you've written 500 lines.
 
-### 1. Fork the Repository
+**Documentation** — Missing something? Wrong? Boring? Fixes here are always appreciated and don't require deep codebase knowledge.
 
-Fork the repository on GitHub and clone your fork locally:
+**Translations** — RU and ET are partially done. Other languages welcome.
+
+**Tests** — The test suite exists but coverage is thin. Real-world bug reports with reproduction steps are often more valuable than unit tests.
+
+## Getting Set Up
+
+### Prerequisites
+
+- Node.js 18+
+- npm 9+
+
+### Fork and Clone
 
 ```bash
+# Fork on GitHub, then:
 git clone https://github.com/YOUR_USERNAME/ag-claw.git
 cd ag-claw
-```
-
-### 2. Install Dependencies
-
-```bash
 npm install
 ```
 
-### 3. Create a Branch
+### Day-to-Day Commands
 
 ```bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/your-bug-fix
-```
+# Type check (do this before pushing, seriously)
+npm run typecheck
 
-## 📝 Coding Standards
+# Lint (ESLint v9 flat config)
+npm run lint
 
-### Code Style
-
-We use ESLint and Prettier for code formatting:
-
-```bash
-# Check formatting
-npm run format:check
-
-# Fix formatting issues
+# Format code
 npm run format
-```
 
-### TypeScript
-
-- Use strict TypeScript mode
-- Avoid `any` type
-- Provide proper types for all functions and variables
-- Document complex logic with comments
-
-### Commit Messages
-
-We follow Conventional Commits:
-
-```
-feat: add new feature
-fix: resolve bug
-docs: update documentation
-style: formatting changes
-refactor: code refactoring
-test: add tests
-chore: maintenance tasks
-```
-
-Example:
-```
-feat: add WebSocket support for real-time agent communication
-
-Adds WebSocket endpoint for monitoring agent activity in real-time.
-Includes connection pooling and automatic reconnection logic.
-```
-
-## 🧪 Testing
-
-```bash
-# Run all tests
+# Run tests
 npm test
 
-# Run with coverage
-npm run test:coverage
-
-# Run specific test suite
+# Run specific test suites
 npm run test:unit
 npm run test:integration
 ```
 
-### Writing Tests
+### Build
 
-- Write tests for all new features
-- Ensure all tests pass before submitting PR
-- Aim for meaningful test coverage
+```bash
+npm run build        # production build
+npm run dev          # watch mode with tsx
+npm run docker:build # Docker image
+```
 
-## 🔍 Making Changes
+## Branch Strategy
 
-1. Make your changes in your feature branch
-2. Add or update tests as needed
-3. Ensure code follows our style guidelines
-4. Write clear commit messages
-5. Push to your fork and submit a pull request
+```
+main          — stable, always releasable
+feat/X        — new features
+fix/X         — bug fixes
+docs/X        — documentation only
+```
 
-## 📬 Pull Request Process
+## Commit Messages
 
-1. Fill out the PR template completely
-2. Request review from maintainers
-3. Address any feedback
-4. Once approved, your PR will be merged
+This project uses Conventional Commits (but not strictly enforced):
 
-## 🔒 Security
+```
+feat: add budget tracking feature
+fix: escapeHtml quote handling in security module
+docs: clarify Docker setup in README
+test: add integration tests for mesh workflow
+chore: update typescript-eslint to v8
+```
 
-If you discover a security vulnerability, please DO NOT open a public issue. Instead, email us privately or see [SECURITY.md](./SECURITY.md).
+Keep them short and honest. "WIP" commits are fine during review, just squash them before merging.
 
-## 📜 License
+## Pull Request Checklist
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+Before requesting review:
 
-## 🙏 Thank You
+- [ ] `npm run typecheck` passes
+- [ ] `npm run lint` passes (warnings are OK for existing code, not for new)
+- [ ] Tests added/updated if applicable
+- [ ] Commit messages are clean
+- [ ] PR description explains *what* and *why*, not just *what changed*
 
-Every contribution is appreciated. Thank you for making AG-Claw better!
+## Things That Won't Get Merged
 
-## 📞 Getting Help
+- PRs with commented-out code left in
+- Changes that break the build
+- Code that introduces new ESLint errors (not warnings)
+- Huge PRs without explanation — split them up
 
-- 📖 Check [docs/](docs/) for documentation
-- 💬 Join our [Telegram channel](https://t.me/agclaw)
-- 🐛 Open an issue for bugs
-- ✨ Submit feature requests
+## Architecture Notes
+
+AG-Claw is built on OpenClaw. The key directories:
+
+```
+src/
+  core/          — Core agent loop, memory, tools
+  channels/      — Telegram, Discord, WhatsApp integrations
+  features/      — Pluggable features (toggle in config)
+  security/      — Policy engine, credential manager, sandbox
+  mcp/           — MCP server implementation
+  ui/dashboard/  — Web dashboard
+
+agents/          — Specialized sub-agents (coder, researcher, etc.)
+scripts/         — Automation scripts (backup, daily update, etc.)
+```
+
+If you're adding a feature, look at `src/features/` for the pattern.
+
+## Questions?
+
+- Open an issue for bugs or feature requests
+- Telegram: [@ag_064](https://t.me/ag_064)
+- Check the [docs/](docs/) directory first — there's more detail there than in this file
+
+## License
+
+By contributing, you agree your work will be licensed under MIT.
