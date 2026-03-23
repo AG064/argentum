@@ -193,7 +193,9 @@ function searchLogs(query) {
         const content = msg.textContent;
         if (content.toLowerCase().includes(lowerQuery)) {
           const regex = new RegExp(`(${query})`, 'gi');
-          msg.innerHTML = content.replace(
+          // Escape HTML before inserting markup to prevent XSS
+          const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          msg.innerHTML = escaped.replace(
             regex,
             '<mark style="background: var(--color-warning-muted); color: var(--color-warning);">$1</mark>',
           );
