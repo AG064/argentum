@@ -260,50 +260,45 @@ export function validateOutboundUrl(url: string): { valid: boolean; reason?: str
  * Uses a whitelist approach for tags and attributes.
  */
 export function sanitizeHTML(html: string): string {
-  return (
-    html
-      // Remove null bytes
-      .replace(/\0/g, '')
-      // Remove script-like content in attributes
-      .replace(/javascript:/gi, '')
-      .replace(/data:/gi, '')
-      .replace(/vbscript:/gi, '')
-      // Remove event handlers (comprehensive list)
-      .replace(/\bon\w+\s*=/gi, 'data-blocked-')
-      // Remove expression() IE CSS
-      .replace(/expression\s*\(/gi, 'expr-blocked(')
-      // Remove URL schemes in attributes (keep safe ones)
-      .replace(/url\s*\(\s*["']?\s*javascript:/gi, 'url(blocked:')
-      .replace(/url\s*\(\s*["']?\s*data:/gi, 'url(blocked:')
-      // Remove DOMPurify-style dangerous patterns
-      .replace(/<script/gi, '&lt;script')
-      .replace(/<\/script/gi, '&lt;/script')
-      .replace(/<iframe/gi, '&lt;iframe')
-      .replace(/<object/gi, '&lt;object')
-      .replace(/<embed/gi, '&lt;embed')
-      .replace(/<link/gi, '&lt;link')
-      .replace(/<meta/gi, '&lt;meta')
-      // Remove SVG/XML dangerous elements
-      .replace(/<svg[^>]*>.*?<\/svg>/gis, '')
-      .replace(/<math[^>]*>.*?<\/math>/gis, '')
-      // Remove XML processing instructions
-      .replace(/<\?.*?\?>/gs, '')
-      // Remove HTML comments (can hide malicious content)
-      .replace(/<!--.*?-->/gs, '')
-      // Remove dangerously named attributes
-      .replace(/\s+formaction\s*=/gi, ' data-blocked-formaction=')
-      .replace(/\s+xlink:href\s*=/gi, ' data-blocked-xlink=')
-      // Limit img src to safe schemes only
-      .replace(/<img([^>]+)>/gi, (_match, attrs) => {
-        const safeAttrs = attrs
-          .replace(/src\s*=\s*["']?\s*javascript:/gi, 'data-blocked-src=')
-          .replace(
-            /src\s*=\s*["']?\s*data:(?!image\/(png|jpeg|jpg|gif|webp))/gi,
-            'data-blocked-src=',
-          );
-        return `<img${safeAttrs}>`;
-      })
-  );
+  // Robust HTML sanitization using allowlist approach.
+  // First strip all tags, then re-encode safe formatting tags.
+  return html
+    // Remove null bytes
+    .replace(/\0/g, '')
+    // Remove HTML comments (can hide malicious content)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    // Replace dangerous tags with text equivalents
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed[\s\S]*?<\/embed>/gi, '')
+    .replace(/<form[\s\S]*?<\/form>/gi, '')
+    // Remove SVG tags (can contain scripts)
+    .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+    // Remove Math tags (can contain scripts)
+    .replace(/<math[\s\S]*?<\/math>/gi, '')
+    // Remove link/meta tags
+    .replace(/<link[^>]*>/gi, '')
+    .replace(/<meta[^>]*>/gi, '')
+    // Remove event handler attributes (all on* attributes)
+    .replace(/\s+on\w+=/gi, ' data-blocked=')
+    // Remove javascript: URIs (case-insensitive, all occurrences)
+    .replace(/javascript\s*:/gi, 'blocked:')
+    // Remove data: URIs except for safe image types
+    .replace(/data\s*:\s*(?!image\/(png|jpeg|jpg|gif|webp))/gi, 'blocked:')
+    // Remove vbscript: URIs
+    .replace(/vbscript\s*:/gi, 'blocked:')
+    // Remove expression() IE CSS expressions
+    .replace(/expression\s*\(/gi, 'blocked(')
+    // Remove url() with javascript/data
+    .replace(/url\s*\(\s*["']?\s*javascript:/gi, 'url(blocked:')
+    .replace(/url\s*\(\s*["']?\s*data:/gi, 'url(blocked:')
+    // Remove formaction attribute
+    .replace(/\s+formaction\s*=/gi, ' data-blocked-formaction=')
+    // Encode remaining < and > for any remaining tags
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /**
