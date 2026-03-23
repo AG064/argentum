@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * AG-Claw CLI
@@ -16,9 +18,6 @@ import * as crypto from 'crypto';
  */
 
 import 'dotenv/config';
-
-import * as path from 'path';
-import * as fs from 'fs';
 
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
@@ -157,8 +156,8 @@ function cmdACP(): void {
     const proc = spawn(cmd, ['-e', code], { timeout: 30000 });
 
     let stdout = '', stderr = '';
-    proc.stdout?.on('data', (d: any) => stdout += d);
-    proc.stderr?.on('data', (d: any) => stderr += d);
+    proc.stdout?.on('data', (d: any) => { stdout += d; });
+    proc.stderr?.on('data', (d: any) => { stderr += d; });
 
     proc.on('close', (code: any) => {
       const duration = Date.now() - start;
@@ -341,14 +340,14 @@ async function cmdStart(): Promise<void> {
         if (f.state === 'active') await pluginLoader.disableFeature(f.name);
       }
       server.close();
-      process.exit(0);
+      return;
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
   } catch (err) {
     error(`Failed to start: ${(err as Error).message}`);
-    process.exit(1);
+    throw new Error(`Failed to start: ${(err as Error).message}`);
   }
 }
 
@@ -374,9 +373,11 @@ function cmdFeatures(): void {
     try {
       const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
       if (fs.existsSync(distPath)) {
-        // Just list the name for now
+        // intentionally empty
       }
-    } catch {}
+    } catch {
+      // intentionally empty
+    }
     print(`  • ${name}`);
   }
 
@@ -1908,7 +1909,7 @@ async function main(): Promise<void> {
       await cmdBackup();
       break;
     case 'acp':
-      await cmdACP();
+      cmdACP();
       break;
     case 'memory':
       await cmdMemory();

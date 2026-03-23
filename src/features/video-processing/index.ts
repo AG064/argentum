@@ -6,7 +6,7 @@
  */
 
 import { exec as execOriginal } from 'child_process';
-import { mkdirSync, existsSync, unlink, readdirSync } from 'fs';
+import { mkdirSync, existsSync, _unlink, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { promisify } from 'util';
 
