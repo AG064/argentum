@@ -2,13 +2,13 @@ name: Stale Issues & PRs
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Run daily at midnight UTC
+    - cron: "0 0 * * *" # Run daily at midnight UTC
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Operation mode'
+        description: "Operation mode"
         required: false
-        default: 'full'
+        default: "full"
         type: choice
         options:
           - full
@@ -34,7 +34,7 @@ jobs:
         uses: actions/stale@v9
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-issue-label: 'status: stale'
+          stale-issue-label: "status: stale"
           stale-issue-message: |
             👋 Hey there! This issue has been open for a while now.
 
@@ -48,7 +48,7 @@ jobs:
             Thanks for helping keep things organized! 🙏
           days-before-stale: 60
           days-before-close: 14
-          only-labels: ''
+          only-labels: ""
           remove-stale-when-updated: true
           debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
           operations-per-run: 100
@@ -62,7 +62,7 @@ jobs:
         uses: actions/stale@v9
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-pr-label: 'status: stale'
+          stale-pr-label: "status: stale"
           stale-pr-message: |
             👋 Hi there! This PR has been marked as stale.
 
@@ -81,7 +81,7 @@ jobs:
           remove-stale-when-updated: true
           debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
           operations-per-run: 100
-          start-date: '2024-01-01Z00:00:00Z'  # Don't mark old PRs as stale
+          start-date: "2024-01-01Z00:00:00Z" # Don't mark old PRs as stale
 
   close-stale:
     name: Close Stale Items
@@ -92,7 +92,7 @@ jobs:
         uses: actions/stale@v9
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-issue-label: 'status: stale'
+          stale-issue-label: "status: stale"
           close-issue-message: |
             👋 This issue has been automatically closed because it has been stale
             for 14 days with no activity.
