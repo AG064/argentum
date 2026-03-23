@@ -5,10 +5,12 @@
  * graph export, BFS pathfinding, and SQLite + in-memory backends.
  */
 
-import Database from 'better-sqlite3';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Knowledge Graph configuration */
 export interface KnowledgeGraphConfig {

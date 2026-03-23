@@ -5,8 +5,9 @@
  * and encrypted local storage. Designed for high-security environments.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
 import { resolve } from 'path';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Air-gapped configuration */
 export interface AirGappedConfig {

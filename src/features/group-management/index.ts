@@ -5,7 +5,7 @@
  * shared context, and group-specific settings.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Group management configuration */
 export interface GroupManagementConfig {

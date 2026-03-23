@@ -14,7 +14,8 @@ import {
 } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
-import { createLogger, Logger } from '../core/logger';
+
+import { createLogger, type Logger } from '../core/logger';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ function deriveKey(masterKey: Buffer, salt: Buffer): Buffer {
  * Priority: explicit arg → AGCLAW_MASTER_KEY env → error.
  */
 function resolveMasterKey(explicit?: string): Buffer {
-  const raw = explicit ?? process.env['AGCLAW_MASTER_KEY'];
+  const raw = explicit ?? process.env.AGCLAW_MASTER_KEY;
   if (!raw || raw.length === 0) {
     throw new Error(
       'Master key not provided. Set AGCLAW_MASTER_KEY env var or pass key to init().',

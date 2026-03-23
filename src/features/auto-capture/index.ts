@@ -5,9 +5,9 @@
  * decisions, lessons, errors, and preferences from conversations.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
-import { getSemanticMemory } from '../../memory/semantic';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 import { getMemoryGraph } from '../../memory/graph';
+import { getSemanticMemory } from '../../memory/semantic';
 
 /** Capture configuration */
 export interface AutoCaptureConfig {

@@ -5,9 +5,11 @@
  * and generating a digest of recent articles.
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** News digest configuration */
 export interface NewsDigestConfig {

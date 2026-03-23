@@ -9,10 +9,11 @@
  * - Reaction support
  */
 
-import { Bot, InputFile } from 'grammy';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+
+import { Bot, InputFile } from 'grammy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -297,7 +298,7 @@ class TelegramFeature {
     try {
       if (!this.bot) return { healthy: false, details: { error: 'Bot not initialized' } };
       const me = await this.bot.api.getMe();
-      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as any).c;
+      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
       return {
         healthy: true,
         details: {

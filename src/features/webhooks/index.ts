@@ -6,7 +6,8 @@
  */
 
 import { createHmac } from 'crypto';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Webhook configuration */
 export interface WebhooksConfig {

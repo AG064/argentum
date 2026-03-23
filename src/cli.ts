@@ -16,8 +16,10 @@ import * as crypto from 'crypto';
  */
 
 import 'dotenv/config';
+
 import * as path from 'path';
 import * as fs from 'fs';
+
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
 
@@ -29,7 +31,7 @@ const command = args[0] || 'help';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function print(text: string): void {
-  process.stdout.write(text + '\n');
+  process.stdout.write(`${text  }\n`);
 }
 
 function error(text: string): void {
@@ -60,7 +62,7 @@ function banner(): void {
   print('  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m');
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
   print('  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║                    \x1b[32mv' + VERSION + '\x1b[36m                            ║\x1b[0m');
+  print(`  \x1b[1m\x1b[36m║                    \x1b[32mv${  VERSION  }\x1b[36m                            ║\x1b[0m`);
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
   print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════════════════════╝\x1b[0m');
   print('');
@@ -69,7 +71,7 @@ function banner(): void {
 }
 
 function getWorkDir(): string {
-  return process.env['AGCLAW_WORKDIR'] || process.cwd();
+  return process.env.AGCLAW_WORKDIR || process.cwd();
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -210,8 +212,8 @@ function cmdInit(): void {
         'goal-decomposition': { enabled: true },
         'sqlite-memory': { enabled: true },
         'cron-scheduler': { enabled: true },
-        'webchat': { enabled: false },
-        'webhooks': { enabled: false },
+        webchat: { enabled: false },
+        webhooks: { enabled: false },
         'api-gateway': { enabled: false },
         'audit-log': { enabled: true },
         'encrypted-secrets': { enabled: false },
@@ -619,7 +621,7 @@ async function cmdSessions(): Promise<void> {
       info(`Sessions (${sessions.length}):`);
       print('');
       for (const s of sessions) {
-        const msgs = (db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(s.id) as any).c;
+        const msgs = (db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(s.id)).c;
         const ago = formatAgo(s.updated_at);
         const status = s.status === 'active' ? '\x1b[32m●\x1b[0m' : '\x1b[33m○\x1b[0m';
         print(`  ${status} \x1b[1m${s.title}\x1b[0m`);
@@ -652,7 +654,7 @@ async function cmdSessions(): Promise<void> {
       banner();
       const db = getDb();
       // Find by prefix
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
       if (!session) { error(`Session '${id}' not found`); db.close(); return; }
 
       info(`Session: ${session.title}`);
@@ -682,7 +684,7 @@ async function cmdSessions(): Promise<void> {
       const id = args[2];
       if (!id) { error('Usage: agclaw session delete <id>'); return; }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
       if (!session) { error(`Session '${id}' not found`); db.close(); return; }
       db.prepare("UPDATE sessions SET status = 'deleted' WHERE id = ?").run(session.id);
       success(`Session '${session.title}' deleted`);
@@ -694,7 +696,7 @@ async function cmdSessions(): Promise<void> {
       const id = args[2];
       if (!id) { error('Usage: agclaw session archive <id>'); return; }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
       if (!session) { error(`Session '${id}' not found`); db.close(); return; }
       db.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(session.id);
       success(`Session '${session.title}' archived`);
@@ -732,7 +734,7 @@ async function cmdSessions(): Promise<void> {
       const id = args[2];
       if (!id) { error('Usage: agclaw session export <id>'); return; }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id) as any;
+      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
       if (!session) { error(`Session '${id}' not found`); db.close(); return; }
       const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(session.id) as any[];
       const exportData = { session, messages };
@@ -746,9 +748,9 @@ async function cmdSessions(): Promise<void> {
     case 'stats': {
       banner();
       const db = getDb();
-      const total = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
-      const active = (db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get() as any).c;
-      const messages = (db.prepare('SELECT COUNT(*) as c FROM messages').get() as any).c;
+      const total = (db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
+      const active = (db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get()).c;
+      const messages = (db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
       print(`  Total sessions: ${total}`);
       print(`  Active: ${active}`);
       print(`  Archived: ${total - active}`);
@@ -1139,7 +1141,7 @@ async function cmdMemory(): Promise<void> {
       }
       info('Memory namespaces:');
       for (const ns of namespaces) {
-        const count = (db.prepare("SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?").get(ns.namespace) as any).c;
+        const count = (db.prepare("SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?").get(ns.namespace)).c;
         print(`  • ${ns.namespace}: ${count} entries`);
       }
       db.close();
@@ -1386,7 +1388,7 @@ async function cmdOnboard(): Promise<void> {
   const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG-Claw): ');
   if (name.trim()) config.name = name.trim();
   print('');
-  print('  \x1b[32m✓\x1b[0m Instance name: \x1b[1m' + config.name + '\x1b[0m');
+  print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${  config.name  }\x1b[0m`);
   print('');
 
   // Step 2: LLM Provider
@@ -1408,11 +1410,11 @@ async function cmdOnboard(): Promise<void> {
 
   interface Preset { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }
   const presets: Record<string, Preset> = {
-    '1': { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
-    '2': { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
-    '3': { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
-    '4': { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
-    '5': { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
+    1: { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
+    2: { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
+    3: { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
+    4: { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    5: { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
   };
 
   let preset: Preset;
@@ -1439,11 +1441,11 @@ async function cmdOnboard(): Promise<void> {
   config.llm.default = preset.name;
 
   print('');
-  print('  \x1b[32m✓\x1b[0m Selected: \x1b[1m' + preset.name + '\x1b[0m (\x1b[90m' + preset.base_url + '\x1b[0m)');
+  print(`  \x1b[32m✓\x1b[0m Selected: \x1b[1m${  preset.name  }\x1b[0m (\x1b[90m${  preset.base_url  }\x1b[0m)`);
 
   // Ask for API key
   print('');
-  const apiKey = await ask('  \x1b[33m▶\x1b[0m \x1b[33m' + preset.api_key_env + '\x1b[0m (press Enter to skip): ');
+  const apiKey = await ask(`  \x1b[33m▶\x1b[0m \x1b[33m${  preset.api_key_env  }\x1b[0m (press Enter to skip): `);
   if (apiKey.trim()) {
     const envPath = path.join(getWorkDir(), '.env');
     fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
@@ -1490,7 +1492,7 @@ async function cmdOnboard(): Promise<void> {
   for (const f of defaults) {
     config.features[f] = { enabled: true };
   }
-  print('  \x1b[32m✓\x1b[0m \x1b[1m' + defaults.length + '\x1b[0m features enabled: \x1b[33m' + defaults.join(', ') + '\x1b[0m');
+  print(`  \x1b[32m✓\x1b[0m \x1b[1m${  defaults.length  }\x1b[0m features enabled: \x1b[33m${  defaults.join(', ')  }\x1b[0m`);
   print('');
 
   // Step 5: Port
@@ -1502,7 +1504,7 @@ async function cmdOnboard(): Promise<void> {
     config.server.port = parseInt(port);
   }
   print('');
-  print('  \x1b[32m✓\x1b[0m Server port: \x1b[1m' + config.server.port + '\x1b[0m');
+  print(`  \x1b[32m✓\x1b[0m Server port: \x1b[1m${  config.server.port  }\x1b[0m`);
   print('');
 
   // Save config
@@ -1525,7 +1527,7 @@ async function cmdOnboard(): Promise<void> {
   print('  \x1b[1m\x1b[32m╚═══════════════════════════════════════════════╝\x1b[0m');
   print('');
   print('  \x1b[1m\x1b[37mNext steps:\x1b[0m');
-  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ' + config.server.port + '\x1b[0m');
+  print(`    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ${  config.server.port  }\x1b[0m`);
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
   print('');
@@ -1538,8 +1540,8 @@ async function cmdSkill(): Promise<void> {
   const { execSync } = require('child_process');
 
   // Default skills dir: OpenClaw workspace
-  const defaultWorkDir = path.join(process.env['HOME'] || '~', '.openclaw', 'workspace');
-  const clawhubWorkDir = process.env['AGCLAW_WORKDIR'] || defaultWorkDir;
+  const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+  const clawhubWorkDir = process.env.AGCLAW_WORKDIR || defaultWorkDir;
 
   const runClawhub = (cmd: string): string => {
     try {
@@ -1723,7 +1725,7 @@ async function cmdSkill(): Promise<void> {
         else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
         else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
         else cmd = `npx tsx "${scriptPath}"`;
-        if (scriptArgs.length) cmd += ' ' + scriptArgs.map((a: string) => `"${a}"`).join(' ');
+        if (scriptArgs.length) cmd += ` ${  scriptArgs.map((a: string) => `"${a}"`).join(' ')}`;
         try {
           const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
           print(result);
@@ -1763,7 +1765,7 @@ async function cmdTelegram(): Promise<void> {
         return;
       }
       print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
-      print(`  Bot Token: ${tg.botToken ? '***' + tg.botToken.slice(-8) : 'NOT SET'}`);
+      print(`  Bot Token: ${tg.botToken ? `***${  tg.botToken.slice(-8)}` : 'NOT SET'}`);
       print(`  DM Policy: ${tg.dmPolicy || 'pairing'}`);
       print(`  Group Policy: ${tg.groupPolicy || 'allowlist'}`);
       print(`  Allowed Users: ${(tg.allowFrom || []).join(', ') || 'none'}`);
@@ -1778,7 +1780,7 @@ async function cmdTelegram(): Promise<void> {
         const newCode = crypto.randomBytes(4).toString('hex');
         info(`Pairing code: ${newCode}`);
         info('Valid for 10 minutes');
-        info('Share with user: /pair ' + newCode);
+        info(`Share with user: /pair ${  newCode}`);
       } else {
         info(`Pairing code: ${code}`);
       }

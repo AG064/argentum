@@ -6,10 +6,11 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { parse } from 'yaml';
 import { resolve } from 'path';
-import { z } from 'zod';
+
 import { watch } from 'chokidar';
+import { parse } from 'yaml';
+import { z } from 'zod';
 
 /** Server configuration schema */
 const ServerConfigSchema = z.object({
@@ -253,20 +254,20 @@ export class ConfigManager {
   private loadEnvOverrides(): Record<string, unknown> {
     const overrides: Record<string, unknown> = {};
 
-    if (process.env['AGCLAW_PORT']) {
-      overrides['server'] = { port: parseInt(process.env['AGCLAW_PORT'], 10) };
+    if (process.env.AGCLAW_PORT) {
+      overrides['server'] = { port: parseInt(process.env.AGCLAW_PORT, 10) };
     }
-    if (process.env['AGCLAW_LOG_LEVEL']) {
-      overrides['logging'] = { level: process.env['AGCLAW_LOG_LEVEL'] };
+    if (process.env.AGCLAW_LOG_LEVEL) {
+      overrides['logging'] = { level: process.env.AGCLAW_LOG_LEVEL };
     }
-    if (process.env['AGCLAW_TELEGRAM_TOKEN']) {
-      overrides['channels'] = { telegram: { token: process.env['AGCLAW_TELEGRAM_TOKEN'] } };
+    if (process.env.AGCLAW_TELEGRAM_TOKEN) {
+      overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
     }
-    if (process.env['AGCLAW_SUPABASE_URL']) {
-      overrides['memory'] = { supabaseUrl: process.env['AGCLAW_SUPABASE_URL'] };
+    if (process.env.AGCLAW_SUPABASE_URL) {
+      overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
     }
-    if (process.env['AGCLAW_SUPABASE_KEY']) {
-      overrides['memory'] = { ...((overrides['memory'] as object) ?? {}), supabaseKey: process.env['AGCLAW_SUPABASE_KEY'] };
+    if (process.env.AGCLAW_SUPABASE_KEY) {
+      overrides['memory'] = { ...((overrides['memory'] as object) ?? {}), supabaseKey: process.env.AGCLAW_SUPABASE_KEY };
     }
 
     return overrides;

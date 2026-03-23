@@ -5,12 +5,14 @@
  * and metadata retrieval. Gracefully degrades if ffmpeg is not available.
  */
 
+import { exec as execOriginal } from 'child_process';
 import { mkdirSync, existsSync, unlink, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
-import { exec as execOriginal } from 'child_process';
 import { promisify } from 'util';
+
 import Database from 'better-sqlite3';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 const exec = promisify(execOriginal);
 

@@ -1,5 +1,6 @@
 import { cpus, totalmem, freemem, arch, platform } from 'os';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

@@ -8,8 +8,10 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+
 import { parse } from 'yaml';
-import { createLogger, Logger } from '../core/logger';
+
+import { createLogger, type Logger } from '../core/logger';
 
 export interface AllowlistConfig {
   allowedCommands: string[];
@@ -303,7 +305,7 @@ export class AllowlistManager {
 
     // Exact or prefix match
     return normalizedPath === normalizedPattern ||
-      normalizedPath.startsWith(normalizedPattern + '/');
+      normalizedPath.startsWith(`${normalizedPattern  }/`);
   }
 
   /**
@@ -313,7 +315,7 @@ export class AllowlistManager {
   private matchHost(host: string, pattern: string): boolean {
     if (pattern.startsWith('*.')) {
       const domain = pattern.slice(2);
-      return host === domain || host.endsWith('.' + domain);
+      return host === domain || host.endsWith(`.${  domain}`);
     }
     return host === pattern;
   }

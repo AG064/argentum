@@ -4,10 +4,12 @@
  * Stores goals and tasks with parent-child relationships and dependencies.
  */
 
-import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
+
+import Database from 'better-sqlite3';
+
 import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
 
 export type TaskStatus = 'pending' | 'in-progress' | 'done' | 'blocked';

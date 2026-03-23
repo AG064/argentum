@@ -5,9 +5,9 @@
  * Stores messages, tracks context, manages history.
  */
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -102,8 +102,8 @@ class SessionsFeature {
 
   async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {
     try {
-      const sessionCount = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
-      const messageCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as any).c;
+      const sessionCount = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
+      const messageCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
       return {
         healthy: true,
         details: { sessions: sessionCount, messages: messageCount },
@@ -136,9 +136,9 @@ class SessionsFeature {
   }
 
   get(id: string): Session | null {
-    const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
     if (!row) return null;
-    const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(id) as any).c;
+    const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(id)).c;
     return {
       id: row.id,
       title: row.title,
@@ -174,7 +174,7 @@ class SessionsFeature {
 
     const rows = this.db.prepare(query).all(...params) as any[];
     return rows.map(row => {
-      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(row.id) as any).c;
+      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(row.id)).c;
       return {
         id: row.id,
         title: row.title,
@@ -302,7 +302,7 @@ class SessionsFeature {
 
   getState(sessionId: string, key: string): string | null {
     const row = this.db.prepare('SELECT value FROM session_state WHERE session_id = ? AND key = ?')
-      .get(sessionId, key) as any;
+      .get(sessionId, key);
     return row?.value ?? null;
   }
 
@@ -327,9 +327,9 @@ class SessionsFeature {
   // ─── Stats ──────────────────────────────────────────────────────────────
 
   getStats(): { totalSessions: number; activeSessions: number; totalMessages: number; avgMessagesPerSession: number } {
-    const totalSessions = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c;
-    const activeSessions = (this.db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get() as any).c;
-    const totalMessages = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as any).c;
+    const totalSessions = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
+    const activeSessions = (this.db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get()).c;
+    const totalMessages = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
     return {
       totalSessions,
       activeSessions,

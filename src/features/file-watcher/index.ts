@@ -5,8 +5,9 @@
  * Uses chokidar for cross-platform file watching.
  */
 
-import chokidar, { FSWatcher } from 'chokidar';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import chokidar, { type FSWatcher } from 'chokidar';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** File watcher configuration */
 export interface FileWatcherConfig {
@@ -116,7 +117,7 @@ class FileWatcherFeature implements FeatureModule {
     const entry: InternalWatchEntry = {
       id,
       path,
-      pattern: pattern as string | RegExp | (string | RegExp)[] | undefined,
+      pattern,
       userCallback: callback ?? (() => {}),
       watcher,
     };

@@ -13,8 +13,9 @@
 
 import { spawn } from 'child_process';
 import { resolve } from 'path';
+
 import { createLogger } from '../../core/logger';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ────────────────────────────────────────────────────
 

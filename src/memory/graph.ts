@@ -5,8 +5,10 @@
  * Links memories via typed edges for traversal and pathfinding.
  */
 
-import Database from 'better-sqlite3';
-import { getSemanticMemory, MemoryResult } from './semantic';
+import { getSemanticMemory, type MemoryResult } from './semantic';
+
+import type Database from 'better-sqlite3';
+
 
 /** A node in the memory graph */
 export interface MemoryNode {

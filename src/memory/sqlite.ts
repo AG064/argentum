@@ -5,10 +5,11 @@
  * Supports keyword search, access tracking, and metadata.
  */
 
-import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { randomUUID } from 'crypto';
+
+import Database from 'better-sqlite3';
 
 /** Memory entry stored in SQLite */
 export interface SQLiteMemoryEntry {

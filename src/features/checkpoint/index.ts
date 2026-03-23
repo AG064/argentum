@@ -5,7 +5,7 @@
  * Integrates with mesh-workflows for persistent workflow state.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 import { getSemanticMemory } from '../../memory/semantic';
 
 /** Checkpoint configuration */

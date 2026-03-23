@@ -5,7 +5,7 @@
  * Human-readable, git-friendly storage for knowledge and notes.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 import { MarkdownMemory } from '../../memory/markdown';
 
 /** Feature configuration */

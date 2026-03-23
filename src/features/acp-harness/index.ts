@@ -16,10 +16,12 @@
  *   WS  /acp/stream   - streaming output
  */
 
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { WebSocketServer } from 'ws';
 import { spawn } from 'child_process';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { createServer, type IncomingMessage, type ServerResponse } from 'http';
+
+import { WebSocketServer } from 'ws';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 export interface ACPConfig {
   enabled: boolean;

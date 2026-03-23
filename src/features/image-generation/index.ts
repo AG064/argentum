@@ -5,10 +5,11 @@
  * Provides image caching, upscaling, and variations.
  */
 
+import crypto from 'crypto';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import crypto from 'crypto';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Supported image providers */
 export type ImageProvider = 'dalle' | 'stable-diffusion' | 'midjourney';
@@ -183,7 +184,7 @@ class ImageGenerationFeature implements FeatureModule {
       return cached;
     }
 
-    this.ctx.logger.debug('Generating image (stub)', { provider: this.provider, prompt: prompt.substring(0, 50) + '...' });
+    this.ctx.logger.debug('Generating image (stub)', { provider: this.provider, prompt: `${prompt.substring(0, 50)  }...` });
 
     // In real implementation, would call provider API
     // For stub, create a placeholder text file as "image"

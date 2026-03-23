@@ -5,9 +5,9 @@
  * Any SKILL.md in ~/.openclaw/workspace/skills/ becomes available.
  */
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ class SkillsLoaderFeature {
   async init(config: Record<string, unknown>, context: any): Promise<void> {
     this.ctx = context;
     this['skillsDir'] = (config['skillsDir'] as string) ||
-      path.join(process.env['HOME'] || '~', '.openclaw', 'workspace', 'skills');
+      path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
 
     this.scanSkills();
   }

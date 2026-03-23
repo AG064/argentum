@@ -6,8 +6,10 @@
  */
 
 import { EventEmitter } from 'events';
-import { Logger } from '../core/logger';
+
 import type { MCPTool, ToolsCallRequest, Resource, ResourceTemplate, ToolResultContent } from './types';
+
+import { Logger } from '../core/logger';
 
 // Re-export for backwards compatibility
 export type Tool = MCPTool;

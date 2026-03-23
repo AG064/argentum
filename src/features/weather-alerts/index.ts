@@ -5,9 +5,11 @@
  * Uses wttr.in for free weather API (no key required).
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Weather configuration */
 export interface WeatherConfig {
@@ -183,7 +185,7 @@ class WeatherAlertsFeature implements FeatureModule {
     const current = data.current_condition?.[0];
     if (!current) throw new Error('Weather data unavailable');
     const weather: Weather = {
-      location: location,
+      location,
       temperature: parseInt(current.temp_C) || parseInt(current.temp_F),
       feelsLike: parseInt(current.FeelsLikeC) || parseInt(current.FeelsLikeF),
       humidity: parseInt(current.humidity),
