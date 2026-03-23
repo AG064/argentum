@@ -11,68 +11,54 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    # Only run on main branch pushes (not PRs) and releases
     if: github.event_name == 'push' || github.event_name == 'release' || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)
     steps:
       - name: Send push notification
         if: github.event_name == 'push'
         run: |
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1 | cut -c1-200)
-          CHAT_ID="@ag_claw"
-          TEXT="🔔 *AG-Claw Update*
-
-📦 ${{ github.actor }} pushed to \`main\`
-
-\`$COMMIT_MSG\`"
-
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=$CHAT_ID" \
-            -d "text=$TEXT" \
+            -d "chat_id=386565331" \
+            -d "text=🔔 *AG-Claw*
+
+📦 ${{ github.actor }} pushed to main
+
+\`$COMMIT_MSG\`" \
             -d "parse_mode=Markdown" \
             -d "disable_web_page_preview=true"
 
       - name: Send release notification
         if: github.event_name == 'release'
         run: |
-          CHAT_ID="@ag_claw"
           TAG="${{ github.event.release.tag_name }}"
           NAME="${{ github.event.release.name }}"
           BODY="${{ github.event.release.body }}"
-
-          # Truncate body if too long (Telegram message limit ~4096 chars)
           BODY=$(echo "$BODY" | head -c 3500)
-
-          TEXT="🚀 *New Release: $TAG*
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=386565331" \
+            -d "text=🚀 *New Release: $TAG*
 
 $NAME
 
-$BODY"
-
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=$CHAT_ID" \
-            -d "text=$TEXT" \
+$BODY" \
             -d "parse_mode=Markdown" \
             -d "disable_web_page_preview=true"
 
       - name: Send merged PR notification
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         run: |
-          CHAT_ID="@ag_claw"
           TITLE="${{ github.event.pull_request.title }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           BODY="${{ github.event.pull_request.body }}"
           BODY=$(echo "$BODY" | head -c 1500)
-
-          TEXT="✅ *PR #$PR_NUM Merged*
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=386565331" \
+            -d "text=✅ *PR #$PR_NUM Merged*
 
 $TITLE
 
 _$BODY_
 
-By ${{ github.actor }}"
-
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=$CHAT_ID" \
-            -d "text=$TEXT" \
+By ${{ github.actor }}" \
             -d "parse_mode=Markdown" \
             -d "disable_web_page_preview=true"
