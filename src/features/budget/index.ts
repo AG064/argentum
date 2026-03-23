@@ -197,7 +197,7 @@ class BudgetFeature implements FeatureModule {
   }
 
   async start(): Promise<void> {
-    this.ctx.logger.info('Budget enforcement active', {
+    this.log('info', 'Budget enforcement active', {
       globalMonthlyLimit: `$${this.config.globalMonthlyLimit}/month`,
       globalDailyLimit: `$${this.config.globalDailyLimit}/day`,
       perAgentLimit: this.config.perAgentLimit
@@ -270,17 +270,19 @@ class BudgetFeature implements FeatureModule {
       .prepare('INSERT OR REPLACE INTO budget_config (key, value) VALUES (?, ?)')
       .run('config', JSON.stringify(this.config));
 
-    this.ctx.logger.info('Budget config updated', {
+    this.log('info', 'Budget config updated', {
       config: this.config,
     });
     return { success: true };
   }
 
   getConfig(): BudgetConfig {
+    this.ensureDb();
     return { ...this.config };
   }
 
   getConfigDisplay(): Record<string, { value: unknown; default: unknown }> {
+    this.ensureDb();
     return {
       globalMonthlyLimit: {
         value: this.config.globalMonthlyLimit,
@@ -504,7 +506,7 @@ class BudgetFeature implements FeatureModule {
     this.ensureDb();
     this.db.prepare('DELETE FROM budget_usage').run();
     this.alertedAgents.clear();
-    this.ctx.logger.info('Budget usage reset');
+    this.log('info', 'Budget usage reset');
   }
 
   resetAgent(agentId: string): { changes: number } {
@@ -674,16 +676,13 @@ class BudgetFeature implements FeatureModule {
       !this.alertedAgents.has(agentId)
     ) {
       this.alertedAgents.add(agentId);
-      this.ctx.logger.warn(
-        `Budget alert: ${agentId} at ${status.percentUsed}% of threshold`,
-        {
-          agentId,
-          monthlyCost: status.monthlyCost,
-          monthlyLimit: status.monthlyLimit,
-          dailyCost: status.dailyCost,
-          dailyLimit: status.dailyLimit,
-        },
-      );
+      this.log('warn', `Budget alert: ${agentId} at ${status.percentUsed}% of threshold`, {
+        agentId,
+        monthlyCost: status.monthlyCost,
+        monthlyLimit: status.monthlyLimit,
+        dailyCost: status.dailyCost,
+        dailyLimit: status.dailyLimit,
+      });
     }
   }
 }
