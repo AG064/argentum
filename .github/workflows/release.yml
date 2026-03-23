@@ -3,16 +3,16 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version override (e.g. v1.2.3)'
+        description: "Version override (e.g. v1.2.3)"
         required: false
       release_type:
-        description: 'Release type'
+        description: "Release type"
         required: false
-        default: 'auto'
+        default: "auto"
         type: choice
         options:
           - auto
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: "22"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -135,7 +135,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -150,7 +150,7 @@ jobs:
         run: npm run test:ci
         env:
           CI: true
-          NODE_OPTIONS: '--experimental-vm-modules'
+          NODE_OPTIONS: "--experimental-vm-modules"
 
       - name: Build
         run: npm run build:prod
@@ -246,9 +246,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@ag064'
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
+          scope: "@ag064"
 
       - name: Install dependencies
         run: npm ci

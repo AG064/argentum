@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: "20"
   TURBO_TOKEN: ${{ vars.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
@@ -32,7 +32,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -64,7 +64,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -93,7 +93,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -102,7 +102,7 @@ jobs:
         run: npm run test:unit
         env:
           CI: true
-          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
+          NODE_OPTIONS: "--experimental-vm-modules --openssl-legacy-provider"
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '20'
@@ -137,7 +137,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -146,8 +146,8 @@ jobs:
         run: npm run test:integration
         env:
           CI: true
-          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
-          TEST_ENV: 'integration'
+          NODE_OPTIONS: "--experimental-vm-modules --openssl-legacy-provider"
+          TEST_ENV: "integration"
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '20'
@@ -175,7 +175,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -189,8 +189,8 @@ jobs:
         run: npm run test:e2e
         env:
           CI: true
-          NODE_OPTIONS: '--experimental-vm-modules --openssl-legacy-provider'
-          TEST_ENV: 'e2e'
+          NODE_OPTIONS: "--experimental-vm-modules --openssl-legacy-provider"
+          TEST_ENV: "e2e"
 
       - name: Upload E2E test results
         if: always()
@@ -222,7 +222,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -291,7 +291,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci

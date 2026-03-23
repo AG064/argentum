@@ -36,7 +36,10 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-unnecessary-type-assertion': 'error',
     '@typescript-eslint/no-require-imports': 'error',
-    '@typescript-eslint/no-use-before-define': ['error', { functions: false, classes: true, variables: true }],
+    '@typescript-eslint/no-use-before-define': [
+      'error',
+      { functions: false, classes: true, variables: true },
+    ],
     '@typescript-eslint/no-floating-promises': 'error',
     '@typescript-eslint/await-thenable': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
@@ -54,7 +57,7 @@ module.exports = {
     'import/order': [
       'error',
       {
-        groups: [
+        'groups': [
           'builtin',
           'external',
           'internal',
@@ -63,15 +66,19 @@ module.exports = {
           'object',
           'type',
         ],
-        pathGroups: [
-          { pattern: '{@clack/prompts,chalk,consola,debug,pino}', group: 'external', position: 'before' },
+        'pathGroups': [
+          {
+            pattern: '{@clack/prompts,chalk,consola,debug,pino}',
+            group: 'external',
+            position: 'before',
+          },
           { pattern: '{./,../}*.js', group: 'sibling', position: 'after' },
           { pattern: '{./,../}*.ts', group: 'sibling', position: 'after' },
           { pattern: '{./types,./types/**}', group: 'internal', position: 'before' },
         ],
-        alphabetize: { order: 'asc', caseInsensitive: false },
+        'alphabetize': { order: 'asc', caseInsensitive: false },
         'newlines-between': 'always',
-        warnOnUnassignedImports: true,
+        'warnOnUnassignedImports': true,
       },
     ],
     'import/no-default-export': 'error',
@@ -190,7 +197,10 @@ module.exports = {
         '@typescript-eslint/no-var-requires': 'off',
         '@typescript-eslint/prefer-nullish-coalescing': 'warn',
         '@typescript-eslint/no-floating-promises': 'warn',
-        '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        ],
         'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
         'consistent-return': 'off',
         '@typescript-eslint/consistent-return': 'off',
