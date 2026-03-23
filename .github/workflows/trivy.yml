@@ -1,0 +1,49 @@
+name: Trivy Security Scan
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+      - '.github/workflows/trivy.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+
+jobs:
+  trivy:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ag-claw:${{ github.sha }} ./docker
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ag-claw:${{ github.sha }}'
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Fail on critical vulnerabilities
+        if: always()
+        run: |
+          CRITICAL=$(grep -c '"severity": "CRITICAL"' trivy-results.sarif || echo "0")
+          if [ "$CRITICAL" -gt "0" ]; then
+            echo "Found $CRITICAL critical vulnerabilities"
+            exit 1
+          fi
