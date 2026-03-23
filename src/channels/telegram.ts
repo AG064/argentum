@@ -10,7 +10,12 @@
 
 import { Bot, type Context, GrammyError, HttpError } from 'grammy';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../core/plugin-loader';
 import { type Agent } from '../index';
 
 /** Telegram channel configuration */
@@ -71,17 +76,19 @@ class TelegramChannel implements FeatureModule {
     this.registerHandlers();
 
     // Start bot in background (non-blocking)
-    this.bot.start({
-      onStart: (info) => {
-        this.running = true;
-        this.ctx.logger.info('Telegram bot started', { username: info.username });
-      },
-    }).catch((err) => {
-      this.ctx.logger.error('Telegram bot error', {
-        error: err instanceof Error ? err.message : String(err),
+    this.bot
+      .start({
+        onStart: (info) => {
+          this.running = true;
+          this.ctx.logger.info('Telegram bot started', { username: info.username });
+        },
+      })
+      .catch((err) => {
+        this.ctx.logger.error('Telegram bot error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        this.running = false;
       });
-      this.running = false;
-    });
 
     this.ctx.logger.info('Telegram channel initializing...');
   }
@@ -134,8 +141,8 @@ class TelegramChannel implements FeatureModule {
     this.bot.command('start', async (ctx) => {
       await ctx.reply(
         '🤖 Welcome to AG-Claw!\n\n' +
-        'I am an AI assistant. Just send me a message and I will do my best to help.\n\n' +
-        '/help - Show available commands'
+          'I am an AI assistant. Just send me a message and I will do my best to help.\n\n' +
+          '/help - Show available commands',
       );
     });
 
@@ -143,12 +150,12 @@ class TelegramChannel implements FeatureModule {
     this.bot.command('help', async (ctx) => {
       await ctx.reply(
         '🤖 AG-Claw Help\n\n' +
-        'Commands:\n' +
-        '/start - Welcome message\n' +
-        '/help - This help message\n' +
-        '/status - Bot status\n\n' +
-        'Send any text message and I will respond.\n' +
-        'Send a voice message for transcription.'
+          'Commands:\n' +
+          '/start - Welcome message\n' +
+          '/help - This help message\n' +
+          '/status - Bot status\n\n' +
+          'Send any text message and I will respond.\n' +
+          'Send a voice message for transcription.',
       );
     });
 
@@ -158,9 +165,9 @@ class TelegramChannel implements FeatureModule {
       const memUsage = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
       await ctx.reply(
         `📊 AG-Claw Status\n\n` +
-        `Uptime: ${uptime}s\n` +
-        `Memory: ${memUsage}MB\n` +
-        `Running: ${this.running ? '✅' : '❌'}`
+          `Uptime: ${uptime}s\n` +
+          `Memory: ${memUsage}MB\n` +
+          `Running: ${this.running ? '✅' : '❌'}`,
       );
     });
 
@@ -248,7 +255,7 @@ class TelegramChannel implements FeatureModule {
           return;
         }
 
-        const { text: transcription } = await transcribeResponse.json() as { text: string };
+        const { text: transcription } = (await transcribeResponse.json()) as { text: string };
         this.ctx.logger.info('Voice transcribed', { text: transcription.slice(0, 100) });
 
         // Process with agent

@@ -10,11 +10,16 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Feature configuration */
 export interface MemoryCompressionConfig {
-  dbPath?: string;         // Path to the sqlite-memory database (default: ./data/sqlite-memory.db)
+  dbPath?: string; // Path to the sqlite-memory database (default: ./data/sqlite-memory.db)
   archiveAfterDays?: number; // Age after which entries are eligible for archiving (default: 30)
   similarityThreshold?: number; // Jaccard similarity threshold for merging (default: 0.8)
 }
@@ -64,7 +69,8 @@ class MemoryCompressionFeature implements FeatureModule {
     this.config = {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
       archiveAfterDays: (config['archiveAfterDays'] as number) ?? this.config['archiveAfterDays'],
-      similarityThreshold: (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
+      similarityThreshold:
+        (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
     };
 
     this.initDatabase();
@@ -100,7 +106,10 @@ class MemoryCompressionFeature implements FeatureModule {
   }
 
   /** Compress memories in a namespace older than specified days */
-  async compress(namespace: string, olderThanDays: number): Promise<{
+  async compress(
+    namespace: string,
+    olderThanDays: number,
+  ): Promise<{
     duplicatesMerged: number;
     similarMerged: number;
     entriesBefore: number;
@@ -109,11 +118,15 @@ class MemoryCompressionFeature implements FeatureModule {
     const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
 
     // Get entries older than cutoff
-    const oldEntries = this.db.prepare(`
+    const oldEntries = this.db
+      .prepare(
+        `
       SELECT rowid, * FROM kv_store
       WHERE namespace = ? AND updated_at < ?
       ORDER BY updated_at ASC
-    `).all(namespace, cutoff) as Array<{
+    `,
+      )
+      .all(namespace, cutoff) as Array<{
       rowid: number;
       namespace: string;
       key: string;
@@ -131,7 +144,10 @@ class MemoryCompressionFeature implements FeatureModule {
     let similarMerged = 0;
 
     // Group by exact value to deduplicate
-    const valueGroups = new Map<string, Array<{ rowid: number; key: string; updated_at: number }>>();
+    const valueGroups = new Map<
+      string,
+      Array<{ rowid: number; key: string; updated_at: number }>
+    >();
     for (const entry of oldEntries) {
       const group = valueGroups.get(entry.value) ?? [];
       group.push({ rowid: entry.rowid, key: entry.key, updated_at: entry.updated_at });
@@ -152,7 +168,7 @@ class MemoryCompressionFeature implements FeatureModule {
     }
 
     // Find similar entries among those not already exact duplicates
-    const candidates = oldEntries.filter(e => !toDelete.has(e.rowid));
+    const candidates = oldEntries.filter((e) => !toDelete.has(e.rowid));
     const mergedPairs = new Set<number>();
 
     for (let i = 0; i < candidates.length; i++) {
@@ -165,16 +181,17 @@ class MemoryCompressionFeature implements FeatureModule {
         const similarity = this.jaccardSimilarity(a, b);
         if (similarity >= this.config.similarityThreshold) {
           // Merge: keep the more recent entry, mark the other for deletion (will be archived)
-          const keep = candidates[i]!.updated_at >= candidates[j]!.updated_at ? candidates[i]! : candidates[j]!;
+          const keep =
+            candidates[i]!.updated_at >= candidates[j]!.updated_at
+              ? candidates[i]!
+              : candidates[j]!;
           const remove = keep === candidates[i]! ? candidates[j]! : candidates[i]!;
           toDelete.add(remove.rowid);
           mergedPairs.add(remove.rowid);
           // Update the kept entry's value to include both (concatenate)
-          this.db.prepare(`UPDATE kv_store SET value = ?, updated_at = ? WHERE rowid = ?`).run(
-            `${keep.value}\n---\n${remove.value}`,
-            Date.now(),
-            keep.rowid
-          );
+          this.db
+            .prepare(`UPDATE kv_store SET value = ?, updated_at = ? WHERE rowid = ?`)
+            .run(`${keep.value}\n---\n${remove.value}`, Date.now(), keep.rowid);
           similarMerged++;
         }
       }
@@ -182,7 +199,7 @@ class MemoryCompressionFeature implements FeatureModule {
 
     // Move deleted entries to archive
     if (toDelete.size > 0) {
-      const archiveRows = oldEntries.filter(e => toDelete.has(e.rowid));
+      const archiveRows = oldEntries.filter((e) => toDelete.has(e.rowid));
       const insertArchive = this.db.prepare(`
         INSERT INTO kv_archive (namespace, key, value, archived_at, reason)
         VALUES (@namespace, @key, @value, @archived_at, @reason)
@@ -196,7 +213,10 @@ class MemoryCompressionFeature implements FeatureModule {
           key: row.key,
           value: row.value,
           archived_at: now,
-          reason: toDelete.has(row.rowid) && valueGroups.get(row.value)!.length > 1 ? 'duplicate' : 'merged',
+          reason:
+            toDelete.has(row.rowid) && valueGroups.get(row.value)!.length > 1
+              ? 'duplicate'
+              : 'merged',
         });
         deleteStmt.run(row.rowid);
       }
@@ -213,7 +233,11 @@ class MemoryCompressionFeature implements FeatureModule {
       duplicatesMerged,
       similarMerged,
       entriesBefore,
-      entriesAfter: (this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(namespace) as { c: number }).c,
+      entriesAfter: (
+        this.db
+          .prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?')
+          .get(namespace) as { c: number }
+      ).c,
     };
   }
 
@@ -221,10 +245,19 @@ class MemoryCompressionFeature implements FeatureModule {
   async archive(namespace: string): Promise<number> {
     const cutoff = Date.now() - this.config.archiveAfterDays * 24 * 60 * 60 * 1000;
 
-    const toArchive = this.db.prepare(`
+    const toArchive = this.db
+      .prepare(
+        `
       SELECT rowid, namespace, key, value FROM kv_store
       WHERE namespace = ? AND updated_at < ?
-    `).all(namespace, cutoff) as Array<{ rowid: number; namespace: string; key: string; value: string }>;
+    `,
+      )
+      .all(namespace, cutoff) as Array<{
+      rowid: number;
+      namespace: string;
+      key: string;
+      value: string;
+    }>;
 
     if (toArchive.length === 0) {
       return 0;
@@ -253,17 +286,31 @@ class MemoryCompressionFeature implements FeatureModule {
 
   /** Get compression statistics */
   getStats(): CompressionStats {
-    const totalActive = (this.db.prepare('SELECT COUNT(*) as c FROM kv_store').get() as { c: number }).c;
-    const totalArchived = (this.db.prepare('SELECT COUNT(*) as c FROM kv_archive').get() as { c: number }).c;
+    const totalActive = (
+      this.db.prepare('SELECT COUNT(*) as c FROM kv_store').get() as { c: number }
+    ).c;
+    const totalArchived = (
+      this.db.prepare('SELECT COUNT(*) as c FROM kv_archive').get() as { c: number }
+    ).c;
 
     const namespaces: Record<string, { active: number; archived: number }> = {};
 
     // Get distinct namespaces from kv_store
-    const nsRows = this.db.prepare('SELECT DISTINCT namespace FROM kv_store').all() as Array<{ namespace: string }>;
+    const nsRows = this.db.prepare('SELECT DISTINCT namespace FROM kv_store').all() as Array<{
+      namespace: string;
+    }>;
     for (const nsRow of nsRows) {
       const ns = nsRow.namespace;
-      const active = (this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(ns) as { c: number }).c;
-      const archived = (this.db.prepare('SELECT COUNT(*) as c FROM kv_archive WHERE namespace = ?').get(ns) as { c: number }).c;
+      const active = (
+        this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(ns) as {
+          c: number;
+        }
+      ).c;
+      const archived = (
+        this.db.prepare('SELECT COUNT(*) as c FROM kv_archive WHERE namespace = ?').get(ns) as {
+          c: number;
+        }
+      ).c;
       namespaces[ns] = { active, archived };
     }
 
@@ -304,11 +351,21 @@ class MemoryCompressionFeature implements FeatureModule {
 
   /** Compute Jaccard similarity between two texts based on word sets */
   private jaccardSimilarity(a: string, b: string): number {
-    const wordsA = new Set(a.toLowerCase().split(/\s+/).filter(w => w.length > 2));
-    const wordsB = new Set(b.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    const wordsA = new Set(
+      a
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2),
+    );
+    const wordsB = new Set(
+      b
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2),
+    );
     if (wordsA.size === 0 && wordsB.size === 0) return 1;
     if (wordsA.size === 0 || wordsB.size === 0) return 0;
-    const intersection = new Set([...wordsA].filter(w => wordsB.has(w)));
+    const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)));
     const union = new Set([...wordsA, ...wordsB]);
     return intersection.size / union.size;
   }

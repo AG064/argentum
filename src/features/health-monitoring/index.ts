@@ -1,6 +1,11 @@
 import { cpus, totalmem, freemem, arch, platform } from 'os';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,9 +60,9 @@ export interface HealthMonitoringConfig {
   enabled: boolean;
   collectionIntervalMs: number;
   diskCheckPath: string;
-  cpuWarningThreshold: number;   // %
+  cpuWarningThreshold: number; // %
   memoryWarningThreshold: number; // %
-  diskWarningThreshold: number;  // %
+  diskWarningThreshold: number; // %
 }
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
@@ -96,7 +101,7 @@ class HealthMonitoringFeature implements FeatureModule {
 
     // Start periodic collection
     this.collectionTimer = setInterval(() => {
-      this.collectMetrics().catch(err => {
+      this.collectMetrics().catch((err) => {
         this.ctx.logger.error('Health metrics collection failed', { error: err });
       });
     }, this.config.collectionIntervalMs);
@@ -138,9 +143,9 @@ class HealthMonitoringFeature implements FeatureModule {
     }
 
     // Check feature statuses
-    const unhealthyFeatures = this.featureStatuses.filter(f => !f.healthy);
+    const unhealthyFeatures = this.featureStatuses.filter((f) => !f.healthy);
     if (unhealthyFeatures.length > 0) {
-      issues.push(`Unhealthy features: ${unhealthyFeatures.map(f => f.name).join(', ')}`);
+      issues.push(`Unhealthy features: ${unhealthyFeatures.map((f) => f.name).join(', ')}`);
     }
 
     return {
@@ -149,7 +154,7 @@ class HealthMonitoringFeature implements FeatureModule {
       details: {
         lastCollection: this.lastCollection,
         metricCount: this.metrics ? 1 : 0,
-        activeAlerts: this.alerts.filter(a => a.level !== 'info').length,
+        activeAlerts: this.alerts.filter((a) => a.level !== 'info').length,
       },
     };
   }
@@ -226,7 +231,7 @@ class HealthMonitoringFeature implements FeatureModule {
   }
 
   private getLoadAverage(): number[] {
-    return cpus().map(__cpu => 0); // Placeholder - we get system load avg separately
+    return cpus().map((__cpu) => 0); // Placeholder - we get system load avg separately
   }
 
   private getDiskInfo(): DiskInfo[] {
@@ -235,13 +240,15 @@ class HealthMonitoringFeature implements FeatureModule {
       const total = stats.blocks * stats.bsize;
       const free = stats.bfree * stats.bsize;
       const used = total - free;
-      return [{
-        mount: this.config.diskCheckPath,
-        total,
-        free,
-        used,
-        usagePercent: (used / total) * 100,
-      }];
+      return [
+        {
+          mount: this.config.diskCheckPath,
+          total,
+          free,
+          used,
+          usagePercent: (used / total) * 100,
+        },
+      ];
     } catch (err) {
       this.ctx.logger.warn('Failed to get disk info', { error: err });
       return [];
@@ -318,8 +325,9 @@ class HealthMonitoringFeature implements FeatureModule {
 
   private addAlert(level: 'info' | 'warning' | 'critical', message: string): void {
     // Avoid duplicate alerts (same message within 5 minutes)
-    const recent = this.alerts
-      .filter(a => a.message === message && Date.now() - a.timestamp < 5 * 60 * 1000);
+    const recent = this.alerts.filter(
+      (a) => a.message === message && Date.now() - a.timestamp < 5 * 60 * 1000,
+    );
     if (recent.length > 0) return;
 
     const alert: Alert = {
@@ -330,7 +338,10 @@ class HealthMonitoringFeature implements FeatureModule {
     };
 
     this.alerts.push(alert);
-    this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info']('Alert raised', alert as any);
+    this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info'](
+      'Alert raised',
+      alert as any,
+    );
   }
 }
 

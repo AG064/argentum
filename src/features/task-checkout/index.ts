@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -24,7 +29,7 @@ export interface TaskAssignment {
 export interface TaskCheckoutConfig {
   enabled: boolean;
   dbPath: string;
-  leaseDurationMs: number;  // How long a checkout lasts before auto-expire
+  leaseDurationMs: number; // How long a checkout lasts before auto-expire
   maxLeasesPerAgent: number;
 }
 
@@ -103,9 +108,9 @@ class TaskCheckoutFeature implements FeatureModule {
    */
   async checkout(taskId: string, agentId: string): Promise<boolean> {
     // Check agent lease limit
-    const agentLeases = this.db.prepare(
-      'SELECT COUNT(*) as c FROM checkouts WHERE agent_id = ?'
-    ).get(agentId) as { c: number };
+    const agentLeases = this.db
+      .prepare('SELECT COUNT(*) as c FROM checkouts WHERE agent_id = ?')
+      .get(agentId) as { c: number };
 
     if (agentLeases.c >= this.config.maxLeasesPerAgent) {
       this.ctx.logger.warn('Agent lease limit reached', { agentId, leases: agentLeases.c });
@@ -119,7 +124,7 @@ class TaskCheckoutFeature implements FeatureModule {
     try {
       const stmt = this.db.prepare(
         `INSERT INTO checkouts (task_id, agent_id, checked_out_at, expires_at)
-         VALUES (?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?)`,
       );
       stmt.run(taskId, agentId, now, expiresAt);
 
@@ -130,15 +135,17 @@ class TaskCheckoutFeature implements FeatureModule {
       const e = err as { code?: string; message?: string };
       if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.message?.includes('UNIQUE')) {
         // Check if the existing checkout is expired
-        const existing = this.db.prepare(
-          'SELECT * FROM checkouts WHERE task_id = ?'
-        ).get(taskId) as TaskRow | undefined;
+        const existing = this.db
+          .prepare('SELECT * FROM checkouts WHERE task_id = ?')
+          .get(taskId) as TaskRow | undefined;
 
         if (existing && existing.expires_at < now) {
           // Expired — steal the lease
-          this.db.prepare(
-            'UPDATE checkouts SET agent_id = ?, checked_out_at = ?, expires_at = ? WHERE task_id = ?'
-          ).run(agentId, now, expiresAt, taskId);
+          this.db
+            .prepare(
+              'UPDATE checkouts SET agent_id = ?, checked_out_at = ?, expires_at = ? WHERE task_id = ?',
+            )
+            .run(agentId, now, expiresAt, taskId);
 
           this.ctx.logger.info('Task lease stolen (expired)', {
             taskId,
@@ -177,9 +184,9 @@ class TaskCheckoutFeature implements FeatureModule {
 
   /** Check if a task is available for checkout */
   async isAvailable(taskId: string): Promise<boolean> {
-    const row = this.db.prepare(
-      'SELECT * FROM checkouts WHERE task_id = ?'
-    ).get(taskId) as TaskRow | undefined;
+    const row = this.db.prepare('SELECT * FROM checkouts WHERE task_id = ?').get(taskId) as
+      | TaskRow
+      | undefined;
 
     if (!row) return true;
     return row.expires_at < Date.now();
@@ -187,11 +194,11 @@ class TaskCheckoutFeature implements FeatureModule {
 
   /** Get tasks checked out by a specific agent */
   async getAgentTasks(agentId: string): Promise<TaskAssignment[]> {
-    const rows = this.db.prepare(
-      'SELECT * FROM checkouts WHERE agent_id = ? ORDER BY checked_out_at ASC'
-    ).all(agentId) as TaskRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM checkouts WHERE agent_id = ? ORDER BY checked_out_at ASC')
+      .all(agentId) as TaskRow[];
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       taskId: r.task_id,
       agentId: r.agent_id,
       checkedOutAt: r.checked_out_at,
@@ -202,9 +209,9 @@ class TaskCheckoutFeature implements FeatureModule {
   /** Extend a lease */
   async extendLease(taskId: string): Promise<boolean> {
     const newExpiry = Date.now() + this.config.leaseDurationMs;
-    const result = this.db.prepare(
-      'UPDATE checkouts SET expires_at = ? WHERE task_id = ?'
-    ).run(newExpiry, taskId);
+    const result = this.db
+      .prepare('UPDATE checkouts SET expires_at = ? WHERE task_id = ?')
+      .run(newExpiry, taskId);
     return result.changes > 0;
   }
 
@@ -234,11 +241,11 @@ class TaskCheckoutFeature implements FeatureModule {
 
   private getCheckedOutTasksSync(): TaskAssignment[] {
     const now = Date.now();
-    const rows = this.db.prepare(
-      'SELECT * FROM checkouts WHERE expires_at > ? ORDER BY checked_out_at ASC'
-    ).all(now) as TaskRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM checkouts WHERE expires_at > ? ORDER BY checked_out_at ASC')
+      .all(now) as TaskRow[];
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       taskId: r.task_id,
       agentId: r.agent_id,
       checkedOutAt: r.checked_out_at,
@@ -248,9 +255,9 @@ class TaskCheckoutFeature implements FeatureModule {
 
   private getExpiredCount(): number {
     const now = Date.now();
-    const row = this.db.prepare(
-      'SELECT COUNT(*) as c FROM checkouts WHERE expires_at <= ?'
-    ).get(now) as { c: number };
+    const row = this.db
+      .prepare('SELECT COUNT(*) as c FROM checkouts WHERE expires_at <= ?')
+      .get(now) as { c: number };
     return row.c;
   }
 

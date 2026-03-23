@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Slack message */
 export interface SlackMessage {
@@ -103,7 +108,8 @@ class SlackIntegrationFeature implements FeatureModule {
   private signingSecret: string = '';
   private appToken: string | null = null;
   private socketMode: boolean = false;
-  private eventHandlers: Map<string, Array<(event: SlackEventPayload['event']) => Promise<void>>> = new Map();
+  private eventHandlers: Map<string, Array<(event: SlackEventPayload['event']) => Promise<void>>> =
+    new Map();
   private interactionHandlers: Array<(interaction: SlackInteraction) => Promise<void>> = [];
 
   constructor() {
@@ -142,10 +148,12 @@ class SlackIntegrationFeature implements FeatureModule {
 
     // Check environment variables if not set
     if (!this.botToken && process.env[this.config.tokenEnvVar]) {
-      const tok = process.env[this.config.tokenEnvVar]; if (tok) this.botToken = tok;
+      const tok = process.env[this.config.tokenEnvVar];
+      if (tok) this.botToken = tok;
     }
     if (!this.signingSecret && process.env[this.config.secretEnvVar]) {
-      const sec = process.env[this.config.secretEnvVar]; if (sec) this.signingSecret = sec;
+      const sec = process.env[this.config.secretEnvVar];
+      if (sec) this.signingSecret = sec;
     }
   }
 
@@ -167,8 +175,12 @@ class SlackIntegrationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const sent = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }).c;
-      const received = (this.db.prepare('SELECT COUNT(*) as c FROM received_events').get() as { c: number }).c;
+      const sent = (
+        this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }
+      ).c;
+      const received = (
+        this.db.prepare('SELECT COUNT(*) as c FROM received_events').get() as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -195,7 +207,12 @@ class SlackIntegrationFeature implements FeatureModule {
    * @param appToken - App-Level Token for Socket Mode (xapp-..., optional)
    * @param socketMode - Use Socket Mode instead of HTTP Events API
    */
-  configure(botToken: string, signingSecret: string, appToken?: string, socketMode: boolean = false): void {
+  configure(
+    botToken: string,
+    signingSecret: string,
+    appToken?: string,
+    socketMode: boolean = false,
+  ): void {
     this.botToken = botToken;
     this.signingSecret = signingSecret;
     this.appToken = appToken ?? null;
@@ -271,7 +288,12 @@ class SlackIntegrationFeature implements FeatureModule {
   /**
    * Send an ephemeral message (only visible to user).
    */
-  async sendEphemeral(channel: string, user: string, _text: string, _blocks?: unknown[]): Promise<{ ok: boolean }> {
+  async sendEphemeral(
+    channel: string,
+    user: string,
+    _text: string,
+    _blocks?: unknown[],
+  ): Promise<{ ok: boolean }> {
     // Stub implementation
     this.ctx.logger.debug('Ephemeral message (stub)', { channel, user });
     return { ok: true };
@@ -302,7 +324,10 @@ class SlackIntegrationFeature implements FeatureModule {
         try {
           await handler(event);
         } catch (err) {
-          this.ctx.logger.error('Slack event handler error', { eventType: event.type, error: err instanceof Error ? err.message : String(err) });
+          this.ctx.logger.error('Slack event handler error', {
+            eventType: event.type,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }
@@ -320,7 +345,9 @@ class SlackIntegrationFeature implements FeatureModule {
       try {
         await handler(interaction);
       } catch (err) {
-        this.ctx.logger.error('Slack interaction handler error', { error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.error('Slack interaction handler error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -330,7 +357,12 @@ class SlackIntegrationFeature implements FeatureModule {
   /**
    * Verify a Slack request signature (would use crypto in real impl).
    */
-  verifySignature(_signingSecret: string, _timestamp: string, _signature: string, _body: string): boolean {
+  verifySignature(
+    _signingSecret: string,
+    _timestamp: string,
+    _signature: string,
+    _body: string,
+  ): boolean {
     // In real implementation, would compute HMAC-SHA256 of timestamp+body
     // and compare to signature header X-Slack-Signature
     return true; // Stub always returns true
@@ -357,9 +389,14 @@ class SlackIntegrationFeature implements FeatureModule {
     interactions: number;
     activeEventHandlers: number;
   } {
-    const sent = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }).c;
-    const received = (this.db.prepare('SELECT COUNT(*) as c FROM received_events').get() as { c: number }).c;
-    const interactions = (this.db.prepare('SELECT COUNT(*) as c FROM received_interactions').get() as { c: number }).c;
+    const sent = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number })
+      .c;
+    const received = (
+      this.db.prepare('SELECT COUNT(*) as c FROM received_events').get() as { c: number }
+    ).c;
+    const interactions = (
+      this.db.prepare('SELECT COUNT(*) as c FROM received_interactions').get() as { c: number }
+    ).c;
 
     return {
       configured: this.isConfigured(),
@@ -372,35 +409,59 @@ class SlackIntegrationFeature implements FeatureModule {
 
   /** Log sent message */
   private logSentMessage(msg: SlackMessage): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO sent_messages (id, channel, text, blocks, sent_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(msg.ts, msg.channel, msg.text, msg.blocks ? JSON.stringify(msg.blocks) : null, Date.now());
+    `,
+      )
+      .run(
+        msg.ts,
+        msg.channel,
+        msg.text,
+        msg.blocks ? JSON.stringify(msg.blocks) : null,
+        Date.now(),
+      );
   }
 
   /** Log received event */
   private logReceivedEvent(payload: SlackEventPayload): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO received_events (event_id, event_type, team_id, channel, user, text, ts, received_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      payload.eventId,
-      payload.event.type,
-      payload.teamId,
-      payload.event.channel ?? null,
-      payload.event.user ?? null,
-      payload.event.text ?? null,
-      payload.event.ts,
-      Date.now()
-    );
+    `,
+      )
+      .run(
+        payload.eventId,
+        payload.event.type,
+        payload.teamId,
+        payload.event.channel ?? null,
+        payload.event.user ?? null,
+        payload.event.text ?? null,
+        payload.event.ts,
+        Date.now(),
+      );
   }
 
   /** Log received interaction */
   private logReceivedInteraction(interaction: SlackInteraction): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO received_interactions (type, user_id, username, channel_id, timestamp)
       VALUES (?, ?, ?, ?, ?)
-    `).run(interaction.type, interaction.user.id, interaction.user.username, interaction.channel?.id ?? null, Date.now());
+    `,
+      )
+      .run(
+        interaction.type,
+        interaction.user.id,
+        interaction.user.username,
+        interaction.channel?.id ?? null,
+        Date.now(),
+      );
   }
 
   /** Initialize database and create tables */

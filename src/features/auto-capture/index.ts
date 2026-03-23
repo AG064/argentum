@@ -5,7 +5,12 @@
  * decisions, lessons, errors, and preferences from conversations.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import { getMemoryGraph } from '../../memory/graph';
 import { getSemanticMemory } from '../../memory/semantic';
 
@@ -105,7 +110,15 @@ class AutoCaptureFeature implements FeatureModule {
           /(?:going\s+with|chose|selected)\s+(.+)/gi,
           /(?:I\s+think\s+)?(?:we\s+should|let'?s\s+just)\s+(.+)/gi,
         ],
-        keywords: ["let's use", "go with", "decided", "plan is", "we'll use", "going with", "we should"],
+        keywords: [
+          "let's use",
+          'go with',
+          'decided',
+          'plan is',
+          "we'll use",
+          'going with',
+          'we should',
+        ],
         confidence: 0.7,
       });
     }
@@ -120,7 +133,15 @@ class AutoCaptureFeature implements FeatureModule {
           /(?:pro\s+tip|lesson\s+learned|good\s+to\s+know)[:\s]+(.+)/gi,
           /(?:in\s+the\s+future|next\s+time|from\s+now\s+on)[,:\s]+(.+)/gi,
         ],
-        keywords: ["I learned", "don't do", "trick is", "pro tip", "lesson", "good to know", "next time"],
+        keywords: [
+          'I learned',
+          "don't do",
+          'trick is',
+          'pro tip',
+          'lesson',
+          'good to know',
+          'next time',
+        ],
         confidence: 0.8,
       });
     }
@@ -135,7 +156,15 @@ class AutoCaptureFeature implements FeatureModule {
           /(?:the\s+)?(?:fix|workaround|solution)\s+(?:was|is)\s+(?:to\s+)?(.+)/gi,
           /(?:broke|failed|crashed)\s+(?:because|when|due\s+to)\s+(.+)/gi,
         ],
-        keywords: ["error was", "fixed by", "issue was", "bug was", "root cause", "the fix is", "broke because"],
+        keywords: [
+          'error was',
+          'fixed by',
+          'issue was',
+          'bug was',
+          'root cause',
+          'the fix is',
+          'broke because',
+        ],
         confidence: 0.8,
       });
     }
@@ -150,7 +179,7 @@ class AutoCaptureFeature implements FeatureModule {
           /(?:best\s+practice|recommended)\s+(?:is\s+)?(?:to\s+)?(.+)/gi,
           /(?:I|we)\s+(?:like|love|hate|avoid)\s+(?:using\s+)?(.+)/gi,
         ],
-        keywords: ["I prefer", "always use", "never use", "best practice", "I like", "I avoid"],
+        keywords: ['I prefer', 'always use', 'never use', 'best practice', 'I like', 'I avoid'],
         confidence: 0.6,
       });
     }
@@ -254,7 +283,7 @@ class AutoCaptureFeature implements FeatureModule {
       }
     }
 
-    return captures.filter(c => c.confidence >= this.config.minConfidence);
+    return captures.filter((c) => c.confidence >= this.config.minConfidence);
   }
 
   /** Save a captured item to semantic memory */
@@ -263,16 +292,12 @@ class AutoCaptureFeature implements FeatureModule {
       const memory = getSemanticMemory();
       const graph = getMemoryGraph();
 
-      const memoryId = await memory.store(
-        capture.type,
-        capture.content,
-        {
-          confidence: capture.confidence,
-          source: capture.source,
-          capturedBy: 'auto-capture',
-          capturedAt: new Date().toISOString(),
-        }
-      );
+      const memoryId = await memory.store(capture.type, capture.content, {
+        confidence: capture.confidence,
+        source: capture.source,
+        capturedBy: 'auto-capture',
+        capturedAt: new Date().toISOString(),
+      });
 
       // Link to recent memories (same session context)
       const recent = await memory.getRecent(1); // Last hour

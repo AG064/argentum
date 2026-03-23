@@ -5,7 +5,12 @@
  * Wraps the SemanticMemory backend with a simplified API.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import { getSemanticMemory, type MemoryResult } from '../../memory/semantic';
 
 /** Feature configuration */

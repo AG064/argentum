@@ -5,7 +5,12 @@
  * Human-readable, git-friendly storage for knowledge and notes.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import { MarkdownMemory } from '../../memory/markdown';
 
 /** Feature configuration */
@@ -76,7 +81,12 @@ class MarkdownMemoryFeature implements FeatureModule {
   }
 
   /** Write a new markdown file (or replace existing) */
-  write(filename: string, content: string, metadata?: Record<string, string>, tags?: string[]): string {
+  write(
+    filename: string,
+    content: string,
+    metadata?: Record<string, string>,
+    tags?: string[],
+  ): string {
     const entry = this.storage.save({
       filename,
       title: filename,
@@ -89,7 +99,9 @@ class MarkdownMemoryFeature implements FeatureModule {
   }
 
   /** Read a markdown file */
-  read(filename: string): { content: string; metadata: Record<string, string>; tags: string[] } | null {
+  read(
+    filename: string,
+  ): { content: string; metadata: Record<string, string>; tags: string[] } | null {
     const entry = this.storage.get(filename);
     if (!entry) return null;
     return {
@@ -124,9 +136,18 @@ class MarkdownMemoryFeature implements FeatureModule {
   }
 
   /** Full-text search across markdown files */
-  search(query: string, limit = 20): Array<{ filename: string; title: string; content: string; tags: string[]; relevance: number }> {
+  search(
+    query: string,
+    limit = 20,
+  ): Array<{
+    filename: string;
+    title: string;
+    content: string;
+    tags: string[];
+    relevance: number;
+  }> {
     const results = this.storage.search(query, limit);
-    return results.map(entry => ({
+    return results.map((entry) => ({
       filename: entry.filename,
       title: entry.title,
       content: entry.content,
@@ -138,13 +159,15 @@ class MarkdownMemoryFeature implements FeatureModule {
 
   /** List all files */
   listAll(): string[] {
-    return this.storage.list().map(e => e.filename);
+    return this.storage.list().map((e) => e.filename);
   }
 
   /** Get by tag */
-  getByTag(tag: string): Array<{ filename: string; title: string; content: string; tags: string[] }> {
+  getByTag(
+    tag: string,
+  ): Array<{ filename: string; title: string; content: string; tags: string[] }> {
     const entries = this.storage.getByTag(tag);
-    return entries.map(entry => ({
+    return entries.map((entry) => ({
       filename: entry.filename,
       title: entry.title,
       content: entry.content,

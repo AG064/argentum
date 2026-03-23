@@ -1,6 +1,6 @@
 /**
  * AG-Claw Security Module
- * 
+ *
  * Comprehensive security hardening for AG-Claw.
  * Provides authentication, authorization, rate limiting, and audit logging.
  */
@@ -41,7 +41,7 @@ export interface SecurityConfig {
   };
 }
 
-export type AuditEvent = 
+export type AuditEvent =
   | 'auth.login'
   | 'auth.logout'
   | 'auth.failed'
@@ -87,7 +87,7 @@ export class SecurityManager extends EventEmitter {
     this.jwtSecret = createHmac('sha256', config.authentication.jwtSecret)
       .update('ag-claw-key')
       .digest();
-    
+
     // Start rate limit cleanup interval
     if (config.rateLimiting.enabled) {
       setInterval(() => this.cleanupRateLimits(), 60000);
@@ -97,7 +97,9 @@ export class SecurityManager extends EventEmitter {
   /**
    * Authenticate a request
    */
-  public async authenticate(token: string): Promise<{ valid: boolean; userId?: string; agentId?: string }> {
+  public async authenticate(
+    token: string,
+  ): Promise<{ valid: boolean; userId?: string; agentId?: string }> {
     if (!this.config.authentication.enabled) {
       return { valid: true };
     }
@@ -123,7 +125,7 @@ export class SecurityManager extends EventEmitter {
       }
 
       const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-      
+
       // Check expiry
       if (data.exp && data.exp < Date.now() / 1000) {
         this.log('auth.failed', { reason: 'token_expired' });
@@ -143,13 +145,15 @@ export class SecurityManager extends EventEmitter {
    */
   public generateToken(userId: string, agentId?: string): string {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    
-    const payload = Buffer.from(JSON.stringify({
-      sub: userId,
-      agentId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + this.config.authentication.tokenExpiry,
-    })).toString('base64url');
+
+    const payload = Buffer.from(
+      JSON.stringify({
+        sub: userId,
+        agentId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + this.config.authentication.tokenExpiry,
+      }),
+    ).toString('base64url');
 
     const signature = createHmac('sha256', this.jwtSecret)
       .update(`${header}.${payload}`)
@@ -161,13 +165,16 @@ export class SecurityManager extends EventEmitter {
   /**
    * Check rate limit
    */
-  public async checkRateLimit(key: string, isAgent = false): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  public async checkRateLimit(
+    key: string,
+    isAgent = false,
+  ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
     if (!this.config.rateLimiting.enabled) {
       return { allowed: true, remaining: -1, resetAt: 0 };
     }
 
-    const maxRequests = isAgent 
-      ? (this.config.rateLimiting.maxRequestsPerAgent || this.config.rateLimiting.maxRequests)
+    const maxRequests = isAgent
+      ? this.config.rateLimiting.maxRequestsPerAgent || this.config.rateLimiting.maxRequests
       : this.config.rateLimiting.maxRequests;
 
     const now = Date.now();
@@ -197,8 +204,8 @@ export class SecurityManager extends EventEmitter {
     }
 
     const normalized = filePath.replace(/\\/g, '/');
-    
-    return this.config.allowedPaths.paths.some(allowed => {
+
+    return this.config.allowedPaths.paths.some((allowed) => {
       return normalized.startsWith(allowed);
     });
   }
@@ -225,10 +232,12 @@ export class SecurityManager extends EventEmitter {
   public log(
     event: AuditEvent,
     details: Record<string, unknown> = {},
-    context: { agentId?: string; userId?: string; ip?: string } = {}
+    context: { agentId?: string; userId?: string; ip?: string } = {},
   ): void {
     if (!this.config.auditLog.enabled) return;
-    const allowedEvents = this.config.auditLog.events as string[]; if (allowedEvents.length > 0 && !allowedEvents.includes(event) && !allowedEvents.includes('*')) return;
+    const allowedEvents = this.config.auditLog.events as string[];
+    if (allowedEvents.length > 0 && !allowedEvents.includes(event) && !allowedEvents.includes('*'))
+      return;
 
     const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
@@ -239,7 +248,7 @@ export class SecurityManager extends EventEmitter {
     };
 
     this.auditLog.push(entry);
-    
+
     // Emit event for real-time monitoring
     this.emit('audit', entry);
 
@@ -256,9 +265,9 @@ export class SecurityManager extends EventEmitter {
     let entries = [...this.auditLog];
 
     if (filter) {
-      if (filter.event) entries = entries.filter(e => e.event === filter.event);
-      if (filter.agentId) entries = entries.filter(e => e.agentId === filter.agentId);
-      if (filter.userId) entries = entries.filter(e => e.userId === filter.userId);
+      if (filter.event) entries = entries.filter((e) => e.event === filter.event);
+      if (filter.agentId) entries = entries.filter((e) => e.agentId === filter.agentId);
+      if (filter.userId) entries = entries.filter((e) => e.userId === filter.userId);
     }
 
     return entries.slice(-100); // Last 100 entries

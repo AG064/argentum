@@ -3,7 +3,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -33,8 +38,8 @@ export interface Task {
 export interface MultiAgentCoordinationConfig {
   enabled: boolean;
   dbPath: string;
-  heartbeatIntervalMs: number;      // How often agents send heartbeats
-  offlineTimeoutMs: number;         // When to mark agent as offline
+  heartbeatIntervalMs: number; // How often agents send heartbeats
+  offlineTimeoutMs: number; // When to mark agent as offline
   maxAgents: number;
 }
 
@@ -91,10 +96,14 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const totalAgents = this.agents.size;
-    const idleAgents = Array.from(this.agents.values()).filter(a => a.status === 'idle').length;
-    const busyAgents = Array.from(this.agents.values()).filter(a => a.status === 'busy').length;
-    const offlineAgents = Array.from(this.agents.values()).filter(a => a.status === 'offline').length;
-    const pendingTasks = this.db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'pending'").get() as { c: number };
+    const idleAgents = Array.from(this.agents.values()).filter((a) => a.status === 'idle').length;
+    const busyAgents = Array.from(this.agents.values()).filter((a) => a.status === 'busy').length;
+    const offlineAgents = Array.from(this.agents.values()).filter(
+      (a) => a.status === 'offline',
+    ).length;
+    const pendingTasks = this.db
+      .prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'pending'")
+      .get() as { c: number };
     const pendingCount = pendingTasks.c;
 
     return {
@@ -168,7 +177,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   /** Get agents by capability */
   getAgentsByCapability(capability: string): AgentInfo[] {
-    return Array.from(this.agents.values()).filter(a => a.capabilities.includes(capability));
+    return Array.from(this.agents.values()).filter((a) => a.capabilities.includes(capability));
   }
 
   /** Update agent's last seen timestamp */
@@ -211,7 +220,11 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   // ─── Task Management ──────────────────────────────────────────────────────
 
   /** Assign a task to an agent */
-  async assignTask(taskId: string, agentId: string, payload: Record<string, unknown> = {}): Promise<boolean> {
+  async assignTask(
+    taskId: string,
+    agentId: string,
+    payload: Record<string, unknown> = {},
+  ): Promise<boolean> {
     const agent = this.agents.get(agentId);
     if (!agent) {
       throw new Error(`Agent not found: ${agentId}`);
@@ -253,9 +266,11 @@ class MultiAgentCoordinationFeature implements FeatureModule {
     if (!task) return false;
 
     const now = Date.now();
-    this.db.prepare(
-      "UPDATE tasks SET status = 'completed', completed_at = ?, result = ? WHERE task_id = ?"
-    ).run(now, JSON.stringify(result), taskId);
+    this.db
+      .prepare(
+        "UPDATE tasks SET status = 'completed', completed_at = ?, result = ? WHERE task_id = ?",
+      )
+      .run(now, JSON.stringify(result), taskId);
 
     // Free up the agent
     const agent = this.agents.get(task.assigned_agent_id);
@@ -275,9 +290,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
     if (!task) return false;
 
     const now = Date.now();
-    this.db.prepare(
-      "UPDATE tasks SET status = 'failed', completed_at = ? WHERE task_id = ?"
-    ).run(now, taskId);
+    this.db
+      .prepare("UPDATE tasks SET status = 'failed', completed_at = ? WHERE task_id = ?")
+      .run(now, taskId);
 
     // Free up the agent
     const agent = this.agents.get(task.assigned_agent_id);
@@ -302,7 +317,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   async listTasks(status?: string): Promise<Task[]> {
     let stmt = this.db.prepare('SELECT * FROM tasks');
     if (status) {
-      stmt = this.db.prepare("SELECT * FROM tasks WHERE status = ?");
+      stmt = this.db.prepare('SELECT * FROM tasks WHERE status = ?');
     }
     const rows = status ? stmt.all(status) : stmt.all();
     return rows.map(this.mapTaskRow);
@@ -325,11 +340,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   /** Broadcast a message to all agents (or filtered by capability) */
   async broadcast(message: string, capability?: string, excludeAgentId?: string): Promise<number> {
-    const targets = capability
-      ? this.getAgentsByCapability(capability)
-      : this.getAvailableAgents();
+    const targets = capability ? this.getAgentsByCapability(capability) : this.getAvailableAgents();
 
-    const filtered = targets.filter(a => a.id !== excludeAgentId && a.status !== 'offline');
+    const filtered = targets.filter((a) => a.id !== excludeAgentId && a.status !== 'offline');
     const sent = filtered.length;
 
     this.ctx.logger.info('Broadcasting message', {
@@ -393,18 +406,20 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   }
 
   private insertAgentToDb(agent: AgentInfo): void {
-    this.db.prepare(
-      `INSERT OR REPLACE INTO agents (id, name, capabilities, status, current_task_id, last_seen, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      agent.id,
-      agent.name,
-      JSON.stringify(agent.capabilities),
-      agent.status,
-      agent.currentTaskId,
-      agent.lastSeen,
-      JSON.stringify(agent.metadata)
-    );
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO agents (id, name, capabilities, status, current_task_id, last_seen, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        agent.id,
+        agent.name,
+        JSON.stringify(agent.capabilities),
+        agent.status,
+        agent.currentTaskId,
+        agent.lastSeen,
+        JSON.stringify(agent.metadata),
+      );
   }
 
   private upsertAgentToDb(agent: AgentInfo): void {
@@ -412,9 +427,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   }
 
   private updateAgentInDb(agent: AgentInfo): void {
-    this.db.prepare(
-      `UPDATE agents SET status = ?, current_task_id = ?, last_seen = ? WHERE id = ?`
-    ).run(agent.status, agent.currentTaskId, agent.lastSeen, agent.id);
+    this.db
+      .prepare(`UPDATE agents SET status = ?, current_task_id = ?, last_seen = ? WHERE id = ?`)
+      .run(agent.status, agent.currentTaskId, agent.lastSeen, agent.id);
   }
 
   private loadAgentsFromDb(): void {
@@ -434,17 +449,19 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   }
 
   private insertTaskToDb(task: Task): void {
-    this.db.prepare(
-      `INSERT INTO tasks (task_id, assigned_agent_id, status, created_at, assigned_at, payload)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      task.taskId,
-      task.assignedAgentId,
-      task.status,
-      task.createdAt,
-      task.assignedAt,
-      JSON.stringify(task.payload)
-    );
+    this.db
+      .prepare(
+        `INSERT INTO tasks (task_id, assigned_agent_id, status, created_at, assigned_at, payload)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        task.taskId,
+        task.assignedAgentId,
+        task.status,
+        task.createdAt,
+        task.assignedAt,
+        JSON.stringify(task.payload),
+      );
   }
 }
 

@@ -7,7 +7,12 @@
 
 import { createHmac } from 'crypto';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Webhook configuration */
 export interface WebhooksConfig {
@@ -163,12 +168,12 @@ class WebhooksFeature implements FeatureModule {
     // IPv4 checks
     const parts = h.split('.');
     if (parts.length === 4) {
-      const [a,b] = parts.map(p => parseInt(p,10));
+      const [a, b] = parts.map((p) => parseInt(p, 10));
       if (a === 127) return true;
       if (a === 10) return true;
       if (a === 192 && b === 168) return true;
       if (a === 169 && b === 254) return true;
-      if (a === 172 && b !== undefined && b >=16 && b <=31) return true;
+      if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
     }
     return false;
   }
@@ -179,14 +184,22 @@ class WebhooksFeature implements FeatureModule {
       const host = parsed.hostname;
       if (this.isInternalHostname(host)) return false;
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   /** Deliver webhook with retry logic */
-  private async deliverWithRetry(sub: WebhookSubscription, event: WebhookEvent, attempt = 1): Promise<void> {
+  private async deliverWithRetry(
+    sub: WebhookSubscription,
+    event: WebhookEvent,
+    attempt = 1,
+  ): Promise<void> {
     try {
       if (!this.validateUrl(sub.url)) {
-        this.ctx.logger.warn('Blocked webhook delivery to internal or invalid URL', { url: sub.url });
+        this.ctx.logger.warn('Blocked webhook delivery to internal or invalid URL', {
+          url: sub.url,
+        });
         return;
       }
 
@@ -205,12 +218,12 @@ class WebhooksFeature implements FeatureModule {
       });
 
       if (!response.ok && attempt < this.config.maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, this.config.retryDelayMs * attempt));
+        await new Promise((resolve) => setTimeout(resolve, this.config.retryDelayMs * attempt));
         await this.deliverWithRetry(sub, event, attempt + 1);
       }
     } catch (err) {
       if (attempt < this.config.maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, this.config.retryDelayMs * attempt));
+        await new Promise((resolve) => setTimeout(resolve, this.config.retryDelayMs * attempt));
         await this.deliverWithRetry(sub, event, attempt + 1);
       } else {
         this.ctx.logger.error('Webhook delivery failed after retries', {

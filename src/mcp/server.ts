@@ -1,13 +1,19 @@
 /**
  * AG-Claw MCP Server
- * 
+ *
  * Model Context Protocol (MCP) server implementation for AG-Claw.
  * Provides tools and resources compatible with Claude Code.
  */
 
 import { EventEmitter } from 'events';
 
-import type { MCPTool, ToolsCallRequest, Resource, ResourceTemplate, ToolResultContent } from './types';
+import type {
+  MCPTool,
+  ToolsCallRequest,
+  Resource,
+  ResourceTemplate,
+  ToolResultContent,
+} from './types';
 
 import { Logger } from '../core/logger';
 
@@ -91,10 +97,12 @@ export class MCPServer extends EventEmitter {
 
     if (!tool) {
       return {
-        content: [{
-          type: 'text',
-          data: JSON.stringify({ error: `Tool not found: ${call.name}` }),
-        }],
+        content: [
+          {
+            type: 'text',
+            data: JSON.stringify({ error: `Tool not found: ${call.name}` }),
+          },
+        ],
       };
     }
 
@@ -103,24 +111,28 @@ export class MCPServer extends EventEmitter {
       this.logger.debug(`Executing tool: ${call.name}`, { input });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (tool as any).handler(input);
-      
+
       this.emit('tool-call', { tool: call.name, input, result });
 
       return {
-        content: [{
-          type: 'text',
-          data: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-        }],
+        content: [
+          {
+            type: 'text',
+            data: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+          },
+        ],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Tool ${call.name} failed`, { error: errorMessage });
-      
+
       return {
-        content: [{
-          type: 'text',
-          data: JSON.stringify({ error: errorMessage }),
-        }],
+        content: [
+          {
+            type: 'text',
+            data: JSON.stringify({ error: errorMessage }),
+          },
+        ],
       };
     }
   }
@@ -159,7 +171,7 @@ export function createTool(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: Record<string, any>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: (input: Record<string, any>) => Promise<any>
+  handler: (input: Record<string, any>) => Promise<any>,
 ): MCPTool {
   return {
     name,
@@ -175,59 +187,108 @@ export function createTool(
  */
 export const builtInTools = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Read: createTool('Read', 'Read file contents', { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] }, async ({ file_path }: any) => {
-    const fs = await import('fs/promises');
-    const content = await fs.readFile(file_path as string, 'utf-8');
-    return { content, size: content.length };
-  }),
+  Read: createTool(
+    'Read',
+    'Read file contents',
+    { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] },
+    async ({ file_path }: any) => {
+      const fs = await import('fs/promises');
+      const content = await fs.readFile(file_path as string, 'utf-8');
+      return { content, size: content.length };
+    },
+  ),
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Write: createTool('Write', 'Write file contents', { type: 'object', properties: { file_path: { type: 'string' }, content: { type: 'string' } }, required: ['file_path', 'content'] }, async ({ file_path, content }: any) => {
-    const fs = await import('fs/promises');
-    await fs.writeFile(file_path as string, content as string, 'utf-8');
-    return { success: true, path: file_path };
-  }),
+  Write: createTool(
+    'Write',
+    'Write file contents',
+    {
+      type: 'object',
+      properties: { file_path: { type: 'string' }, content: { type: 'string' } },
+      required: ['file_path', 'content'],
+    },
+    async ({ file_path, content }: any) => {
+      const fs = await import('fs/promises');
+      await fs.writeFile(file_path as string, content as string, 'utf-8');
+      return { success: true, path: file_path };
+    },
+  ),
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Edit: createTool('Edit', 'Edit file contents', { type: 'object', properties: { file_path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' } }, required: ['file_path', 'old_string', 'new_string'] }, async ({ file_path, old_string, new_string }: any) => {
-    const fs = await import('fs/promises');
-    let content = await fs.readFile(file_path as string, 'utf-8');
-    if (!content.includes(old_string as string)) {
-      throw new Error('old_string not found in file');
-    }
-    content = content.replace(old_string as string, new_string as string);
-    await fs.writeFile(file_path as string, content, 'utf-8');
-    return { success: true, replacements: 1 };
-  }),
+  Edit: createTool(
+    'Edit',
+    'Edit file contents',
+    {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string' },
+        old_string: { type: 'string' },
+        new_string: { type: 'string' },
+      },
+      required: ['file_path', 'old_string', 'new_string'],
+    },
+    async ({ file_path, old_string, new_string }: any) => {
+      const fs = await import('fs/promises');
+      let content = await fs.readFile(file_path as string, 'utf-8');
+      if (!content.includes(old_string as string)) {
+        throw new Error('old_string not found in file');
+      }
+      content = content.replace(old_string as string, new_string as string);
+      await fs.writeFile(file_path as string, content, 'utf-8');
+      return { success: true, replacements: 1 };
+    },
+  ),
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Bash: createTool('Bash', 'Execute bash command', { type: 'object', properties: { command: { type: 'string' }, timeout: { type: 'number' } }, required: ['command'] }, async ({ command, timeout = 60000 }: any) => {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-    
-    try {
-      const { stdout, stderr } = await execAsync(command as string, { timeout: timeout as number });
-      return { stdout, stderr, exitCode: 0 };
-    } catch (error: any) {
-      return {
-        stdout: error.stdout || '',
-        stderr: error.stderr || error.message,
-        exitCode: error.code || 1,
-      };
-    }
-  }),
+  Bash: createTool(
+    'Bash',
+    'Execute bash command',
+    {
+      type: 'object',
+      properties: { command: { type: 'string' }, timeout: { type: 'number' } },
+      required: ['command'],
+    },
+    async ({ command, timeout = 60000 }: any) => {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      try {
+        const { stdout, stderr } = await execAsync(command as string, {
+          timeout: timeout as number,
+        });
+        return { stdout, stderr, exitCode: 0 };
+      } catch (error: any) {
+        return {
+          stdout: error.stdout || '',
+          stderr: error.stderr || error.message,
+          exitCode: error.code || 1,
+        };
+      }
+    },
+  ),
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Grep: createTool('Grep', 'Search pattern in files', { type: 'object', properties: { pattern: { type: 'string' }, path: { type: 'string' } }, required: ['pattern', 'path'] }, async ({ pattern, path }: any) => {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-    
-    const { stdout } = await execAsync(`grep -r "${pattern as string}" ${path as string} 2>/dev/null || true`);
-    const matches = stdout.trim().split('\n').filter(Boolean);
-    return { matches, count: matches.length };
-  }),
+  Grep: createTool(
+    'Grep',
+    'Search pattern in files',
+    {
+      type: 'object',
+      properties: { pattern: { type: 'string' }, path: { type: 'string' } },
+      required: ['pattern', 'path'],
+    },
+    async ({ pattern, path }: any) => {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      const { stdout } = await execAsync(
+        `grep -r "${pattern as string}" ${path as string} 2>/dev/null || true`,
+      );
+      const matches = stdout.trim().split('\n').filter(Boolean);
+      return { matches, count: matches.length };
+    },
+  ),
 };
 
 export default MCPServer;

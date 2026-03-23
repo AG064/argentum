@@ -49,12 +49,12 @@ describe('MCPServer', () => {
         'test_tool',
         'A test tool',
         { type: 'object', properties: { input: { type: 'string' } } },
-        async ({ input }) => ({ result: input })
+        async ({ input }) => ({ result: input }),
       );
 
       server.registerTool(tool);
       const tools = server.listTools();
-      expect(tools.some(t => t.name === 'test_tool')).toBe(true);
+      expect(tools.some((t) => t.name === 'test_tool')).toBe(true);
     });
 
     test('should register built-in tools', () => {
@@ -72,7 +72,7 @@ describe('MCPServer', () => {
         'echo',
         'Echoes the input',
         { type: 'object', properties: { message: { type: 'string' } } },
-        async ({ message }) => ({ echo: message })
+        async ({ message }) => ({ echo: message }),
       );
 
       server.registerTool(tool);
@@ -107,7 +107,7 @@ describe('MCPServer', () => {
         { type: 'object', properties: {} },
         async () => {
           throw new Error('Intentional failure');
-        }
+        },
       );
 
       server.registerTool(tool);
@@ -127,29 +127,26 @@ describe('MCPServer', () => {
   describe('Built-in tools', () => {
     test('should have Read tool', () => {
       const tools = server.listTools();
-      expect(tools.some(t => t.name === 'Read')).toBe(true);
+      expect(tools.some((t) => t.name === 'Read')).toBe(true);
     });
 
     test('should have Write tool', () => {
       const tools = server.listTools();
-      expect(tools.some(t => t.name === 'Write')).toBe(true);
+      expect(tools.some((t) => t.name === 'Write')).toBe(true);
     });
 
     test('should have Bash tool', () => {
       const tools = server.listTools();
-      expect(tools.some(t => t.name === 'Bash')).toBe(true);
+      expect(tools.some((t) => t.name === 'Bash')).toBe(true);
     });
   });
 });
 
 describe('createTool helper', () => {
   test('should create a tool with correct structure', () => {
-    const tool = createTool(
-      'example',
-      'An example tool',
-      { type: 'object' },
-      async () => ({ success: true })
-    );
+    const tool = createTool('example', 'An example tool', { type: 'object' }, async () => ({
+      success: true,
+    }));
 
     expect(tool.name).toBe('example');
     expect(tool.description).toBe('An example tool');

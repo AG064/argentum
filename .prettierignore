@@ -10,3 +10,6 @@ pnpm-lock.yaml
 .tsbuildinfo
 data
 backups
+.github/workflows/pr.yml
+.github/workflows/*.yml
+.github/workflows/*.yaml

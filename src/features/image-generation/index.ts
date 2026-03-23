@@ -9,7 +9,12 @@ import crypto from 'crypto';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Supported image providers */
 export type ImageProvider = 'dalle' | 'stable-diffusion' | 'midjourney';
@@ -89,7 +94,8 @@ class ImageGenerationFeature implements FeatureModule {
     this.config = {
       cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
       maxCacheSizeMB: (config['maxCacheSizeMB'] as number) ?? this.config['maxCacheSizeMB'],
-      defaultProvider: (config['defaultProvider'] as ImageProvider) ?? this.config['defaultProvider'],
+      defaultProvider:
+        (config['defaultProvider'] as ImageProvider) ?? this.config['defaultProvider'],
       defaultSize: (config['defaultSize'] as string) ?? this.config['defaultSize'],
       apiKeys: (config['apiKeys'] as Record<ImageProvider, string>) ?? this.config['apiKeys'],
     };
@@ -121,7 +127,12 @@ class ImageGenerationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const cacheSizeMB = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0), 0) / (1024 * 1024);
+      const cacheSizeMB =
+        Array.from(this.cacheIndex.values()).reduce(
+          (acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0),
+          0,
+        ) /
+        (1024 * 1024);
       const imageCount = this.cacheIndex.size;
 
       return {
@@ -183,7 +194,10 @@ class ImageGenerationFeature implements FeatureModule {
       return cached;
     }
 
-    this.ctx.logger.debug('Generating image (stub)', { provider: this.provider, prompt: `${prompt.substring(0, 50)  }...` });
+    this.ctx.logger.debug('Generating image (stub)', {
+      provider: this.provider,
+      prompt: `${prompt.substring(0, 50)}...`,
+    });
 
     // In real implementation, would call provider API
     // For stub, create a placeholder text file as "image"
@@ -313,7 +327,7 @@ class ImageGenerationFeature implements FeatureModule {
    * Delete a generated image.
    */
   deleteImage(imageId: string): boolean {
-    const found = Array.from(this.cacheIndex.values()).find(img => img.id === imageId);
+    const found = Array.from(this.cacheIndex.values()).find((img) => img.id === imageId);
     if (!found) return false;
 
     try {
@@ -330,7 +344,10 @@ class ImageGenerationFeature implements FeatureModule {
       this.ctx.logger.info('Image deleted', { imageId });
       return true;
     } catch (err) {
-      this.ctx.logger.warn('Failed to delete image', { imageId, error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.warn('Failed to delete image', {
+        imageId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return false;
     }
   }
@@ -339,7 +356,7 @@ class ImageGenerationFeature implements FeatureModule {
    * Get image by ID.
    */
   getImage(imageId: string): GeneratedImage | null {
-    return Array.from(this.cacheIndex.values()).find(img => img.id === imageId) ?? null;
+    return Array.from(this.cacheIndex.values()).find((img) => img.id === imageId) ?? null;
   }
 
   /**
@@ -349,7 +366,7 @@ class ImageGenerationFeature implements FeatureModule {
     let images = Array.from(this.cacheIndex.values());
 
     if (provider) {
-      images = images.filter(img => img.provider === provider);
+      images = images.filter((img) => img.provider === provider);
     }
 
     return images.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
@@ -390,7 +407,10 @@ class ImageGenerationFeature implements FeatureModule {
    * Get cache statistics.
    */
   getCacheStats(): { images: number; sizeMB: number } {
-    const size = Array.from(this.cacheIndex.values()).reduce((acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0), 0);
+    const size = Array.from(this.cacheIndex.values()).reduce(
+      (acc, img) => acc + ((img.metadata as { size: number })?.size ?? 0),
+      0,
+    );
     return {
       images: this.cacheIndex.size,
       sizeMB: size / (1024 * 1024),
@@ -398,7 +418,13 @@ class ImageGenerationFeature implements FeatureModule {
   }
 
   /** Generate a content-addressed cache key */
-  private generateCacheKey(prompt: string, size: string, style?: string, seed?: number, provider?: ImageProvider): string {
+  private generateCacheKey(
+    prompt: string,
+    size: string,
+    style?: string,
+    seed?: number,
+    provider?: ImageProvider,
+  ): string {
     const data = `${prompt}:${size}:${style ?? ''}:${seed ?? ''}:${provider ?? this.provider}`;
     return crypto.createHash('sha256').update(data).digest('hex');
   }

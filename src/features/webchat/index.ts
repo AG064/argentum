@@ -10,7 +10,12 @@ import { Server as HttpServer, type IncomingMessage, type ServerResponse } from 
 
 import { WebSocketServer, WebSocket } from 'ws';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Webchat configuration */
 export interface WebchatConfig {
@@ -369,7 +374,8 @@ class WebchatFeature implements FeatureModule {
   private clients: Map<string, Client> = new Map();
   private messageHistory: Map<string, ChatMessage[]> = new Map(); // roomId -> messages
   private typingStates: Map<string, TypingState> = new Map();
-  private uploadedFiles: Map<string, { data: Buffer; filename: string; mimeType: string }> = new Map();
+  private uploadedFiles: Map<string, { data: Buffer; filename: string; mimeType: string }> =
+    new Map();
   private config: WebchatConfig = {
     enabled: false,
     port: 3001,
@@ -394,7 +400,10 @@ class WebchatFeature implements FeatureModule {
       // Basic auth check for HTTP endpoints if authToken is set
       const authHeader = req.headers['authorization'];
       if (this.authToken) {
-        if (!authHeader || (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`) {
+        if (
+          !authHeader ||
+          (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`
+        ) {
           res.writeHead(401);
           res.end('Unauthorized');
           return;
@@ -446,7 +455,14 @@ class WebchatFeature implements FeatureModule {
       const roomId = parsedUrl.searchParams.get('room') ?? 'default';
       const userId = parsedUrl.searchParams.get('user') ?? `anon-${clientId}`;
 
-      const client: Client = { ws, userId, roomId, username: userId, connectedAt: Date.now(), typing: false };
+      const client: Client = {
+        ws,
+        userId,
+        roomId,
+        username: userId,
+        connectedAt: Date.now(),
+        typing: false,
+      };
       this.clients.set(clientId, client);
 
       this.ctx.logger.info('Client connected', { clientId, userId, roomId });
@@ -459,8 +475,12 @@ class WebchatFeature implements FeatureModule {
       this.broadcastToRoom(roomId, {
         type: 'message',
         message: {
-          id: this.generateId(), userId: 'system', roomId, content: `${userId} joined`,
-          role: 'system', timestamp: Date.now(),
+          id: this.generateId(),
+          userId: 'system',
+          roomId,
+          content: `${userId} joined`,
+          role: 'system',
+          timestamp: Date.now(),
         },
       });
 
@@ -480,8 +500,12 @@ class WebchatFeature implements FeatureModule {
           this.broadcastToRoom(c.roomId, {
             type: 'message',
             message: {
-              id: this.generateId(), userId: 'system', roomId: c.roomId, content: `${c.userId} left`,
-              role: 'system', timestamp: Date.now(),
+              id: this.generateId(),
+              userId: 'system',
+              roomId: c.roomId,
+              content: `${c.userId} left`,
+              role: 'system',
+              timestamp: Date.now(),
             },
           });
         }
@@ -494,7 +518,9 @@ class WebchatFeature implements FeatureModule {
     });
 
     this.httpServer.listen(this.config.port, () => {
-      this.ctx.logger.info(`Webchat server on :${this.config.port} (UI at http://localhost:${this.config.port}/)`);
+      this.ctx.logger.info(
+        `Webchat server on :${this.config.port} (UI at http://localhost:${this.config.port}/)`,
+      );
     });
   }
 
@@ -523,7 +549,10 @@ class WebchatFeature implements FeatureModule {
   }
 
   /** Handle incoming WebSocket message */
-  private handleMessage(clientId: string, msg: { type: string; content?: string; filename?: string; mimeType?: string; data?: string }): void {
+  private handleMessage(
+    clientId: string,
+    msg: { type: string; content?: string; filename?: string; mimeType?: string; data?: string },
+  ): void {
     const client = this.clients.get(clientId);
     if (!client) return;
 
@@ -541,7 +570,11 @@ class WebchatFeature implements FeatureModule {
         this.broadcastToRoom(client.roomId, { type: 'message', message: chatMsg });
 
         // Emit hook for agent processing
-        this.ctx.emit('webchat:message', { roomId: client.roomId, userId: client.userId, content: msg.content });
+        this.ctx.emit('webchat:message', {
+          roomId: client.roomId,
+          userId: client.userId,
+          content: msg.content,
+        });
         break;
       }
       case 'typing': {
@@ -552,7 +585,8 @@ class WebchatFeature implements FeatureModule {
         const prev = this.typingStates.get(clientId);
         if (prev) clearTimeout(prev.timer);
         this.typingStates.set(clientId, {
-          userId: client.userId, roomId: client.roomId,
+          userId: client.userId,
+          roomId: client.roomId,
           timer: setTimeout(() => this.typingStates.delete(clientId), 3000),
         });
         break;
@@ -565,7 +599,11 @@ class WebchatFeature implements FeatureModule {
           return;
         }
         const fileId = this.generateId();
-        this.uploadedFiles.set(fileId, { data: buf, filename: msg.filename, mimeType: msg.mimeType ?? 'application/octet-stream' });
+        this.uploadedFiles.set(fileId, {
+          data: buf,
+          filename: msg.filename,
+          mimeType: msg.mimeType ?? 'application/octet-stream',
+        });
 
         const fileMsg: ChatMessage = {
           id: this.generateId(),
@@ -574,7 +612,15 @@ class WebchatFeature implements FeatureModule {
           content: `📎 ${msg.filename}`,
           role: 'user',
           timestamp: Date.now(),
-          attachments: [{ id: fileId, filename: msg.filename, mimeType: msg.mimeType ?? 'application/octet-stream', size: buf.length, url: `/files/${fileId}` }],
+          attachments: [
+            {
+              id: fileId,
+              filename: msg.filename,
+              mimeType: msg.mimeType ?? 'application/octet-stream',
+              size: buf.length,
+              url: `/files/${fileId}`,
+            },
+          ],
         };
         this.addMessageToHistory(client.roomId, fileMsg);
         this.broadcastToRoom(client.roomId, { type: 'message', message: fileMsg });
@@ -597,7 +643,11 @@ class WebchatFeature implements FeatureModule {
   private broadcastToRoom(roomId: string, data: unknown, excludeClientId?: string): void {
     const payload = JSON.stringify(data);
     for (const [id, client] of this.clients) {
-      if (id !== excludeClientId && client.roomId === roomId && client.ws.readyState === WebSocket.OPEN) {
+      if (
+        id !== excludeClientId &&
+        client.roomId === roomId &&
+        client.ws.readyState === WebSocket.OPEN
+      ) {
         client.ws.send(payload);
       }
     }
@@ -606,7 +656,12 @@ class WebchatFeature implements FeatureModule {
   /** Send a message as the assistant (for agent responses) */
   sendAssistantMessage(roomId: string, content: string): void {
     const msg: ChatMessage = {
-      id: this.generateId(), userId: 'assistant', roomId, content, role: 'assistant', timestamp: Date.now(),
+      id: this.generateId(),
+      userId: 'assistant',
+      roomId,
+      content,
+      role: 'assistant',
+      timestamp: Date.now(),
     };
     this.addMessageToHistory(roomId, msg);
     this.broadcastToRoom(roomId, { type: 'message', message: msg });

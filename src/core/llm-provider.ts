@@ -111,10 +111,14 @@ class OpenAICompatibleProvider implements LLMProvider {
     throw lastError ?? new Error('All models failed');
   }
 
-  private async callModel(model: string, messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
+  private async callModel(
+    model: string,
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map(m => {
+      messages: messages.map((m) => {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
         if (m.name) msg['name'] = m['name'];
         if (m.tool_call_id) msg['tool_call_id'] = m['tool_call_id'];
@@ -131,7 +135,7 @@ class OpenAICompatibleProvider implements LLMProvider {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey}`,
+      'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
       ...this.extraHeaders,
     };
@@ -147,7 +151,7 @@ class OpenAICompatibleProvider implements LLMProvider {
       throw new Error(`API error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices: Array<{
         message: {
           content: string | null;
@@ -174,9 +178,13 @@ class OpenAICompatibleProvider implements LLMProvider {
     if (choice.message.content) result.content = choice.message.content;
 
     if (choice.message.tool_calls?.length) {
-      result.toolCalls = choice.message.tool_calls.map(tc => {
+      result.toolCalls = choice.message.tool_calls.map((tc) => {
         let args: Record<string, unknown> = {};
-        try { args = JSON.parse(tc.function.arguments); } catch { /* ignore */ }
+        try {
+          args = JSON.parse(tc.function.arguments);
+        } catch {
+          /* ignore */
+        }
         return { id: tc.id, name: tc.function.name, arguments: args };
       });
     }
@@ -200,19 +208,19 @@ class AnthropicProvider implements LLMProvider {
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<LLMResponse> {
-    const systemMsg = messages.find(m => m.role === 'system');
-    const conversation = messages.filter(m => m.role !== 'system');
+    const systemMsg = messages.find((m) => m.role === 'system');
+    const conversation = messages.filter((m) => m.role !== 'system');
 
     const body: Record<string, unknown> = {
       model: this.model,
       max_tokens: 4096,
-      messages: conversation.map(m => ({ role: m.role, content: m.content })),
+      messages: conversation.map((m) => ({ role: m.role, content: m.content })),
     };
 
     if (systemMsg) body['system'] = systemMsg.content;
 
     if (tools?.length) {
-      body['tools'] = tools.map(t => ({
+      body['tools'] = tools.map((t) => ({
         name: t.function.name,
         description: t.function.description,
         input_schema: t.function.parameters,
@@ -234,8 +242,14 @@ class AnthropicProvider implements LLMProvider {
       throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json() as {
-      content: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown>; id?: string }>;
+    const data = (await response.json()) as {
+      content: Array<{
+        type: string;
+        text?: string;
+        name?: string;
+        input?: Record<string, unknown>;
+        id?: string;
+      }>;
       usage?: { input_tokens: number; output_tokens: number };
     };
 
@@ -246,12 +260,12 @@ class AnthropicProvider implements LLMProvider {
       },
     };
 
-    const textParts = data.content.filter(c => c.type === 'text');
-    if (textParts.length) result.content = textParts.map(c => c.text).join('\n');
+    const textParts = data.content.filter((c) => c.type === 'text');
+    if (textParts.length) result.content = textParts.map((c) => c.text).join('\n');
 
-    const toolUses = data.content.filter(c => c.type === 'tool_use');
+    const toolUses = data.content.filter((c) => c.type === 'tool_use');
     if (toolUses.length) {
-      result.toolCalls = toolUses.map(tc => ({
+      result.toolCalls = toolUses.map((tc) => ({
         id: tc.id ?? '',
         name: tc.name ?? '',
         arguments: tc.input ?? {},
@@ -299,11 +313,14 @@ export function createLLMProvider(config: {
 
   // If llm config is provided, use config-driven approach
   if (llmConfig?.providers) {
-    const providerName = config.provider ?? llmConfig.default ?? Object.keys(llmConfig.providers)[0];
+    const providerName =
+      config.provider ?? llmConfig.default ?? Object.keys(llmConfig.providers)[0];
     const providerConfig = llmConfig.providers[providerName];
 
     if (!providerConfig) {
-      throw new Error(`Provider '${providerName}' not found in config. Available: ${Object.keys(llmConfig.providers).join(', ')}`);
+      throw new Error(
+        `Provider '${providerName}' not found in config. Available: ${Object.keys(llmConfig.providers).join(', ')}`,
+      );
     }
 
     const model = config.model ?? providerConfig.models?.[0] ?? 'default';
@@ -316,7 +333,9 @@ export function createLLMProvider(config: {
       apiKey = process.env[providerConfig.api_key_env];
     }
     if (!apiKey) {
-      const envHint = providerConfig.api_key_env ? ` Set ${providerConfig.api_key_env} or api_key in agclaw.json` : ' Set api_key or api_key_env in agclaw.json';
+      const envHint = providerConfig.api_key_env
+        ? ` Set ${providerConfig.api_key_env} or api_key in agclaw.json`
+        : ' Set api_key or api_key_env in agclaw.json';
       throw new Error(`No API key for provider '${providerName}'.${envHint}`);
     }
 

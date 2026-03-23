@@ -7,7 +7,12 @@
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** File watcher configuration */
 export interface FileWatcherConfig {
@@ -99,7 +104,11 @@ class FileWatcherFeature implements FeatureModule {
   }
 
   /** Start watching a path with an optional glob pattern */
-  watch(path: string, pattern?: string | RegExp | (string | RegExp)[], callback?: (event: 'change' | 'create' | 'delete', filePath: string) => void): string {
+  watch(
+    path: string,
+    pattern?: string | RegExp | (string | RegExp)[],
+    callback?: (event: 'change' | 'create' | 'delete', filePath: string) => void,
+  ): string {
     if (!this.active) {
       throw new Error('File Watcher not active. Call start() first.');
     }
@@ -172,7 +181,7 @@ class FileWatcherFeature implements FeatureModule {
 
   /** List all active watches */
   listWatches(): WatchInfo[] {
-    return Array.from(this.watches.values()).map(entry => ({
+    return Array.from(this.watches.values()).map((entry) => ({
       id: entry.id,
       path: entry.path,
       pattern: entry.pattern,

@@ -5,7 +5,12 @@
  * real-time streaming responses.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../core/plugin-loader';
 
 /** Webchat channel configuration */
 export interface WebchatChannelConfig {

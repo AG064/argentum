@@ -1,7 +1,12 @@
 import { mkdirSync, existsSync, readdirSync } from 'fs';
 import { dirname, resolve, join } from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +60,12 @@ class AutoUpdateFeature implements FeatureModule {
   private currentVersion: string;
   private lastCheck: number = 0;
   private latestRelease: UpdateInfo | null = null;
-  private updateHistory: Array<{version: string, timestamp: number, success: boolean, message: string}> = [];
+  private updateHistory: Array<{
+    version: string;
+    timestamp: number;
+    success: boolean;
+    message: string;
+  }> = [];
   private checkTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -85,11 +95,14 @@ class AutoUpdateFeature implements FeatureModule {
     await this.checkUpdates();
 
     // Schedule periodic checks
-    this.checkTimer = setInterval(() => {
-      this.checkUpdates().catch(err => {
-        this.ctx.logger.error('Update check failed', { error: err });
-      });
-    }, this.config.checkIntervalHours * 60 * 60 * 1000);
+    this.checkTimer = setInterval(
+      () => {
+        this.checkUpdates().catch((err) => {
+          this.ctx.logger.error('Update check failed', { error: err });
+        });
+      },
+      this.config.checkIntervalHours * 60 * 60 * 1000,
+    );
 
     this.ctx.logger.info('Auto-update active', {
       currentVersion: this.currentVersion,
@@ -108,7 +121,8 @@ class AutoUpdateFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const lastCheckAge = Date.now() - this.lastCheck;
-    const hasLatest = this.latestRelease && this.isNewerVersion(this.latestRelease.version, this.currentVersion);
+    const hasLatest =
+      this.latestRelease && this.isNewerVersion(this.latestRelease.version, this.currentVersion);
 
     return {
       healthy: true,
@@ -175,7 +189,10 @@ class AutoUpdateFeature implements FeatureModule {
       }
     }
 
-    this.ctx.logger.info('Applying update', { from: this.currentVersion, to: this.latestRelease!.version });
+    this.ctx.logger.info('Applying update', {
+      from: this.currentVersion,
+      to: this.latestRelease!.version,
+    });
 
     try {
       if (this.config.backupBeforeUpdate) {
@@ -217,7 +234,9 @@ class AutoUpdateFeature implements FeatureModule {
 
     try {
       // Find last successful update before current
-      const previous = this.updateHistory.find(h => h.success && h.version !== this.currentVersion);
+      const previous = this.updateHistory.find(
+        (h) => h.success && h.version !== this.currentVersion,
+      );
       if (!previous) {
         return { success: false, version: this.currentVersion, message: 'No rollback available' };
       }
@@ -259,20 +278,22 @@ class AutoUpdateFeature implements FeatureModule {
     try {
       const response = await fetch(url, {
         headers: {
-          Accept: 'application/vnd.github.v3+json',
+          'Accept': 'application/vnd.github.v3+json',
           'User-Agent': `ag-claw-updater/${this.currentVersion}`,
         },
       });
 
       if (!response.ok) {
         if (response.status === 404) {
-          this.ctx.logger.warn('GitHub repo not found', { repo: `${this.config.repoOwner}/${this.config.repoName}` });
+          this.ctx.logger.warn('GitHub repo not found', {
+            repo: `${this.config.repoOwner}/${this.config.repoName}`,
+          });
           return null;
         }
         throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         tag_name: string;
         html_url: string;
         body: string;
@@ -333,7 +354,10 @@ class AutoUpdateFeature implements FeatureModule {
       throw new Error('Backup directory not found');
     }
 
-    const backups = readdirSync(backupDir).filter(f => f.startsWith('agclaw-backup-')).sort().reverse();
+    const backups = readdirSync(backupDir)
+      .filter((f) => f.startsWith('agclaw-backup-'))
+      .sort()
+      .reverse();
     if (backups.length === 0) {
       throw new Error('No backups found');
     }
@@ -368,7 +392,9 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   private loadUpdateHistory(): void {
-    const rows = this.db.prepare('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100').all();
+    const rows = this.db
+      .prepare('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
+      .all();
     this.updateHistory = rows.map((row: any) => ({
       version: row.version,
       timestamp: row.timestamp,
@@ -379,9 +405,11 @@ class AutoUpdateFeature implements FeatureModule {
 
   private async recordUpdate(version: string, success: boolean, message: string): Promise<void> {
     const timestamp = Date.now();
-    this.db.prepare(
-      'INSERT INTO update_history (version, timestamp, success, message) VALUES (?, ?, ?, ?)'
-    ).run(version, timestamp, success ? 1 : 0, message);
+    this.db
+      .prepare(
+        'INSERT INTO update_history (version, timestamp, success, message) VALUES (?, ?, ?, ?)',
+      )
+      .run(version, timestamp, success ? 1 : 0, message);
 
     this.updateHistory.push({ version, timestamp, success, message });
     // Keep only last 100 entries in memory

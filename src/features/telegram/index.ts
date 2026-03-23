@@ -20,7 +20,7 @@ import { Bot, InputFile } from 'grammy';
 export interface TelegramConfig {
   enabled: boolean;
   botToken: string;
-  allowFrom: string[];          // ["tg:userId", "tg:userId"]
+  allowFrom: string[]; // ["tg:userId", "tg:userId"]
   groupPolicy: 'allowlist' | 'open' | 'disabled';
   groups: Record<string, { requireMention: boolean }>;
   dmPolicy: 'pairing' | 'open' | 'disabled';
@@ -114,11 +114,15 @@ class TelegramFeature {
 
     // Load allowed users/groups from config
     for (const userId of this.config.allowFrom) {
-      this.db.prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)')
+      this.db
+        .prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)')
         .run(userId, Date.now());
     }
     for (const [groupId, opts] of Object.entries(this.config.groups)) {
-      this.db.prepare('INSERT OR IGNORE INTO allowed_groups (group_id, require_mention, added_at) VALUES (?, ?, ?)')
+      this.db
+        .prepare(
+          'INSERT OR IGNORE INTO allowed_groups (group_id, require_mention, added_at) VALUES (?, ?, ?)',
+        )
         .run(groupId, opts.requireMention ? 1 : 0, Date.now());
     }
 
@@ -140,11 +144,11 @@ class TelegramFeature {
       }
       await ctx.reply(
         '**AG-Claw** is online.\n\n' +
-        'Commands:\n' +
-        '/status — system status\n' +
-        '/features — list features\n' +
-        '/help — this message',
-        { parse_mode: 'Markdown' }
+          'Commands:\n' +
+          '/status — system status\n' +
+          '/features — list features\n' +
+          '/help — this message',
+        { parse_mode: 'Markdown' },
       );
     });
 
@@ -156,11 +160,13 @@ class TelegramFeature {
         return;
       }
       const code = args[0].trim();
-      const row = this.db.prepare('SELECT * FROM pairing_codes WHERE code = ? AND expires_at > ?')
+      const row = this.db
+        .prepare('SELECT * FROM pairing_codes WHERE code = ? AND expires_at > ?')
         .get(code, Date.now());
       if (row) {
         const userId = `tg:${ctx.from?.id}`;
-        this.db.prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)')
+        this.db
+          .prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)')
           .run(userId, Date.now());
         this.db.prepare('DELETE FROM pairing_codes WHERE code = ?').run(code);
         await ctx.reply('Access granted! Send /start to begin.');
@@ -177,16 +183,18 @@ class TelegramFeature {
       const mins = Math.floor((uptime % 3600) / 60);
       await ctx.reply(
         `**AG-Claw Status**\n` +
-        `Uptime: ${hours}h ${mins}m\n` +
-        `Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)} MB`,
-        { parse_mode: 'Markdown' }
+          `Uptime: ${hours}h ${mins}m\n` +
+          `Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)} MB`,
+        { parse_mode: 'Markdown' },
       );
     });
 
     // /features command
     this.bot.command('features', async (ctx) => {
       if (!this.isAllowed(`tg:${ctx.from?.id}`)) return;
-      await ctx.reply('Use `agclaw tools` on the server to list features.', { parse_mode: 'Markdown' });
+      await ctx.reply('Use `agclaw tools` on the server to list features.', {
+        parse_mode: 'Markdown',
+      });
     });
 
     // /generate_pair — admin generates pairing code
@@ -194,8 +202,12 @@ class TelegramFeature {
       if (!this.isAllowed(`tg:${ctx.from?.id}`)) return;
       const code = crypto.randomBytes(4).toString('hex');
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-      this.db.prepare('INSERT INTO pairing_codes (code, expires_at) VALUES (?, ?)').run(code, expiresAt);
-      await ctx.reply(`Pairing code: \`${code}\`\nValid for 10 minutes.`, { parse_mode: 'Markdown' });
+      this.db
+        .prepare('INSERT INTO pairing_codes (code, expires_at) VALUES (?, ?)')
+        .run(code, expiresAt);
+      await ctx.reply(`Pairing code: \`${code}\`\nValid for 10 minutes.`, {
+        parse_mode: 'Markdown',
+      });
     });
 
     // Message handler
@@ -215,16 +227,27 @@ class TelegramFeature {
         if (this.config.groupPolicy === 'disabled') return;
         if (this.config.groupPolicy === 'allowlist') {
           const groupId = String(chatId);
-          const groupRow = this.db.prepare('SELECT * FROM allowed_groups WHERE group_id = ?').get(groupId);
+          const groupRow = this.db
+            .prepare('SELECT * FROM allowed_groups WHERE group_id = ?')
+            .get(groupId);
           if (!groupRow) return;
           if (groupRow.require_mention && !ctx.message.text.includes(`@${ctx.me.username}`)) return;
         }
       }
 
       // Store message
-      this.db.prepare('INSERT INTO messages (id, chat_id, user_id, text, timestamp, reply_to) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(ctx.message.message_id, chatId, ctx.from.id, ctx.message.text, Date.now(),
-          ctx.message.reply_to_message?.message_id);
+      this.db
+        .prepare(
+          'INSERT INTO messages (id, chat_id, user_id, text, timestamp, reply_to) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          ctx.message.message_id,
+          chatId,
+          ctx.from.id,
+          ctx.message.text,
+          Date.now(),
+          ctx.message.reply_to_message?.message_id,
+        );
 
       // Forward to handlers
       const msg: TelegramMessage = {
@@ -253,7 +276,9 @@ class TelegramFeature {
       this.ctx?.logger?.debug?.('Telegram reaction', {
         chatId: reaction.chat.id,
         userId: reaction.user?.id,
-        emoji: reaction.new_reaction.map((r: any) => r.emoji || r.custom_emoji_id || 'unknown').join(', '),
+        emoji: reaction.new_reaction
+          .map((r: any) => r.emoji || r.custom_emoji_id || 'unknown')
+          .join(', '),
       });
     });
 
@@ -298,7 +323,7 @@ class TelegramFeature {
     try {
       if (!this.bot) return { healthy: false, details: { error: 'Bot not initialized' } };
       const me = await this.bot.api.getMe();
-      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
+      const msgCount = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
       return {
         healthy: true,
         details: {
@@ -318,7 +343,11 @@ class TelegramFeature {
     this.messageHandlers.push(handler);
   }
 
-  async sendMessage(chatId: number | string, text: string, options?: { parseMode?: string; replyTo?: number }): Promise<void> {
+  async sendMessage(
+    chatId: number | string,
+    text: string,
+    options?: { parseMode?: string; replyTo?: number },
+  ): Promise<void> {
     if (!this.bot) throw new Error('Bot not initialized');
     await this.bot.api.sendMessage(chatId, text, {
       parse_mode: (options?.parseMode as any) || 'Markdown',
@@ -326,7 +355,11 @@ class TelegramFeature {
     });
   }
 
-  async sendPhoto(chatId: number | string, photo: string | Buffer, caption?: string): Promise<void> {
+  async sendPhoto(
+    chatId: number | string,
+    photo: string | Buffer,
+    caption?: string,
+  ): Promise<void> {
     if (!this.bot) throw new Error('Bot not initialized');
     if (typeof photo === 'string' && (photo.startsWith('http') || photo.startsWith('/'))) {
       await this.bot.api.sendPhoto(chatId, new InputFile(photo), { caption });
@@ -343,17 +376,21 @@ class TelegramFeature {
   generatePairingCode(): string {
     const code = crypto.randomBytes(4).toString('hex');
     const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.db.prepare('INSERT INTO pairing_codes (code, expires_at) VALUES (?, ?)').run(code, expiresAt);
+    this.db
+      .prepare('INSERT INTO pairing_codes (code, expires_at) VALUES (?, ?)')
+      .run(code, expiresAt);
     return code;
   }
 
   listAllowedUsers(): string[] {
     const rows = this.db.prepare('SELECT user_id FROM allowed_users').all() as any[];
-    return rows.map(r => r.user_id);
+    return rows.map((r) => r.user_id);
   }
 
   addUser(userId: string): void {
-    this.db.prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)').run(userId, Date.now());
+    this.db
+      .prepare('INSERT OR IGNORE INTO allowed_users (user_id, added_at) VALUES (?, ?)')
+      .run(userId, Date.now());
   }
 
   removeUser(userId: string): void {

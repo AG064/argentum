@@ -4,7 +4,12 @@
  * Text-to-Speech (TTS), Speech-to-Text (STT) via ElevenLabs and OpenAI.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Voice feature configuration */
 export interface VoiceConfig {
@@ -51,7 +56,7 @@ const ELEVENLABS_API = 'https://api.elevenlabs.io/v1';
 export async function generateSpeech(
   text: string,
   voiceId?: string,
-  options?: { model?: string; stability?: number; similarityBoost?: number }
+  options?: { model?: string; stability?: number; similarityBoost?: number },
 ): Promise<Buffer> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -66,7 +71,7 @@ export async function generateSpeech(
     headers: {
       'xi-api-key': apiKey,
       'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
+      'Accept': 'audio/mpeg',
     },
     body: JSON.stringify({
       text,
@@ -105,7 +110,7 @@ export async function listVoices(): Promise<VoiceInfo[]> {
     throw new Error(`ElevenLabs voices API error (${response.status}): ${errorText}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     voices: Array<{
       voice_id: string;
       name: string;
@@ -115,7 +120,7 @@ export async function listVoices(): Promise<VoiceInfo[]> {
     }>;
   };
 
-  return data.voices.map(v => ({
+  return data.voices.map((v) => ({
     id: v.voice_id,
     name: v.name,
     category: v.category,
@@ -127,7 +132,9 @@ export async function listVoices(): Promise<VoiceInfo[]> {
 /** Get voice info by ID or name */
 export async function getVoice(voiceId: string): Promise<VoiceInfo | null> {
   const voices = await listVoices();
-  return voices.find(v => v.id === voiceId || v.name.toLowerCase() === voiceId.toLowerCase()) ?? null;
+  return (
+    voices.find((v) => v.id === voiceId || v.name.toLowerCase() === voiceId.toLowerCase()) ?? null
+  );
 }
 
 // ─── Feature Module ───────────────────────────────────────────────────────────
@@ -177,12 +184,11 @@ class VoiceFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const hasTTS = this.config.provider === 'elevenlabs'
-      ? !!process.env.ELEVENLABS_API_KEY
-      : !!process.env.OPENAI_API_KEY;
-    const hasSTT = this.config.sttProvider === 'whisper'
-      ? !!process.env.OPENAI_API_KEY
-      : true;
+    const hasTTS =
+      this.config.provider === 'elevenlabs'
+        ? !!process.env.ELEVENLABS_API_KEY
+        : !!process.env.OPENAI_API_KEY;
+    const hasSTT = this.config.sttProvider === 'whisper' ? !!process.env.OPENAI_API_KEY : true;
 
     return {
       healthy: hasTTS && hasSTT,
@@ -232,7 +238,7 @@ class VoiceFeature implements FeatureModule {
       throw new Error(`Whisper API error: ${response.status}`);
     }
 
-    const data = await response.json() as { text: string };
+    const data = (await response.json()) as { text: string };
     return data.text;
   }
 }

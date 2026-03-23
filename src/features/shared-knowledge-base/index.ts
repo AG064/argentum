@@ -3,7 +3,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -69,9 +74,13 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const articleRow = this.db.prepare("SELECT COUNT(*) as c FROM articles WHERE current = 1").get() as { c: number };
+    const articleRow = this.db
+      .prepare('SELECT COUNT(*) as c FROM articles WHERE current = 1')
+      .get() as { c: number };
     const articleCount = articleRow.c;
-    const versionRow = this.db.prepare('SELECT COUNT(*) as c FROM article_versions').get() as { c: number };
+    const versionRow = this.db.prepare('SELECT COUNT(*) as c FROM article_versions').get() as {
+      c: number;
+    };
     const versionCount = versionRow.c;
 
     return {
@@ -86,7 +95,12 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   // ─── Article Management ───────────────────────────────────────────────────
 
   /** Add a new article */
-  async addArticle(title: string, content: string, tags: string[], createdBy: string): Promise<Article> {
+  async addArticle(
+    title: string,
+    content: string,
+    tags: string[],
+    createdBy: string,
+  ): Promise<Article> {
     if (!title || !content) {
       throw new Error('Title and content are required');
     }
@@ -96,16 +110,20 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     const version = 1;
 
     // Insert current article
-    this.db.prepare(
-      `INSERT INTO articles (id, title, content, tags, version, created_at, updated_at, created_by, current)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
-    ).run(id, title, content, JSON.stringify(tags), version, now, now, createdBy);
+    this.db
+      .prepare(
+        `INSERT INTO articles (id, title, content, tags, version, created_at, updated_at, created_by, current)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .run(id, title, content, JSON.stringify(tags), version, now, now, createdBy);
 
     // Store version history
-    this.db.prepare(
-      `INSERT INTO article_versions (article_id, version, content, updated_at, updated_by)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(id, version, content, now, createdBy);
+    this.db
+      .prepare(
+        `INSERT INTO article_versions (article_id, version, content, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, version, content, now, createdBy);
 
     // Update FTS
     this.updateFts(id, title, content, tags);
@@ -116,9 +134,9 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
 
   /** Get article by ID */
   async getArticle(id: string): Promise<Article | null> {
-    const row = this.db.prepare(
-      'SELECT * FROM articles WHERE id = ? AND current = 1'
-    ).get(id) as any;
+    const row = this.db
+      .prepare('SELECT * FROM articles WHERE id = ? AND current = 1')
+      .get(id) as any;
 
     if (!row) return null;
     return this.mapArticleRow(row);
@@ -126,11 +144,11 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
 
   /** Get article versions */
   async getArticleVersions(id: string): Promise<ArticleVersion[]> {
-    const rows = this.db.prepare(
-      'SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC'
-    ).all(id) as any[];
+    const rows = this.db
+      .prepare('SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC')
+      .all(id) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       version: row.version,
       content: row.content,
       updatedAt: row.updated_at,
@@ -139,8 +157,16 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   }
 
   /** Update an article (creates new version) */
-  async updateArticle(id: string, updatedBy: string, title?: string, content?: string, tags?: string[]): Promise<Article | null> {
-    const existing = this.db.prepare('SELECT * FROM articles WHERE id = ? AND current = 1').get(id) as any;
+  async updateArticle(
+    id: string,
+    updatedBy: string,
+    title?: string,
+    content?: string,
+    tags?: string[],
+  ): Promise<Article | null> {
+    const existing = this.db
+      .prepare('SELECT * FROM articles WHERE id = ? AND current = 1')
+      .get(id) as any;
     if (!existing) {
       throw new Error(`Article not found: ${id}`);
     }
@@ -149,25 +175,36 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     const newVersion = existing.version + 1;
 
     // Archive current version
-    this.db.prepare(
-      'UPDATE articles SET current = 0 WHERE id = ?'
-    ).run(id);
+    this.db.prepare('UPDATE articles SET current = 0 WHERE id = ?').run(id);
 
     // Insert version into history
-    this.db.prepare(
-      `INSERT INTO article_versions (article_id, version, content, updated_at, updated_by)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(id, existing.version, existing.content, existing.updated_at, existing.created_by);
+    this.db
+      .prepare(
+        `INSERT INTO article_versions (article_id, version, content, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, existing.version, existing.content, existing.updated_at, existing.created_by);
 
     // Insert new current version
     const finalTitle = title ?? existing.title;
     const finalContent = content ?? existing.content;
     const finalTags = tags ?? JSON.parse(existing.tags);
 
-    this.db.prepare(
-      `INSERT INTO articles (id, title, content, tags, version, created_at, updated_at, created_by, current)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`
-    ).run(id, finalTitle, finalContent, JSON.stringify(finalTags), newVersion, existing.created_at, now, updatedBy);
+    this.db
+      .prepare(
+        `INSERT INTO articles (id, title, content, tags, version, created_at, updated_at, created_by, current)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .run(
+        id,
+        finalTitle,
+        finalContent,
+        JSON.stringify(finalTags),
+        newVersion,
+        existing.created_at,
+        now,
+        updatedBy,
+      );
 
     // Update FTS (delete + insert)
     this.db.prepare('DELETE FROM knowledge_fts WHERE docid = ?').run(existing.id);
@@ -215,21 +252,27 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
 
     try {
       const rows = this.db.prepare(searchSql).all(query, limit, offset) as any[];
-      return rows.map(row => this.mapArticleRow(row));
+      return rows.map((row) => this.mapArticleRow(row));
     } catch (err) {
       // If FTS fails, fallback to simple LIKE search
       this.ctx.logger.warn('FTS search failed, falling back to LIKE', { error: err });
       const likePattern = `%${query}%`;
-      const rows = this.db.prepare(
-        `SELECT * FROM articles WHERE current = 1 AND (title LIKE ? OR content LIKE ?) LIMIT ? OFFSET ?`
-      ).all(likePattern, likePattern, limit, offset) as any[];
+      const rows = this.db
+        .prepare(
+          `SELECT * FROM articles WHERE current = 1 AND (title LIKE ? OR content LIKE ?) LIMIT ? OFFSET ?`,
+        )
+        .all(likePattern, likePattern, limit, offset) as any[];
 
-      return rows.map(row => this.mapArticleRow(row));
+      return rows.map((row) => this.mapArticleRow(row));
     }
   }
 
   /** Search by tags */
-  async searchByTags(tags: string[], matchAll: boolean = false, limit: number = 20): Promise<Article[]> {
+  async searchByTags(
+    tags: string[],
+    matchAll: boolean = false,
+    limit: number = 20,
+  ): Promise<Article[]> {
     if (tags.length === 0) return [];
 
     const rows: any[] = [];
@@ -246,7 +289,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
       rows.push(...this.db.prepare(simpleQuery).all(limit));
     } else {
       // Articles can have any of the tags
-      const likePatterns = tags.map(t => `%"${t}"%`);
+      const likePatterns = tags.map((t) => `%"${t}"%`);
       const placeholders = likePatterns.map(() => '?').join(' OR ');
       const query = `SELECT * FROM articles WHERE current = 1 AND (${placeholders}) LIMIT ?`;
       const stmt = this.db.prepare(query);
@@ -254,7 +297,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
       rows.push(...newRows);
     }
 
-    return rows.map(row => this.mapArticleRow(row));
+    return rows.map((row) => this.mapArticleRow(row));
   }
 
   // ─── Database ─────────────────────────────────────────────────────────────
@@ -330,9 +373,11 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     // FTS is auto-updated via triggers, but we need to ensure the rowid matches
     const row = this.db.prepare('SELECT rowid FROM articles WHERE id = ?').get(id) as any;
     if (row) {
-      this.db.prepare(
-        'INSERT OR REPLACE INTO knowledge_fts (rowid, title, content, tags) VALUES (?, ?, ?, ?)'
-      ).run(row.rowid, title, content, JSON.stringify(tags));
+      this.db
+        .prepare(
+          'INSERT OR REPLACE INTO knowledge_fts (rowid, title, content, tags) VALUES (?, ?, ?, ?)',
+        )
+        .run(row.rowid, title, content, JSON.stringify(tags));
     }
   }
 

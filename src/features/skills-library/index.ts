@@ -11,7 +11,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
+import type {
+  FeatureModule,
+  FeatureMeta,
+  FeatureContext,
+  HealthStatus,
+} from '../../core/plugin-loader';
 
 export interface SkillRecord {
   id: string;
@@ -55,8 +60,12 @@ class SkillsLibraryFeature implements FeatureModule {
     this.initDatabase();
   }
 
-  async start(): Promise<void> { /* nothing */ }
-  async stop(): Promise<void> { this.db?.close(); }
+  async start(): Promise<void> {
+    /* nothing */
+  }
+  async stop(): Promise<void> {
+    this.db?.close();
+  }
 
   async healthCheck(): Promise<HealthStatus> {
     const count = (this.db.prepare('SELECT COUNT(*) as c FROM skills').get() as { c: number }).c;
@@ -77,10 +86,22 @@ class SkillsLibraryFeature implements FeatureModule {
     const now = Date.now();
     const version = payload.version ?? '1.0.0';
 
-    this.db.prepare(
-      `INSERT INTO skills (id, name, version, description, code, tags, author, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, payload.name, version, payload.description ?? '', payload.code, JSON.stringify(payload.tags ?? []), payload.author ?? '', now, now);
+    this.db
+      .prepare(
+        `INSERT INTO skills (id, name, version, description, code, tags, author, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        payload.name,
+        version,
+        payload.description ?? '',
+        payload.code,
+        JSON.stringify(payload.tags ?? []),
+        payload.author ?? '',
+        now,
+        now,
+      );
 
     const rec: SkillRecord = {
       id,
@@ -106,25 +127,41 @@ class SkillsLibraryFeature implements FeatureModule {
 
   listSkills(): SkillRecord[] {
     const rows = this.db.prepare('SELECT * FROM skills ORDER BY updated_at DESC').all() as any[];
-    return rows.map(r => this.rowToSkill(r));
+    return rows.map((r) => this.rowToSkill(r));
   }
 
   searchSkills(query: string): SkillRecord[] {
     const q = `%${query.toLowerCase()}%`;
-    const rows = this.db.prepare(
-      `SELECT * FROM skills WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(tags) LIKE ? ORDER BY updated_at DESC LIMIT 100`
-    ).all(q, q, q) as any[];
-    return rows.map(r => this.rowToSkill(r));
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM skills WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(tags) LIKE ? ORDER BY updated_at DESC LIMIT 100`,
+      )
+      .all(q, q, q) as any[];
+    return rows.map((r) => this.rowToSkill(r));
   }
 
-  updateSkill(id: string, patch: Partial<Omit<SkillRecord, 'id' | 'createdAt'>>): SkillRecord | null {
+  updateSkill(
+    id: string,
+    patch: Partial<Omit<SkillRecord, 'id' | 'createdAt'>>,
+  ): SkillRecord | null {
     const existing = this.getSkill(id);
     if (!existing) return null;
     const updated = { ...existing, ...patch, updatedAt: Date.now() } as SkillRecord;
 
-    this.db.prepare(
-      `UPDATE skills SET name = ?, version = ?, description = ?, code = ?, tags = ?, author = ?, updated_at = ? WHERE id = ?`
-    ).run(updated.name, updated.version, updated.description, updated.code, JSON.stringify(updated.tags), updated.author ?? '', updated.updatedAt, id);
+    this.db
+      .prepare(
+        `UPDATE skills SET name = ?, version = ?, description = ?, code = ?, tags = ?, author = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(
+        updated.name,
+        updated.version,
+        updated.description,
+        updated.code,
+        JSON.stringify(updated.tags),
+        updated.author ?? '',
+        updated.updatedAt,
+        id,
+      );
 
     this.ctx.logger?.info('Skill updated', { id });
     return updated;
@@ -178,7 +215,11 @@ class SkillsLibraryFeature implements FeatureModule {
   }
 
   private safeParse(s: string): string[] {
-    try { return JSON.parse(s); } catch { return []; }
+    try {
+      return JSON.parse(s);
+    } catch {
+      return [];
+    }
   }
 }
 

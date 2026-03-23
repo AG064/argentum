@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Memory entry */
 export interface MemoryEntry {
@@ -79,10 +84,13 @@ class SQLiteMemoryFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM kv_store').get() as { c: number }).c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM kv_store').get() as { c: number })
+        .c;
       const namespaceCounts: Record<string, number> = {};
       for (const ns of this.config.namespaces) {
-        const row = this.db.prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?').get(ns) as { c: number };
+        const row = this.db
+          .prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?')
+          .get(ns) as { c: number };
         namespaceCounts[ns] = row.c;
       }
       return {
@@ -103,7 +111,9 @@ class SQLiteMemoryFeature implements FeatureModule {
   /** Store a value under a namespace and key */
   store(namespace: string, key: string, value: string): void {
     if (!this.config.namespaces.includes(namespace)) {
-      throw new Error(`Invalid namespace: ${namespace}. Allowed: ${this.config.namespaces.join(', ')}`);
+      throw new Error(
+        `Invalid namespace: ${namespace}. Allowed: ${this.config.namespaces.join(', ')}`,
+      );
     }
 
     const now = Date.now();
@@ -119,27 +129,39 @@ class SQLiteMemoryFeature implements FeatureModule {
 
   /** Get a value by namespace and key */
   get(namespace: string, key: string): string | null {
-    const row = this.db.prepare(
-      'SELECT value FROM kv_store WHERE namespace = ? AND key = ?'
-    ).get(namespace, key) as { value: string } | undefined;
+    const row = this.db
+      .prepare('SELECT value FROM kv_store WHERE namespace = ? AND key = ?')
+      .get(namespace, key) as { value: string } | undefined;
 
     return row?.value ?? null;
   }
 
   /** Search values by full-text query across all namespaces */
-  search(query: string, limit = 20): Array<{ namespace: string; key: string; value: string; rank: number }> {
+  search(
+    query: string,
+    limit = 20,
+  ): Array<{ namespace: string; key: string; value: string; rank: number }> {
     if (!query.trim()) return [];
 
     try {
       const sanitized = query.replace(/[^\w\s]/g, ' ').trim();
-      const rows = this.db.prepare(`
+      const rows = this.db
+        .prepare(
+          `
         SELECT k.namespace, k.key, k.value, fts.rank
         FROM kv_store k
         JOIN kv_fts fts ON k.rowid = fts.rowid
         WHERE kv_fts MATCH ?
         ORDER BY rank
         LIMIT ?
-      `).all(sanitized, limit) as Array<{ namespace: string; key: string; value: string; rank: number }>;
+      `,
+        )
+        .all(sanitized, limit) as Array<{
+        namespace: string;
+        key: string;
+        value: string;
+        rank: number;
+      }>;
 
       return rows;
     } catch {
@@ -150,9 +172,9 @@ class SQLiteMemoryFeature implements FeatureModule {
 
   /** Delete a specific key in a namespace */
   delete(namespace: string, key: string): boolean {
-    const result = this.db.prepare(
-      'DELETE FROM kv_store WHERE namespace = ? AND key = ?'
-    ).run(namespace, key);
+    const result = this.db
+      .prepare('DELETE FROM kv_store WHERE namespace = ? AND key = ?')
+      .run(namespace, key);
     return result.changes > 0;
   }
 
@@ -162,11 +184,11 @@ class SQLiteMemoryFeature implements FeatureModule {
       throw new Error(`Invalid namespace: ${namespace}`);
     }
 
-    const rows = this.db.prepare(
-      'SELECT key FROM kv_store WHERE namespace = ? ORDER BY updated_at DESC'
-    ).all(namespace) as Array<{ key: string }>;
+    const rows = this.db
+      .prepare('SELECT key FROM kv_store WHERE namespace = ? ORDER BY updated_at DESC')
+      .all(namespace) as Array<{ key: string }>;
 
-    return rows.map(r => r.key);
+    return rows.map((r) => r.key);
   }
 
   /** Get all entries in a namespace */
@@ -175,9 +197,11 @@ class SQLiteMemoryFeature implements FeatureModule {
       throw new Error(`Invalid namespace: ${namespace}`);
     }
 
-    const rows = this.db.prepare(
-      'SELECT namespace, key, value, created_at, updated_at FROM kv_store WHERE namespace = ? ORDER BY updated_at DESC'
-    ).all(namespace) as MemoryEntry[];
+    const rows = this.db
+      .prepare(
+        'SELECT namespace, key, value, created_at, updated_at FROM kv_store WHERE namespace = ? ORDER BY updated_at DESC',
+      )
+      .all(namespace) as MemoryEntry[];
 
     return rows;
   }
@@ -237,16 +261,21 @@ class SQLiteMemoryFeature implements FeatureModule {
   }
 
   /** Fallback LIKE search */
-  private searchByLike(query: string, limit: number): Array<{ namespace: string; key: string; value: string; rank: number }> {
+  private searchByLike(
+    query: string,
+    limit: number,
+  ): Array<{ namespace: string; key: string; value: string; rank: number }> {
     const pattern = `%${query}%`;
-    const rows = this.db.prepare(
-      `SELECT namespace, key, value FROM kv_store
+    const rows = this.db
+      .prepare(
+        `SELECT namespace, key, value FROM kv_store
        WHERE value LIKE ?
        ORDER BY updated_at DESC
-       LIMIT ?`
-    ).all(pattern, limit) as Array<{ namespace: string; key: string; value: string }>;
+       LIMIT ?`,
+      )
+      .all(pattern, limit) as Array<{ namespace: string; key: string; value: string }>;
 
-    return rows.map(r => ({ ...r, rank: 0 }));
+    return rows.map((r) => ({ ...r, rank: 0 }));
   }
 }
 

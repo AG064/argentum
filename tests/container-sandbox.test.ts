@@ -17,6 +17,8 @@ describe('container-sandbox validation (exec-level)', () => {
   });
 
   test('parsing with quotes handled (no validation error)', async () => {
-    await expect((container as any).execute("echo 'hello world'")).resolves.toHaveProperty('success');
+    await expect((container as any).execute("echo 'hello world'")).resolves.toHaveProperty(
+      'success',
+    );
   });
 });

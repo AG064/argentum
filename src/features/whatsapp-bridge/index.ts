@@ -11,7 +11,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** WhatsApp configuration */
 export interface WhatsAppConfig {
@@ -131,7 +136,8 @@ class WhatsAppBridgeFeature implements FeatureModule {
     this.config = {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
       webhookPath: (config['webhookPath'] as string) ?? this.config['webhookPath'],
-      maxMessageHistory: (config['maxMessageHistory'] as number) ?? this.config['maxMessageHistory'],
+      maxMessageHistory:
+        (config['maxMessageHistory'] as number) ?? this.config['maxMessageHistory'],
       autoAck: (config['autoAck'] as boolean) ?? this.config['autoAck'],
     };
 
@@ -166,11 +172,19 @@ class WhatsAppBridgeFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }).c;
-      const inboundToday = (this.db.prepare(`
+      const msgCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }
+      ).c;
+      const inboundToday = (
+        this.db
+          .prepare(
+            `
         SELECT COUNT(*) as c FROM messages
         WHERE direction = 'inbound' AND timestamp > ?
-      `).get(Date.now() - 86400000) as { c: number }).c;
+      `,
+          )
+          .get(Date.now() - 86400000) as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -196,11 +210,16 @@ class WhatsAppBridgeFeature implements FeatureModule {
    * @param webhookSecret - Optional secret for webhook verification
    * @param businessId - Optional business ID
    */
-  configure(apiToken: string, phoneNumberId: string, webhookSecret?: string, businessId?: string): void {
+  configure(
+    apiToken: string,
+    phoneNumberId: string,
+    webhookSecret?: string,
+    businessId?: string,
+  ): void {
     this.apiToken = apiToken;
     this.phoneNumberId = phoneNumberId;
     this.webhookSecret = webhookSecret ?? '';
-    this.businessId = (businessId ?? '');
+    this.businessId = businessId ?? '';
 
     const value = JSON.stringify({
       apiToken: this.apiToken,
@@ -209,7 +228,9 @@ class WhatsAppBridgeFeature implements FeatureModule {
       businessId: this.businessId,
     });
 
-    this.db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('whatsapp', value);
+    this.db
+      .prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)')
+      .run('whatsapp', value);
 
     this.ctx.logger.info('WhatsApp configured', { phoneNumberId });
   }
@@ -238,7 +259,11 @@ class WhatsAppBridgeFeature implements FeatureModule {
    * @param type - Message type (default text)
    * @returns Sent WhatsAppMessage with status 'sent'
    */
-  async send(to: string, body: string, type: WhatsAppMessage['type'] = 'text'): Promise<WhatsAppMessage> {
+  async send(
+    to: string,
+    body: string,
+    type: WhatsAppMessage['type'] = 'text',
+  ): Promise<WhatsAppMessage> {
     if (!this.isConfigured()) {
       throw new Error('WhatsApp not configured. Call configure() first.');
     }
@@ -298,7 +323,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
       metadata: string | null;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       from: r.from_addr,
       to: r.to_addr,
@@ -319,7 +344,10 @@ class WhatsAppBridgeFeature implements FeatureModule {
    * @param verifySignature - Optional signature verification function (returns boolean)
    * @returns true if webhook processed successfully
    */
-  async webhook(payload: WebhookPayload, _verifySignature?: (sig: string, body: string) => boolean): Promise<boolean> {
+  async webhook(
+    payload: WebhookPayload,
+    _verifySignature?: (sig: string, body: string) => boolean,
+  ): Promise<boolean> {
     // In real implementation, verify X-Hub-Signature-256 header against webhookSecret
 
     try {
@@ -341,10 +369,19 @@ class WhatsAppBridgeFeature implements FeatureModule {
                 mediaId: msg.image?.id ?? msg.audio?.id ?? msg.video?.id ?? msg.document?.id,
                 metadata: {
                   contactName: value.contacts?.[0]?.profile.name,
-                  mimeType: msg.image?.mime_type ?? msg.audio?.mime_type ?? msg.video?.mime_type ?? msg.document?.mime_type,
+                  mimeType:
+                    msg.image?.mime_type ??
+                    msg.audio?.mime_type ??
+                    msg.video?.mime_type ??
+                    msg.document?.mime_type,
                   filename: msg.document?.filename,
                   location: msg.location
-                    ? { lat: msg.location.latitude, lng: msg.location.longitude, name: msg.location.name, address: msg.location.address }
+                    ? {
+                        lat: msg.location.latitude,
+                        lng: msg.location.longitude,
+                        name: msg.location.name,
+                        address: msg.location.address,
+                      }
                     : undefined,
                 },
               };
@@ -356,7 +393,9 @@ class WhatsAppBridgeFeature implements FeatureModule {
                 try {
                   await handler(waMsg);
                 } catch (err) {
-                  this.ctx.logger.error('Webhook handler error', { error: err instanceof Error ? err.message : String(err) });
+                  this.ctx.logger.error('Webhook handler error', {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
                 }
               }
             }
@@ -365,9 +404,13 @@ class WhatsAppBridgeFeature implements FeatureModule {
           // Handle status updates
           if (value.statuses) {
             for (const status of value.statuses) {
-              this.db.prepare(`
+              this.db
+                .prepare(
+                  `
                 UPDATE messages SET status = ? WHERE id = ?
-              `).run(status.status, status.id);
+              `,
+                )
+                .run(status.status, status.id);
 
               if (status.error) {
                 this.ctx.logger.warn('Message status error', {
@@ -384,7 +427,9 @@ class WhatsAppBridgeFeature implements FeatureModule {
       this.ctx.logger.debug('Webhook processed', { entryCount: payload.entry.length });
       return true;
     } catch (err) {
-      this.ctx.logger.error('Webhook processing failed', { error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.error('Webhook processing failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return false;
     }
   }
@@ -394,7 +439,11 @@ class WhatsAppBridgeFeature implements FeatureModule {
    */
   getStats(): { total: number; inbound: number; outbound: number } {
     const total = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }).c;
-    const inbound = (this.db.prepare("SELECT COUNT(*) as c FROM messages WHERE direction = 'inbound'").get() as { c: number }).c;
+    const inbound = (
+      this.db.prepare("SELECT COUNT(*) as c FROM messages WHERE direction = 'inbound'").get() as {
+        c: number;
+      }
+    ).c;
     const outbound = total - inbound;
     return { total, inbound, outbound };
   }
@@ -416,15 +465,20 @@ class WhatsAppBridgeFeature implements FeatureModule {
       msg.status,
       msg.mediaUrl ?? null,
       msg.mediaId ?? null,
-      msg.metadata ? JSON.stringify(msg.metadata) : null
+      msg.metadata ? JSON.stringify(msg.metadata) : null,
     );
 
     // Enforce max message history
     if (this.config.maxMessageHistory > 0) {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }).c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number })
+        .c;
       if (count > this.config.maxMessageHistory) {
         const deleteCount = count - this.config.maxMessageHistory;
-        this.db.prepare('DELETE FROM messages WHERE id IN (SELECT id FROM messages ORDER BY timestamp ASC LIMIT ?)').run(deleteCount);
+        this.db
+          .prepare(
+            'DELETE FROM messages WHERE id IN (SELECT id FROM messages ORDER BY timestamp ASC LIMIT ?)',
+          )
+          .run(deleteCount);
       }
     }
   }

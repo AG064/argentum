@@ -12,7 +12,12 @@ import { promisify } from 'util';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 const exec = promisify(execOriginal);
 
@@ -101,7 +106,8 @@ class VideoProcessingFeature implements FeatureModule {
     this.config = {
       ffmpegPath: (config['ffmpegPath'] as string) ?? this.config['ffmpegPath'],
       outputDir: (config['outputDir'] as string) ?? this.config['outputDir'],
-      maxConcurrentJobs: (config['maxConcurrentJobs'] as number) ?? this.config['maxConcurrentJobs'],
+      maxConcurrentJobs:
+        (config['maxConcurrentJobs'] as number) ?? this.config['maxConcurrentJobs'],
       logDir: (config['logDir'] as string) ?? this.config['logDir'],
     };
 
@@ -129,8 +135,13 @@ class VideoProcessingFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const jobsTotal = (this.db.prepare('SELECT COUNT(*) as c FROM jobs').get() as { c: number }).c;
-      const failedJobs = (this.db.prepare("SELECT COUNT(*) as c FROM jobs WHERE status = 'failed'").get() as { c: number }).c;
+      const jobsTotal = (this.db.prepare('SELECT COUNT(*) as c FROM jobs').get() as { c: number })
+        .c;
+      const failedJobs = (
+        this.db.prepare("SELECT COUNT(*) as c FROM jobs WHERE status = 'failed'").get() as {
+          c: number;
+        }
+      ).c;
 
       return {
         healthy: true,
@@ -158,8 +169,12 @@ class VideoProcessingFeature implements FeatureModule {
       const versionLine = stdout?.split('\n')[0] ?? '';
       this.ctx.logger.info('ffmpeg found', { version: versionLine.trim() });
     } catch (err) {
-      this.ctx.logger.error('ffmpeg not available', { error: err instanceof Error ? err.message : String(err) });
-      throw new Error(`ffmpeg not found at ${this.ffmpegPath}. Install ffmpeg to use video processing.`);
+      this.ctx.logger.error('ffmpeg not available', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw new Error(
+        `ffmpeg not found at ${this.ffmpegPath}. Install ffmpeg to use video processing.`,
+      );
     }
   }
 
@@ -170,7 +185,10 @@ class VideoProcessingFeature implements FeatureModule {
    * @param options - Extraction options
    * @returns ExtractFramesResult with paths to extracted frames
    */
-  async extractFrames(videoPath: string, options: ExtractFramesOptions = {}): Promise<ExtractFramesResult> {
+  async extractFrames(
+    videoPath: string,
+    options: ExtractFramesOptions = {},
+  ): Promise<ExtractFramesResult> {
     const {
       interval = 1,
       startTime = 0,
@@ -189,7 +207,13 @@ class VideoProcessingFeature implements FeatureModule {
     }
 
     const jobId = `extract-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    this.logJobStart(jobId, 'extract_frames', videoPath, { interval, startTime, endTime, outputDir, format });
+    this.logJobStart(jobId, 'extract_frames', videoPath, {
+      interval,
+      startTime,
+      endTime,
+      outputDir,
+      format,
+    });
 
     try {
       // Build ffmpeg command
@@ -203,10 +227,7 @@ class VideoProcessingFeature implements FeatureModule {
         vfFilter = `fps=1/${interval}`;
       }
 
-      const args: string[] = [
-        '-i', videoPath,
-        '-ss', startTime.toString(),
-      ];
+      const args: string[] = ['-i', videoPath, '-ss', startTime.toString()];
 
       if (endTime) {
         args.push('-t', (endTime - startTime).toString());
@@ -226,12 +247,18 @@ class VideoProcessingFeature implements FeatureModule {
       await exec(cmd, { timeout: 3600000 }); // 1hr timeout
 
       // Read output directory to find generated frames
-      const files = readdirSync(outputDir).filter((f: string) => f.startsWith('frame_') && f.endsWith(`.${format}`)).sort();
+      const files = readdirSync(outputDir)
+        .filter((f: string) => f.startsWith('frame_') && f.endsWith(`.${format}`))
+        .sort();
       const framePaths = files.map((f: string) => join(outputDir, f));
 
       this.logJobComplete(jobId, true, { frameCount: framePaths.length });
 
-      this.ctx.logger.info('Frames extracted', { video: videoPath, count: framePaths.length, outputDir });
+      this.ctx.logger.info('Frames extracted', {
+        video: videoPath,
+        count: framePaths.length,
+        outputDir,
+      });
 
       return {
         outputDir,
@@ -240,7 +267,9 @@ class VideoProcessingFeature implements FeatureModule {
         interval,
       };
     } catch (err) {
-      this.logJobComplete(jobId, false, { error: err instanceof Error ? err.message : String(err) });
+      this.logJobComplete(jobId, false, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     }
   }
@@ -254,7 +283,12 @@ class VideoProcessingFeature implements FeatureModule {
    * @param outputPath - Destination (optional, default to trimmed_<filename>)
    * @returns TrimResult with output info
    */
-  async trim(videoPath: string, startTime: number, endTime: number, outputPath?: string): Promise<TrimResult> {
+  async trim(
+    videoPath: string,
+    startTime: number,
+    endTime: number,
+    outputPath?: string,
+  ): Promise<TrimResult> {
     if (!existsSync(videoPath)) {
       throw new Error(`Video file not found: ${videoPath}`);
     }
@@ -285,7 +319,9 @@ class VideoProcessingFeature implements FeatureModule {
         originalDuration: originalStats.size / 1000000, // rough estimate
       };
     } catch (err) {
-      this.logJobComplete(jobId, false, { error: err instanceof Error ? err.message : String(err) });
+      this.logJobComplete(jobId, false, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     }
   }
@@ -311,7 +347,10 @@ class VideoProcessingFeature implements FeatureModule {
 
       // Parse frame rate (e.g., "30/1" -> 30)
       const fpsParts = stream.r_frame_rate.split('/');
-      const fps = fpsParts.length === 2 ? parseInt(fpsParts[0]) / parseInt(fpsParts[1]) : parseFloat(stream.r_frame_rate);
+      const fps =
+        fpsParts.length === 2
+          ? parseInt(fpsParts[0]) / parseInt(fpsParts[1])
+          : parseFloat(stream.r_frame_rate);
 
       const stats = require('fs').statSync(videoPath);
 
@@ -328,10 +367,16 @@ class VideoProcessingFeature implements FeatureModule {
         createdAt: stats.mtimeMs,
       };
 
-      this.ctx.logger.debug('Metadata retrieved', { video: videoPath, duration: metadata.duration });
+      this.ctx.logger.debug('Metadata retrieved', {
+        video: videoPath,
+        duration: metadata.duration,
+      });
       return metadata;
     } catch (err) {
-      this.ctx.logger.error('Failed to get metadata', { video: videoPath, error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.error('Failed to get metadata', {
+        video: videoPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     }
   }
@@ -384,21 +429,34 @@ class VideoProcessingFeature implements FeatureModule {
   }
 
   /** Log job start */
-  private logJobStart(id: string, type: string, inputPath: string, params: Record<string, unknown>): void {
-    this.db.prepare(`
+  private logJobStart(
+    id: string,
+    type: string,
+    inputPath: string,
+    params: Record<string, unknown>,
+  ): void {
+    this.db
+      .prepare(
+        `
       INSERT INTO jobs (id, type, input_path, params, status, started_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, type, inputPath, JSON.stringify(params), 'running', Date.now());
+    `,
+      )
+      .run(id, type, inputPath, JSON.stringify(params), 'running', Date.now());
   }
 
   /** Log job completion */
   private logJobComplete(id: string, success: boolean, extra: Record<string, unknown>): void {
     const result = success ? 'completed' : 'failed';
     const resultData = JSON.stringify(extra);
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE jobs SET status = ?, completed_at = ?, result = ?
       WHERE id = ?
-    `).run(result, Date.now(), resultData, id);
+    `,
+      )
+      .run(result, Date.now(), resultData, id);
   }
 
   /** Quote a path for shell */

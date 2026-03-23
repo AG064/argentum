@@ -8,7 +8,12 @@
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { resolve, join } from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -93,7 +98,7 @@ const SECRET_PATTERNS = [
 ];
 
 function isSecretKey(key: string): boolean {
-  return SECRET_PATTERNS.some(p => p.test(key));
+  return SECRET_PATTERNS.some((p) => p.test(key));
 }
 
 function scrubSecrets(obj: unknown): unknown {
@@ -185,7 +190,7 @@ class CompanyTemplatesFeature implements FeatureModule {
         timezone: ((config as Record<string, unknown>)['timezone'] as string) ?? 'UTC',
         locale: ((config as Record<string, unknown>)['locale'] as string) ?? 'en',
         settings: scrubSecrets(
-          ((config as Record<string, unknown>)['organization'] as Record<string, unknown>) ?? {}
+          ((config as Record<string, unknown>)['organization'] as Record<string, unknown>) ?? {},
         ) as Record<string, unknown>,
       },
       agents: this.extractAgents(config),
@@ -318,7 +323,7 @@ class CompanyTemplatesFeature implements FeatureModule {
     const fullPath = resolve(this.config.templatesPath);
     if (!existsSync(fullPath)) return;
 
-    const files = readdirSync(fullPath).filter(f => f.endsWith('.json'));
+    const files = readdirSync(fullPath).filter((f) => f.endsWith('.json'));
     for (const file of files) {
       const name = file.replace('.json', '');
       this.templates.set(name, {
@@ -334,10 +339,10 @@ class CompanyTemplatesFeature implements FeatureModule {
   }
 
   private extractAgents(config: Record<string, unknown>): AgentConfig[] {
-    const agents = (config)['agents'] as Record<string, unknown>[] | undefined;
+    const agents = config['agents'] as Record<string, unknown>[] | undefined;
     if (!agents) return [];
 
-    return agents.map(a => ({
+    return agents.map((a) => ({
       name: (a['name'] as string) ?? 'unnamed',
       role: (a['role'] as string) ?? 'assistant',
       model: (a['model'] as string) ?? 'default',

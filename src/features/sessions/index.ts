@@ -102,8 +102,8 @@ class SessionsFeature {
 
   async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {
     try {
-      const sessionCount = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
-      const messageCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
+      const sessionCount = this.db.prepare('SELECT COUNT(*) as c FROM sessions').get().c;
+      const messageCount = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
       return {
         healthy: true,
         details: { sessions: sessionCount, messages: messageCount },
@@ -129,16 +129,20 @@ class SessionsFeature {
       tags: [],
       metadata: {},
     };
-    this.db.prepare(
-      'INSERT INTO sessions (id, title, created_at, updated_at, model, status) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, session.title, now, now, session.model, 'active');
+    this.db
+      .prepare(
+        'INSERT INTO sessions (id, title, created_at, updated_at, model, status) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(id, session.title, now, now, session.model, 'active');
     return session;
   }
 
   get(id: string): Session | null {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
     if (!row) return null;
-    const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(id)).c;
+    const msgCount = this.db
+      .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
+      .get(id).c;
     return {
       id: row.id,
       title: row.title,
@@ -173,8 +177,10 @@ class SessionsFeature {
     }
 
     const rows = this.db.prepare(query).all(...params) as any[];
-    return rows.map(row => {
-      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(row.id)).c;
+    return rows.map((row) => {
+      const msgCount = this.db
+        .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
+        .get(row.id).c;
       return {
         id: row.id,
         title: row.title,
@@ -212,7 +218,9 @@ class SessionsFeature {
     params.push(Date.now());
     params.push(id);
 
-    const result = this.db.prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    const result = this.db
+      .prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`)
+      .run(...params);
     return result.changes > 0;
   }
 
@@ -233,9 +241,11 @@ class SessionsFeature {
     const id = crypto.randomUUID();
     const now = Date.now();
 
-    this.db.prepare(
-      'INSERT INTO messages (id, session_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, sessionId, role, content, now, toolCalls ? JSON.stringify(toolCalls) : null);
+    this.db
+      .prepare(
+        'INSERT INTO messages (id, session_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(id, sessionId, role, content, now, toolCalls ? JSON.stringify(toolCalls) : null);
 
     // Update session timestamp
     this.db.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId);
@@ -250,7 +260,10 @@ class SessionsFeature {
     };
   }
 
-  getMessages(sessionId: string, options?: { limit?: number; offset?: number; role?: string }): Message[] {
+  getMessages(
+    sessionId: string,
+    options?: { limit?: number; offset?: number; role?: string },
+  ): Message[] {
     let query = 'SELECT * FROM messages WHERE session_id = ?';
     const params: any[] = [sessionId];
 
@@ -267,7 +280,7 @@ class SessionsFeature {
     }
 
     const rows = this.db.prepare(query).all(...params) as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       sessionId: row.session_id,
       role: row.role,
@@ -278,12 +291,23 @@ class SessionsFeature {
     }));
   }
 
-  search(query: string, limit = 20): Array<{ sessionId: string; messageId: string; content: string; role: string; timestamp: number }> {
-    const rows = this.db.prepare(
-      'SELECT m.id as message_id, m.session_id, m.content, m.role, m.timestamp FROM messages m WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT ?'
-    ).all(`%${query}%`, limit) as any[];
+  search(
+    query: string,
+    limit = 20,
+  ): Array<{
+    sessionId: string;
+    messageId: string;
+    content: string;
+    role: string;
+    timestamp: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        'SELECT m.id as message_id, m.session_id, m.content, m.role, m.timestamp FROM messages m WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT ?',
+      )
+      .all(`%${query}%`, limit) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       sessionId: row.session_id,
       messageId: row.message_id,
       content: row.content.slice(0, 200),
@@ -295,26 +319,32 @@ class SessionsFeature {
   // ─── Session State ──────────────────────────────────────────────────────
 
   setState(sessionId: string, key: string, value: string): void {
-    this.db.prepare(
-      'INSERT OR REPLACE INTO session_state (session_id, key, value, updated_at) VALUES (?, ?, ?, ?)'
-    ).run(sessionId, key, value, Date.now());
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO session_state (session_id, key, value, updated_at) VALUES (?, ?, ?, ?)',
+      )
+      .run(sessionId, key, value, Date.now());
   }
 
   getState(sessionId: string, key: string): string | null {
-    const row = this.db.prepare('SELECT value FROM session_state WHERE session_id = ? AND key = ?')
+    const row = this.db
+      .prepare('SELECT value FROM session_state WHERE session_id = ? AND key = ?')
       .get(sessionId, key);
     return row?.value ?? null;
   }
 
   getAllState(sessionId: string): Record<string, string> {
-    const rows = this.db.prepare('SELECT key, value FROM session_state WHERE session_id = ?')
+    const rows = this.db
+      .prepare('SELECT key, value FROM session_state WHERE session_id = ?')
       .all(sessionId) as any[];
-    return Object.fromEntries(rows.map(r => [r.key, r.value]));
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
 
   // ─── Export/Import ──────────────────────────────────────────────────────
 
-  export(sessionId: string): { session: Session; messages: Message[]; state: Record<string, string> } | null {
+  export(
+    sessionId: string,
+  ): { session: Session; messages: Message[]; state: Record<string, string> } | null {
     const session = this.get(sessionId);
     if (!session) return null;
     return {
@@ -326,10 +356,17 @@ class SessionsFeature {
 
   // ─── Stats ──────────────────────────────────────────────────────────────
 
-  getStats(): { totalSessions: number; activeSessions: number; totalMessages: number; avgMessagesPerSession: number } {
-    const totalSessions = (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
-    const activeSessions = (this.db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get()).c;
-    const totalMessages = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
+  getStats(): {
+    totalSessions: number;
+    activeSessions: number;
+    totalMessages: number;
+    avgMessagesPerSession: number;
+  } {
+    const totalSessions = this.db.prepare('SELECT COUNT(*) as c FROM sessions').get().c;
+    const activeSessions = this.db
+      .prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'")
+      .get().c;
+    const totalMessages = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
     return {
       totalSessions,
       activeSessions,

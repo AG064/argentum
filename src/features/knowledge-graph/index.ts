@@ -10,7 +10,12 @@ import { dirname } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Knowledge Graph configuration */
 export interface KnowledgeGraphConfig {
@@ -162,25 +167,42 @@ class SQLiteGraphBackend implements GraphBackend {
     `);
   }
 
-  async close(): Promise<void> { this.db?.close(); }
+  async close(): Promise<void> {
+    this.db?.close();
+  }
 
   async addEntity(data: Omit<Entity, 'id' | 'createdAt' | 'updatedAt'>): Promise<Entity> {
     const id = `ent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
-    this.db.prepare(
-      'INSERT INTO entities (id, type, name, properties, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, data.type, data.name, JSON.stringify(data.properties), JSON.stringify(data.tags ?? []), now, now);
+    this.db
+      .prepare(
+        'INSERT INTO entities (id, type, name, properties, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        id,
+        data.type,
+        data.name,
+        JSON.stringify(data.properties),
+        JSON.stringify(data.tags ?? []),
+        now,
+        now,
+      );
     return { id, ...data, tags: data.tags ?? [], createdAt: now, updatedAt: now };
   }
 
   async getEntity(id: string): Promise<Entity | null> {
-    const row = this.db.prepare('SELECT * FROM entities WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare('SELECT * FROM entities WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined;
     if (!row) return null;
     return {
-      id: row['id'] as string, type: row['type'] as string, name: row['name'] as string,
+      id: row['id'] as string,
+      type: row['type'] as string,
+      name: row['name'] as string,
       properties: JSON.parse(row['properties'] as string),
       tags: JSON.parse((row['tags'] as string) ?? '[]'),
-      createdAt: row['created_at'] as number, updatedAt: row['updated_at'] as number,
+      createdAt: row['created_at'] as number,
+      updatedAt: row['updated_at'] as number,
     };
   }
 
@@ -189,9 +211,9 @@ class SQLiteGraphBackend implements GraphBackend {
     if (!existing) throw new Error(`Entity not found: ${id}`);
     const now = Date.now();
     const merged = { ...existing, ...updates, updatedAt: now };
-    this.db.prepare(
-      'UPDATE entities SET name=?, properties=?, tags=?, updated_at=? WHERE id=?'
-    ).run(merged.name, JSON.stringify(merged.properties), JSON.stringify(merged.tags), now, id);
+    this.db
+      .prepare('UPDATE entities SET name=?, properties=?, tags=?, updated_at=? WHERE id=?')
+      .run(merged.name, JSON.stringify(merged.properties), JSON.stringify(merged.tags), now, id);
     return merged;
   }
 
@@ -203,29 +225,50 @@ class SQLiteGraphBackend implements GraphBackend {
   async addRelationship(data: Omit<Relationship, 'id' | 'createdAt'>): Promise<Relationship> {
     const id = `rel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
-    this.db.prepare(
-      'INSERT INTO relationships (id, source_id, target_id, type, properties, weight, created_at) VALUES (?,?,?,?,?,?,?)'
-    ).run(id, data.sourceId, data.targetId, data.type, JSON.stringify(data.properties), data.weight, now);
+    this.db
+      .prepare(
+        'INSERT INTO relationships (id, source_id, target_id, type, properties, weight, created_at) VALUES (?,?,?,?,?,?,?)',
+      )
+      .run(
+        id,
+        data.sourceId,
+        data.targetId,
+        data.type,
+        JSON.stringify(data.properties),
+        data.weight,
+        now,
+      );
     return { id, ...data, createdAt: now };
   }
 
   async getRelationships(entityId: string, type?: string): Promise<Relationship[]> {
     let query = 'SELECT * FROM relationships WHERE source_id = ? OR target_id = ?';
     const params: unknown[] = [entityId, entityId];
-    if (type) { query += ' AND type = ?'; params.push(type); }
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
     const rows = this.db.prepare(query).all(...params) as Record<string, unknown>[];
     return rows.map(this.rowToRel);
   }
 
   async getAllRelationships(): Promise<Relationship[]> {
-    return (this.db.prepare('SELECT * FROM relationships').all() as Record<string, unknown>[]).map(this.rowToRel);
+    return (this.db.prepare('SELECT * FROM relationships').all() as Record<string, unknown>[]).map(
+      this.rowToRel,
+    );
   }
 
   async findEntities(query: { type?: string; name?: string; tags?: string[] }): Promise<Entity[]> {
     let sql = 'SELECT * FROM entities WHERE 1=1';
     const params: unknown[] = [];
-    if (query.type) { sql += ' AND type = ?'; params.push(query.type); }
-    if (query.name) { sql += ' AND name LIKE ?'; params.push(`%${query.name}%`); }
+    if (query.type) {
+      sql += ' AND type = ?';
+      params.push(query.type);
+    }
+    if (query.name) {
+      sql += ' AND name LIKE ?';
+      params.push(`%${query.name}%`);
+    }
     if (query.tags?.length) {
       // Simple JSON array search
       for (const tag of query.tags) {
@@ -237,7 +280,9 @@ class SQLiteGraphBackend implements GraphBackend {
   }
 
   async getAllEntities(): Promise<Entity[]> {
-    return (this.db.prepare('SELECT * FROM entities').all() as Record<string, unknown>[]).map(this.rowToEntity);
+    return (this.db.prepare('SELECT * FROM entities').all() as Record<string, unknown>[]).map(
+      this.rowToEntity,
+    );
   }
 
   async findPaths(sourceId: string, targetId: string, maxDepth = 5): Promise<Entity[][]> {
@@ -248,7 +293,7 @@ class SQLiteGraphBackend implements GraphBackend {
     while (queue.length > 0 && paths.length < 10) {
       const { id, path } = queue.shift()!;
       if (id === targetId) {
-        const entities = await Promise.all(path.map(pid => this.getEntity(pid)));
+        const entities = await Promise.all(path.map((pid) => this.getEntity(pid)));
         paths.push(entities.filter((e): e is Entity => e !== null));
         continue;
       }
@@ -265,8 +310,11 @@ class SQLiteGraphBackend implements GraphBackend {
   }
 
   async getStats(): Promise<{ entities: number; relationships: number }> {
-    const entities = (this.db.prepare('SELECT COUNT(*) as c FROM entities').get() as { c: number }).c;
-    const relationships = (this.db.prepare('SELECT COUNT(*) as c FROM relationships').get() as { c: number }).c;
+    const entities = (this.db.prepare('SELECT COUNT(*) as c FROM entities').get() as { c: number })
+      .c;
+    const relationships = (
+      this.db.prepare('SELECT COUNT(*) as c FROM relationships').get() as { c: number }
+    ).c;
     return { entities, relationships };
   }
 
@@ -276,18 +324,25 @@ class SQLiteGraphBackend implements GraphBackend {
 
   private rowToEntity(row: Record<string, unknown>): Entity {
     return {
-      id: row['id'] as string, type: row['type'] as string, name: row['name'] as string,
+      id: row['id'] as string,
+      type: row['type'] as string,
+      name: row['name'] as string,
       properties: JSON.parse(row['properties'] as string),
       tags: JSON.parse((row['tags'] as string) ?? '[]'),
-      createdAt: row['created_at'] as number, updatedAt: row['updated_at'] as number,
+      createdAt: row['created_at'] as number,
+      updatedAt: row['updated_at'] as number,
     };
   }
 
   private rowToRel(row: Record<string, unknown>): Relationship {
     return {
-      id: row['id'] as string, sourceId: row['source_id'] as string, targetId: row['target_id'] as string,
-      type: row['type'] as string, properties: JSON.parse(row['properties'] as string),
-      weight: row['weight'] as number, createdAt: row['created_at'] as number,
+      id: row['id'] as string,
+      sourceId: row['source_id'] as string,
+      targetId: row['target_id'] as string,
+      type: row['type'] as string,
+      properties: JSON.parse(row['properties'] as string),
+      weight: row['weight'] as number,
+      createdAt: row['created_at'] as number,
     };
   }
 }
@@ -309,7 +364,9 @@ class MemoryGraphBackend implements GraphBackend {
     return entity;
   }
 
-  async getEntity(id: string): Promise<Entity | null> { return this.entities.get(id) ?? null; }
+  async getEntity(id: string): Promise<Entity | null> {
+    return this.entities.get(id) ?? null;
+  }
 
   async updateEntity(id: string, updates: Partial<Entity>): Promise<Entity> {
     const existing = this.entities.get(id);
@@ -335,18 +392,22 @@ class MemoryGraphBackend implements GraphBackend {
 
   async getRelationships(entityId: string, type?: string): Promise<Relationship[]> {
     return Array.from(this.relationships.values()).filter(
-      r => (r.sourceId === entityId || r.targetId === entityId) && (!type || r.type === type)
+      (r) => (r.sourceId === entityId || r.targetId === entityId) && (!type || r.type === type),
     );
   }
 
-  async getAllRelationships(): Promise<Relationship[]> { return Array.from(this.relationships.values()); }
-  async getAllEntities(): Promise<Entity[]> { return Array.from(this.entities.values()); }
+  async getAllRelationships(): Promise<Relationship[]> {
+    return Array.from(this.relationships.values());
+  }
+  async getAllEntities(): Promise<Entity[]> {
+    return Array.from(this.entities.values());
+  }
 
   async findEntities(query: { type?: string; name?: string; tags?: string[] }): Promise<Entity[]> {
-    return Array.from(this.entities.values()).filter(e => {
+    return Array.from(this.entities.values()).filter((e) => {
       if (query.type && e.type !== query.type) return false;
       if (query.name && !e.name.toLowerCase().includes(query.name.toLowerCase())) return false;
-      if (query.tags?.length && !query.tags.some(t => e.tags.includes(t))) return false;
+      if (query.tags?.length && !query.tags.some((t) => e.tags.includes(t))) return false;
       return true;
     });
   }
@@ -358,7 +419,7 @@ class MemoryGraphBackend implements GraphBackend {
     while (queue.length > 0 && paths.length < 10) {
       const { id, path } = queue.shift()!;
       if (id === targetId) {
-        paths.push(path.map(pid => this.entities.get(pid)!).filter(Boolean));
+        paths.push(path.map((pid) => this.entities.get(pid)!).filter(Boolean));
         continue;
       }
       if (path.length >= maxDepth || visited.has(id)) continue;
@@ -375,7 +436,10 @@ class MemoryGraphBackend implements GraphBackend {
     return { entities: this.entities.size, relationships: this.relationships.size };
   }
 
-  async clear(): Promise<void> { this.entities.clear(); this.relationships.clear(); }
+  async clear(): Promise<void> {
+    this.entities.clear();
+    this.relationships.clear();
+  }
 }
 
 // ─── Main Feature ────────────────────────────────────────────────────────────
@@ -407,14 +471,18 @@ class KnowledgeGraphFeature implements FeatureModule {
   }
 
   async start(): Promise<void> {
-    this.backend = this.config.backend === 'sqlite'
-      ? new SQLiteGraphBackend(this.config.path)
-      : new MemoryGraphBackend();
+    this.backend =
+      this.config.backend === 'sqlite'
+        ? new SQLiteGraphBackend(this.config.path)
+        : new MemoryGraphBackend();
     await this.backend.init();
     this.ctx.logger.info('Knowledge Graph active', { backend: this.config.backend });
   }
 
-  async stop(): Promise<void> { await this.backend?.close(); this.backend = null; }
+  async stop(): Promise<void> {
+    await this.backend?.close();
+    this.backend = null;
+  }
 
   async healthCheck(): Promise<HealthStatus> {
     if (!this.backend) return { healthy: false, message: 'Not initialized' };
@@ -424,7 +492,12 @@ class KnowledgeGraphFeature implements FeatureModule {
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
-  async addEntity(type: string, name: string, properties: Record<string, unknown> = {}, tags: string[] = []): Promise<Entity> {
+  async addEntity(
+    type: string,
+    name: string,
+    properties: Record<string, unknown> = {},
+    tags: string[] = [],
+  ): Promise<Entity> {
     if (!this.backend) throw new Error('Backend not initialized');
     return this.backend.addEntity({ type, name, properties, tags });
   }
@@ -444,7 +517,13 @@ class KnowledgeGraphFeature implements FeatureModule {
     return this.backend.deleteEntity(id);
   }
 
-  async addRelationship(sourceId: string, targetId: string, type: string, properties: Record<string, unknown> = {}, weight = 1.0): Promise<Relationship> {
+  async addRelationship(
+    sourceId: string,
+    targetId: string,
+    type: string,
+    properties: Record<string, unknown> = {},
+    weight = 1.0,
+  ): Promise<Relationship> {
     if (!this.backend) throw new Error('Backend not initialized');
     return this.backend.addRelationship({ sourceId, targetId, type, properties, weight });
   }
@@ -472,7 +551,10 @@ class KnowledgeGraphFeature implements FeatureModule {
 
     for (const item of parsed) {
       const entity = await this.backend.addEntity({
-        type: item.type, name: item.name, properties: item.properties, tags: [],
+        type: item.type,
+        name: item.name,
+        properties: item.properties,
+        tags: [],
       });
       nameToId.set(item.name, entity.id);
       entityCount++;
@@ -485,13 +567,21 @@ class KnowledgeGraphFeature implements FeatureModule {
         const targetId = nameToId.get(rel.target);
         if (!targetId) continue;
         await this.backend.addRelationship({
-          sourceId, targetId, type: rel.type, properties: {}, weight: rel.weight ?? 1.0,
+          sourceId,
+          targetId,
+          type: rel.type,
+          properties: {},
+          weight: rel.weight ?? 1.0,
         });
         relCount++;
       }
     }
 
-    this.ctx.logger.info('Markdown import complete', { file: filePath, entities: entityCount, relationships: relCount });
+    this.ctx.logger.info('Markdown import complete', {
+      file: filePath,
+      entities: entityCount,
+      relationships: relCount,
+    });
     return { entities: entityCount, relationships: relCount };
   }
 
@@ -517,13 +607,18 @@ class KnowledgeGraphFeature implements FeatureModule {
       relCount++;
     }
 
-    this.ctx.logger.info('JSON import complete', { file: filePath, entities: entityCount, relationships: relCount });
+    this.ctx.logger.info('JSON import complete', {
+      file: filePath,
+      entities: entityCount,
+      relationships: relCount,
+    });
     return { entities: entityCount, relationships: relCount };
   }
 
   /** Import from any supported file */
   async importFromFile(filePath: string): Promise<{ entities: number; relationships: number }> {
-    if (filePath.endsWith('.md') || filePath.endsWith('.markdown')) return this.importFromMarkdown(filePath);
+    if (filePath.endsWith('.md') || filePath.endsWith('.markdown'))
+      return this.importFromMarkdown(filePath);
     if (filePath.endsWith('.json')) return this.importFromJson(filePath);
     throw new Error(`Unsupported file format: ${filePath}`);
   }

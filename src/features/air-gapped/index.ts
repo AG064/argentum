@@ -7,7 +7,12 @@
 
 import { resolve } from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Air-gapped configuration */
 export interface AirGappedConfig {
@@ -171,7 +176,8 @@ class AirGappedFeature implements FeatureModule {
 
   /** Check if a network request is allowed */
   checkNetworkAccess(host: string, port: number): boolean {
-    const allowed = this.config.allowedHosts.includes(host) && !this.networkPolicy.blockedPorts.includes(port);
+    const allowed =
+      this.config.allowedHosts.includes(host) && !this.networkPolicy.blockedPorts.includes(port);
 
     this.audit({
       action: 'network_access',
@@ -216,10 +222,14 @@ class AirGappedFeature implements FeatureModule {
   }
 
   /** Get audit log entries */
-  getAuditLog(filter?: { action?: string; result?: 'allowed' | 'denied'; limit?: number }): AuditEntry[] {
+  getAuditLog(filter?: {
+    action?: string;
+    result?: 'allowed' | 'denied';
+    limit?: number;
+  }): AuditEntry[] {
     let entries = [...this.auditLog];
-    if (filter?.action) entries = entries.filter(e => e.action === filter.action);
-    if (filter?.result) entries = entries.filter(e => e.result === filter.result);
+    if (filter?.action) entries = entries.filter((e) => e.action === filter.action);
+    if (filter?.result) entries = entries.filter((e) => e.result === filter.result);
     if (filter?.limit) entries = entries.slice(-filter.limit);
     return entries;
   }

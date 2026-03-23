@@ -5,7 +5,12 @@
  * Deduplication, decay, merge, and pruning of memory entries.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import { getSemanticMemory } from '../../memory/semantic';
 
 /** Consolidation configuration */
@@ -70,7 +75,7 @@ class ConsolidationFeature implements FeatureModule {
   async start(): Promise<void> {
     if (this.config.intervalMs > 0) {
       this.timer = setInterval(() => {
-        this.run().catch(err => {
+        this.run().catch((err) => {
           this.ctx.logger.error('Consolidation run failed', {
             error: err instanceof Error ? err.message : String(err),
           });
@@ -162,13 +167,17 @@ class ConsolidationFeature implements FeatureModule {
     const db = memory.getDb();
 
     // Find duplicates by content hash
-    const duplicates = db.prepare(`
+    const duplicates = db
+      .prepare(
+        `
       SELECT content_hash, COUNT(*) as cnt, GROUP_CONCAT(id) as ids
       FROM memories
       WHERE content_hash IS NOT NULL
       GROUP BY content_hash
       HAVING cnt > 1
-    `).all() as Array<{ content_hash: string; cnt: number; ids: string }>;
+    `,
+      )
+      .all() as Array<{ content_hash: string; cnt: number; ids: string }>;
 
     let removed = 0;
 
@@ -201,19 +210,27 @@ class ConsolidationFeature implements FeatureModule {
 
     // Decay memories not accessed in the last week with low access count
     if (!this.config.dryRun) {
-      const result = db.prepare(`
+      const result = db
+        .prepare(
+          `
         UPDATE memories
         SET weight = weight * ?
         WHERE accessed_at < ? AND access_count < 3 AND weight > 0.1
-      `).run(this.config.decayRate, now - weekMs);
+      `,
+        )
+        .run(this.config.decayRate, now - weekMs);
 
       return result.changes;
     }
 
-    const count = db.prepare(`
+    const count = db
+      .prepare(
+        `
       SELECT COUNT(*) as c FROM memories
       WHERE accessed_at < ? AND access_count < 3 AND weight > 0.1
-    `).get(now - weekMs) as { c: number };
+    `,
+      )
+      .get(now - weekMs) as { c: number };
 
     return count.c;
   }
@@ -224,9 +241,9 @@ class ConsolidationFeature implements FeatureModule {
     const db = memory.getDb();
 
     // Get all memories
-    const allMemories = db.prepare(
-      'SELECT * FROM memories ORDER BY created_at ASC'
-    ).all() as Array<{
+    const allMemories = db
+      .prepare('SELECT * FROM memories ORDER BY created_at ASC')
+      .all() as Array<{
       id: string;
       type: string;
       content: string;
@@ -257,22 +274,20 @@ class ConsolidationFeature implements FeatureModule {
             const mergedWeight = Math.max(a.weight, b.weight);
             const mergedAccess = a.access_count + b.access_count;
 
-            db.prepare(`
+            db.prepare(
+              `
               UPDATE memories
               SET content = ?, weight = ?, access_count = ?, accessed_at = ?
               WHERE id = ?
-            `).run(mergedContent, mergedWeight, mergedAccess, Date.now(), a.id);
+            `,
+            ).run(mergedContent, mergedWeight, mergedAccess, Date.now(), a.id);
 
             // Delete b
             await memory.delete(b.id);
 
             // Transfer edges from b to a
-            db.prepare(
-              'UPDATE edges SET source_id = ? WHERE source_id = ?'
-            ).run(a.id, b.id);
-            db.prepare(
-              'UPDATE edges SET target_id = ? WHERE target_id = ?'
-            ).run(a.id, b.id);
+            db.prepare('UPDATE edges SET source_id = ? WHERE source_id = ?').run(a.id, b.id);
+            db.prepare('UPDATE edges SET target_id = ? WHERE target_id = ?').run(a.id, b.id);
           }
 
           processed.add(b.id);
@@ -295,24 +310,34 @@ class ConsolidationFeature implements FeatureModule {
 
     if (!this.config.dryRun) {
       // First clean up edges pointing to pruned memories
-      db.prepare(`
+      db.prepare(
+        `
         DELETE FROM edges WHERE source_id IN (
           SELECT id FROM memories WHERE weight < ? AND access_count = 0
         ) OR target_id IN (
           SELECT id FROM memories WHERE weight < ? AND access_count = 0
         )
-      `).run(this.config.pruneWeightThreshold, this.config.pruneWeightThreshold);
+      `,
+      ).run(this.config.pruneWeightThreshold, this.config.pruneWeightThreshold);
 
-      const result = db.prepare(`
+      const result = db
+        .prepare(
+          `
         DELETE FROM memories WHERE weight < ? AND access_count = 0
-      `).run(this.config.pruneWeightThreshold);
+      `,
+        )
+        .run(this.config.pruneWeightThreshold);
 
       return result.changes;
     }
 
-    const count = db.prepare(`
+    const count = db
+      .prepare(
+        `
       SELECT COUNT(*) as c FROM memories WHERE weight < ? AND access_count = 0
-    `).get(this.config.pruneWeightThreshold) as { c: number };
+    `,
+      )
+      .get(this.config.pruneWeightThreshold) as { c: number };
 
     return count.c;
   }
@@ -329,11 +354,15 @@ class ConsolidationFeature implements FeatureModule {
 
     if (!this.config.dryRun) {
       // Remove lowest weight, least accessed memories
-      const toRemove = db.prepare(`
+      const toRemove = db
+        .prepare(
+          `
         SELECT id FROM memories
         ORDER BY weight ASC, access_count ASC, created_at ASC
         LIMIT ?
-      `).all(excess) as Array<{ id: string }>;
+      `,
+        )
+        .all(excess) as Array<{ id: string }>;
 
       for (const row of toRemove) {
         await memory.delete(row.id);
@@ -348,13 +377,23 @@ class ConsolidationFeature implements FeatureModule {
 
   /** Compute Jaccard similarity between two strings */
   private computeSimilarity(a: string, b: string): number {
-    const wordsA = new Set(a.toLowerCase().split(/\s+/).filter(w => w.length > 2));
-    const wordsB = new Set(b.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    const wordsA = new Set(
+      a
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2),
+    );
+    const wordsB = new Set(
+      b
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2),
+    );
 
     if (wordsA.size === 0 && wordsB.size === 0) return 1;
     if (wordsA.size === 0 || wordsB.size === 0) return 0;
 
-    const intersection = new Set([...wordsA].filter(w => wordsB.has(w)));
+    const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)));
     const union = new Set([...wordsA, ...wordsB]);
 
     return intersection.size / union.size;

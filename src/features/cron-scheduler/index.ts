@@ -4,7 +4,12 @@ import { dirname, resolve } from 'path';
 import Database from 'better-sqlite3';
 import cron from 'node-cron';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +84,7 @@ class CronSchedulerFeature implements FeatureModule {
 
     this.ctx.logger.info('Cron scheduler active', {
       scheduledJobs: this.jobs.size,
-      enabledJobs: Array.from(this.jobs.values()).filter(j => j.enabled).length,
+      enabledJobs: Array.from(this.jobs.values()).filter((j) => j.enabled).length,
       timezone: this.config.timezone || 'local',
     });
   }
@@ -95,7 +100,7 @@ class CronSchedulerFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const totalJobs = this.jobs.size;
-    const enabledJobs = Array.from(this.jobs.values()).filter(j => j.enabled).length;
+    const enabledJobs = Array.from(this.jobs.values()).filter((j) => j.enabled).length;
     const registeredHandlers = this.handlers.size;
     const recentlyFailed = this.getRecentlyFailed(15 * 60 * 1000); // last 15 min
 
@@ -134,7 +139,12 @@ class CronSchedulerFeature implements FeatureModule {
   // ─── Job Management ───────────────────────────────────────────────────────
 
   /** Add a new cron job */
-  async addJob(name: string, cronExpr: string, handlerId: string, enabled: boolean = true): Promise<CronJob> {
+  async addJob(
+    name: string,
+    cronExpr: string,
+    handlerId: string,
+    enabled: boolean = true,
+  ): Promise<CronJob> {
     if (this.jobs.size >= this.config.maxJobs) {
       throw new Error(`Max job limit reached: ${this.config.maxJobs}`);
     }
@@ -164,10 +174,12 @@ class CronSchedulerFeature implements FeatureModule {
     };
 
     // Save to DB
-    this.db.prepare(
-      `INSERT INTO jobs (id, name, cron_expr, handler_id, enabled, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, name, cronExpr, handlerId, enabled ? 1 : 0, now);
+    this.db
+      .prepare(
+        `INSERT INTO jobs (id, name, cron_expr, handler_id, enabled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, name, cronExpr, handlerId, enabled ? 1 : 0, now);
 
     this.jobs.set(id, job);
 
@@ -280,17 +292,24 @@ class CronSchedulerFeature implements FeatureModule {
       this.cronJobs.get(job.id)!.stop();
     }
 
-    const cronJob = cron.schedule(job.cronExpr, async () => {
-      const handler = this.handlers.get(job.handlerId);
-      if (!handler) {
-        this.ctx.logger.error('Handler not found during cron execution', { jobId: job.id, handlerId: job.handlerId });
-        return;
-      }
-      await this.executeHandler(job, handler);
-    }, {
-      timezone: this.config.timezone,
-      scheduled: true,
-    });
+    const cronJob = cron.schedule(
+      job.cronExpr,
+      async () => {
+        const handler = this.handlers.get(job.handlerId);
+        if (!handler) {
+          this.ctx.logger.error('Handler not found during cron execution', {
+            jobId: job.id,
+            handlerId: job.handlerId,
+          });
+          return;
+        }
+        await this.executeHandler(job, handler);
+      },
+      {
+        timezone: this.config.timezone,
+        scheduled: true,
+      },
+    );
 
     this.cronJobs.set(job.id, cronJob);
   }
@@ -302,7 +321,9 @@ class CronSchedulerFeature implements FeatureModule {
 
     // --- Atomic checkout: try to claim the job in running_tasks. If another process claimed it, skip.
     try {
-      const insert = this.db.prepare('INSERT INTO running_tasks (job_id, started_at) VALUES (?, ?)');
+      const insert = this.db.prepare(
+        'INSERT INTO running_tasks (job_id, started_at) VALUES (?, ?)',
+      );
       insert.run(job.id, Date.now());
     } catch (e) {
       // UNIQUE constraint failed -> another worker is running it
@@ -311,9 +332,13 @@ class CronSchedulerFeature implements FeatureModule {
     }
 
     // --- Concurrency check: ensure we don't exceed maxConcurrentRuns
-    const runningCount = (this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get() as any).c || 0;
+    const runningCount =
+      (this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get() as any).c || 0;
     if (runningCount > (this.config as any).maxConcurrentRuns) {
-      this.ctx.logger.warn('Concurrency limit reached, skipping job', { jobId: job.id, runningCount });
+      this.ctx.logger.warn('Concurrency limit reached, skipping job', {
+        jobId: job.id,
+        runningCount,
+      });
       // release claim
       this.db.prepare('DELETE FROM running_tasks WHERE job_id = ?').run(job.id);
       return;
@@ -349,22 +374,28 @@ class CronSchedulerFeature implements FeatureModule {
       if (!success) {
         job.lastError = error || 'Unknown error';
       }
-      this.db.prepare(
-        'UPDATE jobs SET last_run = ?, last_error = ? WHERE id = ?'
-      ).run(endTime, error, job.id);
+      this.db
+        .prepare('UPDATE jobs SET last_run = ?, last_error = ? WHERE id = ?')
+        .run(endTime, error, job.id);
 
       // Record run in history
-      this.db.prepare(
-        `INSERT INTO job_runs (job_id, started_at, completed_at, success, error)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(job.id, startTime, endTime, success ? 1 : 0, error);
+      this.db
+        .prepare(
+          `INSERT INTO job_runs (job_id, started_at, completed_at, success, error)
+         VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(job.id, startTime, endTime, success ? 1 : 0, error);
 
       // persist any session state optionally provided by handler via running_tasks.session_state
       try {
-        const row = this.db.prepare('SELECT session_state FROM running_tasks WHERE job_id = ?').get(job.id) as any;
+        const row = this.db
+          .prepare('SELECT session_state FROM running_tasks WHERE job_id = ?')
+          .get(job.id) as any;
         if (row?.session_state) {
           // store as last_error field for visibility (placeholder) or a dedicated sessions table
-          this.db.prepare('UPDATE jobs SET last_error = ? WHERE id = ?').run(`session:${row.session_state}`, job.id);
+          this.db
+            .prepare('UPDATE jobs SET last_error = ? WHERE id = ?')
+            .run(`session:${row.session_state}`, job.id);
         }
       } catch (e) {
         // ignore
@@ -379,16 +410,18 @@ class CronSchedulerFeature implements FeatureModule {
 
   private getRecentlyFailed(withinMs: number): number {
     const cutoff = Date.now() - withinMs;
-    const count = (this.db.prepare(
-      'SELECT COUNT(*) as c FROM job_runs WHERE started_at >= ? AND success = 0'
-    ).get(cutoff) as { c: number }).c;
+    const count = (
+      this.db
+        .prepare('SELECT COUNT(*) as c FROM job_runs WHERE started_at >= ? AND success = 0')
+        .get(cutoff) as { c: number }
+    ).c;
     return count;
   }
 
   async getJobRuns(jobId: string, limit: number = 50): Promise<JobRun[]> {
-    const rows = this.db.prepare(
-      'SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?'
-    ).all(jobId, limit);
+    const rows = this.db
+      .prepare('SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?')
+      .all(jobId, limit);
 
     return rows.map((row: any) => ({
       jobId: row.job_id,

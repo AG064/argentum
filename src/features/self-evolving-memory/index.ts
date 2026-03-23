@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Feature configuration */
 export interface SelfEvolvingConfig {
@@ -56,7 +61,12 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   private db!: Database.Database;
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastAnalysis: AnalysisResult | null = null;
-  private lastConsolidation: { dedup: number; merged: number; decayed: number; pruned: number } | null = null;
+  private lastConsolidation: {
+    dedup: number;
+    merged: number;
+    decayed: number;
+    pruned: number;
+  } | null = null;
 
   constructor() {
     this.config = {
@@ -75,7 +85,8 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
       autoEvolve: (config['autoEvolve'] as boolean) ?? this.config['autoEvolve'],
       evolveIntervalMs: (config['evolveIntervalMs'] as number) ?? this.config['evolveIntervalMs'],
-      similarityThreshold: (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
+      similarityThreshold:
+        (config['similarityThreshold'] as number) ?? this.config['similarityThreshold'],
       decayRate: (config['decayRate'] as number) ?? this.config['decayRate'],
       weightBoost: (config['weightBoost'] as number) ?? this.config['weightBoost'],
     };
@@ -87,7 +98,9 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
     if (this.config.autoEvolve) {
       this.timer = setInterval(() => {
         this.consolidate().catch((err: Error) => {
-          this.ctx.logger.error('Auto-consolidation failed', { error: err instanceof Error ? err.message : String(err) });
+          this.ctx.logger.error('Auto-consolidation failed', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
       }, this.config.evolveIntervalMs);
     }
@@ -109,7 +122,8 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM memories').get() as { c: number }).c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM memories').get() as { c: number })
+        .c;
       return {
         healthy: true,
         details: {
@@ -131,16 +145,26 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
     const total = (this.db.prepare('SELECT COUNT(*) as c FROM memories').get() as { c: number }).c;
 
     const byType: Record<string, number> = {};
-    const typeRows = this.db.prepare('SELECT type, COUNT(*) as c FROM memories GROUP BY type').all() as Array<{ type: string; c: number }>;
+    const typeRows = this.db
+      .prepare('SELECT type, COUNT(*) as c FROM memories GROUP BY type')
+      .all() as Array<{ type: string; c: number }>;
     for (const row of typeRows) {
       byType[row.type] = row.c;
     }
 
-    const avgWeight = (this.db.prepare('SELECT AVG(weight) as avg FROM memories').get() as { avg: number })?.avg ?? 0;
-    const zeroWeight = (this.db.prepare('SELECT COUNT(*) as c FROM memories WHERE weight < 0.1').get() as { c: number }).c;
+    const avgWeight =
+      (this.db.prepare('SELECT AVG(weight) as avg FROM memories').get() as { avg: number })?.avg ??
+      0;
+    const zeroWeight = (
+      this.db.prepare('SELECT COUNT(*) as c FROM memories WHERE weight < 0.1').get() as {
+        c: number;
+      }
+    ).c;
 
     // Top words (simple word frequency from content)
-    const rows = this.db.prepare('SELECT content FROM memories').all() as Array<{ content: string }>;
+    const rows = this.db.prepare('SELECT content FROM memories').all() as Array<{
+      content: string;
+    }>;
     const wordCounts = new Map<string, number>();
     for (const row of rows) {
       const words = row.content.toLowerCase().split(/\s+/);
@@ -156,11 +180,17 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
       .map(([word, frequency]) => ({ word, frequency }));
 
     // Duplicate groups by content_hash
-    const dupGroups = (this.db.prepare(`
+    const dupGroups = (
+      this.db
+        .prepare(
+          `
       SELECT content_hash, COUNT(*) as cnt FROM memories
       WHERE content_hash IS NOT NULL
       GROUP BY content_hash HAVING cnt > 1
-    `).all() as Array<{ content_hash: string; cnt: number }>).length;
+    `,
+        )
+        .all() as Array<{ content_hash: string; cnt: number }>
+    ).length;
 
     this.lastAnalysis = {
       totalMemories: total,
@@ -177,18 +207,25 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   /** Deduplicate exact content hashes */
   async deduplicate(): Promise<number> {
     // Find duplicates (keep oldest by created_at)
-    const duplicates = this.db.prepare(`
+    const duplicates = this.db
+      .prepare(
+        `
       SELECT MIN(rowid) as keep_id, GROUP_CONCAT(rowid) as ids
       FROM memories
       WHERE content_hash IS NOT NULL
       GROUP BY content_hash
       HAVING COUNT(*) > 1
-    `).all() as Array<{ keep_id: number; ids: string }>;
+    `,
+      )
+      .all() as Array<{ keep_id: number; ids: string }>;
 
     let removed = 0;
     const transaction = this.db.transaction(() => {
       for (const dup of duplicates) {
-        const ids = dup.ids.split(',').map(Number).filter(id => id !== dup.keep_id);
+        const ids = dup.ids
+          .split(',')
+          .map(Number)
+          .filter((id) => id !== dup.keep_id);
         for (const id of ids) {
           this.db.prepare('DELETE FROM memories WHERE rowid = ?').run(id);
           // Also delete edges? Not needed if FK cascade is set? Edges table has FK with ON DELETE CASCADE.
@@ -213,21 +250,29 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
     // 2. Decay weights for old, rarely accessed memories
     const now = Date.now();
     const weekMs = 7 * 24 * 60 * 60 * 1000;
-    const decayResult = this.db.prepare(`
+    const decayResult = this.db
+      .prepare(
+        `
       UPDATE memories
       SET weight = weight * ?
       WHERE accessed_at < ? AND access_count < 3 AND weight > 0.1
-    `).run(this.config.decayRate, now - weekMs);
+    `,
+      )
+      .run(this.config.decayRate, now - weekMs);
     const decayed = decayResult.changes;
 
     // 3. Merge similar entries (Jaccard similarity)
     const merged = await this.mergeSimilar();
 
     // 4. Prune entries with very low weight and no access
-    const pruneResult = this.db.prepare(`
+    const pruneResult = this.db
+      .prepare(
+        `
       DELETE FROM memories
       WHERE weight < 0.1 AND access_count = 0
-    `).run();
+    `,
+      )
+      .run();
     const pruned = pruneResult.changes;
 
     const durationMs = Date.now() - startTime;
@@ -248,9 +293,13 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   async promote(pattern: string): Promise<number> {
     // Find memories where content contains the pattern (simple LIKE)
     const likePattern = `%${pattern}%`;
-    const toBoost = this.db.prepare(`
+    const toBoost = this.db
+      .prepare(
+        `
       SELECT rowid FROM memories WHERE content LIKE ?
-    `).all(likePattern) as Array<{ rowid: number }>;
+    `,
+      )
+      .all(likePattern) as Array<{ rowid: number }>;
 
     if (toBoost.length === 0) {
       return 0;
@@ -258,11 +307,15 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
 
     const transaction = this.db.transaction(() => {
       for (const row of toBoost) {
-        this.db.prepare(`
+        this.db
+          .prepare(
+            `
           UPDATE memories
           SET weight = MIN(weight * ?, 1.0), accessed_at = ?
           WHERE rowid = ?
-        `).run(this.config.weightBoost, Date.now(), row.rowid);
+        `,
+          )
+          .run(this.config.weightBoost, Date.now(), row.rowid);
       }
     });
     transaction();
@@ -293,7 +346,9 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
   /** Merge similar memory entries using Jaccard similarity */
   private async mergeSimilar(): Promise<number> {
     // Get all memories (sample if too many)
-    const all = this.db.prepare('SELECT rowid, content, weight, access_count FROM memories').all() as Array<{
+    const all = this.db
+      .prepare('SELECT rowid, content, weight, access_count FROM memories')
+      .all() as Array<{
       rowid: number;
       content: string;
       weight: number;
@@ -320,12 +375,11 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
           toDelete.add(remove.rowid);
           // Merge: update kept entry's content to combine both
           const mergedContent = `${keep.content}\n---\n${remove.content}`;
-          this.db.prepare('UPDATE memories SET content = ?, weight = ?, access_count = ? WHERE rowid = ?').run(
-            mergedContent,
-            keep.weight,
-            keep.access_count + remove.access_count,
-            keep.rowid
-          );
+          this.db
+            .prepare(
+              'UPDATE memories SET content = ?, weight = ?, access_count = ? WHERE rowid = ?',
+            )
+            .run(mergedContent, keep.weight, keep.access_count + remove.access_count, keep.rowid);
           merged++;
         }
       }
@@ -344,11 +398,21 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
 
   /** Jaccard similarity on word sets */
   private jaccardSimilarity(a: string, b: string): number {
-    const wordsA = new Set(a.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-    const wordsB = new Set(b.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+    const wordsA = new Set(
+      a
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+    const wordsB = new Set(
+      b
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
     if (wordsA.size === 0 && wordsB.size === 0) return 1;
     if (wordsA.size === 0 || wordsB.size === 0) return 0;
-    const intersection = new Set([...wordsA].filter(w => wordsB.has(w)));
+    const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)));
     const union = new Set([...wordsA, ...wordsB]);
     return intersection.size / union.size;
   }

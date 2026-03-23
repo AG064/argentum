@@ -120,7 +120,9 @@ class BrowserAutomationFeature implements FeatureModule {
       }
       this.ctx.logger.info(`Browser engine loaded: ${this.config.engine}`);
     } catch {
-      this.ctx.logger.warn(`${this.config.engine} not installed — browser features will be limited to session tracking`);
+      this.ctx.logger.warn(
+        `${this.config.engine} not installed — browser features will be limited to session tracking`,
+      );
     }
   }
 
@@ -144,9 +146,9 @@ class BrowserAutomationFeature implements FeatureModule {
   isUrlAllowed(url: string): boolean {
     try {
       const domain = new URL(url).hostname;
-      if (this.config.blockedDomains.some(d => domain.includes(d))) return false;
+      if (this.config.blockedDomains.some((d) => domain.includes(d))) return false;
       if (this.config.allowedDomains.includes('*')) return true;
-      return this.config.allowedDomains.some(d => domain.includes(d));
+      return this.config.allowedDomains.some((d) => domain.includes(d));
     } catch {
       return false;
     }
@@ -198,7 +200,8 @@ class BrowserAutomationFeature implements FeatureModule {
         } else {
           page = await b.newPage();
           await (page as Record<string, Function>).setViewport({
-            width: this.config.viewportWidth, height: this.config.viewportHeight,
+            width: this.config.viewportWidth,
+            height: this.config.viewportHeight,
           });
           if (this.config.userAgent) {
             await (page as Record<string, Function>).setUserAgent(this.config.userAgent);
@@ -207,19 +210,26 @@ class BrowserAutomationFeature implements FeatureModule {
 
         if (url && this.isUrlAllowed(url)) {
           await (page as Record<string, Function>).goto(url, {
-            waitUntil: 'networkidle2', timeout: this.config.timeout,
+            waitUntil: 'networkidle2',
+            timeout: this.config.timeout,
           });
         }
       } catch (err) {
-        this.ctx.logger.error('Failed to create browser session', { error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.error('Failed to create browser session', {
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
     }
 
     const session: PageSession = {
-      id: sessionId, browser, page, context,
+      id: sessionId,
+      browser,
+      page,
+      context,
       url: url ?? 'about:blank',
-      createdAt: Date.now(), lastAction: Date.now(),
+      createdAt: Date.now(),
+      lastAction: Date.now(),
       proxy: proxyUrl ?? this.config.proxyUrl,
     };
 
@@ -245,7 +255,13 @@ class BrowserAutomationFeature implements FeatureModule {
           waitUntil: options.waitUntil ?? 'networkidle2',
           timeout: options.timeout ?? this.config.timeout,
         });
-        return { success: true, data: { url: options.url, title: await (session.page as Record<string, Function>).title() } };
+        return {
+          success: true,
+          data: {
+            url: options.url,
+            title: await (session.page as Record<string, Function>).title(),
+          },
+        };
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
@@ -266,7 +282,10 @@ class BrowserAutomationFeature implements FeatureModule {
       switch (action.type) {
         case 'click':
           if (action.waitForNavigation) {
-            await Promise.all([page.waitForNavigation({ timeout: this.config.timeout }), page.click(action.selector)]);
+            await Promise.all([
+              page.waitForNavigation({ timeout: this.config.timeout }),
+              page.click(action.selector),
+            ]);
           } else {
             await page.click(action.selector);
           }
@@ -281,18 +300,29 @@ class BrowserAutomationFeature implements FeatureModule {
           return { success: true };
 
         case 'screenshot': {
-          const buf = await page.screenshot({ fullPage: action.fullPage ?? false, type: action.format ?? 'png' });
+          const buf = await page.screenshot({
+            fullPage: action.fullPage ?? false,
+            type: action.format ?? 'png',
+          });
           return { success: true, screenshot: Buffer.from(buf as ArrayBuffer) };
         }
 
         case 'extract': {
           if (action.extractAll) {
-            const data = await page.$$eval(action.selector, (els: Element[], attr?: string) =>
-              els.map(el => attr ? el.getAttribute(attr) : el.textContent?.trim()), action.attribute);
+            const data = await page.$$eval(
+              action.selector,
+              (els: Element[], attr?: string) =>
+                els.map((el) => (attr ? el.getAttribute(attr) : el.textContent?.trim())),
+              action.attribute,
+            );
             return { success: true, data };
           }
           const data = action.attribute
-            ? await page.$eval(action.selector, (el: Element, attr: string) => el.getAttribute(attr), action.attribute)
+            ? await page.$eval(
+                action.selector,
+                (el: Element, attr: string) => el.getAttribute(attr),
+                action.attribute,
+              )
             : await page.$eval(action.selector, (el: Element) => el.textContent?.trim());
           return { success: true, data };
         }
@@ -303,7 +333,9 @@ class BrowserAutomationFeature implements FeatureModule {
         }
 
         case 'waitFor':
-          await page.waitForSelector(action.selector, { timeout: action.timeout ?? this.config.timeout });
+          await page.waitForSelector(action.selector, {
+            timeout: action.timeout ?? this.config.timeout,
+          });
           return { success: true };
 
         case 'scroll': {
@@ -361,22 +393,35 @@ class BrowserAutomationFeature implements FeatureModule {
           title: document.title,
           url: location.href,
           text: document.body?.innerText?.slice(0, 50000) ?? '',
-          links: Array.from(document.querySelectorAll('a[href]')).map(a => ({
-            text: getText(a), href: (a as HTMLAnchorElement).href,
-          })).filter(l => l.href.startsWith('http')).slice(0, 200),
-          images: Array.from(document.querySelectorAll('img[src]')).map(img => ({
-            src: (img as HTMLImageElement).src, alt: (img as HTMLImageElement).alt,
-          })).slice(0, 100),
+          links: Array.from(document.querySelectorAll('a[href]'))
+            .map((a) => ({
+              text: getText(a),
+              href: (a as HTMLAnchorElement).href,
+            }))
+            .filter((l) => l.href.startsWith('http'))
+            .slice(0, 200),
+          images: Array.from(document.querySelectorAll('img[src]'))
+            .map((img) => ({
+              src: (img as HTMLImageElement).src,
+              alt: (img as HTMLImageElement).alt,
+            }))
+            .slice(0, 100),
           meta: Object.fromEntries(
-            Array.from(document.querySelectorAll('meta[name], meta[property]')).map(m => [
-              (m as HTMLMetaElement).name || (m as HTMLMetaElement).getAttribute('property') || '',
-              (m as HTMLMetaElement).content,
-            ]).filter(([k]) => k)
+            Array.from(document.querySelectorAll('meta[name], meta[property]'))
+              .map((m) => [
+                (m as HTMLMetaElement).name ||
+                  (m as HTMLMetaElement).getAttribute('property') ||
+                  '',
+                (m as HTMLMetaElement).content,
+              ])
+              .filter(([k]) => k),
           ),
         };
       });
     } catch (err) {
-      this.ctx.logger.error('Extract content failed', { error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.error('Extract content failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return null;
     }
   }
@@ -399,8 +444,11 @@ class BrowserAutomationFeature implements FeatureModule {
 
   /** List all active sessions */
   listSessions(): Array<{ id: string; url: string; proxy?: string; createdAt: number }> {
-    return Array.from(this.sessions.values()).map(s => ({
-      id: s.id, url: s.url, proxy: s.proxy, createdAt: s.createdAt,
+    return Array.from(this.sessions.values()).map((s) => ({
+      id: s.id,
+      url: s.url,
+      proxy: s.proxy,
+      createdAt: s.createdAt,
     }));
   }
 }

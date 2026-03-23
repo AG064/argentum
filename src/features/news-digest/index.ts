@@ -9,7 +9,12 @@ import path from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** News digest configuration */
 export interface NewsDigestConfig {
@@ -90,8 +95,12 @@ class NewsDigestFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const sources = (this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get() as { c: number }).c;
-      const articles = (this.db.prepare('SELECT COUNT(*) as c FROM articles').get() as { c: number }).c;
+      const sources = (
+        this.db.prepare('SELECT COUNT(*) as c FROM news_sources').get() as { c: number }
+      ).c;
+      const articles = (
+        this.db.prepare('SELECT COUNT(*) as c FROM articles').get() as { c: number }
+      ).c;
       return {
         healthy: true,
         message: 'News Digest OK',
@@ -152,9 +161,13 @@ class NewsDigestFeature implements FeatureModule {
     const now = Date.now();
 
     try {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO news_sources (id, url, name, added_at) VALUES (?, ?, ?, ?)
-      `).run(id, url, name ?? null, now);
+      `,
+        )
+        .run(id, url, name ?? null, now);
       this.ctx.logger.info('News source added', { id, url, name });
     } catch (err: any) {
       if (err.message?.includes('UNIQUE constraint')) {
@@ -174,8 +187,10 @@ class NewsDigestFeature implements FeatureModule {
 
   /** Get all sources */
   getSources(): NewsSource[] {
-    const rows = this.db.prepare('SELECT * FROM news_sources ORDER BY added_at DESC').all() as any[];
-    return rows.map(row => ({
+    const rows = this.db
+      .prepare('SELECT * FROM news_sources ORDER BY added_at DESC')
+      .all() as any[];
+    return rows.map((row) => ({
       id: row.id,
       url: row.url,
       name: row.name,
@@ -187,7 +202,7 @@ class NewsDigestFeature implements FeatureModule {
 
   /** Get a digest of recent articles */
   async getDigest(sources?: string[], limit: number = 20): Promise<Article[]> {
-    const sourceIds = sources ?? this.getSources().map(s => s.id);
+    const sourceIds = sources ?? this.getSources().map((s) => s.id);
     if (sourceIds.length === 0) {
       return [];
     }
@@ -206,7 +221,7 @@ class NewsDigestFeature implements FeatureModule {
     `);
 
     const rows = stmt.all(...sourceIds, limit) as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       sourceId: row.source_id,
       sourceName: row.source_name,
@@ -221,14 +236,16 @@ class NewsDigestFeature implements FeatureModule {
 
   /** Check if a source needs fetching */
   private needsFetch(sourceId: string): boolean {
-    const source = this.db.prepare('SELECT last_fetched FROM news_sources WHERE id = ?').get(sourceId) as any;
+    const source = this.db
+      .prepare('SELECT last_fetched FROM news_sources WHERE id = ?')
+      .get(sourceId) as any;
     if (!source?.last_fetched) return true;
     const age = Date.now() - source.last_fetched;
     return age > this.config.cacheMinutes * 60 * 1000;
   }
 
   private async fetchSourcesIfNeeded(sourceIds: string[]): Promise<void> {
-    const toFetch = sourceIds.filter(id => this.needsFetch(id));
+    const toFetch = sourceIds.filter((id) => this.needsFetch(id));
     if (toFetch.length === 0) {
       return;
     }
@@ -237,11 +254,16 @@ class NewsDigestFeature implements FeatureModule {
 
     for (const sourceId of toFetch) {
       try {
-        const source = this.db.prepare('SELECT url FROM news_sources WHERE id = ?').get(sourceId) as any;
+        const source = this.db
+          .prepare('SELECT url FROM news_sources WHERE id = ?')
+          .get(sourceId) as any;
         if (!source) continue;
         await this.fetchSource(sourceId, source.url);
       } catch (err) {
-        this.ctx.logger.error('Source fetch failed', { sourceId, error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.error('Source fetch failed', {
+          sourceId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
@@ -261,9 +283,7 @@ class NewsDigestFeature implements FeatureModule {
     const contentType = response.headers.get('content-type') ?? '';
     const body = await response.text();
 
-    const articles = contentType.includes('atom')
-      ? this.parseAtom(body)
-      : this.parseRSS(body);
+    const articles = contentType.includes('atom') ? this.parseAtom(body) : this.parseRSS(body);
 
     const now = Date.now();
     const insert = this.db.prepare(`
@@ -282,22 +302,40 @@ class NewsDigestFeature implements FeatureModule {
         article.description ?? null,
         article.content ?? null,
         article.publishedAt,
-        now
+        now,
       );
       count++;
     }
 
     // Update source last_fetched and count
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE news_sources SET last_fetched = ?, last_article_count = ? WHERE id = ?
-    `).run(now, count, sourceId);
+    `,
+      )
+      .run(now, count, sourceId);
 
     this.ctx.logger.debug('Source fetch complete', { sourceId, articlesAdded: count });
   }
 
   /** Parse RSS 2.0 feed */
-  private parseRSS(xml: string): Array<{ title: string; link: string; description?: string; content?: string; publishedAt: number }> {
-    const items: Array<{ title: string; link: string; description?: string; content?: string; publishedAt: number }> = [];
+  private parseRSS(
+    xml: string,
+  ): Array<{
+    title: string;
+    link: string;
+    description?: string;
+    content?: string;
+    publishedAt: number;
+  }> {
+    const items: Array<{
+      title: string;
+      link: string;
+      description?: string;
+      content?: string;
+      publishedAt: number;
+    }> = [];
 
     // Simple regex extraction for <item> blocks
     const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
@@ -337,8 +375,22 @@ class NewsDigestFeature implements FeatureModule {
   }
 
   /** Parse Atom 1.0 feed */
-  private parseAtom(xml: string): Array<{ title: string; link: string; description?: string; content?: string; publishedAt: number }> {
-    const entries: Array<{ title: string; link: string; description?: string; content?: string; publishedAt: number }> = [];
+  private parseAtom(
+    xml: string,
+  ): Array<{
+    title: string;
+    link: string;
+    description?: string;
+    content?: string;
+    publishedAt: number;
+  }> {
+    const entries: Array<{
+      title: string;
+      link: string;
+      description?: string;
+      content?: string;
+      publishedAt: number;
+    }> = [];
 
     const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
     let match;

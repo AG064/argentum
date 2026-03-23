@@ -5,7 +5,12 @@
  * tomorrow's preview, and daily metrics.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Evening recap configuration */
 export interface EveningRecapConfig {
@@ -149,7 +154,7 @@ class EveningRecapFeature implements FeatureModule {
   /** Record an accomplishment for today */
   recordAccomplishment(description: string): void {
     const today = new Date().toISOString().split('T')[0];
-    const todayRecap = this.recapHistory.find(r => r.date === today);
+    const todayRecap = this.recapHistory.find((r) => r.date === today);
     if (todayRecap) {
       todayRecap.accomplishments.push(description);
     }

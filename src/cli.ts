@@ -22,7 +22,6 @@ import 'dotenv/config';
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
 
-
 const VERSION = '0.2.0';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
@@ -30,7 +29,7 @@ const command = args[0] || 'help';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function print(text: string): void {
-  process.stdout.write(`${text  }\n`);
+  process.stdout.write(`${text}\n`);
 }
 
 function error(text: string): void {
@@ -53,15 +52,31 @@ function banner(): void {
   print('');
   print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════════════════════╗\x1b[0m');
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗\x1b[36m   ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝\x1b[36m   ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m███████║██████╔╝██║     ███████║██║   ██║███████╗\x1b[36m   ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m██╔══██║██╔══██╗██║     ██╔══██║██║   ██║╚════██║\x1b[36m   ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║\x1b[36m   ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m');
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗\x1b[36m   ║\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝\x1b[36m   ║\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m███████║██████╔╝██║     ███████║██║   ██║███████╗\x1b[36m   ║\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██║██╔══██╗██║     ██╔══██║██║   ██║╚════██║\x1b[36m   ║\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║\x1b[36m   ║\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m',
+  );
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m');
-  print(`  \x1b[1m\x1b[36m║                    \x1b[32mv${  VERSION  }\x1b[36m                            ║\x1b[0m`);
+  print(
+    '  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m',
+  );
+  print(
+    `  \x1b[1m\x1b[36m║                    \x1b[32mv${VERSION}\x1b[36m                            ║\x1b[0m`,
+  );
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
   print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════════════════════╝\x1b[0m');
   print('');
@@ -155,9 +170,14 @@ function cmdACP(): void {
     const cmd = 'node';
     const proc = spawn(cmd, ['-e', code], { timeout: 30000 });
 
-    let stdout = '', stderr = '';
-    proc.stdout?.on('data', (d: any) => { stdout += d; });
-    proc.stderr?.on('data', (d: any) => { stderr += d; });
+    let stdout = '',
+      stderr = '';
+    proc.stdout?.on('data', (d: any) => {
+      stdout += d;
+    });
+    proc.stderr?.on('data', (d: any) => {
+      stderr += d;
+    });
 
     proc.on('close', (code: any) => {
       const duration = Date.now() - start;
@@ -211,8 +231,8 @@ function cmdInit(): void {
         'goal-decomposition': { enabled: true },
         'sqlite-memory': { enabled: true },
         'cron-scheduler': { enabled: true },
-        webchat: { enabled: false },
-        webhooks: { enabled: false },
+        'webchat': { enabled: false },
+        'webhooks': { enabled: false },
         'api-gateway': { enabled: false },
         'audit-log': { enabled: true },
         'encrypted-secrets': { enabled: false },
@@ -241,16 +261,19 @@ function cmdInit(): void {
   // Create .env.example
   const envPath = path.join(workDir, '.env.example');
   if (!fs.existsSync(envPath)) {
-    fs.writeFileSync(envPath, [
-      '# AG-Claw Environment Variables',
-      'AGCLAW_WORKDIR=.',
-      'AGCLAW_PORT=3000',
-      'AGCLAW_MASTER_KEY=',
-      'OPENAI_API_KEY=',
-      'ANTHROPIC_API_KEY=',
-      'OPENROUTER_API_KEY=',
-      '',
-    ].join('\n'));
+    fs.writeFileSync(
+      envPath,
+      [
+        '# AG-Claw Environment Variables',
+        'AGCLAW_WORKDIR=.',
+        'AGCLAW_PORT=3000',
+        'AGCLAW_MASTER_KEY=',
+        'OPENAI_API_KEY=',
+        'ANTHROPIC_API_KEY=',
+        'OPENROUTER_API_KEY=',
+        '',
+      ].join('\n'),
+    );
     success('Created .env.example');
   }
 
@@ -282,12 +305,14 @@ async function cmdStart(): Promise<void> {
       if (url.pathname === '/health') {
         const features = pluginLoader.listFeatures().filter((f: any) => f.state === 'active');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'ok',
-          version: VERSION,
-          features: features.length,
-          uptime: process.uptime(),
-        }));
+        res.end(
+          JSON.stringify({
+            status: 'ok',
+            version: VERSION,
+            features: features.length,
+            uptime: process.uptime(),
+          }),
+        );
         return;
       }
 
@@ -295,11 +320,15 @@ async function cmdStart(): Promise<void> {
       if (url.pathname === '/api/features') {
         const features = pluginLoader.listFeatures();
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(features.map((f: any) => ({
-          name: f.name,
-          version: f.version,
-          state: f.state,
-        }))));
+        res.end(
+          JSON.stringify(
+            features.map((f: any) => ({
+              name: f.name,
+              version: f.version,
+              state: f.state,
+            })),
+          ),
+        );
         return;
       }
 
@@ -313,10 +342,12 @@ async function cmdStart(): Promise<void> {
           return;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          name: featureName,
-          state: featureState,
-        }));
+        res.end(
+          JSON.stringify({
+            name: featureName,
+            state: featureState,
+          }),
+        );
         return;
       }
 
@@ -344,13 +375,11 @@ async function cmdStart(): Promise<void> {
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
-
   } catch (err) {
     error(`Failed to start: ${(err as Error).message}`);
     throw new Error(`Failed to start: ${(err as Error).message}`);
   }
 }
-
 
 function cmdFeatures(): void {
   banner();
@@ -363,10 +392,15 @@ function cmdFeatures(): void {
     return;
   }
 
-  const features = fs.readdirSync(featuresDir).filter((f: string) => {
-    return fs.existsSync(path.join(featuresDir, f, 'index.ts')) ||
-           fs.existsSync(path.join(featuresDir, f, 'index.js'));
-  }).sort();
+  const features = fs
+    .readdirSync(featuresDir)
+    .filter((f: string) => {
+      return (
+        fs.existsSync(path.join(featuresDir, f, 'index.ts')) ||
+        fs.existsSync(path.join(featuresDir, f, 'index.js'))
+      );
+    })
+    .sort();
 
   for (const name of features) {
     // Try to read meta
@@ -415,7 +449,9 @@ function cmdFeature(): void {
   } catch (err) {
     warn(`Could not load feature metadata: ${(err as Error).message}`);
     print(`  File: ${distPath}`);
-    const lines = fs.existsSync(distPath) ? fs.readFileSync(distPath, 'utf8').split('\n').length : 0;
+    const lines = fs.existsSync(distPath)
+      ? fs.readFileSync(distPath, 'utf8').split('\n').length
+      : 0;
     print(`  Size: ${lines} lines`);
   }
 }
@@ -500,7 +536,12 @@ async function cmdDoctor(): Promise<void> {
     {
       name: 'better-sqlite3 installed',
       check: () => {
-        try { require('better-sqlite3'); return true; } catch { return false; }
+        try {
+          require('better-sqlite3');
+          return true;
+        } catch {
+          return false;
+        }
       },
       fix: 'Run: npm install better-sqlite3',
     },
@@ -558,8 +599,9 @@ async function cmdTools(): Promise<void> {
     return;
   }
 
-  const features = fs.readdirSync(featuresDir)
-    .filter(f => fs.existsSync(path.join(featuresDir, f, 'index.js')))
+  const features = fs
+    .readdirSync(featuresDir)
+    .filter((f) => fs.existsSync(path.join(featuresDir, f, 'index.js')))
     .sort();
 
   for (const name of features) {
@@ -613,7 +655,11 @@ async function cmdSessions(): Promise<void> {
     case 'ls': {
       banner();
       const db = getDb();
-      const sessions = db.prepare("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT 20").all() as any[];
+      const sessions = db
+        .prepare(
+          "SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT 20",
+        )
+        .all() as any[];
       if (sessions.length === 0) {
         info('No sessions yet. Create one with: agclaw session create');
         db.close();
@@ -622,7 +668,9 @@ async function cmdSessions(): Promise<void> {
       info(`Sessions (${sessions.length}):`);
       print('');
       for (const s of sessions) {
-        const msgs = (db.prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?').get(s.id)).c;
+        const msgs = db
+          .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
+          .get(s.id).c;
         const ago = formatAgo(s.updated_at);
         const status = s.status === 'active' ? '\x1b[32m●\x1b[0m' : '\x1b[33m○\x1b[0m';
         print(`  ${status} \x1b[1m${s.title}\x1b[0m`);
@@ -640,8 +688,9 @@ async function cmdSessions(): Promise<void> {
       const db = getDb();
       const id = crypto.randomUUID();
       const now = Date.now();
-      db.prepare('INSERT INTO sessions (id, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?)')
-        .run(id, title, now, now, 'active');
+      db.prepare(
+        'INSERT INTO sessions (id, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, title, now, now, 'active');
       success(`Session created: ${id}`);
       print(`  Title: ${title}`);
       db.close();
@@ -651,12 +700,21 @@ async function cmdSessions(): Promise<void> {
     case 'show':
     case 'view': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw session show <id>'); return; }
+      if (!id) {
+        error('Usage: agclaw session show <id>');
+        return;
+      }
       banner();
       const db = getDb();
       // Find by prefix
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
-      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      const session = db
+        .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
+        .get(`%${id}%`, id);
+      if (!session) {
+        error(`Session '${id}' not found`);
+        db.close();
+        return;
+      }
 
       info(`Session: ${session.title}`);
       print(`  ID: ${session.id}`);
@@ -664,12 +722,16 @@ async function cmdSessions(): Promise<void> {
       print(`  Created: ${new Date(session.created_at).toLocaleString()}`);
       print(`  Updated: ${new Date(session.updated_at).toLocaleString()}`);
 
-      const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(session.id) as any[];
+      const messages = db
+        .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC')
+        .all(session.id) as any[];
       print(`  Messages: ${messages.length}`);
       print('');
 
-      for (const msg of messages.slice(-10)) { // Last 10 messages
-        const roleColor = msg.role === 'user' ? '\x1b[36m' : msg.role === 'assistant' ? '\x1b[32m' : '\x1b[33m';
+      for (const msg of messages.slice(-10)) {
+        // Last 10 messages
+        const roleColor =
+          msg.role === 'user' ? '\x1b[36m' : msg.role === 'assistant' ? '\x1b[32m' : '\x1b[33m';
         const content = msg.content.slice(0, 150).replace(/\n/g, ' ');
         print(`  ${roleColor}${msg.role}\x1b[0m: ${content}`);
       }
@@ -683,10 +745,19 @@ async function cmdSessions(): Promise<void> {
     case 'delete':
     case 'rm': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw session delete <id>'); return; }
+      if (!id) {
+        error('Usage: agclaw session delete <id>');
+        return;
+      }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
-      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      const session = db
+        .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
+        .get(`%${id}%`, id);
+      if (!session) {
+        error(`Session '${id}' not found`);
+        db.close();
+        return;
+      }
       db.prepare("UPDATE sessions SET status = 'deleted' WHERE id = ?").run(session.id);
       success(`Session '${session.title}' deleted`);
       db.close();
@@ -695,10 +766,19 @@ async function cmdSessions(): Promise<void> {
 
     case 'archive': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw session archive <id>'); return; }
+      if (!id) {
+        error('Usage: agclaw session archive <id>');
+        return;
+      }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
-      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
+      const session = db
+        .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
+        .get(`%${id}%`, id);
+      if (!session) {
+        error(`Session '${id}' not found`);
+        db.close();
+        return;
+      }
       db.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(session.id);
       success(`Session '${session.title}' archived`);
       db.close();
@@ -707,12 +787,17 @@ async function cmdSessions(): Promise<void> {
 
     case 'search': {
       const query = args.slice(2).join(' ');
-      if (!query) { error('Usage: agclaw session search <query>'); return; }
+      if (!query) {
+        error('Usage: agclaw session search <query>');
+        return;
+      }
       banner();
       const db = getDb();
-      const results = db.prepare(
-        'SELECT m.session_id, m.content, m.role, m.timestamp, s.title FROM messages m JOIN sessions s ON m.session_id = s.id WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT 10'
-      ).all(`%${query}%`) as any[];
+      const results = db
+        .prepare(
+          'SELECT m.session_id, m.content, m.role, m.timestamp, s.title FROM messages m JOIN sessions s ON m.session_id = s.id WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT 10',
+        )
+        .all(`%${query}%`) as any[];
 
       if (results.length === 0) {
         info('No results found');
@@ -733,11 +818,22 @@ async function cmdSessions(): Promise<void> {
 
     case 'export': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw session export <id>'); return; }
+      if (!id) {
+        error('Usage: agclaw session export <id>');
+        return;
+      }
       const db = getDb();
-      const session = db.prepare("SELECT * FROM sessions WHERE id LIKE ? OR id = ?").get(`%${id}%`, id);
-      if (!session) { error(`Session '${id}' not found`); db.close(); return; }
-      const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(session.id) as any[];
+      const session = db
+        .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
+        .get(`%${id}%`, id);
+      if (!session) {
+        error(`Session '${id}' not found`);
+        db.close();
+        return;
+      }
+      const messages = db
+        .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC')
+        .all(session.id) as any[];
       const exportData = { session, messages };
       const exportPath = path.join(getWorkDir(), 'data', `session-${session.id.slice(0, 8)}.json`);
       fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
@@ -749,9 +845,11 @@ async function cmdSessions(): Promise<void> {
     case 'stats': {
       banner();
       const db = getDb();
-      const total = (db.prepare('SELECT COUNT(*) as c FROM sessions').get()).c;
-      const active = (db.prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'").get()).c;
-      const messages = (db.prepare('SELECT COUNT(*) as c FROM messages').get()).c;
+      const total = db.prepare('SELECT COUNT(*) as c FROM sessions').get().c;
+      const active = db
+        .prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'")
+        .get().c;
+      const messages = db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
       print(`  Total sessions: ${total}`);
       print(`  Active: ${active}`);
       print(`  Archived: ${total - active}`);
@@ -834,7 +932,9 @@ async function cmdGateway(): Promise<void> {
         warn('Gateway already running');
         return;
       }
-      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10) : 3000;
+      const port = args.includes('--port')
+        ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
+        : 3000;
       info(`Starting AG-Claw gateway on port ${port}...`);
 
       // Spawn gateway as background process
@@ -842,7 +942,8 @@ async function cmdGateway(): Promise<void> {
       const gatewayPath = path.join(__dirname, 'cli.js');
       const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
         detached: true,
-        stdio: ['ignore',
+        stdio: [
+          'ignore',
           fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
           fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
         ],
@@ -882,18 +983,23 @@ async function cmdGateway(): Promise<void> {
       const pid = getPid();
       if (pid) {
         info(`Stopping gateway (PID: ${pid})...`);
-        try { process.kill(pid, 'SIGTERM'); } catch {}
+        try {
+          process.kill(pid, 'SIGTERM');
+        } catch {}
         // Wait a moment
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1000));
       }
-      const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10) : 3000;
+      const port = args.includes('--port')
+        ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
+        : 3000;
       info(`Restarting AG-Claw gateway on port ${port}...`);
 
       const { spawn } = await import('child_process');
       const gatewayPath = path.join(__dirname, 'cli.js');
       const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
         detached: true,
-        stdio: ['ignore',
+        stdio: [
+          'ignore',
           fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
           fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
         ],
@@ -937,8 +1043,9 @@ async function cmdPlugins(): Promise<void> {
     return;
   }
 
-  const features = fs.readdirSync(featuresDir)
-    .filter(f => fs.existsSync(path.join(featuresDir, f, 'index.js')))
+  const features = fs
+    .readdirSync(featuresDir)
+    .filter((f) => fs.existsSync(path.join(featuresDir, f, 'index.js')))
     .sort();
 
   for (const name of features) {
@@ -991,7 +1098,7 @@ async function cmdBackup(): Promise<void> {
       if (fs.existsSync(dataDir)) {
         const backupDataDir = path.join(backupPath, 'data');
         fs.mkdirSync(backupDataDir, { recursive: true });
-        const dbs = fs.readdirSync(dataDir).filter(f => f.endsWith('.db'));
+        const dbs = fs.readdirSync(dataDir).filter((f) => f.endsWith('.db'));
         for (const db of dbs) {
           fs.copyFileSync(path.join(dataDir, db), path.join(backupDataDir, db));
           count++;
@@ -999,11 +1106,18 @@ async function cmdBackup(): Promise<void> {
       }
 
       // Create manifest
-      fs.writeFileSync(path.join(backupPath, 'manifest.json'), JSON.stringify({
-        timestamp: new Date().toISOString(),
-        version: '0.2.0',
-        files: count,
-      }, null, 2));
+      fs.writeFileSync(
+        path.join(backupPath, 'manifest.json'),
+        JSON.stringify(
+          {
+            timestamp: new Date().toISOString(),
+            version: '0.2.0',
+            files: count,
+          },
+          null,
+          2,
+        ),
+      );
 
       success(`Backup created: ${backupPath}`);
       print(`  Files: ${count}`);
@@ -1017,7 +1131,11 @@ async function cmdBackup(): Promise<void> {
         info('No backups found');
         return;
       }
-      const backups = fs.readdirSync(backupDir).filter(f => f.startsWith('backup-')).sort().reverse();
+      const backups = fs
+        .readdirSync(backupDir)
+        .filter((f) => f.startsWith('backup-'))
+        .sort()
+        .reverse();
       if (backups.length === 0) {
         info('No backups found');
         return;
@@ -1100,7 +1218,11 @@ async function cmdMemory(): Promise<void> {
   switch (subcommand) {
     case 'search': {
       const query = args.slice(2).join(' ');
-      if (!query) { error('Usage: agclaw memory search <query>'); db.close(); return; }
+      if (!query) {
+        error('Usage: agclaw memory search <query>');
+        db.close();
+        return;
+      }
       banner();
       info(`Searching: "${query}"`);
       print('');
@@ -1108,13 +1230,17 @@ async function cmdMemory(): Promise<void> {
       // Try FTS5 first, fallback to LIKE
       let results: any[] = [];
       try {
-        results = db.prepare(
-          "SELECT key, value, namespace, updated_at FROM kv_fts WHERE kv_fts MATCH ? LIMIT 10"
-        ).all(query);
+        results = db
+          .prepare(
+            'SELECT key, value, namespace, updated_at FROM kv_fts WHERE kv_fts MATCH ? LIMIT 10',
+          )
+          .all(query);
       } catch {
-        results = db.prepare(
-          "SELECT key, value, namespace, updated_at FROM kv_store WHERE value LIKE ? OR key LIKE ? ORDER BY updated_at DESC LIMIT 10"
-        ).all(`%${query}%`, `%${query}%`);
+        results = db
+          .prepare(
+            'SELECT key, value, namespace, updated_at FROM kv_store WHERE value LIKE ? OR key LIKE ? ORDER BY updated_at DESC LIMIT 10',
+          )
+          .all(`%${query}%`, `%${query}%`);
       }
 
       if (results.length === 0) {
@@ -1134,7 +1260,9 @@ async function cmdMemory(): Promise<void> {
     case 'list': {
       banner();
       // List all namespaces
-      const namespaces = db.prepare("SELECT DISTINCT namespace FROM kv_store ORDER BY namespace").all() as any[];
+      const namespaces = db
+        .prepare('SELECT DISTINCT namespace FROM kv_store ORDER BY namespace')
+        .all() as any[];
       if (namespaces.length === 0) {
         info('Memory is empty');
         db.close();
@@ -1142,7 +1270,9 @@ async function cmdMemory(): Promise<void> {
       }
       info('Memory namespaces:');
       for (const ns of namespaces) {
-        const count = (db.prepare("SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?").get(ns.namespace)).c;
+        const count = db
+          .prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?')
+          .get(ns.namespace).c;
         print(`  • ${ns.namespace}: ${count} entries`);
       }
       db.close();
@@ -1210,7 +1340,7 @@ async function cmdCron(): Promise<void> {
       // Interactive job creation
       const readline = require('readline');
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+      const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
 
       banner();
       info('Creating new cron job');
@@ -1220,12 +1350,12 @@ async function cmdCron(): Promise<void> {
       if (fs.existsSync(dbPath)) jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
 
       const id = crypto.randomUUID();
-      const name = await ask('  Name (optional): ') || `Job-${id.slice(0, 8)}`;
-      const scheduleKind = await ask('  Schedule [every|cron] (default: every): ') || 'every';
+      const name = (await ask('  Name (optional): ')) || `Job-${id.slice(0, 8)}`;
+      const scheduleKind = (await ask('  Schedule [every|cron] (default: every): ')) || 'every';
       let schedule: any;
 
       if (scheduleKind === 'every') {
-        const minutes = parseInt(await ask('  Interval in minutes (default: 60): ') || '60');
+        const minutes = parseInt((await ask('  Interval in minutes (default: 60): ')) || '60');
         schedule = { kind: 'every', everyMs: minutes * 60 * 1000 };
       } else {
         const expr = await ask('  Cron expression: ');
@@ -1255,11 +1385,20 @@ async function cmdCron(): Promise<void> {
 
     case 'run': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw cron run <id>'); return; }
-      if (!fs.existsSync(dbPath)) { error('No cron jobs defined'); return; }
+      if (!id) {
+        error('Usage: agclaw cron run <id>');
+        return;
+      }
+      if (!fs.existsSync(dbPath)) {
+        error('No cron jobs defined');
+        return;
+      }
       const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
       const job = jobs.find((j: any) => j.id === id);
-      if (!job) { error(`Job '${id}' not found`); return; }
+      if (!job) {
+        error(`Job '${id}' not found`);
+        return;
+      }
 
       // Execute job payload as system event
       banner();
@@ -1274,11 +1413,20 @@ async function cmdCron(): Promise<void> {
     case 'enable':
     case 'disable': {
       const id = args[2];
-      if (!id) { error(`Usage: agclaw cron ${subcommand} <id>`); return; }
-      if (!fs.existsSync(dbPath)) { error('No cron jobs defined'); return; }
+      if (!id) {
+        error(`Usage: agclaw cron ${subcommand} <id>`);
+        return;
+      }
+      if (!fs.existsSync(dbPath)) {
+        error('No cron jobs defined');
+        return;
+      }
       const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
       const job = jobs.find((j: any) => j.id === id);
-      if (!job) { error(`Job '${id}' not found`); return; }
+      if (!job) {
+        error(`Job '${id}' not found`);
+        return;
+      }
 
       job.enabled = subcommand === 'enable';
       fs.writeFileSync(dbPath, JSON.stringify(jobs, null, 2));
@@ -1289,7 +1437,10 @@ async function cmdCron(): Promise<void> {
     case 'remove':
     case 'rm': {
       const id = args[2];
-      if (!id) { error('Usage: agclaw cron remove <id>'); return; }
+      if (!id) {
+        error('Usage: agclaw cron remove <id>');
+        return;
+      }
       const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
       const filtered = jobs.filter((j: any) => j.id !== id);
       if (filtered.length === jobs.length) {
@@ -1320,7 +1471,7 @@ async function cmdStatus(): Promise<void> {
   // Check data directories
   const dataDir = path.join(getWorkDir(), 'data');
   if (fs.existsSync(dataDir)) {
-    const dbs = fs.readdirSync(dataDir).filter(f => f.endsWith('.db'));
+    const dbs = fs.readdirSync(dataDir).filter((f) => f.endsWith('.db'));
     print(`  \x1b[1mDatabases:\x1b[0m ${dbs.length}`);
     for (const db of dbs) {
       try {
@@ -1359,7 +1510,7 @@ async function cmdStatus(): Promise<void> {
 async function cmdOnboard(): Promise<void> {
   const readline = require('readline');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
 
   banner();
   print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
@@ -1389,7 +1540,7 @@ async function cmdOnboard(): Promise<void> {
   const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG-Claw): ');
   if (name.trim()) config.name = name.trim();
   print('');
-  print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${  config.name  }\x1b[0m`);
+  print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${config.name}\x1b[0m`);
   print('');
 
   // Step 2: LLM Provider
@@ -1399,23 +1550,73 @@ async function cmdOnboard(): Promise<void> {
   print('  \x1b[90mChoose a provider or add your own OpenAI-compatible API.\x1b[0m');
   print('');
   print('  \x1b[1m\x1b[33m╭──────────────╮\x1b[0m  \x1b[37mProvider Presets:\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m1\x1b[0m \x1b[37mOpenRouter   \x1b[90mopenrouter.ai/api/v1\x1b[0m   \x1b[33m│\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m2\x1b[0m \x1b[37mNVIDIA       \x1b[90mintegrate.api.nvidia.com\x1b[0m \x1b[33m│\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m3\x1b[0m \x1b[37mGoogle Gemini\x1b[90mgenerativelanguage.googleapis\x1b[33m│\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m4\x1b[0m \x1b[37mAnthropic   \x1b[90mapi.anthropic.com\x1b[0m        \x1b[33m│\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m5\x1b[0m \x1b[37mOpenAI      \x1b[90mapi.openai.com\x1b[0m               \x1b[33m│\x1b[0m');
-  print('  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m6\x1b[0m \x1b[37mCustom      \x1b[90myour own base_url\x1b[0m          \x1b[33m│\x1b[0m');
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m1\x1b[0m \x1b[37mOpenRouter   \x1b[90mopenrouter.ai/api/v1\x1b[0m   \x1b[33m│\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m2\x1b[0m \x1b[37mNVIDIA       \x1b[90mintegrate.api.nvidia.com\x1b[0m \x1b[33m│\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m3\x1b[0m \x1b[37mGoogle Gemini\x1b[90mgenerativelanguage.googleapis\x1b[33m│\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m4\x1b[0m \x1b[37mAnthropic   \x1b[90mapi.anthropic.com\x1b[0m        \x1b[33m│\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m5\x1b[0m \x1b[37mOpenAI      \x1b[90mapi.openai.com\x1b[0m               \x1b[33m│\x1b[0m',
+  );
+  print(
+    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m6\x1b[0m \x1b[37mCustom      \x1b[90myour own base_url\x1b[0m          \x1b[33m│\x1b[0m',
+  );
   print('  \x1b[1m\x1b[33m╰──────────────╯\x1b[0m');
   print('');
   const providerChoice = await ask('  \x1b[33m▶\x1b[0m Choose (1-6, default: 2): ');
 
-  interface Preset { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }
+  interface Preset {
+    name: string;
+    base_url: string;
+    api_key_env: string;
+    api: string;
+    model: string;
+    headers?: Record<string, string>;
+  }
   const presets: Record<string, Preset> = {
-    1: { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
-    2: { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
-    3: { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
-    4: { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
-    5: { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
+    1: {
+      name: 'openrouter',
+      base_url: 'https://openrouter.ai/api/v1',
+      api_key_env: 'OPENROUTER_API_KEY',
+      api: 'openai',
+      model: 'auto',
+      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
+    },
+    2: {
+      name: 'nvidia',
+      base_url: 'https://integrate.api.nvidia.com/v1',
+      api_key_env: 'NVIDIA_API_KEY',
+      api: 'openai',
+      model: 'deepseek-ai/deepseek-v3.2',
+    },
+    3: {
+      name: 'google',
+      base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      api_key_env: 'GOOGLE_API_KEY',
+      api: 'openai',
+      model: 'gemini-2.5-flash',
+    },
+    4: {
+      name: 'anthropic',
+      base_url: 'https://api.anthropic.com',
+      api_key_env: 'ANTHROPIC_API_KEY',
+      api: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+    },
+    5: {
+      name: 'openai',
+      base_url: 'https://api.openai.com/v1',
+      api_key_env: 'OPENAI_API_KEY',
+      api: 'openai',
+      model: 'gpt-4o',
+    },
   };
 
   let preset: Preset;
@@ -1425,9 +1626,17 @@ async function cmdOnboard(): Promise<void> {
     const custName = await ask('    \x1b[90mProvider name:\x1b[0m ');
     const custUrl = await ask('    \x1b[90mBase URL:\x1b[0m ');
     const custModel = await ask('    \x1b[90mDefault model:\x1b[0m ');
-    const custApi = await ask('    \x1b[90mAPI style [openai|anthropic] (default: openai):\x1b[0m ') || 'openai';
+    const custApi =
+      (await ask('    \x1b[90mAPI style [openai|anthropic] (default: openai):\x1b[0m ')) ||
+      'openai';
     const custKeyEnv = await ask('    \x1b[90mAPI key env var (e.g. MY_API_KEY):\x1b[0m ');
-    preset = { name: custName.trim() || 'custom', base_url: custUrl.trim(), api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY', api: custApi, model: custModel.trim() };
+    preset = {
+      name: custName.trim() || 'custom',
+      base_url: custUrl.trim(),
+      api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY',
+      api: custApi,
+      model: custModel.trim(),
+    };
   } else {
     preset = presets[providerChoice.trim()] ?? presets['2']!;
   }
@@ -1442,11 +1651,15 @@ async function cmdOnboard(): Promise<void> {
   config.llm.default = preset.name;
 
   print('');
-  print(`  \x1b[32m✓\x1b[0m Selected: \x1b[1m${  preset.name  }\x1b[0m (\x1b[90m${  preset.base_url  }\x1b[0m)`);
+  print(
+    `  \x1b[32m✓\x1b[0m Selected: \x1b[1m${preset.name}\x1b[0m (\x1b[90m${preset.base_url}\x1b[0m)`,
+  );
 
   // Ask for API key
   print('');
-  const apiKey = await ask(`  \x1b[33m▶\x1b[0m \x1b[33m${  preset.api_key_env  }\x1b[0m (press Enter to skip): `);
+  const apiKey = await ask(
+    `  \x1b[33m▶\x1b[0m \x1b[33m${preset.api_key_env}\x1b[0m (press Enter to skip): `,
+  );
   if (apiKey.trim()) {
     const envPath = path.join(getWorkDir(), '.env');
     fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
@@ -1455,9 +1668,16 @@ async function cmdOnboard(): Promise<void> {
 
   // Ask for additional models
   print('');
-  const addModels = await ask('  \x1b[33m▶\x1b[0m Add fallback models (comma-separated, or Enter to skip): ');
+  const addModels = await ask(
+    '  \x1b[33m▶\x1b[0m Add fallback models (comma-separated, or Enter to skip): ',
+  );
   if (addModels.trim()) {
-    config.llm.providers[preset.name].models.push(...addModels.trim().split(',').map((m: string) => m.trim()));
+    config.llm.providers[preset.name].models.push(
+      ...addModels
+        .trim()
+        .split(',')
+        .map((m: string) => m.trim()),
+    );
   }
   print('');
 
@@ -1486,14 +1706,22 @@ async function cmdOnboard(): Promise<void> {
   print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
   print('  \x1b[90mEnabling recommended features...\x1b[0m');
   const defaults = [
-    'life-domains', 'skills-library', 'goal-decomposition',
-    'sqlite-memory', 'cron-scheduler', 'audit-log',
-    'knowledge-graph', 'webhooks', 'file-watcher',
+    'life-domains',
+    'skills-library',
+    'goal-decomposition',
+    'sqlite-memory',
+    'cron-scheduler',
+    'audit-log',
+    'knowledge-graph',
+    'webhooks',
+    'file-watcher',
   ];
   for (const f of defaults) {
     config.features[f] = { enabled: true };
   }
-  print(`  \x1b[32m✓\x1b[0m \x1b[1m${  defaults.length  }\x1b[0m features enabled: \x1b[33m${  defaults.join(', ')  }\x1b[0m`);
+  print(
+    `  \x1b[32m✓\x1b[0m \x1b[1m${defaults.length}\x1b[0m features enabled: \x1b[33m${defaults.join(', ')}\x1b[0m`,
+  );
   print('');
 
   // Step 5: Port
@@ -1505,7 +1733,7 @@ async function cmdOnboard(): Promise<void> {
     config.server.port = parseInt(port);
   }
   print('');
-  print(`  \x1b[32m✓\x1b[0m Server port: \x1b[1m${  config.server.port  }\x1b[0m`);
+  print(`  \x1b[32m✓\x1b[0m Server port: \x1b[1m${config.server.port}\x1b[0m`);
   print('');
 
   // Save config
@@ -1528,7 +1756,7 @@ async function cmdOnboard(): Promise<void> {
   print('  \x1b[1m\x1b[32m╚═══════════════════════════════════════════════╝\x1b[0m');
   print('');
   print('  \x1b[1m\x1b[37mNext steps:\x1b[0m');
-  print(`    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ${  config.server.port  }\x1b[0m`);
+  print(`    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ${config.server.port}\x1b[0m`);
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
   print('');
@@ -1691,49 +1919,52 @@ async function cmdSkill(): Promise<void> {
       break;
     }
 
-    default:
-      // Treat as "run" — execute a script from an installed skill
-      {
-        const skillName = subcommand;
-        const skillsDir = path.join(clawhubWorkDir, 'skills');
-        const skillPath = path.join(skillsDir, skillName);
-        if (!fs.existsSync(skillPath)) {
-          error(`Unknown command or skill: ${skillName}`);
-          print('');
-          print('  agclaw skill [list|search|install|uninstall|update|explore|info|publish|star|sync]');
-          return;
-        }
-        const scriptName = args[2];
-        if (!scriptName) {
-          const scriptsDir = path.join(skillPath, 'scripts');
-          if (fs.existsSync(scriptsDir)) {
-            const scripts = fs.readdirSync(scriptsDir).filter((f: string) => /\.(sh|js|py|ts)$/.test(f));
-            if (scripts.length) {
-              info(`Scripts in ${skillName}:`);
-              for (const s of scripts) print(`  • ${s}`);
-            }
-          }
-          return;
-        }
-        const scriptPath = path.join(skillPath, 'scripts', scriptName);
-        if (!fs.existsSync(scriptPath)) {
-          error(`Script '${scriptName}' not found`);
-          return;
-        }
-        const scriptArgs = args.slice(3);
-        let cmd: string;
-        if (scriptName.endsWith('.sh')) cmd = `bash "${scriptPath}"`;
-        else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
-        else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
-        else cmd = `npx tsx "${scriptPath}"`;
-        if (scriptArgs.length) cmd += ` ${  scriptArgs.map((a: string) => `"${a}"`).join(' ')}`;
-        try {
-          const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
-          print(result);
-        } catch (err: any) {
-          error(err.message);
-        }
+    default: // Treat as "run" — execute a script from an installed skill
+    {
+      const skillName = subcommand;
+      const skillsDir = path.join(clawhubWorkDir, 'skills');
+      const skillPath = path.join(skillsDir, skillName);
+      if (!fs.existsSync(skillPath)) {
+        error(`Unknown command or skill: ${skillName}`);
+        print('');
+        print(
+          '  agclaw skill [list|search|install|uninstall|update|explore|info|publish|star|sync]',
+        );
+        return;
       }
+      const scriptName = args[2];
+      if (!scriptName) {
+        const scriptsDir = path.join(skillPath, 'scripts');
+        if (fs.existsSync(scriptsDir)) {
+          const scripts = fs
+            .readdirSync(scriptsDir)
+            .filter((f: string) => /\.(sh|js|py|ts)$/.test(f));
+          if (scripts.length) {
+            info(`Scripts in ${skillName}:`);
+            for (const s of scripts) print(`  • ${s}`);
+          }
+        }
+        return;
+      }
+      const scriptPath = path.join(skillPath, 'scripts', scriptName);
+      if (!fs.existsSync(scriptPath)) {
+        error(`Script '${scriptName}' not found`);
+        return;
+      }
+      const scriptArgs = args.slice(3);
+      let cmd: string;
+      if (scriptName.endsWith('.sh')) cmd = `bash "${scriptPath}"`;
+      else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
+      else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
+      else cmd = `npx tsx "${scriptPath}"`;
+      if (scriptArgs.length) cmd += ` ${scriptArgs.map((a: string) => `"${a}"`).join(' ')}`;
+      try {
+        const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
+        print(result);
+      } catch (err: any) {
+        error(err.message);
+      }
+    }
   }
 }
 
@@ -1766,7 +1997,7 @@ async function cmdTelegram(): Promise<void> {
         return;
       }
       print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
-      print(`  Bot Token: ${tg.botToken ? `***${  tg.botToken.slice(-8)}` : 'NOT SET'}`);
+      print(`  Bot Token: ${tg.botToken ? `***${tg.botToken.slice(-8)}` : 'NOT SET'}`);
       print(`  DM Policy: ${tg.dmPolicy || 'pairing'}`);
       print(`  Group Policy: ${tg.groupPolicy || 'allowlist'}`);
       print(`  Allowed Users: ${(tg.allowFrom || []).join(', ') || 'none'}`);
@@ -1781,7 +2012,7 @@ async function cmdTelegram(): Promise<void> {
         const newCode = crypto.randomBytes(4).toString('hex');
         info(`Pairing code: ${newCode}`);
         info('Valid for 10 minutes');
-        info(`Share with user: /pair ${  newCode}`);
+        info(`Share with user: /pair ${newCode}`);
       } else {
         info(`Pairing code: ${code}`);
       }
@@ -1803,23 +2034,29 @@ async function cmdTelegram(): Promise<void> {
     case 'config': {
       info('Telegram configuration template');
       print('');
-      print(JSON.stringify({
-        features: {
-          telegram: {
-            enabled: true,
-            botToken: 'YOUR_BOT_TOKEN',
-            allowFrom: ['tg:YOUR_USER_ID'],
-            groupPolicy: 'allowlist',
-            groups: {
-              '-100XXXXXXXXXX': { requireMention: false }
+      print(
+        JSON.stringify(
+          {
+            features: {
+              telegram: {
+                enabled: true,
+                botToken: 'YOUR_BOT_TOKEN',
+                allowFrom: ['tg:YOUR_USER_ID'],
+                groupPolicy: 'allowlist',
+                groups: {
+                  '-100XXXXXXXXXX': { requireMention: false },
+                },
+                dmPolicy: 'pairing',
+                streaming: 'partial',
+                reactionNotifications: 'minimal',
+                markdown: { tables: 'code' },
+              },
             },
-            dmPolicy: 'pairing',
-            streaming: 'partial',
-            reactionNotifications: 'minimal',
-            markdown: { tables: 'code' },
-          }
-        }
-      }, null, 2));
+          },
+          null,
+          2,
+        ),
+      );
       break;
     }
 
@@ -1929,7 +2166,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   error(err.message);
   process.exit(1);
 });

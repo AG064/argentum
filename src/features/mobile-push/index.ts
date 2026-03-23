@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Platform types */
 export type PushPlatform = 'android' | 'ios';
@@ -130,11 +135,21 @@ class MobilePushFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const deviceCount = (this.db.prepare('SELECT COUNT(*) as c FROM devices WHERE enabled = 1').get() as { c: number }).c;
-      const recentSends = (this.db.prepare(`
+      const deviceCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM devices WHERE enabled = 1').get() as {
+          c: number;
+        }
+      ).c;
+      const recentSends = (
+        this.db
+          .prepare(
+            `
         SELECT COUNT(*) as c FROM notification_logs
         WHERE sent_at > ?
-      `).get(Date.now() - 3600000) as { c: number }).c;
+      `,
+          )
+          .get(Date.now() - 3600000) as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -156,7 +171,10 @@ class MobilePushFeature implements FeatureModule {
    * Check if at least one push provider is configured.
    */
   isConfigured(): boolean {
-    return !!(this.config.fcmServerKey || (this.config.apnsKeyPath && this.config.apnsTeamId && this.config.apnsBundleId));
+    return !!(
+      this.config.fcmServerKey ||
+      (this.config.apnsKeyPath && this.config.apnsTeamId && this.config.apnsBundleId)
+    );
   }
 
   /**
@@ -169,7 +187,13 @@ class MobilePushFeature implements FeatureModule {
    * @param metadata - Optional additional device info
    * @returns The registered Device object
    */
-  register(deviceId: string, platform: PushPlatform, pushToken: string, userId?: string, metadata?: Record<string, string>): Device {
+  register(
+    deviceId: string,
+    platform: PushPlatform,
+    pushToken: string,
+    userId?: string,
+    metadata?: Record<string, string>,
+  ): Device {
     const now = Date.now();
 
     // Upsert
@@ -178,15 +202,39 @@ class MobilePushFeature implements FeatureModule {
       | undefined;
 
     if (existing) {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE devices SET platform = ?, push_token = ?, user_id = ?, metadata = ?, last_seen = ?, enabled = 1
         WHERE id = ?
-      `).run(platform, pushToken, userId ?? null, metadata ? JSON.stringify(metadata) : null, now, deviceId);
+      `,
+        )
+        .run(
+          platform,
+          pushToken,
+          userId ?? null,
+          metadata ? JSON.stringify(metadata) : null,
+          now,
+          deviceId,
+        );
     } else {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO devices (id, platform, push_token, user_id, metadata, last_seen, enabled, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(deviceId, platform, pushToken, userId ?? null, metadata ? JSON.stringify(metadata) : null, now, 1, now);
+      `,
+        )
+        .run(
+          deviceId,
+          platform,
+          pushToken,
+          userId ?? null,
+          metadata ? JSON.stringify(metadata) : null,
+          now,
+          1,
+          now,
+        );
     }
 
     const device: Device = {
@@ -280,7 +328,7 @@ class MobilePushFeature implements FeatureModule {
       created_at: number;
     }>;
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       platform: row.platform as PushPlatform,
       pushToken: row.push_token,
@@ -313,26 +361,34 @@ class MobilePushFeature implements FeatureModule {
     const messageId = `push-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = Date.now();
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO notification_logs (id, device_id, title, body, data, url, image_url, sound, badge, priority, ttl, sent_at, success)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      messageId,
-      deviceId,
-      notification.title,
-      notification.body,
-      notification.data ? JSON.stringify(notification.data) : null,
-      notification.url ?? null,
-      notification.imageUrl ?? null,
-      notification.sound ?? null,
-      notification.badge ?? null,
-      notification.priority ?? 'normal',
-      notification.ttl ?? null,
-      now,
-      1
-    );
+    `,
+      )
+      .run(
+        messageId,
+        deviceId,
+        notification.title,
+        notification.body,
+        notification.data ? JSON.stringify(notification.data) : null,
+        notification.url ?? null,
+        notification.imageUrl ?? null,
+        notification.sound ?? null,
+        notification.badge ?? null,
+        notification.priority ?? 'normal',
+        notification.ttl ?? null,
+        now,
+        1,
+      );
 
-    this.ctx.logger.info('Push notification sent (stub)', { deviceId, platform: device.platform, title: notification.title });
+    this.ctx.logger.info('Push notification sent (stub)', {
+      deviceId,
+      platform: device.platform,
+      title: notification.title,
+    });
 
     return {
       success: true,
@@ -350,7 +406,11 @@ class MobilePushFeature implements FeatureModule {
    * @param userId - Filter by user ID (optional)
    * @returns Array of SendResults
    */
-  async broadcast(notification: PushNotification, platform?: PushPlatform, userId?: string): Promise<SendResult[]> {
+  async broadcast(
+    notification: PushNotification,
+    platform?: PushPlatform,
+    userId?: string,
+  ): Promise<SendResult[]> {
     const devices = this.listDevices(platform, userId);
     const results: SendResult[] = [];
 
@@ -374,17 +434,31 @@ class MobilePushFeature implements FeatureModule {
     failures: number;
     last24h: number;
   } {
-    const total = (this.db.prepare('SELECT COUNT(*) as c FROM notification_logs').get() as { c: number }).c;
-    const successes = (this.db.prepare('SELECT COUNT(*) as c FROM notification_logs WHERE success = 1').get() as { c: number }).c;
+    const total = (
+      this.db.prepare('SELECT COUNT(*) as c FROM notification_logs').get() as { c: number }
+    ).c;
+    const successes = (
+      this.db.prepare('SELECT COUNT(*) as c FROM notification_logs WHERE success = 1').get() as {
+        c: number;
+      }
+    ).c;
     const failures = total - successes;
-    const last24h = (this.db.prepare('SELECT COUNT(*) as c FROM notification_logs WHERE sent_at > ?').get(Date.now() - 86400000) as { c: number }).c;
+    const last24h = (
+      this.db
+        .prepare('SELECT COUNT(*) as c FROM notification_logs WHERE sent_at > ?')
+        .get(Date.now() - 86400000) as { c: number }
+    ).c;
 
-    const platformRows = this.db.prepare(`
+    const platformRows = this.db
+      .prepare(
+        `
       SELECT d.platform, COUNT(l.id) as count
       FROM notification_logs l
       JOIN devices d ON l.device_id = d.id
       GROUP BY d.platform
-    `).all() as Array<{ platform: string; count: number }>;
+    `,
+      )
+      .all() as Array<{ platform: string; count: number }>;
 
     const byPlatform: Record<string, number> = {};
     for (const row of platformRows) {
@@ -404,7 +478,9 @@ class MobilePushFeature implements FeatureModule {
    * Update device lastSeen timestamp (call when device checks in).
    */
   touchDevice(deviceId: string): boolean {
-    const result = this.db.prepare('UPDATE devices SET last_seen = ? WHERE id = ?').run(Date.now(), deviceId);
+    const result = this.db
+      .prepare('UPDATE devices SET last_seen = ? WHERE id = ?')
+      .run(Date.now(), deviceId);
     return result.changes > 0;
   }
 
@@ -412,7 +488,9 @@ class MobilePushFeature implements FeatureModule {
    * Enable/disable a device.
    */
   setDeviceEnabled(deviceId: string, enabled: boolean): boolean {
-    const result = this.db.prepare('UPDATE devices SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, deviceId);
+    const result = this.db
+      .prepare('UPDATE devices SET enabled = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, deviceId);
     if (result.changes > 0) {
       this.ctx.logger.info('Device enabled state changed', { deviceId, enabled });
       return true;

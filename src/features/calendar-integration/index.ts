@@ -9,7 +9,12 @@ import path from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Calendar configuration */
 export interface CalendarConfig {
@@ -180,8 +185,15 @@ class CalendarIntegrationFeature implements FeatureModule {
       ORDER BY start_time ASC
     `);
 
-    const rows = stmt.all(startOfDay, endOfDay, startOfDay, endOfDay, startOfDay, endOfDay) as any[];
-    return rows.map(row => this.rowToEvent(row));
+    const rows = stmt.all(
+      startOfDay,
+      endOfDay,
+      startOfDay,
+      endOfDay,
+      startOfDay,
+      endOfDay,
+    ) as any[];
+    return rows.map((row) => this.rowToEvent(row));
   }
 
   /** Create a new event */
@@ -227,7 +239,7 @@ class CalendarIntegrationFeature implements FeatureModule {
       data.recurrence?.until ?? null,
       data.recurrence?.count ?? null,
       now,
-      now
+      now,
     );
 
     // Insert reminders
@@ -239,7 +251,8 @@ class CalendarIntegrationFeature implements FeatureModule {
       for (const rem of data.reminders) {
         const remId = rem.id ?? `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         // Determine reminder time
-        const remTime: number = rem.time || (startTime - this.config.defaultReminderMinutes * 60 * 1000);
+        const remTime: number =
+          rem.time || startTime - this.config.defaultReminderMinutes * 60 * 1000;
         remStmt.run(remId, id, remTime, rem.triggered ? 1 : 0, rem.method ?? 'notification');
       }
     }
@@ -257,15 +270,18 @@ class CalendarIntegrationFeature implements FeatureModule {
   }
 
   /** Update an event */
-  updateEvent(id: string, data: Partial<{
-    title: string;
-    description: string;
-    startTime: Date | number;
-    endTime: Date | number;
-    allDay: boolean;
-    location: string;
-    recurrence: RecurrenceRule;
-  }>): CalendarEvent | null {
+  updateEvent(
+    id: string,
+    data: Partial<{
+      title: string;
+      description: string;
+      startTime: Date | number;
+      endTime: Date | number;
+      allDay: boolean;
+      location: string;
+      recurrence: RecurrenceRule;
+    }>,
+  ): CalendarEvent | null {
     const existing = this.getEvent(id);
     if (!existing) {
       return null;
@@ -337,8 +353,10 @@ class CalendarIntegrationFeature implements FeatureModule {
 
   /** Get reminders for an event */
   private getRemindersForEvent(eventId: string): Reminder[] {
-    const rows = this.db.prepare('SELECT * FROM reminders WHERE event_id = ?').all(eventId) as any[];
-    return rows.map(row => ({
+    const rows = this.db
+      .prepare('SELECT * FROM reminders WHERE event_id = ?')
+      .all(eventId) as any[];
+    return rows.map((row) => ({
       id: row.id,
       eventId: row.event_id,
       time: row.time,
@@ -357,12 +375,14 @@ class CalendarIntegrationFeature implements FeatureModule {
       endTime: row.end_time,
       allDay: Boolean(row.all_day),
       location: row.location,
-      recurrence: row.recurrence_rule ? {
-        frequency: row.recurrence_rule as RecurrenceRule['frequency'],
-        interval: row.recurrence_interval,
-        until: row.recurrence_until,
-        count: row.recurrence_count,
-      } : undefined,
+      recurrence: row.recurrence_rule
+        ? {
+            frequency: row.recurrence_rule as RecurrenceRule['frequency'],
+            interval: row.recurrence_interval,
+            until: row.recurrence_until,
+            count: row.recurrence_count,
+          }
+        : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       reminders: [], // fill separately with getRemindersForEvent
@@ -375,9 +395,12 @@ class CalendarIntegrationFeature implements FeatureModule {
     if (!event) return null;
 
     const id = `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const time: number = reminder.time || (event.startTime - this.config.defaultReminderMinutes * 60 * 1000);
+    const time: number =
+      reminder.time || event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
 
-    const stmt = this.db.prepare('INSERT INTO reminders (id, event_id, time, triggered, method) VALUES (?, ?, ?, ?, ?)');
+    const stmt = this.db.prepare(
+      'INSERT INTO reminders (id, event_id, time, triggered, method) VALUES (?, ?, ?, ?, ?)',
+    );
     stmt.run(id, eventId, time, reminder.triggered ? 1 : 0, reminder.method ?? 'notification');
 
     // Return the created reminder
@@ -399,8 +422,10 @@ class CalendarIntegrationFeature implements FeatureModule {
   /** Get pending reminders (not triggered, time <= now) */
   getPendingReminders(): Reminder[] {
     const now = Date.now();
-    const rows = this.db.prepare('SELECT * FROM reminders WHERE triggered = 0 AND time <= ?').all(now) as any[];
-    return rows.map(row => ({
+    const rows = this.db
+      .prepare('SELECT * FROM reminders WHERE triggered = 0 AND time <= ?')
+      .all(now) as any[];
+    return rows.map((row) => ({
       id: row.id,
       eventId: row.event_id,
       time: row.time,
@@ -425,10 +450,12 @@ class CalendarIntegrationFeature implements FeatureModule {
       LIMIT ?
     `);
     const rows = stmt.all(now, limit) as any[];
-    return rows.map(row => this.rowToEvent(row)).map(event => ({
-      ...event,
-      reminders: this.getRemindersForEvent(event.id),
-    }));
+    return rows
+      .map((row) => this.rowToEvent(row))
+      .map((event) => ({
+        ...event,
+        reminders: this.getRemindersForEvent(event.id),
+      }));
   }
 
   /** Query events by date range */
@@ -443,10 +470,12 @@ class CalendarIntegrationFeature implements FeatureModule {
       ORDER BY start_time ASC
     `);
     const rows = stmt.all(start, end, start, end, start, end) as any[];
-    return rows.map(row => this.rowToEvent(row)).map(event => ({
-      ...event,
-      reminders: this.getRemindersForEvent(event.id),
-    }));
+    return rows
+      .map((row) => this.rowToEvent(row))
+      .map((event) => ({
+        ...event,
+        reminders: this.getRemindersForEvent(event.id),
+      }));
   }
 }
 

@@ -10,7 +10,12 @@ import crypto from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Supported TTS providers */
 export type TtsProvider = 'elevenlabs' | 'google' | 'azure' | 'local';
@@ -88,7 +93,10 @@ class TtsEngineFeature implements FeatureModule {
 
   // Cache
   private cacheDir!: string;
-  private cacheIndex: Map<string, { path: string; voice: string; format: AudioFormat; size: number; created: number }> = new Map();
+  private cacheIndex: Map<
+    string,
+    { path: string; voice: string; format: AudioFormat; size: number; created: number }
+  > = new Map();
 
   constructor() {
     this.config = {
@@ -133,7 +141,8 @@ class TtsEngineFeature implements FeatureModule {
   async healthCheck(): Promise<HealthStatus> {
     try {
       const cacheFiles = this.cacheIndex.size;
-      const cacheSizeMB = Array.from(this.cacheIndex.values()).reduce((acc, v) => acc + v.size, 0) / (1024 * 1024);
+      const cacheSizeMB =
+        Array.from(this.cacheIndex.values()).reduce((acc, v) => acc + v.size, 0) / (1024 * 1024);
 
       return {
         healthy: true,
@@ -180,7 +189,7 @@ class TtsEngineFeature implements FeatureModule {
    * Set the default voice ID.
    */
   setDefaultVoice(voiceId: string): boolean {
-    const exists = this.voices.some(v => v.id === voiceId);
+    const exists = this.voices.some((v) => v.id === voiceId);
     if (exists) {
       this.defaultVoice = voiceId;
       this.ctx.logger.info('Default TTS voice set', { voiceId });
@@ -207,7 +216,7 @@ class TtsEngineFeature implements FeatureModule {
     }
 
     const format = request.format ?? this.config.defaultFormat;
-    const voice = this.voices.find(v => v.id === voiceId);
+    const voice = this.voices.find((v) => v.id === voiceId);
 
     if (!voice) {
       throw new Error(`Voice not found: ${voiceId}`);
@@ -237,7 +246,7 @@ class TtsEngineFeature implements FeatureModule {
     const audioPath = await this.synthesizeInternal(text, voice, request);
 
     // Get file size
-    const stats = await import('fs').then(fs => fs.statSync(audioPath));
+    const stats = await import('fs').then((fs) => fs.statSync(audioPath));
     const size = stats.size;
 
     // Cache the result
@@ -286,7 +295,10 @@ class TtsEngineFeature implements FeatureModule {
         this.cacheIndex.delete(cacheKey);
         deleted++;
       } catch (err) {
-        this.ctx.logger.warn('Failed to delete cached file', { path: info.path, error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.warn('Failed to delete cached file', {
+          path: info.path,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -312,7 +324,11 @@ class TtsEngineFeature implements FeatureModule {
    * Internal synthesis stub - creates empty/silent file.
    * Real implementation would call provider API and save audio.
    */
-  private async synthesizeInternal(text: string, voice: Voice, request: SynthesisRequest): Promise<string> {
+  private async synthesizeInternal(
+    text: string,
+    voice: Voice,
+    request: SynthesisRequest,
+  ): Promise<string> {
     // Generate filename
     const ext = request.format ?? this.config.defaultFormat;
     const filename = `${crypto.randomBytes(16).toString('hex')}.${ext}`;
@@ -350,33 +366,123 @@ class TtsEngineFeature implements FeatureModule {
     // Default voices - in real implementation these would be fetched from provider APIs
     if (this.provider === 'elevenlabs') {
       this.voices = [
-        { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', provider: 'elevenlabs', language: 'en', gender: 'female' },
-        { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi', provider: 'elevenlabs', language: 'en', gender: 'female' },
-        { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', provider: 'elevenlabs', language: 'en', gender: 'female' },
-        { id: 'ErXwoba YiNxjP1xXxNwZ', name: 'Antoni', provider: 'elevenlabs', language: 'en', gender: 'male' },
-        { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', provider: 'elevenlabs', language: 'en', gender: 'female' },
-        { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', provider: 'elevenlabs', language: 'en', gender: 'male' },
-        { id: 'VR6AewLTigWG4x5ukaTc', name: 'Arnold', provider: 'elevenlabs', language: 'en', gender: 'male' },
-        { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', provider: 'elevenlabs', language: 'en', gender: 'male' },
-        { id: 'yoZ06aMxZJJ28mfd3LOQ', name: 'Sam', provider: 'elevenlabs', language: 'en', gender: 'male' },
+        {
+          id: '21m00Tcm4TlvDq8ikWAM',
+          name: 'Rachel',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'female',
+        },
+        {
+          id: 'AZnzlk1XvdvUeBnXmlld',
+          name: 'Domi',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'female',
+        },
+        {
+          id: 'EXAVITQu4vr4xnSDxMaL',
+          name: 'Bella',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'female',
+        },
+        {
+          id: 'ErXwoba YiNxjP1xXxNwZ',
+          name: 'Antoni',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'male',
+        },
+        {
+          id: 'MF3mGyEYCl7XYWbV9V6O',
+          name: 'Elli',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'female',
+        },
+        {
+          id: 'TxGEqnHWrfWFTfGW9XjX',
+          name: 'Josh',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'male',
+        },
+        {
+          id: 'VR6AewLTigWG4x5ukaTc',
+          name: 'Arnold',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'male',
+        },
+        {
+          id: 'pNInz6obpgDQGcFmaJgB',
+          name: 'Adam',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'male',
+        },
+        {
+          id: 'yoZ06aMxZJJ28mfd3LOQ',
+          name: 'Sam',
+          provider: 'elevenlabs',
+          language: 'en',
+          gender: 'male',
+        },
       ];
       this.defaultVoice = this.defaultVoice || '21m00Tcm4TlvDq8ikWAM';
     } else if (this.provider === 'google') {
       this.voices = [
-        { id: 'en-US-Wavenet-D', name: 'Wavenet D', provider: 'google', language: 'en-US', gender: 'female' },
-        { id: 'en-US-Wavenet-F', name: 'Wavenet F', provider: 'google', language: 'en-US', gender: 'male' },
-        { id: 'en-US-Wavenet-J', name: 'Wavenet J', provider: 'google', language: 'en-US', gender: 'male' },
+        {
+          id: 'en-US-Wavenet-D',
+          name: 'Wavenet D',
+          provider: 'google',
+          language: 'en-US',
+          gender: 'female',
+        },
+        {
+          id: 'en-US-Wavenet-F',
+          name: 'Wavenet F',
+          provider: 'google',
+          language: 'en-US',
+          gender: 'male',
+        },
+        {
+          id: 'en-US-Wavenet-J',
+          name: 'Wavenet J',
+          provider: 'google',
+          language: 'en-US',
+          gender: 'male',
+        },
       ];
       this.defaultVoice = this.defaultVoice || 'en-US-Wavenet-D';
     } else if (this.provider === 'azure') {
       this.voices = [
-        { id: 'en-US-JennyNeural', name: 'Jenny', provider: 'azure', language: 'en-US', gender: 'female' },
-        { id: 'en-US-GuyNeural', name: 'Guy', provider: 'azure', language: 'en-US', gender: 'male' },
+        {
+          id: 'en-US-JennyNeural',
+          name: 'Jenny',
+          provider: 'azure',
+          language: 'en-US',
+          gender: 'female',
+        },
+        {
+          id: 'en-US-GuyNeural',
+          name: 'Guy',
+          provider: 'azure',
+          language: 'en-US',
+          gender: 'male',
+        },
       ];
       this.defaultVoice = this.defaultVoice || 'en-US-JennyNeural';
     } else if (this.provider === 'local') {
       this.voices = [
-        { id: 'local-default', name: 'Local System', provider: 'local', language: 'en', description: 'Uses system TTS engine' },
+        {
+          id: 'local-default',
+          name: 'Local System',
+          provider: 'local',
+          language: 'en',
+          description: 'Uses system TTS engine',
+        },
       ];
       this.defaultVoice = this.defaultVoice || 'local-default';
     }

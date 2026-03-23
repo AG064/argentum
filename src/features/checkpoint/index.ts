@@ -5,7 +5,12 @@
  * Integrates with mesh-workflows for persistent workflow state.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import { getSemanticMemory } from '../../memory/semantic';
 
 /** Checkpoint configuration */
@@ -73,7 +78,7 @@ class CheckpointFeature implements FeatureModule {
   async start(): Promise<void> {
     if (this.config.autoCheckpoint && this.config.checkpointIntervalMs > 0) {
       this.timer = setInterval(() => {
-        this.autoCheckpointAll().catch(err => {
+        this.autoCheckpointAll().catch((err) => {
           this.ctx.logger.error('Auto-checkpoint failed', {
             error: err instanceof Error ? err.message : String(err),
           });
@@ -122,7 +127,7 @@ class CheckpointFeature implements FeatureModule {
   async checkpoint(
     taskId: string,
     state: unknown,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ): Promise<void> {
     const memory = getSemanticMemory();
     await memory.checkpoint(taskId, {
@@ -143,14 +148,20 @@ class CheckpointFeature implements FeatureModule {
     });
 
     // Also store as semantic memory for searchability
-    await memory.store('checkpoint', `Checkpoint for task ${taskId}: ${JSON.stringify(state).slice(0, 200)}`, {
-      taskId,
-      checkpointTime: new Date().toISOString(),
-    });
+    await memory.store(
+      'checkpoint',
+      `Checkpoint for task ${taskId}: ${JSON.stringify(state).slice(0, 200)}`,
+      {
+        taskId,
+        checkpointTime: new Date().toISOString(),
+      },
+    );
   }
 
   /** Resume a checkpointed task */
-  async resume(taskId: string): Promise<{ state: unknown; context: Record<string, unknown> } | null> {
+  async resume(
+    taskId: string,
+  ): Promise<{ state: unknown; context: Record<string, unknown> } | null> {
     const memory = getSemanticMemory();
     const data = await memory.resume(taskId);
 
@@ -177,9 +188,7 @@ class CheckpointFeature implements FeatureModule {
     const memory = getSemanticMemory();
     const db = memory.getDb();
 
-    const rows = db.prepare(
-      'SELECT * FROM checkpoints ORDER BY updated_at DESC'
-    ).all() as Array<{
+    const rows = db.prepare('SELECT * FROM checkpoints ORDER BY updated_at DESC').all() as Array<{
       task_id: string;
       state: string;
       context: string;
@@ -187,7 +196,7 @@ class CheckpointFeature implements FeatureModule {
       updated_at: number;
     }>;
 
-    return rows.map(row => {
+    return rows.map((row) => {
       const stateStr = row.state;
       return {
         taskId: row.task_id,
@@ -216,7 +225,8 @@ class CheckpointFeature implements FeatureModule {
     const db = memory.getDb();
 
     const row = db.prepare('SELECT * FROM checkpoints WHERE task_id = ?').get(taskId) as
-      { task_id: string; state: string; context: string; created_at: number; updated_at: number } | undefined;
+      | { task_id: string; state: string; context: string; created_at: number; updated_at: number }
+      | undefined;
 
     if (!row) return null;
 
@@ -262,7 +272,7 @@ class CheckpointFeature implements FeatureModule {
     const task = this.activeTasks.get(taskData.taskId);
     if (task) {
       await this.checkpoint(taskData.taskId, {
-        ...task.state as Record<string, unknown>,
+        ...(task.state as Record<string, unknown>),
         completed: true,
         completedAt: new Date().toISOString(),
       });
@@ -300,7 +310,7 @@ class CheckpointFeature implements FeatureModule {
     try {
       const ctx = JSON.parse(contextStr) as Record<string, unknown>;
       const keys = Object.keys(ctx).slice(0, 3);
-      return keys.map(k => `${k}: ${JSON.stringify(ctx[k]).slice(0, 30)}`).join(', ');
+      return keys.map((k) => `${k}: ${JSON.stringify(ctx[k]).slice(0, 30)}`).join(', ');
     } catch {
       return contextStr.slice(0, 100);
     }

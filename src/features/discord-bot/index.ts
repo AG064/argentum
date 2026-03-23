@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Discord message (simplified) */
 export interface DiscordMessage {
@@ -149,8 +154,12 @@ class DiscordBotFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const sentCount = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }).c;
-      const receivedCount = (this.db.prepare('SELECT COUNT(*) as c FROM received_messages').get() as { c: number }).c;
+      const sentCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }
+      ).c;
+      const receivedCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM received_messages').get() as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -190,8 +199,13 @@ class DiscordBotFeature implements FeatureModule {
       commandPrefix: this.commandPrefix,
     });
 
-    this.db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('discord', value);
-    this.ctx.logger.info('DiscordBot configured', { hasGuild: !!guildId, prefix: this.commandPrefix });
+    this.db
+      .prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)')
+      .run('discord', value);
+    this.ctx.logger.info('DiscordBot configured', {
+      hasGuild: !!guildId,
+      prefix: this.commandPrefix,
+    });
   }
 
   /**
@@ -206,10 +220,17 @@ class DiscordBotFeature implements FeatureModule {
    */
   setCommandPrefix(prefix: string): void {
     this.commandPrefix = prefix;
-    this.db.prepare('UPDATE config SET value = ? WHERE key = ?').run(
-      JSON.stringify({ token: this.token, clientId: this.clientId, guildId: this.guildId, commandPrefix: this.commandPrefix }),
-      'discord'
-    );
+    this.db
+      .prepare('UPDATE config SET value = ? WHERE key = ?')
+      .run(
+        JSON.stringify({
+          token: this.token,
+          clientId: this.clientId,
+          guildId: this.guildId,
+          commandPrefix: this.commandPrefix,
+        }),
+        'discord',
+      );
   }
 
   /**
@@ -259,7 +280,13 @@ class DiscordBotFeature implements FeatureModule {
    * Process an incoming Discord message (stub).
    * Would be called by gateway event in real implementation.
    */
-  async receiveMessage(raw: Partial<DiscordMessage> & { id: string; channelId: string; author: { id: string; username: string } }): Promise<void> {
+  async receiveMessage(
+    raw: Partial<DiscordMessage> & {
+      id: string;
+      channelId: string;
+      author: { id: string; username: string };
+    },
+  ): Promise<void> {
     const message: DiscordMessage = {
       id: raw.id,
       channelId: raw.channelId,
@@ -279,14 +306,19 @@ class DiscordBotFeature implements FeatureModule {
 
     this.logReceivedMessage(message);
 
-    this.ctx.logger.debug('Discord message received', { channelId: message.channelId, author: message.author.username });
+    this.ctx.logger.debug('Discord message received', {
+      channelId: message.channelId,
+      author: message.author.username,
+    });
 
     // Invoke handlers
     for (const handler of this.messageHandlers) {
       try {
         await handler(message);
       } catch (err) {
-        this.ctx.logger.error('Discord message handler error', { error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.error('Discord message handler error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
@@ -295,12 +327,16 @@ class DiscordBotFeature implements FeatureModule {
    * Get message history for a channel (stub).
    */
   getHistory(channelId: string, limit: number = 50): DiscordMessage[] {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM received_messages
       WHERE channel_id = ?
       ORDER BY timestamp DESC
       LIMIT ?
-    `).all(channelId, limit) as Array<{
+    `,
+      )
+      .all(channelId, limit) as Array<{
       id: string;
       channel_id: string;
       guild_id: string | null;
@@ -314,7 +350,7 @@ class DiscordBotFeature implements FeatureModule {
       embeds: string | null;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       channelId: r.channel_id,
       guildId: r.guild_id ?? undefined,
@@ -340,8 +376,11 @@ class DiscordBotFeature implements FeatureModule {
     messagesReceived: number;
     activeHandlers: number;
   } {
-    const sent = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number }).c;
-    const received = (this.db.prepare('SELECT COUNT(*) as c FROM received_messages').get() as { c: number }).c;
+    const sent = (this.db.prepare('SELECT COUNT(*) as c FROM sent_messages').get() as { c: number })
+      .c;
+    const received = (
+      this.db.prepare('SELECT COUNT(*) as c FROM received_messages').get() as { c: number }
+    ).c;
 
     return {
       configured: this.isReady(),
@@ -353,30 +392,38 @@ class DiscordBotFeature implements FeatureModule {
 
   /** Log sent message */
   private logSentMessage(msg: DiscordMessage): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO sent_messages (id, channel_id, content, sent_at)
       VALUES (?, ?, ?, ?)
-    `).run(msg.id, msg.channelId, msg.content, msg.timestamp);
+    `,
+      )
+      .run(msg.id, msg.channelId, msg.content, msg.timestamp);
   }
 
   /** Log received message */
   private logReceivedMessage(msg: DiscordMessage): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO received_messages (id, channel_id, guild_id, author_id, author_username, author_discriminator, author_bot, content, timestamp, attachments, embeds)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      msg.id,
-      msg.channelId,
-      msg.guildId ?? null,
-      msg.author.id,
-      msg.author.username,
-      msg.author.discriminator ?? null,
-      msg.author.bot ? 1 : 0,
-      msg.content,
-      msg.timestamp,
-      msg.attachments ? JSON.stringify(msg.attachments) : null,
-      msg.embeds ? JSON.stringify(msg.embeds) : null
-    );
+    `,
+      )
+      .run(
+        msg.id,
+        msg.channelId,
+        msg.guildId ?? null,
+        msg.author.id,
+        msg.author.username,
+        msg.author.discriminator ?? null,
+        msg.author.bot ? 1 : 0,
+        msg.content,
+        msg.timestamp,
+        msg.attachments ? JSON.stringify(msg.attachments) : null,
+        msg.embeds ? JSON.stringify(msg.embeds) : null,
+      );
   }
 
   /** Initialize database and create tables */

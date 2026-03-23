@@ -14,7 +14,11 @@ import 'dotenv/config';
 
 import { getConfig, type AGClawConfig } from './core/config';
 import {
-  type LLMProvider, type Message, type ToolDefinition, type LLMResponse, createLLMProvider,
+  type LLMProvider,
+  type Message,
+  type ToolDefinition,
+  type LLMResponse,
+  createLLMProvider,
 } from './core/llm-provider';
 import { createLogger, type Logger } from './core/logger';
 import { PluginLoader } from './core/plugin-loader';
@@ -42,7 +46,9 @@ export class Agent {
   constructor(model: LLMProvider, systemPrompt?: string) {
     this.model = model;
     this.logger = createLogger().child({ feature: 'agent' });
-    this.systemPrompt = systemPrompt ?? `You are AG-Claw, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
+    this.systemPrompt =
+      systemPrompt ??
+      `You are AG-Claw, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
   }
 
   registerTool(tool: Tool): void {
@@ -69,7 +75,7 @@ export class Agent {
     ];
 
     // Convert tools to LLM format
-    const toolDefs: ToolDefinition[] = Array.from(this.tools.values()).map(t => ({
+    const toolDefs: ToolDefinition[] = Array.from(this.tools.values()).map((t) => ({
       type: 'function' as const,
       function: {
         name: t.name,
@@ -77,8 +83,8 @@ export class Agent {
         parameters: {
           type: 'object',
           properties: t.parameters,
-          required: Object.keys(t.parameters).filter(k =>
-            (t.parameters[k] as Record<string, unknown>)['required'] === true
+          required: Object.keys(t.parameters).filter(
+            (k) => (t.parameters[k] as Record<string, unknown>)['required'] === true,
           ),
         },
       },
@@ -95,7 +101,9 @@ export class Agent {
       try {
         response = await this.model.chat(messages, toolDefs.length > 0 ? toolDefs : undefined);
       } catch (err) {
-        this.logger.error('LLM call failed', { error: err instanceof Error ? err.message : String(err) });
+        this.logger.error('LLM call failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
 
@@ -108,7 +116,7 @@ export class Agent {
         const assistantMsg: Message = {
           role: 'assistant',
           content: response.content ?? '',
-          tool_calls: response.toolCalls.map(tc => ({
+          tool_calls: response.toolCalls.map((tc) => ({
             id: tc.id,
             type: 'function' as const,
             function: {
@@ -197,7 +205,8 @@ function createBuiltinTools(): Tool[] {
   return [
     {
       name: 'web_search',
-      description: 'Search the web for information. Returns search results with titles and snippets.',
+      description:
+        'Search the web for information. Returns search results with titles and snippets.',
       parameters: {
         query: { type: 'string', description: 'The search query', required: true },
       },
@@ -208,15 +217,18 @@ function createBuiltinTools(): Tool[] {
         // Use DuckDuckGo instant answer API as a lightweight search
         try {
           const response = await fetch(
-            `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
+            `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
           );
-          const data = await response.json() as Record<string, unknown>;
+          const data = (await response.json()) as Record<string, unknown>;
           const abstract = data.Abstract as string;
           const heading = data.Heading as string;
-          const related = (data.RelatedTopics as Array<{ Text: string }> ?? []).slice(0, 5).map(t => t.Text).join('\n');
+          const related = ((data.RelatedTopics as Array<{ Text: string }>) ?? [])
+            .slice(0, 5)
+            .map((t) => t.Text)
+            .join('\n');
 
           if (abstract) {
-            return `Search result for "${query}":\n${heading ? `${heading  }\n` : ''}${abstract}`;
+            return `Search result for "${query}":\n${heading ? `${heading}\n` : ''}${abstract}`;
           } else if (related) {
             return `Search results for "${query}":\n${related}`;
           } else {
@@ -255,9 +267,7 @@ function createBuiltinTools(): Tool[] {
 
         try {
           const content = readFileSync(safePath, 'utf-8');
-          return content.length > 5000
-            ? `${content.slice(0, 5000)  }\n... (truncated)`
-            : content;
+          return content.length > 5000 ? `${content.slice(0, 5000)}\n... (truncated)` : content;
         } catch (err) {
           return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
         }
@@ -276,7 +286,8 @@ function createBuiltinTools(): Tool[] {
         const filePath = params['path'] as string;
         const content = params['content'] as string;
 
-        if (!filePath || content === undefined) return 'Error: path and content parameters are required';
+        if (!filePath || content === undefined)
+          return 'Error: path and content parameters are required';
 
         try {
           mkdirSync(dirname(filePath), { recursive: true });
@@ -301,14 +312,18 @@ function createBuiltinTools(): Tool[] {
 
         // Block dangerous commands
         const blocked = ['rm -rf /', 'mkfs', 'dd if=', ':(){ :|:& };:', 'chmod 777'];
-        if (blocked.some(b => cmd.includes(b))) {
+        if (blocked.some((b) => cmd.includes(b))) {
           return 'Error: This command is blocked for safety reasons.';
         }
 
         try {
-          const output = execSync(cmd, { timeout: 30000, encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+          const output = execSync(cmd, {
+            timeout: 30000,
+            encoding: 'utf-8',
+            maxBuffer: 1024 * 1024,
+          });
           return output.length > 5000
-            ? `${output.slice(0, 5000)  }\n... (truncated)`
+            ? `${output.slice(0, 5000)}\n... (truncated)`
             : output || '(no output)';
         } catch (err: unknown) {
           const e = err as { message: string; stderr?: string };
@@ -383,7 +398,9 @@ class AGClaw {
       this.llmProvider = createLLMProvider({
         llm: llmConfig,
       });
-      this.logger.info(`LLM provider initialized: ${this.llmProvider.name} (${this.llmProvider.model})`);
+      this.logger.info(
+        `LLM provider initialized: ${this.llmProvider.name} (${this.llmProvider.model})`,
+      );
     } catch (err) {
       this.logger.warn('LLM provider not configured, agent will have limited capabilities', {
         error: err instanceof Error ? err.message : String(err),
@@ -395,7 +412,8 @@ class AGClaw {
         baseUrl: '',
         async chat(_messages: Message[]): Promise<LLMResponse> {
           return {
-            content: 'I am running in stub mode. Please configure OPENROUTER_API_KEY or ANTHROPIC_API_KEY to enable full capabilities.',
+            content:
+              'I am running in stub mode. Please configure OPENROUTER_API_KEY or ANTHROPIC_API_KEY to enable full capabilities.',
             usage: { prompt: 0, completion: 0 },
           };
         },
@@ -418,14 +436,14 @@ class AGClaw {
     await this.pluginLoader.enableAll();
 
     // Emit startup hook for OMEGA Memory features (auto-capture, consolidation, checkpoint)
-    await this.pluginLoader['emitHook']?.('system:start', { timestamp: Date.now() }) ??
+    (await this.pluginLoader['emitHook']?.('system:start', { timestamp: Date.now() })) ??
       this.logger.debug('Hook emission not available on plugin loader');
 
     // Start channels
     await this.startChannels();
 
     const features = this.pluginLoader.listFeatures();
-    const activeCount = features.filter(f => f.state === 'active').length;
+    const activeCount = features.filter((f) => f.state === 'active').length;
     const totalCount = features.length;
 
     this.logger.info(`AG-Claw started successfully`, {
@@ -444,7 +462,10 @@ class AGClaw {
 
     // Start Telegram if configured
     if (channels?.['telegram']?.['enabled'] !== false) {
-      const token = (channels?.['telegram']?.['token'] as string) ?? process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
+      const token =
+        (channels?.['telegram']?.['token'] as string) ??
+        process.env.AGCLAW_TELEGRAM_TOKEN ??
+        process.env.TELEGRAM_BOT_TOKEN;
       if (token) {
         try {
           await this.startTelegram(token, channels?.['telegram']);
@@ -454,7 +475,9 @@ class AGClaw {
           });
         }
       } else {
-        this.logger.info('Telegram channel enabled but no token provided (set AGCLAW_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)');
+        this.logger.info(
+          'Telegram channel enabled but no token provided (set AGCLAW_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)',
+        );
       }
     }
 
@@ -465,7 +488,10 @@ class AGClaw {
   }
 
   /** Start Telegram bot using grammY */
-  private async startTelegram(token: string, channelConfig?: Record<string, unknown>): Promise<void> {
+  private async startTelegram(
+    token: string,
+    channelConfig?: Record<string, unknown>,
+  ): Promise<void> {
     try {
       const { Bot } = await import('grammy');
       const bot = new Bot(token);
@@ -507,7 +533,10 @@ class AGClaw {
           const autoCapture = (await import('./features/auto-capture')).default;
           const captures = autoCapture.detectCaptures(text, `telegram:${ctx.from?.id}`);
           if (captures.length > 0) {
-            this.logger.info('Auto-captured items', { count: captures.length, types: captures.map(c => c.type) });
+            this.logger.info('Auto-captured items', {
+              count: captures.length,
+              types: captures.map((c) => c.type),
+            });
             for (const capture of captures) {
               await this.semanticMemory.store(capture.type, capture.content, {
                 source: 'telegram',
@@ -517,11 +546,17 @@ class AGClaw {
             }
           }
         } catch (err) {
-          this.logger.debug('Auto-capture skipped', { error: err instanceof Error ? err.message : String(err) });
+          this.logger.debug('Auto-capture skipped', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
 
         // Emit message received hook
-        await this.pluginLoader['emitHook']?.('message:received', { text, userId: ctx.from?.id, chatId: ctx.chat?.id });
+        await this.pluginLoader['emitHook']?.('message:received', {
+          text,
+          userId: ctx.from?.id,
+          chatId: ctx.chat?.id,
+        });
 
         // Show typing indicator
         await ctx.replyWithChatAction('typing');
@@ -533,7 +568,9 @@ class AGClaw {
           this.logger.error('Agent error', {
             error: err instanceof Error ? err.message : String(err),
           });
-          await ctx.reply('Sorry, I encountered an error processing your request. Please try again.');
+          await ctx.reply(
+            'Sorry, I encountered an error processing your request. Please try again.',
+          );
         }
       });
 
@@ -564,23 +601,30 @@ class AGClaw {
             formData.append('file', blob, 'voice.ogg');
             formData.append('model', 'whisper-1');
 
-            const transcribeResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${openaiKey}` },
-              body: formData,
-            });
+            const transcribeResponse = await fetch(
+              'https://api.openai.com/v1/audio/transcriptions',
+              {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${openaiKey}` },
+                body: formData,
+              },
+            );
 
             if (transcribeResponse.ok) {
-              const { text } = await transcribeResponse.json() as { text: string };
+              const { text } = (await transcribeResponse.json()) as { text: string };
               this.logger.info('Voice transcribed', { text: text.slice(0, 100) });
 
               const agentResponse = await this.agent.handleMessage(text);
-              await ctx.reply(`🎤 *Transcription:* ${text}\n\n${agentResponse}`, { parse_mode: 'Markdown' });
+              await ctx.reply(`🎤 *Transcription:* ${text}\n\n${agentResponse}`, {
+                parse_mode: 'Markdown',
+              });
             } else {
               await ctx.reply('Sorry, I was unable to transcribe your voice message.');
             }
           } else {
-            await ctx.reply('I received your voice message, but voice transcription is not configured (OPENAI_API_KEY not set).');
+            await ctx.reply(
+              'I received your voice message, but voice transcription is not configured (OPENAI_API_KEY not set).',
+            );
           }
         } catch (err) {
           this.logger.error('Voice processing error', {
@@ -594,8 +638,8 @@ class AGClaw {
       bot.command('start', async (ctx) => {
         await ctx.reply(
           '🤖 Welcome to AG-Claw!\n\n' +
-          'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
-          `Available tools: ${this.agent.getToolNames().join(', ')}`
+            'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
+            `Available tools: ${this.agent.getToolNames().join(', ')}`,
         );
       });
 
@@ -604,28 +648,26 @@ class AGClaw {
         const tools = this.agent.getToolNames();
         await ctx.reply(
           `🤖 *AG-Claw Help*\n\n` +
-          `Just send me any message and I will respond.\n\n` +
-          `*Available tools:*\n${ 
-          tools.map(t => `• /${t}`).join('\n') 
-          }\n\n*Commands:*\n` +
-          `/start - Welcome message\n` +
-          `/help - This help message\n` +
-          `/status - Bot status`,
-          { parse_mode: 'Markdown' }
+            `Just send me any message and I will respond.\n\n` +
+            `*Available tools:*\n${tools.map((t) => `• /${t}`).join('\n')}\n\n*Commands:*\n` +
+            `/start - Welcome message\n` +
+            `/help - This help message\n` +
+            `/status - Bot status`,
+          { parse_mode: 'Markdown' },
         );
       });
 
       // Handle /status command
       bot.command('status', async (ctx) => {
         const features = this.pluginLoader.listFeatures();
-        const activeCount = features.filter(f => f.state === 'active').length;
+        const activeCount = features.filter((f) => f.state === 'active').length;
         await ctx.reply(
           '📊 *AG-Claw Status*\n\n' +
-          `LLM: ${this.llmProvider.name}\n` +
-          `Tools: ${this.agent.getToolNames().length}\n` +
-          `Features: ${activeCount}/${features.length} active\n` +
-          `Uptime: ${Math.floor(process.uptime())}s`,
-          { parse_mode: 'Markdown' }
+            `LLM: ${this.llmProvider.name}\n` +
+            `Tools: ${this.agent.getToolNames().length}\n` +
+            `Features: ${activeCount}/${features.length} active\n` +
+            `Uptime: ${Math.floor(process.uptime())}s`,
+          { parse_mode: 'Markdown' },
         );
       });
 
@@ -665,7 +707,8 @@ class AGClaw {
 
     this.agent.registerTool({
       name: 'memory_search',
-      description: 'Search semantic memory for relevant past conversations, decisions, and lessons.',
+      description:
+        'Search semantic memory for relevant past conversations, decisions, and lessons.',
       parameters: {
         query: { type: 'string', description: 'Search query', required: true },
         limit: { type: 'number', description: 'Max results (default 5)' },
@@ -675,17 +718,22 @@ class AGClaw {
         const limit = (params['limit'] as number) ?? 5;
         const results = await self.semanticMemory.search(query, limit);
         if (results.length === 0) return 'No memories found matching your query.';
-        return results.map(r =>
-          `[${r.type}] ${r.content.slice(0, 200)} (accessed ${r.access_count}x)`
-        ).join('\n');
+        return results
+          .map((r) => `[${r.type}] ${r.content.slice(0, 200)} (accessed ${r.access_count}x)`)
+          .join('\n');
       },
     });
 
     this.agent.registerTool({
       name: 'memory_store',
-      description: 'Store a new memory entry (decision, lesson, error, preference, or general note).',
+      description:
+        'Store a new memory entry (decision, lesson, error, preference, or general note).',
       parameters: {
-        type: { type: 'string', description: 'Type: decision, lesson, error, preference, general', required: true },
+        type: {
+          type: 'string',
+          description: 'Type: decision, lesson, error, preference, general',
+          required: true,
+        },
         content: { type: 'string', description: 'Content to remember', required: true },
       },
       execute: async (params) => {
@@ -725,7 +773,9 @@ class AGClaw {
       },
     });
 
-    this.logger.info('OMEGA Memory tools registered', { tools: ['memory_search', 'memory_store', 'memory_checkpoint', 'memory_resume'] });
+    this.logger.info('OMEGA Memory tools registered', {
+      tools: ['memory_search', 'memory_store', 'memory_checkpoint', 'memory_resume'],
+    });
   }
   /** Register signal handlers for graceful shutdown */
   private registerShutdownHandlers(): void {
@@ -756,7 +806,7 @@ class AGClaw {
   /** Graceful shutdown */
   private async shutdown(): Promise<void> {
     const features = this.pluginLoader.listFeatures();
-    const active = features.filter(f => f.state === 'active');
+    const active = features.filter((f) => f.state === 'active');
 
     this.logger.info(`Stopping ${active.length} active features...`);
 

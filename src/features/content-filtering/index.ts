@@ -12,7 +12,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Content filtering rule */
 export interface FilterRule {
@@ -79,7 +84,12 @@ class ContentFilteringFeature implements FeatureModule {
   private db!: Database.Database;
 
   // Built-in patterns
-  private readonly builtInRules: Array<{ id: string; type: string; name: string; pattern: RegExp }> = [
+  private readonly builtInRules: Array<{
+    id: string;
+    type: string;
+    name: string;
+    pattern: RegExp;
+  }> = [
     {
       id: 'pii-email',
       type: 'pii',
@@ -131,8 +141,10 @@ class ContentFilteringFeature implements FeatureModule {
     this.ctx = context;
     this.config = {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
-      defaultReplacement: (config['defaultReplacement'] as string) ?? this.config['defaultReplacement'],
-      autoFilterProfanity: (config['autoFilterProfanity'] as boolean) ?? this.config['autoFilterProfanity'],
+      defaultReplacement:
+        (config['defaultReplacement'] as string) ?? this.config['defaultReplacement'],
+      autoFilterProfanity:
+        (config['autoFilterProfanity'] as boolean) ?? this.config['autoFilterProfanity'],
       enabledRuleTypes: (config['enabledRuleTypes'] as string[]) ?? this.config['enabledRuleTypes'],
     };
 
@@ -155,8 +167,13 @@ class ContentFilteringFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const ruleCount = (this.db.prepare('SELECT COUNT(*) as c FROM rules').get() as { c: number }).c;
-      const customCount = (this.db.prepare('SELECT COUNT(*) as c FROM rules WHERE type = "custom"').get() as { c: number }).c;
+      const ruleCount = (this.db.prepare('SELECT COUNT(*) as c FROM rules').get() as { c: number })
+        .c;
+      const customCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM rules WHERE type = "custom"').get() as {
+          c: number;
+        }
+      ).c;
       return {
         healthy: true,
         details: {
@@ -205,14 +222,19 @@ class ContentFilteringFeature implements FeatureModule {
         });
 
         if (filter) {
-          filteredText = this.replaceAt(filteredText, match.index + offset, match[0].length, replacement);
+          filteredText = this.replaceAt(
+            filteredText,
+            match.index + offset,
+            match[0].length,
+            replacement,
+          );
           offset += replacement.length - match[0].length;
         }
       }
     }
 
     // Check custom rules
-    const customRules = this.listRules().filter(r => r.type === 'custom' && r.enabled);
+    const customRules = this.listRules().filter((r) => r.type === 'custom' && r.enabled);
     for (const rule of customRules) {
       try {
         const pattern = new RegExp(rule.pattern, 'g');
@@ -227,7 +249,12 @@ class ContentFilteringFeature implements FeatureModule {
           });
 
           if (filter) {
-            filteredText = this.replaceAt(filteredText, match.index + offset, match[0].length, rule.replacement ?? this.config.defaultReplacement);
+            filteredText = this.replaceAt(
+              filteredText,
+              match.index + offset,
+              match[0].length,
+              rule.replacement ?? this.config.defaultReplacement,
+            );
             offset += (rule.replacement ?? this.config.defaultReplacement).length - match[0].length;
           }
         }
@@ -277,7 +304,15 @@ class ContentFilteringFeature implements FeatureModule {
       INSERT INTO rules (id, type, name, pattern, enabled, replacement, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(rule.id, rule.type, rule.name, rule.pattern, rule.enabled ? 1 : 0, rule.replacement ?? null, rule.created_at);
+    stmt.run(
+      rule.id,
+      rule.type,
+      rule.name,
+      rule.pattern,
+      rule.enabled ? 1 : 0,
+      rule.replacement ?? null,
+      rule.created_at,
+    );
 
     this.ctx.logger.info('Custom rule added', { ruleId: id, name });
     return rule;
@@ -304,9 +339,11 @@ class ContentFilteringFeature implements FeatureModule {
    * @returns Array of custom rules
    */
   listRules(): FilterRule[] {
-    const rows = this.db.prepare('SELECT * FROM rules WHERE type = "custom" ORDER BY created_at DESC').all() as RawFilterRule[];
+    const rows = this.db
+      .prepare('SELECT * FROM rules WHERE type = "custom" ORDER BY created_at DESC')
+      .all() as RawFilterRule[];
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       type: r.type,
       name: r.name,
@@ -324,7 +361,9 @@ class ContentFilteringFeature implements FeatureModule {
    * @param enabled - true to enable, false to disable
    */
   setRuleEnabled(id: string, enabled: boolean): boolean {
-    const result = this.db.prepare('UPDATE rules SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+    const result = this.db
+      .prepare('UPDATE rules SET enabled = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, id);
     if (result.changes > 0) {
       this.ctx.logger.info('Rule state changed', { ruleId: id, enabled });
       return true;
@@ -333,13 +372,15 @@ class ContentFilteringFeature implements FeatureModule {
   }
 
   /** Get built-in rule by ID */
-  private _getBuiltInRule(id: string): typeof this.builtInRules[0] | undefined {
-    return this.builtInRules.find(r => r.id === id);
+  private _getBuiltInRule(id: string): (typeof this.builtInRules)[0] | undefined {
+    return this.builtInRules.find((r) => r.id === id);
   }
 
   /** Get custom rule by ID (from DB) */
   private getCustomRule(id: string): FilterRule | undefined {
-    const row = this.db.prepare('SELECT * FROM rules WHERE id = ? AND enabled = 1').get(id) as RawFilterRule | undefined;
+    const row = this.db.prepare('SELECT * FROM rules WHERE id = ? AND enabled = 1').get(id) as
+      | RawFilterRule
+      | undefined;
 
     if (!row) return undefined;
 
@@ -391,10 +432,14 @@ class ContentFilteringFeature implements FeatureModule {
     for (const rule of this.builtInRules) {
       const existing = this.db.prepare('SELECT 1 FROM rules WHERE id = ?').get(rule.id);
       if (!existing) {
-        this.db.prepare(`
+        this.db
+          .prepare(
+            `
           INSERT INTO rules (id, type, name, pattern, enabled, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run(rule.id, rule.type, rule.name, rule.pattern.toString(), 1, Date.now());
+        `,
+          )
+          .run(rule.id, rule.type, rule.name, rule.pattern.toString(), 1, Date.now());
       }
     }
   }
