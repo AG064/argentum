@@ -86,6 +86,42 @@
               </svg>
               Memory
             </a>
+            <a class="nav-item" data-page="budget">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Budget
+            </a>
+            <a class="nav-item" data-page="org-chart">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/>
+                <path d="M12 8v4M5 16v-2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Org Chart
+            </a>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-title">Intelligence</div>
+            <a class="nav-item" data-page="self-improving">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Self-Improving
+            </a>
+            <a class="nav-item" data-page="trajectory">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              Trajectory
+            </a>
+            <a class="nav-item" data-page="skills-hub">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+              Skills Hub
+            </a>
           </div>
           <div class="nav-section">
             <div class="nav-section-title">System</div>
@@ -454,6 +490,71 @@
               </div>
             </div>
           </div>
+
+          <!-- Budget Page -->
+          <div class="page" id="page-budget">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Budget</h1>
+                  <p class="page-description">Monitor spending and configure budget limits.</p>
+                </div>
+              </div>
+            </div>
+            <div id="budgetGrid"></div>
+          </div>
+
+          <!-- Org Chart Page -->
+          <div class="page" id="page-org-chart">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Organization Chart</h1>
+                  <p class="page-description">Manage your agent workforce.</p>
+                </div>
+              </div>
+            </div>
+            <div id="orgChartContainer"></div>
+          </div>
+
+          <!-- Self-Improving Page -->
+          <div class="page" id="page-self-improving">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Self-Improving</h1>
+                  <p class="page-description">Monitor and configure the self-improvement loop.</p>
+                </div>
+              </div>
+            </div>
+            <div id="selfImprovingContainer"></div>
+          </div>
+
+          <!-- Trajectory Page -->
+          <div class="page" id="page-trajectory">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Trajectory Export</h1>
+                  <p class="page-description">Export session data for analysis and training.</p>
+                </div>
+              </div>
+            </div>
+            <div id="trajectoryContainer"></div>
+          </div>
+
+          <!-- Skills Hub Page -->
+          <div class="page" id="page-skills-hub">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Skills Hub</h1>
+                  <p class="page-description">Browse, install, and manage AG-Claw skills.</p>
+                </div>
+              </div>
+            </div>
+            <div id="skillsHubContainer"></div>
+          </div>
         </div>
       </main>
     </div>
@@ -466,6 +567,11 @@
     <script src="js/pages/memory.js"></script>
     <script src="js/pages/settings.js"></script>
     <script src="js/pages/logs.js"></script>
+    <script src="js/pages/budget.js"></script>
+    <script src="js/pages/org-chart.js"></script>
+    <script src="js/pages/self-improving.js"></script>
+    <script src="js/pages/trajectory.js"></script>
+    <script src="js/pages/skills-hub.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

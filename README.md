@@ -78,6 +78,74 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
+## Remote Access
+
+### Option 1: SSH Tunnel (Recommended)
+
+The safest way to access your dashboard remotely. All traffic stays encrypted through SSH.
+
+```bash
+# On your local machine
+ssh -L 3000:localhost:3000 user@your-server
+
+# Then open in your browser
+http://localhost:3000
+```
+
+**Note:** Use `127.0.0.1` instead of `localhost` if you have issues with IPv6.
+
+### Option 2: Tailscale (VPN)
+
+For a permanent VPN solution, use Tailscale:
+
+```bash
+# Install Tailscale on your server
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Login and start
+tailscale up
+
+# Enable reverse proxy
+tailscale serve https
+
+# Access via your Tailscale URL (https://your-machine.tail1234.ts.net)
+```
+
+### Option 3: Cloudflare Tunnel (Zero Config)
+
+If you have a domain with Cloudflare:
+
+```bash
+# Install cloudflared
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+chmod +x cloudflared
+
+# Create tunnel (run once)
+./cloudflared tunnel --url http://localhost:3000
+
+# Note the tunnel URL and use it to access your dashboard
+```
+
+### Security
+
+- **Dashboard requires HTTP Basic Auth** — default user is `admin`, password set via `AGCLAW_DASHBOARD_PASS` env var
+- **All data stays on your server** — no third-party services or cloud dependencies
+- **SSH tunnels are encrypted** — your credentials and data never leave your machines
+- **Consider using a strong password** — change it from the default
+
+### Firewall Setup
+
+Make sure your server firewall allows SSH (port 22) from your IP:
+
+```bash
+# UFW example (Ubuntu/Debian)
+sudo ufw allow from your-local-ip to any port 22
+
+# Don't expose the dashboard port directly to the internet unless using auth + HTTPS
+```
+
+---
+
 ## Features at a Glance
 
 ### Communication Channels
