@@ -17,12 +17,6 @@ import { dirname, resolve } from 'path';
 import Database from 'better-sqlite3';
 
 import {
-  type FeatureModule,
-  type FeatureContext,
-  type FeatureMeta,
-  type HealthStatus,
-} from '../../core/plugin-loader';
-import {
   type BudgetConfig,
   type BudgetConfigInput,
   type BudgetStatus,
@@ -31,6 +25,13 @@ import {
   type TokenUsage,
   MODEL_PRICING,
 } from './types';
+
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Model Pricing ────────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ export const MODEL_PRICING_MAP: Record<string, { input: number; output: number }
  * Falls back to wildcard patterns then to 'unknown' pricing.
  */
 export function calculateCost(model: string, usage: TokenUsage): number {
-  let pricing = MODEL_PRICING_MAP[model];
+  const pricing = MODEL_PRICING_MAP[model];
   if (pricing) {
     return (
       (usage.promptTokens * pricing.input +
@@ -190,7 +191,7 @@ class BudgetFeature implements FeatureModule {
       ...(input.blockOnExhausted !== undefined
         ? { blockOnExhausted: input.blockOnExhausted }
         : {}),
-      ...(input.dbPath ? { dbPath: input.dbPath as string } : {}),
+      ...(input.dbPath ? { dbPath: input.dbPath } : {}),
     };
 
     this.ensureDb();
@@ -216,7 +217,7 @@ class BudgetFeature implements FeatureModule {
     this.ensureDb();
     try {
       const usage = this.getMonthlyUsage();
-      const daily = this.getDailyUsage();
+      const _daily = this.getDailyUsage();
       const healthy =
         usage.totalCost < this.config.globalMonthlyLimit &&
         daily.totalCost < this.config.globalDailyLimit;
@@ -346,7 +347,7 @@ class BudgetFeature implements FeatureModule {
 
   checkBudget(agentId: string): BudgetCheckResult {
     this.ensureDb();
-    const daily = this.getAgentDailyUsage(agentId);
+    const _daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
 
     const agentLimit =
@@ -399,7 +400,7 @@ class BudgetFeature implements FeatureModule {
 
   getUsage(agentId: string): BudgetStatus {
     this.ensureDb();
-    const daily = this.getAgentDailyUsage(agentId);
+    const _daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
     const agentLimit =
       this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
@@ -427,7 +428,7 @@ class BudgetFeature implements FeatureModule {
     const byAgent: BudgetStatus[] = agents.map((a) => this.getUsage(a.agent_id));
 
     const monthly = this.getMonthlyUsage();
-    const daily = this.getDailyUsage();
+    const _daily = this.getDailyUsage();
 
     const alerts: string[] = [];
     for (const status of byAgent) {

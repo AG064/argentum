@@ -13,9 +13,12 @@
 import { randomUUID } from 'crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
+
 import Database from 'better-sqlite3';
 
 import { createLogger, type Logger } from '../../core/logger';
+import { encrypt, decrypt } from '../encrypted-secrets';
+
 import type {
   Policy,
   PolicyCondition,
@@ -29,7 +32,6 @@ import type {
   Blueprint,
   SecurityStats,
 } from '../types';
-import { encrypt, decrypt } from '../encrypted-secrets';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -756,7 +758,7 @@ export class PolicyEngine {
     // Write to file if configured
     if (this.auditFilePath) {
       try {
-        appendFileSync(this.auditFilePath, JSON.stringify(fullEntry) + '\n', 'utf-8');
+        appendFileSync(this.auditFilePath, `${JSON.stringify(fullEntry)  }\n`, 'utf-8');
       } catch (err) {
         this.logger.error('Failed to write audit to file', { error: String(err) });
       }
@@ -838,7 +840,7 @@ export class PolicyEngine {
     const now = Date.now();
     const fiveMinFromNow = now + 5 * 60 * 1000;
 
-    let credentialsExpiringSoon = 0;
+    const credentialsExpiringSoon = 0;
 
     return {
       policiesActive: Array.from(this.policies.values()).filter((p) => p.enabled).length,

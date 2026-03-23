@@ -39,6 +39,10 @@ import { resolve, dirname } from 'path';
 import { parse } from 'yaml';
 
 import { createLogger, type Logger } from '../../core/logger';
+import { getCredentialManager } from '../credential-manager';
+import { getPolicyEngine } from '../policy-engine';
+import { getSandboxExecutor } from '../sandbox';
+
 import type {
   Blueprint,
   BlueprintSandbox,
@@ -46,9 +50,6 @@ import type {
   BlueprintCredentials,
   BlueprintApproval,
 } from '../types';
-import { getPolicyEngine } from '../policy-engine';
-import { getCredentialManager } from '../credential-manager';
-import { getSandboxExecutor } from '../sandbox';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

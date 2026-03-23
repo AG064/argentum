@@ -19,13 +19,6 @@ import { resolve, dirname, join } from 'path';
 import Database from 'better-sqlite3';
 
 import {
-  type FeatureModule,
-  type FeatureContext,
-  type FeatureMeta,
-  type HealthStatus,
-} from '../../core/plugin-loader';
-
-import {
   type OrgNode,
   type OrgChartConfig,
   type TaskAssignment,
@@ -35,6 +28,14 @@ import {
   type OrgStatus,
   type BudgetConfig,
 } from './types';
+
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
+
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ class OrgChartFeature implements FeatureModule {
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      role: r.role as OrgRole,
+      role: r.role,
       parentId: r.parent_id ?? undefined,
       agentType: r.agent_type as AgentType,
       config: JSON.parse(r.config),
@@ -169,7 +170,7 @@ class OrgChartFeature implements FeatureModule {
     return {
       id: row.id,
       name: row.name,
-      role: row.role as OrgRole,
+      role: row.role,
       parentId: row.parent_id ?? undefined,
       agentType: row.agent_type as AgentType,
       config: JSON.parse(row.config),
@@ -356,7 +357,7 @@ class OrgChartFeature implements FeatureModule {
       } else {
         const parent = node.parentId ?? this.config.ceoId;
         if (!children[parent]) children[parent] = [];
-        children[parent]!.push(node);
+        children[parent].push(node);
       }
     }
 

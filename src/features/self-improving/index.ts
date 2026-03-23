@@ -19,16 +19,9 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import type {
-  FeatureModule,
-  FeatureContext,
-  FeatureMeta,
-  HealthStatus,
-} from '../../core/plugin-loader';
-import { ErrorAnalyzer } from './analyzer';
-import { SkillCreator } from './skill-creator';
+import * as path from 'path';
+
 import type {
   SelfImprovingConfig,
   SelfImprovingResult,
@@ -37,6 +30,18 @@ import type {
   SkillTemplate,
   LessonEntry,
 } from './types';
+
+import { ErrorAnalyzer } from './analyzer';
+import { SkillCreator } from './skill-creator';
+
+import type {
+  FeatureModule,
+  FeatureContext,
+  FeatureMeta,
+  HealthStatus,
+} from '../../core/plugin-loader';
+
+
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

@@ -17,13 +17,14 @@ import { homedir } from 'os';
 import { resolve } from 'path';
 
 import { createLogger, type Logger } from '../../core/logger';
+import { getPolicyEngine } from '../policy-engine';
+
 import type {
   SandboxConfig,
   SandboxResult,
   SandboxCheckResult,
   AgentAction,
 } from '../types';
-import { getPolicyEngine } from '../policy-engine';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 

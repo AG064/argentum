@@ -10,12 +10,13 @@
  * - CORS configuration
  */
 
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
-import * as fs from 'fs';
 import * as path from 'path';
 import * as url from 'url';
-import * as crypto from 'crypto';
+
 import { WebSocketServer, WebSocket } from 'ws';
 
 // Types
@@ -419,7 +420,7 @@ function getSystemStats() {
   const memUsage = process.memoryUsage();
   return {
     uptime: process.uptime(),
-    memoryUsage: (memUsage.heapUsed / 1024 / 1024).toFixed(2) + ' MB',
+    memoryUsage: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)  } MB`,
     cpuUsage: 0, // Would need os module for accurate reading
     activeAgents: 4,
     wsClients: wsClients.size,
@@ -637,11 +638,11 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.log('  ║         AG-Claw Dashboard Server Started                  ║');
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
-      console.log('  ║  Auth:     HTTP Basic Auth (user: ' + config.auth.username + ')            ║');
-      console.log('  ║  WebSocket: ws://' + config.host + ':' + config.port + '/ws               ║');
+      console.log(`  ║  Auth:     HTTP Basic Auth (user: ${  config.auth.username  })            ║`);
+      console.log(`  ║  WebSocket: ws://${  config.host  }:${  config.port  }/ws               ║`);
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log('  ║  Remote Access:                                        ║');
-      console.log('  ║    SSH:  ssh -L 3000:localhost:' + config.port + ' user@host        ║');
+      console.log(`  ║    SSH:  ssh -L 3000:localhost:${  config.port  } user@host        ║`);
       console.log('  ║    Then open: http://localhost:3000                    ║');
       console.log('  ╚══════════════════════════════════════════════════════════╝');
       console.log('');
