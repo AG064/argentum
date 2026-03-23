@@ -12,7 +12,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -93,35 +98,272 @@ interface EntryRow {
 // ─── Default Domains ─────────────────────────────────────────────────────────
 
 const DEFAULT_DOMAINS = [
-  { name: 'Work', description: 'Professional life, projects, career', color: '#4f46e5', icon: '💼' },
+  {
+    name: 'Work',
+    description: 'Professional life, projects, career',
+    color: '#4f46e5',
+    icon: '💼',
+  },
   { name: 'Health', description: 'Physical and mental wellness', color: '#10b981', icon: '🏃' },
   { name: 'Finance', description: 'Money, investments, budgeting', color: '#f59e0b', icon: '💰' },
-  { name: 'Relationships', description: 'Family, friends, social connections', color: '#ec4899', icon: '❤️' },
-  { name: 'Learning', description: 'Education, skills, knowledge growth', color: '#8b5cf6', icon: '📚' },
+  {
+    name: 'Relationships',
+    description: 'Family, friends, social connections',
+    color: '#ec4899',
+    icon: '❤️',
+  },
+  {
+    name: 'Learning',
+    description: 'Education, skills, knowledge growth',
+    color: '#8b5cf6',
+    icon: '📚',
+  },
   { name: 'Projects', description: 'Personal projects and hobbies', color: '#06b6d4', icon: '🛠️' },
-  { name: 'Home', description: 'Living space, household, daily logistics', color: '#84cc16', icon: '🏠' },
-  { name: 'Creative', description: 'Art, writing, music, creative expression', color: '#f97316', icon: '🎨' },
+  {
+    name: 'Home',
+    description: 'Living space, household, daily logistics',
+    color: '#84cc16',
+    icon: '🏠',
+  },
+  {
+    name: 'Creative',
+    description: 'Art, writing, music, creative expression',
+    color: '#f97316',
+    icon: '🎨',
+  },
 ];
 
 // ─── Classification Keywords ─────────────────────────────────────────────────
 
 const DOMAIN_KEYWORDS: Record<string, string[]> = {
-  Work: ['meeting', 'deadline', 'project', 'client', 'manager', 'sprint', 'deploy', 'code', 'review', 'standup', 'jira', 'pull request', 'merge', 'release',
-         'встреча', 'дедлайн', 'проект', 'клиент', 'менеджер', 'спринт', 'код', 'ревью', 'релиз', 'работа', 'офис', 'задача', 'коллега', 'начальник', 'совещание', 'отпуск'],
-  Health: ['exercise', 'workout', 'gym', 'run', 'sleep', 'diet', 'doctor', 'medication', 'yoga', 'meditation', 'steps', 'calories', 'water',
-           'спортзал', 'спорт', 'тренировка', 'бег', 'сон', 'диета', 'врач', 'доктор', 'йога', 'медитация', 'здоровье', 'калории', 'вода', 'лекарство', 'больница', 'анализы'],
-  Finance: ['budget', 'expense', 'income', 'invest', 'stock', 'crypto', 'savings', 'rent', 'salary', 'tax', 'invoice', 'payment', 'bank',
-            'бюджет', 'расход', 'доход', 'инвестиции', 'акции', 'крипто', 'сбережения', 'аренда', 'зарплата', 'налог', 'счёт', 'оплата', 'банк', 'деньги', 'карта', 'долг'],
-  Relationships: ['friend', 'family', 'partner', 'date', 'birthday', 'call', 'visit', 'dinner', 'party', 'together', 'anniversary',
-                  'друг', 'семья', 'партнёр', 'парень', 'девушка', 'день рождения', 'звонок', 'визит', 'ужин', 'вечеринка', 'вместе', 'годовщина', 'мама', 'папа', 'брат', 'сестра'],
-  Learning: ['learn', 'study', 'course', 'tutorial', 'book', 'read', 'practice', 'exam', 'certification', 'skill', 'language', 'lesson',
-             'учить', 'учиться', 'курс', 'учебник', 'книга', 'читать', 'практика', 'экзамен', 'сертификат', 'навык', 'язык', 'урок', 'лекция', 'домашка', 'школа', 'университет'],
-  Projects: ['build', 'create', 'prototype', 'side project', 'weekend', 'hobby', '3d', 'print', 'arduino', 'raspberry pi',
-             'создать', 'построить', 'прототип', 'хобби', 'выходные', 'проект', '3d', 'печать', 'самоделка', 'конструктор'],
-  Home: ['clean', 'repair', 'furniture', 'kitchen', 'garden', 'laundry', 'grocery', 'shopping', 'appliance', 'decoration',
-         'убрать', 'починить', 'мебель', 'кухня', 'сад', 'стирка', 'покупки', 'магазин', 'техника', 'декор', 'дом', 'квартира', 'ремонт'],
-  Creative: ['write', 'draw', 'paint', 'compose', 'photo', 'video', 'edit', 'design', 'sketch', 'music', 'story', 'poem',
-             'писать', 'рисовать', 'рисунок', 'композиция', 'фото', 'видео', 'монтаж', 'дизайн', 'эскиз', 'музыка', 'история', 'стих', 'творчество', 'арт'],
+  Work: [
+    'meeting',
+    'deadline',
+    'project',
+    'client',
+    'manager',
+    'sprint',
+    'deploy',
+    'code',
+    'review',
+    'standup',
+    'jira',
+    'pull request',
+    'merge',
+    'release',
+    'встреча',
+    'дедлайн',
+    'проект',
+    'клиент',
+    'менеджер',
+    'спринт',
+    'код',
+    'ревью',
+    'релиз',
+    'работа',
+    'офис',
+    'задача',
+    'коллега',
+    'начальник',
+    'совещание',
+    'отпуск',
+  ],
+  Health: [
+    'exercise',
+    'workout',
+    'gym',
+    'run',
+    'sleep',
+    'diet',
+    'doctor',
+    'medication',
+    'yoga',
+    'meditation',
+    'steps',
+    'calories',
+    'water',
+    'спортзал',
+    'спорт',
+    'тренировка',
+    'бег',
+    'сон',
+    'диета',
+    'врач',
+    'доктор',
+    'йога',
+    'медитация',
+    'здоровье',
+    'калории',
+    'вода',
+    'лекарство',
+    'больница',
+    'анализы',
+  ],
+  Finance: [
+    'budget',
+    'expense',
+    'income',
+    'invest',
+    'stock',
+    'crypto',
+    'savings',
+    'rent',
+    'salary',
+    'tax',
+    'invoice',
+    'payment',
+    'bank',
+    'бюджет',
+    'расход',
+    'доход',
+    'инвестиции',
+    'акции',
+    'крипто',
+    'сбережения',
+    'аренда',
+    'зарплата',
+    'налог',
+    'счёт',
+    'оплата',
+    'банк',
+    'деньги',
+    'карта',
+    'долг',
+  ],
+  Relationships: [
+    'friend',
+    'family',
+    'partner',
+    'date',
+    'birthday',
+    'call',
+    'visit',
+    'dinner',
+    'party',
+    'together',
+    'anniversary',
+    'друг',
+    'семья',
+    'партнёр',
+    'парень',
+    'девушка',
+    'день рождения',
+    'звонок',
+    'визит',
+    'ужин',
+    'вечеринка',
+    'вместе',
+    'годовщина',
+    'мама',
+    'папа',
+    'брат',
+    'сестра',
+  ],
+  Learning: [
+    'learn',
+    'study',
+    'course',
+    'tutorial',
+    'book',
+    'read',
+    'practice',
+    'exam',
+    'certification',
+    'skill',
+    'language',
+    'lesson',
+    'учить',
+    'учиться',
+    'курс',
+    'учебник',
+    'книга',
+    'читать',
+    'практика',
+    'экзамен',
+    'сертификат',
+    'навык',
+    'язык',
+    'урок',
+    'лекция',
+    'домашка',
+    'школа',
+    'университет',
+  ],
+  Projects: [
+    'build',
+    'create',
+    'prototype',
+    'side project',
+    'weekend',
+    'hobby',
+    '3d',
+    'print',
+    'arduino',
+    'raspberry pi',
+    'создать',
+    'построить',
+    'прототип',
+    'хобби',
+    'выходные',
+    'проект',
+    '3d',
+    'печать',
+    'самоделка',
+    'конструктор',
+  ],
+  Home: [
+    'clean',
+    'repair',
+    'furniture',
+    'kitchen',
+    'garden',
+    'laundry',
+    'grocery',
+    'shopping',
+    'appliance',
+    'decoration',
+    'убрать',
+    'починить',
+    'мебель',
+    'кухня',
+    'сад',
+    'стирка',
+    'покупки',
+    'магазин',
+    'техника',
+    'декор',
+    'дом',
+    'квартира',
+    'ремонт',
+  ],
+  Creative: [
+    'write',
+    'draw',
+    'paint',
+    'compose',
+    'photo',
+    'video',
+    'edit',
+    'design',
+    'sketch',
+    'music',
+    'story',
+    'poem',
+    'писать',
+    'рисовать',
+    'рисунок',
+    'композиция',
+    'фото',
+    'видео',
+    'монтаж',
+    'дизайн',
+    'эскиз',
+    'музыка',
+    'история',
+    'стих',
+    'творчество',
+    'арт',
+  ],
 };
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
@@ -157,8 +399,12 @@ class LifeDomainsFeature implements FeatureModule {
       this.seedDefaultDomains();
     }
 
-    const domainCount = (this.db.prepare('SELECT COUNT(*) as c FROM domains').get() as { c: number }).c;
-    const entryCount = (this.db.prepare('SELECT COUNT(*) as c FROM domain_entries').get() as { c: number }).c;
+    const domainCount = (
+      this.db.prepare('SELECT COUNT(*) as c FROM domains').get() as { c: number }
+    ).c;
+    const entryCount = (
+      this.db.prepare('SELECT COUNT(*) as c FROM domain_entries').get() as { c: number }
+    ).c;
 
     this.ctx.logger.info('Life Domains active', { domains: domainCount, entries: entryCount });
   }
@@ -169,7 +415,9 @@ class LifeDomainsFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const domains = (this.db.prepare('SELECT COUNT(*) as c FROM domains').get() as { c: number }).c;
-    const entries = (this.db.prepare('SELECT COUNT(*) as c FROM domain_entries').get() as { c: number }).c;
+    const entries = (
+      this.db.prepare('SELECT COUNT(*) as c FROM domain_entries').get() as { c: number }
+    ).c;
     return {
       healthy: true,
       details: { domains, entries },
@@ -179,7 +427,11 @@ class LifeDomainsFeature implements FeatureModule {
   // ─── Domain CRUD ─────────────────────────────────────────────────────────
 
   /** Create a new life domain */
-  createDomain(name: string, description: string, options?: { color?: string; icon?: string; parentId?: string; priority?: number }): LifeDomain {
+  createDomain(
+    name: string,
+    description: string,
+    options?: { color?: string; icon?: string; parentId?: string; priority?: number },
+  ): LifeDomain {
     const id = randomUUID();
     const now = Date.now();
 
@@ -195,10 +447,22 @@ class LifeDomainsFeature implements FeatureModule {
       updatedAt: now,
     };
 
-    this.db.prepare(
-      `INSERT INTO domains (id, name, description, color, icon, parent_id, priority, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, name, description, domain.color, domain.icon, domain.parentId, domain.priority, now, now);
+    this.db
+      .prepare(
+        `INSERT INTO domains (id, name, description, color, icon, parent_id, priority, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        name,
+        description,
+        domain.color,
+        domain.icon,
+        domain.parentId,
+        domain.priority,
+        now,
+        now,
+      );
 
     this.ctx.logger.info('Domain created', { id, name });
     return domain;
@@ -206,31 +470,50 @@ class LifeDomainsFeature implements FeatureModule {
 
   /** List all domains */
   listDomains(): LifeDomain[] {
-    const rows = this.db.prepare('SELECT * FROM domains ORDER BY priority DESC, name ASC').all() as DomainRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM domains ORDER BY priority DESC, name ASC')
+      .all() as DomainRow[];
     return rows.map(this.rowToDomain);
   }
 
   /** Get a domain by ID */
   getDomain(id: string): LifeDomain | null {
-    const row = this.db.prepare('SELECT * FROM domains WHERE id = ?').get(id) as DomainRow | undefined;
+    const row = this.db.prepare('SELECT * FROM domains WHERE id = ?').get(id) as
+      | DomainRow
+      | undefined;
     return row ? this.rowToDomain(row) : null;
   }
 
   /** Get domain by name */
   getDomainByName(name: string): LifeDomain | null {
-    const row = this.db.prepare('SELECT * FROM domains WHERE name = ? COLLATE NOCASE').get(name) as DomainRow | undefined;
+    const row = this.db.prepare('SELECT * FROM domains WHERE name = ? COLLATE NOCASE').get(name) as
+      | DomainRow
+      | undefined;
     return row ? this.rowToDomain(row) : null;
   }
 
   /** Update a domain */
-  updateDomain(id: string, updates: Partial<Omit<LifeDomain, 'id' | 'createdAt'>>): LifeDomain | null {
+  updateDomain(
+    id: string,
+    updates: Partial<Omit<LifeDomain, 'id' | 'createdAt'>>,
+  ): LifeDomain | null {
     const existing = this.getDomain(id);
     if (!existing) return null;
 
     const merged = { ...existing, ...updates, updatedAt: Date.now() };
-    this.db.prepare(
-      'UPDATE domains SET name=?, description=?, color=?, icon=?, priority=?, updated_at=? WHERE id=?'
-    ).run(merged.name, merged.description, merged.color, merged.icon, merged.priority, merged.updatedAt, id);
+    this.db
+      .prepare(
+        'UPDATE domains SET name=?, description=?, color=?, icon=?, priority=?, updated_at=? WHERE id=?',
+      )
+      .run(
+        merged.name,
+        merged.description,
+        merged.color,
+        merged.icon,
+        merged.priority,
+        merged.updatedAt,
+        id,
+      );
 
     return merged;
   }
@@ -250,7 +533,7 @@ class LifeDomainsFeature implements FeatureModule {
     type: DomainEntry['type'],
     title: string,
     content: string,
-    options?: { tags?: string[]; importance?: number; metadata?: Record<string, unknown> }
+    options?: { tags?: string[]; importance?: number; metadata?: Record<string, unknown> },
   ): DomainEntry {
     const domain = this.getDomain(domainId);
     if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -271,17 +554,33 @@ class LifeDomainsFeature implements FeatureModule {
       updatedAt: now,
     };
 
-    this.db.prepare(
-      `INSERT INTO domain_entries (id, domain_id, type, title, content, tags, importance, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, domainId, type, title, content, JSON.stringify(entry.tags), entry.importance, JSON.stringify(entry.metadata), now, now);
+    this.db
+      .prepare(
+        `INSERT INTO domain_entries (id, domain_id, type, title, content, tags, importance, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        domainId,
+        type,
+        title,
+        content,
+        JSON.stringify(entry.tags),
+        entry.importance,
+        JSON.stringify(entry.metadata),
+        now,
+        now,
+      );
 
     this.ctx.logger.debug('Entry added', { domainId, type, title: title.slice(0, 50) });
     return entry;
   }
 
   /** List entries for a domain */
-  listEntries(domainId: string, options?: { type?: DomainEntry['type']; minImportance?: number; limit?: number }): DomainEntry[] {
+  listEntries(
+    domainId: string,
+    options?: { type?: DomainEntry['type']; minImportance?: number; limit?: number },
+  ): DomainEntry[] {
     let sql = 'SELECT * FROM domain_entries WHERE domain_id = ?';
     const params: unknown[] = [domainId];
 
@@ -306,7 +605,10 @@ class LifeDomainsFeature implements FeatureModule {
   }
 
   /** Search entries across all domains */
-  searchEntries(query: string, options?: { domainId?: string; type?: DomainEntry['type']; limit?: number }): DomainEntry[] {
+  searchEntries(
+    query: string,
+    options?: { domainId?: string; type?: DomainEntry['type']; limit?: number },
+  ): DomainEntry[] {
     let sql = `SELECT * FROM domain_entries WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)`;
     const params: unknown[] = [`%${query}%`, `%${query}%`, `%${query}%`];
 
@@ -328,19 +630,34 @@ class LifeDomainsFeature implements FeatureModule {
 
   /** Get an entry by ID */
   getEntry(id: string): DomainEntry | null {
-    const row = this.db.prepare('SELECT * FROM domain_entries WHERE id = ?').get(id) as EntryRow | undefined;
+    const row = this.db.prepare('SELECT * FROM domain_entries WHERE id = ?').get(id) as
+      | EntryRow
+      | undefined;
     return row ? this.rowToEntry(row) : null;
   }
 
   /** Update an entry */
-  updateEntry(id: string, updates: Partial<Omit<DomainEntry, 'id' | 'domainId' | 'createdAt'>>): DomainEntry | null {
+  updateEntry(
+    id: string,
+    updates: Partial<Omit<DomainEntry, 'id' | 'domainId' | 'createdAt'>>,
+  ): DomainEntry | null {
     const existing = this.getEntry(id);
     if (!existing) return null;
 
     const merged = { ...existing, ...updates, updatedAt: Date.now() };
-    this.db.prepare(
-      'UPDATE domain_entries SET title=?, content=?, tags=?, importance=?, metadata=?, updated_at=? WHERE id=?'
-    ).run(merged.title, merged.content, JSON.stringify(merged.tags), merged.importance, JSON.stringify(merged.metadata), merged.updatedAt, id);
+    this.db
+      .prepare(
+        'UPDATE domain_entries SET title=?, content=?, tags=?, importance=?, metadata=?, updated_at=? WHERE id=?',
+      )
+      .run(
+        merged.title,
+        merged.content,
+        JSON.stringify(merged.tags),
+        merged.importance,
+        JSON.stringify(merged.metadata),
+        merged.updatedAt,
+        id,
+      );
 
     return merged;
   }
@@ -373,7 +690,11 @@ class LifeDomainsFeature implements FeatureModule {
   }
 
   /** Auto-add entry to best matching domain */
-  autoAddEntry(title: string, content: string, type: DomainEntry['type'] = 'note'): DomainEntry | null {
+  autoAddEntry(
+    title: string,
+    content: string,
+    type: DomainEntry['type'] = 'note',
+  ): DomainEntry | null {
     if (!this.config.autoClassify) return null;
 
     const classifications = this.classifyText(`${title} ${content}`);
@@ -385,7 +706,11 @@ class LifeDomainsFeature implements FeatureModule {
 
     return this.addEntry(domain.id, type, title, content, {
       importance: best.confidence,
-      metadata: { autoClassified: true, confidence: best.confidence, alternatives: classifications.slice(1) },
+      metadata: {
+        autoClassified: true,
+        confidence: best.confidence,
+        alternatives: classifications.slice(1),
+      },
     });
   }
 
@@ -394,7 +719,7 @@ class LifeDomainsFeature implements FeatureModule {
   /** Get statistics for all domains */
   getDomainStats(): DomainStats[] {
     const domains = this.listDomains();
-    return domains.map(domain => {
+    return domains.map((domain) => {
       const entries = this.listEntries(domain.id);
       const typeBreakdown: Record<string, number> = {};
       let totalImportance = 0;
@@ -412,22 +737,27 @@ class LifeDomainsFeature implements FeatureModule {
         entryCount: entries.length,
         lastEntryAt: lastEntry,
         typeBreakdown,
-        avgImportance: entries.length > 0 ? Math.round((totalImportance / entries.length) * 100) / 100 : 0,
+        avgImportance:
+          entries.length > 0 ? Math.round((totalImportance / entries.length) * 100) / 100 : 0,
       };
     });
   }
 
   /** Get recent activity across all domains */
   getRecentActivity(limit = 10): Array<DomainEntry & { domainName: string }> {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT de.*, d.name as domain_name
       FROM domain_entries de
       JOIN domains d ON d.id = de.domain_id
       ORDER BY de.created_at DESC
       LIMIT ?
-    `).all(limit) as Array<EntryRow & { domain_name: string }>;
+    `,
+      )
+      .all(limit) as Array<EntryRow & { domain_name: string }>;
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       ...this.rowToEntry(row),
       domainName: row.domain_name,
     }));
@@ -486,7 +816,7 @@ class LifeDomainsFeature implements FeatureModule {
   private seedDefaultDomains(): void {
     const stmt = this.db.prepare(
       `INSERT INTO domains (id, name, description, color, icon, parent_id, priority, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NULL, 5, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, NULL, 5, ?, ?)`,
     );
     const now = Date.now();
 
@@ -494,7 +824,9 @@ class LifeDomainsFeature implements FeatureModule {
       stmt.run(randomUUID(), domain.name, domain.description, domain.color, domain.icon, now, now);
     }
 
-    this.ctx.logger.info('Seeded default life domains', { count: this.config.defaultDomains.length });
+    this.ctx.logger.info('Seeded default life domains', {
+      count: this.config.defaultDomains.length,
+    });
   }
 
   private rowToDomain(row: DomainRow): LifeDomain {
@@ -527,11 +859,19 @@ class LifeDomainsFeature implements FeatureModule {
   }
 
   private parseJson(str: string): Record<string, unknown> {
-    try { return JSON.parse(str); } catch { return {}; }
+    try {
+      return JSON.parse(str);
+    } catch {
+      return {};
+    }
   }
 
   private parseJsonArray(str: string): string[] {
-    try { return JSON.parse(str); } catch { return []; }
+    try {
+      return JSON.parse(str);
+    } catch {
+      return [];
+    }
   }
 }
 

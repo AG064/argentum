@@ -12,7 +12,9 @@ class AllowlistsFeature {
   }
 
   init() {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       CREATE TABLE IF NOT EXISTS rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pattern TEXT NOT NULL,
@@ -20,7 +22,9 @@ class AllowlistsFeature {
         action TEXT NOT NULL,
         createdAt INTEGER NOT NULL
       );
-    `).run();
+    `,
+      )
+      .run();
   }
 
   start() {
@@ -36,7 +40,9 @@ class AllowlistsFeature {
   }
 
   addRule(pattern: string, type: 'url' | 'command' | 'user', action: 'allow' | 'deny') {
-    const stmt = this.db.prepare('INSERT INTO rules (pattern, type, action, createdAt) VALUES (?, ?, ?, ?)');
+    const stmt = this.db.prepare(
+      'INSERT INTO rules (pattern, type, action, createdAt) VALUES (?, ?, ?, ?)',
+    );
     const info = stmt.run(pattern, type, action, Date.now());
     return { id: info.lastInsertRowid };
   }
@@ -66,7 +72,10 @@ class AllowlistsFeature {
           // If regex compilation fails or is risky, fall back to simple wildcard matching
           // Convert pattern with '*' into wildcard, otherwise literal compare
           if (pattern.includes('*')) {
-            const escaped = pattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+            const escaped = pattern
+              .split('*')
+              .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+              .join('.*');
             try {
               const re2 = new RegExp(`^${escaped}$`);
               if (re2.test(item.value)) {
@@ -82,7 +91,10 @@ class AllowlistsFeature {
       } else {
         // Treat as simple wildcard: support '*' only
         if (pattern.includes('*')) {
-          const escaped = pattern.split('*').map(s => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('.*');
+          const escaped = pattern
+            .split('*')
+            .map((s) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'))
+            .join('.*');
           const re = new RegExp(`^${escaped}$`);
           if (re.test(item.value)) {
             return { matched: true, action: r.action, rule: r };

@@ -2,7 +2,12 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 export interface SecureProfileRecord {
   id: string;
@@ -57,7 +62,7 @@ class SecureProfileFeature implements FeatureModule {
           this.key = crypto.createHash('sha256').update(this.key).digest();
         }
       } catch (e) {
-        this.ctx.logger.error(`Failed to parse master key: ${  String(e)}`);
+        this.ctx.logger.error(`Failed to parse master key: ${String(e)}`);
         this.key = null;
       }
     }

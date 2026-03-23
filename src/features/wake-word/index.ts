@@ -12,7 +12,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Wake word definition */
 export interface WakeWord {
@@ -85,7 +90,8 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     this.ctx = context;
     this.config = {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
-      defaultSensitivity: (config['defaultSensitivity'] as number) ?? this.config['defaultSensitivity'],
+      defaultSensitivity:
+        (config['defaultSensitivity'] as number) ?? this.config['defaultSensitivity'],
       maxContextChars: (config['maxContextChars'] as number) ?? this.config['maxContextChars'],
     };
 
@@ -98,7 +104,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     this.running = true;
     this.ctx.logger.info('WakeWord active', {
       dbPath: this.config.dbPath,
-      activeWords: this.wakeWords.filter(w => w.enabled).length,
+      activeWords: this.wakeWords.filter((w) => w.enabled).length,
     });
   }
 
@@ -110,7 +116,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
   async healthCheck(): Promise<HealthStatus> {
     try {
       const total = this.wakeWords.length;
-      const enabled = this.wakeWords.filter(w => w.enabled).length;
+      const enabled = this.wakeWords.filter((w) => w.enabled).length;
 
       return {
         healthy: true,
@@ -136,7 +142,11 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
    * @param caseSensitive - Case-sensitive matching
    * @returns The created WakeWord object
    */
-  addWord(word: string, sensitivity: number = this.defaultSensitivity, caseSensitive: boolean = false): WakeWord {
+  addWord(
+    word: string,
+    sensitivity: number = this.defaultSensitivity,
+    caseSensitive: boolean = false,
+  ): WakeWord {
     if (!word.trim()) {
       throw new Error('Wake word cannot be empty');
     }
@@ -155,18 +165,22 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
       created_at: Date.now(),
     };
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO wake_words (id, word, sensitivity, case_sensitive, pattern, enabled, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      word,
-      wakeWord.sensitivity,
-      caseSensitive ? 1 : 0,
-      regex.toString(),
-      wakeWord.enabled ? 1 : 0,
-      wakeWord.created_at
-    );
+    `,
+      )
+      .run(
+        id,
+        word,
+        wakeWord.sensitivity,
+        caseSensitive ? 1 : 0,
+        regex.toString(),
+        wakeWord.enabled ? 1 : 0,
+        wakeWord.created_at,
+      );
 
     this.wakeWords.push(wakeWord);
     this.ctx.logger.info('Wake word added', { word, sensitivity, caseSensitive });
@@ -177,7 +191,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
    * Remove a wake word by ID.
    */
   removeWord(id: string): boolean {
-    const index = this.wakeWords.findIndex(w => w.id === id);
+    const index = this.wakeWords.findIndex((w) => w.id === id);
     if (index === -1) return false;
 
     this.wakeWords.splice(index, 1);
@@ -198,7 +212,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
    * Enable or disable a wake word.
    */
   setWordEnabled(id: string, enabled: boolean): boolean {
-    const word = this.wakeWords.find(w => w.id === id);
+    const word = this.wakeWords.find((w) => w.id === id);
     if (!word) return false;
 
     word.enabled = enabled;
@@ -222,7 +236,8 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     if (!this.running) return [];
 
     const detections: Detection[] = [];
-    const _lowerText = this.config.maxContextChars > 0 ? text.substring(0, this.config.maxContextChars * 2) : text;
+    const _lowerText =
+      this.config.maxContextChars > 0 ? text.substring(0, this.config.maxContextChars * 2) : text;
 
     for (const word of this.wakeWords) {
       if (!word.enabled) continue;
@@ -252,7 +267,10 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     }
 
     if (detections.length > 0) {
-      this.ctx.logger.debug('Wake words detected', { count: detections.length, words: detections.map(d => d.word).join(', ') });
+      this.ctx.logger.debug('Wake words detected', {
+        count: detections.length,
+        words: detections.map((d) => d.word).join(', '),
+      });
     }
 
     return detections;
@@ -262,7 +280,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
    * Simulate detection (for testing or manual trigger).
    */
   simulateDetection(wordId: string, matchedText?: string): boolean {
-    const word = this.wakeWords.find(w => w.id === wordId);
+    const word = this.wakeWords.find((w) => w.id === wordId);
     if (!word || !word.enabled) return false;
 
     const detection: Detection = {
@@ -301,7 +319,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     const start = Math.max(0, position - contextLength);
     const end = Math.min(text.length, position + contextLength);
     const ctx = text.substring(start, end);
-    return start > 0 ? `...${  ctx}` : ctx + (end < text.length ? '...' : '');
+    return start > 0 ? `...${ctx}` : ctx + (end < text.length ? '...' : '');
   }
 
   /** Load wake words from database */
@@ -330,7 +348,10 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
           created_at: row.created_at,
         });
       } catch (err) {
-        this.ctx.logger.warn('Invalid wake word pattern', { id: row.id, error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.warn('Invalid wake word pattern', {
+          id: row.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }

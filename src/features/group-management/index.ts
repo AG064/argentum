@@ -5,7 +5,12 @@
  * shared context, and group-specific settings.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Group management configuration */
 export interface GroupManagementConfig {
@@ -53,7 +58,14 @@ export interface GroupSettings {
 
 /** Role permissions mapping */
 const ROLE_PERMISSIONS: Record<GroupRole, string[]> = {
-  owner: ['manage_members', 'manage_settings', 'delete_group', 'manage_context', 'send_messages', 'view_history'],
+  owner: [
+    'manage_members',
+    'manage_settings',
+    'delete_group',
+    'manage_context',
+    'send_messages',
+    'view_history',
+  ],
   admin: ['manage_members', 'manage_settings', 'manage_context', 'send_messages', 'view_history'],
   member: ['send_messages', 'view_history'],
   viewer: ['view_history'],
@@ -102,7 +114,10 @@ class GroupManagementFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const totalMembers = Array.from(this.groups.values()).reduce((sum, g) => sum + g.members.size, 0);
+    const totalMembers = Array.from(this.groups.values()).reduce(
+      (sum, g) => sum + g.members.size,
+      0,
+    );
     return {
       healthy: true,
       details: {
@@ -155,7 +170,12 @@ class GroupManagementFeature implements FeatureModule {
   }
 
   /** Add member to group */
-  addMember(groupId: string, userId: string, username: string, role: GroupRole = this.config.defaultRole): boolean {
+  addMember(
+    groupId: string,
+    userId: string,
+    username: string,
+    role: GroupRole = this.config.defaultRole,
+  ): boolean {
     const group = this.groups.get(groupId);
     if (!group) return false;
 
@@ -226,7 +246,7 @@ class GroupManagementFeature implements FeatureModule {
     const groupIds = this.userGroups.get(userId);
     if (!groupIds) return [];
     return Array.from(groupIds)
-      .map(id => this.groups.get(id))
+      .map((id) => this.groups.get(id))
       .filter((g): g is Group => g !== undefined);
   }
 

@@ -6,7 +6,12 @@
  * and adaptive suggestions based on past interactions.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Smart recommendations configuration */
 export interface SmartRecommendationsConfig {
@@ -81,11 +86,16 @@ const SUGGESTION_RULES: SuggestionRule[] = [
     category: 'productivity',
     condition: (ctx) => ctx.timeOfDay === 'morning' && ctx.dayOfWeek >= 1 && ctx.dayOfWeek <= 5,
     generate: () => ({
-      id: '', category: 'productivity', title: 'Start your day with a briefing',
+      id: '',
+      category: 'productivity',
+      title: 'Start your day with a briefing',
       description: 'Get a summary of your calendar, tasks, and news for today',
-      confidence: 0.8, reason: 'Morning routine detected', priority: 'high',
+      confidence: 0.8,
+      reason: 'Morning routine detected',
+      priority: 'high',
       action: { type: 'trigger', params: { feature: 'morning-briefing', action: 'generate' } },
-      metadata: {}, createdAt: Date.now(),
+      metadata: {},
+      createdAt: Date.now(),
     }),
   },
   {
@@ -93,46 +103,64 @@ const SUGGESTION_RULES: SuggestionRule[] = [
     category: 'productivity',
     condition: (ctx) => ctx.timeOfDay === 'evening',
     generate: () => ({
-      id: '', category: 'productivity', title: 'Review your day',
+      id: '',
+      category: 'productivity',
+      title: 'Review your day',
       description: 'See what you accomplished and plan for tomorrow',
-      confidence: 0.7, reason: 'Evening routine detected', priority: 'medium',
+      confidence: 0.7,
+      reason: 'Evening routine detected',
+      priority: 'medium',
       action: { type: 'trigger', params: { feature: 'evening-recap', action: 'generate' } },
-      metadata: {}, createdAt: Date.now(),
+      metadata: {},
+      createdAt: Date.now(),
     }),
   },
   {
     id: 'learn-preference',
     category: 'learning',
     condition: (_ctx, profiles) => {
-      const learningProfiles = profiles.filter(p => p.category === 'learning');
-      return learningProfiles.length > 0 && learningProfiles.every(p => p.score > 0.6);
+      const learningProfiles = profiles.filter((p) => p.category === 'learning');
+      return learningProfiles.length > 0 && learningProfiles.every((p) => p.score > 0.6);
     },
     generate: (_ctx, profiles) => {
-      const topLearning = profiles.filter(p => p.category === 'learning').sort((a, b) => b.score - a.score)[0];
+      const topLearning = profiles
+        .filter((p) => p.category === 'learning')
+        .sort((a, b) => b.score - a.score)[0];
       if (!topLearning) return null;
       return {
-        id: '', category: 'learning', title: `Continue learning ${topLearning.value}`,
+        id: '',
+        category: 'learning',
+        title: `Continue learning ${topLearning.value}`,
         description: `You've shown strong interest in ${topLearning.value}`,
-        confidence: topLearning.score, reason: `${topLearning.eventCount} learning interactions`,
-        priority: 'low', metadata: { topic: topLearning.value }, createdAt: Date.now(),
+        confidence: topLearning.score,
+        reason: `${topLearning.eventCount} learning interactions`,
+        priority: 'low',
+        metadata: { topic: topLearning.value },
+        createdAt: Date.now(),
       };
     },
   },
   {
     id: 'frequent-task',
     category: 'automation',
-    condition: (_ctx, profiles) => profiles.some(p => p.eventCount > 10 && p.positiveCount / Math.max(1, p.eventCount) > 0.7),
+    condition: (_ctx, profiles) =>
+      profiles.some((p) => p.eventCount > 10 && p.positiveCount / Math.max(1, p.eventCount) > 0.7),
     generate: (_ctx, profiles) => {
       const repetitive = profiles
-        .filter(p => p.eventCount > 10 && p.positiveCount / p.eventCount > 0.7)
+        .filter((p) => p.eventCount > 10 && p.positiveCount / p.eventCount > 0.7)
         .sort((a, b) => b.eventCount - a.eventCount)[0];
       if (!repetitive) return null;
       return {
-        id: '', category: 'automation', title: `Automate "${repetitive.value}"?`,
+        id: '',
+        category: 'automation',
+        title: `Automate "${repetitive.value}"?`,
         description: `You do this frequently (${repetitive.eventCount} times). Consider automating it.`,
-        confidence: 0.65, reason: 'Detected repetitive positive task', priority: 'medium',
+        confidence: 0.65,
+        reason: 'Detected repetitive positive task',
+        priority: 'medium',
         action: { type: 'suggest_automation', params: { task: repetitive.value } },
-        metadata: { task: repetitive.value, count: repetitive.eventCount }, createdAt: Date.now(),
+        metadata: { task: repetitive.value, count: repetitive.eventCount },
+        createdAt: Date.now(),
       };
     },
   },
@@ -177,8 +205,10 @@ class SmartRecommendationsFeature implements FeatureModule {
   async start(): Promise<void> {
     // Start proactive suggestion checks
     this.suggestionTimer = setInterval(() => {
-      this.runProactiveCheck().catch(err => {
-        this.ctx.logger.error('Proactive check error', { error: err instanceof Error ? err.message : String(err) });
+      this.runProactiveCheck().catch((err) => {
+        this.ctx.logger.error('Proactive check error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
     }, this.config.proactiveCheckIntervalMs);
 
@@ -189,7 +219,10 @@ class SmartRecommendationsFeature implements FeatureModule {
   }
 
   async stop(): Promise<void> {
-    if (this.suggestionTimer) { clearInterval(this.suggestionTimer); this.suggestionTimer = null; }
+    if (this.suggestionTimer) {
+      clearInterval(this.suggestionTimer);
+      this.suggestionTimer = null;
+    }
   }
 
   async healthCheck(): Promise<HealthStatus> {
@@ -222,8 +255,11 @@ class SmartRecommendationsFeature implements FeatureModule {
       if (event.outcome === 'negative') existing.negativeCount++;
     } else {
       this.profiles.set(key, {
-        category: event.category, value: event.value,
-        score: this.config.learningRate, lastUpdated: Date.now(), eventCount: 1,
+        category: event.category,
+        value: event.value,
+        score: this.config.learningRate,
+        lastUpdated: Date.now(),
+        eventCount: 1,
         positiveCount: event.outcome === 'positive' ? 1 : 0,
         negativeCount: event.outcome === 'negative' ? 1 : 0,
       });
@@ -264,8 +300,9 @@ class SmartRecommendationsFeature implements FeatureModule {
     }
 
     // Profile-based recommendations
-    const sortedProfiles = Array.from(this.profiles.entries())
-      .sort((a, b) => b[1].score - a[1].score);
+    const sortedProfiles = Array.from(this.profiles.entries()).sort(
+      (a, b) => b[1].score - a[1].score,
+    );
 
     for (const [key, profile] of sortedProfiles.slice(0, this.config.maxRecommendations)) {
       if (profile.score < this.config.minConfidence) continue;
@@ -291,11 +328,13 @@ class SmartRecommendationsFeature implements FeatureModule {
   /** Run proactive suggestion check */
   private async runProactiveCheck(): Promise<void> {
     const suggestions = await this.generateRecommendations();
-    const highPriority = suggestions.filter(s => s.priority === 'high' && s.confidence >= 0.6);
+    const highPriority = suggestions.filter((s) => s.priority === 'high' && s.confidence >= 0.6);
 
     for (const suggestion of highPriority) {
       if (this.onSuggestionCallback) {
-        try { this.onSuggestionCallback(suggestion); } catch {}
+        try {
+          this.onSuggestionCallback(suggestion);
+        } catch {}
       }
       this.ctx.emit('suggestion:proactive', suggestion);
     }
@@ -314,7 +353,7 @@ class SmartRecommendationsFeature implements FeatureModule {
     return {
       timeOfDay,
       dayOfWeek: now.getDay(),
-      lastActions: this.behaviorHistory.slice(-10).map(e => e.value),
+      lastActions: this.behaviorHistory.slice(-10).map((e) => e.value),
       ...partial,
     };
   }
@@ -339,19 +378,29 @@ class SmartRecommendationsFeature implements FeatureModule {
 
     // Record feedback as behavior event
     this.recordEvent({
-      type: 'feedback', category: rec.category, value: rec.title,
-      timestamp: Date.now(), outcome: accepted ? 'positive' : 'negative',
+      type: 'feedback',
+      category: rec.category,
+      value: rec.title,
+      timestamp: Date.now(),
+      outcome: accepted ? 'positive' : 'negative',
     });
   }
 
   /** Get top preference profiles */
-  getTopPreferences(limit = 10): Array<{ category: string; value: string; score: number; eventCount: number }> {
+  getTopPreferences(
+    limit = 10,
+  ): Array<{ category: string; value: string; score: number; eventCount: number }> {
     return Array.from(this.profiles.entries())
       .sort((a, b) => b[1].score - a[1].score)
       .slice(0, limit)
       .map(([key, profile]) => {
         const [, value] = key.split(':');
-        return { category: profile.category, value: value ?? '', score: profile.score, eventCount: profile.eventCount };
+        return {
+          category: profile.category,
+          value: value ?? '',
+          score: profile.score,
+          eventCount: profile.eventCount,
+        };
       });
   }
 

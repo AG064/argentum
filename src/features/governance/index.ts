@@ -11,7 +11,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -156,9 +161,9 @@ class GovernanceFeature implements FeatureModule {
     }
 
     const now = Date.now();
-    this.db.prepare(
-      'UPDATE approval_tickets SET status = ?, approver = ?, resolved_at = ? WHERE id = ?'
-    ).run('approved', approver, now, ticketId);
+    this.db
+      .prepare('UPDATE approval_tickets SET status = ?, approver = ?, resolved_at = ? WHERE id = ?')
+      .run('approved', approver, now, ticketId);
 
     this.ctx.logger.info('Ticket approved', { ticketId, approver, action: ticket.action.type });
 
@@ -177,9 +182,11 @@ class GovernanceFeature implements FeatureModule {
     if (ticket.status !== 'pending') throw new Error(`Ticket is not pending: ${ticket.status}`);
 
     const now = Date.now();
-    this.db.prepare(
-      'UPDATE approval_tickets SET status = ?, approver = ?, reason = ?, resolved_at = ? WHERE id = ?'
-    ).run('rejected', approver, reason, now, ticketId);
+    this.db
+      .prepare(
+        'UPDATE approval_tickets SET status = ?, approver = ?, reason = ?, resolved_at = ? WHERE id = ?',
+      )
+      .run('rejected', approver, reason, now, ticketId);
 
     this.ctx.logger.info('Ticket rejected', { ticketId, approver, reason });
 
@@ -203,9 +210,9 @@ class GovernanceFeature implements FeatureModule {
 
   /** Rollback a configuration change (stores rollback data) */
   async rollback(configId: string): Promise<void> {
-    const ticket = this.db.prepare(
-      "SELECT * FROM approval_tickets WHERE id = ? AND status = 'approved'"
-    ).get(configId) as TicketRow | undefined;
+    const ticket = this.db
+      .prepare("SELECT * FROM approval_tickets WHERE id = ? AND status = 'approved'")
+      .get(configId) as TicketRow | undefined;
 
     if (!ticket) {
       throw new Error(`No approved ticket found for rollback: ${configId}`);
@@ -248,8 +255,12 @@ class GovernanceFeature implements FeatureModule {
   /** List all tickets with optional status filter */
   async listTickets(status?: ApprovalTicket['status']): Promise<ApprovalTicket[]> {
     const rows = status
-      ? this.db.prepare('SELECT * FROM approval_tickets WHERE status = ? ORDER BY created_at DESC').all(status) as TicketRow[]
-      : this.db.prepare('SELECT * FROM approval_tickets ORDER BY created_at DESC').all() as TicketRow[];
+      ? (this.db
+          .prepare('SELECT * FROM approval_tickets WHERE status = ? ORDER BY created_at DESC')
+          .all(status) as TicketRow[])
+      : (this.db
+          .prepare('SELECT * FROM approval_tickets ORDER BY created_at DESC')
+          .all() as TicketRow[]);
 
     return rows.map(this.rowToTicket);
   }
@@ -290,7 +301,7 @@ class GovernanceFeature implements FeatureModule {
     action: Action,
     requester: string,
     status: 'pending' | 'approved',
-    reason?: string
+    reason?: string,
   ): ApprovalTicket {
     const id = randomUUID();
     const now = Date.now();
@@ -308,20 +319,26 @@ class GovernanceFeature implements FeatureModule {
       expiresAt,
     };
 
-    this.db.prepare(
-      `INSERT INTO approval_tickets
+    this.db
+      .prepare(
+        `INSERT INTO approval_tickets
        (id, action_type, action_description, action_payload, action_risk, requester, status, approver, reason, created_at, resolved_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id, action.type, action.description,
-      JSON.stringify(action.payload), action.risk,
-      requester, status,
-      status === 'approved' ? 'system' : null,
-      reason ?? null,
-      now,
-      status === 'approved' ? now : null,
-      expiresAt
-    );
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        action.type,
+        action.description,
+        JSON.stringify(action.payload),
+        action.risk,
+        requester,
+        status,
+        status === 'approved' ? 'system' : null,
+        reason ?? null,
+        now,
+        status === 'approved' ? now : null,
+        expiresAt,
+      );
 
     if (status === 'pending') {
       this.ctx.logger.info('Approval ticket created', {
@@ -336,30 +353,36 @@ class GovernanceFeature implements FeatureModule {
   }
 
   private getTicketSync(ticketId: string): ApprovalTicket | null {
-    const row = this.db.prepare('SELECT * FROM approval_tickets WHERE id = ?').get(ticketId) as TicketRow | undefined;
+    const row = this.db.prepare('SELECT * FROM approval_tickets WHERE id = ?').get(ticketId) as
+      | TicketRow
+      | undefined;
     return row ? this.rowToTicket(row) : null;
   }
 
   private getPendingSync(): ApprovalTicket[] {
-    const rows = this.db.prepare(
-      "SELECT * FROM approval_tickets WHERE status = 'pending' ORDER BY created_at ASC"
-    ).all() as TicketRow[];
+    const rows = this.db
+      .prepare("SELECT * FROM approval_tickets WHERE status = 'pending' ORDER BY created_at ASC")
+      .all() as TicketRow[];
     return rows.map(this.rowToTicket);
   }
 
   private getExpiredCount(): number {
     const now = Date.now();
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as c FROM approval_tickets WHERE status = 'pending' AND expires_at <= ?"
-    ).get(now) as { c: number };
+    const row = this.db
+      .prepare(
+        "SELECT COUNT(*) as c FROM approval_tickets WHERE status = 'pending' AND expires_at <= ?",
+      )
+      .get(now) as { c: number };
     return row.c;
   }
 
   private expireOldTickets(): void {
     const now = Date.now();
-    const result = this.db.prepare(
-      "UPDATE approval_tickets SET status = 'expired', resolved_at = ? WHERE status = 'pending' AND expires_at <= ?"
-    ).run(now, now);
+    const result = this.db
+      .prepare(
+        "UPDATE approval_tickets SET status = 'expired', resolved_at = ? WHERE status = 'pending' AND expires_at <= ?",
+      )
+      .run(now, now);
 
     if (result.changes > 0) {
       this.ctx.logger.warn('Expired pending tickets', { count: result.changes });

@@ -7,7 +7,12 @@
 
 import express, { type Request, type Response, type Handler } from 'express';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 import rateLimiting from '../rate-limiting';
 
 /** API Gateway configuration */
@@ -120,7 +125,7 @@ class ApiGatewayFeature implements FeatureModule {
 
   async stop(): Promise<void> {
     if (this.server) {
-      await new Promise(resolve => this.server!.close(resolve));
+      await new Promise((resolve) => this.server!.close(resolve));
       this.server = null;
     }
     this.active = false;
@@ -142,7 +147,12 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Register a new endpoint */
-  registerEndpoint(path: string, method: ApiEndpoint['method'], handler: Handler, options?: { description?: string; requiresAuth?: boolean; rateLimited?: boolean }): void {
+  registerEndpoint(
+    path: string,
+    method: ApiEndpoint['method'],
+    handler: Handler,
+    options?: { description?: string; requiresAuth?: boolean; rateLimited?: boolean },
+  ): void {
     if (!this.app) {
       throw new Error('API Gateway not started. Call start() first.');
     }
@@ -198,7 +208,7 @@ class ApiGatewayFeature implements FeatureModule {
     if (method) {
       const methodEndpoints = this.endpoints.get(method);
       if (methodEndpoints) {
-        const filtered = methodEndpoints.filter(e => e.path !== normalizedPath);
+        const filtered = methodEndpoints.filter((e) => e.path !== normalizedPath);
         removed = methodEndpoints.length > filtered.length;
         this.endpoints.set(method, filtered);
       }
@@ -206,7 +216,7 @@ class ApiGatewayFeature implements FeatureModule {
       // Remove for all methods
       for (const [m, endpoints] of this.endpoints) {
         const before = endpoints.length;
-        const filtered = endpoints.filter(e => e.path !== normalizedPath);
+        const filtered = endpoints.filter((e) => e.path !== normalizedPath);
         this.endpoints.set(m, filtered);
         if (filtered.length < before) removed = true;
       }
@@ -239,7 +249,7 @@ class ApiGatewayFeature implements FeatureModule {
       lastUsed: undefined,
     };
     this.apiTokens.set(key, token);
-    this.ctx.logger.info('API token created', { name, key: `${key.slice(0, 12)  }...` });
+    this.ctx.logger.info('API token created', { name, key: `${key.slice(0, 12)}...` });
     return token;
   }
 
@@ -294,7 +304,11 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Rate limiting middleware */
-  private async rateLimitMiddleware(req: Request, res: Response, next: express.NextFunction): Promise<void> {
+  private async rateLimitMiddleware(
+    req: Request,
+    res: Response,
+    next: express.NextFunction,
+  ): Promise<void> {
     // Skip rate limiting for health check
     if (req.path.endsWith('/health')) {
       next();
@@ -338,7 +352,9 @@ class ApiGatewayFeature implements FeatureModule {
         return;
       }
     } catch (err) {
-      this.ctx.logger.warn('Rate limiting check failed, allowing', { error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.warn('Rate limiting check failed, allowing', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     next();
@@ -382,7 +398,7 @@ class ApiGatewayFeature implements FeatureModule {
     if (!methodEndpoints) return undefined;
 
     // Exact match only for now (could support params later)
-    return methodEndpoints.find(e => e.path === path);
+    return methodEndpoints.find((e) => e.path === path);
   }
 
   /** Health check handler */
@@ -392,7 +408,11 @@ class ApiGatewayFeature implements FeatureModule {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      endpoints: endpoints.map(e => ({ method: e.method, path: e.path, description: e.description })),
+      endpoints: endpoints.map((e) => ({
+        method: e.method,
+        path: e.path,
+        description: e.description,
+      })),
     });
   }
 
@@ -400,7 +420,11 @@ class ApiGatewayFeature implements FeatureModule {
   private registerDefaultEndpoints(): void {
     // GET /api/tokens - List tokens (admin)
     this.registerEndpoint('/tokens', 'GET', (_req, res) => {
-      const tokens = this.listTokens().map(t => ({ name: t.name, createdAt: t.createdAt, lastUsed: t.lastUsed }));
+      const tokens = this.listTokens().map((t) => ({
+        name: t.name,
+        createdAt: t.createdAt,
+        lastUsed: t.lastUsed,
+      }));
       res.json({ tokens });
     });
 
@@ -428,7 +452,7 @@ class ApiGatewayFeature implements FeatureModule {
 
     // GET /api/endpoints - List all registered endpoints
     this.registerEndpoint('/endpoints', 'GET', (_req, res) => {
-      const endpoints = this.listEndpoints().map(e => ({
+      const endpoints = this.listEndpoints().map((e) => ({
         method: e.method,
         path: e.path,
         description: e.description,

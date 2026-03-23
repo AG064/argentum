@@ -41,25 +41,35 @@ export const MCP_PROTOCOL_VERSION = '2025-06-18';
 
 export const InitializeRequestSchema = z.object({
   protocolVersion: z.string().optional(),
-  capabilities: z.object({
-    tools: z.object({
-      listChanged: z.boolean().optional(),
-    }).optional(),
-    resources: z.object({
-      subscribe: z.boolean().optional(),
-      listChanged: z.boolean().optional(),
-    }).optional(),
-    prompts: z.object({
-      listChanged: z.boolean().optional(),
-    }).optional(),
-    elicitation: z.object({}).optional(),
-    sampling: z.object({}).optional(),
-    logging: z.object({}).optional(),
-  }).optional(),
-  clientInfo: z.object({
-    name: z.string(),
-    version: z.string(),
-  }).optional(),
+  capabilities: z
+    .object({
+      tools: z
+        .object({
+          listChanged: z.boolean().optional(),
+        })
+        .optional(),
+      resources: z
+        .object({
+          subscribe: z.boolean().optional(),
+          listChanged: z.boolean().optional(),
+        })
+        .optional(),
+      prompts: z
+        .object({
+          listChanged: z.boolean().optional(),
+        })
+        .optional(),
+      elicitation: z.object({}).optional(),
+      sampling: z.object({}).optional(),
+      logging: z.object({}).optional(),
+    })
+    .optional(),
+  clientInfo: z
+    .object({
+      name: z.string(),
+      version: z.string(),
+    })
+    .optional(),
 });
 
 export type InitializeRequest = z.infer<typeof InitializeRequestSchema>;
@@ -67,16 +77,22 @@ export type InitializeRequest = z.infer<typeof InitializeRequestSchema>;
 export const InitializeResponseSchema = z.object({
   protocolVersion: z.string(),
   capabilities: z.object({
-    tools: z.object({
-      listChanged: z.boolean().optional(),
-    }).optional(),
-    resources: z.object({
-      subscribe: z.boolean().optional(),
-      listChanged: z.boolean().optional(),
-    }).optional(),
-    prompts: z.object({
-      listChanged: z.boolean().optional(),
-    }).optional(),
+    tools: z
+      .object({
+        listChanged: z.boolean().optional(),
+      })
+      .optional(),
+    resources: z
+      .object({
+        subscribe: z.boolean().optional(),
+        listChanged: z.boolean().optional(),
+      })
+      .optional(),
+    prompts: z
+      .object({
+        listChanged: z.boolean().optional(),
+      })
+      .optional(),
     sampling: z.object({}).optional(),
     logging: z.object({}).optional(),
   }),
@@ -189,11 +205,15 @@ export type ResourcesReadResponse = z.infer<typeof ResourcesReadResponseSchema>;
 export const PromptSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  arguments: z.array(z.object({
-    name: z.string(),
-    description: z.string().optional(),
-    required: z.boolean().optional(),
-  })).optional(),
+  arguments: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        required: z.boolean().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type Prompt = z.infer<typeof PromptSchema>;

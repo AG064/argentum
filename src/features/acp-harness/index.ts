@@ -21,7 +21,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 
 import { WebSocketServer } from 'ws';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 export interface ACPConfig {
   enabled: boolean;
@@ -133,7 +138,7 @@ class ACPHarnessFeature implements FeatureModule {
 
     // Parse body
     let body = '';
-    req.on('data', chunk => body += chunk);
+    req.on('data', (chunk) => (body += chunk));
     req.on('end', async () => {
       try {
         const reqBody: ACPExecuteRequest = JSON.parse(body);
@@ -142,14 +147,16 @@ class ACPHarnessFeature implements FeatureModule {
         res.end(JSON.stringify(result));
       } catch (err) {
         res.statusCode = 500;
-        res.end(JSON.stringify({
-          success: false,
-          error: err instanceof Error ? err.message : 'Unknown error',
-          stdout: '',
-          stderr: '',
-          exitCode: -1,
-          durationMs: 0,
-        }));
+        res.end(
+          JSON.stringify({
+            success: false,
+            error: err instanceof Error ? err.message : 'Unknown error',
+            stdout: '',
+            stderr: '',
+            exitCode: -1,
+            durationMs: 0,
+          }),
+        );
       }
     });
   }
@@ -163,9 +170,10 @@ class ACPHarnessFeature implements FeatureModule {
       const cmd = this.getCommand(req.language);
       const proc = spawn(cmd, ['-e', req.code], { timeout: timeoutMs });
 
-      let stdout = '', stderr = '';
-      proc.stdout?.on('data', d => stdout += d);
-      proc.stderr?.on('data', d => stderr += d);
+      let stdout = '',
+        stderr = '';
+      proc.stdout?.on('data', (d) => (stdout += d));
+      proc.stderr?.on('data', (d) => (stderr += d));
 
       proc.on('close', (code) => {
         resolve({

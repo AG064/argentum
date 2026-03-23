@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -107,7 +112,7 @@ class BudgetFeature implements FeatureModule {
   /** Record token usage for an agent */
   recordUsage(agent: string, tokens: number, cost: number): void {
     const stmt = this.db.prepare(
-      'INSERT INTO budget_log (agent, tokens, cost, timestamp) VALUES (?, ?, ?, ?)'
+      'INSERT INTO budget_log (agent, tokens, cost, timestamp) VALUES (?, ?, ?, ?)',
     );
     stmt.run(agent, tokens, cost, Date.now());
 
@@ -130,9 +135,11 @@ class BudgetFeature implements FeatureModule {
       return this.getAgentUsage(agent);
     }
     // Aggregate for all agents
-    const row = this.db.prepare(
-      'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE timestamp >= ?'
-    ).get(this.getMonthStart()) as { tokens: number; cost: number };
+    const row = this.db
+      .prepare(
+        'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE timestamp >= ?',
+      )
+      .get(this.getMonthStart()) as { tokens: number; cost: number };
 
     const limit = this.config.monthlyLimit;
     return {
@@ -156,11 +163,11 @@ class BudgetFeature implements FeatureModule {
 
   /** Get monthly report with all agents */
   getMonthlyReport(): BudgetReport {
-    const agents = this.db.prepare(
-      'SELECT DISTINCT agent FROM budget_log WHERE timestamp >= ?'
-    ).all(this.getMonthStart()) as Array<{ agent: string }>;
+    const agents = this.db
+      .prepare('SELECT DISTINCT agent FROM budget_log WHERE timestamp >= ?')
+      .all(this.getMonthStart()) as Array<{ agent: string }>;
 
-    const byAgent = agents.map(a => this.getAgentUsage(a.agent));
+    const byAgent = agents.map((a) => this.getAgentUsage(a.agent));
     const alerts: string[] = [];
 
     for (const status of byAgent) {
@@ -184,9 +191,9 @@ class BudgetFeature implements FeatureModule {
   getLogEntries(from?: number, to?: number): BudgetLogRow[] {
     const fromTs = from ?? this.getMonthStart();
     const toTs = to ?? Date.now();
-    return this.db.prepare(
-      'SELECT * FROM budget_log WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC'
-    ).all(fromTs, toTs) as BudgetLogRow[];
+    return this.db
+      .prepare('SELECT * FROM budget_log WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC')
+      .all(fromTs, toTs) as BudgetLogRow[];
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────
@@ -215,9 +222,11 @@ class BudgetFeature implements FeatureModule {
   }
 
   private getAgentUsage(agent: string): BudgetStatus {
-    const row = this.db.prepare(
-      'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE agent = ? AND timestamp >= ?'
-    ).get(agent, this.getMonthStart()) as { tokens: number; cost: number };
+    const row = this.db
+      .prepare(
+        'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE agent = ? AND timestamp >= ?',
+      )
+      .get(agent, this.getMonthStart()) as { tokens: number; cost: number };
 
     const limit = this.config.perAgentLimits[agent] ?? this.config.monthlyLimit;
 
@@ -232,9 +241,11 @@ class BudgetFeature implements FeatureModule {
   }
 
   private getMonthlyUsage(): { totalTokens: number; totalCost: number } {
-    const row = this.db.prepare(
-      'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE timestamp >= ?'
-    ).get(this.getMonthStart()) as { tokens: number; cost: number };
+    const row = this.db
+      .prepare(
+        'SELECT COALESCE(SUM(tokens), 0) as tokens, COALESCE(SUM(cost), 0) as cost FROM budget_log WHERE timestamp >= ?',
+      )
+      .get(this.getMonthStart()) as { tokens: number; cost: number };
     return { totalTokens: row.tokens, totalCost: row.cost };
   }
 

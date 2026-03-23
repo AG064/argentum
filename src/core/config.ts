@@ -16,15 +16,19 @@ import { z } from 'zod';
 const ServerConfigSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3000),
   host: z.string().default('0.0.0.0'),
-  cors: z.object({
-    enabled: z.boolean().default(true),
-    origins: z.array(z.string()).default(['*']),
-  }).default({}),
-  rateLimit: z.object({
-    enabled: z.boolean().default(true),
-    windowMs: z.number().int().default(60000),
-    maxRequests: z.number().int().default(100),
-  }).default({}),
+  cors: z
+    .object({
+      enabled: z.boolean().default(true),
+      origins: z.array(z.string()).default(['*']),
+    })
+    .default({}),
+  rateLimit: z
+    .object({
+      enabled: z.boolean().default(true),
+      windowMs: z.number().int().default(60000),
+      maxRequests: z.number().int().default(100),
+    })
+    .default({}),
 });
 
 /** Feature toggle schema */
@@ -131,87 +135,101 @@ export const LLMProviderConfigSchema = z.object({
 });
 
 /** LLM configuration schema */
-export const LLMConfigSchema = z.object({
-  providers: z.record(LLMProviderConfigSchema).default({}),
-  default: z.string().default(''),
-  fallback: z.array(z.string()).optional(),
-}).default({ providers: {}, default: '' });
+export const LLMConfigSchema = z
+  .object({
+    providers: z.record(LLMProviderConfigSchema).default({}),
+    default: z.string().default(''),
+    fallback: z.array(z.string()).optional(),
+  })
+  .default({ providers: {}, default: '' });
 
 /** Root configuration schema */
 export const ConfigSchema = z.object({
   server: ServerConfigSchema.default({}),
   llm: LLMConfigSchema.default({}),
-  features: z.object({
-    webchat: WebchatConfigSchema.default({}),
-    voice: VoiceConfigSchema.default({}),
-    'knowledge-graph': KnowledgeGraphConfigSchema.default({}),
-    'multimodal-memory': FeatureToggleSchema.default({}),
-    'browser-automation': FeatureToggleSchema.default({}),
-    webhooks: FeatureToggleSchema.default({}),
-    'mesh-workflows': FeatureToggleSchema.default({}),
-    'live-canvas': FeatureToggleSchema.default({}),
-    'container-sandbox': FeatureToggleSchema.default({}),
-    'air-gapped': FeatureToggleSchema.default({}),
-    'morning-briefing': FeatureToggleSchema.default({}),
-    'evening-recap': FeatureToggleSchema.default({}),
-    'smart-recommendations': FeatureToggleSchema.default({}),
-    'group-management': FeatureToggleSchema.default({}),
-    budget: FeatureToggleSchema.extend({
-      monthlyLimit: z.number().default(1_000_000),
-      perAgentLimits: z.record(z.number()).default({}),
-      alertThreshold: z.number().default(80),
-      hardStop: z.boolean().default(true),
-      dbPath: z.string().default('./data/budget.db'),
-    }).default({}),
-    goals: FeatureToggleSchema.extend({
-      dbPath: z.string().default('./data/goals.db'),
-    }).default({}),
-    'task-checkout': FeatureToggleSchema.extend({
-      dbPath: z.string().default('./data/task-checkout.db'),
-      leaseDurationMs: z.number().default(1_800_000),
-      maxLeasesPerAgent: z.number().default(10),
-    }).default({}),
-    'company-templates': FeatureToggleSchema.extend({
-      templatesPath: z.string().default('./data/templates'),
-    }).default({}),
-    governance: FeatureToggleSchema.extend({
-      dbPath: z.string().default('./data/governance.db'),
-      autoApproveRisk: z.enum(['none', 'low', 'medium']).default('low'),
-      ticketExpiryMs: z.number().default(86_400_000),
-      requiredApprovers: z.number().default(1),
-      approvers: z.array(z.string()).default([]),
-    }).default({}),
-    'multi-agent-coordination': MultiAgentCoordinationConfigSchema.default({}),
-    'role-based-access': RoleBasedAccessConfigSchema.default({}),
-    'shared-knowledge-base': SharedKnowledgeBaseConfigSchema.default({}),
-    'health-monitoring': HealthMonitoringConfigSchema.default({}),
-    'auto-update': AutoUpdateConfigSchema.default({}),
-    'cron-scheduler': CronSchedulerConfigSchema.default({}),
-  }).default({}),
+  features: z
+    .object({
+      'webchat': WebchatConfigSchema.default({}),
+      'voice': VoiceConfigSchema.default({}),
+      'knowledge-graph': KnowledgeGraphConfigSchema.default({}),
+      'multimodal-memory': FeatureToggleSchema.default({}),
+      'browser-automation': FeatureToggleSchema.default({}),
+      'webhooks': FeatureToggleSchema.default({}),
+      'mesh-workflows': FeatureToggleSchema.default({}),
+      'live-canvas': FeatureToggleSchema.default({}),
+      'container-sandbox': FeatureToggleSchema.default({}),
+      'air-gapped': FeatureToggleSchema.default({}),
+      'morning-briefing': FeatureToggleSchema.default({}),
+      'evening-recap': FeatureToggleSchema.default({}),
+      'smart-recommendations': FeatureToggleSchema.default({}),
+      'group-management': FeatureToggleSchema.default({}),
+      'budget': FeatureToggleSchema.extend({
+        monthlyLimit: z.number().default(1_000_000),
+        perAgentLimits: z.record(z.number()).default({}),
+        alertThreshold: z.number().default(80),
+        hardStop: z.boolean().default(true),
+        dbPath: z.string().default('./data/budget.db'),
+      }).default({}),
+      'goals': FeatureToggleSchema.extend({
+        dbPath: z.string().default('./data/goals.db'),
+      }).default({}),
+      'task-checkout': FeatureToggleSchema.extend({
+        dbPath: z.string().default('./data/task-checkout.db'),
+        leaseDurationMs: z.number().default(1_800_000),
+        maxLeasesPerAgent: z.number().default(10),
+      }).default({}),
+      'company-templates': FeatureToggleSchema.extend({
+        templatesPath: z.string().default('./data/templates'),
+      }).default({}),
+      'governance': FeatureToggleSchema.extend({
+        dbPath: z.string().default('./data/governance.db'),
+        autoApproveRisk: z.enum(['none', 'low', 'medium']).default('low'),
+        ticketExpiryMs: z.number().default(86_400_000),
+        requiredApprovers: z.number().default(1),
+        approvers: z.array(z.string()).default([]),
+      }).default({}),
+      'multi-agent-coordination': MultiAgentCoordinationConfigSchema.default({}),
+      'role-based-access': RoleBasedAccessConfigSchema.default({}),
+      'shared-knowledge-base': SharedKnowledgeBaseConfigSchema.default({}),
+      'health-monitoring': HealthMonitoringConfigSchema.default({}),
+      'auto-update': AutoUpdateConfigSchema.default({}),
+      'cron-scheduler': CronSchedulerConfigSchema.default({}),
+    })
+    .default({}),
   memory: MemoryConfigSchema.default({}),
   security: SecurityConfigSchema.default({}),
-  channels: z.object({
-    telegram: z.object({
-      enabled: z.boolean().default(true),
-      token: z.string().optional(),
-    }).default({}),
-    webchat: z.object({
-      enabled: z.boolean().default(true),
-    }).default({}),
-    mobile: z.object({
-      enabled: z.boolean().default(false),
-      fcmKey: z.string().optional(),
-      httpPort: z.number().default(3003),
-      httpPath: z.string().default('/mobile'),
-      requireAuth: z.boolean().default(false),
-      authToken: z.string().optional(),
-    }).default({}),
-  }).default({}),
-  logging: z.object({
-    level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-    format: z.enum(['json', 'pretty']).default('pretty'),
-    file: z.string().optional(),
-  }).default({}),
+  channels: z
+    .object({
+      telegram: z
+        .object({
+          enabled: z.boolean().default(true),
+          token: z.string().optional(),
+        })
+        .default({}),
+      webchat: z
+        .object({
+          enabled: z.boolean().default(true),
+        })
+        .default({}),
+      mobile: z
+        .object({
+          enabled: z.boolean().default(false),
+          fcmKey: z.string().optional(),
+          httpPort: z.number().default(3003),
+          httpPath: z.string().default('/mobile'),
+          requireAuth: z.boolean().default(false),
+          authToken: z.string().optional(),
+        })
+        .default({}),
+    })
+    .default({}),
+  logging: z
+    .object({
+      level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+      format: z.enum(['json', 'pretty']).default('pretty'),
+      file: z.string().optional(),
+    })
+    .default({}),
 });
 
 export type AGClawConfig = z.infer<typeof ConfigSchema>;
@@ -267,18 +285,27 @@ export class ConfigManager {
       overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
     }
     if (process.env.AGCLAW_SUPABASE_KEY) {
-      overrides['memory'] = { ...((overrides['memory'] as object) ?? {}), supabaseKey: process.env.AGCLAW_SUPABASE_KEY };
+      overrides['memory'] = {
+        ...((overrides['memory'] as object) ?? {}),
+        supabaseKey: process.env.AGCLAW_SUPABASE_KEY,
+      };
     }
 
     return overrides;
   }
 
   /** Deep merge two objects */
-  private deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  private deepMerge(
+    target: Record<string, unknown>,
+    source: Record<string, unknown>,
+  ): Record<string, unknown> {
     const result = { ...target };
     for (const key of Object.keys(source)) {
       if (source[key] instanceof Object && key in target && target[key] instanceof Object) {
-        result[key] = this.deepMerge(target[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
+        result[key] = this.deepMerge(
+          target[key] as Record<string, unknown>,
+          source[key] as Record<string, unknown>,
+        );
       } else {
         result[key] = source[key];
       }

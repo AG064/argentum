@@ -41,13 +41,24 @@ describe('webchat auth behavior (unit-level)', () => {
     // Create fake req/res
     const req: any = { headers: {}, url: '/' };
     const headersSent: any = {};
-    const res: any = { writeHead: (code: number) => { headersSent.code = code; }, end: (msg?: string) => { headersSent.msg = msg; } };
+    const res: any = {
+      writeHead: (code: number) => {
+        headersSent.code = code;
+      },
+      end: (msg?: string) => {
+        headersSent.msg = msg;
+      },
+    };
 
     // Recreate the HTTP handler from start() for testing
     const handler = (reqLocal: any, resLocal: any) => {
       const authHeader = reqLocal.headers['authorization'];
       if (instance.authToken) {
-        if (!authHeader || (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${instance.authToken}`) {
+        if (
+          !authHeader ||
+          (Array.isArray(authHeader) ? authHeader[0] : authHeader) !==
+            `Bearer ${instance.authToken}`
+        ) {
           resLocal.writeHead(401);
           resLocal.end('Unauthorized');
           return;

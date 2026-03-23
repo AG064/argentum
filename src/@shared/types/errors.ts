@@ -16,7 +16,7 @@ export abstract class DomainError extends Error {
     message: string,
     code: string,
     context: Record<string, unknown> = {},
-    isOperational = true
+    isOperational = true,
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -55,7 +55,7 @@ export class LLMProviderError extends DomainError {
     message: string,
     provider: string,
     statusCode?: number,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'LLM_PROVIDER_ERROR', { provider, statusCode, ...context });
     this.provider = provider;
@@ -72,7 +72,7 @@ export class FeatureError extends DomainError {
     message: string,
     feature: string,
     phase: FeatureError['phase'],
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'FEATURE_ERROR', { feature, phase, ...context });
     this.feature = feature;
@@ -89,7 +89,7 @@ export class MemoryError extends DomainError {
     message: string,
     operation: string,
     memoryType: string,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'MEMORY_ERROR', { operation, memoryType, ...context });
     this.operation = operation;
@@ -106,7 +106,7 @@ export class ToolExecutionError extends DomainError {
     message: string,
     tool: string,
     args: Record<string, unknown> = {},
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'TOOL_EXECUTION_ERROR', { tool, args, ...context });
     this.tool = tool;
@@ -123,7 +123,7 @@ export class ValidationError extends DomainError {
     message: string,
     field: string,
     value: unknown,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'VALIDATION_ERROR', { field, value, ...context });
     this.field = field;
@@ -140,7 +140,7 @@ export class AgentError extends DomainError {
     message: string,
     iteration: number,
     phase: AgentError['phase'],
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'AGENT_ERROR', { iteration, phase, ...context });
     this.iteration = iteration;
@@ -157,7 +157,7 @@ export class ChannelError extends DomainError {
     message: string,
     channel: string,
     event: string,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'CHANNEL_ERROR', { channel, event, ...context });
     this.channel = channel;
@@ -174,7 +174,7 @@ export class CoordinationError extends DomainError {
     message: string,
     agentId: string,
     action: string,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'COORDINATION_ERROR', { agentId, action, ...context });
     this.agentId = agentId;
@@ -191,7 +191,7 @@ export class PersistenceError extends DomainError {
     message: string,
     operation: string,
     dbPath?: string,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'PERSISTENCE_ERROR', { operation, dbPath, ...context });
     this.operation = operation;
@@ -208,7 +208,7 @@ export class CacheError extends DomainError {
     message: string,
     key: string,
     operation: CacheError['operation'],
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'CACHE_ERROR', { key, operation, ...context });
     this.key = key;
@@ -227,7 +227,7 @@ export class RateLimitError extends DomainError {
     limit: number,
     windowMs: number,
     retryAfterMs?: number,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ) {
     super(message, 'RATE_LIMIT_ERROR', { limit, windowMs, retryAfterMs, ...context });
     this.limit = limit;

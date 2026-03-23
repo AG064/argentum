@@ -11,7 +11,12 @@ import { dirname, extname, basename, join } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Supported document types */
 export type DocumentType = 'pdf' | 'docx' | 'txt' | 'md';
@@ -97,7 +102,8 @@ class DocumentAnalysisFeature implements FeatureModule {
     this.config = {
       cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
       maxCacheEntries: (config['maxCacheEntries'] as number) ?? this.config['maxCacheEntries'],
-      summaryProvider: (config['summaryProvider'] as 'local' | 'llm') ?? this.config['summaryProvider'],
+      summaryProvider:
+        (config['summaryProvider'] as 'local' | 'llm') ?? this.config['summaryProvider'],
     };
 
     this.initDatabase();
@@ -122,7 +128,9 @@ class DocumentAnalysisFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const cached = (this.db.prepare('SELECT COUNT(*) as c FROM analysis_cache').get() as { c: number }).c;
+      const cached = (
+        this.db.prepare('SELECT COUNT(*) as c FROM analysis_cache').get() as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -181,7 +189,10 @@ class DocumentAnalysisFeature implements FeatureModule {
         sections,
       };
     } catch (err) {
-      this.ctx.logger.error('Text extraction failed', { file: filePath, error: err instanceof Error ? err.message : String(err) });
+      this.ctx.logger.error('Text extraction failed', {
+        file: filePath,
+        error: err instanceof Error ? err.message : String(err),
+      });
       throw err;
     }
   }
@@ -244,9 +255,9 @@ class DocumentAnalysisFeature implements FeatureModule {
 
     // Check cache
     if (!force) {
-      const cached = this.db.prepare('SELECT * FROM analysis_cache WHERE cache_key = ?').get(cacheKey) as
-        | { result: string }
-        | undefined;
+      const cached = this.db
+        .prepare('SELECT * FROM analysis_cache WHERE cache_key = ?')
+        .get(cacheKey) as { result: string } | undefined;
       if (cached) {
         this.ctx.logger.debug('Analysis cache hit', { file: filePath });
         return JSON.parse(cached.result);
@@ -289,10 +300,14 @@ class DocumentAnalysisFeature implements FeatureModule {
     };
 
     // Cache result
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO analysis_cache (cache_key, file_path, result, cached_at)
       VALUES (?, ?, ?, ?)
-    `).run(cacheKey, filePath, JSON.stringify(result), Date.now());
+    `,
+      )
+      .run(cacheKey, filePath, JSON.stringify(result), Date.now());
 
     this.ctx.logger.info('Analysis complete', {
       file: filePath,
@@ -373,9 +388,9 @@ class DocumentAnalysisFeature implements FeatureModule {
 
   /** Generate a basic summary (first N sentences) */
   private generateSummary(text: string, maxSentences: number = 3): string {
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
     if (sentences.length === 0) return '';
-    return `${sentences.slice(0, maxSentences).join('. ')  }.`;
+    return `${sentences.slice(0, maxSentences).join('. ')}.`;
   }
 
   /** Very basic language detection */
@@ -405,8 +420,26 @@ class DocumentAnalysisFeature implements FeatureModule {
   /** Estimate sentiment based on simple keyword matching */
   private estimateSentiment(text: string): 'positive' | 'neutral' | 'negative' {
     const lower = text.toLowerCase();
-    const positive = ['good', 'great', 'excellent', 'love', 'happy', 'wonderful', 'amazing', 'positive'].filter(w => lower.includes(w)).length;
-    const negative = ['bad', 'terrible', 'awful', 'hate', 'sad', 'horrible', 'negative', 'worst'].filter(w => lower.includes(w)).length;
+    const positive = [
+      'good',
+      'great',
+      'excellent',
+      'love',
+      'happy',
+      'wonderful',
+      'amazing',
+      'positive',
+    ].filter((w) => lower.includes(w)).length;
+    const negative = [
+      'bad',
+      'terrible',
+      'awful',
+      'hate',
+      'sad',
+      'horrible',
+      'negative',
+      'worst',
+    ].filter((w) => lower.includes(w)).length;
 
     if (positive > negative) return 'positive';
     if (negative > positive) return 'negative';

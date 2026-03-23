@@ -176,7 +176,7 @@ export class PolicyEngine {
 
     // 2. Sort rules by priority (highest first)
     const sortedRules = Array.from(this.rules.values())
-      .filter(r => r.enabled)
+      .filter((r) => r.enabled)
       .sort((a, b) => b.priority - a.priority);
 
     // 3. Find first matching rule
@@ -288,7 +288,7 @@ export class PolicyEngine {
   private evaluateConditions(conditions: PolicyCondition[], context: PolicyContext): boolean {
     if (!conditions || conditions.length === 0) return true;
 
-    return conditions.every(cond => {
+    return conditions.every((cond) => {
       const value = context[cond.field];
 
       switch (cond.operator) {
@@ -375,7 +375,7 @@ export class PolicyEngine {
     // File-based audit log
     if (this.auditFilePath) {
       try {
-        const line = `${JSON.stringify(entry)  }\n`;
+        const line = `${JSON.stringify(entry)}\n`;
         appendFileSync(this.auditFilePath, line, 'utf-8');
       } catch (err) {
         this.logger.error('Failed to write audit log', {

@@ -10,7 +10,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
+import type {
+  FeatureModule,
+  FeatureMeta,
+  FeatureContext,
+  HealthStatus,
+} from '../../core/plugin-loader';
 
 export type TaskStatus = 'pending' | 'in-progress' | 'done' | 'blocked';
 
@@ -54,11 +59,17 @@ class GoalDecompositionFeature implements FeatureModule {
     this.initDatabase();
   }
 
-  async start(): Promise<void> { /* nothing */ }
-  async stop(): Promise<void> { this.db?.close(); }
+  async start(): Promise<void> {
+    /* nothing */
+  }
+  async stop(): Promise<void> {
+    this.db?.close();
+  }
 
   async healthCheck(): Promise<HealthStatus> {
-    const goals = (this.db.prepare('SELECT COUNT(DISTINCT goal_id) as c FROM tasks').get() as { c: number }).c;
+    const goals = (
+      this.db.prepare('SELECT COUNT(DISTINCT goal_id) as c FROM tasks').get() as { c: number }
+    ).c;
     const tasks = (this.db.prepare('SELECT COUNT(*) as c FROM tasks').get() as { c: number }).c;
     return { healthy: true, details: { goals, tasks } };
   }
@@ -69,25 +80,37 @@ class GoalDecompositionFeature implements FeatureModule {
     const id = randomUUID();
     const now = Date.now();
     // A goal is represented as a top-level task with goal_id = id and parent_id = NULL
-    this.db.prepare(
-      `INSERT INTO tasks (id, goal_id, parent_id, title, description, status, priority, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, 'pending', 5, ?, ?)`
-    ).run(id, id, title, description ?? '', now, now);
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, goal_id, parent_id, title, description, status, priority, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, 'pending', 5, ?, ?)`,
+      )
+      .run(id, id, title, description ?? '', now, now);
     this.ctx.logger?.info('Goal created', { id, title });
     return id;
   }
 
-  addSubTask(goalId: string, title: string, description?: string, parentId?: string, priority = 5): string {
+  addSubTask(
+    goalId: string,
+    title: string,
+    description?: string,
+    parentId?: string,
+    priority = 5,
+  ): string {
     const id = randomUUID();
     const now = Date.now();
     // ensure goal exists
-    const goalRow = this.db.prepare('SELECT id FROM tasks WHERE id = ? AND goal_id = ?').get(goalId, goalId);
+    const goalRow = this.db
+      .prepare('SELECT id FROM tasks WHERE id = ? AND goal_id = ?')
+      .get(goalId, goalId);
     if (!goalRow) throw new Error('Goal not found');
 
-    this.db.prepare(
-      `INSERT INTO tasks (id, goal_id, parent_id, title, description, status, priority, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
-    ).run(id, goalId, parentId ?? null, title, description ?? '', priority, now, now);
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, goal_id, parent_id, title, description, status, priority, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      )
+      .run(id, goalId, parentId ?? null, title, description ?? '', priority, now, now);
 
     this.ctx.logger?.info('Subtask added', { id, goalId, parentId });
     return id;
@@ -96,24 +119,34 @@ class GoalDecompositionFeature implements FeatureModule {
   setDependency(taskId: string, dependsOnId: string): void {
     // prevent circular dependency simple check
     if (taskId === dependsOnId) throw new Error('Task cannot depend on itself');
-    this.db.prepare('INSERT OR IGNORE INTO dependencies (task_id, depends_on_id) VALUES (?, ?)').run(taskId, dependsOnId);
+    this.db
+      .prepare('INSERT OR IGNORE INTO dependencies (task_id, depends_on_id) VALUES (?, ?)')
+      .run(taskId, dependsOnId);
   }
 
   updateStatus(taskId: string, status: TaskStatus): void {
-    if (!['pending', 'in-progress', 'done', 'blocked'].includes(status)) throw new Error('Invalid status');
+    if (!['pending', 'in-progress', 'done', 'blocked'].includes(status))
+      throw new Error('Invalid status');
     const now = Date.now();
-    this.db.prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?').run(status, now, taskId);
+    this.db
+      .prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?')
+      .run(status, now, taskId);
   }
 
   getTaskTree(goalId: string): TaskRow | null {
-    const root = this.db.prepare('SELECT * FROM tasks WHERE id = ? AND goal_id = ?').get(goalId, goalId) as TaskRow | undefined;
+    const root = this.db
+      .prepare('SELECT * FROM tasks WHERE id = ? AND goal_id = ?')
+      .get(goalId, goalId) as TaskRow | undefined;
     if (!root) return null;
 
-    const all = this.db.prepare('SELECT * FROM tasks WHERE goal_id = ? ORDER BY priority DESC, created_at ASC').all(goalId) as TaskRow[];
+    const all = this.db
+      .prepare('SELECT * FROM tasks WHERE goal_id = ? ORDER BY priority DESC, created_at ASC')
+      .all(goalId) as TaskRow[];
     const map: Record<string, TaskRow & { children?: TaskRow[] }> = {};
     for (const t of all) map[t.id] = { ...t, children: [] } as any;
     for (const t of all) {
-      if (t.parent_id && map[t.parent_id] && map[t.id]) map[t.parent_id]!.children!.push(map[t.id] as TaskRow & { children?: TaskRow[] });
+      if (t.parent_id && map[t.parent_id] && map[t.id])
+        map[t.parent_id]!.children!.push(map[t.id] as TaskRow & { children?: TaskRow[] });
     }
 
     return map[goalId] || null;
@@ -121,7 +154,9 @@ class GoalDecompositionFeature implements FeatureModule {
 
   getReadyTasks(): TaskRow[] {
     // Tasks that are not done and have no unfinished dependencies
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT t.* FROM tasks t
       LEFT JOIN (
         SELECT d.task_id, COUNT(*) as pending_deps FROM dependencies d
@@ -131,7 +166,9 @@ class GoalDecompositionFeature implements FeatureModule {
       WHERE t.status != 'done' AND (pd.pending_deps IS NULL OR pd.pending_deps = 0)
       ORDER BY t.priority DESC, t.created_at ASC
       LIMIT 100
-    `).all() as TaskRow[];
+    `,
+      )
+      .all() as TaskRow[];
     return rows;
   }
 

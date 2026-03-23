@@ -5,7 +5,12 @@
  * Supports shapes, freehand drawing, text, and image overlays.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Live Canvas configuration */
 export interface LiveCanvasConfig {
@@ -137,7 +142,10 @@ class LiveCanvasFeature implements FeatureModule {
   }
 
   /** Add an element to canvas */
-  addElement(canvasId: string, element: Omit<CanvasElement, 'id' | 'createdAt'>): CanvasElement | null {
+  addElement(
+    canvasId: string,
+    element: Omit<CanvasElement, 'id' | 'createdAt'>,
+  ): CanvasElement | null {
     const canvas = this.canvases.get(canvasId);
     if (!canvas) return null;
 

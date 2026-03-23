@@ -11,7 +11,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -95,7 +100,9 @@ class GoalsFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const goals = this.db.prepare('SELECT COUNT(*) as c FROM goals').get() as { c: number };
-    const active = this.db.prepare("SELECT COUNT(*) as c FROM goals WHERE status = 'active'").get() as { c: number };
+    const active = this.db
+      .prepare("SELECT COUNT(*) as c FROM goals WHERE status = 'active'")
+      .get() as { c: number };
     return {
       healthy: true,
       details: { totalGoals: goals.c, activeGoals: active.c },
@@ -125,10 +132,12 @@ class GoalsFeature implements FeatureModule {
       updatedAt: now,
     };
 
-    this.db.prepare(
-      `INSERT INTO goals (id, title, description, parent_id, status, metrics, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, parentId ?? null, 'active', '{}', now, now);
+    this.db
+      .prepare(
+        `INSERT INTO goals (id, title, description, parent_id, status, metrics, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, title, description, parentId ?? null, 'active', '{}', now, now);
 
     this.ctx.logger.info('Goal created', { id, title, parentId });
     return goal;
@@ -140,18 +149,16 @@ class GoalsFeature implements FeatureModule {
     if (!goal) throw new Error(`Goal not found: ${goalId}`);
 
     const now = Date.now();
-    this.db.prepare(
-      `INSERT OR REPLACE INTO task_goals (task_id, goal_id, linked_at) VALUES (?, ?, ?)`
-    ).run(taskId, goalId, now);
+    this.db
+      .prepare(`INSERT OR REPLACE INTO task_goals (task_id, goal_id, linked_at) VALUES (?, ?, ?)`)
+      .run(taskId, goalId, now);
 
     this.ctx.logger.debug('Task linked to goal', { taskId, goalId });
   }
 
   /** Get full goal tree */
   async getGoalTree(): Promise<GoalNode[]> {
-    const rows = this.db.prepare(
-      'SELECT * FROM goals ORDER BY created_at ASC'
-    ).all() as GoalRow[];
+    const rows = this.db.prepare('SELECT * FROM goals ORDER BY created_at ASC').all() as GoalRow[];
 
     const taskCounts = this.getTaskCounts();
 
@@ -190,21 +197,27 @@ class GoalsFeature implements FeatureModule {
 
   /** Get progress report for a goal */
   async getGoalProgress(goalId: string): Promise<ProgressReport> {
-    const row = this.db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId) as GoalRow | undefined;
+    const row = this.db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId) as
+      | GoalRow
+      | undefined;
     if (!row) throw new Error(`Goal not found: ${goalId}`);
 
-    const taskCounts = this.db.prepare(
-      `SELECT
+    const taskCounts = this.db
+      .prepare(
+        `SELECT
         COUNT(*) as total,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
        FROM task_goals tg
        LEFT JOIN tasks t ON t.id = tg.task_id
-       WHERE tg.goal_id = ?`
-    ).get(goalId) as { total: number; completed: number };
+       WHERE tg.goal_id = ?`,
+      )
+      .get(goalId) as { total: number; completed: number };
 
-    const subGoalCount = (this.db.prepare(
-      'SELECT COUNT(*) as c FROM goals WHERE parent_id = ?'
-    ).get(goalId) as { c: number }).c;
+    const subGoalCount = (
+      this.db.prepare('SELECT COUNT(*) as c FROM goals WHERE parent_id = ?').get(goalId) as {
+        c: number;
+      }
+    ).c;
 
     const total = taskCounts.total ?? 0;
     const completed = taskCounts.completed ?? 0;
@@ -225,9 +238,9 @@ class GoalsFeature implements FeatureModule {
 
   /** Update goal status */
   async updateGoalStatus(goalId: string, status: Goal['status']): Promise<void> {
-    const result = this.db.prepare(
-      'UPDATE goals SET status = ?, updated_at = ? WHERE id = ?'
-    ).run(status, Date.now(), goalId);
+    const result = this.db
+      .prepare('UPDATE goals SET status = ?, updated_at = ? WHERE id = ?')
+      .run(status, Date.now(), goalId);
 
     if (result.changes === 0) throw new Error(`Goal not found: ${goalId}`);
     this.ctx.logger.info('Goal status updated', { goalId, status });
@@ -235,17 +248,22 @@ class GoalsFeature implements FeatureModule {
 
   /** Update goal metrics */
   async updateGoalMetrics(goalId: string, metrics: Record<string, unknown>): Promise<void> {
-    const existing = this.db.prepare('SELECT metrics FROM goals WHERE id = ?').get(goalId) as { metrics: string } | undefined;
+    const existing = this.db.prepare('SELECT metrics FROM goals WHERE id = ?').get(goalId) as
+      | { metrics: string }
+      | undefined;
     if (!existing) throw new Error(`Goal not found: ${goalId}`);
 
     const merged = { ...this.parseJson(existing.metrics), ...metrics };
-    this.db.prepare('UPDATE goals SET metrics = ?, updated_at = ? WHERE id = ?')
+    this.db
+      .prepare('UPDATE goals SET metrics = ?, updated_at = ? WHERE id = ?')
       .run(JSON.stringify(merged), Date.now(), goalId);
   }
 
   /** Get a single goal by ID */
   async getGoal(goalId: string): Promise<Goal | null> {
-    const row = this.db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId) as GoalRow | undefined;
+    const row = this.db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId) as
+      | GoalRow
+      | undefined;
     if (!row) return null;
 
     return {
@@ -263,10 +281,12 @@ class GoalsFeature implements FeatureModule {
   /** List all goals */
   async listGoals(status?: Goal['status']): Promise<Goal[]> {
     const rows = status
-      ? this.db.prepare('SELECT * FROM goals WHERE status = ? ORDER BY created_at DESC').all(status) as GoalRow[]
-      : this.db.prepare('SELECT * FROM goals ORDER BY created_at DESC').all() as GoalRow[];
+      ? (this.db
+          .prepare('SELECT * FROM goals WHERE status = ? ORDER BY created_at DESC')
+          .all(status) as GoalRow[])
+      : (this.db.prepare('SELECT * FROM goals ORDER BY created_at DESC').all() as GoalRow[]);
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       title: r.title,
       description: r.description,
@@ -328,14 +348,16 @@ class GoalsFeature implements FeatureModule {
   }
 
   private getTaskCounts(): Map<string, { total: number; completed: number }> {
-    const rows = this.db.prepare(
-      `SELECT tg.goal_id,
+    const rows = this.db
+      .prepare(
+        `SELECT tg.goal_id,
         COUNT(*) as total,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
        FROM task_goals tg
        LEFT JOIN tasks t ON t.id = tg.task_id
-       GROUP BY tg.goal_id`
-    ).all() as Array<{ goal_id: string; total: number; completed: number }>;
+       GROUP BY tg.goal_id`,
+      )
+      .all() as Array<{ goal_id: string; total: number; completed: number }>;
 
     const map = new Map<string, { total: number; completed: number }>();
     for (const row of rows) {

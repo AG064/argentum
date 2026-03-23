@@ -112,15 +112,18 @@ export class Logger {
 
   /** Log an error object with stack trace */
   exception(error: Error, message?: string, data?: Record<string, unknown>): void {
-    this.pino.error({
-      ...this.context,
-      ...data,
-      err: {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
+    this.pino.error(
+      {
+        ...this.context,
+        ...data,
+        err: {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        },
       },
-    }, message ?? error.message);
+      message ?? error.message,
+    );
   }
 
   /** Set log level dynamically */

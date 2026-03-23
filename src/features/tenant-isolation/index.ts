@@ -3,7 +3,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 export interface TenantIsolationConfig {
   enabled: boolean;
@@ -34,7 +39,9 @@ class TenantIsolationFeature implements FeatureModule {
   }
 
   async start(): Promise<void> {
-    this.ctx.logger.info('Tenant isolation active', { defaultQuota: this.config.defaultQuotaPerTenant });
+    this.ctx.logger.info('Tenant isolation active', {
+      defaultQuota: this.config.defaultQuotaPerTenant,
+    });
   }
 
   async stop(): Promise<void> {
@@ -50,13 +57,19 @@ class TenantIsolationFeature implements FeatureModule {
   ensureTenant(tenantId: string, displayName?: string) {
     const exists = this.db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId);
     if (!exists) {
-      this.db.prepare('INSERT INTO tenants (id, name, quota) VALUES (?, ?, ?)').run(tenantId, displayName || tenantId, this.config.defaultQuotaPerTenant);
+      this.db
+        .prepare('INSERT INTO tenants (id, name, quota) VALUES (?, ?, ?)')
+        .run(tenantId, displayName || tenantId, this.config.defaultQuotaPerTenant);
       this.ctx.logger.info('Tenant created', { tenantId });
     }
   }
 
   // Check quota for tenant, consume if allowConsume true
-  checkAndConsumeQuota(tenantId: string, amount: number = 1, allowConsume: boolean = true): boolean {
+  checkAndConsumeQuota(
+    tenantId: string,
+    amount: number = 1,
+    allowConsume: boolean = true,
+  ): boolean {
     const row = this.db.prepare('SELECT quota FROM tenants WHERE id = ?').get(tenantId) as any;
     if (!row) return false;
     const quota = row.quota as number;

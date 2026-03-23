@@ -7,7 +7,12 @@
 
 import jsep from 'jsep';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /**
  * Mesh Workflows feature — goal decomposition and multi-step orchestration.
@@ -69,7 +74,11 @@ export interface WorkflowExecution {
 }
 
 /** Step handler function */
-export type StepHandler = (step: WorkflowStep, context: Record<string, unknown>, execution: WorkflowExecution) => Promise<unknown>;
+export type StepHandler = (
+  step: WorkflowStep,
+  context: Record<string, unknown>,
+  execution: WorkflowExecution,
+) => Promise<unknown>;
 
 /** Goal decomposition result */
 export interface DecomposedGoal {
@@ -91,45 +100,59 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
       const left = evalNode(node.left, vars);
       const right = evalNode(node.right, vars);
       switch (node.operator) {
-        case '+': return left + right;
-        case '-': return left - right;
-        case '*': return left * right;
-        case '/': return left / right;
-        case '>': return left > right;
-        case '<': return left < right;
-        case '>=': return left >= right;
-        case '<=': return left <= right;
-        case '==': return left == right;
-        case '!=': return left != right;
-        case '===': return left === right;
-        case '!==': return left !== right;
+        case '+':
+          return left + right;
+        case '-':
+          return left - right;
+        case '*':
+          return left * right;
+        case '/':
+          return left / right;
+        case '>':
+          return left > right;
+        case '<':
+          return left < right;
+        case '>=':
+          return left >= right;
+        case '<=':
+          return left <= right;
+        case '==':
+          return left == right;
+        case '!=':
+          return left != right;
+        case '===':
+          return left === right;
+        case '!==':
+          return left !== right;
       }
-      throw new Error(`Unsupported operator: ${  node.operator}`);
+      throw new Error(`Unsupported operator: ${node.operator}`);
     }
     case 'LogicalExpression': {
       if (node.operator === '&&') return evalNode(node.left, vars) && evalNode(node.right, vars);
       if (node.operator === '||') return evalNode(node.left, vars) || evalNode(node.right, vars);
-      throw new Error(`Unsupported logical operator: ${  node.operator}`);
+      throw new Error(`Unsupported logical operator: ${node.operator}`);
     }
     case 'UnaryExpression': {
       const val = evalNode(node.argument, vars);
       if (node.operator === '!') return !val;
       if (node.operator === '+') return +val;
       if (node.operator === '-') return -val;
-      throw new Error(`Unsupported unary operator: ${  node.operator}`);
+      throw new Error(`Unsupported unary operator: ${node.operator}`);
     }
     case 'Identifier': {
       const name = node.name;
       if (Object.prototype.hasOwnProperty.call(vars, name)) return vars[name as keyof typeof vars];
       return undefined;
     }
-    case 'Literal': return node.value;
+    case 'Literal':
+      return node.value;
     case 'MemberExpression': {
       const obj = evalNode(node.object, vars);
       const prop = node.computed ? evalNode(node.property, vars) : node.property.name;
       return obj ? obj[prop] : undefined;
     }
-    default: throw new Error(`Unsupported node type: ${  node.type}`);
+    default:
+      throw new Error(`Unsupported node type: ${node.type}`);
   }
 }
 
@@ -171,7 +194,7 @@ class MeshWorkflowsFeature implements FeatureModule {
     // Register built-in handlers
     this.registerStepHandler('delay', async (step) => {
       const ms = (step.config['duration'] as number) ?? 1000;
-      await new Promise(r => setTimeout(r, ms));
+      await new Promise((r) => setTimeout(r, ms));
       return { delayed: ms };
     });
     this.registerStepHandler('condition', async (step, vars) => {
@@ -181,7 +204,10 @@ class MeshWorkflowsFeature implements FeatureModule {
         const result = evaluateCondition(condition, vars);
         return { result: !!result, nextStep: result ? step.nextSteps[0] : step.nextSteps[1] };
       } catch (err) {
-        this.ctx.logger.warn('Condition evaluation failed', { condition, error: err instanceof Error ? err.message : String(err) });
+        this.ctx.logger.warn('Condition evaluation failed', {
+          condition,
+          error: err instanceof Error ? err.message : String(err),
+        });
         return { result: false };
       }
     });
@@ -195,7 +221,9 @@ class MeshWorkflowsFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const running = Array.from(this.executions.values()).filter(e => e.status === 'running').length;
+    const running = Array.from(this.executions.values()).filter(
+      (e) => e.status === 'running',
+    ).length;
     return {
       healthy: running < this.config.maxConcurrent,
       details: {
@@ -210,7 +238,10 @@ class MeshWorkflowsFeature implements FeatureModule {
   // ─── Goal Decomposition ───────────────────────────────────────────────────
 
   /** Decompose a goal into subtasks using the agent */
-  async decomposeGoal(goal: string, context: Record<string, unknown> = {}): Promise<DecomposedGoal> {
+  async decomposeGoal(
+    goal: string,
+    context: Record<string, unknown> = {},
+  ): Promise<DecomposedGoal> {
     // Analyze goal and create subtasks
     const subtasks = this.analyzeGoal(goal, context);
 
@@ -221,12 +252,18 @@ class MeshWorkflowsFeature implements FeatureModule {
   }
 
   /** Simple goal analysis — extracts subtasks from goal description */
-  private analyzeGoal(goal: string, __context: Record<string, unknown>): DecomposedGoal['subtasks'] {
+  private analyzeGoal(
+    goal: string,
+    __context: Record<string, unknown>,
+  ): DecomposedGoal['subtasks'] {
     const subtasks: DecomposedGoal['subtasks'] = [];
-    const lines = goal.split(/[.\n]/).map(l => l.trim()).filter(Boolean);
+    const lines = goal
+      .split(/[.\n]/)
+      .map((l) => l.trim())
+      .filter(Boolean);
 
     // If goal has explicit steps (numbered or bulleted), use them
-    const explicitSteps = lines.filter(l => /^\d+[\.\)]\s/.test(l) || /^[-*]\s/.test(l));
+    const explicitSteps = lines.filter((l) => /^\d+[\.\)]\s/.test(l) || /^[-*]\s/.test(l));
     if (explicitSteps.length > 1) {
       explicitSteps.forEach((step, i) => {
         const name = step.replace(/^(\d+[\.\)]|[-*])\s*/, '').trim();
@@ -240,10 +277,25 @@ class MeshWorkflowsFeature implements FeatureModule {
     } else {
       // Default decomposition: research -> plan -> execute -> verify
       subtasks.push(
-        { id: 'research', name: 'Research & gather info', description: `Research context for: ${goal}`, dependencies: [] },
-        { id: 'plan', name: 'Create execution plan', description: 'Plan approach and resources', dependencies: ['research'] },
+        {
+          id: 'research',
+          name: 'Research & gather info',
+          description: `Research context for: ${goal}`,
+          dependencies: [],
+        },
+        {
+          id: 'plan',
+          name: 'Create execution plan',
+          description: 'Plan approach and resources',
+          dependencies: ['research'],
+        },
         { id: 'execute', name: 'Execute main task', description: goal, dependencies: ['plan'] },
-        { id: 'verify', name: 'Verify results', description: 'Check that goal is achieved', dependencies: ['execute'] },
+        {
+          id: 'verify',
+          name: 'Verify results',
+          description: 'Check that goal is achieved',
+          dependencies: ['execute'],
+        },
       );
     }
 
@@ -254,9 +306,12 @@ class MeshWorkflowsFeature implements FeatureModule {
   private topologicalSort(subtasks: DecomposedGoal['subtasks']): string[] {
     const inDegree = new Map<string, number>();
     const adjacency = new Map<string, string[]>();
-    const ids = subtasks.map(s => s.id);
+    const ids = subtasks.map((s) => s.id);
 
-    for (const id of ids) { inDegree.set(id, 0); adjacency.set(id, []); }
+    for (const id of ids) {
+      inDegree.set(id, 0);
+      adjacency.set(id, []);
+    }
     for (const task of subtasks) {
       for (const dep of task.dependencies) {
         if (adjacency.has(dep)) {
@@ -266,7 +321,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       }
     }
 
-    const queue = ids.filter(id => (inDegree.get(id) ?? 0) === 0);
+    const queue = ids.filter((id) => (inDegree.get(id) ?? 0) === 0);
     const order: string[] = [];
     while (queue.length > 0) {
       const id = queue.shift()!;
@@ -286,13 +341,17 @@ class MeshWorkflowsFeature implements FeatureModule {
     const now = Date.now();
     const full: Workflow = { ...workflow, createdAt: now, updatedAt: now };
     this.workflows.set(workflow.id, full);
-    this.ctx.logger.info('Workflow registered', { id: workflow.id, name: workflow.name, steps: workflow.steps.length });
+    this.ctx.logger.info('Workflow registered', {
+      id: workflow.id,
+      name: workflow.name,
+      steps: workflow.steps.length,
+    });
     return full;
   }
 
   /** Create a workflow from a decomposed goal */
   createWorkflowFromGoal(goalId: string, decomposed: DecomposedGoal): Workflow {
-    const steps: WorkflowStep[] = decomposed.subtasks.map(task => ({
+    const steps: WorkflowStep[] = decomposed.subtasks.map((task) => ({
       id: task.id,
       name: task.name,
       type: 'agent' as const,
@@ -304,7 +363,7 @@ class MeshWorkflowsFeature implements FeatureModule {
 
     // Set nextSteps based on execution plan order
     for (let i = 0; i < decomposed.executionPlan.length - 1; i++) {
-      const step = steps.find(s => s.id === decomposed.executionPlan[i]);
+      const step = steps.find((s) => s.id === decomposed.executionPlan[i]);
       if (step) step.nextSteps = [decomposed.executionPlan[i + 1]!];
     }
 
@@ -333,26 +392,39 @@ class MeshWorkflowsFeature implements FeatureModule {
   // ─── Execution ────────────────────────────────────────────────────────────
 
   /** Execute a workflow */
-  async execute(workflowId: string, variables: Record<string, unknown> = {}): Promise<WorkflowExecution> {
-    if (this.runningCount >= this.config.maxConcurrent) throw new Error('Maximum concurrent executions reached');
+  async execute(
+    workflowId: string,
+    variables: Record<string, unknown> = {},
+  ): Promise<WorkflowExecution> {
+    if (this.runningCount >= this.config.maxConcurrent)
+      throw new Error('Maximum concurrent executions reached');
 
     const workflow = this.workflows.get(workflowId);
     if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const execution: WorkflowExecution = {
-      id: executionId, workflowId, status: 'running', currentStep: workflow.entryStep,
-      completedSteps: [], failedSteps: [],
+      id: executionId,
+      workflowId,
+      status: 'running',
+      currentStep: workflow.entryStep,
+      completedSteps: [],
+      failedSteps: [],
       variables: { ...workflow.variables, ...variables },
-      stepResults: new Map(), progress: 0, startedAt: Date.now(),
+      stepResults: new Map(),
+      progress: 0,
+      startedAt: Date.now(),
     };
 
     this.executions.set(executionId, execution);
     this.runningCount++;
 
     // Run asynchronously with dependency awareness
-    this.runExecution(execution, workflow).catch(err => {
-      this.ctx.logger.error('Workflow execution error', { executionId, error: err instanceof Error ? err.message : String(err) });
+    this.runExecution(execution, workflow).catch((err) => {
+      this.ctx.logger.error('Workflow execution error', {
+        executionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
 
     return execution;
@@ -367,14 +439,16 @@ class MeshWorkflowsFeature implements FeatureModule {
     try {
       while (execution.status === 'running' && completed.size < totalSteps) {
         // Find steps ready to run (dependencies satisfied)
-        const readySteps = workflow.steps.filter(step =>
-          !completed.has(step.id) && !failed.has(step.id) &&
-          step.dependencies.every(d => completed.has(d))
+        const readySteps = workflow.steps.filter(
+          (step) =>
+            !completed.has(step.id) &&
+            !failed.has(step.id) &&
+            step.dependencies.every((d) => completed.has(d)),
         );
 
         if (readySteps.length === 0) {
           // Check if we're stuck (remaining steps have failed dependencies)
-          const remaining = workflow.steps.filter(s => !completed.has(s.id) && !failed.has(s.id));
+          const remaining = workflow.steps.filter((s) => !completed.has(s.id) && !failed.has(s.id));
           if (remaining.length > 0) {
             execution.status = 'failed';
             execution.error = 'Deadlock: remaining steps have unsatisfied dependencies';
@@ -383,45 +457,50 @@ class MeshWorkflowsFeature implements FeatureModule {
         }
 
         // Run ready steps (parallel if multiple)
-        await Promise.all(readySteps.map(async (step) => {
-          execution.currentStep = step.id;
-          this.emitProgress(execution);
+        await Promise.all(
+          readySteps.map(async (step) => {
+            execution.currentStep = step.id;
+            this.emitProgress(execution);
 
-          try {
-            const handler = this.stepHandlers.get(step.type);
-            if (handler) {
-              const result = await handler(step, execution.variables, execution);
-              execution.stepResults.set(step.id, result);
+            try {
+              const handler = this.stepHandlers.get(step.type);
+              if (handler) {
+                const result = await handler(step, execution.variables, execution);
+                execution.stepResults.set(step.id, result);
 
-              // Handle condition branching
-              if (step.type === 'condition' && result && typeof result === 'object') {
-                const r = result as { nextStep?: string };
-                if (r.nextStep) step.nextSteps = [r.nextStep];
+                // Handle condition branching
+                if (step.type === 'condition' && result && typeof result === 'object') {
+                  const r = result as { nextStep?: string };
+                  if (r.nextStep) step.nextSteps = [r.nextStep];
+                }
+              }
+              completed.add(step.id);
+              execution.completedSteps.push(step.id);
+            } catch (err) {
+              failed.add(step.id);
+              execution.failedSteps.push(step.id);
+              this.ctx.logger.error('Step failed', {
+                step: step.name,
+                error: err instanceof Error ? err.message : String(err),
+              });
+
+              if (step.errorStep) {
+                // Execute error handler step
+                const errorStep = workflow.steps.find((s) => s.id === step.errorStep);
+                if (errorStep) {
+                  try {
+                    const handler = this.stepHandlers.get(errorStep.type);
+                    if (handler) await handler(errorStep, execution.variables, execution);
+                  } catch {}
+                }
               }
             }
-            completed.add(step.id);
-            execution.completedSteps.push(step.id);
-          } catch (err) {
-            failed.add(step.id);
-            execution.failedSteps.push(step.id);
-            this.ctx.logger.error('Step failed', { step: step.name, error: err instanceof Error ? err.message : String(err) });
 
-            if (step.errorStep) {
-              // Execute error handler step
-              const errorStep = workflow.steps.find(s => s.id === step.errorStep);
-              if (errorStep) {
-                try {
-                  const handler = this.stepHandlers.get(errorStep.type);
-                  if (handler) await handler(errorStep, execution.variables, execution);
-                } catch {}
-              }
-            }
-          }
-
-          // Update progress
-          execution.progress = Math.round((completed.size / totalSteps) * 100);
-          this.emitProgress(execution);
-        }));
+            // Update progress
+            execution.progress = Math.round((completed.size / totalSteps) * 100);
+            this.emitProgress(execution);
+          }),
+        );
       }
 
       if (execution.status === 'running') {
@@ -437,7 +516,9 @@ class MeshWorkflowsFeature implements FeatureModule {
   /** Emit progress to listeners */
   private emitProgress(exec: WorkflowExecution): void {
     for (const listener of this.progressListeners) {
-      try { listener(exec); } catch {}
+      try {
+        listener(exec);
+      } catch {}
     }
   }
 
@@ -449,7 +530,10 @@ class MeshWorkflowsFeature implements FeatureModule {
   /** Pause execution */
   pauseExecution(executionId: string): boolean {
     const exec = this.executions.get(executionId);
-    if (exec?.status === 'running') { exec.status = 'paused'; return true; }
+    if (exec?.status === 'running') {
+      exec.status = 'paused';
+      return true;
+    }
     return false;
   }
 
@@ -470,11 +554,15 @@ class MeshWorkflowsFeature implements FeatureModule {
     const exec = this.executions.get(executionId);
     if (!exec) return null;
     return {
-      id: exec.id, workflowId: exec.workflowId, status: exec.status,
-      currentStep: exec.currentStep, completedSteps: [...exec.completedSteps],
+      id: exec.id,
+      workflowId: exec.workflowId,
+      status: exec.status,
+      currentStep: exec.currentStep,
+      completedSteps: [...exec.completedSteps],
       variables: { ...exec.variables },
       stepResults: Array.from(exec.stepResults.entries()),
-      progress: exec.progress, startedAt: exec.startedAt,
+      progress: exec.progress,
+      startedAt: exec.startedAt,
     };
   }
 
@@ -485,13 +573,16 @@ class MeshWorkflowsFeature implements FeatureModule {
     if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
 
     const execution: WorkflowExecution = {
-      id: data['id'] as string, workflowId, status: 'paused',
+      id: data['id'] as string,
+      workflowId,
+      status: 'paused',
       currentStep: data['currentStep'] as string,
       completedSteps: (data['completedSteps'] as string[]) ?? [],
       failedSteps: [],
       variables: (data['variables'] as Record<string, unknown>) ?? {},
       stepResults: new Map(data['stepResults'] as [string, unknown][]),
-      progress: data['progress'] as number, startedAt: data['startedAt'] as number,
+      progress: data['progress'] as number,
+      startedAt: data['startedAt'] as number,
       checkpointData: data,
     };
 

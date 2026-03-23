@@ -9,7 +9,12 @@ import path from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Weather configuration */
 export interface WeatherConfig {
@@ -110,7 +115,9 @@ class WeatherAlertsFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM weather_alerts').get() as { c: number }).c;
+      const count = (
+        this.db.prepare('SELECT COUNT(*) as c FROM weather_alerts').get() as { c: number }
+      ).c;
       return {
         healthy: true,
         message: 'Weather Alerts OK',
@@ -154,7 +161,7 @@ class WeatherAlertsFeature implements FeatureModule {
 
     // Check cache first if recent
     const cached = this.weatherCache.get(cacheKey);
-    if (cached && (Date.now() - cached.fetched) < this.config.cacheMinutes * 60 * 1000) {
+    if (cached && Date.now() - cached.fetched < this.config.cacheMinutes * 60 * 1000) {
       this.ctx.logger.debug('Weather cache hit', { location });
       return cached.data;
     }
@@ -169,15 +176,25 @@ class WeatherAlertsFeature implements FeatureModule {
       throw new Error(`Weather fetch failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       current_condition: Array<{
-        temp_C: string; temp_F: string; FeelsLikeC: string; FeelsLikeF: string;
-        humidity: string; windspeedKmph: string; winddir16Point: string;
+        temp_C: string;
+        temp_F: string;
+        FeelsLikeC: string;
+        FeelsLikeF: string;
+        humidity: string;
+        windspeedKmph: string;
+        winddir16Point: string;
         weatherDesc: Array<{ value: string }>;
       }>;
       weather?: Array<{
-        date: string; mintempC: string; maxtempC: string; mintempF: string; maxtempF: string;
-        weatherDesc: Array<{ value: string }>; chanceofrain: string;
+        date: string;
+        mintempC: string;
+        maxtempC: string;
+        mintempF: string;
+        maxtempF: string;
+        weatherDesc: Array<{ value: string }>;
+        chanceofrain: string;
       }>;
     };
 
@@ -230,7 +247,7 @@ class WeatherAlertsFeature implements FeatureModule {
   /** Get all stored alerts */
   getAlerts(): WeatherAlert[] {
     const rows = this.db.prepare('SELECT * FROM weather_alerts').all() as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       location: row.location,
       conditionJSON: row.condition_json,
@@ -263,7 +280,10 @@ class WeatherAlertsFeature implements FeatureModule {
     if (condition.minWind !== undefined && weather.windSpeed < condition.minWind) {
       return true;
     }
-    if (condition.descriptionContains && weather.description.toLowerCase().includes(condition.descriptionContains.toLowerCase())) {
+    if (
+      condition.descriptionContains &&
+      weather.description.toLowerCase().includes(condition.descriptionContains.toLowerCase())
+    ) {
       return true;
     }
     if (condition.custom) {
@@ -286,11 +306,15 @@ class WeatherAlertsFeature implements FeatureModule {
         if (matches) {
           triggered.push({ alert, weather });
           // Update last_triggered timestamp
-          this.db.prepare('UPDATE weather_alerts SET last_triggered = ? WHERE id = ?').run(Date.now(), alert.id);
+          this.db
+            .prepare('UPDATE weather_alerts SET last_triggered = ? WHERE id = ?')
+            .run(Date.now(), alert.id);
         }
 
         // Update last_checked
-        this.db.prepare('UPDATE weather_alerts SET last_checked = ? WHERE id = ?').run(Date.now(), alert.id);
+        this.db
+          .prepare('UPDATE weather_alerts SET last_checked = ? WHERE id = ?')
+          .run(Date.now(), alert.id);
       } catch (err) {
         this.ctx.logger.error('Alert check failed', {
           alertId: alert.id,

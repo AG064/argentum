@@ -6,12 +6,7 @@
  * Secrets stored in a JSON file on disk, encrypted at rest.
  */
 
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  pbkdf2Sync,
-} from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, pbkdf2Sync } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 
@@ -21,10 +16,10 @@ import { createLogger, type Logger } from '../core/logger';
 
 interface SecretEntry {
   key: string;
-  iv: string;         // hex
-  salt: string;       // hex (per-secret salt for key derivation)
+  iv: string; // hex
+  salt: string; // hex (per-secret salt for key derivation)
   ciphertext: string; // hex
-  tag: string;        // GCM auth tag, hex
+  tag: string; // GCM auth tag, hex
   createdAt: number;
   updatedAt: number;
 }
@@ -98,7 +93,12 @@ export function encrypt(masterKey: string | Buffer, value: string): string {
   const encrypted = Buffer.concat([cipher.update(value, 'utf-8'), cipher.final()]);
   const tag = cipher.getAuthTag();
 
-  return [iv.toString('hex'), salt.toString('hex'), encrypted.toString('hex'), tag.toString('hex')].join(':');
+  return [
+    iv.toString('hex'),
+    salt.toString('hex'),
+    encrypted.toString('hex'),
+    tag.toString('hex'),
+  ].join(':');
 }
 
 /**
@@ -122,10 +122,7 @@ export function decrypt(masterKey: string | Buffer, encrypted: string): string {
   const decipher = createDecipheriv('aes-256-gcm', derivedKey, iv);
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
 
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(ctHex, 'hex')),
-    decipher.final(),
-  ]);
+  const decrypted = Buffer.concat([decipher.update(Buffer.from(ctHex, 'hex')), decipher.final()]);
 
   return decrypted.toString('utf-8');
 }
@@ -149,7 +146,7 @@ export function store(key: string, value: string, filePath?: string): void {
 
   const vault = loadVault(path);
 
-  const existing = vault.secrets.find(s => s.key === key);
+  const existing = vault.secrets.find((s) => s.key === key);
 
   // Encrypt with a fresh IV + salt
   const iv = randomBytes(IV_LENGTH);
@@ -192,7 +189,7 @@ export function retrieve(key: string, filePath?: string): string | null {
   const masterKey = resolveMasterKey();
   const vault = loadVault(path);
 
-  const entry = vault.secrets.find(s => s.key === key);
+  const entry = vault.secrets.find((s) => s.key === key);
   if (!entry) {
     getLogger().debug(`Secret not found: ${key}`);
     return null;
@@ -223,7 +220,7 @@ export function retrieve(key: string, filePath?: string): string | null {
 export function removeSecret(key: string, filePath?: string): boolean {
   const path = filePath ?? vaultPath;
   const vault = loadVault(path);
-  const idx = vault.secrets.findIndex(s => s.key === key);
+  const idx = vault.secrets.findIndex((s) => s.key === key);
   if (idx === -1) return false;
 
   vault.secrets.splice(idx, 1);
@@ -238,7 +235,7 @@ export function removeSecret(key: string, filePath?: string): boolean {
 export function listSecrets(filePath?: string): string[] {
   const path = filePath ?? vaultPath;
   const vault = loadVault(path);
-  return vault.secrets.map(s => s.key);
+  return vault.secrets.map((s) => s.key);
 }
 
 /**
@@ -247,7 +244,7 @@ export function listSecrets(filePath?: string): string[] {
 export function hasSecret(key: string, filePath?: string): boolean {
   const path = filePath ?? vaultPath;
   const vault = loadVault(path);
-  return vault.secrets.some(s => s.key === key);
+  return vault.secrets.some((s) => s.key === key);
 }
 
 /**
@@ -271,9 +268,10 @@ function loadVault(path: string): SecretsFile {
   try {
     const raw = readFileSync(resolved, 'utf-8');
     const parsed = JSON.parse(raw) as SecretsFile;
-    vaultCache = parsed.version === FILE_VERSION
-      ? parsed
-      : { version: FILE_VERSION, secrets: parsed.secrets ?? [] };
+    vaultCache =
+      parsed.version === FILE_VERSION
+        ? parsed
+        : { version: FILE_VERSION, secrets: parsed.secrets ?? [] };
   } catch (err) {
     getLogger().warn(`Corrupt vault file, starting fresh: ${resolved}`);
     vaultCache = { version: FILE_VERSION, secrets: [] };

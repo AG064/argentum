@@ -208,7 +208,7 @@ export class AllowlistManager {
     }
 
     // Strip port if present
-    const hostOnly = trimmed.includes(':') ? trimmed.split(':')[0] ?? trimmed : trimmed;
+    const hostOnly = trimmed.includes(':') ? (trimmed.split(':')[0] ?? trimmed) : trimmed;
 
     // 1. Check blocked hosts first
     for (const pattern of this.config.blockedHosts) {
@@ -294,8 +294,10 @@ export class AllowlistManager {
 
     // Directory prefix: "/app/" matches "/app/anything"
     if (normalizedPattern.endsWith('/')) {
-      return normalizedPath.startsWith(normalizedPattern) ||
-        normalizedPath === normalizedPattern.slice(0, -1);
+      return (
+        normalizedPath.startsWith(normalizedPattern) ||
+        normalizedPath === normalizedPattern.slice(0, -1)
+      );
     }
 
     // Glob pattern
@@ -304,8 +306,9 @@ export class AllowlistManager {
     }
 
     // Exact or prefix match
-    return normalizedPath === normalizedPattern ||
-      normalizedPath.startsWith(`${normalizedPattern  }/`);
+    return (
+      normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`)
+    );
   }
 
   /**
@@ -315,7 +318,7 @@ export class AllowlistManager {
   private matchHost(host: string, pattern: string): boolean {
     if (pattern.startsWith('*.')) {
       const domain = pattern.slice(2);
-      return host === domain || host.endsWith(`.${  domain}`);
+      return host === domain || host.endsWith(`.${domain}`);
     }
     return host === pattern;
   }

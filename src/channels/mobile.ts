@@ -8,7 +8,12 @@
 
 import express, { type Request, type Response, Router } from 'express';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../core/plugin-loader';
 
 /** Mobile channel configuration */
 export interface MobileChannelConfig {
@@ -146,7 +151,9 @@ class MobileChannel implements FeatureModule {
         const { userId, deviceId, platform, token, topics } = req.body as Record<string, unknown>;
 
         if (!userId || !deviceId || !platform || !token) {
-          res.status(400).json({ error: 'Missing required fields: userId, deviceId, platform, token' });
+          res
+            .status(400)
+            .json({ error: 'Missing required fields: userId, deviceId, platform, token' });
           return;
         }
 
@@ -250,7 +257,7 @@ class MobileChannel implements FeatureModule {
     // List devices for user
     this.router.get('/devices/:userId', authMiddleware, (req: Request, res: Response) => {
       const devices = this.getUserDevices(req.params['userId'] ?? '');
-      res.json({ devices: devices.map(d => ({ ...d, token: '***' })) }); // Mask tokens
+      res.json({ devices: devices.map((d) => ({ ...d, token: '***' })) }); // Mask tokens
     });
 
     // Health check
@@ -307,13 +314,14 @@ class MobileChannel implements FeatureModule {
 
   /** Get all devices for a user */
   getUserDevices(userId: string): DeviceRegistration[] {
-    return Array.from(this.devices.values()).filter(d => d.userId === userId);
+    return Array.from(this.devices.values()).filter((d) => d.userId === userId);
   }
 
   /** Send push notification */
   async sendNotification(notification: PushNotification): Promise<NotificationResult> {
-    const device = this.devices.get(`${notification.userId}:default`)
-      ?? Array.from(this.devices.values()).find(d => d.userId === notification.userId);
+    const device =
+      this.devices.get(`${notification.userId}:default`) ??
+      Array.from(this.devices.values()).find((d) => d.userId === notification.userId);
 
     if (!device) {
       return { success: false, platform: 'none', error: 'No device registered for user' };
@@ -347,21 +355,25 @@ class MobileChannel implements FeatureModule {
   }
 
   /** Send to all devices for a user */
-  async broadcastToUser(userId: string, notification: Omit<PushNotification, 'userId'>): Promise<NotificationResult[]> {
+  async broadcastToUser(
+    userId: string,
+    notification: Omit<PushNotification, 'userId'>,
+  ): Promise<NotificationResult[]> {
     const devices = this.getUserDevices(userId);
     const results: NotificationResult[] = [];
 
     for (const device of devices) {
-      results.push(
-        await this.sendNotification({ ...notification, userId: device.userId })
-      );
+      results.push(await this.sendNotification({ ...notification, userId: device.userId }));
     }
 
     return results;
   }
 
   /** Send via Firebase Cloud Messaging */
-  private async sendFCM(device: DeviceRegistration, notification: PushNotification): Promise<NotificationResult> {
+  private async sendFCM(
+    device: DeviceRegistration,
+    notification: PushNotification,
+  ): Promise<NotificationResult> {
     if (!this.config.fcmServerKey) {
       return { success: false, platform: 'android', error: 'FCM not configured' };
     }
@@ -370,7 +382,7 @@ class MobileChannel implements FeatureModule {
       const response = await fetch('https://fcm.googleapis.com/fcm/send', {
         method: 'POST',
         headers: {
-          Authorization: `key=${this.config.fcmServerKey}`,
+          'Authorization': `key=${this.config.fcmServerKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -385,7 +397,11 @@ class MobileChannel implements FeatureModule {
         }),
       });
 
-      const result = await response.json() as { success: number; failure: number; message_id?: string };
+      const result = (await response.json()) as {
+        success: number;
+        failure: number;
+        message_id?: string;
+      };
       return {
         success: result.success === 1,
         platform: 'android',
@@ -401,7 +417,10 @@ class MobileChannel implements FeatureModule {
   }
 
   /** Send via Apple Push Notification Service (stub — needs APNs HTTP/2 client) */
-  private async sendAPNs(device: DeviceRegistration, notification: PushNotification): Promise<NotificationResult> {
+  private async sendAPNs(
+    device: DeviceRegistration,
+    notification: PushNotification,
+  ): Promise<NotificationResult> {
     // Real implementation would use apn2 or apns2 library with JWT auth
     this.ctx.logger.debug('APNs send (stub)', {
       device: device.deviceId,

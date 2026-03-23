@@ -5,7 +5,12 @@
  * news, tasks, and personalized insights every morning.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Morning briefing configuration */
 export interface MorningBriefingConfig {
@@ -208,7 +213,7 @@ class MorningBriefingFeature implements FeatureModule {
   private async getCalendarSection(): Promise<BriefingSection> {
     return {
       type: 'calendar',
-      title: 'Today\'s Schedule',
+      title: "Today's Schedule",
       priority: 2,
       items: [],
     };

@@ -21,6 +21,13 @@
       }
     },
     {
+      "files": ".github/workflows/pr.yml",
+      "options": {
+        "parser": "yaml",
+        "printWidth": 200
+      }
+    },
+    {
       "files": "*.{json,yaml,yml}",
       "options": {
         "printWidth": 120,

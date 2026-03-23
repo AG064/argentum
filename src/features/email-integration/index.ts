@@ -12,7 +12,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Email account configuration (encrypted passwords) */
 export interface EmailAccount {
@@ -127,7 +132,8 @@ class EmailIntegrationFeature implements FeatureModule {
     this.ctx = context;
     this.config = {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
-      encryptionKey: (config['encryptionKey'] as string) ?? this.config['encryptionKey'] ?? this.generateKey(),
+      encryptionKey:
+        (config['encryptionKey'] as string) ?? this.config['encryptionKey'] ?? this.generateKey(),
       maxConnections: (config['maxConnections'] as number) ?? this.config['maxConnections'],
       defaultImapPort: (config['defaultImapPort'] as number) ?? this.config['defaultImapPort'],
       defaultSmtpPort: (config['defaultSmtpPort'] as number) ?? this.config['defaultSmtpPort'],
@@ -156,7 +162,11 @@ class EmailIntegrationFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const accountCount = (this.db.prepare('SELECT COUNT(*) as c FROM accounts WHERE enabled = 1').get() as { c: number }).c;
+      const accountCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM accounts WHERE enabled = 1').get() as {
+          c: number;
+        }
+      ).c;
       return {
         healthy: true,
         details: {
@@ -182,7 +192,14 @@ class EmailIntegrationFeature implements FeatureModule {
    * @param secure - Use TLS/SSL
    * @returns Created account with encrypted password
    */
-  configure(name: string, host: string, port: number, username: string, password: string, secure: boolean = true): EmailAccount {
+  configure(
+    name: string,
+    host: string,
+    port: number,
+    username: string,
+    password: string,
+    secure: boolean = true,
+  ): EmailAccount {
     if (port === 0) {
       port = secure ? this.config.defaultImapPort : this.config.defaultSmtpPort;
     }
@@ -217,7 +234,7 @@ class EmailIntegrationFeature implements FeatureModule {
       account.passwordEncrypted,
       account.passwordIV,
       account.enabled ? 1 : 0,
-      account.created_at
+      account.created_at,
     );
 
     // Return account without sensitive data? Actually we have encrypted, it's safe
@@ -233,7 +250,7 @@ class EmailIntegrationFeature implements FeatureModule {
   listAccounts(): EmailAccount[] {
     const rows = this.db.prepare('SELECT * FROM accounts ORDER BY name').all() as RawEmailAccount[];
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       name: r.name,
       host: r.host,
@@ -251,7 +268,9 @@ class EmailIntegrationFeature implements FeatureModule {
    * Get a specific account by ID.
    */
   getAccount(id: string): EmailAccount | null {
-    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as RawEmailAccount | undefined;
+    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as
+      | RawEmailAccount
+      | undefined;
 
     if (!row) return null;
 
@@ -273,7 +292,9 @@ class EmailIntegrationFeature implements FeatureModule {
    * Enable/disable an account.
    */
   setAccountEnabled(id: string, enabled: boolean): boolean {
-    const result = this.db.prepare('UPDATE accounts SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+    const result = this.db
+      .prepare('UPDATE accounts SET enabled = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, id);
     if (result.changes > 0) {
       this.ctx.logger.info('Account state changed', { accountId: id, enabled });
       return true;
@@ -307,12 +328,16 @@ class EmailIntegrationFeature implements FeatureModule {
 
     // In a real implementation, this would connect to IMAP and fetch messages.
     // For now, we can return cached/stored messages from previous syncs.
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM messages
       WHERE account_id = ? AND folder = ?
       ORDER BY date DESC
       LIMIT ?
-    `).all(accountId, folder, limit) as Array<{
+    `,
+      )
+      .all(accountId, folder, limit) as Array<{
       id: string;
       account_id: string;
       folder: string;
@@ -325,7 +350,7 @@ class EmailIntegrationFeature implements FeatureModule {
       is_read: number;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       accountId: r.account_id,
       folder: r.folder,
@@ -345,7 +370,9 @@ class EmailIntegrationFeature implements FeatureModule {
   getMessage(accountId: string, messageId: string): EmailMessageFull | null {
     this.validateAccount(accountId);
 
-    const row = this.db.prepare('SELECT * FROM messages WHERE account_id = ? AND id = ?').get(accountId, messageId) as
+    const row = this.db
+      .prepare('SELECT * FROM messages WHERE account_id = ? AND id = ?')
+      .get(accountId, messageId) as
       | {
           id: string;
           account_id: string;
@@ -391,7 +418,13 @@ class EmailIntegrationFeature implements FeatureModule {
    * @param html - Optional HTML body
    * @returns true if "sent" successfully (stub always returns true)
    */
-  send(accountId: string, to: string | string[], subject: string, body: string, html?: string): boolean {
+  send(
+    accountId: string,
+    to: string | string[],
+    subject: string,
+    body: string,
+    html?: string,
+  ): boolean {
     this.validateAccount(accountId);
     const _account = this.getAccount(accountId)!;
 
@@ -399,18 +432,22 @@ class EmailIntegrationFeature implements FeatureModule {
     // Here we can log to database as "sent" record.
     const now = new Date().toISOString();
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO sent_emails (id, account_id, to_addr, subject, body, body_html, sent_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      `sent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      accountId,
-      Array.isArray(to) ? to.join(',') : to,
-      subject,
-      body,
-      html ?? null,
-      now
-    );
+    `,
+      )
+      .run(
+        `sent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        accountId,
+        Array.isArray(to) ? to.join(',') : to,
+        subject,
+        body,
+        html ?? null,
+        now,
+      );
 
     this.ctx.logger.info('Email sent (stub)', { accountId, to, subject });
     return true;
@@ -428,13 +465,17 @@ class EmailIntegrationFeature implements FeatureModule {
     this.validateAccount(accountId);
 
     const likeQuery = `%${query}%`;
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT m.id, m.account_id, m.folder, m.subject, m.from_addr, m.date, m.snippet
       FROM messages m
       WHERE m.account_id = ? AND (m.subject LIKE ? OR m.body LIKE ? OR m.from_addr LIKE ?)
       ORDER BY m.date DESC
       LIMIT ?
-    `).all(accountId, likeQuery, likeQuery, likeQuery, limit) as Array<{
+    `,
+      )
+      .all(accountId, likeQuery, likeQuery, likeQuery, limit) as Array<{
       id: string;
       account_id: string;
       folder: string;
@@ -444,7 +485,7 @@ class EmailIntegrationFeature implements FeatureModule {
       snippet: string;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       messageId: r.id,
       accountId: r.account_id,
       folder: r.folder,
@@ -459,27 +500,35 @@ class EmailIntegrationFeature implements FeatureModule {
    * Store a message in cache (for stub implementations to simulate synced messages).
    * Internal use for testing.
    */
-  storeMessage(accountId: string, folder: string, msg: Partial<EmailMessageFull> & { id: string; date: string }): void {
+  storeMessage(
+    accountId: string,
+    folder: string,
+    msg: Partial<EmailMessageFull> & { id: string; date: string },
+  ): void {
     this.validateAccount(accountId);
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO messages
       (id, account_id, folder, subject, from_addr, to_addrs, date, body, body_html, attachments, has_attachments, is_read)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      msg.id,
-      accountId,
-      folder,
-      msg.subject ?? '',
-      msg.from ?? '',
-      (msg.to ?? []).join(','),
-      msg.date,
-      msg.body ?? '',
-      msg.bodyHtml ?? null,
-      msg.attachments ? JSON.stringify(msg.attachments) : null,
-      msg.hasAttachments ? 1 : 0,
-      msg.isRead ? 1 : 0
-    );
+    `,
+      )
+      .run(
+        msg.id,
+        accountId,
+        folder,
+        msg.subject ?? '',
+        msg.from ?? '',
+        (msg.to ?? []).join(','),
+        msg.date,
+        msg.body ?? '',
+        msg.bodyHtml ?? null,
+        msg.attachments ? JSON.stringify(msg.attachments) : null,
+        msg.hasAttachments ? 1 : 0,
+        msg.isRead ? 1 : 0,
+      );
   }
 
   /** Validate account exists and is enabled */

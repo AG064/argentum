@@ -3,7 +3,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +80,9 @@ class RoleBasedAccessFeature implements FeatureModule {
 
     return {
       healthy: defaultRoleExists,
-      message: defaultRoleExists ? undefined : `Default role "${this.config.defaultRole}" not found`,
+      message: defaultRoleExists
+        ? undefined
+        : `Default role "${this.config.defaultRole}" not found`,
       details: {
         roles: roleCount,
         userRoleAssignments: userRoleCount,
@@ -101,9 +108,9 @@ class RoleBasedAccessFeature implements FeatureModule {
     const id = `role:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
     const role: Role = { id, name, permissions };
 
-    this.db.prepare(
-      `INSERT INTO roles (id, name, permissions) VALUES (?, ?, ?)`
-    ).run(id, name, JSON.stringify(permissions));
+    this.db
+      .prepare(`INSERT INTO roles (id, name, permissions) VALUES (?, ?, ?)`)
+      .run(id, name, JSON.stringify(permissions));
 
     this.rolesCache.set(id, role);
     this.ctx.logger.info('Role created', { roleId: id, name, permissions });
@@ -158,9 +165,9 @@ class RoleBasedAccessFeature implements FeatureModule {
     }
 
     const now = Date.now();
-    this.db.prepare(
-      `INSERT OR REPLACE INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`
-    ).run(userId, roleId, now);
+    this.db
+      .prepare(`INSERT OR REPLACE INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`)
+      .run(userId, roleId, now);
 
     // Update cache
     let userRoles = this.userRolesCache.get(userId);
@@ -175,7 +182,9 @@ class RoleBasedAccessFeature implements FeatureModule {
 
   /** Remove a specific role from a user */
   async removeRole(userId: string, roleId: string): Promise<boolean> {
-    const result = this.db.prepare('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?').run(userId, roleId);
+    const result = this.db
+      .prepare('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?')
+      .run(userId, roleId);
 
     // Update cache
     const userRoles = this.userRolesCache.get(userId);
@@ -249,22 +258,29 @@ class RoleBasedAccessFeature implements FeatureModule {
   async setManager(userId: string, managerId: string | null, roleId?: string): Promise<void> {
     if (managerId === userId) throw new Error('User cannot be their own manager');
     const _now = Date.now();
-    this.db.prepare(
-      `INSERT OR REPLACE INTO org_hierarchy (user_id, parent_id, role_id) VALUES (?, ?, ?)`
-    ).run(userId, managerId, roleId ?? null);
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO org_hierarchy (user_id, parent_id, role_id) VALUES (?, ?, ?)`,
+      )
+      .run(userId, managerId, roleId ?? null);
     this.ctx.logger.info('Manager set', { userId, managerId });
   }
 
   /** Get direct reports for a manager */
   async getReports(managerId: string): Promise<string[]> {
-    const rows = this.db.prepare('SELECT user_id FROM org_hierarchy WHERE parent_id = ?').all(managerId) as any[];
-    return rows.map(r => r.user_id);
+    const rows = this.db
+      .prepare('SELECT user_id FROM org_hierarchy WHERE parent_id = ?')
+      .all(managerId) as any[];
+    return rows.map((r) => r.user_id);
   }
 
   /** Delegate a task from one user to another (records delegation) */
   async delegateTask(fromUser: string, toUser: string, taskId?: string): Promise<string> {
     const id = `del:${Date.now()}:${Math.random().toString(36).substr(2, 8)}`;
-    this.db.prepare('INSERT INTO delegations (id, from_user, to_user, task_id, created_at) VALUES (?, ?, ?, ?, ?)')
+    this.db
+      .prepare(
+        'INSERT INTO delegations (id, from_user, to_user, task_id, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
       .run(id, fromUser, toUser, taskId ?? null, Date.now());
     this.ctx.logger.info('Task delegated', { id, fromUser, toUser, taskId });
     return id;
@@ -272,7 +288,11 @@ class RoleBasedAccessFeature implements FeatureModule {
 
   /** Get delegations for a user */
   async getDelegations(userId: string): Promise<any[]> {
-    const rows = this.db.prepare('SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC').all(userId, userId) as any[];
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC',
+      )
+      .all(userId, userId) as any[];
     return rows;
   }
 

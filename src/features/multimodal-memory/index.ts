@@ -5,7 +5,12 @@
  * Supports semantic search and temporal queries.
  */
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Multimodal memory configuration */
 export interface MultimodalMemoryConfig {
@@ -100,7 +105,13 @@ class MultimodalMemoryFeature implements FeatureModule {
   }
 
   /** Store a new memory */
-  async store(type: MemoryType, content: string, metadata: Record<string, unknown> = {}, tags: string[] = [], importance = 0.5): Promise<MemoryEntry> {
+  async store(
+    type: MemoryType,
+    content: string,
+    metadata: Record<string, unknown> = {},
+    tags: string[] = [],
+    importance = 0.5,
+  ): Promise<MemoryEntry> {
     const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const entry: MemoryEntry = {
       id,
@@ -144,7 +155,7 @@ class MultimodalMemoryFeature implements FeatureModule {
       if (query.minImportance && entry.importance < query.minImportance) continue;
       if (query.startDate && entry.createdAt < query.startDate) continue;
       if (query.endDate && entry.createdAt > query.endDate) continue;
-      if (query.tags?.length && !query.tags.some(t => entry.tags.includes(t))) continue;
+      if (query.tags?.length && !query.tags.some((t) => entry.tags.includes(t))) continue;
 
       let score = entry.importance;
       if (query.text) {
@@ -181,7 +192,7 @@ class MultimodalMemoryFeature implements FeatureModule {
   private computeTextSimilarity(a: string, b: string): number {
     const wordsA = new Set(a.toLowerCase().split(/\s+/));
     const wordsB = new Set(b.toLowerCase().split(/\s+/));
-    const intersection = new Set([...wordsA].filter(w => wordsB.has(w)));
+    const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)));
     const union = new Set([...wordsA, ...wordsB]);
     return union.size === 0 ? 0 : intersection.size / union.size;
   }

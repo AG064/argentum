@@ -46,7 +46,8 @@ class SkillsLoaderFeature {
 
   async init(config: Record<string, unknown>, context: any): Promise<void> {
     this.ctx = context;
-    this['skillsDir'] = (config['skillsDir'] as string) ||
+    this['skillsDir'] =
+      (config['skillsDir'] as string) ||
       path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
 
     this.scanSkills();
@@ -86,9 +87,11 @@ class SkillsLoaderFeature {
       let scriptCount = 0;
       let hasScripts = false;
       if (fs.existsSync(scriptsDir)) {
-        const scripts = fs.readdirSync(scriptsDir).filter(f =>
-          f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts')
-        );
+        const scripts = fs
+          .readdirSync(scriptsDir)
+          .filter(
+            (f) => f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts'),
+          );
         scriptCount = scripts.length;
         hasScripts = scriptCount > 0;
       }
@@ -115,7 +118,7 @@ class SkillsLoaderFeature {
       details: {
         skillsDir: this.skillsDir,
         skillCount: this.skills.size,
-        skillsWithScripts: [...this.skills.values()].filter(s => s.hasScripts).length,
+        skillsWithScripts: [...this.skills.values()].filter((s) => s.hasScripts).length,
       },
     };
   }
@@ -145,9 +148,11 @@ class SkillsLoaderFeature {
     if (!skill) return [];
     const scriptsDir = path.join(skill.path, 'scripts');
     if (!fs.existsSync(scriptsDir)) return [];
-    return fs.readdirSync(scriptsDir).filter(f =>
-      f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts')
-    );
+    return fs
+      .readdirSync(scriptsDir)
+      .filter(
+        (f) => f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts'),
+      );
   }
 
   runScript(skillName: string, scriptName: string, args: string[] = []): string {
@@ -155,18 +160,19 @@ class SkillsLoaderFeature {
     if (!skill) throw new Error(`Skill '${skillName}' not found`);
 
     const scriptPath = path.join(skill.path, 'scripts', scriptName);
-    if (!fs.existsSync(scriptPath)) throw new Error(`Script '${scriptName}' not found in skill '${skillName}'`);
+    if (!fs.existsSync(scriptPath))
+      throw new Error(`Script '${scriptName}' not found in skill '${skillName}'`);
 
     try {
       let command: string;
       if (scriptName.endsWith('.sh')) {
-        command = `bash "${scriptPath}" ${args.map(a => `"${a}"`).join(' ')}`;
+        command = `bash "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
       } else if (scriptName.endsWith('.js')) {
-        command = `node "${scriptPath}" ${args.map(a => `"${a}"`).join(' ')}`;
+        command = `node "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
       } else if (scriptName.endsWith('.py')) {
-        command = `python3 "${scriptPath}" ${args.map(a => `"${a}"`).join(' ')}`;
+        command = `python3 "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
       } else if (scriptName.endsWith('.ts')) {
-        command = `npx tsx "${scriptPath}" ${args.map(a => `"${a}"`).join(' ')}`;
+        command = `npx tsx "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
       } else {
         throw new Error(`Unsupported script type: ${scriptName}`);
       }
@@ -183,9 +189,8 @@ class SkillsLoaderFeature {
 
   searchSkills(query: string): SkillMeta[] {
     const q = query.toLowerCase();
-    return this.listSkills().filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q)
+    return this.listSkills().filter(
+      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
     );
   }
 

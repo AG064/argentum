@@ -12,7 +12,12 @@ import { dirname, resolve, basename } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** Supported STT providers */
 export type SttProvider = 'whisper' | 'google' | 'azure' | 'local';
@@ -101,7 +106,8 @@ class SttEngineFeature implements FeatureModule {
       dbPath: (config['dbPath'] as string) ?? this.config['dbPath'],
       defaultProvider: (config['defaultProvider'] as SttProvider) ?? this.config['defaultProvider'],
       defaultLanguage: (config['defaultLanguage'] as string) ?? this.config['defaultLanguage'],
-      maxHistoryEntries: (config['maxHistoryEntries'] as number) ?? this.config['maxHistoryEntries'],
+      maxHistoryEntries:
+        (config['maxHistoryEntries'] as number) ?? this.config['maxHistoryEntries'],
       cacheDir: (config['cacheDir'] as string) ?? this.config['cacheDir'],
     };
 
@@ -129,11 +135,19 @@ class SttEngineFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const historyCount = (this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }).c;
-      const todayCount = (this.db.prepare(`
+      const historyCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }
+      ).c;
+      const todayCount = (
+        this.db
+          .prepare(
+            `
         SELECT COUNT(*) as c FROM transcription_history
         WHERE transcribed_at > ?
-      `).get(Date.now() - 86400000) as { c: number }).c;
+      `,
+          )
+          .get(Date.now() - 86400000) as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -172,7 +186,11 @@ class SttEngineFeature implements FeatureModule {
    * @returns TranscriptionResult with text and metadata
    */
   async transcribe(request: TranscriptionRequest): Promise<TranscriptionResult> {
-    const { audioPath, language = this.config.defaultLanguage, enableTimestamps: _enableTimestamps = false } = request;
+    const {
+      audioPath,
+      language = this.config.defaultLanguage,
+      enableTimestamps: _enableTimestamps = false,
+    } = request;
 
     // Validate audio file exists
     if (!existsSync(audioPath)) {
@@ -186,7 +204,9 @@ class SttEngineFeature implements FeatureModule {
 
     // Check cache first
     const cacheKey = this.getAudioHash(audioPath);
-    const cached = this.db.prepare('SELECT * FROM transcription_cache WHERE audio_hash = ? AND provider = ?').get(cacheKey, this.provider) as
+    const cached = this.db
+      .prepare('SELECT * FROM transcription_cache WHERE audio_hash = ? AND provider = ?')
+      .get(cacheKey, this.provider) as
       | { text: string; language: string; cached_at: number }
       | undefined;
 
@@ -225,15 +245,23 @@ class SttEngineFeature implements FeatureModule {
     };
 
     // Cache the result
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO transcription_cache (audio_hash, provider, text, language, cached_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(cacheKey, this.provider, result.text, result.language, Date.now());
+    `,
+      )
+      .run(cacheKey, this.provider, result.text, result.language, Date.now());
 
     // Log to history
     this.logHistory(request, result.text, audioInfo.size, processingTime, language, confidence);
 
-    this.ctx.logger.info('Transcription complete (stub)', { audioPath, provider: this.provider, chars: result.text.length });
+    this.ctx.logger.info('Transcription complete (stub)', {
+      audioPath,
+      provider: this.provider,
+      chars: result.text.length,
+    });
 
     return result;
   }
@@ -245,11 +273,15 @@ class SttEngineFeature implements FeatureModule {
    * @returns History entries ordered by timestamp descending
    */
   getHistory(limit: number = 100): TranscriptionHistory[] {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM transcription_history
       ORDER BY transcribed_at DESC
       LIMIT ?
-    `).all(limit) as Array<{
+    `,
+      )
+      .all(limit) as Array<{
       id: string;
       audio_filename: string;
       audio_size: number;
@@ -262,7 +294,7 @@ class SttEngineFeature implements FeatureModule {
       transcribed_at: number;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       audioFilename: r.audio_filename,
       audioSize: r.audio_size,
@@ -285,21 +317,31 @@ class SttEngineFeature implements FeatureModule {
     avgProcessingTimeMs: number;
     avgConfidence: number;
   } {
-    const total = (this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }).c;
+    const total = (
+      this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }
+    ).c;
 
-    const byProviderRows = this.db.prepare(`
+    const byProviderRows = this.db
+      .prepare(
+        `
       SELECT provider, COUNT(*) as count FROM transcription_history GROUP BY provider
-    `).all() as Array<{ provider: string; count: number }>;
+    `,
+      )
+      .all() as Array<{ provider: string; count: number }>;
 
     const byProvider: Record<string, number> = {};
     for (const row of byProviderRows) {
       byProvider[row.provider] = row.count;
     }
 
-    const avg = this.db.prepare(`
+    const avg = this.db
+      .prepare(
+        `
       SELECT AVG(processing_time_ms) as avgTime, AVG(confidence) as avgConf
       FROM transcription_history
-    `).get() as { avgTime: number | null; avgConf: number | null } | undefined;
+    `,
+      )
+      .get() as { avgTime: number | null; avgConf: number | null } | undefined;
 
     return {
       total,
@@ -317,7 +359,9 @@ class SttEngineFeature implements FeatureModule {
    */
   clearCache(olderThanDays: number = 7): number {
     const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
-    const result = this.db.prepare('DELETE FROM transcription_cache WHERE cached_at < ?').run(cutoff);
+    const result = this.db
+      .prepare('DELETE FROM transcription_cache WHERE cached_at < ?')
+      .run(cutoff);
     if (result.changes > 0) {
       this.ctx.logger.info('STT cache cleared', { deleted: result.changes, olderThanDays });
     }
@@ -331,32 +375,42 @@ class SttEngineFeature implements FeatureModule {
     audioSize: number,
     processingTimeMs: number,
     language: string,
-    confidence: number
+    confidence: number,
   ): void {
     const id = `stt-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO transcription_history (id, audio_filename, audio_size, text, language, provider, duration, processing_time_ms, confidence, transcribed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      basename(request.audioPath),
-      audioSize,
-      text,
-      language,
-      this.provider,
-      0, // duration unknown
-      processingTimeMs,
-      confidence,
-      Date.now()
-    );
+    `,
+      )
+      .run(
+        id,
+        basename(request.audioPath),
+        audioSize,
+        text,
+        language,
+        this.provider,
+        0, // duration unknown
+        processingTimeMs,
+        confidence,
+        Date.now(),
+      );
 
     // Enforce max history
     if (this.config.maxHistoryEntries > 0) {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }).c;
+      const count = (
+        this.db.prepare('SELECT COUNT(*) as c FROM transcription_history').get() as { c: number }
+      ).c;
       if (count > this.config.maxHistoryEntries) {
         const deleteCount = count - this.config.maxHistoryEntries;
-        this.db.prepare('DELETE FROM transcription_history WHERE id IN (SELECT id FROM transcription_history ORDER BY transcribed_at ASC LIMIT ?)').run(deleteCount);
+        this.db
+          .prepare(
+            'DELETE FROM transcription_history WHERE id IN (SELECT id FROM transcription_history ORDER BY transcribed_at ASC LIMIT ?)',
+          )
+          .run(deleteCount);
       }
     }
   }

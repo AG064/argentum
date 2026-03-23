@@ -99,7 +99,7 @@ export class PluginLoader {
     }
 
     const entries = readdirSync(this.featuresPath, { withFileTypes: true });
-    const featureDirs = entries.filter(e => e.isDirectory());
+    const featureDirs = entries.filter((e) => e.isDirectory());
 
     this.logger.info(`Scanning ${featureDirs.length} feature directories`);
 
@@ -127,9 +127,13 @@ export class PluginLoader {
 
     // Dynamic import of the feature module
     const mod = await import(path);
-    const featureModule: FeatureModule = mod.default ?? mod[name] ?? Object.values(mod).find(
-      (v): v is FeatureModule => typeof v === 'object' && v !== null && 'meta' in v && 'init' in v
-    );
+    const featureModule: FeatureModule =
+      mod.default ??
+      mod[name] ??
+      Object.values(mod).find(
+        (v): v is FeatureModule =>
+          typeof v === 'object' && v !== null && 'meta' in v && 'init' in v,
+      );
 
     if (!featureModule?.meta) {
       throw new Error(`Invalid feature module: ${name} - missing meta export`);

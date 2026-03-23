@@ -11,7 +11,12 @@ import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 /** SMS provider interface */
 export interface SmsProvider {
@@ -116,11 +121,19 @@ class SmsGatewayFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const logCount = (this.db.prepare('SELECT COUNT(*) as c FROM sms_logs').get() as { c: number }).c;
-      const recentErrors = (this.db.prepare(`
+      const logCount = (
+        this.db.prepare('SELECT COUNT(*) as c FROM sms_logs').get() as { c: number }
+      ).c;
+      const recentErrors = (
+        this.db
+          .prepare(
+            `
         SELECT COUNT(*) as c FROM sms_logs
         WHERE success = 0 AND sent_at > ?
-      `).get(Date.now() - 3600000) as { c: number }).c;
+      `,
+          )
+          .get(Date.now() - 3600000) as { c: number }
+      ).c;
 
       return {
         healthy: true,
@@ -202,7 +215,12 @@ class SmsGatewayFeature implements FeatureModule {
    * @param providerName - Specific provider to use (default if not specified)
    * @returns SmsResult with status and messageId if successful
    */
-  async send(to: string, message: string, from?: string, providerName?: string): Promise<SmsResult> {
+  async send(
+    to: string,
+    message: string,
+    from?: string,
+    providerName?: string,
+  ): Promise<SmsResult> {
     const name = providerName ?? this.defaultProvider;
     if (!name) {
       throw new Error('No provider specified and no default provider set');
@@ -284,7 +302,7 @@ class SmsGatewayFeature implements FeatureModule {
       sent_at: number;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       provider: r.provider,
       to: r.to,
@@ -303,16 +321,23 @@ class SmsGatewayFeature implements FeatureModule {
    * @param providerName - Provider to get stats for
    * @param hoursBack - Lookback period in hours (default 24)
    */
-  getProviderStats(providerName: string, hoursBack: number = 24): { sent: number; delivered: number; failed: number } {
+  getProviderStats(
+    providerName: string,
+    hoursBack: number = 24,
+  ): { sent: number; delivered: number; failed: number } {
     const since = Date.now() - hoursBack * 3600000;
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as delivered,
         SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed
       FROM sms_logs
       WHERE provider = ? AND sent_at >= ?
-    `).get(providerName, since) as { total: number; delivered: number; failed: number };
+    `,
+      )
+      .get(providerName, since) as { total: number; delivered: number; failed: number };
 
     return {
       sent: rows.total,
@@ -343,15 +368,20 @@ class SmsGatewayFeature implements FeatureModule {
       log.messageId ?? null,
       log.success ? 1 : 0,
       log.error ?? null,
-      log.sent_at
+      log.sent_at,
     );
 
     // Optional cleanup of old logs
     if (this.config.maxLogEntries > 0) {
-      const count = (this.db.prepare('SELECT COUNT(*) as c FROM sms_logs').get() as { c: number }).c;
+      const count = (this.db.prepare('SELECT COUNT(*) as c FROM sms_logs').get() as { c: number })
+        .c;
       if (count > this.config.maxLogEntries) {
         const deleteCount = count - this.config.maxLogEntries;
-        this.db.prepare('DELETE FROM sms_logs WHERE id IN (SELECT id FROM sms_logs ORDER BY sent_at ASC LIMIT ?)').run(deleteCount);
+        this.db
+          .prepare(
+            'DELETE FROM sms_logs WHERE id IN (SELECT id FROM sms_logs ORDER BY sent_at ASC LIMIT ?)',
+          )
+          .run(deleteCount);
       }
     }
   }

@@ -15,7 +15,12 @@ import { spawn } from 'child_process';
 import { resolve } from 'path';
 
 import { createLogger } from '../../core/logger';
-import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -141,10 +146,14 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   const args: string[] = [
     'run',
     '--rm',
-    '--name', containerName,
-    '--memory', config.memoryLimit,
-    '--cpus', config.cpuLimit,
-    '--pids-limit', '64',
+    '--name',
+    containerName,
+    '--memory',
+    config.memoryLimit,
+    '--cpus',
+    config.cpuLimit,
+    '--pids-limit',
+    '64',
   ];
 
   // Network isolation
@@ -177,7 +186,24 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   }
 
   // Whitelist common allowed base commands
-  const whitelist = new Set(['ls','cat','echo','grep','find','node','python','npm','curl','wget','stat','du','df','ps','whoami','id']);
+  const whitelist = new Set([
+    'ls',
+    'cat',
+    'echo',
+    'grep',
+    'find',
+    'node',
+    'python',
+    'npm',
+    'curl',
+    'wget',
+    'stat',
+    'du',
+    'df',
+    'ps',
+    'whoami',
+    'id',
+  ]);
 
   // Simple split respecting quotes
   const parts: string[] = [];
@@ -190,7 +216,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
     }
     parts.push(p);
   }
-  if (parts.length === 0) parts.push('sh','-c','');
+  if (parts.length === 0) parts.push('sh', '-c', '');
 
   // Check base command against whitelist
   const base = parts[0] as string;
