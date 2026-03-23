@@ -186,7 +186,6 @@ export function createTool(
  * Pre-built tools for AG-Claw
  */
 export const builtInTools = {
-   
   Read: createTool(
     'Read',
     'Read file contents',
@@ -198,7 +197,6 @@ export const builtInTools = {
     },
   ),
 
-   
   Write: createTool(
     'Write',
     'Write file contents',
@@ -214,7 +212,6 @@ export const builtInTools = {
     },
   ),
 
-   
   Edit: createTool(
     'Edit',
     'Edit file contents',
@@ -239,7 +236,6 @@ export const builtInTools = {
     },
   ),
 
-   
   Bash: createTool(
     'Bash',
     'Execute bash command',
@@ -268,7 +264,6 @@ export const builtInTools = {
     },
   ),
 
-   
   Grep: createTool(
     'Grep',
     'Search pattern in files',

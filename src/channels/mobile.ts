@@ -382,7 +382,7 @@ class MobileChannel implements FeatureModule {
       const response = await fetch('https://fcm.googleapis.com/fcm/send', {
         method: 'POST',
         headers: {
-          Authorization: `key=${this.config.fcmServerKey}`,
+          'Authorization': `key=${this.config.fcmServerKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

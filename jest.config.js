@@ -1,6 +1,5 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests', '<rootDir>/src'],
   testMatch: [
@@ -15,7 +14,7 @@ module.exports = {
     '/data/',
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
+    '^.+\\.tsx?$': ['ts-jest', { useESM: false }],
   },
 
   transformIgnorePatterns: [

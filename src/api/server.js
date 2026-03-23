@@ -1,6 +1,6 @@
 /**
  * AG-Claw Dashboard - Simple API Server
- * 
+ *
  * This is a minimal Express server that provides API endpoints
  * for the dashboard. In production, these would be integrated
  * with the main AG-Claw application.
@@ -24,32 +24,69 @@ const mimeTypes = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
 };
 
 // Mock data generators
 const mockData = {
   agents: [
-    { id: 'coder', name: 'Coder', status: 'online', tasksCompleted: 1247, successRate: 99.2, memory: '890MB', uptime: '99.9%' },
-    { id: 'researcher', name: 'Researcher', status: 'online', tasksCompleted: 843, successRate: 98.7, memory: '456MB', uptime: '99.5%' },
-    { id: 'foreman', name: 'Foreman', status: 'online', tasksCompleted: 432, successRate: 99.8, memory: '234MB', uptime: '99.9%' },
-    { id: 'writer', name: 'Writer', status: 'idle', tasksCompleted: 156, successRate: 97.4, memory: '178MB', uptime: '98.2%' }
+    {
+      id: 'coder',
+      name: 'Coder',
+      status: 'online',
+      tasksCompleted: 1247,
+      successRate: 99.2,
+      memory: '890MB',
+      uptime: '99.9%',
+    },
+    {
+      id: 'researcher',
+      name: 'Researcher',
+      status: 'online',
+      tasksCompleted: 843,
+      successRate: 98.7,
+      memory: '456MB',
+      uptime: '99.5%',
+    },
+    {
+      id: 'foreman',
+      name: 'Foreman',
+      status: 'online',
+      tasksCompleted: 432,
+      successRate: 99.8,
+      memory: '234MB',
+      uptime: '99.9%',
+    },
+    {
+      id: 'writer',
+      name: 'Writer',
+      status: 'idle',
+      tasksCompleted: 156,
+      successRate: 97.4,
+      memory: '178MB',
+      uptime: '98.2%',
+    },
   ],
   skills: [
     { id: 'github', name: 'GitHub Integration', installed: true, rating: 4.8 },
     { id: 'deep-research-pro', name: 'Deep Research Pro', installed: true, rating: 4.9 },
     { id: 'telegram', name: 'Telegram Bot', installed: true, rating: 4.7 },
-    { id: 'weather', name: 'Weather Forecast', installed: false, rating: 4.5 }
+    { id: 'weather', name: 'Weather Forecast', installed: false, rating: 4.5 },
   ],
-  logs: []
+  logs: [],
 };
 
 // Generate initial logs
 const logLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
 const logSources = ['core', 'agent:coder', 'agent:researcher', 'skills:github'];
 const logMessages = [
-  'Processing request', 'Task completed', 'Cache hit', 'Skill executed',
-  'Heartbeat sent', 'Connection established', 'Configuration loaded'
+  'Processing request',
+  'Task completed',
+  'Cache hit',
+  'Skill executed',
+  'Heartbeat sent',
+  'Connection established',
+  'Configuration loaded',
 ];
 
 for (let i = 0; i < 100; i++) {
@@ -57,7 +94,7 @@ for (let i = 0; i < 100; i++) {
     timestamp: new Date(Date.now() - i * 5000).toISOString(),
     level: logLevels[Math.floor(Math.random() * logLevels.length)],
     source: logSources[Math.floor(Math.random() * logSources.length)],
-    message: logMessages[Math.floor(Math.random() * logMessages.length)]
+    message: logMessages[Math.floor(Math.random() * logMessages.length)],
   });
 }
 
@@ -65,7 +102,7 @@ for (let i = 0; i < 100; i++) {
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => body += chunk);
+    req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -83,7 +120,7 @@ function sendJson(res, statusCode, data) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(data));
 }
@@ -100,7 +137,7 @@ const routes = {
     sendJson(res, 200, {
       status: 'healthy',
       uptime: process.uptime(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -108,13 +145,13 @@ const routes = {
   'GET /api/stats': (req, res) => {
     const cpuUsage = Math.random() * 40 + 10;
     const memoryUsage = Math.random() * 2 + 0.5;
-    
+
     sendJson(res, 200, {
       uptime: '99.9%',
       activeAgents: 4,
       cpuUsage: cpuUsage.toFixed(1) + '%',
       memoryUsage: memoryUsage.toFixed(1) + ' GB',
-      requestsPerMinute: Math.floor(Math.random() * 500) + 100
+      requestsPerMinute: Math.floor(Math.random() * 500) + 100,
     });
   },
 
@@ -125,7 +162,7 @@ const routes = {
 
   // Get single agent
   'GET /api/agents/:id': (req, res) => {
-    const agent = mockData.agents.find(a => a.id === req.params.id);
+    const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
       sendJson(res, 200, agent);
     } else {
@@ -135,7 +172,7 @@ const routes = {
 
   // Start agent
   'POST /api/agents/:id/start': (req, res) => {
-    const agent = mockData.agents.find(a => a.id === req.params.id);
+    const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
       agent.status = 'online';
       sendJson(res, 200, { success: true, agent });
@@ -146,7 +183,7 @@ const routes = {
 
   // Stop agent
   'POST /api/agents/:id/stop': (req, res) => {
-    const agent = mockData.agents.find(a => a.id === req.params.id);
+    const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
       agent.status = 'offline';
       sendJson(res, 200, { success: true, agent });
@@ -166,17 +203,17 @@ const routes = {
     let logs = [...mockData.logs];
 
     if (level && level !== 'all') {
-      logs = logs.filter(l => l.level.toLowerCase() === level.toLowerCase());
+      logs = logs.filter((l) => l.level.toLowerCase() === level.toLowerCase());
     }
     if (source) {
-      logs = logs.filter(l => l.source === source);
+      logs = logs.filter((l) => l.source === source);
     }
 
     logs = logs.slice(-parseInt(limit));
 
     sendJson(res, 200, {
       logs,
-      total: mockData.logs.length
+      total: mockData.logs.length,
     });
   },
 
@@ -187,7 +224,7 @@ const routes = {
       timestamp: new Date().toISOString(),
       level: body.level || 'INFO',
       source: body.source || 'api',
-      message: body.message || ''
+      message: body.message || '',
     };
     mockData.logs.push(logEntry);
     sendJson(res, 201, logEntry);
@@ -196,9 +233,24 @@ const routes = {
   // Get memories
   'GET /api/memory': (req, res) => {
     const memories = [
-      { id: 'mem_001', type: 'semantic', title: 'User Preferences', content: 'Language: English, Timezone: Europe/Tallinn' },
-      { id: 'mem_002', type: 'episodic', title: 'Session Started', content: 'Dashboard opened at 10:00' },
-      { id: 'mem_003', type: 'procedural', title: 'Backup Complete', content: '847 files backed up' }
+      {
+        id: 'mem_001',
+        type: 'semantic',
+        title: 'User Preferences',
+        content: 'Language: English, Timezone: Europe/Tallinn',
+      },
+      {
+        id: 'mem_002',
+        type: 'episodic',
+        title: 'Session Started',
+        content: 'Dashboard opened at 10:00',
+      },
+      {
+        id: 'mem_003',
+        type: 'procedural',
+        title: 'Backup Complete',
+        content: '847 files backed up',
+      },
     ];
     sendJson(res, 200, { memories, total: memories.length });
   },
@@ -210,7 +262,7 @@ const routes = {
       language: 'en',
       autoUpdate: true,
       llmProvider: 'minimax',
-      llmModel: 'MiniMax-M2.7'
+      llmModel: 'MiniMax-M2.7',
     });
   },
 
@@ -218,7 +270,7 @@ const routes = {
   'PUT /api/settings': async (req, res) => {
     const body = await parseBody(req);
     sendJson(res, 200, { success: true, settings: body });
-  }
+  },
 };
 
 // Find matching route
@@ -268,7 +320,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
+      'Access-Control-Allow-Headers': 'Content-Type',
     });
     res.end();
     return;
@@ -299,7 +351,7 @@ const server = http.createServer(async (req, res) => {
 
   // Static files
   let filePath = path.join(STATIC_DIR, pathname === '/' ? 'index.html' : pathname);
-  
+
   // Security: prevent directory traversal
   if (!filePath.startsWith(STATIC_DIR)) {
     res.writeHead(403);

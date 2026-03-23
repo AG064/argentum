@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 /**
  * WebChat Feature
  *
@@ -6,9 +6,9 @@
  * file upload (drag & drop), WebSocket messaging, dark/light theme,
  * and chat history persistence.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-const http_1 = require("http");
-const ws_1 = require("ws");
+Object.defineProperty(exports, '__esModule', { value: true });
+const http_1 = require('http');
+const ws_1 = require('ws');
 // ─── Embedded HTML UI ────────────────────────────────────────────────────────
 const WEBCHAT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -298,244 +298,284 @@ connect();
  * or implement proper access controls before exposing publicly.
  */
 class WebchatFeature {
-    constructor() {
-        this.meta = {
-            name: 'webchat',
-            version: '0.2.0',
-            description: 'Full-featured web chat UI with Markdown, file upload, themes',
-            dependencies: [],
-        };
-        this.server = null;
-        this.httpServer = null;
-        this.clients = new Map();
-        this.messageHistory = new Map(); // roomId -> messages
-        this.typingStates = new Map();
-        this.uploadedFiles = new Map();
-        this.config = {
-            enabled: false,
-            port: 3001,
-            maxConnections: 1000,
-            maxMessageHistory: 500,
-            maxFileSize: 10 * 1024 * 1024,
-            allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
-            uploadDir: './uploads',
-        };
-        this.authToken = null;
-    }
-    async init(config, context) {
-        this.ctx = context;
-        this.config = { ...this.config, ...config };
-        // Optional auth token for simple bearer authentication
-        this.authToken = config.authToken ?? null;
-    }
-    async start() {
-        this.httpServer = new http_1.Server((req, res) => {
-            // Basic auth check for HTTP endpoints if authToken is set
-            const authHeader = req.headers['authorization'];
-            if (this.authToken) {
-                if (!authHeader || (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`) {
-                    res.writeHead(401);
-                    res.end('Unauthorized');
-                    return;
-                }
-            }
-            // Serve HTML UI
-            if (req.url === '/' || req.url?.startsWith('/?')) {
-                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(WEBCHAT_HTML);
-                return;
-            }
-            // Serve uploaded files
-            if (req.url?.startsWith('/files/')) {
-                const fileId = req.url.slice(7);
-                const file = this.uploadedFiles.get(fileId);
-                if (file) {
-                    res.writeHead(200, { 'Content-Type': file.mimeType, 'Content-Length': file.data.length });
-                    res.end(file.data);
-                }
-                else {
-                    res.writeHead(404);
-                    res.end('Not found');
-                }
-                return;
-            }
-            res.writeHead(404);
-            res.end('Not found');
-        });
-        this.server = new ws_1.WebSocketServer({ server: this.httpServer, path: '/ws' });
-        this.server.on('connection', (ws, req) => {
-            // WebSocket token check
-            const wsUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
-            const token = wsUrl.searchParams.get('token');
-            if (this.authToken && token !== this.authToken) {
-                // Close with application-defined code 4001 for auth failure
-                ws.close(4001, 'Unauthorized');
-                this.ctx.logger.warn('WebSocket connection rejected due to invalid token');
-                return;
-            }
-            if (this.clients.size >= this.config.maxConnections) {
-                ws.close(1013, 'Server at capacity');
-                return;
-            }
-            const clientId = this.generateId();
-            const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
-            const roomId = parsedUrl.searchParams.get('room') ?? 'default';
-            const userId = parsedUrl.searchParams.get('user') ?? `anon-${clientId}`;
-            const client = { ws, userId, roomId, username: userId, connectedAt: Date.now(), typing: false };
-            this.clients.set(clientId, client);
-            this.ctx.logger.info('Client connected', { clientId, userId, roomId });
-            // Send message history for this room
-            const history = (this.messageHistory.get(roomId) ?? []).slice(-this.config.maxMessageHistory);
-            ws.send(JSON.stringify({ type: 'history', messages: history }));
-            // System message: user joined
-            this.broadcastToRoom(roomId, {
-                type: 'message',
-                message: {
-                    id: this.generateId(), userId: 'system', roomId, content: `${userId} joined`,
-                    role: 'system', timestamp: Date.now(),
-                },
-            });
-            ws.on('message', (raw) => {
-                try {
-                    const msg = JSON.parse(raw.toString());
-                    this.handleMessage(clientId, msg);
-                }
-                catch {
-                    this.ctx.logger.warn('Invalid message', { clientId });
-                }
-            });
-            ws.on('close', () => {
-                const c = this.clients.get(clientId);
-                this.clients.delete(clientId);
-                if (c) {
-                    this.broadcastToRoom(c.roomId, {
-                        type: 'message',
-                        message: {
-                            id: this.generateId(), userId: 'system', roomId: c.roomId, content: `${c.userId} left`,
-                            role: 'system', timestamp: Date.now(),
-                        },
-                    });
-                }
-                this.ctx.logger.info('Client disconnected', { clientId });
-            });
-            ws.on('error', (err) => {
-                this.ctx.logger.error('WebSocket error', { clientId, error: err.message });
-            });
-        });
-        this.httpServer.listen(this.config.port, () => {
-            this.ctx.logger.info(`Webchat server on :${this.config.port} (UI at http://localhost:${this.config.port}/)`);
-        });
-    }
-    async stop() {
-        for (const [, client] of this.clients) {
-            client.ws.close(1001, 'Server shutting down');
+  constructor() {
+    this.meta = {
+      name: 'webchat',
+      version: '0.2.0',
+      description: 'Full-featured web chat UI with Markdown, file upload, themes',
+      dependencies: [],
+    };
+    this.server = null;
+    this.httpServer = null;
+    this.clients = new Map();
+    this.messageHistory = new Map(); // roomId -> messages
+    this.typingStates = new Map();
+    this.uploadedFiles = new Map();
+    this.config = {
+      enabled: false,
+      port: 3001,
+      maxConnections: 1000,
+      maxMessageHistory: 500,
+      maxFileSize: 10 * 1024 * 1024,
+      allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
+      uploadDir: './uploads',
+    };
+    this.authToken = null;
+  }
+  async init(config, context) {
+    this.ctx = context;
+    this.config = { ...this.config, ...config };
+    // Optional auth token for simple bearer authentication
+    this.authToken = config.authToken ?? null;
+  }
+  async start() {
+    this.httpServer = new http_1.Server((req, res) => {
+      // Basic auth check for HTTP endpoints if authToken is set
+      const authHeader = req.headers['authorization'];
+      if (this.authToken) {
+        if (
+          !authHeader ||
+          (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`
+        ) {
+          res.writeHead(401);
+          res.end('Unauthorized');
+          return;
         }
-        this.clients.clear();
-        this.server?.close();
-        this.httpServer?.close();
-        // Clear typing timers
-        for (const [, state] of this.typingStates)
-            clearTimeout(state.timer);
-        this.typingStates.clear();
-    }
-    async healthCheck() {
-        return {
-            healthy: this.server !== null,
-            message: this.server ? `Active, ${this.clients.size} clients` : 'Not started',
-            details: {
-                clients: this.clients.size,
-                rooms: this.messageHistory.size,
-                totalMessages: Array.from(this.messageHistory.values()).reduce((s, m) => s + m.length, 0),
+      }
+      // Serve HTML UI
+      if (req.url === '/' || req.url?.startsWith('/?')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(WEBCHAT_HTML);
+        return;
+      }
+      // Serve uploaded files
+      if (req.url?.startsWith('/files/')) {
+        const fileId = req.url.slice(7);
+        const file = this.uploadedFiles.get(fileId);
+        if (file) {
+          res.writeHead(200, { 'Content-Type': file.mimeType, 'Content-Length': file.data.length });
+          res.end(file.data);
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
+        }
+        return;
+      }
+      res.writeHead(404);
+      res.end('Not found');
+    });
+    this.server = new ws_1.WebSocketServer({ server: this.httpServer, path: '/ws' });
+    this.server.on('connection', (ws, req) => {
+      // WebSocket token check
+      const wsUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const token = wsUrl.searchParams.get('token');
+      if (this.authToken && token !== this.authToken) {
+        // Close with application-defined code 4001 for auth failure
+        ws.close(4001, 'Unauthorized');
+        this.ctx.logger.warn('WebSocket connection rejected due to invalid token');
+        return;
+      }
+      if (this.clients.size >= this.config.maxConnections) {
+        ws.close(1013, 'Server at capacity');
+        return;
+      }
+      const clientId = this.generateId();
+      const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const roomId = parsedUrl.searchParams.get('room') ?? 'default';
+      const userId = parsedUrl.searchParams.get('user') ?? `anon-${clientId}`;
+      const client = {
+        ws,
+        userId,
+        roomId,
+        username: userId,
+        connectedAt: Date.now(),
+        typing: false,
+      };
+      this.clients.set(clientId, client);
+      this.ctx.logger.info('Client connected', { clientId, userId, roomId });
+      // Send message history for this room
+      const history = (this.messageHistory.get(roomId) ?? []).slice(-this.config.maxMessageHistory);
+      ws.send(JSON.stringify({ type: 'history', messages: history }));
+      // System message: user joined
+      this.broadcastToRoom(roomId, {
+        type: 'message',
+        message: {
+          id: this.generateId(),
+          userId: 'system',
+          roomId,
+          content: `${userId} joined`,
+          role: 'system',
+          timestamp: Date.now(),
+        },
+      });
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          this.handleMessage(clientId, msg);
+        } catch {
+          this.ctx.logger.warn('Invalid message', { clientId });
+        }
+      });
+      ws.on('close', () => {
+        const c = this.clients.get(clientId);
+        this.clients.delete(clientId);
+        if (c) {
+          this.broadcastToRoom(c.roomId, {
+            type: 'message',
+            message: {
+              id: this.generateId(),
+              userId: 'system',
+              roomId: c.roomId,
+              content: `${c.userId} left`,
+              role: 'system',
+              timestamp: Date.now(),
             },
+          });
+        }
+        this.ctx.logger.info('Client disconnected', { clientId });
+      });
+      ws.on('error', (err) => {
+        this.ctx.logger.error('WebSocket error', { clientId, error: err.message });
+      });
+    });
+    this.httpServer.listen(this.config.port, () => {
+      this.ctx.logger.info(
+        `Webchat server on :${this.config.port} (UI at http://localhost:${this.config.port}/)`,
+      );
+    });
+  }
+  async stop() {
+    for (const [, client] of this.clients) {
+      client.ws.close(1001, 'Server shutting down');
+    }
+    this.clients.clear();
+    this.server?.close();
+    this.httpServer?.close();
+    // Clear typing timers
+    for (const [, state] of this.typingStates) clearTimeout(state.timer);
+    this.typingStates.clear();
+  }
+  async healthCheck() {
+    return {
+      healthy: this.server !== null,
+      message: this.server ? `Active, ${this.clients.size} clients` : 'Not started',
+      details: {
+        clients: this.clients.size,
+        rooms: this.messageHistory.size,
+        totalMessages: Array.from(this.messageHistory.values()).reduce((s, m) => s + m.length, 0),
+      },
+    };
+  }
+  /** Handle incoming WebSocket message */
+  handleMessage(clientId, msg) {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+    switch (msg.type) {
+      case 'chat': {
+        const chatMsg = {
+          id: this.generateId(),
+          userId: client.userId,
+          roomId: client.roomId,
+          content: msg.content ?? '',
+          role: 'user',
+          timestamp: Date.now(),
         };
-    }
-    /** Handle incoming WebSocket message */
-    handleMessage(clientId, msg) {
-        const client = this.clients.get(clientId);
-        if (!client)
-            return;
-        switch (msg.type) {
-            case 'chat': {
-                const chatMsg = {
-                    id: this.generateId(),
-                    userId: client.userId,
-                    roomId: client.roomId,
-                    content: msg.content ?? '',
-                    role: 'user',
-                    timestamp: Date.now(),
-                };
-                this.addMessageToHistory(client.roomId, chatMsg);
-                this.broadcastToRoom(client.roomId, { type: 'message', message: chatMsg });
-                // Emit hook for agent processing
-                this.ctx.emit('webchat:message', { roomId: client.roomId, userId: client.userId, content: msg.content });
-                break;
-            }
-            case 'typing': {
-                // Broadcast typing to others in room
-                this.broadcastToRoom(client.roomId, { type: 'typing', userId: client.userId }, clientId);
-                // Clear previous typing timer
-                const prev = this.typingStates.get(clientId);
-                if (prev)
-                    clearTimeout(prev.timer);
-                this.typingStates.set(clientId, {
-                    userId: client.userId, roomId: client.roomId,
-                    timer: setTimeout(() => this.typingStates.delete(clientId), 3000),
-                });
-                break;
-            }
-            case 'file': {
-                if (!msg.data || !msg.filename)
-                    return;
-                const buf = Buffer.from(msg.data, 'base64');
-                if (buf.length > this.config.maxFileSize) {
-                    client.ws.send(JSON.stringify({ type: 'error', message: 'File too large' }));
-                    return;
-                }
-                const fileId = this.generateId();
-                this.uploadedFiles.set(fileId, { data: buf, filename: msg.filename, mimeType: msg.mimeType ?? 'application/octet-stream' });
-                const fileMsg = {
-                    id: this.generateId(),
-                    userId: client.userId,
-                    roomId: client.roomId,
-                    content: `📎 ${msg.filename}`,
-                    role: 'user',
-                    timestamp: Date.now(),
-                    attachments: [{ id: fileId, filename: msg.filename, mimeType: msg.mimeType ?? 'application/octet-stream', size: buf.length, url: `/files/${fileId}` }],
-                };
-                this.addMessageToHistory(client.roomId, fileMsg);
-                this.broadcastToRoom(client.roomId, { type: 'message', message: fileMsg });
-                break;
-            }
+        this.addMessageToHistory(client.roomId, chatMsg);
+        this.broadcastToRoom(client.roomId, { type: 'message', message: chatMsg });
+        // Emit hook for agent processing
+        this.ctx.emit('webchat:message', {
+          roomId: client.roomId,
+          userId: client.userId,
+          content: msg.content,
+        });
+        break;
+      }
+      case 'typing': {
+        // Broadcast typing to others in room
+        this.broadcastToRoom(client.roomId, { type: 'typing', userId: client.userId }, clientId);
+        // Clear previous typing timer
+        const prev = this.typingStates.get(clientId);
+        if (prev) clearTimeout(prev.timer);
+        this.typingStates.set(clientId, {
+          userId: client.userId,
+          roomId: client.roomId,
+          timer: setTimeout(() => this.typingStates.delete(clientId), 3000),
+        });
+        break;
+      }
+      case 'file': {
+        if (!msg.data || !msg.filename) return;
+        const buf = Buffer.from(msg.data, 'base64');
+        if (buf.length > this.config.maxFileSize) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'File too large' }));
+          return;
         }
-    }
-    /** Add message to room history with cap */
-    addMessageToHistory(roomId, msg) {
-        const history = this.messageHistory.get(roomId) ?? [];
-        history.push(msg);
-        if (history.length > this.config.maxMessageHistory) {
-            history.splice(0, history.length - this.config.maxMessageHistory);
-        }
-        this.messageHistory.set(roomId, history);
-    }
-    /** Broadcast to all clients in a room */
-    broadcastToRoom(roomId, data, excludeClientId) {
-        const payload = JSON.stringify(data);
-        for (const [id, client] of this.clients) {
-            if (id !== excludeClientId && client.roomId === roomId && client.ws.readyState === ws_1.WebSocket.OPEN) {
-                client.ws.send(payload);
-            }
-        }
-    }
-    /** Send a message as the assistant (for agent responses) */
-    sendAssistantMessage(roomId, content) {
-        const msg = {
-            id: this.generateId(), userId: 'assistant', roomId, content, role: 'assistant', timestamp: Date.now(),
+        const fileId = this.generateId();
+        this.uploadedFiles.set(fileId, {
+          data: buf,
+          filename: msg.filename,
+          mimeType: msg.mimeType ?? 'application/octet-stream',
+        });
+        const fileMsg = {
+          id: this.generateId(),
+          userId: client.userId,
+          roomId: client.roomId,
+          content: `📎 ${msg.filename}`,
+          role: 'user',
+          timestamp: Date.now(),
+          attachments: [
+            {
+              id: fileId,
+              filename: msg.filename,
+              mimeType: msg.mimeType ?? 'application/octet-stream',
+              size: buf.length,
+              url: `/files/${fileId}`,
+            },
+          ],
         };
-        this.addMessageToHistory(roomId, msg);
-        this.broadcastToRoom(roomId, { type: 'message', message: msg });
+        this.addMessageToHistory(client.roomId, fileMsg);
+        this.broadcastToRoom(client.roomId, { type: 'message', message: fileMsg });
+        break;
+      }
     }
-    generateId() {
-        return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+  /** Add message to room history with cap */
+  addMessageToHistory(roomId, msg) {
+    const history = this.messageHistory.get(roomId) ?? [];
+    history.push(msg);
+    if (history.length > this.config.maxMessageHistory) {
+      history.splice(0, history.length - this.config.maxMessageHistory);
     }
+    this.messageHistory.set(roomId, history);
+  }
+  /** Broadcast to all clients in a room */
+  broadcastToRoom(roomId, data, excludeClientId) {
+    const payload = JSON.stringify(data);
+    for (const [id, client] of this.clients) {
+      if (
+        id !== excludeClientId &&
+        client.roomId === roomId &&
+        client.ws.readyState === ws_1.WebSocket.OPEN
+      ) {
+        client.ws.send(payload);
+      }
+    }
+  }
+  /** Send a message as the assistant (for agent responses) */
+  sendAssistantMessage(roomId, content) {
+    const msg = {
+      id: this.generateId(),
+      userId: 'assistant',
+      roomId,
+      content,
+      role: 'assistant',
+      timestamp: Date.now(),
+    };
+    this.addMessageToHistory(roomId, msg);
+    this.broadcastToRoom(roomId, { type: 'message', message: msg });
+  }
+  generateId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
 }
 exports.default = new WebchatFeature();

@@ -8,37 +8,40 @@ const mockSkills = [
     id: 'github',
     name: 'GitHub Integration',
     author: 'AG-Claw',
-    description: 'Seamless GitHub integration for repository management, issues, pull requests, and workflow automation.',
+    description:
+      'Seamless GitHub integration for repository management, issues, pull requests, and workflow automation.',
     icon: '🐙',
     rating: 4.8,
     reviews: 234,
     installs: 12453,
     category: 'communication',
-    installed: true
+    installed: true,
   },
   {
     id: 'deep-research-pro',
     name: 'Deep Research Pro',
     author: 'AG-Claw',
-    description: 'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
+    description:
+      'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
     icon: '🔍',
     rating: 4.9,
     reviews: 189,
     installs: 8932,
     category: 'memory',
-    installed: true
+    installed: true,
   },
   {
     id: 'telegram',
     name: 'Telegram Bot',
     author: 'AG-Claw',
-    description: 'Design Telegram Bot API workflows and command-driven conversations using direct HTTPS requests.',
+    description:
+      'Design Telegram Bot API workflows and command-driven conversations using direct HTTPS requests.',
     icon: '✈️',
     rating: 4.7,
     reviews: 312,
     installs: 15621,
     category: 'communication',
-    installed: true
+    installed: true,
   },
   {
     id: 'weather',
@@ -50,19 +53,20 @@ const mockSkills = [
     reviews: 87,
     installs: 4521,
     category: 'automation',
-    installed: false
+    installed: false,
   },
   {
     id: 'himalaya',
     name: 'Email Management',
     author: 'Community',
-    description: 'CLI to manage emails via IMAP/SMTP. Supports multiple accounts and message composition.',
+    description:
+      'CLI to manage emails via IMAP/SMTP. Supports multiple accounts and message composition.',
     icon: '📧',
     rating: 4.6,
     reviews: 156,
     installs: 7823,
     category: 'automation',
-    installed: false
+    installed: false,
   },
   {
     id: 'voice',
@@ -74,7 +78,7 @@ const mockSkills = [
     reviews: 98,
     installs: 3241,
     category: 'automation',
-    installed: false
+    installed: false,
   },
   {
     id: 'calendar',
@@ -86,27 +90,30 @@ const mockSkills = [
     reviews: 67,
     installs: 2156,
     category: 'automation',
-    installed: false
+    installed: false,
   },
   {
     id: 'healthcheck',
     name: 'Health Monitor',
     author: 'AG-Claw',
-    description: 'Host security hardening and risk-tolerance configuration for OpenClaw deployments.',
+    description:
+      'Host security hardening and risk-tolerance configuration for OpenClaw deployments.',
     icon: '🛡️',
     rating: 4.8,
     reviews: 145,
     installs: 6789,
     category: 'security',
-    installed: true
-  }
+    installed: true,
+  },
 ];
 
 function loadSkills() {
   const grid = document.getElementById('skillsGrid');
   if (!grid) return;
 
-  grid.innerHTML = mockSkills.map(skill => `
+  grid.innerHTML = mockSkills
+    .map(
+      (skill) => `
     <div class="skill-card ${skill.installed ? 'installed' : ''}">
       <div class="skill-header">
         <div class="skill-icon">${skill.icon}</div>
@@ -137,14 +144,19 @@ function loadSkills() {
         </button>
       </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 
   // Setup search
   const searchInput = document.getElementById('skillSearch');
   if (searchInput) {
-    searchInput.addEventListener('input', Components.debounce((e) => {
-      filterSkills(e.target.value);
-    }, 300));
+    searchInput.addEventListener(
+      'input',
+      Components.debounce((e) => {
+        filterSkills(e.target.value);
+      }, 300),
+    );
   }
 }
 
@@ -155,12 +167,16 @@ function filterSkills(query) {
   const cards = grid.querySelectorAll('.skill-card');
   const lowerQuery = query.toLowerCase();
 
-  cards.forEach(card => {
+  cards.forEach((card) => {
     const name = card.querySelector('.skill-name')?.textContent.toLowerCase() || '';
     const description = card.querySelector('.skill-description')?.textContent.toLowerCase() || '';
     const author = card.querySelector('.skill-author')?.textContent.toLowerCase() || '';
 
-    if (name.includes(lowerQuery) || description.includes(lowerQuery) || author.includes(lowerQuery)) {
+    if (
+      name.includes(lowerQuery) ||
+      description.includes(lowerQuery) ||
+      author.includes(lowerQuery)
+    ) {
       card.style.display = '';
     } else {
       card.style.display = 'none';
@@ -169,7 +185,7 @@ function filterSkills(query) {
 }
 
 async function toggleSkill(skillId) {
-  const skill = mockSkills.find(s => s.id === skillId);
+  const skill = mockSkills.find((s) => s.id === skillId);
   if (!skill) return;
 
   if (skill.installed) {
@@ -178,7 +194,7 @@ async function toggleSkill(skillId) {
       title: 'Uninstall Skill',
       message: `Are you sure you want to uninstall "${skill.name}"? This action cannot be undone.`,
       confirmText: 'Uninstall',
-      danger: true
+      danger: true,
     });
 
     if (confirmed) {

@@ -1,248 +1,471 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AG-Claw Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/dashboard.css">
-</head>
-<body>
-  <div class="app">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="brand">
-          <div class="brand-logo">⚡</div>
-          <span class="brand-name">AG-Claw</span>
-        </div>
-      </div>
-      <nav class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">Overview</div>
-          <a class="nav-item active" data-page="overview">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            Dashboard
-          </a>
-        </div>
-        <div class="nav-section">
-          <div class="nav-section-title">Management</div>
-          <a class="nav-item" data-page="agents">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-            Agents
-            <span class="nav-item-badge">4</span>
-          </a>
-          <a class="nav-item" data-page="skills">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-            Skills
-          </a>
-          <a class="nav-item" data-page="memory">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-            Memory
-          </a>
-        </div>
-        <div class="nav-section">
-          <div class="nav-section-title">System</div>
-          <a class="nav-item" data-page="logs">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Activity Logs
-          </a>
-          <a class="nav-item" data-page="settings">
-            <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Settings
-          </a>
-        </div>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="status-indicator">
-          <span class="status-dot online"></span>
-          <span class="status-text">System <strong>Online</strong></span>
-        </div>
-      </div>
-    </aside>
-    <main class="main">
-      <header class="header">
-        <div class="header-left">
-          <div class="header-breadcrumb">
-            <span>AG-Claw</span><span>/</span>
-            <a href="#" id="breadcrumbCurrent">Dashboard</a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AG-Claw Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/main.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/dashboard.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="brand">
+            <div class="brand-logo">⚡</div>
+            <span class="brand-name">AG-Claw</span>
           </div>
         </div>
-        <div class="header-right">
-          <div class="search-global">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" class="input" placeholder="Search..." id="globalSearch">
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-title">Overview</div>
+            <a class="nav-item active" data-page="overview">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+              Dashboard
+            </a>
           </div>
-          <button class="btn-icon-label" id="themeToggle" aria-label="Toggle theme">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          </button>
-          <div class="avatar" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); cursor: pointer;">AG</div>
+          <div class="nav-section">
+            <div class="nav-section-title">Management</div>
+            <a class="nav-item" data-page="agents">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M20 21a8 8 0 1 0-16 0" />
+              </svg>
+              Agents
+              <span class="nav-item-badge">4</span>
+            </a>
+            <a class="nav-item" data-page="skills">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
+              Skills
+            </a>
+            <a class="nav-item" data-page="memory">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+                />
+              </svg>
+              Memory
+            </a>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-title">System</div>
+            <a class="nav-item" data-page="logs">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              Activity Logs
+            </a>
+            <a class="nav-item" data-page="settings">
+              <svg
+                class="nav-item-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                />
+              </svg>
+              Settings
+            </a>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="status-indicator">
+            <span class="status-dot online"></span>
+            <span class="status-text">System <strong>Online</strong></span>
+          </div>
         </div>
-      </header>
-      <div class="content">
-        <!-- Overview Page -->
-        <div class="page active" id="page-overview">
-          <div class="page-header">
-            <div class="page-header-content">
-              <div>
-                <h1 class="page-title">Dashboard</h1>
-                <p class="page-description">Monitor your AG-Claw system performance and manage your agents.</p>
-              </div>
-              <div class="page-actions">
-                <button class="btn btn-secondary" onclick="refreshDashboard()">Refresh</button>
-              </div>
+      </aside>
+      <main class="main">
+        <header class="header">
+          <div class="header-left">
+            <div class="header-breadcrumb">
+              <span>AG-Claw</span><span>/</span>
+              <a href="#" id="breadcrumbCurrent">Dashboard</a>
             </div>
           </div>
-          <div class="stats-grid stagger-children">
-            <div class="stat-card">
-              <div class="stat-card-header">
-                <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-                <span class="stat-card-trend up">Active</span>
-              </div>
-              <div class="stat-card-value" id="uptime">99.9%</div>
-              <div class="stat-card-label">System Uptime</div>
+          <div class="header-right">
+            <div class="search-global">
+              <svg
+                class="icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input type="text" class="input" placeholder="Search..." id="globalSearch" />
             </div>
-            <div class="stat-card">
-              <div class="stat-card-header"><div class="stat-card-icon success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></div></div>
-              <div class="stat-card-value" id="activeAgents">4</div>
-              <div class="stat-card-label">Active Agents</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card-header"><div class="stat-card-icon info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div></div>
-              <div class="stat-card-value" id="cpuUsage">23%</div>
-              <div class="stat-card-label">CPU Usage</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card-header"><div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div></div>
-              <div class="stat-card-value" id="memoryUsage">1.2 GB</div>
-              <div class="stat-card-label">Memory Usage</div>
+            <button class="btn-icon-label" id="themeToggle" aria-label="Toggle theme">
+              <svg
+                class="icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            </button>
+            <div
+              class="avatar"
+              style="background: linear-gradient(135deg, #6366f1, #8b5cf6); cursor: pointer"
+            >
+              AG
             </div>
           </div>
-          <div class="overview-grid" style="margin-top: var(--space-6);">
-            <div class="activity-feed">
-              <div class="activity-header">
-                <h3 class="activity-title">Recent Activity</h3>
-                <button class="btn btn-ghost btn-sm" onclick="navigateTo('logs')">View All</button>
+        </header>
+        <div class="content">
+          <!-- Overview Page -->
+          <div class="page active" id="page-overview">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Dashboard</h1>
+                  <p class="page-description">
+                    Monitor your AG-Claw system performance and manage your agents.
+                  </p>
+                </div>
+                <div class="page-actions">
+                  <button class="btn btn-secondary" onclick="refreshDashboard()">Refresh</button>
+                </div>
               </div>
-              <div class="activity-list" id="activityList">
-                <div class="activity-item">
-                  <div class="activity-icon" style="background: var(--color-success-muted); color: var(--color-success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
-                  <div class="activity-content">
-                    <div class="activity-message">Agent <strong>coder</strong> completed task <strong>#2847</strong></div>
-                    <div class="activity-time">2 minutes ago</div>
+            </div>
+            <div class="stats-grid stagger-children">
+              <div class="stat-card">
+                <div class="stat-card-header">
+                  <div class="stat-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <span class="stat-card-trend up">Active</span>
+                </div>
+                <div class="stat-card-value" id="uptime">99.9%</div>
+                <div class="stat-card-label">System Uptime</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-header">
+                  <div class="stat-card-icon success">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M20 21a8 8 0 1 0-16 0" />
+                    </svg>
                   </div>
                 </div>
-                <div class="activity-item">
-                  <div class="activity-icon" style="background: var(--color-info-muted); color: var(--color-info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg></div>
-                  <div class="activity-content">
-                    <div class="activity-message">Memory cleanup completed: <strong>128 MB</strong> freed</div>
-                    <div class="activity-time">5 minutes ago</div>
+                <div class="stat-card-value" id="activeAgents">4</div>
+                <div class="stat-card-label">Active Agents</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-header">
+                  <div class="stat-card-icon info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
                   </div>
                 </div>
-                <div class="activity-item">
-                  <div class="activity-icon" style="background: var(--color-warning-muted); color: var(--color-warning);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
-                  <div class="activity-content">
-                    <div class="activity-message">Skill <strong>deep-research-pro</strong> update available</div>
-                    <div class="activity-time">12 minutes ago</div>
+                <div class="stat-card-value" id="cpuUsage">23%</div>
+                <div class="stat-card-label">CPU Usage</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card-header">
+                  <div class="stat-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <div class="stat-card-value" id="memoryUsage">1.2 GB</div>
+                <div class="stat-card-label">Memory Usage</div>
+              </div>
+            </div>
+            <div class="overview-grid" style="margin-top: var(--space-6)">
+              <div class="activity-feed">
+                <div class="activity-header">
+                  <h3 class="activity-title">Recent Activity</h3>
+                  <button class="btn btn-ghost btn-sm" onclick="navigateTo('logs')">
+                    View All
+                  </button>
+                </div>
+                <div class="activity-list" id="activityList">
+                  <div class="activity-item">
+                    <div
+                      class="activity-icon"
+                      style="background: var(--color-success-muted); color: var(--color-success)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                    <div class="activity-content">
+                      <div class="activity-message">
+                        Agent <strong>coder</strong> completed task <strong>#2847</strong>
+                      </div>
+                      <div class="activity-time">2 minutes ago</div>
+                    </div>
+                  </div>
+                  <div class="activity-item">
+                    <div
+                      class="activity-icon"
+                      style="background: var(--color-info-muted); color: var(--color-info)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                      </svg>
+                    </div>
+                    <div class="activity-content">
+                      <div class="activity-message">
+                        Memory cleanup completed: <strong>128 MB</strong> freed
+                      </div>
+                      <div class="activity-time">5 minutes ago</div>
+                    </div>
+                  </div>
+                  <div class="activity-item">
+                    <div
+                      class="activity-icon"
+                      style="background: var(--color-warning-muted); color: var(--color-warning)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                          d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                        />
+                      </svg>
+                    </div>
+                    <div class="activity-content">
+                      <div class="activity-message">
+                        Skill <strong>deep-research-pro</strong> update available
+                      </div>
+                      <div class="activity-time">12 minutes ago</div>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div class="quick-actions">
+                <h3 class="quick-actions-title">Quick Actions</h3>
+                <div class="quick-actions-grid">
+                  <button class="quick-action" onclick="navigateTo('agents')">
+                    <div
+                      class="quick-action-icon"
+                      style="background: var(--color-success-muted); color: var(--color-success)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                    </div>
+                    <span class="quick-action-label">Start Agent</span>
+                  </button>
+                  <button class="quick-action" onclick="navigateTo('skills')">
+                    <div
+                      class="quick-action-icon"
+                      style="background: var(--color-accent-muted); color: var(--color-accent)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                      </svg>
+                    </div>
+                    <span class="quick-action-label">Add Skill</span>
+                  </button>
+                  <button class="quick-action" onclick="navigateTo('logs')">
+                    <div
+                      class="quick-action-icon"
+                      style="background: var(--color-info-muted); color: var(--color-info)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      </svg>
+                    </div>
+                    <span class="quick-action-label">View Logs</span>
+                  </button>
+                  <button class="quick-action" onclick="navigateTo('settings')">
+                    <div
+                      class="quick-action-icon"
+                      style="background: var(--color-warning-muted); color: var(--color-warning)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </div>
+                    <span class="quick-action-label">Settings</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="quick-actions">
-              <h3 class="quick-actions-title">Quick Actions</h3>
-              <div class="quick-actions-grid">
-                <button class="quick-action" onclick="navigateTo('agents')">
-                  <div class="quick-action-icon" style="background: var(--color-success-muted); color: var(--color-success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
-                  <span class="quick-action-label">Start Agent</span>
-                </button>
-                <button class="quick-action" onclick="navigateTo('skills')">
-                  <div class="quick-action-icon" style="background: var(--color-accent-muted); color: var(--color-accent);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg></div>
-                  <span class="quick-action-label">Add Skill</span>
-                </button>
-                <button class="quick-action" onclick="navigateTo('logs')">
-                  <div class="quick-action-icon" style="background: var(--color-info-muted); color: var(--color-info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg></div>
-                  <span class="quick-action-label">View Logs</span>
-                </button>
-                <button class="quick-action" onclick="navigateTo('settings')">
-                  <div class="quick-action-icon" style="background: var(--color-warning-muted); color: var(--color-warning);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></div>
-                  <span class="quick-action-label">Settings</span>
-                </button>
+          </div>
+          <!-- Agents Page -->
+          <div class="page" id="page-agents">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Agents</h1>
+                  <p class="page-description">Manage and monitor your AI agents.</p>
+                </div>
+                <div class="page-actions">
+                  <button class="btn btn-primary" onclick="showModal('newAgent')">New Agent</button>
+                </div>
+              </div>
+            </div>
+            <div class="agents-grid" id="agentsGrid"></div>
+          </div>
+          <!-- Skills Page -->
+          <div class="page" id="page-skills">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Skills Marketplace</h1>
+                  <p class="page-description">Extend your AG-Claw capabilities.</p>
+                </div>
+              </div>
+            </div>
+            <div class="skills-grid" id="skillsGrid"></div>
+          </div>
+          <!-- Memory Page -->
+          <div class="page" id="page-memory">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Memory Explorer</h1>
+                  <p class="page-description">Explore your agent memories.</p>
+                </div>
+              </div>
+            </div>
+            <div class="memory-list" id="memoryList">
+              <div class="memory-item">
+                <div class="memory-item-header">
+                  <span class="memory-item-title badge badge-info">Semantic</span>
+                </div>
+                <div class="memory-item-preview">
+                  User preferences: English, Europe/Tallinn timezone.
+                </div>
+              </div>
+              <div class="memory-item">
+                <div class="memory-item-header">
+                  <span class="memory-item-title badge badge-warning">Episodic</span>
+                </div>
+                <div class="memory-item-preview">
+                  Session started with user AG. Dashboard opened.
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Logs Page -->
+          <div class="page" id="page-logs">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Activity Logs</h1>
+                  <p class="page-description">Real-time system logs.</p>
+                </div>
+                <div class="page-actions">
+                  <button class="btn btn-secondary" onclick="exportLogs()">Export</button>
+                </div>
+              </div>
+            </div>
+            <div class="logs-container">
+              <div class="logs-header">
+                <div class="logs-title"><span class="live-indicator"></span> Live Logs</div>
+              </div>
+              <div class="logs-body" id="logsBody"></div>
+            </div>
+          </div>
+          <!-- Settings Page -->
+          <div class="page" id="page-settings">
+            <div class="page-header"><h1 class="page-title">Settings</h1></div>
+            <div class="settings-section">
+              <h2 class="settings-section-title">General</h2>
+              <div class="settings-row">
+                <div class="settings-row-info"><div class="settings-row-label">Dark Mode</div></div>
+                <label class="toggle"
+                  ><input type="checkbox" checked /><span class="toggle-slider"></span
+                ></label>
+              </div>
+              <div class="settings-row">
+                <div class="settings-row-info">
+                  <div class="settings-row-label">Auto-update</div>
+                </div>
+                <label class="toggle"
+                  ><input type="checkbox" checked /><span class="toggle-slider"></span
+                ></label>
+              </div>
+            </div>
+            <div class="settings-section">
+              <h2 class="settings-section-title">LLM Provider</h2>
+              <div class="settings-row">
+                <div class="settings-row-info"><div class="settings-row-label">Provider</div></div>
+                <select class="input select" style="width: 200px">
+                  <option>MiniMax Portal</option>
+                </select>
               </div>
             </div>
           </div>
         </div>
-        <!-- Agents Page -->
-        <div class="page" id="page-agents">
-          <div class="page-header">
-            <div class="page-header-content">
-              <div><h1 class="page-title">Agents</h1><p class="page-description">Manage and monitor your AI agents.</p></div>
-              <div class="page-actions"><button class="btn btn-primary" onclick="showModal('newAgent')">New Agent</button></div>
-            </div>
-          </div>
-          <div class="agents-grid" id="agentsGrid"></div>
-        </div>
-        <!-- Skills Page -->
-        <div class="page" id="page-skills">
-          <div class="page-header">
-            <div class="page-header-content">
-              <div><h1 class="page-title">Skills Marketplace</h1><p class="page-description">Extend your AG-Claw capabilities.</p></div>
-            </div>
-          </div>
-          <div class="skills-grid" id="skillsGrid"></div>
-        </div>
-        <!-- Memory Page -->
-        <div class="page" id="page-memory">
-          <div class="page-header">
-            <div class="page-header-content">
-              <div><h1 class="page-title">Memory Explorer</h1><p class="page-description">Explore your agent memories.</p></div>
-            </div>
-          </div>
-          <div class="memory-list" id="memoryList">
-            <div class="memory-item"><div class="memory-item-header"><span class="memory-item-title badge badge-info">Semantic</span></div><div class="memory-item-preview">User preferences: English, Europe/Tallinn timezone.</div></div>
-            <div class="memory-item"><div class="memory-item-header"><span class="memory-item-title badge badge-warning">Episodic</span></div><div class="memory-item-preview">Session started with user AG. Dashboard opened.</div></div>
-          </div>
-        </div>
-        <!-- Logs Page -->
-        <div class="page" id="page-logs">
-          <div class="page-header">
-            <div class="page-header-content">
-              <div><h1 class="page-title">Activity Logs</h1><p class="page-description">Real-time system logs.</p></div>
-              <div class="page-actions"><button class="btn btn-secondary" onclick="exportLogs()">Export</button></div>
-            </div>
-          </div>
-          <div class="logs-container">
-            <div class="logs-header"><div class="logs-title"><span class="live-indicator"></span> Live Logs</div></div>
-            <div class="logs-body" id="logsBody"></div>
-          </div>
-        </div>
-        <!-- Settings Page -->
-        <div class="page" id="page-settings">
-          <div class="page-header"><h1 class="page-title">Settings</h1></div>
-          <div class="settings-section">
-            <h2 class="settings-section-title">General</h2>
-            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Dark Mode</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
-            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Auto-update</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
-          </div>
-          <div class="settings-section">
-            <h2 class="settings-section-title">LLM Provider</h2>
-            <div class="settings-row"><div class="settings-row-info"><div class="settings-row-label">Provider</div></div><select class="input select" style="width:200px"><option>MiniMax Portal</option></select></div>
-          </div>
-        </div>
-      </div>
-    </main>
-  </div>
-  <div class="toast-container" id="toastContainer"></div>
-  <script src="js/api.js"></script>
-  <script src="js/components.js"></script>
-  <script src="js/pages/overview.js"></script>
-  <script src="js/pages/agents.js"></script>
-  <script src="js/pages/skills.js"></script>
-  <script src="js/pages/memory.js"></script>
-  <script src="js/pages/settings.js"></script>
-  <script src="js/pages/logs.js"></script>
-  <script src="js/app.js"></script>
-</body>
+      </main>
+    </div>
+    <div class="toast-container" id="toastContainer"></div>
+    <script src="js/api.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/pages/overview.js"></script>
+    <script src="js/pages/agents.js"></script>
+    <script src="js/pages/skills.js"></script>
+    <script src="js/pages/memory.js"></script>
+    <script src="js/pages/settings.js"></script>
+    <script src="js/pages/logs.js"></script>
+    <script src="js/app.js"></script>
+  </body>
 </html>
