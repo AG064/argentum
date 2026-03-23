@@ -6,8 +6,9 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import * as path from 'path';
+
 import type { SkillTemplate } from './types';
 
 export class SkillCreator {

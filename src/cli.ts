@@ -1590,10 +1590,10 @@ async function cmdBudget(): Promise<void> {
     const empty = width - filled;
     const p = Math.min(100, Math.max(0, percent));
     const color = p >= 90 ? '\x1b[31m' : p >= 75 ? '\x1b[33m' : '\x1b[32m';
-    return color + '█'.repeat(filled) + '\x1b[90m' + '░'.repeat(empty) + '\x1b[0m';
+    return `${color + '█'.repeat(filled)  }\x1b[90m${  '░'.repeat(empty)  }\x1b[0m`;
   };
 
-  const usd = (n: number): string => '$' + n.toFixed(4);
+  const usd = (n: number): string => `$${  n.toFixed(4)}`;
 
   switch (subcommand) {
     case 'status':
@@ -1612,17 +1612,17 @@ async function cmdBudget(): Promise<void> {
       const config = budget.getConfig();
       const report = budget.getBudgetReport();
       const monthlyPct = Math.round((report.monthlyCost / report.monthlyLimit) * 100);
-      const dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
+      const _dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
 
       print('  \x1b[1mGlobal Limits\x1b[0m');
-      print('  Monthly  ' + bar(monthlyPct) + ' ' + usd(report.monthlyCost).padStart(10) + ' / ' + usd(report.monthlyLimit));
-      print('  Daily    ' + bar(dailyPct) + ' ' + usd(report.dailyCost).padStart(10) + ' / ' + usd(report.dailyLimit));
+      print(`  Monthly  ${  bar(monthlyPct)  } ${  usd(report.monthlyCost).padStart(10)  } / ${  usd(report.monthlyLimit)}`);
+      print(`  Daily    ${  bar(dailyPct)  } ${  usd(report.dailyCost).padStart(10)  } / ${  usd(report.dailyLimit)}`);
       print('');
 
       if (report.alerts.length > 0) {
         print('  \x1b[1m\x1b[33m⚠\x1b[0m  \x1b[1mAlerts\x1b[0m');
         for (const alert of report.alerts) {
-          print('    \x1b[33m▸\x1b[0m ' + alert);
+          print(`    \x1b[33m▸\x1b[0m ${  alert}`);
         }
         print('');
       }
@@ -1630,12 +1630,12 @@ async function cmdBudget(): Promise<void> {
       if (report.byAgent.length > 0) {
         print('  \x1b[1mPer-Agent Usage\x1b[0m');
         print('  \x1b[90m  Agent                Cost          Tokens           % of Limit    Status\x1b[0m');
-        print('  \x1b[90m  ' + '─'.repeat(72));
+        print(`  \x1b[90m  ${  '─'.repeat(72)}`);
         for (const s of report.byAgent) {
           const statusColor = s.canProceed ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
           const pctColor = s.percentUsed >= 90 ? '\x1b[31m' : s.percentUsed >= 75 ? '\x1b[33m' : '\x1b[32m';
-          const pctStr = pctColor + s.percentUsed + '%\x1b[0m';
-          print('    ' + s.agent.padEnd(20) + usd(s.totalCost).padEnd(12) + s.totalTokens.toLocaleString().padEnd(12) + pctStr.padEnd(14) + ' ' + statusColor);
+          const pctStr = `${pctColor + s.percentUsed  }%\x1b[0m`;
+          print(`    ${  s.agent.padEnd(20)  }${usd(s.totalCost).padEnd(12)  }${s.totalTokens.toLocaleString().padEnd(12)  }${pctStr.padEnd(14)  } ${  statusColor}`);
         }
         print('');
       } else {
@@ -1643,9 +1643,9 @@ async function cmdBudget(): Promise<void> {
       }
 
       print('  \x1b[1mSettings\x1b[0m');
-      print('  \x1b[90m  alertThreshold:   \x1b[0m' + Math.round(config.alertThreshold * 100) + '%');
-      print('  \x1b[90m  blockOnExhausted: \x1b[0m' + (config.blockOnExhausted ? 'yes' : 'no'));
-      if (config.perAgentLimit) { print('  \x1b[90m  perAgentLimit:    \x1b[0m$' + config.perAgentLimit); }
+      print(`  \x1b[90m  alertThreshold:   \x1b[0m${  Math.round(config.alertThreshold * 100)  }%`);
+      print(`  \x1b[90m  blockOnExhausted: \x1b[0m${  config.blockOnExhausted ? 'yes' : 'no'}`);
+      if (config.perAgentLimit) { print(`  \x1b[90m  perAgentLimit:    \x1b[0m$${  config.perAgentLimit}`); }
       print('');
       break;
     }
@@ -1664,10 +1664,10 @@ async function cmdBudget(): Promise<void> {
         case 'monthly': case 'm': result = budget.updateConfig({ globalMonthlyLimit: amount }); break;
         case 'daily': case 'd': result = budget.updateConfig({ globalDailyLimit: amount }); break;
         case 'per-agent': case 'peragent': case 'agent': case 'a': result = budget.updateConfig({ perAgentLimit: amount }); break;
-        default: error('Unknown limit type: ' + limitType + '. Use: monthly, daily, or per-agent'); return;
+        default: error(`Unknown limit type: ${  limitType  }. Use: monthly, daily, or per-agent`); return;
       }
-      if (result.success) { success('Updated ' + limitType + ' limit to $' + amount); }
-      else { error('Failed: ' + result.error); }
+      if (result.success) { success(`Updated ${  limitType  } limit to $${  amount}`); }
+      else { error(`Failed: ${  result.error}`); }
       break;
     }
 
@@ -1681,20 +1681,20 @@ async function cmdBudget(): Promise<void> {
       if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
       const days = parseInt(args[2] || '30', 10);
       const history = budget.getHistory(days);
-      if (history.length === 0) { info('No spending history in the last ' + days + ' days.'); return; }
+      if (history.length === 0) { info(`No spending history in the last ${  days  } days.`); return; }
       print('  \x1b[90m  Date           Cost           Tokens         Requests   Daily %\x1b[0m');
-      print('  \x1b[90m  ' + '─'.repeat(66));
+      print(`  \x1b[90m  ${  '─'.repeat(66)}`);
       const cfg = budget.getConfig();
       for (const row of history) {
-        const dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
+        const _dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
         const pctColor = dailyPct >= 90 ? '\x1b[31m' : dailyPct >= 75 ? '\x1b[33m' : '\x1b[32m';
-        print('    \x1b[37m' + row.date.padEnd(12) + '\x1b[0m ' + usd(row.totalCost).padEnd(14) + row.totalTokens.toLocaleString().padEnd(14) + row.requestCount.toString().padEnd(10) + pctColor + dailyPct + '%\x1b[0m');
+        print(`    \x1b[37m${  row.date.padEnd(12)  }\x1b[0m ${  usd(row.totalCost).padEnd(14)  }${row.totalTokens.toLocaleString().padEnd(14)  }${row.requestCount.toString().padEnd(10)  }${pctColor  }${dailyPct  }%\x1b[0m`);
       }
       print('');
       const tc = history.reduce((s: number, r: { totalCost: number }) => s + r.totalCost, 0);
       const tt = history.reduce((s: number, r: { totalTokens: number }) => s + r.totalTokens, 0);
       const tr = history.reduce((s: number, r: { requestCount: number }) => s + r.requestCount, 0);
-      print('  \x1b[90m  Totals: \x1b[0m' + usd(tc) + ' | ' + tt.toLocaleString() + ' tokens | ' + tr + ' requests\n');
+      print(`  \x1b[90m  Totals: \x1b[0m${  usd(tc)  } | ${  tt.toLocaleString()  } tokens | ${  tr  } requests\n`);
       break;
     }
 
@@ -1721,23 +1721,23 @@ async function cmdBudget(): Promise<void> {
       if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
       const d = budget.getConfigDisplay();
       const rows: Array<[string, string, string, string]> = [
-        ['globalMonthlyLimit', '$10/month', '$' + d.globalMonthlyLimit.value + '/month',
+        ['globalMonthlyLimit', '$10/month', `$${  d.globalMonthlyLimit.value  }/month`,
           d.globalMonthlyLimit.value === d.globalMonthlyLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['globalDailyLimit', '$1/day', '$' + d.globalDailyLimit.value + '/day',
+        ['globalDailyLimit', '$1/day', `$${  d.globalDailyLimit.value  }/day`,
           d.globalDailyLimit.value === d.globalDailyLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
         ['perAgentLimit', '$10/agent',
-          d.perAgentLimit.value ? '$' + d.perAgentLimit.value + '/agent' : '\x1b[90munset (uses monthly)\x1b[0m',
+          d.perAgentLimit.value ? `$${  d.perAgentLimit.value  }/agent` : '\x1b[90munset (uses monthly)\x1b[0m',
           d.perAgentLimit.value === d.perAgentLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['alertThreshold', '80%', Math.round((d.alertThreshold.value as number) * 100) + '%',
+        ['alertThreshold', '80%', `${Math.round((d.alertThreshold.value as number) * 100)  }%`,
           d.alertThreshold.value === d.alertThreshold.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
         ['blockOnExhausted', 'yes', d.blockOnExhausted.value ? 'yes' : 'no',
           d.blockOnExhausted.value === d.blockOnExhausted.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
         ['enabled', 'false', d.enabled.value ? 'true' : 'false', '\x1b[90m(feature toggle)\x1b[0m'],
       ];
       print('  \x1b[90m  Key               Default       Current               Status\x1b[0m');
-      print('  \x1b[90m  ' + '─'.repeat(68));
+      print(`  \x1b[90m  ${  '─'.repeat(68)}`);
       for (const [key, def, cur, status] of rows) {
-        print('  \x1b[37m  ' + key.padEnd(20) + '\x1b[0m ' + def.padEnd(14) + ' ' + cur.padEnd(20) + ' ' + status);
+        print(`  \x1b[37m  ${  key.padEnd(20)  }\x1b[0m ${  def.padEnd(14)  } ${  cur.padEnd(20)  } ${  status}`);
       }
       print('');
       print('  \x1b[1mQuick commands:\x1b[0m');
@@ -1749,7 +1749,7 @@ async function cmdBudget(): Promise<void> {
     }
 
     default:
-      error('Unknown budget command: ' + subcommand);
+      error(`Unknown budget command: ${  subcommand}`);
       print('  agclaw budget [status|set-limit|history|reset|config]');
   }
 }
@@ -2439,7 +2439,7 @@ async function cmdSecurity(): Promise<void> {
           info('No policies defined.');
         } else {
           print(`  \x1b[90m  ${'Name'.padEnd(25)} ${'Resource'.padEnd(25)} ${'Action'.padEnd(8)} ${'Effect'.padEnd(8)} ${'Priority'} ${'Enabled'}\x1b[0m`);
-          print('  \x1b[90m  ' + '─'.repeat(80));
+          print(`  \x1b[90m  ${  '─'.repeat(80)}`);
           for (const p of policies) {
             const effectColor = p.effect === 'allow' ? '\x1b[32m' : p.effect === 'deny' ? '\x1b[31m' : '\x1b[33m';
             const enabledIcon = p.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[31m○\x1b[0m';
@@ -2598,7 +2598,7 @@ async function cmdSecurity(): Promise<void> {
         info('No audit entries found.');
       } else {
         print(`  \x1b[90m  ${'Time'.padEnd(20)} ${'Severity'.padEnd(8)} ${'Action'.padEnd(25)} ${'Actor'.padEnd(12)} Decision\x1b[0m`);
-        print('  \x1b[90m  ' + '─'.repeat(85));
+        print(`  \x1b[90m  ${  '─'.repeat(85)}`);
         for (const entry of entries) {
           const time = new Date(entry.timestamp).toISOString().slice(0, 19).replace('T', ' ');
           const sevColor = entry.severity === 'error' || entry.severity === 'critical' ? '\x1b[31m' :
@@ -2626,7 +2626,7 @@ async function cmdSecurity(): Promise<void> {
           info('No credentials stored.');
         } else {
           print(`  \x1b[90m  ${'Name'.padEnd(20)} ${'Provider'.padEnd(15)} ${'Type'.padEnd(10)} Expires\x1b[0m`);
-          print('  \x1b[90m  ' + '─'.repeat(65));
+          print(`  \x1b[90m  ${  '─'.repeat(65)}`);
           for (const c of creds) {
             const expiresIn = formatExpiry(c.expiresAt);
             const expiringSoon = c.expiresAt - Date.now() < 300000;

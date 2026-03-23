@@ -8,19 +8,13 @@
  */
 
 import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'fs';
-import { createGzip } from 'zlib';
 import { dirname, resolve, join } from 'path';
-import { pipeline } from 'stream/promises';
 import { createInterface } from 'readline';
+import { pipeline } from 'stream/promises';
+import { createGzip } from 'zlib';
 
 import Database from 'better-sqlite3';
 
-import {
-  type FeatureModule,
-  type FeatureContext,
-  type FeatureMeta,
-  type HealthStatus,
-} from '../../core/plugin-loader';
 
 import {
   type TrajectoryEntry,
@@ -30,6 +24,13 @@ import {
   type TrajectoryStats,
   type TrajectoryConfig,
 } from './types';
+
+import {
+  type FeatureModule,
+  type FeatureContext,
+  type FeatureMeta,
+  type HealthStatus,
+} from '../../core/plugin-loader';
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
@@ -200,17 +201,17 @@ class TrajectoryExportFeature implements FeatureModule {
       if (!stats.byAgent[agentId]) {
         stats.byAgent[agentId] = { sessions: 0, messages: 0, tokens: 0, cost: 0 };
       }
-      stats.byAgent[agentId]!.sessions++;
-      stats.byAgent[agentId]!.messages += entry.messages.length;
-      stats.byAgent[agentId]!.tokens += entry.metadata.tokens;
-      stats.byAgent[agentId]!.cost += entry.metadata.cost;
+      stats.byAgent[agentId].sessions++;
+      stats.byAgent[agentId].messages += entry.messages.length;
+      stats.byAgent[agentId].tokens += entry.metadata.tokens;
+      stats.byAgent[agentId].cost += entry.metadata.cost;
 
       for (const tag of entry.metadata.tags) {
         if (!stats.byTag[tag]) {
           stats.byTag[tag] = { sessions: 0, messages: 0 };
         }
-        stats.byTag[tag]!.sessions++;
-        stats.byTag[tag]!.messages += entry.messages.length;
+        stats.byTag[tag].sessions++;
+        stats.byTag[tag].messages += entry.messages.length;
       }
     }
 

@@ -6,8 +6,9 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import * as path from 'path';
+
 import type { ErrorAnalysis, UserCorrection } from './types';
 
 export class ErrorAnalyzer {
@@ -26,9 +27,9 @@ export class ErrorAnalyzer {
    */
   async analyzeErrors(): Promise<ErrorAnalysis[]> {
     const analyses: ErrorAnalysis[] = [];
-    const corrections = await this.findUserCorrections();
+    const _corrections = await this.findUserCorrections();
     const failedTasks = await this.findFailedTasks();
-    const existingLessons = this.loadExistingLessons();
+    const _existingLessons = this.loadExistingLessons();
 
     // Group corrections by pattern
     const patternGroups = new Map<string, UserCorrection[]>();

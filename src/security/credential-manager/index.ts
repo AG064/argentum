@@ -1,3 +1,4 @@
+ 
 // @ts-nocheck
 /**
  * AG-Claw Credential Manager
@@ -13,17 +14,19 @@
 import { randomBytes, randomUUID } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
+
 import Database from 'better-sqlite3';
 
 import { createLogger, type Logger } from '../../core/logger';
 import { encrypt, decrypt } from '../encrypted-secrets';
+import { getPolicyEngine } from '../policy-engine';
+
 import type {
   CredentialConfig,
   StoredCredential,
   MintedKey,
   AuditEntry,
 } from '../types';
-import { getPolicyEngine } from '../policy-engine';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -137,7 +140,7 @@ export class CredentialManager {
 
     // Derive a stable 32-byte key
     const { pbkdf2Sync } = require('crypto');
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+     
     this.masterKey = pbkdf2Sync(keyEnv, 'ag-claw-credential-salt', 100000, 32, 'sha256')!;
     return this.masterKey;
   }

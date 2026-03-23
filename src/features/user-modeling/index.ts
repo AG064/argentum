@@ -15,8 +15,8 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { mkdirSync, existsSync } from 'fs';
+import * as path from 'path';
 
 import type {
   FeatureModule,

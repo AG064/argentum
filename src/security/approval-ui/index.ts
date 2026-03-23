@@ -14,12 +14,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 
 import { createLogger, type Logger } from '../../core/logger';
+import { getPolicyEngine } from '../policy-engine';
+
 import type {
   ApprovalRequest,
   ApprovalRisk,
   AgentAction,
 } from '../types';
-import { getPolicyEngine } from '../policy-engine';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -233,7 +234,7 @@ export class ApprovalUI {
     }
     if (request.respondedBy) {
       lines.push(`  ${'─'.repeat(70)}`);
-      lines.push(`  \x1b[1mResponded by:\x1b[0m ${request.respondedBy} at ${request.respondedAt ? new Date(request.respondedAt!).toLocaleString() : 'N/A'}`);
+      lines.push(`  \x1b[1mResponded by:\x1b[0m ${request.respondedBy} at ${request.respondedAt ? new Date(request.respondedAt).toLocaleString() : 'N/A'}`);
       if (request.notes) {
         lines.push(`  \x1b[1mNotes:\x1b[0m ${request.notes}`);
       }

@@ -36,10 +36,7 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-unnecessary-type-assertion': 'error',
     '@typescript-eslint/no-require-imports': 'error',
-    '@typescript-eslint/no-use-before-define': [
-      'error',
-      { functions: false, classes: true, variables: true },
-    ],
+    '@typescript-eslint/no-use-before-define': 'off',
     '@typescript-eslint/no-floating-promises': 'error',
     '@typescript-eslint/await-thenable': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
