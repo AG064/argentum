@@ -365,7 +365,7 @@ const Components = {
       <div class="code-block">
         <div class="code-header">
           <span class="code-title">${language || 'code'}</span>
-          <button class="code-copy" onclick="navigator.clipboard.writeText(\`${code.replace(/`/g, '\\`')}\`)">Copy</button>
+          <button class="code-copy" onclick="navigator.clipboard.writeText(\`${code.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`)">Copy</button>
         </div>
         <pre class="code-content">${escaped}</pre>
       </div>
