@@ -204,7 +204,7 @@ class EmailIntegrationFeature implements FeatureModule {
       port = secure ? this.config.defaultImapPort : this.config.defaultSmtpPort;
     }
 
-    const id = `email-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `email-${Date.now()}-${randomBytes(8).toString('hex')}`;
     const { encrypted, iv } = this.encrypt(password);
 
     const account: EmailAccount = {
@@ -440,7 +440,7 @@ class EmailIntegrationFeature implements FeatureModule {
     `,
       )
       .run(
-        `sent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        `sent-${Date.now()}-${randomBytes(8).toString('hex')}`,
         accountId,
         Array.isArray(to) ? to.join(',') : to,
         subject,
