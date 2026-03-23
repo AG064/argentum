@@ -182,7 +182,7 @@ class BrowserAutomationFeature implements FeatureModule {
       throw new Error(`Maximum page limit (${this.config.maxPages}) reached`);
     }
 
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const sessionId = `session_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let browser: unknown = null;
     let page: unknown = null;
     let context: unknown = null;
