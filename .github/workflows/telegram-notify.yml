@@ -18,13 +18,13 @@ jobs:
         if: github.event_name == 'push'
         run: |
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1 | cut -c1-200)
-          CHAT_ID="-1003355989721"
+          CHAT_ID="@ag_claw"
           TEXT="🔔 *AG-Claw Update*
-          
+
 📦 ${{ github.actor }} pushed to \`main\`
-          
+
 \`$COMMIT_MSG\`"
-          
+
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=$CHAT_ID" \
             -d "text=$TEXT" \
@@ -34,20 +34,20 @@ jobs:
       - name: Send release notification
         if: github.event_name == 'release'
         run: |
-          CHAT_ID="-1003355989721"
+          CHAT_ID="@ag_claw"
           TAG="${{ github.event.release.tag_name }}"
           NAME="${{ github.event.release.name }}"
           BODY="${{ github.event.release.body }}"
-          
+
           # Truncate body if too long (Telegram message limit ~4096 chars)
           BODY=$(echo "$BODY" | head -c 3500)
-          
+
           TEXT="🚀 *New Release: $TAG*
-          
+
 $NAME
 
 $BODY"
-          
+
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=$CHAT_ID" \
             -d "text=$TEXT" \
@@ -57,20 +57,20 @@ $BODY"
       - name: Send merged PR notification
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         run: |
-          CHAT_ID="-1003355989721"
+          CHAT_ID="@ag_claw"
           TITLE="${{ github.event.pull_request.title }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           BODY="${{ github.event.pull_request.body }}"
           BODY=$(echo "$BODY" | head -c 1500)
-          
+
           TEXT="✅ *PR #$PR_NUM Merged*
-          
+
 $TITLE
-          
+
 _$BODY_
 
 By ${{ github.actor }}"
-          
+
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=$CHAT_ID" \
             -d "text=$TEXT" \
