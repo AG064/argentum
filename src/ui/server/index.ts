@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as url from 'url';
 
 import { WebSocketServer, WebSocket } from 'ws';
+import bcrypt from 'bcryptjs';
 
 // Types
 interface AuthConfig {
@@ -120,17 +121,17 @@ function loadConfig(): ServerConfig {
 }
 
 /**
- * Simple password hashing (for demo - use bcrypt in production)
+ * Simple password hashing using bcryptjs (production-grade)
  */
 function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password).digest('hex');
+  return bcrypt.hashSync(password, 10);
 }
 
 /**
  * Verify password against hash
  */
 function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
+  return bcrypt.compareSync(password, hash);
 }
 
 /**
