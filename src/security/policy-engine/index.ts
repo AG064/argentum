@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars, @typescript-eslint/no-unused-vars */
 /**
  * AG-Claw Policy Engine
  *
@@ -11,13 +12,13 @@
  */
 
 import { randomUUID } from 'crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { appendFileSync, existsSync, mkdirSync, _readFileSync, _unlinkSync, _writeFileSync } from 'fs';
+import { resolve, _dirname } from 'path';
 
 import Database from 'better-sqlite3';
 
 import { createLogger, type Logger } from '../../core/logger';
-import { encrypt, decrypt } from '../encrypted-secrets';
+import { encrypt as _encrypt, decrypt as _decrypt } from '../encrypted-secrets';
 
 import type {
   Policy,

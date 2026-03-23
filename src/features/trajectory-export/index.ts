@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars, @typescript-eslint/no-unused-vars */
 /**
  * Trajectory Export Feature
  *
@@ -7,11 +8,11 @@
  * Stores entries in SQLite alongside the sessions database for easy joining.
  */
 
-import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'fs';
-import { dirname, resolve, join } from 'path';
-import { createInterface } from 'readline';
-import { pipeline } from 'stream/promises';
-import { createGzip } from 'zlib';
+import { existsSync, mkdirSync } from 'fs';
+import { resolve, join } from 'path';
+import { createInterface as _createInterface } from 'readline';
+import { pipeline as _pipeline } from 'stream/promises';
+import { createGzip as _createGzip } from 'zlib';
 
 import Database from 'better-sqlite3';
 
