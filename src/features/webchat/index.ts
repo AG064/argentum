@@ -7,6 +7,7 @@
  */
 
 import { Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
+import { randomBytes as _randomBytes } from 'crypto';
 
 import { WebSocketServer, WebSocket } from 'ws';
 
@@ -668,7 +669,7 @@ class WebchatFeature implements FeatureModule {
   }
 
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    return `${Date.now()}-${_randomBytes(8).toString('hex')}`;
   }
 }
 
