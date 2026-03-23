@@ -6,9 +6,11 @@
  * and chat history persistence.
  */
 
-import { Server as HttpServer, IncomingMessage, ServerResponse } from 'http';
+import { Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
+
 import { WebSocketServer, WebSocket } from 'ws';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Webchat configuration */
 export interface WebchatConfig {

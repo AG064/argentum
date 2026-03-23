@@ -8,9 +8,10 @@
  * - Agent integration
  */
 
-import { Bot, Context, GrammyError, HttpError } from 'grammy';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../core/plugin-loader';
-import { Agent } from '../index';
+import { Bot, type Context, GrammyError, HttpError } from 'grammy';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../core/plugin-loader';
+import { type Agent } from '../index';
 
 /** Telegram channel configuration */
 export interface TelegramChannelConfig {
@@ -54,7 +55,7 @@ class TelegramChannel implements FeatureModule {
 
     // Get token from config or env
     if (!this.config.token) {
-      this.config.token = process.env['AGCLAW_TELEGRAM_TOKEN'] ?? process.env['TELEGRAM_BOT_TOKEN'];
+      this.config.token = process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
     }
   }
 
@@ -223,7 +224,7 @@ class TelegramChannel implements FeatureModule {
         const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
 
         // Transcribe with Whisper if available
-        const openaiKey = process.env['OPENAI_API_KEY'];
+        const openaiKey = process.env.OPENAI_API_KEY;
         if (!openaiKey) {
           await ctx.reply('Voice transcription is not configured (OPENAI_API_KEY not set).');
           return;

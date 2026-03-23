@@ -6,11 +6,13 @@
  * Emits 'detected' event when wake word is found.
  */
 
-import Database from 'better-sqlite3';
+import { EventEmitter } from 'events';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { EventEmitter } from 'events';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Wake word definition */
 export interface WakeWord {
@@ -299,7 +301,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     const start = Math.max(0, position - contextLength);
     const end = Math.min(text.length, position + contextLength);
     const ctx = text.substring(start, end);
-    return start > 0 ? '...' + ctx : ctx + (end < text.length ? '...' : '');
+    return start > 0 ? `...${  ctx}` : ctx + (end < text.length ? '...' : '');
   }
 
   /** Load wake words from database */

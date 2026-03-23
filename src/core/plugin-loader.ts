@@ -7,8 +7,9 @@
 
 import { readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
-import { Logger, featureLogger } from './logger';
-import { AGClawConfig } from './config';
+
+import { type AGClawConfig } from './config';
+import { type Logger, featureLogger } from './logger';
 
 /** Feature lifecycle states */
 export type FeatureState = 'unloaded' | 'loading' | 'active' | 'error' | 'disabled';
@@ -130,7 +131,7 @@ export class PluginLoader {
       (v): v is FeatureModule => typeof v === 'object' && v !== null && 'meta' in v && 'init' in v
     );
 
-    if (!featureModule || !featureModule.meta) {
+    if (!featureModule?.meta) {
       throw new Error(`Invalid feature module: ${name} - missing meta export`);
     }
 

@@ -11,14 +11,15 @@
  */
 
 import 'dotenv/config';
-import { getConfig, AGClawConfig } from './core/config';
-import { createLogger, Logger } from './core/logger';
-import { PluginLoader } from './core/plugin-loader';
+
+import { getConfig, type AGClawConfig } from './core/config';
 import {
-  LLMProvider, Message, ToolDefinition, LLMResponse, createLLMProvider,
+  type LLMProvider, type Message, type ToolDefinition, type LLMResponse, createLLMProvider,
 } from './core/llm-provider';
-import { getSemanticMemory, SemanticMemory } from './memory/semantic';
-import { getMemoryGraph, MemoryGraph } from './memory/graph';
+import { createLogger, type Logger } from './core/logger';
+import { PluginLoader } from './core/plugin-loader';
+import { getMemoryGraph, type MemoryGraph } from './memory/graph';
+import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 
@@ -210,12 +211,12 @@ function createBuiltinTools(): Tool[] {
             `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
           );
           const data = await response.json() as Record<string, unknown>;
-          const abstract = data['Abstract'] as string;
-          const heading = data['Heading'] as string;
-          const related = (data['RelatedTopics'] as Array<{ Text: string }> ?? []).slice(0, 5).map(t => t.Text).join('\n');
+          const abstract = data.Abstract as string;
+          const heading = data.Heading as string;
+          const related = (data.RelatedTopics as Array<{ Text: string }> ?? []).slice(0, 5).map(t => t.Text).join('\n');
 
           if (abstract) {
-            return `Search result for "${query}":\n${heading ? heading + '\n' : ''}${abstract}`;
+            return `Search result for "${query}":\n${heading ? `${heading  }\n` : ''}${abstract}`;
           } else if (related) {
             return `Search results for "${query}":\n${related}`;
           } else {
@@ -255,7 +256,7 @@ function createBuiltinTools(): Tool[] {
         try {
           const content = readFileSync(safePath, 'utf-8');
           return content.length > 5000
-            ? content.slice(0, 5000) + '\n... (truncated)'
+            ? `${content.slice(0, 5000)  }\n... (truncated)`
             : content;
         } catch (err) {
           return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
@@ -307,7 +308,7 @@ function createBuiltinTools(): Tool[] {
         try {
           const output = execSync(cmd, { timeout: 30000, encoding: 'utf-8', maxBuffer: 1024 * 1024 });
           return output.length > 5000
-            ? output.slice(0, 5000) + '\n... (truncated)'
+            ? `${output.slice(0, 5000)  }\n... (truncated)`
             : output || '(no output)';
         } catch (err: unknown) {
           const e = err as { message: string; stderr?: string };
@@ -443,7 +444,7 @@ class AGClaw {
 
     // Start Telegram if configured
     if (channels?.['telegram']?.['enabled'] !== false) {
-      const token = (channels?.['telegram']?.['token'] as string) ?? process.env['AGCLAW_TELEGRAM_TOKEN'] ?? process.env['TELEGRAM_BOT_TOKEN'];
+      const token = (channels?.['telegram']?.['token'] as string) ?? process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
       if (token) {
         try {
           await this.startTelegram(token, channels?.['telegram']);
@@ -554,7 +555,7 @@ class AGClaw {
           const audioBuffer = Buffer.from(await response.arrayBuffer());
 
           // Try to transcribe with Whisper if available
-          const openaiKey = process.env['OPENAI_API_KEY'];
+          const openaiKey = process.env.OPENAI_API_KEY;
           if (openaiKey) {
             await ctx.replyWithChatAction('typing');
 
@@ -602,14 +603,14 @@ class AGClaw {
       bot.command('help', async (ctx) => {
         const tools = this.agent.getToolNames();
         await ctx.reply(
-          '🤖 *AG-Claw Help*\n\n' +
-          'Just send me any message and I will respond.\n\n' +
-          '*Available tools:*\n' +
-          tools.map(t => `• /${t}`).join('\n') +
-          '\n\n*Commands:*\n' +
-          '/start - Welcome message\n' +
-          '/help - This help message\n' +
-          '/status - Bot status',
+          `🤖 *AG-Claw Help*\n\n` +
+          `Just send me any message and I will respond.\n\n` +
+          `*Available tools:*\n${ 
+          tools.map(t => `• /${t}`).join('\n') 
+          }\n\n*Commands:*\n` +
+          `/start - Welcome message\n` +
+          `/help - This help message\n` +
+          `/status - Bot status`,
           { parse_mode: 'Markdown' }
         );
       });

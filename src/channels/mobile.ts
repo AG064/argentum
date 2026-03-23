@@ -6,8 +6,9 @@
  * Includes HTTP endpoint for receiving push registration requests.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../core/plugin-loader';
-import express, { Request, Response, Router } from 'express';
+import express, { type Request, type Response, Router } from 'express';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../core/plugin-loader';
 
 /** Mobile channel configuration */
 export interface MobileChannelConfig {
@@ -369,7 +370,7 @@ class MobileChannel implements FeatureModule {
       const response = await fetch('https://fcm.googleapis.com/fcm/send', {
         method: 'POST',
         headers: {
-          'Authorization': `key=${this.config.fcmServerKey}`,
+          Authorization: `key=${this.config.fcmServerKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

@@ -31,7 +31,7 @@ export function deepClone<T>(value: T): T {
  * Deep merge two objects. Source values override target values.
  */
 export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
-  const result = { ...target } as T;
+  const result = { ...target };
   for (const key of Object.keys(source) as (string & keyof T)[]) {
     const sourceVal = source[key];
     const targetVal = target[key as keyof T];

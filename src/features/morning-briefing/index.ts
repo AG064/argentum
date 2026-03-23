@@ -5,7 +5,7 @@
  * news, tasks, and personalized insights every morning.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Morning briefing configuration */
 export interface MorningBriefingConfig {

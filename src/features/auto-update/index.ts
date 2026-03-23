@@ -1,7 +1,7 @@
 import { mkdirSync, existsSync, readdirSync } from 'fs';
 import { dirname, resolve, join } from 'path';
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -108,7 +108,7 @@ class AutoUpdateFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const lastCheckAge = Date.now() - this.lastCheck;
-    const hasLatest = this.latestRelease && this.isNewerVersion(this.latestRelease!.version, this.currentVersion);
+    const hasLatest = this.latestRelease && this.isNewerVersion(this.latestRelease.version, this.currentVersion);
 
     return {
       healthy: true,
@@ -259,7 +259,7 @@ class AutoUpdateFeature implements FeatureModule {
     try {
       const response = await fetch(url, {
         headers: {
-          'Accept': 'application/vnd.github.v3+json',
+          Accept: 'application/vnd.github.v3+json',
           'User-Agent': `ag-claw-updater/${this.currentVersion}`,
         },
       });

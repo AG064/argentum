@@ -7,7 +7,8 @@
 
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { resolve, join } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -333,7 +334,7 @@ class CompanyTemplatesFeature implements FeatureModule {
   }
 
   private extractAgents(config: Record<string, unknown>): AgentConfig[] {
-    const agents = (config as Record<string, unknown>)['agents'] as Record<string, unknown>[] | undefined;
+    const agents = (config)['agents'] as Record<string, unknown>[] | undefined;
     if (!agents) return [];
 
     return agents.map(a => ({

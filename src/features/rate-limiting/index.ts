@@ -5,9 +5,11 @@
  * Can be used by other features via direct import.
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Rate limiting configuration */
 export interface RateLimitConfig {
@@ -31,7 +33,7 @@ class RateLimitingFeature implements FeatureModule {
   };
 
   constructor() {
-    const dbPath = process.env['AGCLAW_DB_PATH'] || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
   }
 

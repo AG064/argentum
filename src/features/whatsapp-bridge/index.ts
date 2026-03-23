@@ -6,10 +6,12 @@
  * All activity is logged to SQLite.
  */
 
-import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** WhatsApp configuration */
 export interface WhatsAppConfig {
@@ -198,7 +200,7 @@ class WhatsAppBridgeFeature implements FeatureModule {
     this.apiToken = apiToken;
     this.phoneNumberId = phoneNumberId;
     this.webhookSecret = webhookSecret ?? '';
-    this.businessId = (businessId ?? '') as string;
+    this.businessId = (businessId ?? '');
 
     const value = JSON.stringify({
       apiToken: this.apiToken,

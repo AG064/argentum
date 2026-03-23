@@ -1,15 +1,16 @@
-import Database from 'better-sqlite3';
 import crypto from 'crypto';
 import path from 'path';
+
+import Database from 'better-sqlite3';
 
 class EncryptedSecretsFeature {
   db: Database.Database;
   masterKey: Buffer;
 
   constructor() {
-    const dbPath = process.env['AGCLAW_DB_PATH'] || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
-    const mk = process.env['AGCLAW_MASTER_KEY'];
+    const mk = process.env.AGCLAW_MASTER_KEY;
     if (!mk) {
       throw new Error('AGCLAW_MASTER_KEY not set');
     }

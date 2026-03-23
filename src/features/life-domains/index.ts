@@ -6,11 +6,13 @@
  * and cross-domain insights.
  */
 
-import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { randomUUID } from 'crypto';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 

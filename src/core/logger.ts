@@ -5,7 +5,7 @@
  * Supports JSON output for production and pretty-print for development.
  */
 
-import pino, { Logger as PinoLogger, LoggerOptions } from 'pino';
+import pino, { type Logger as PinoLogger, type LoggerOptions } from 'pino';
 
 /** Log level enumeration */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';

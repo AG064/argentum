@@ -5,7 +5,16 @@
  * checkpoint/resume integration, and progress reporting.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import jsep from 'jsep';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+
+/**
+ * Mesh Workflows feature — goal decomposition and multi-step orchestration.
+ *
+ * Decomposes goals into subtasks, builds dependency graphs,
+ * executes steps with checkpoint/resume, and reports progress.
+ */
 
 /** Mesh workflow configuration */
 export interface MeshWorkflowsConfig {
@@ -75,14 +84,6 @@ export interface DecomposedGoal {
   executionPlan: string[];
 }
 
-/**
- * Mesh Workflows feature — goal decomposition and multi-step orchestration.
- *
- * Decomposes goals into subtasks, builds dependency graphs,
- * executes steps with checkpoint/resume, and reports progress.
- */
-import jsep from 'jsep';
-
 // Evaluate parsed AST node
 function evalNode(node: any, vars: Record<string, unknown>): any {
   switch (node.type) {
@@ -103,19 +104,19 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
         case '===': return left === right;
         case '!==': return left !== right;
       }
-      throw new Error('Unsupported operator: ' + node.operator);
+      throw new Error(`Unsupported operator: ${  node.operator}`);
     }
     case 'LogicalExpression': {
       if (node.operator === '&&') return evalNode(node.left, vars) && evalNode(node.right, vars);
       if (node.operator === '||') return evalNode(node.left, vars) || evalNode(node.right, vars);
-      throw new Error('Unsupported logical operator: ' + node.operator);
+      throw new Error(`Unsupported logical operator: ${  node.operator}`);
     }
     case 'UnaryExpression': {
       const val = evalNode(node.argument, vars);
       if (node.operator === '!') return !val;
       if (node.operator === '+') return +val;
       if (node.operator === '-') return -val;
-      throw new Error('Unsupported unary operator: ' + node.operator);
+      throw new Error(`Unsupported unary operator: ${  node.operator}`);
     }
     case 'Identifier': {
       const name = node.name;
@@ -128,7 +129,7 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
       const prop = node.computed ? evalNode(node.property, vars) : node.property.name;
       return obj ? obj[prop] : undefined;
     }
-    default: throw new Error('Unsupported node type: ' + node.type);
+    default: throw new Error(`Unsupported node type: ${  node.type}`);
   }
 }
 
@@ -177,7 +178,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       const condition = step.config['condition'] as string;
       // Safe condition evaluation using jsep
       try {
-        const result = evaluateCondition(condition, vars as Record<string, unknown>);
+        const result = evaluateCondition(condition, vars);
         return { result: !!result, nextStep: result ? step.nextSteps[0] : step.nextSteps[1] };
       } catch (err) {
         this.ctx.logger.warn('Condition evaluation failed', { condition, error: err instanceof Error ? err.message : String(err) });

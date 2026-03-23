@@ -131,7 +131,7 @@ class OpenAICompatibleProvider implements LLMProvider {
     }
 
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
       ...this.extraHeaders,
     };
@@ -354,7 +354,7 @@ export function createLLMProvider(config: {
   }
 
   // Fallback: legacy direct params (for backwards compat)
-  const apiKey = process.env['OPENROUTER_API_KEY'];
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error('No LLM config found. Run: agclaw onboard');
   }

@@ -5,9 +5,11 @@
  * Supports events, reminders, and recurring events.
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Calendar configuration */
 export interface CalendarConfig {

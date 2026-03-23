@@ -1,8 +1,10 @@
-import cron from 'node-cron';
-import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+import cron from 'node-cron';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -360,7 +362,7 @@ class CronSchedulerFeature implements FeatureModule {
       // persist any session state optionally provided by handler via running_tasks.session_state
       try {
         const row = this.db.prepare('SELECT session_state FROM running_tasks WHERE job_id = ?').get(job.id) as any;
-        if (row && row.session_state) {
+        if (row?.session_state) {
           // store as last_error field for visibility (placeholder) or a dedicated sessions table
           this.db.prepare('UPDATE jobs SET last_error = ? WHERE id = ?').run(`session:${row.session_state}`, job.id);
         }

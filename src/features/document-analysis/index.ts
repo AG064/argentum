@@ -8,8 +8,10 @@
 
 import { mkdirSync, existsSync, statSync, readFileSync } from 'fs';
 import { dirname, extname, basename, join } from 'path';
+
 import Database from 'better-sqlite3';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Supported document types */
 export type DocumentType = 'pdf' | 'docx' | 'txt' | 'md';
@@ -373,7 +375,7 @@ class DocumentAnalysisFeature implements FeatureModule {
   private generateSummary(text: string, maxSentences: number = 3): string {
     const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
     if (sentences.length === 0) return '';
-    return sentences.slice(0, maxSentences).join('. ') + '.';
+    return `${sentences.slice(0, maxSentences).join('. ')  }.`;
   }
 
   /** Very basic language detection */

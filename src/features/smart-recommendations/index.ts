@@ -6,7 +6,7 @@
  * and adaptive suggestions based on past interactions.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Smart recommendations configuration */
 export interface SmartRecommendationsConfig {

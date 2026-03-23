@@ -8,8 +8,10 @@
 
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
+
 import { parse } from 'yaml';
-import { createLogger, Logger } from '../core/logger';
+
+import { createLogger, type Logger } from '../core/logger';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -373,7 +375,7 @@ export class PolicyEngine {
     // File-based audit log
     if (this.auditFilePath) {
       try {
-        const line = JSON.stringify(entry) + '\n';
+        const line = `${JSON.stringify(entry)  }\n`;
         appendFileSync(this.auditFilePath, line, 'utf-8');
       } catch (err) {
         this.logger.error('Failed to write audit log', {

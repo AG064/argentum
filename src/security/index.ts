@@ -5,8 +5,8 @@
  * Provides authentication, authorization, rate limiting, and audit logging.
  */
 
-import { EventEmitter } from 'events';
 import { createHmac, randomBytes } from 'crypto';
+import { EventEmitter } from 'events';
 
 // Types
 export interface SecurityConfig {
@@ -324,7 +324,7 @@ export function createSecurityManager(config?: Partial<SecurityConfig>): Securit
   const defaultConfig: SecurityConfig = {
     authentication: {
       enabled: false,
-      jwtSecret: process.env['JWT_SECRET'] || 'change-me-in-production',
+      jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
       tokenExpiry: 3600,
       refreshTokenExpiry: 86400 * 7,
     },

@@ -5,10 +5,12 @@
  * Note: code is stored as text only and never executed by this module.
  */
 
-import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { randomUUID } from 'crypto';
+
+import Database from 'better-sqlite3';
+
 import type { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/plugin-loader';
 
 export interface SkillRecord {

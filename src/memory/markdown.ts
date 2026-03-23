@@ -45,7 +45,7 @@ export class MarkdownMemory {
     try {
       // Prevent path traversal: resolve and ensure file stays within basePath
       const fullPath = resolve(this.basePath, filename);
-      if (!fullPath.startsWith(this.basePath + '/')) {
+      if (!fullPath.startsWith(`${this.basePath  }/`)) {
         // allow exact match if equals basePath file
         if (fullPath !== this.basePath) return null;
       }
@@ -113,7 +113,7 @@ export class MarkdownMemory {
   /** Store or update a memory entry */
   save(entry: Omit<MarkdownEntry, 'filename' | 'createdAt' | 'updatedAt'> & { filename?: string }): string {
     this.init();
-    let filename = entry.filename ?? `${Date.now()}-${this.sanitize(entry.title)}.md`;
+    const filename = entry.filename ?? `${Date.now()}-${this.sanitize(entry.title)}.md`;
 
     // Basic validation: filename should not contain path separators and be reasonably short
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
@@ -122,7 +122,7 @@ export class MarkdownMemory {
     if (filename.length > 255) throw new Error('Filename too long');
 
     const fullPath = resolve(this.basePath, filename);
-    if (!fullPath.startsWith(this.basePath + '/')) {
+    if (!fullPath.startsWith(`${this.basePath  }/`)) {
       throw new Error('Invalid filename path');
     }
 
@@ -149,7 +149,7 @@ export class MarkdownMemory {
   get(filename: string): MarkdownEntry | null {
     // Validate path and prevent traversal
     const fullPath = resolve(this.basePath, filename);
-    if (!fullPath.startsWith(this.basePath + '/')) return null;
+    if (!fullPath.startsWith(`${this.basePath  }/`)) return null;
     if (!existsSync(fullPath)) return null;
     return this.parseMarkdown(filename);
   }
@@ -157,7 +157,7 @@ export class MarkdownMemory {
   /** Delete a memory entry */
   delete(filename: string): boolean {
     const fullPath = resolve(this.basePath, filename);
-    if (!fullPath.startsWith(this.basePath + '/')) return false;
+    if (!fullPath.startsWith(`${this.basePath  }/`)) return false;
     if (!existsSync(fullPath)) return false;
     unlinkSync(fullPath);
     return true;

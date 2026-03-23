@@ -5,17 +5,19 @@
  * and archiving outdated data to a separate table.
  */
 
-import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Feature configuration */
 export interface MemoryCompressionConfig {
   dbPath?: string;         // Path to the sqlite-memory database (default: ./data/sqlite-memory.db)
   archiveAfterDays?: number; // Age after which entries are eligible for archiving (default: 30)
   similarityThreshold?: number; // Jaccard similarity threshold for merging (default: 0.8)
-};
+}
 
 /** Statistics */
 export interface CompressionStats {

@@ -48,7 +48,7 @@ describe('MCPServer', () => {
       const tool = createTool(
         'test_tool',
         'A test tool',
-        { type: 'object', properties: { input: { type: 'string' } },
+        { type: 'object', properties: { input: { type: 'string' } } },
         async ({ input }) => ({ result: input })
       );
 

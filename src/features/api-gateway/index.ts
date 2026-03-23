@@ -5,8 +5,9 @@
  * and endpoint management.
  */
 
-import express, { Request, Response, Handler } from 'express';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import express, { type Request, type Response, type Handler } from 'express';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 import rateLimiting from '../rate-limiting';
 
 /** API Gateway configuration */
@@ -157,7 +158,7 @@ class ApiGatewayFeature implements FeatureModule {
     };
 
     // Store in registry
-    let methodEndpoints = this.endpoints.get(method) ?? [];
+    const methodEndpoints = this.endpoints.get(method) ?? [];
     methodEndpoints.push(endpoint);
     this.endpoints.set(method, methodEndpoints);
 
@@ -238,7 +239,7 @@ class ApiGatewayFeature implements FeatureModule {
       lastUsed: undefined,
     };
     this.apiTokens.set(key, token);
-    this.ctx.logger.info('API token created', { name, key: key.slice(0, 12) + '...' });
+    this.ctx.logger.info('API token created', { name, key: `${key.slice(0, 12)  }...` });
     return token;
   }
 
@@ -288,7 +289,7 @@ class ApiGatewayFeature implements FeatureModule {
     }
     res.status(500).json({
       error: 'Internal server error',
-      message: process.env['NODE_ENV'] === 'development' ? err.message : undefined,
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 

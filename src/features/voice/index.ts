@@ -4,7 +4,7 @@
  * Text-to-Speech (TTS), Speech-to-Text (STT) via ElevenLabs and OpenAI.
  */
 
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Voice feature configuration */
 export interface VoiceConfig {
@@ -53,12 +53,12 @@ export async function generateSpeech(
   voiceId?: string,
   options?: { model?: string; stability?: number; similarityBoost?: number }
 ): Promise<Buffer> {
-  const apiKey = process.env['ELEVENLABS_API_KEY'];
+  const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     throw new Error('ELEVENLABS_API_KEY environment variable is required');
   }
 
-  const voice = voiceId ?? process.env['ELEVENLABS_DEFAULT_VOICE'] ?? 'JBFqnCBsd6RMkjVDRZzb'; // George
+  const voice = voiceId ?? process.env.ELEVENLABS_DEFAULT_VOICE ?? 'JBFqnCBsd6RMkjVDRZzb'; // George
   const model = options?.model ?? 'eleven_multilingual_v2';
 
   const response = await fetch(`${ELEVENLABS_API}/text-to-speech/${voice}`, {
@@ -66,7 +66,7 @@ export async function generateSpeech(
     headers: {
       'xi-api-key': apiKey,
       'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
+      Accept: 'audio/mpeg',
     },
     body: JSON.stringify({
       text,
@@ -88,7 +88,7 @@ export async function generateSpeech(
 
 /** List available voices from ElevenLabs */
 export async function listVoices(): Promise<VoiceInfo[]> {
-  const apiKey = process.env['ELEVENLABS_API_KEY'];
+  const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     throw new Error('ELEVENLABS_API_KEY environment variable is required');
   }
@@ -163,10 +163,10 @@ class VoiceFeature implements FeatureModule {
 
   async start(): Promise<void> {
     // Verify API key is available
-    if (this.config.provider === 'elevenlabs' && !process.env['ELEVENLABS_API_KEY']) {
+    if (this.config.provider === 'elevenlabs' && !process.env.ELEVENLABS_API_KEY) {
       this.ctx.logger.warn('ELEVENLABS_API_KEY not set — TTS will not work');
     }
-    if (this.config.sttProvider === 'whisper' && !process.env['OPENAI_API_KEY']) {
+    if (this.config.sttProvider === 'whisper' && !process.env.OPENAI_API_KEY) {
       this.ctx.logger.warn('OPENAI_API_KEY not set — STT will not work');
     }
     this.ctx.logger.info('Voice feature active');
@@ -178,10 +178,10 @@ class VoiceFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     const hasTTS = this.config.provider === 'elevenlabs'
-      ? !!process.env['ELEVENLABS_API_KEY']
-      : !!process.env['OPENAI_API_KEY'];
+      ? !!process.env.ELEVENLABS_API_KEY
+      : !!process.env.OPENAI_API_KEY;
     const hasSTT = this.config.sttProvider === 'whisper'
-      ? !!process.env['OPENAI_API_KEY']
+      ? !!process.env.OPENAI_API_KEY
       : true;
 
     return {
@@ -212,7 +212,7 @@ class VoiceFeature implements FeatureModule {
 
   /** Transcribe audio */
   async speechToText(audio: Buffer, format: string = 'ogg'): Promise<string> {
-    const openaiKey = process.env['OPENAI_API_KEY'];
+    const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
       throw new Error('OPENAI_API_KEY not configured');
     }

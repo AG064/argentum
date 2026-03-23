@@ -6,10 +6,11 @@
  * Real API calls not implemented - structure only.
  */
 
+import crypto from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
-import crypto from 'crypto';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Supported TTS providers */
 export type TtsProvider = 'elevenlabs' | 'google' | 'azure' | 'local';

@@ -5,10 +5,12 @@
  * and receiving events via Events API and Interactivity. Stub implementation.
  */
 
-import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Slack message */
 export interface SlackMessage {

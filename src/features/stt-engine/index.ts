@@ -6,11 +6,13 @@
  * Transcription history is stored in SQLite.
  */
 
-import Database from 'better-sqlite3';
+import crypto from 'crypto';
 import { mkdirSync, existsSync, statSync } from 'fs';
 import { dirname, resolve, basename } from 'path';
-import crypto from 'crypto';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Supported STT providers */
 export type SttProvider = 'whisper' | 'google' | 'azure' | 'local';
@@ -214,7 +216,7 @@ class SttEngineFeature implements FeatureModule {
 
     const result: TranscriptionResult = {
       text: stubText,
-      language: language,
+      language,
       provider: this.provider,
       duration: 0, // Could extract from audio metadata in real implementation
       processingTimeMs: processingTime,

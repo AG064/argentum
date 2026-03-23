@@ -5,10 +5,12 @@
  * consolidating similar entries, and promoting important memories.
  */
 
-import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { FeatureModule, FeatureContext, FeatureMeta, HealthStatus } from '../../core/plugin-loader';
+
+import Database from 'better-sqlite3';
+
+import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
 
 /** Feature configuration */
 export interface SelfEvolvingConfig {
@@ -18,7 +20,7 @@ export interface SelfEvolvingConfig {
   similarityThreshold?: number;
   decayRate?: number;
   weightBoost?: number;
-};
+}
 
 /** Analysis result */
 export interface AnalysisResult {
@@ -28,7 +30,7 @@ export interface AnalysisResult {
   zeroWeightCount: number;
   topWords: Array<{ word: string; frequency: number }>;
   duplicateGroups: number;
-};
+}
 
 /**
  * SelfEvolvingMemoryFeature — automatic memory optimization.

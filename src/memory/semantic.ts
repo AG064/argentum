@@ -6,10 +6,11 @@
  * for semantic similarity matching.
  */
 
-import Database from 'better-sqlite3';
+import { randomUUID, createHash } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { randomUUID, createHash } from 'crypto';
+
+import Database from 'better-sqlite3';
 
 /** Memory result returned from searches */
 export interface MemoryResult {
