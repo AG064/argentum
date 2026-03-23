@@ -1612,7 +1612,7 @@ async function cmdBudget(): Promise<void> {
       const config = budget.getConfig();
       const report = budget.getBudgetReport();
       const monthlyPct = Math.round((report.monthlyCost / report.monthlyLimit) * 100);
-      const _dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
+      const dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
 
       print('  \x1b[1mGlobal Limits\x1b[0m');
       print(`  Monthly  ${  bar(monthlyPct)  } ${  usd(report.monthlyCost).padStart(10)  } / ${  usd(report.monthlyLimit)}`);
@@ -1686,7 +1686,7 @@ async function cmdBudget(): Promise<void> {
       print(`  \x1b[90m  ${  '─'.repeat(66)}`);
       const cfg = budget.getConfig();
       for (const row of history) {
-        const _dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
+        const dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
         const pctColor = dailyPct >= 90 ? '\x1b[31m' : dailyPct >= 75 ? '\x1b[33m' : '\x1b[32m';
         print(`    \x1b[37m${  row.date.padEnd(12)  }\x1b[0m ${  usd(row.totalCost).padEnd(14)  }${row.totalTokens.toLocaleString().padEnd(14)  }${row.requestCount.toString().padEnd(10)  }${pctColor  }${dailyPct  }%\x1b[0m`);
       }
