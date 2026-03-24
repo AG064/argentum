@@ -168,7 +168,7 @@ export class PluginLoader {
     // Check dependencies
     for (const dep of entry.module.meta.dependencies) {
       const depEntry = this.features.get(dep);
-      if (!depEntry || depEntry.state !== 'active') {
+      if (depEntry?.state !== 'active') {
         this.logger.info(`Loading dependency: ${dep} for ${name}`);
         await this.enableFeature(dep);
       }
@@ -200,7 +200,7 @@ export class PluginLoader {
   /** Disable a feature */
   async disableFeature(name: string): Promise<void> {
     const entry = this.features.get(name);
-    if (!entry || entry.state !== 'active') return;
+    if (entry?.state !== 'active') return;
 
     if (entry.module.stop) {
       await entry.module.stop();

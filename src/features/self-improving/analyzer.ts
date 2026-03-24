@@ -33,7 +33,7 @@ export class ErrorAnalyzer {
 
     // Group corrections by pattern
     const patternGroups = new Map<string, UserCorrection[]>();
-    for (const corr of corrections) {
+    for (const corr of _corrections) {
       const pattern = this.categorizeCorrection(corr);
       if (!patternGroups.has(pattern)) {
         patternGroups.set(pattern, []);
@@ -76,7 +76,7 @@ export class ErrorAnalyzer {
     const _corrections: UserCorrection[] = [];
 
     if (!existsSync(this.sessionsDbPath)) {
-      return corrections;
+      return _corrections;
     }
 
     try {
@@ -113,7 +113,7 @@ export class ErrorAnalyzer {
         const isCorrection = correctionIndicators.some(ind => content.toLowerCase().includes(ind));
 
         if (isCorrection && nextMsg?.role === 'assistant') {
-          corrections.push({
+          _corrections.push({
             sessionId: msg.session_id,
             timestamp: msg.timestamp,
             originalResponse: nextMsg.content,
@@ -129,7 +129,7 @@ export class ErrorAnalyzer {
       // Silently handle - sessions DB might not exist
     }
 
-    return corrections;
+    return _corrections;
   }
 
   /**
@@ -245,8 +245,8 @@ export class ErrorAnalyzer {
   /**
    * Describe a pattern in human-readable form
    */
-  private describePattern(pattern: string, _corrections: UserCorrection[]): string {
-    const count = corrections.length;
+  private describePattern(pattern: string, corrs: UserCorrection[]): string {
+    const count = corrs.length;
     switch (pattern) {
       case 'output_formatting':
         return `User corrected output formatting ${count} time${count > 1 ? 's' : ''}`;
