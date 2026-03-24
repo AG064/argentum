@@ -2,10 +2,10 @@ name: Semgrep SAST
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main]
   pull_request:
   schedule:
-    - cron: '0 0 * * 0'  # Weekly scan
+    - cron: '0 0 * * 0'
 
 jobs:
   semgrep:
@@ -15,19 +15,17 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
+      - uses: returntocorp/semgrep-action@v1
         with:
-          config: >
-            auto
-            rules/security/
-          uploadToSarif: true
+          config: auto
+          publishToken: ${{ secrets.GITHUB_TOKEN }}
+         Sarif: true
 
-      - name: Upload to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload to GitHub
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: semgrep.sarif
           category: semgrep
