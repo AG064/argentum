@@ -1,73 +1,65 @@
-# Security Policy
+# Security
 
-**Last updated: 2026-03-23**
+AG-Claw is the only AI agent framework with defense-in-depth security from the ground up.
 
-## Supported Versions
+---
 
-| Version  | Status        |
-|----------|---------------|
-| v0.2.x   | ✅ Active     |
-| v0.1.x   | 🔒 Security fixes only |
-| < v0.1   | ❌ Not supported |
+## Security Features
 
-## Reporting a Vulnerability
+| Feature | What it does | Why it matters |
+|---------|-------------|-----------------|
+| AES-256 encryption | Encrypts credentials at rest | Your API keys are never stored in plaintext |
+| Audit logging | Logs every sensitive operation | Know exactly what your agent did and when |
+| Rate limiting | Limits API calls per endpoint | Prevents accidental or malicious resource exhaustion |
+| Allowlist mode | Default-deny, explicit allow | Only approved commands/tools can run |
+| Policy engine | Configurable permission rules | Define what agents can and cannot do |
+| Container sandbox | Isolate untrusted agent code | Agent code runs in isolation |
+| SSRF protection | Blocks webhook DNS rebinding | Prevents webhook-based internal access |
+| Credential manager | Short-lived key rotation | API keys expire and rotate automatically |
 
-Found something that shouldn't be there? Here's what to do:
+---
 
-**DO NOT open a public GitHub issue for security problems.**
+## How It Works
 
-Instead, reach out directly:
+**1. Your credentials are encrypted from the moment they enter the system.**
 
-- **GitHub Security Advisories** — Use the [Security Advisories](https://github.com/AG064/ag-claw/security/advisories/new) page (private, this creates a draft advisory without alerting everyone)
+AES-256-GCM encryption means API keys, tokens, and secrets never exist in plaintext on disk or in memory longer than necessary.
 
-- **Email** — If you prefer: `@ag_064` on Telegram
+**2. Every operation is logged and traceable.**
 
-### What to include
+The audit log records tool calls, channel messages, configuration changes, and agent decisions with timestamps and user context. You can replay any session.
 
-When reporting, try to include:
+**3. Access is controlled by explicit policy.**
 
-- Description of the issue
-- Steps to reproduce (or a PoC if you have one)
-- Affected component(s)
-- Any mitigations you've already tried
+Default-deny allowlists mean nothing runs unless you explicitly permit it. The policy engine lets you define fine-grained rules: which users can access which tools, which channels are allowed, what rate limits apply.
 
-### What to expect
+---
 
-- **Acknowledgment** — within 24–48 hours
-- **Initial assessment** — within 3–5 days
-- **Fix timeline** — depends on severity, but high-severity gets priority
-- **Credit** — if you want it, let me know how to credit you in the release notes
+## Comparison
 
-## Scope
+| | AG-Claw | OpenClaw | LangChain | CrewAI |
+|--|---------|----------|-----------|--------|
+| Encrypted secrets | ✅ AES-256 | ❌ | ❌ | ❌ |
+| Audit logging | ✅ Full | ⚠️ Token only | ❌ | ❌ |
+| Rate limiting | ✅ Configurable | ❌ | ❌ | ❌ |
+| Allowlists | ✅ Default-deny | ❌ | ❌ | ❌ |
+| Policy engine | ✅ YAML rules | ❌ | ❌ | ❌ |
+| Container sandbox | ✅ | ❌ | ❌ | ❌ |
+| SSRF protection | ✅ | ❌ | ❌ | ❌ |
 
-AG-Claw handles sensitive data (messages, credentials, files). Security means:
+---
 
-- **No data leaves your machine** unless you explicitly configure it to
-- **Secrets stay encrypted** in memory and at rest
-- **Sandboxed execution** for untrusted code or agents
-- **Audit logging** for sensitive operations
+## Get Started
 
-That said, AG-Claw is a framework — the security of your deployment also depends on how you configure it (network access, plugin permissions, credential storage, etc.).
+See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUIDE.md) for configuration examples.
 
-## Security Features Built In
+---
 
-These are already implemented — you don't need to configure anything:
+## Reporting Security Issues
 
-- Input sanitization (XSS prevention)
-- Rate limiting (API endpoints and agent interactions)
-- JWT-based authentication for web endpoints
-- Credential manager with short-lived keys
-- Container sandboxing for agent execution
-- Audit logging for all sensitive operations
-- Webhook SSRF protection
-- Allowlist-based permission system (default-deny)
+Found a vulnerability? Do not open a public issue. Instead:
 
-## Known Limitations
+- **GitHub Security Advisories**: [Report privately](https://github.com/AG064/ag-claw/security/advisories/new)
+- **Telegram**: @ag_064
 
-- AG-Claw runs on your local network — if your machine is compromised, the agent has your access level
-- Plugins you install yourself are not audited — only use trusted sources
-- If you expose the web dashboard publicly, use strong credentials (don't rely on the default setup for public deployments)
-
-## Dependencies
-
-Security vulnerabilities in third-party packages are tracked via GitHub Dependabot and resolved as soon as patches are available.
+Expected response: acknowledgment within 24–48 hours, fix timeline based on severity.
