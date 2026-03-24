@@ -1,7 +1,7 @@
 {
   "name": "ag-claw",
   "version": "0.2.0",
-  "description": "Modular AI agent framework with Agentic Tool Loop",
+  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -44,7 +44,9 @@
     "chatbot",
     "automation",
     "llm",
-    "tool-loop"
+    "tool-loop",
+    "self-hosted",
+    "agent-framework"
   ],
   "author": "AG064",
   "license": "MIT",
