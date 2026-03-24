@@ -1,10 +1,10 @@
 # AG-Claw
 
+**59 modular features. 8 channels. Self-hosted. Zero subscriptions.**
+
 <h3 align="center">
 
-**Modular AI Agent Framework** — 59 pluggable features, production-ready security, and zero vendor lock-in.
-
-*OpenClaw, evolved.*
+*Modular AI Agent Framework — built on OpenClaw.*
 
 </h3>
 
@@ -14,10 +14,8 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/typescript-5.3-blue.svg?style=flat-square)](#)
-[![Build](https://img.shields.io/badge/build-typescript-blue.svg?style=flat-square)](#)
-
+[![Stars](https://img.shields.io/github/stars/AG064/ag-claw?style=flat-square)](https://github.com/AG064/ag-claw/stargazers)
 [![Telegram](https://img.shields.io/badge/Telegram-AG-Claw-26A5E4?logo=telegram&style=flat-square)](https://t.me/ag_claw)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-AG064%2Fag--claw-181717?logo=github&style=flat-square)](https://github.com/AG064/ag-claw)
 
 </p>
 
