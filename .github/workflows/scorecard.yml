@@ -1,202 +1,21 @@
 name: Security Scorecard
 
 on:
-  schedule:
-    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish results to security tab'
-        required: false
-        default: 'true'
-        type: boolean
-
-  # Also run on demand when code changes significantly
   push:
-    branches: [main, master]
-
-permissions:
-  contents: read
-  security-events: write
-  actions: read
-  checks: write
-  packages: read
-  vulnerabilities: read
-
-concurrency:
-  group: scorecard-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 jobs:
-  scorecard:
-    name: Security Scorecard
+  analysis:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      packages: read
-      security-events: write
-      vulnerabilities: read
-      checks: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: ossf/scorecard-action@v2
         with:
-          fetch-depth: 0  # Security Scorecard requires full git history
-
-      - name: Run Security Scorecard
-        uses: ossf/scorecard-action@v2.4.1
-        with:
-          results_file: scorecard-results.json
-          results-format: json
-          # Publish results to the security tab
-          publish_results: ${{ github.event_name == 'schedule' || inputs.publish == 'true' }}
-
-      - name: Upload scorecard results as artifact
-        uses: actions/upload-artifact@v4
+          results-file: results.sarif
+      - uses: actions/upload-artifact@v4
         with:
           name: scorecard-results
-          path: scorecard-results.json
-          retention-days: 30
-
-      - name: Upload to OSS-Fuzz
-        uses: google/security-scorecards/actions/upload@v1
-        with:
-          scorecard-results: scorecard-results.json
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Display scorecard results
-        run: |
-          SCORE=$(node -e "
-            const data = JSON.parse(require('fs').readFileSync('scorecard-results.json', 'utf8'));
-            const score = data.repo.score;
-            console.log('Security Score:', score);
-            if (score < 5) process.exit(1);
-          " || echo "Could not parse score")
-          echo "$SCORE"
-
-      - name: Generate SARIF report
-        if: github.event_name == 'schedule' || inputs.publish == 'true'
-        run: |
-          node -e "
-            const scorecard = JSON.parse(require('fs').readFileSync('scorecard-results.json', 'utf8'));
-            const sarif = {
-              version: '2.1.0',
-              '$schema': 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
-              runs: [{
-                tool: {
-                  driver: {
-                    name: 'Security Scorecard',
-                    version: 'v2',
-                    informationUri: 'https://github.com/ossf/scorecard',
-                    rules: []
-                  }
-                },
-                results: scorecard.results || [],
-                artifacts: []
-              }]
-            };
-            require('fs').writeFileSync('scorecard-results.sarif', JSON.stringify(sarif, null, 2));
-            console.log('SARIF report generated');
-          "
-
-      - name: Upload SARIF to GitHub Security
-        if: github.event_name == 'schedule' || inputs.publish == 'true'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: scorecard-results.sarif
-          category: security-scorecard
-
-  # Supply-chain verification using Dependency Review Action
-  supply-chain:
-    name: Supply Chain Security
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          comment-summary-in-pr: on-failure
-          fail-on-severity: critical
-          license-types: restrict
-         许可证-允许列表: |
-            MIT
-            Apache-2.0
-            BSD-2-Clause
-            BSD-3-Clause
-            ISC
-            CC-BY-4.0
-            Unlicense
-            0BSD
-          denied-licenses: |
-            GPL-1.0
-            GPL-2.0
-            AGPL-1.0
-            AGPL-3.0
-            EUPL-1.0
-            EUPL-1.1
-            LGPL-2.0
-            LGPL-2.1
-            MPL-1.0
-            MPL-1.1
-            CDDL-1.0
-            OSL-1.0
-            OSL-2.0
-            OSL-3.0
-            CPOL-1.02
-            SSPL-1.0
-            SSPL-3.0
-            BSL-1.0
-            Uni-license
-
-      - name: Check for npm security advisories
-        run: |
-          npm audit --json > advisories.json 2>/dev/null || true
-          HIGH=$(node -e "
-            const a = require('./advisories.json');
-            const v = Object.values(a.vulnerabilities || {});
-            console.log(v.filter(x => x.severity === 'high' || x.severity === 'critical').length);
-          " 2>/dev/null || echo "0")
-          echo "High/Critical npm advisories: $HIGH"
-          if [ "$HIGH" -gt "0" ]; then
-            echo "::warning::Found $HIGH high/critical npm advisories"
-          fi
-
-  security-report:
-    name: Weekly Security Report
-    runs-on: ubuntu-latest
-    needs: [scorecard, supply-chain]
-    if: github.event_name == 'schedule'
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Generate security report
-        run: |
-          REPORT="# Security Report - $(date +%Y-%m-%d)\n\n"
-          REPORT="${REPORT}## AG-Claw Security Status\n\n"
-          REPORT="${REPORT}This is an automated weekly security status report.\n\n"
-
-          REPORT="${REPORT}### Scorecard Results\n\n"
-          REPORT="${REPORT}- Security Score: [View in Security tab](${{ github.server_url }}/${{ github.repository }}/security)\n\n"
-
-          REPORT="${REPORT}### Action Items\n\n"
-          REPORT="${REPORT}Please review any open security advisories and address them promptly.\n\n"
-          REPORT="${REPORT}---\n*Generated by GitHub Actions Security Scorecard workflow*"
-
-          echo "$REPORT" > security-report.md
-          echo "report_file=security-report.md" >> $GITHUB_OUTPUT
-
-      - name: Post to GitHub
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('security-report.md', 'utf8');
-            // Create an issue in the security repository for tracking
-            console.log('Security report generated');
-            // Could post to a security dashboard or send notifications here
+          path: results.sarif
