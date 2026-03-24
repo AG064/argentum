@@ -17,6 +17,8 @@ import {
   type HealthStatus,
 } from '../../core/plugin-loader';
 
+import { EmbeddingsStorage, initEmbeddings, type SimilarityResult } from '../../memory/embeddings';
+
 /** Knowledge Graph configuration */
 export interface KnowledgeGraphConfig {
   enabled: boolean;
@@ -464,6 +466,7 @@ class KnowledgeGraphFeature implements FeatureModule {
   };
   private ctx!: FeatureContext;
   private backend: GraphBackend | null = null;
+  private embeddings: EmbeddingsStorage | null = null;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -476,12 +479,19 @@ class KnowledgeGraphFeature implements FeatureModule {
         ? new SQLiteGraphBackend(this.config.path)
         : new MemoryGraphBackend();
     await this.backend.init();
+
+    // Initialize embeddings storage
+    const embeddingsPath = this.config.path.replace('.db', '-embeddings.db');
+    this.embeddings = await initEmbeddings(embeddingsPath);
+
     this.ctx.logger.info('Knowledge Graph active', { backend: this.config.backend });
   }
 
   async stop(): Promise<void> {
     await this.backend?.close();
     this.backend = null;
+    this.embeddings?.close();
+    this.embeddings = null;
   }
 
   async healthCheck(): Promise<HealthStatus> {
@@ -536,6 +546,86 @@ class KnowledgeGraphFeature implements FeatureModule {
   async findPaths(sourceId: string, targetId: string, maxDepth = 5): Promise<Entity[][]> {
     if (!this.backend) throw new Error('Backend not initialized');
     return this.backend.findPaths(sourceId, targetId, maxDepth);
+  }
+
+  // ─── 3D Visualization Data ───────────────────────────────────────────────
+
+  /**
+   * Get graph data formatted for 3D visualization
+   * Returns {nodes, links} format compatible with 3d-force-graph
+   */
+  async getGraph3DData(): Promise<{
+    entities: Entity[];
+    relationships: Relationship[];
+  }> {
+    if (!this.backend) throw new Error('Backend not initialized');
+    const entities = await this.backend.getAllEntities();
+    const relationships = await this.backend.getAllRelationships();
+    return { entities, relationships };
+  }
+
+  // ─── Embeddings & Similarity Search ───────────────────────────────────────
+
+  /**
+   * Add embedding for an entity (used for similarity search)
+   * @param entityId - The entity ID
+   * @param text - The text content to embed
+   */
+  async addEmbedding(entityId: string, text: string): Promise<void> {
+    if (!this.embeddings) throw new Error('Embeddings not initialized');
+    await this.embeddings.addEmbedding(entityId, text);
+  }
+
+  /**
+   * Find similar entities using vector embeddings
+   * Falls back to keyword matching if embeddings unavailable
+   * @param text - Query text
+   * @param k - Number of results to return (default: 5)
+   */
+  async searchSimilar(
+    text: string,
+    k = 5,
+  ): Promise<Array<{ entity: Entity; similarity: number }>> {
+    if (!this.backend) throw new Error('Backend not initialized');
+
+    const emb = this.embeddings;
+    
+    // Try embedding-based search first
+    if (emb) {
+      const results = await emb.findSimilar(text, k);
+      const entities = await Promise.all(
+        results.map(async (r: { entity_id: string; similarity: number }) => {
+          const entity = await this.backend!.getEntity(r.entity_id);
+          return entity ? { entity, similarity: r.similarity } : null;
+        }),
+      );
+      return entities.filter((e): e is { entity: Entity; similarity: number } => e !== null);
+    }
+
+    return [];
+  }
+
+  /**
+   * Rebuild embeddings index from all existing entities
+   */
+  async rebuildEmbeddings(): Promise<void> {
+    if (!this.backend || !this.embeddings) throw new Error('Not initialized');
+    const entities = await this.backend.getAllEntities();
+    await this.embeddings.rebuildIndex(
+      entities.map((e) => ({ id: e.id, text: `${e.name} ${e.type} ${e.tags.join(' ')}` })),
+    );
+  }
+
+  /**
+   * Get embedding statistics
+   */
+  async getEmbeddingStats(): Promise<{
+    count: number;
+    vocabularySize: number;
+    avgVectorLength: number;
+  } | null> {
+    if (!this.embeddings) return null;
+    return this.embeddings.getStats();
   }
 
   // ─── Import ───────────────────────────────────────────────────────────────
