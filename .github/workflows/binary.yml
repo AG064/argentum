@@ -2,7 +2,7 @@ name: Build Binary
 
 on:
   release:
-    types: [created]
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -10,17 +10,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+
       - run: npm ci
       - run: npm run build
       - run: npm install -g pkg
-      - run: pkg dist/cli.js --targets node18-linux-x64
-      - name: Upload binary
-        uses: actions/upload-release-asset@v1
+
+      - name: Build Linux binary
+        run: pkg dist/cli.js --targets node18-linux-x64 --output agclaw-linux-x64
+        env:
+          PKG_CACHE_PATH: /tmp/pkg-cache
+
+      - name: Build Windows binary
+        run: pkg dist/cli.js --targets node18-win-x64 --output agclaw-win-x64.exe
+        env:
+          PKG_CACHE_PATH: /tmp/pkg-cache
+
+      - name: Build macOS binary
+        run: pkg dist/cli.js --targets node18-macos-x64 --output agclaw-macos-x64
+        env:
+          PKG_CACHE_PATH: /tmp/pkg-cache
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./agclaw
-          asset_name: agclaw-linux-x64
-          asset_content_type: application/octet-stream
+          files: |
+            agclaw-linux-x64
+            agclaw-win-x64.exe
+            agclaw-macos-x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agclaw-binaries
+          path: |
+            agclaw-linux-x64
+            agclaw-win-x64.exe
+            agclaw-macos-x64
