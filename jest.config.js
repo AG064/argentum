@@ -15,9 +15,8 @@ module.exports = {
     '/tests/unit/mcp.test.ts',
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { useESM: false }],
+    '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
   },
-  extensionsToTreatAsEsm: ['.ts'],
   transformIgnorePatterns: [
     '/node_modules/(?!(pino)/)',
   ],
