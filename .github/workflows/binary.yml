@@ -1,0 +1,26 @@
+name: Build Binary
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run build
+      - run: npm install -g pkg
+      - run: pkg dist/cli.js --targets node18-linux-x64
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./agclaw
+          asset_name: agclaw-linux-x64
+          asset_content_type: application/octet-stream
