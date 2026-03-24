@@ -102,6 +102,12 @@ function navigateTo(page) {
   if (page === 'skills') loadSkills();
   if (page === 'memory') loadMemories();
   if (page === 'logs') startLogStream();
+  if (page === 'knowledge-graph') {
+    // Initialize 3D knowledge graph when page loads
+    if (window.KnowledgeGraph3D) {
+      window.KnowledgeGraph3D.init('kg3dContainer');
+    }
+  }
 
   // Close mobile menu
   closeMobileMenu();

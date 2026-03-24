@@ -122,6 +122,20 @@
               </svg>
               Skills Hub
             </a>
+            <a class="nav-item" data-page="knowledge-graph">
+              <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <circle cx="4" cy="6" r="2"/>
+                <circle cx="20" cy="6" r="2"/>
+                <circle cx="4" cy="18" r="2"/>
+                <circle cx="20" cy="18" r="2"/>
+                <line x1="9.5" y1="10" x2="5.5" y2="7.5"/>
+                <line x1="14.5" y1="10" x2="18.5" y2="7.5"/>
+                <line x1="9.5" y1="14" x2="5.5" y2="16.5"/>
+                <line x1="14.5" y1="14" x2="18.5" y2="16.5"/>
+              </svg>
+              Knowledge Graph
+            </a>
           </div>
           <div class="nav-section">
             <div class="nav-section-title">System</div>
@@ -555,6 +569,128 @@
             </div>
             <div id="skillsHubContainer"></div>
           </div>
+
+          <!-- Knowledge Graph 3D Page -->
+          <div class="page" id="page-knowledge-graph">
+            <div class="page-header">
+              <div class="page-header-content">
+                <div>
+                  <h1 class="page-title">Knowledge Graph</h1>
+                  <p class="page-description">Interactive 3D visualization of entities and relationships.</p>
+                </div>
+                <div class="page-actions">
+                  <button class="btn btn-secondary" onclick="KnowledgeGraph3D.refresh()" title="Refresh">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                    </svg>
+                  </button>
+                  <button class="btn btn-secondary" onclick="KnowledgeGraph3D.zoomToFit()" title="Zoom to Fit">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
+                    </svg>
+                  </button>
+                  <button class="btn btn-primary" onclick="showAddEntityModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Entity
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graph Controls -->
+            <div class="kg-controls" style="display: flex; gap: 12px; padding: 12px 24px; background: var(--color-bg); border-bottom: 1px solid var(--color-border);">
+              <div class="search-global" style="flex: 1; max-width: 300px;">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" class="input" placeholder="Search entities..." id="kgSearch" oninput="handleKGSearch(this.value)" />
+              </div>
+              <select class="input select" id="kgTypeFilter" onchange="handleKGTypeFilter(this.value)" style="width: 150px;">
+                <option value="">All Types</option>
+                <option value="person">Person</option>
+                <option value="organization">Organization</option>
+                <option value="concept">Concept</option>
+                <option value="project">Project</option>
+                <option value="agent">Agent</option>
+                <option value="skill">Skill</option>
+                <option value="memory">Memory</option>
+              </select>
+            </div>
+
+            <!-- 3D Graph Container -->
+            <div class="kg-container" style="display: flex; height: calc(100vh - 220px);">
+              <div id="kg3dContainer" style="flex: 1; background: var(--color-bg); position: relative;">
+                <div style="position: absolute; bottom: 16px; left: 16px; z-index: 10; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px; font-size: 11px;">
+                  <div style="font-weight: 600; margin-bottom: 8px; color: var(--color-text);">Controls</div>
+                  <div style="color: var(--color-text-muted); line-height: 1.6;">
+                    <div><kbd style="background: var(--color-bg); padding: 2px 6px; border-radius: 4px;">Drag</kbd> Move nodes</div>
+                    <div><kbd style="background: var(--color-bg); padding: 2px 6px; border-radius: 4px;">Scroll</kbd> Zoom</div>
+                    <div><kbd style="background: var(--color-bg); padding: 2px 6px; border-radius: 4px;">Right-click</kbd> Center</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Legend -->
+              <div class="kg-legend" style="width: 200px; background: var(--color-surface); border-left: 1px solid var(--color-border); padding: 16px; overflow-y: auto;">
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 12px; color: var(--color-text);">Entity Types</div>
+                <div id="kgLegend" style="display: flex; flex-direction: column; gap: 8px;">
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #6366f1;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">person</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #22c55e;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">organization</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #f59e0b;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">location</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #ec4899;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">concept</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #8b5cf6;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">event</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #14b8a6;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">document</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #f97316;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">project</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #06b6d4;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">task</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #84cc16;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">skill</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #a855f7;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">agent</span>
+                  </div>
+                  <div class="kg-legend-item" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #64748b;"></span>
+                    <span style="font-size: 12px; color: var(--color-text-muted);">memory</span>
+                  </div>
+                </div>
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border);">
+                  <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--color-text);">Statistics</div>
+                  <div id="kgStats" style="font-size: 11px; color: var(--color-text-muted); line-height: 1.8;">
+                    <div>Nodes: <span id="kgNodeCount">0</span></div>
+                    <div>Edges: <span id="kgEdgeCount">0</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -572,6 +708,7 @@
     <script src="js/pages/self-improving.js"></script>
     <script src="js/pages/trajectory.js"></script>
     <script src="js/pages/skills-hub.js"></script>
+    <script src="js/knowledge-graph-3d.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>
