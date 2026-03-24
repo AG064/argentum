@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-use-before-define, @typescript-eslint/no-unsafe-assignment, no-unused-vars */
+ 
 /**
  * Budget Enforcement Feature
  *
@@ -59,7 +59,7 @@ export const _MODEL_PRICING_MAP: Record<string, { input: number; output: number 
  * Falls back to wildcard patterns then to 'unknown' pricing.
  */
 export function calculateCost(model: string, usage: TokenUsage): number {
-  const pricing = MODEL_PRICING_MAP[model];
+  const pricing = _MODEL_PRICING_MAP[model];
   if (pricing) {
     return (
       (usage.promptTokens * pricing.input +
@@ -68,7 +68,7 @@ export function calculateCost(model: string, usage: TokenUsage): number {
     );
   }
 
-  for (const [key, val] of Object.entries(MODEL_PRICING_MAP)) {
+  for (const [key, val] of Object.entries(_MODEL_PRICING_MAP)) {
     if (key.endsWith('/*')) {
       const prefix = key.slice(0, -2);
       if (model.startsWith(prefix)) {
@@ -81,7 +81,7 @@ export function calculateCost(model: string, usage: TokenUsage): number {
     }
   }
 
-  const fallback = MODEL_PRICING_MAP['unknown'] ?? { input: 0.5, output: 2 };
+  const fallback = _MODEL_PRICING_MAP['unknown'] ?? { input: 0.5, output: 2 };
   return (
     (usage.promptTokens * fallback.input +
       usage.completionTokens * fallback.output) /
@@ -221,14 +221,14 @@ class BudgetFeature implements FeatureModule {
       const _daily = this.getDailyUsage();
       const healthy =
         usage.totalCost < this.config.globalMonthlyLimit &&
-        daily.totalCost < this.config.globalDailyLimit;
+        _daily.totalCost < this.config.globalDailyLimit;
       return {
         healthy,
         message: healthy ? 'Budget OK' : 'Budget threshold exceeded',
         details: {
           monthlyUsage: `$${usage.totalCost.toFixed(4)}`,
           monthlyLimit: `$${this.config.globalMonthlyLimit}`,
-          dailyUsage: `$${daily.totalCost.toFixed(4)}`,
+          dailyUsage: `$${_daily.totalCost.toFixed(4)}`,
           dailyLimit: `$${this.config.globalDailyLimit}`,
           percentUsed: Math.round(
             (usage.totalCost / this.config.globalMonthlyLimit) * 100,
@@ -354,7 +354,7 @@ class BudgetFeature implements FeatureModule {
     const agentLimit =
       this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
 
-    const dailyAllowed = daily.totalCost < this.config.globalDailyLimit;
+    const dailyAllowed = _daily.totalCost < this.config.globalDailyLimit;
     const monthlyAllowed = monthly.totalCost < this.config.globalMonthlyLimit;
     const agentAllowed = agentLimit === 0 || monthly.totalCost < agentLimit;
 
@@ -364,7 +364,7 @@ class BudgetFeature implements FeatureModule {
         : 1;
     const dailyPercent =
       this.config.globalDailyLimit > 0
-        ? daily.totalCost / this.config.globalDailyLimit
+        ? _daily.totalCost / this.config.globalDailyLimit
         : 1;
     const maxPercent = Math.max(monthlyPercent, dailyPercent);
 
@@ -375,7 +375,7 @@ class BudgetFeature implements FeatureModule {
     if (!monthlyAllowed) {
       reason = `Monthly budget exhausted ($${monthly.totalCost.toFixed(4)}/$${this.config.globalMonthlyLimit})`;
     } else if (!dailyAllowed) {
-      reason = `Daily budget exhausted ($${daily.totalCost.toFixed(4)}/$${this.config.globalDailyLimit})`;
+      reason = `Daily budget exhausted ($${_daily.totalCost.toFixed(4)}/$${this.config.globalDailyLimit})`;
     } else if (!agentAllowed) {
       reason = `Agent budget exhausted ($${monthly.totalCost.toFixed(4)}/$${agentLimit})`;
     }
@@ -383,7 +383,7 @@ class BudgetFeature implements FeatureModule {
     return {
       allowed,
       reason,
-      dailyCost: daily.totalCost,
+      dailyCost: _daily.totalCost,
       monthlyCost: monthly.totalCost,
       dailyLimit: this.config.globalDailyLimit,
       monthlyLimit: this.config.globalMonthlyLimit,
@@ -458,7 +458,7 @@ class BudgetFeature implements FeatureModule {
       periodDay: currentDay,
       totalTokens: monthly.totalTokens,
       totalCost: monthly.totalCost,
-      dailyCost: daily.totalCost,
+      dailyCost: _daily.totalCost,
       monthlyCost: monthly.totalCost,
       byAgent,
       alerts,

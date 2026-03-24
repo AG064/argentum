@@ -12,8 +12,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { appendFileSync, existsSync, mkdirSync, _readFileSync, _unlinkSync, _writeFileSync } from 'fs';
-import { resolve, _dirname } from 'path';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 

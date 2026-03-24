@@ -3119,6 +3119,58 @@ async function cmdLearnings(): Promise<void> {
   print('    agclaw learnings --verbose             Show tags');
 }
 
+async function cmdTrajectory(): Promise<void> {
+  banner();
+  info('Trajectory export feature');
+  print('');
+  print('  Export your agent session trajectories for analysis.');
+  print('  Currently loads trajectory data from memory/sessions.');
+  print('');
+  try {
+    const featurePath = path.join(__dirname, 'src', 'features', 'trajectory-export', 'index.js');
+    if (fs.existsSync(featurePath)) {
+      const mod = require(featurePath);
+      const exporter = mod.default || mod;
+      if (exporter?.exportTrajectory) {
+        const result = await exporter.exportTrajectory();
+        print(`  Exported ${result?.count ?? 0} trajectory entries.`);
+      } else {
+        print('  Feature module loaded but export not available.');
+      }
+    } else {
+      print('  Feature not found. Run "agclaw init" to set up.');
+    }
+  } catch (err) {
+    warn(`Could not load trajectory-export: ${(err as Error).message}`);
+  }
+}
+
+async function cmdOrg(): Promise<void> {
+  banner();
+  info('Organization chart feature');
+  print('');
+  print('  Visualize your multi-agent organization hierarchy.');
+  print('  Currently loads org data from configuration.');
+  print('');
+  try {
+    const featurePath = path.join(__dirname, 'src', 'features', 'org-chart', 'index.js');
+    if (fs.existsSync(featurePath)) {
+      const mod = require(featurePath);
+      const orgChart = mod.default || mod;
+      if (orgChart?.getOrgChart) {
+        const chart = await orgChart.getOrgChart();
+        print(`  Org chart loaded: ${chart?.agents?.length ?? 0} agents.`);
+      } else {
+        print('  Feature module loaded but getOrgChart not available.');
+      }
+    } else {
+      print('  Feature not found. Run "agclaw init" to set up.');
+    }
+  } catch (err) {
+    warn(`Could not load org-chart: ${(err as Error).message}`);
+  }
+}
+
 function parseLessonsFromFile(lessonsPath: string): any[] {
   const lessons: any[] = [];
 

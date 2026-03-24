@@ -19,7 +19,7 @@ import Database from 'better-sqlite3';
 
 import { createLogger, type Logger } from '../../core/logger';
 import { encrypt, decrypt } from '../encrypted-secrets';
-import { getPolicyEngine } from '../policy-engine';
+import { getPolicyEngine, PolicyEngine } from '../policy-engine/index.js';
 
 import type {
   CredentialConfig,
@@ -141,14 +141,14 @@ export class CredentialManager {
     // Derive a stable 32-byte key
     const { pbkdf2Sync } = require('crypto');
      
-    this.masterKey = pbkdf2Sync(keyEnv, 'ag-claw-credential-salt', 100000, 32, 'sha256')!;
+    this.masterKey = pbkdf2Sync(keyEnv, 'ag-claw-credential-salt', 100000, 32, 'sha256') as Buffer;
     return this.masterKey;
   }
 
   /**
    * Store a new credential (encrypts and persists).
    */
-  store(config: Omit<StoredCredential, 'iv' | 'salt' | 'tag' | 'encryptedValue' | 'rotatedAt' | 'createdAt' | 'expiresAt'>): StoredCredential {
+  store(config: Omit<StoredCredential, 'iv' | 'salt' | 'tag' | 'rotatedAt'>): StoredCredential {
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
@@ -237,6 +237,9 @@ export class CredentialManager {
       name: row.name as string,
       type: row.type as StoredCredential['type'],
       encryptedValue: decryptedValue,
+      iv: row.iv as string,
+      salt: row.salt as string,
+      tag: row.tag as string,
       ttlSeconds: row.ttl_seconds as number,
       expiresAt: row.expires_at as number,
       rotatedAt: row.rotated_at as number,
@@ -433,7 +436,7 @@ export class CredentialManager {
     success: boolean,
   ): void {
     try {
-      const policyEngine = getPolicyEngine();
+      const policyEngine: PolicyEngine = getPolicyEngine();
       policyEngine.logAudit({
         action,
         severity,

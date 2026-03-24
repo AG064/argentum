@@ -12,8 +12,8 @@
 
 import { createHmac as _createHmac, randomBytes } from 'crypto';
 
-import { z } from 'zod';
 import sanitizeHtml from 'sanitize-html';
+import { z } from 'zod';
 
 // ─── Security Headers ─────────────────────────────────────────────────────────
 
@@ -290,22 +290,19 @@ export function sanitizeHTML(html: string): string {
       img: ['src', 'alt', 'title'],
       '*': ['class']
     },
-    // Disallow comments outright (e.g., <!-- ... -->).
-    allowComments: false,
     // Only allow safe URL schemes; blocks javascript:, vbscript:, etc.
     allowedSchemes: ['http', 'https', 'mailto'],
     // Restrict data: URIs to safe image types only on img tags.
     allowedSchemesByTag: {
       img: ['http', 'https', 'data']
     },
-    allowedDataAttributes: false,
     // Ensure noreferrer/noopener on links that open in a new tab.
     transformTags: {
-      a: (tagName, attribs) => {
+      a: (tagName: string, attribs: Record<string, string>) => {
         const transformed = { ...attribs };
         if (transformed.target === '_blank') {
           transformed.rel = transformed.rel
-            ? transformed.rel + ' noopener noreferrer'
+            ? `${transformed.rel  } noopener noreferrer`
             : 'noopener noreferrer';
         }
         return { tagName, attribs: transformed };
