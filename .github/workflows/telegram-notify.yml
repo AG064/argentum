@@ -11,6 +11,7 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+    permissions: {}
     if: github.event_name == 'push' || github.event_name == 'release' || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)
     steps:
       - name: Send push notification
