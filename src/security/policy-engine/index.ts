@@ -138,7 +138,10 @@ function resourceMatches(pattern: string, resource: string): boolean {
 
 // ─── Condition Evaluation ─────────────────────────────────────────────────────
 
-function evaluateConditions(conditions: PolicyCondition[], context: Record<string, unknown>): boolean {
+function evaluateConditions(
+  conditions: PolicyCondition[],
+  context: Record<string, unknown>,
+): boolean {
   if (!conditions || conditions.length === 0) return true;
 
   return conditions.every((cond) => {
@@ -304,7 +307,10 @@ export class PolicyEngine {
   private loadPoliciesFromDB(): void {
     if (!this.db) return;
 
-    const rows = this.db.prepare('SELECT * FROM security_policies').all() as Record<string, unknown>[];
+    const rows = this.db.prepare('SELECT * FROM security_policies').all() as Record<
+      string,
+      unknown
+    >[];
     for (const row of rows) {
       const policy: Policy = {
         id: row.id as string,
@@ -333,7 +339,9 @@ export class PolicyEngine {
 
     const now = Date.now();
     const expired = this.db
-      .prepare("UPDATE security_approvals SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
+      .prepare(
+        "UPDATE security_approvals SET status = 'expired' WHERE status = 'pending' AND expires_at < ?",
+      )
       .run(now);
 
     if (expired.changes > 0) {
@@ -446,7 +454,12 @@ export class PolicyEngine {
 
       // Log decision
       this.logAudit({
-        action: policy.effect === 'deny' ? 'policy.deny' : policy.effect === 'approve' ? 'policy.approve' : 'policy.allow',
+        action:
+          policy.effect === 'deny'
+            ? 'policy.deny'
+            : policy.effect === 'approve'
+              ? 'policy.approve'
+              : 'policy.allow',
         severity: policy.effect === 'deny' ? 'warning' : 'info',
         actor: action.agentId,
         resource: action.resource,
@@ -490,7 +503,10 @@ export class PolicyEngine {
         what: `Agent ${action.agentId} wants to perform: ${action.type} on ${action.resource}`,
         why: 'Required by security policy',
         consequences: `This action will be ${decision.policy.effect}ed by policy: ${decision.policy.name}`,
-        alternatives: ['Modify the policy to allow/deny this action', 'Request temporary access via admin'],
+        alternatives: [
+          'Modify the policy to allow/deny this action',
+          'Request temporary access via admin',
+        ],
       });
     }
 
@@ -654,7 +670,9 @@ export class PolicyEngine {
     // Sync from DB to memory
     if (this.db) {
       const rows = this.db
-        .prepare("SELECT * FROM security_approvals WHERE status = 'pending' ORDER BY requested_at DESC")
+        .prepare(
+          "SELECT * FROM security_approvals WHERE status = 'pending' ORDER BY requested_at DESC",
+        )
         .all() as Record<string, unknown>[];
 
       for (const row of rows) {
@@ -759,18 +777,19 @@ export class PolicyEngine {
     // Write to file if configured
     if (this.auditFilePath) {
       try {
-        appendFileSync(this.auditFilePath, `${JSON.stringify(fullEntry)  }\n`, 'utf-8');
+        appendFileSync(this.auditFilePath, `${JSON.stringify(fullEntry)}\n`, 'utf-8');
       } catch (err) {
         this.logger.error('Failed to write audit to file', { error: String(err) });
       }
     }
 
     // Emit to logger
-    const logMethod = fullEntry.severity === 'error' || fullEntry.severity === 'critical'
-      ? this.logger.error.bind(this.logger)
-      : fullEntry.severity === 'warning'
-        ? this.logger.warn.bind(this.logger)
-        : this.logger.info.bind(this.logger);
+    const logMethod =
+      fullEntry.severity === 'error' || fullEntry.severity === 'critical'
+        ? this.logger.error.bind(this.logger)
+        : fullEntry.severity === 'warning'
+          ? this.logger.warn.bind(this.logger)
+          : this.logger.info.bind(this.logger);
     logMethod(`Audit: ${fullEntry.action}`, fullEntry.details);
   }
 
@@ -856,7 +875,13 @@ export class PolicyEngine {
       sandboxExecutionsTotal: 0, // managed by SandboxExecutor
       sandboxBlockedTotal: 0,
       threatsDetected: this.db
-        ? (this.db.prepare("SELECT COUNT(*) as c FROM security_audit WHERE severity IN ('warning','error','critical') AND timestamp > ?").get(now - 86400000) as { c: number }).c
+        ? (
+            this.db
+              .prepare(
+                "SELECT COUNT(*) as c FROM security_audit WHERE severity IN ('warning','error','critical') AND timestamp > ?",
+              )
+              .get(now - 86400000) as { c: number }
+          ).c
         : 0,
       uptime: process.uptime(),
     };

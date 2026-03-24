@@ -41,8 +41,6 @@ import type {
   HealthStatus,
 } from '../../core/plugin-loader';
 
-
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: SelfImprovingConfig = {
@@ -105,13 +103,18 @@ class SelfImprovingLoop implements FeatureModule {
 
     // Override from feature config if provided
     if (config['enabled'] !== undefined) this.config.enabled = Boolean(config['enabled']);
-    if (config['schedule']) this.config.schedule = config['schedule'] as 'nightly' | 'idle' | 'both';
+    if (config['schedule'])
+      this.config.schedule = config['schedule'] as 'nightly' | 'idle' | 'both';
     if (config['nightlyTime']) this.config.nightlyTime = String(config['nightlyTime']);
     if (config['verbose']) this.config.verbose = true;
 
     // Init sub-modules
     this.analyzer = new ErrorAnalyzer(this.sessionsDbPath, this.memoryDir);
-    this.skillCreator = new SkillCreator(this.skillsDir, this.memoryDir, this.config.skillCreationThreshold);
+    this.skillCreator = new SkillCreator(
+      this.skillsDir,
+      this.memoryDir,
+      this.config.skillCreationThreshold,
+    );
 
     // Create directories
     mkdirSync(path.join(this.memoryDir, 'self-improvement'), { recursive: true });
@@ -227,9 +230,9 @@ class SelfImprovingLoop implements FeatureModule {
     const result: SelfImprovingResult = {
       phases,
       totalDuration: Date.now() - startTime,
-      skillsCreated: phases.find(p => p.phase === 'skill')?.itemsChanged ?? 0,
-      lessonsLearned: phases.reduce((sum, p) => sum + (p.details.length), 0),
-      correctionsApplied: phases.find(p => p.phase === 'correction')?.itemsChanged ?? 0,
+      skillsCreated: phases.find((p) => p.phase === 'skill')?.itemsChanged ?? 0,
+      lessonsLearned: phases.reduce((sum, p) => sum + p.details.length, 0),
+      correctionsApplied: phases.find((p) => p.phase === 'correction')?.itemsChanged ?? 0,
       dryRun: this.config.dryRun,
       timestamp: Date.now(),
     };
@@ -342,7 +345,7 @@ class SelfImprovingLoop implements FeatureModule {
             this.log(`  • ${a.pattern}: ${a.fixSuggestion}`);
           }
         }
-        phase.itemsChanged = analyses.filter(a => a.frequency > 1).length;
+        phase.itemsChanged = analyses.filter((a) => a.frequency > 1).length;
       } else {
         phase.details.push('No new error patterns detected');
       }
@@ -380,7 +383,9 @@ class SelfImprovingLoop implements FeatureModule {
 
       // Detect patterns
       const templates = await this.skillCreator.detectPatterns(sessionContent);
-      const eligible = templates.filter(t => t.complexity >= 7 || t.frequency >= this.config.skillCreationThreshold);
+      const eligible = templates.filter(
+        (t) => t.complexity >= 7 || t.frequency >= this.config.skillCreationThreshold,
+      );
 
       if (eligible.length === 0) {
         phase.details.push('No patterns meet skill creation threshold');
@@ -747,9 +752,7 @@ class SelfImprovingLoop implements FeatureModule {
       }
 
       // Check for questions
-      const questionCount = userMessages.filter((m: any) =>
-        (m.content ?? '').includes('?')
-      ).length;
+      const questionCount = userMessages.filter((m: any) => (m.content ?? '').includes('?')).length;
       if (questionCount > userMessages.length * 0.5) {
         patterns.push('User frequently asks questions (>50% of messages)');
       }
@@ -766,9 +769,7 @@ class SelfImprovingLoop implements FeatureModule {
     const modelingPath = path.join(this.memoryDir, 'user-modeling.md');
 
     try {
-      let content = existsSync(modelingPath)
-        ? fs.readFileSync(modelingPath, 'utf8')
-        : '';
+      let content = existsSync(modelingPath) ? fs.readFileSync(modelingPath, 'utf8') : '';
 
       const timestamp = new Date().toISOString().slice(0, 10);
       content += `\n## Inferred Patterns (${timestamp})\n`;
@@ -783,7 +784,7 @@ class SelfImprovingLoop implements FeatureModule {
   }
 
   private determineCorrections(
-    analyses: ErrorAnalysis[]
+    analyses: ErrorAnalysis[],
   ): Array<{ area: string; whatWentWrong: string; whatWillChange: string }> {
     const corrections: Array<{ area: string; whatWentWrong: string; whatWillChange: string }> = [];
 
@@ -813,7 +814,7 @@ class SelfImprovingLoop implements FeatureModule {
   }
 
   private applyCorrections(
-    corrections: Array<{ area: string; whatWentWrong: string; whatWillChange: string }>
+    corrections: Array<{ area: string; whatWentWrong: string; whatWillChange: string }>,
   ): number {
     let applied = 0;
 
@@ -828,7 +829,11 @@ class SelfImprovingLoop implements FeatureModule {
     return applied;
   }
 
-  private logSelfCorrection(correction: { area: string; whatWentWrong: string; whatWillChange: string }): void {
+  private logSelfCorrection(correction: {
+    area: string;
+    whatWentWrong: string;
+    whatWillChange: string;
+  }): void {
     const logPath = path.join(this.memoryDir, 'self-improvement', 'self-corrections.md');
     const timestamp = new Date().toISOString();
 

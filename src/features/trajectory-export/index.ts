@@ -1,4 +1,3 @@
- 
 /**
  * Trajectory Export Feature
  *
@@ -15,7 +14,6 @@ import { pipeline as _pipeline } from 'stream/promises';
 import { createGzip as _createGzip } from 'zlib';
 
 import Database from 'better-sqlite3';
-
 
 import {
   type TrajectoryEntry,
@@ -86,9 +84,7 @@ class TrajectoryExportFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const row = this.db
-        .prepare('SELECT COUNT(*) as c FROM trajectories')
-        .get() as { c: number };
+      const row = this.db.prepare('SELECT COUNT(*) as c FROM trajectories').get() as { c: number };
       return { healthy: true, message: `${row.c} trajectory entries` };
     } catch {
       return { healthy: false, message: 'Trajectory database unavailable' };

@@ -29,9 +29,7 @@ export class SkillCreator {
     const created: SkillTemplate[] = [];
 
     // Filter by threshold
-    const eligible = complexTasks.filter(t => 
-      t.frequency >= this.threshold || t.complexity >= 7
-    );
+    const eligible = complexTasks.filter((t) => t.frequency >= this.threshold || t.complexity >= 7);
 
     for (const template of eligible) {
       const skillPath = path.join(this.skillsDir, template.name);
@@ -84,7 +82,7 @@ export class SkillCreator {
           /(#+\s*Usage\s*\n)([\s\S]*?)(?=\n#|$)/,
           (_, header, existingUsage) => {
             return `${header}${existingUsage}\n- [${new Date().toISOString().slice(0, 10)}] ${template.description} (from ${template.sourceSessions.length} sessions)\n`;
-          }
+          },
         );
         fs.writeFileSync(skillMdPath, updated, 'utf8');
       }
@@ -113,7 +111,7 @@ ${template.description}
 
 ## Triggers
 
-${template.triggers.map(t => `- ${t}`).join('\n')}
+${template.triggers.map((t) => `- ${t}`).join('\n')}
 
 ## Usage
 
@@ -140,13 +138,25 @@ ${template.triggers.map(t => `- ${t}`).join('\n')}
     for (const content of sessionsContent) {
       // Simple pattern detection based on common task keywords
       const taskPatterns = [
-        { pattern: /write[ing]?\s+(?:a\s+)?(email|letter|message)/gi, name: 'email-writing', category: 'writing' },
+        {
+          pattern: /write[ing]?\s+(?:a\s+)?(email|letter|message)/gi,
+          name: 'email-writing',
+          category: 'writing',
+        },
         { pattern: /summarize[ing]?/gi, name: 'summarization', category: 'analysis' },
-        { pattern: /debug(?:ging)?|fix(?:ing)?\s+(?:the\s+)?error/gi, name: 'debugging', category: 'coding' },
+        {
+          pattern: /debug(?:ging)?|fix(?:ing)?\s+(?:the\s+)?error/gi,
+          name: 'debugging',
+          category: 'coding',
+        },
         { pattern: /explain[ing]?/gi, name: 'explanation', category: 'education' },
         { pattern: /research[ing]?/gi, name: 'research', category: 'analysis' },
         { pattern: /code\s+review/gi, name: 'code-review', category: 'coding' },
-        { pattern: /write\s+(?:a\s+)?(function|class|module|script)/gi, name: 'code-generation', category: 'coding' },
+        {
+          pattern: /write\s+(?:a\s+)?(function|class|module|script)/gi,
+          name: 'code-generation',
+          category: 'coding',
+        },
         { pattern: /translate[ing]?/gi, name: 'translation', category: 'language' },
         { pattern: /plan[ning]?|roadmap/gi, name: 'planning', category: 'strategy' },
         { pattern: /TODO|FIXME|HACK|XXX/gi, name: 'todo-processing', category: 'coding' },
@@ -241,9 +251,10 @@ ${template.triggers.map(t => `- ${t}`).join('\n')}
     }
 
     try {
-      return fs.readdirSync(this.skillsDir, { encoding: 'utf8' })
-        .filter(f => f.startsWith('auto-'))
-        .filter(f => fs.existsSync(path.join(this.skillsDir, f, 'SKILL.md')));
+      return fs
+        .readdirSync(this.skillsDir, { encoding: 'utf8' })
+        .filter((f) => f.startsWith('auto-'))
+        .filter((f) => fs.existsSync(path.join(this.skillsDir, f, 'SKILL.md')));
     } catch {
       return [];
     }

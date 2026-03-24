@@ -105,12 +105,23 @@ export class ErrorAnalyzer {
         // Look for correction patterns in user messages
         const content = msg.content ?? '';
         const correctionIndicators = [
-          'actually', 'no,', 'not quite', 'wrong', 'incorrect',
-          'should be', 'i meant', 'I meant', 'better:', 'correct:',
-          'you misunderstood', 'that\'s not what i asked',
+          'actually',
+          'no,',
+          'not quite',
+          'wrong',
+          'incorrect',
+          'should be',
+          'i meant',
+          'I meant',
+          'better:',
+          'correct:',
+          'you misunderstood',
+          "that's not what i asked",
         ];
 
-        const isCorrection = correctionIndicators.some(ind => content.toLowerCase().includes(ind));
+        const isCorrection = correctionIndicators.some((ind) =>
+          content.toLowerCase().includes(ind),
+        );
 
         if (isCorrection && nextMsg?.role === 'assistant') {
           _corrections.push({
@@ -145,7 +156,7 @@ export class ErrorAnalyzer {
     try {
       const content = fs.readFileSync(this.lessonsPath, 'utf8');
       const failedMatches = content.matchAll(
-        /## FAILED[^\n]*\n([^\n]*\n){0,3}?([^\n]*error[^\n]*|failed|wrong|incorrect)/gi
+        /## FAILED[^\n]*\n([^\n]*\n){0,3}?([^\n]*error[^\n]*|failed|wrong|incorrect)/gi,
       );
 
       for (const match of failedMatches) {
@@ -180,8 +191,10 @@ export class ErrorAnalyzer {
       return [];
     }
     try {
-      return fs.readFileSync(this.lessonsPath, 'utf8').split('\n')
-        .filter(l => l.includes('- lesson:') || l.includes('lesson:'));
+      return fs
+        .readFileSync(this.lessonsPath, 'utf8')
+        .split('\n')
+        .filter((l) => l.includes('- lesson:') || l.includes('lesson:'));
     } catch {
       return [];
     }
@@ -208,7 +221,7 @@ export class ErrorAnalyzer {
     if (text.includes('code') || text.includes('programming') || text.includes('syntax')) {
       return 'code_quality';
     }
-    if (text.includes('miss') || text.includes('forgot') || text.includes('didn\'t include')) {
+    if (text.includes('miss') || text.includes('forgot') || text.includes("didn't include")) {
       return 'incomplete_response';
     }
 
@@ -220,7 +233,12 @@ export class ErrorAnalyzer {
    */
   private categorizeCorrectionText(text: string): string {
     return this.categorizeCorrection({
-      sessionId: '', timestamp: 0, originalResponse: '', correctedResponse: text, context: '', category: ''
+      sessionId: '',
+      timestamp: 0,
+      originalResponse: '',
+      correctedResponse: text,
+      context: '',
+      category: '',
     });
   }
 

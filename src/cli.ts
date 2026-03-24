@@ -870,7 +870,9 @@ async function cmdSessions(): Promise<void> {
         const content = r.content.slice(0, 120).replace(/\n/g, ' ');
         print(`  \x1b[1m${r.title}\x1b[0m [${r.role}]`);
         print(`    ${content}${content.length >= 120 ? '...' : ''}`);
-        print(`    Session: ${r.session_id.slice(0, 8)}... | ${new Date(r.timestamp).toLocaleDateString()}`);
+        print(
+          `    Session: ${r.session_id.slice(0, 8)}... | ${new Date(r.timestamp).toLocaleDateString()}`,
+        );
       }
       db.close();
       break;
@@ -1576,9 +1578,13 @@ async function cmdBudget(): Promise<void> {
   const getBudgetFeature = () => {
     try {
       const budgetPath = path.join(__dirname, 'features', 'budget', 'index.js');
-      if (!fs.existsSync(budgetPath)) { return null; }
+      if (!fs.existsSync(budgetPath)) {
+        return null;
+      }
       return require(budgetPath).default;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
 
   const budget = getBudgetFeature();
@@ -1589,10 +1595,10 @@ async function cmdBudget(): Promise<void> {
     const empty = width - filled;
     const p = Math.min(100, Math.max(0, percent));
     const color = p >= 90 ? '\x1b[31m' : p >= 75 ? '\x1b[33m' : '\x1b[32m';
-    return `${color + '█'.repeat(filled)  }\x1b[90m${  '░'.repeat(empty)  }\x1b[0m`;
+    return `${color + '█'.repeat(filled)}\x1b[90m${'░'.repeat(empty)}\x1b[0m`;
   };
 
-  const usd = (n: number): string => `$${  n.toFixed(4)}`;
+  const usd = (n: number): string => `$${n.toFixed(4)}`;
 
   switch (subcommand) {
     case 'status':
@@ -1614,27 +1620,36 @@ async function cmdBudget(): Promise<void> {
       const dailyPct = Math.round((report.dailyCost / report.dailyLimit) * 100);
 
       print('  \x1b[1mGlobal Limits\x1b[0m');
-      print(`  Monthly  ${  bar(monthlyPct)  } ${  usd(report.monthlyCost).padStart(10)  } / ${  usd(report.monthlyLimit)}`);
-      print(`  Daily    ${  bar(dailyPct)  } ${  usd(report.dailyCost).padStart(10)  } / ${  usd(report.dailyLimit)}`);
+      print(
+        `  Monthly  ${bar(monthlyPct)} ${usd(report.monthlyCost).padStart(10)} / ${usd(report.monthlyLimit)}`,
+      );
+      print(
+        `  Daily    ${bar(dailyPct)} ${usd(report.dailyCost).padStart(10)} / ${usd(report.dailyLimit)}`,
+      );
       print('');
 
       if (report.alerts.length > 0) {
         print('  \x1b[1m\x1b[33m⚠\x1b[0m  \x1b[1mAlerts\x1b[0m');
         for (const alert of report.alerts) {
-          print(`    \x1b[33m▸\x1b[0m ${  alert}`);
+          print(`    \x1b[33m▸\x1b[0m ${alert}`);
         }
         print('');
       }
 
       if (report.byAgent.length > 0) {
         print('  \x1b[1mPer-Agent Usage\x1b[0m');
-        print('  \x1b[90m  Agent                Cost          Tokens           % of Limit    Status\x1b[0m');
-        print(`  \x1b[90m  ${  '─'.repeat(72)}`);
+        print(
+          '  \x1b[90m  Agent                Cost          Tokens           % of Limit    Status\x1b[0m',
+        );
+        print(`  \x1b[90m  ${'─'.repeat(72)}`);
         for (const s of report.byAgent) {
           const statusColor = s.canProceed ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
-          const pctColor = s.percentUsed >= 90 ? '\x1b[31m' : s.percentUsed >= 75 ? '\x1b[33m' : '\x1b[32m';
-          const pctStr = `${pctColor + s.percentUsed  }%\x1b[0m`;
-          print(`    ${  s.agent.padEnd(20)  }${usd(s.totalCost).padEnd(12)  }${s.totalTokens.toLocaleString().padEnd(12)  }${pctStr.padEnd(14)  } ${  statusColor}`);
+          const pctColor =
+            s.percentUsed >= 90 ? '\x1b[31m' : s.percentUsed >= 75 ? '\x1b[33m' : '\x1b[32m';
+          const pctStr = `${pctColor + s.percentUsed}%\x1b[0m`;
+          print(
+            `    ${s.agent.padEnd(20)}${usd(s.totalCost).padEnd(12)}${s.totalTokens.toLocaleString().padEnd(12)}${pctStr.padEnd(14)} ${statusColor}`,
+          );
         }
         print('');
       } else {
@@ -1642,31 +1657,58 @@ async function cmdBudget(): Promise<void> {
       }
 
       print('  \x1b[1mSettings\x1b[0m');
-      print(`  \x1b[90m  alertThreshold:   \x1b[0m${  Math.round(config.alertThreshold * 100)  }%`);
-      print(`  \x1b[90m  blockOnExhausted: \x1b[0m${  config.blockOnExhausted ? 'yes' : 'no'}`);
-      if (config.perAgentLimit) { print(`  \x1b[90m  perAgentLimit:    \x1b[0m$${  config.perAgentLimit}`); }
+      print(`  \x1b[90m  alertThreshold:   \x1b[0m${Math.round(config.alertThreshold * 100)}%`);
+      print(`  \x1b[90m  blockOnExhausted: \x1b[0m${config.blockOnExhausted ? 'yes' : 'no'}`);
+      if (config.perAgentLimit) {
+        print(`  \x1b[90m  perAgentLimit:    \x1b[0m$${config.perAgentLimit}`);
+      }
       print('');
       break;
     }
 
     case 'set-limit':
     case 'set': {
-      if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
       const amountStr = args[2];
       const limitType = (args[3] || 'monthly').toLowerCase();
-      if (!amountStr) { error('Usage: agclaw budget set-limit <amount> [monthly|daily|per-agent]'); return; }
+      if (!amountStr) {
+        error('Usage: agclaw budget set-limit <amount> [monthly|daily|per-agent]');
+        return;
+      }
       const amount = parseFloat(amountStr);
-      if (isNaN(amount) || amount < 0) { error('Amount must be a non-negative number'); return; }
+      if (isNaN(amount) || amount < 0) {
+        error('Amount must be a non-negative number');
+        return;
+      }
 
       let result: { success: boolean; error?: string };
       switch (limitType) {
-        case 'monthly': case 'm': result = budget.updateConfig({ globalMonthlyLimit: amount }); break;
-        case 'daily': case 'd': result = budget.updateConfig({ globalDailyLimit: amount }); break;
-        case 'per-agent': case 'peragent': case 'agent': case 'a': result = budget.updateConfig({ perAgentLimit: amount }); break;
-        default: error(`Unknown limit type: ${  limitType  }. Use: monthly, daily, or per-agent`); return;
+        case 'monthly':
+        case 'm':
+          result = budget.updateConfig({ globalMonthlyLimit: amount });
+          break;
+        case 'daily':
+        case 'd':
+          result = budget.updateConfig({ globalDailyLimit: amount });
+          break;
+        case 'per-agent':
+        case 'peragent':
+        case 'agent':
+        case 'a':
+          result = budget.updateConfig({ perAgentLimit: amount });
+          break;
+        default:
+          error(`Unknown limit type: ${limitType}. Use: monthly, daily, or per-agent`);
+          return;
       }
-      if (result.success) { success(`Updated ${  limitType  } limit to $${  amount}`); }
-      else { error(`Failed: ${  result.error}`); }
+      if (result.success) {
+        success(`Updated ${limitType} limit to $${amount}`);
+      } else {
+        error(`Failed: ${result.error}`);
+      }
       break;
     }
 
@@ -1677,36 +1719,56 @@ async function cmdBudget(): Promise<void> {
       print('  \x1b[1m\x1b[36m║         \x1b[33m📊 Budget History\x1b[36m             ║\x1b[0m');
       print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
       print('');
-      if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
       const days = parseInt(args[2] || '30', 10);
       const history = budget.getHistory(days);
-      if (history.length === 0) { info(`No spending history in the last ${  days  } days.`); return; }
+      if (history.length === 0) {
+        info(`No spending history in the last ${days} days.`);
+        return;
+      }
       print('  \x1b[90m  Date           Cost           Tokens         Requests   Daily %\x1b[0m');
-      print(`  \x1b[90m  ${  '─'.repeat(66)}`);
+      print(`  \x1b[90m  ${'─'.repeat(66)}`);
       const cfg = budget.getConfig();
       for (const row of history) {
         const dailyPct = Math.round((row.totalCost / cfg.globalDailyLimit) * 100);
         const pctColor = dailyPct >= 90 ? '\x1b[31m' : dailyPct >= 75 ? '\x1b[33m' : '\x1b[32m';
-        print(`    \x1b[37m${  row.date.padEnd(12)  }\x1b[0m ${  usd(row.totalCost).padEnd(14)  }${row.totalTokens.toLocaleString().padEnd(14)  }${row.requestCount.toString().padEnd(10)  }${pctColor  }${dailyPct  }%\x1b[0m`);
+        print(
+          `    \x1b[37m${row.date.padEnd(12)}\x1b[0m ${usd(row.totalCost).padEnd(14)}${row.totalTokens.toLocaleString().padEnd(14)}${row.requestCount.toString().padEnd(10)}${pctColor}${dailyPct}%\x1b[0m`,
+        );
       }
       print('');
       const tc = history.reduce((s: number, r: { totalCost: number }) => s + r.totalCost, 0);
       const tt = history.reduce((s: number, r: { totalTokens: number }) => s + r.totalTokens, 0);
       const tr = history.reduce((s: number, r: { requestCount: number }) => s + r.requestCount, 0);
-      print(`  \x1b[90m  Totals: \x1b[0m${  usd(tc)  } | ${  tt.toLocaleString()  } tokens | ${  tr  } requests\n`);
+      print(
+        `  \x1b[90m  Totals: \x1b[0m${usd(tc)} | ${tt.toLocaleString()} tokens | ${tr} requests\n`,
+      );
       break;
     }
 
     case 'reset': {
       banner();
-      if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
       const readline = require('readline');
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const confirm = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
-      const answer = await confirm('  \x1b[31m⚠\x1b[0m This will delete all budget usage records. Continue? [y/N]: ');
+      const confirm = (q: string): Promise<string> =>
+        new Promise((resolve) => rl.question(q, resolve));
+      const answer = await confirm(
+        '  \x1b[31m⚠\x1b[0m This will delete all budget usage records. Continue? [y/N]: ',
+      );
       rl.close();
-      if (answer.toLowerCase() === 'y') { budget.reset(); success('Budget counters reset'); }
-      else { info('Reset cancelled'); }
+      if (answer.toLowerCase() === 'y') {
+        budget.reset();
+        success('Budget counters reset');
+      } else {
+        info('Reset cancelled');
+      }
       break;
     }
 
@@ -1714,41 +1776,77 @@ async function cmdBudget(): Promise<void> {
     case 'cfg': {
       banner();
       print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
-      print('  \x1b[1m\x1b[36m║        \x1b[33m⚙\x1b[0m  Budget Configuration\x1b[36m       ║\x1b[0m');
+      print(
+        '  \x1b[1m\x1b[36m║        \x1b[33m⚙\x1b[0m  Budget Configuration\x1b[36m       ║\x1b[0m',
+      );
       print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
       print('');
-      if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
+      if (!budget) {
+        warn('Budget feature not compiled. Run: npm run build');
+        return;
+      }
       const d = budget.getConfigDisplay();
       const rows: Array<[string, string, string, string]> = [
-        ['globalMonthlyLimit', '$10/month', `$${  d.globalMonthlyLimit.value  }/month`,
-          d.globalMonthlyLimit.value === d.globalMonthlyLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['globalDailyLimit', '$1/day', `$${  d.globalDailyLimit.value  }/day`,
-          d.globalDailyLimit.value === d.globalDailyLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['perAgentLimit', '$10/agent',
-          d.perAgentLimit.value ? `$${  d.perAgentLimit.value  }/agent` : '\x1b[90munset (uses monthly)\x1b[0m',
-          d.perAgentLimit.value === d.perAgentLimit.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['alertThreshold', '80%', `${Math.round((d.alertThreshold.value as number) * 100)  }%`,
-          d.alertThreshold.value === d.alertThreshold.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
-        ['blockOnExhausted', 'yes', d.blockOnExhausted.value ? 'yes' : 'no',
-          d.blockOnExhausted.value === d.blockOnExhausted.default ? '\x1b[90m(default)\x1b[0m' : '\x1b[33m(modified)\x1b[0m'],
+        [
+          'globalMonthlyLimit',
+          '$10/month',
+          `$${d.globalMonthlyLimit.value}/month`,
+          d.globalMonthlyLimit.value === d.globalMonthlyLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'globalDailyLimit',
+          '$1/day',
+          `$${d.globalDailyLimit.value}/day`,
+          d.globalDailyLimit.value === d.globalDailyLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'perAgentLimit',
+          '$10/agent',
+          d.perAgentLimit.value
+            ? `$${d.perAgentLimit.value}/agent`
+            : '\x1b[90munset (uses monthly)\x1b[0m',
+          d.perAgentLimit.value === d.perAgentLimit.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'alertThreshold',
+          '80%',
+          `${Math.round((d.alertThreshold.value as number) * 100)}%`,
+          d.alertThreshold.value === d.alertThreshold.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
+        [
+          'blockOnExhausted',
+          'yes',
+          d.blockOnExhausted.value ? 'yes' : 'no',
+          d.blockOnExhausted.value === d.blockOnExhausted.default
+            ? '\x1b[90m(default)\x1b[0m'
+            : '\x1b[33m(modified)\x1b[0m',
+        ],
         ['enabled', 'false', d.enabled.value ? 'true' : 'false', '\x1b[90m(feature toggle)\x1b[0m'],
       ];
       print('  \x1b[90m  Key               Default       Current               Status\x1b[0m');
-      print(`  \x1b[90m  ${  '─'.repeat(68)}`);
+      print(`  \x1b[90m  ${'─'.repeat(68)}`);
       for (const [key, def, cur, status] of rows) {
-        print(`  \x1b[37m  ${  key.padEnd(20)  }\x1b[0m ${  def.padEnd(14)  } ${  cur.padEnd(20)  } ${  status}`);
+        print(`  \x1b[37m  ${key.padEnd(20)}\x1b[0m ${def.padEnd(14)} ${cur.padEnd(20)} ${status}`);
       }
       print('');
       print('  \x1b[1mQuick commands:\x1b[0m');
-      print("    \x1b[36magclaw budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50");
-      print("    \x1b[36magclaw budget set-limit 5 daily\x1b[0m      Set daily limit to $5");
-      print("    \x1b[36magclaw budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20");
+      print('    \x1b[36magclaw budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50');
+      print('    \x1b[36magclaw budget set-limit 5 daily\x1b[0m      Set daily limit to $5');
+      print('    \x1b[36magclaw budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20');
       print('');
       break;
     }
 
     default:
-      error(`Unknown budget command: ${  subcommand}`);
+      error(`Unknown budget command: ${subcommand}`);
       print('  agclaw budget [status|set-limit|history|reset|config]');
   }
 }
@@ -2177,7 +2275,9 @@ async function cmdSkill(): Promise<void> {
       print('');
       // Use the skills-loader feature directly
       try {
-        const skillsLoader = require(path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js')).default;
+        const skillsLoader = require(
+          path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js'),
+        ).default;
         const skills = skillsLoader.skillsList();
         if (skills.length === 0) {
           info('No skills found');
@@ -2216,7 +2316,9 @@ async function cmdSkill(): Promise<void> {
       banner();
 
       try {
-        const skillsLoader = require(path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js')).default;
+        const skillsLoader = require(
+          path.join(__dirname, 'src', 'features', 'skills-loader', 'index.js'),
+        ).default;
 
         if (refPath) {
           // Level 2: specific reference file
@@ -2348,7 +2450,7 @@ async function cmdSecurity(): Promise<void> {
     try {
       // Security modules are in dist/security/ (not dist/src/security/)
       const baseDir = path.join(__dirname, 'security');
-      
+
       const policyEnginePath = path.join(baseDir, 'policy-engine', 'index.js');
       const credentialManagerPath = path.join(baseDir, 'credential-manager', 'index.js');
       const sandboxPath = path.join(baseDir, 'sandbox', 'index.js');
@@ -2425,7 +2527,8 @@ async function cmdSecurity(): Promise<void> {
       banner();
 
       if (!modules) {
-        warn('Security modules not compiled.'); return;
+        warn('Security modules not compiled.');
+        return;
       }
 
       const policyEngine = modules.getPolicyEngine(securityDbPath);
@@ -2437,12 +2540,17 @@ async function cmdSecurity(): Promise<void> {
         if (policies.length === 0) {
           info('No policies defined.');
         } else {
-          print(`  \x1b[90m  ${'Name'.padEnd(25)} ${'Resource'.padEnd(25)} ${'Action'.padEnd(8)} ${'Effect'.padEnd(8)} ${'Priority'} ${'Enabled'}\x1b[0m`);
-          print(`  \x1b[90m  ${  '─'.repeat(80)}`);
+          print(
+            `  \x1b[90m  ${'Name'.padEnd(25)} ${'Resource'.padEnd(25)} ${'Action'.padEnd(8)} ${'Effect'.padEnd(8)} ${'Priority'} ${'Enabled'}\x1b[0m`,
+          );
+          print(`  \x1b[90m  ${'─'.repeat(80)}`);
           for (const p of policies) {
-            const effectColor = p.effect === 'allow' ? '\x1b[32m' : p.effect === 'deny' ? '\x1b[31m' : '\x1b[33m';
+            const effectColor =
+              p.effect === 'allow' ? '\x1b[32m' : p.effect === 'deny' ? '\x1b[31m' : '\x1b[33m';
             const enabledIcon = p.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[31m○\x1b[0m';
-            print(`    ${p.name.padEnd(25)} ${p.resource.slice(0, 25).padEnd(25)} ${p.action.padEnd(8)} ${effectColor}${p.effect.padEnd(8)}\x1b[0m ${String(p.priority).padEnd(6)} ${enabledIcon}`);
+            print(
+              `    ${p.name.padEnd(25)} ${p.resource.slice(0, 25).padEnd(25)} ${p.action.padEnd(8)} ${effectColor}${p.effect.padEnd(8)}\x1b[0m ${String(p.priority).padEnd(6)} ${enabledIcon}`,
+            );
           }
           print('');
         }
@@ -2463,7 +2571,9 @@ async function cmdSecurity(): Promise<void> {
         const requiresApproval = args.includes('--requires-approval');
 
         if (!name || !effect || !resource) {
-          error('Usage: agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern> [--action <action>] [--priority <n>] [--requires-approval]');
+          error(
+            'Usage: agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern> [--action <action>] [--priority <n>] [--requires-approval]',
+          );
           return;
         }
 
@@ -2485,31 +2595,45 @@ async function cmdSecurity(): Promise<void> {
 
       if (policySubcommand === 'remove' || policySubcommand === 'rm') {
         const policyId = args[3];
-        if (!policyId) { error('Usage: agclaw security policies remove <policy-id>'); return; }
+        if (!policyId) {
+          error('Usage: agclaw security policies remove <policy-id>');
+          return;
+        }
         const ok = policyEngine.removePolicy(policyId);
-        if (ok) success('Policy removed'); else error('Policy not found');
+        if (ok) success('Policy removed');
+        else error('Policy not found');
         break;
       }
 
       if (policySubcommand === 'enable') {
         const policyId = args[3];
-        if (!policyId) { error('Usage: agclaw security policies enable <policy-id>'); return; }
+        if (!policyId) {
+          error('Usage: agclaw security policies enable <policy-id>');
+          return;
+        }
         const ok = policyEngine.setPolicyEnabled(policyId, true);
-        if (ok) success('Policy enabled'); else error('Policy not found');
+        if (ok) success('Policy enabled');
+        else error('Policy not found');
         break;
       }
 
       if (policySubcommand === 'disable') {
         const policyId = args[3];
-        if (!policyId) { error('Usage: agclaw security policies disable <policy-id>'); return; }
+        if (!policyId) {
+          error('Usage: agclaw security policies disable <policy-id>');
+          return;
+        }
         const ok = policyEngine.setPolicyEnabled(policyId, false);
-        if (ok) success('Policy disabled'); else error('Policy not found');
+        if (ok) success('Policy disabled');
+        else error('Policy not found');
         break;
       }
 
       info('Policy commands:');
       print('  agclaw security policies list');
-      print('  agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern>');
+      print(
+        '  agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern>',
+      );
       print('  agclaw security policies remove <id>');
       print('  agclaw security policies enable <id>');
       print('  agclaw security policies disable <id>');
@@ -2522,7 +2646,8 @@ async function cmdSecurity(): Promise<void> {
       banner();
 
       if (!modules) {
-        warn('Security modules not compiled.'); return;
+        warn('Security modules not compiled.');
+        return;
       }
 
       const approvalUI = modules.getApprovalUI();
@@ -2536,28 +2661,42 @@ async function cmdSecurity(): Promise<void> {
 
       if (approvalSubcommand === 'show') {
         const approvalId = args[3];
-        if (!approvalId) { error('Usage: agclaw security approval show <id>'); return; }
+        if (!approvalId) {
+          error('Usage: agclaw security approval show <id>');
+          return;
+        }
         const approval = policyEngine.getApproval(approvalId);
-        if (!approval) { error('Approval not found'); return; }
+        if (!approval) {
+          error('Approval not found');
+          return;
+        }
         print(approvalUI.renderDetail(approval));
         break;
       }
 
       if (approvalSubcommand === 'approve') {
         const approvalId = args[3];
-        if (!approvalId) { error('Usage: agclaw security approve <id>'); return; }
+        if (!approvalId) {
+          error('Usage: agclaw security approve <id>');
+          return;
+        }
         const userId = 'cli-user';
         const result = approvalUI.handleResponse(approvalId, 'approve', userId);
-        if (result.success) success('Request approved'); else error(`Failed: ${result.error}`);
+        if (result.success) success('Request approved');
+        else error(`Failed: ${result.error}`);
         break;
       }
 
       if (approvalSubcommand === 'deny') {
         const approvalId = args[3];
-        if (!approvalId) { error('Usage: agclaw security deny <id>'); return; }
+        if (!approvalId) {
+          error('Usage: agclaw security deny <id>');
+          return;
+        }
         const userId = 'cli-user';
         const result = approvalUI.handleResponse(approvalId, 'deny', userId);
-        if (result.success) success('Request denied'); else error(`Failed: ${result.error}`);
+        if (result.success) success('Request denied');
+        else error(`Failed: ${result.error}`);
         break;
       }
 
@@ -2572,7 +2711,10 @@ async function cmdSecurity(): Promise<void> {
     case 'audit':
     case 'log': {
       banner();
-      if (!modules) { warn('Security modules not compiled.'); return; }
+      if (!modules) {
+        warn('Security modules not compiled.');
+        return;
+      }
 
       const policyEngine = modules.getPolicyEngine(securityDbPath);
 
@@ -2582,8 +2724,10 @@ async function cmdSecurity(): Promise<void> {
       const actionIdx = args.indexOf('--action');
       const limitIdx = args.indexOf('--limit');
 
-      const since = sinceIdx !== -1 && args[sinceIdx + 1] ? new Date(args[sinceIdx + 1]!).getTime() : undefined;
-      const until = untilIdx !== -1 && args[untilIdx + 1] ? new Date(args[untilIdx + 1]!).getTime() : undefined;
+      const since =
+        sinceIdx !== -1 && args[sinceIdx + 1] ? new Date(args[sinceIdx + 1]!).getTime() : undefined;
+      const until =
+        untilIdx !== -1 && args[untilIdx + 1] ? new Date(args[untilIdx + 1]!).getTime() : undefined;
       const actor = actorIdx !== -1 ? args[actorIdx + 1] : undefined;
       const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
       const limit = limitIdx !== -1 && args[limitIdx + 1] ? parseInt(args[limitIdx + 1]!, 10) : 50;
@@ -2596,14 +2740,22 @@ async function cmdSecurity(): Promise<void> {
       if (entries.length === 0) {
         info('No audit entries found.');
       } else {
-        print(`  \x1b[90m  ${'Time'.padEnd(20)} ${'Severity'.padEnd(8)} ${'Action'.padEnd(25)} ${'Actor'.padEnd(12)} Decision\x1b[0m`);
-        print(`  \x1b[90m  ${  '─'.repeat(85)}`);
+        print(
+          `  \x1b[90m  ${'Time'.padEnd(20)} ${'Severity'.padEnd(8)} ${'Action'.padEnd(25)} ${'Actor'.padEnd(12)} Decision\x1b[0m`,
+        );
+        print(`  \x1b[90m  ${'─'.repeat(85)}`);
         for (const entry of entries) {
           const time = new Date(entry.timestamp).toISOString().slice(0, 19).replace('T', ' ');
-          const sevColor = entry.severity === 'error' || entry.severity === 'critical' ? '\x1b[31m' :
-                           entry.severity === 'warning' ? '\x1b[33m' : '\x1b[90m';
+          const sevColor =
+            entry.severity === 'error' || entry.severity === 'critical'
+              ? '\x1b[31m'
+              : entry.severity === 'warning'
+                ? '\x1b[33m'
+                : '\x1b[90m';
           const decisionStr = entry.decision ? entry.decision.padEnd(8) : '         ';
-          print(`    ${time} ${sevColor}${entry.severity.padEnd(8)}\x1b[0m ${entry.action.padEnd(25)} ${(entry.actor || '-').padEnd(12)} ${decisionStr}`);
+          print(
+            `    ${time} ${sevColor}${entry.severity.padEnd(8)}\x1b[0m ${entry.action.padEnd(25)} ${(entry.actor || '-').padEnd(12)} ${decisionStr}`,
+          );
         }
       }
       print('');
@@ -2613,7 +2765,10 @@ async function cmdSecurity(): Promise<void> {
     case 'credentials':
     case 'creds': {
       banner();
-      if (!modules) { warn('Security modules not compiled.'); return; }
+      if (!modules) {
+        warn('Security modules not compiled.');
+        return;
+      }
 
       const credManager = modules.getCredentialManager(securityDbPath);
 
@@ -2624,13 +2779,17 @@ async function cmdSecurity(): Promise<void> {
         if (creds.length === 0) {
           info('No credentials stored.');
         } else {
-          print(`  \x1b[90m  ${'Name'.padEnd(20)} ${'Provider'.padEnd(15)} ${'Type'.padEnd(10)} Expires\x1b[0m`);
-          print(`  \x1b[90m  ${  '─'.repeat(65)}`);
+          print(
+            `  \x1b[90m  ${'Name'.padEnd(20)} ${'Provider'.padEnd(15)} ${'Type'.padEnd(10)} Expires\x1b[0m`,
+          );
+          print(`  \x1b[90m  ${'─'.repeat(65)}`);
           for (const c of creds) {
             const expiresIn = formatExpiry(c.expiresAt);
             const expiringSoon = c.expiresAt - Date.now() < 300000;
             const expColor = expiringSoon ? '\x1b[33m' : '\x1b[90m';
-            print(`    ${c.name.padEnd(20)} ${c.provider.padEnd(15)} ${c.type.padEnd(10)} ${expColor}${expiresIn}\x1b[0m`);
+            print(
+              `    ${c.name.padEnd(20)} ${c.provider.padEnd(15)} ${c.type.padEnd(10)} ${expColor}${expiresIn}\x1b[0m`,
+            );
           }
         }
         print('');
@@ -2650,7 +2809,10 @@ async function cmdSecurity(): Promise<void> {
 
     case 'sandbox': {
       banner();
-      if (!modules) { warn('Security modules not compiled.'); return; }
+      if (!modules) {
+        warn('Security modules not compiled.');
+        return;
+      }
 
       const sandbox = modules.getSandboxExecutor();
       const config = sandbox.getConfig();
@@ -2658,7 +2820,9 @@ async function cmdSecurity(): Promise<void> {
       info('Sandbox Configuration:');
       print('');
       print(`  Enabled:          ${config.enabled ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
-      print(`  Network Isolation: ${config.networkIsolation ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
+      print(
+        `  Network Isolation: ${config.networkIsolation ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`,
+      );
       print(`  Allow Exec:       ${config.allowExec ? '\x1b[32myes\x1b[0m' : '\x1b[31mno\x1b[0m'}`);
       print(`  Max Memory:       ${config.maxMemoryMb ?? 512} MB`);
       print(`  Max CPU:          ${config.maxCpuPercent ?? 50}%`);
@@ -2734,7 +2898,9 @@ async function cmdSecurity(): Promise<void> {
       print('  \x1b[1magclaw security blueprint\x1b[0m [init|show]');
       print('');
       print('  \x1b[1mExamples:\x1b[0m');
-      print('    agclaw security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read');
+      print(
+        '    agclaw security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read',
+      );
       print('    agclaw security approve abc-123         Approve request');
       print('    agclaw security deny def-456          Deny request');
       print('');
@@ -2864,7 +3030,6 @@ async function cmdTelegram(): Promise<void> {
   }
 }
 
-
 // ─── Self-Improving Loop ──────────────────────────────────────────────────────
 
 async function cmdImprove(): Promise<void> {
@@ -2967,7 +3132,7 @@ async function cmdImprove(): Promise<void> {
 
 async function runStandaloneImprove(
   phase: 'all' | 'error' | 'skill' | 'memory' | 'model' | 'correction',
-  opts: { dryRun: boolean; forceRun: boolean; verbose: boolean }
+  opts: { dryRun: boolean; forceRun: boolean; verbose: boolean },
 ): Promise<void> {
   const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
   const memoryDir = path.join(workDir, 'memory');
@@ -2983,7 +3148,9 @@ async function runStandaloneImprove(
 
   const sessionsExist = fs.existsSync(sessionsDb);
   print(`  Sessions DB: ${sessionsExist ? '\x1b[32mfound\x1b[0m' : '\x1b[31mnot found\x1b[0m'}`);
-  print(`  Memory dir:  ${fs.existsSync(memoryDir) ? '\x1b[32mfound\x1b[0m' : '\x1b[31mnot found\x1b[0m'}`);
+  print(
+    `  Memory dir:  ${fs.existsSync(memoryDir) ? '\x1b[32mfound\x1b[0m' : '\x1b[31mnot found\x1b[0m'}`,
+  );
   print('');
 
   if (opts.dryRun) {
@@ -3021,14 +3188,11 @@ async function cmdLearnings(): Promise<void> {
 
   const verbose = args.includes('--verbose') || args.includes('-v');
   const limitArg = args.indexOf('--limit');
-  const limit = limitArg !== -1 && args[limitArg + 1]
-    ? parseInt(args[limitArg + 1]!, 10)
-    : 20;
+  const limit = limitArg !== -1 && args[limitArg + 1] ? parseInt(args[limitArg + 1]!, 10) : 20;
 
   const categoryArg = args.indexOf('--category');
-  const categoryFilter = categoryArg !== -1 && args[categoryArg + 1]
-    ? args[categoryArg + 1]!.toLowerCase()
-    : null;
+  const categoryFilter =
+    categoryArg !== -1 && args[categoryArg + 1] ? args[categoryArg + 1]!.toLowerCase() : null;
 
   let feature: any = null;
   try {
@@ -3090,7 +3254,9 @@ async function cmdLearnings(): Promise<void> {
   for (const [cat, items] of Object.entries(byCategory)) {
     const icon = categoryIcons[cat] || '\x1b[37m•\x1b[0m';
     const catName = cat.replace('_', ' ');
-    print(`  ${icon} \x1b[1m${catName}\x1b[0m  \x1b[90m(${items.length} lesson${items.length !== 1 ? 's' : ''})\x1b[0m`);
+    print(
+      `  ${icon} \x1b[1m${catName}\x1b[0m  \x1b[90m(${items.length} lesson${items.length !== 1 ? 's' : ''})\x1b[0m`,
+    );
   }
 
   print('');

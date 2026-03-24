@@ -70,8 +70,12 @@ function validateSandbox(sandbox: unknown): BlueprintSandbox | null {
 
   return {
     enabled: s.enabled !== false,
-    allowedPaths: Array.isArray(s.allowedPaths) ? s.allowedPaths.filter((p) => typeof p === 'string') : [],
-    deniedPaths: Array.isArray(s.deniedPaths) ? s.deniedPaths.filter((p) => typeof p === 'string') : [],
+    allowedPaths: Array.isArray(s.allowedPaths)
+      ? s.allowedPaths.filter((p) => typeof p === 'string')
+      : [],
+    deniedPaths: Array.isArray(s.deniedPaths)
+      ? s.deniedPaths.filter((p) => typeof p === 'string')
+      : [],
     maxMemory: typeof s.maxMemory === 'number' ? s.maxMemory : undefined,
     maxCpu: typeof s.maxCpu === 'number' ? s.maxCpu : undefined,
     networkIsolation: s.networkIsolation !== false,
@@ -91,10 +95,12 @@ function validatePolicies(policies: unknown): BlueprintPolicy[] | null {
       name: String(p.name ?? 'unnamed'),
       resource: String(p.resource ?? '**'),
       action: String(p.action ?? '*'),
-      effect: validEffects.has(p.effect as string) ? (p.effect as 'allow' | 'deny' | 'approve') : 'deny',
+      effect: validEffects.has(p.effect as string)
+        ? (p.effect as 'allow' | 'deny' | 'approve')
+        : 'deny',
       conditions: Array.isArray(p.conditions) ? p.conditions : undefined,
       requiresApproval: Boolean(p.requiresApproval),
-      approvalRisk: p.approvalRisk as BlueprintPolicy['approvalRisk'] ?? 'medium',
+      approvalRisk: (p.approvalRisk as BlueprintPolicy['approvalRisk']) ?? 'medium',
       priority: typeof p.priority === 'number' ? p.priority : 0,
     }));
 }
@@ -107,7 +113,10 @@ function validateCredentials(creds: unknown): BlueprintCredentials | null {
   return {
     autoRotate: c.autoRotate !== false,
     ttlSeconds: typeof c.ttlSeconds === 'number' ? c.ttlSeconds : 1800,
-    providers: typeof c.providers === 'object' && c.providers !== null ? c.providers as Record<string, unknown> as BlueprintCredentials['providers'] : undefined,
+    providers:
+      typeof c.providers === 'object' && c.providers !== null
+        ? (c.providers as Record<string, unknown> as BlueprintCredentials['providers'])
+        : undefined,
   };
 }
 
@@ -153,15 +162,20 @@ function validateBlueprint(data: unknown): Blueprint | null {
   }
 
   if (d.rateLimits) {
-    blueprint.rateLimits = typeof d.rateLimits === 'object' ? d.rateLimits as Blueprint['rateLimits'] : undefined;
+    blueprint.rateLimits =
+      typeof d.rateLimits === 'object' ? (d.rateLimits as Blueprint['rateLimits']) : undefined;
   }
 
   if (d.allowedHosts) {
-    blueprint.allowedHosts = Array.isArray(d.allowedHosts) ? d.allowedHosts.filter((h) => typeof h === 'string') : undefined;
+    blueprint.allowedHosts = Array.isArray(d.allowedHosts)
+      ? d.allowedHosts.filter((h) => typeof h === 'string')
+      : undefined;
   }
 
   if (d.allowedPaths) {
-    blueprint.allowedPaths = Array.isArray(d.allowedPaths) ? d.allowedPaths.filter((p) => typeof p === 'string') : undefined;
+    blueprint.allowedPaths = Array.isArray(d.allowedPaths)
+      ? d.allowedPaths.filter((p) => typeof p === 'string')
+      : undefined;
   }
 
   return blueprint;

@@ -20,22 +20,13 @@ import { resolve } from 'path';
 import { createLogger, type Logger } from '../../core/logger';
 import { getPolicyEngine } from '../policy-engine';
 
-import type {
-  SandboxConfig,
-  SandboxResult,
-  SandboxCheckResult,
-  AgentAction,
-} from '../types';
+import type { SandboxConfig, SandboxResult, SandboxCheckResult, AgentAction } from '../types';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: SandboxConfig = {
   enabled: true,
-  allowedPaths: [
-    '~/ag-claw/',
-    '~/ag-claw/data/',
-    '/tmp/ag-claw-sandbox/',
-  ],
+  allowedPaths: ['~/ag-claw/', '~/ag-claw/data/', '/tmp/ag-claw-sandbox/'],
   deniedPaths: [
     '/etc/',
     '/root/',
@@ -118,8 +109,12 @@ export class SandboxExecutor {
    */
   updateConfig(config: Partial<SandboxConfig>): void {
     this.config = { ...this.config, ...config };
-    this.config.allowedPaths = (this.config.allowedPaths ?? DEFAULT_CONFIG.allowedPaths).map(expandPath);
-    this.config.deniedPaths = (this.config.deniedPaths ?? DEFAULT_CONFIG.deniedPaths).map(expandPath);
+    this.config.allowedPaths = (this.config.allowedPaths ?? DEFAULT_CONFIG.allowedPaths).map(
+      expandPath,
+    );
+    this.config.deniedPaths = (this.config.deniedPaths ?? DEFAULT_CONFIG.deniedPaths).map(
+      expandPath,
+    );
   }
 
   getConfig(): SandboxConfig {
@@ -219,7 +214,11 @@ export class SandboxExecutor {
   /**
    * Execute code in a sandboxed environment.
    */
-  async execute(code: string, lang: string, options?: { timeoutMs?: number; workingDir?: string }): Promise<SandboxResult> {
+  async execute(
+    code: string,
+    lang: string,
+    options?: { timeoutMs?: number; workingDir?: string },
+  ): Promise<SandboxResult> {
     const startTime = Date.now();
     const langLower = lang.toLowerCase();
 
@@ -272,22 +271,36 @@ export class SandboxExecutor {
           };
       }
 
-      this.logAudit('sandbox.execute', 'info', undefined, `exec://${langLower}`, {
-        language: langLower,
-        success: result.success,
-        executionTimeMs: result.executionTimeMs,
-        outputSize: result.output?.length ?? 0,
-      }, result.success);
+      this.logAudit(
+        'sandbox.execute',
+        'info',
+        undefined,
+        `exec://${langLower}`,
+        {
+          language: langLower,
+          success: result.success,
+          executionTimeMs: result.executionTimeMs,
+          outputSize: result.output?.length ?? 0,
+        },
+        result.success,
+      );
 
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       this.blockedCount++;
 
-      this.logAudit('sandbox.block', 'warning', undefined, `exec://${langLower}`, {
-        language: langLower,
-        error,
-      }, false);
+      this.logAudit(
+        'sandbox.block',
+        'warning',
+        undefined,
+        `exec://${langLower}`,
+        {
+          language: langLower,
+          error,
+        },
+        false,
+      );
 
       return {
         success: false,
@@ -298,15 +311,16 @@ export class SandboxExecutor {
     }
   }
 
-  private async executeJavaScript(code: string, timeoutMs: number, workingDir?: string): Promise<SandboxResult> {
+  private async executeJavaScript(
+    code: string,
+    timeoutMs: number,
+    workingDir?: string,
+  ): Promise<SandboxResult> {
     const startTime = Date.now();
 
     return new Promise((resolve) => {
       // Use Node.js to execute with --input-type=module and restricted globals
-      const child = spawn('node', [
-        '--input-type=module',
-        '--eval', code,
-      ], {
+      const child = spawn('node', ['--input-type=module', '--eval', code], {
         timeout: timeoutMs,
         cwd: workingDir ?? '/tmp',
         env: {
@@ -362,7 +376,11 @@ export class SandboxExecutor {
     });
   }
 
-  private async executePython(code: string, timeoutMs: number, workingDir?: string): Promise<SandboxResult> {
+  private async executePython(
+    code: string,
+    timeoutMs: number,
+    workingDir?: string,
+  ): Promise<SandboxResult> {
     const startTime = Date.now();
 
     return new Promise((resolve) => {
@@ -421,7 +439,11 @@ export class SandboxExecutor {
     });
   }
 
-  private async executeBash(code: string, timeoutMs: number, workingDir?: string): Promise<SandboxResult> {
+  private async executeBash(
+    code: string,
+    timeoutMs: number,
+    workingDir?: string,
+  ): Promise<SandboxResult> {
     if (!this.config.allowExec) {
       return {
         success: false,

@@ -17,11 +17,7 @@ import { resolve, dirname } from 'path';
 import { createLogger, type Logger } from '../../core/logger';
 import { getPolicyEngine } from '../policy-engine';
 
-import type {
-  ApprovalRequest,
-  ApprovalRisk,
-
-} from '../types';
+import type { ApprovalRequest, ApprovalRisk } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,8 +29,8 @@ const RISK_ICONS: Record<ApprovalRisk, string> = {
 };
 
 const RISK_COLORS: Record<ApprovalRisk, string> = {
-  low: '\x1b[34m',      // blue
-  medium: '\x1b[33m',   // yellow
+  low: '\x1b[34m', // blue
+  medium: '\x1b[33m', // yellow
   high: '\x1b[38;5;208m', // orange
   critical: '\x1b[31m', // red
 };
@@ -86,10 +82,14 @@ export class ApprovalUI {
 
     console.log('\n');
     console.log(`  ${'═'.repeat(70)}`);
-    console.log(`  ${riskIcon} ${riskColor}${RISK_LABELS[request.risk]}\x1b[0m Security Approval Required`);
+    console.log(
+      `  ${riskIcon} ${riskColor}${RISK_LABELS[request.risk]}\x1b[0m Security Approval Required`,
+    );
     console.log(`  ${'═'.repeat(70)}`);
     console.log('');
-    console.log(`  \x1b[1mAgent:\x1b[0m ${request.agentId}${request.agentName ? ` (${request.agentName})` : ''}`);
+    console.log(
+      `  \x1b[1mAgent:\x1b[0m ${request.agentId}${request.agentName ? ` (${request.agentName})` : ''}`,
+    );
     console.log(`  \x1b[1mRequest ID:\x1b[0m ${request.id}`);
     console.log(`  \x1b[1mTime:\x1b[0m ${new Date(request.requestedAt).toLocaleString()}`);
     console.log(`  \x1b[1mExpires:\x1b[0m ${new Date(request.expiresAt).toLocaleString()}`);
@@ -123,7 +123,9 @@ export class ApprovalUI {
     let response: 'approve' | 'deny' | 'cancel' = 'cancel';
 
     while (response === 'cancel') {
-      const answer = await question('  \x1b[36m[A]pprove\x1b[0m / \x1b[31m[D]eny\x1b[0m / \x1b[90m[C]ancel\x1b[0m: ');
+      const answer = await question(
+        '  \x1b[36m[A]pprove\x1b[0m / \x1b[31m[D]eny\x1b[0m / \x1b[90m[C]ancel\x1b[0m: ',
+      );
 
       switch (answer.trim().toLowerCase()) {
         case 'a':
@@ -162,7 +164,9 @@ export class ApprovalUI {
     const riskIcon = RISK_ICONS[request.risk];
 
     console.log('\n');
-    console.log(`  \x1b[1m${riskIcon} ${riskColor}[SECURITY APPROVAL REQUIRED]\x1b[0m ${request.agentId}`);
+    console.log(
+      `  \x1b[1m${riskIcon} ${riskColor}[SECURITY APPROVAL REQUIRED]\x1b[0m ${request.agentId}`,
+    );
     console.log(`  \x1b[90mRequest ID: ${request.id} | Risk: ${RISK_LABELS[request.risk]}\x1b[0m`);
     console.log(`  \x1b[90m${request.details.what}\x1b[0m`);
     console.log('');
@@ -194,9 +198,13 @@ export class ApprovalUI {
       const age = formatAge(req.requestedAt);
       const expiresIn = formatExpiry(req.expiresAt);
 
-      lines.push(`  ${riskIcon} \x1b[1m${req.id.slice(0, 8)}\x1b[0m ${riskColor}${RISK_LABELS[req.risk]}\x1b[0m`);
+      lines.push(
+        `  ${riskIcon} \x1b[1m${req.id.slice(0, 8)}\x1b[0m ${riskColor}${RISK_LABELS[req.risk]}\x1b[0m`,
+      );
       lines.push(`    Agent: ${req.agentId} | ${age} | Expires: ${expiresIn}`);
-      lines.push(`    ${req.details.what.slice(0, 60)}${req.details.what.length > 60 ? '...' : ''}`);
+      lines.push(
+        `    ${req.details.what.slice(0, 60)}${req.details.what.length > 60 ? '...' : ''}`,
+      );
       lines.push('');
     }
 
@@ -216,7 +224,9 @@ export class ApprovalUI {
     lines.push(`  ${'═'.repeat(70)}`);
     lines.push(`  \x1b[1mStatus:\x1b[0m ${request.status}`);
     lines.push(`  \x1b[1mRisk:\x1b[0m ${riskColor}${RISK_LABELS[request.risk]}\x1b[0m ${riskIcon}`);
-    lines.push(`  \x1b[1mAgent:\x1b[0m ${request.agentId}${request.agentName ? ` (${request.agentName})` : ''}`);
+    lines.push(
+      `  \x1b[1mAgent:\x1b[0m ${request.agentId}${request.agentName ? ` (${request.agentName})` : ''}`,
+    );
     lines.push(`  \x1b[1mRequested:\x1b[0m ${new Date(request.requestedAt).toLocaleString()}`);
     lines.push(`  \x1b[1mExpires:\x1b[0m ${new Date(request.expiresAt).toLocaleString()}`);
     lines.push('');
@@ -235,7 +245,9 @@ export class ApprovalUI {
     }
     if (request.respondedBy) {
       lines.push(`  ${'─'.repeat(70)}`);
-      lines.push(`  \x1b[1mResponded by:\x1b[0m ${request.respondedBy} at ${request.respondedAt ? new Date(request.respondedAt).toLocaleString() : 'N/A'}`);
+      lines.push(
+        `  \x1b[1mResponded by:\x1b[0m ${request.respondedBy} at ${request.respondedAt ? new Date(request.respondedAt).toLocaleString() : 'N/A'}`,
+      );
       if (request.notes) {
         lines.push(`  \x1b[1mNotes:\x1b[0m ${request.notes}`);
       }
@@ -261,12 +273,18 @@ export class ApprovalUI {
       if (decision === 'approve') {
         const ok = policyEngine.approve(requestId, userId, notes);
         if (!ok) {
-          return { success: false, error: 'Failed to approve (request not found, already responded, or expired)' };
+          return {
+            success: false,
+            error: 'Failed to approve (request not found, already responded, or expired)',
+          };
         }
       } else {
         const ok = policyEngine.deny(requestId, userId, notes);
         if (!ok) {
-          return { success: false, error: 'Failed to deny (request not found, already responded, or expired)' };
+          return {
+            success: false,
+            error: 'Failed to deny (request not found, already responded, or expired)',
+          };
         }
       }
 

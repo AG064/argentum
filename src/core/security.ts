@@ -283,18 +283,18 @@ export function sanitizeHTML(html: string): string {
       'code',
       'pre',
       'a',
-      'img'
+      'img',
     ],
     allowedAttributes: {
-      a: ['href', 'title', 'target', 'rel'],
-      img: ['src', 'alt', 'title'],
-      '*': ['class']
+      'a': ['href', 'title', 'target', 'rel'],
+      'img': ['src', 'alt', 'title'],
+      '*': ['class'],
     },
     // Only allow safe URL schemes; blocks javascript:, vbscript:, etc.
     allowedSchemes: ['http', 'https', 'mailto'],
     // Restrict data: URIs to safe image types only on img tags.
     allowedSchemesByTag: {
-      img: ['http', 'https', 'data']
+      img: ['http', 'https', 'data'],
     },
     // Ensure noreferrer/noopener on links that open in a new tab.
     transformTags: {
@@ -302,12 +302,12 @@ export function sanitizeHTML(html: string): string {
         const transformed = { ...attribs };
         if (transformed.target === '_blank') {
           transformed.rel = transformed.rel
-            ? `${transformed.rel  } noopener noreferrer`
+            ? `${transformed.rel} noopener noreferrer`
             : 'noopener noreferrer';
         }
         return { tagName, attribs: transformed };
-      }
-    }
+      },
+    },
   });
 }
 
