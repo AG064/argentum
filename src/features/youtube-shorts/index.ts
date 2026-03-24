@@ -19,7 +19,8 @@ import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 
-import { google, youtube_v3 } from 'googleapis';
+import { google } from 'googleapis';
+import type { youtube_v3 } from 'googleapis';
 
 import {
   type FeatureModule,
@@ -65,6 +66,13 @@ export interface UploadOptions {
   description?: string;
   tags?: string[];
   privacyStatus?: 'private' | 'unlisted' | 'public';
+}
+
+interface YouTubeUploadResponse {
+  success: boolean;
+  videoId?: string;
+  url?: string;
+  error?: string;
 }
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
@@ -179,9 +187,15 @@ class YouTubeShortsFeature implements FeatureModule {
    */
   private initYouTubeClient(): void {
     try {
+      const youtubeNamespace = google.youtube_v3;
+      if (!youtubeNamespace) {
+        this.ctx?.logger?.error?.('YouTube API v3 not available in googleapis');
+        return;
+      }
+
       if (this.config.youtubeApiKey) {
         // API Key authentication
-        this.youtubeClient = new google.youtube_v3.Youtube({
+        this.youtubeClient = new youtubeNamespace.Youtube({
           auth: this.config.youtubeApiKey,
         });
         this.ctx?.logger?.info?.('YouTube client initialized with API key');
@@ -189,7 +203,7 @@ class YouTubeShortsFeature implements FeatureModule {
         // OAuth2 with access token
         const oauth2 = new google.auth.OAuth2();
         oauth2.setCredentials({ access_token: this.config.youtubeAccessToken });
-        this.youtubeClient = new google.youtube_v3.Youtube({ auth: oauth2 });
+        this.youtubeClient = new youtubeNamespace.Youtube({ auth: oauth2 });
         this.ctx?.logger?.info?.('YouTube client initialized with OAuth2 access token');
       } else if (this.config.youtubeRefreshToken && this.config.youtubeClientId && this.config.youtubeClientSecret) {
         // OAuth2 with refresh token - requires getting new access token
@@ -198,7 +212,7 @@ class YouTubeShortsFeature implements FeatureModule {
           this.config.youtubeClientSecret,
         );
         oauth2Client.setCredentials({ refresh_token: this.config.youtubeRefreshToken });
-        this.youtubeClient = new google.youtube_v3.Youtube({ auth: oauth2Client });
+        this.youtubeClient = new youtubeNamespace.Youtube({ auth: oauth2Client });
         this.ctx?.logger?.info?.('YouTube client initialized with OAuth2 refresh token');
       }
     } catch (err) {
@@ -303,7 +317,7 @@ class YouTubeShortsFeature implements FeatureModule {
   }
 
   /**
-   * Upload a video file to YouTube Shorts
+   * Upload a video file to YouTube Shorts using googleapis
    */
   async uploadToYouTube(
     filePath: string,
@@ -341,28 +355,26 @@ class YouTubeShortsFeature implements FeatureModule {
     });
 
     try {
-      const response = await this.youtubeClient.videos.insert({
-        part: ['snippet', 'status'],
-        requestBody: {
-          snippet: {
-            title,
-            description,
-            tags,
-            categoryId: '22', // People & Blogs - commonly used for Shorts
+      const response = await this.youtubeClient.videos.insert(
+        {
+          part: ['snippet', 'status'],
+          requestBody: {
+            snippet: {
+              title,
+              description,
+              tags,
+              categoryId: '22', // People & Blogs - commonly used for Shorts
+            },
+            status: {
+              privacyStatus,
+              selfDeclaredMadeForKids: false,
+            },
           },
-          status: {
-            privacyStatus,
-            selfDeclaredMadeForKids: false,
+          media: {
+            body: videoData,
           },
-        },
-        media: {
-          body: videoData,
-        },
-      }, {
-        // YouTube Data API v3 requires specifying video type for Shorts
-        // The API doesn't have a separate "shorts" endpoint - they're just videos
-        // with specific metadata. Shorts are typically <60s and vertical.
-      });
+        }
+      );
 
       const videoId = response.data.id;
       if (!videoId) {
@@ -374,24 +386,37 @@ class YouTubeShortsFeature implements FeatureModule {
 
       return { videoId, videoUrl };
     } catch (err: unknown) {
-      const error = err instanceof Error ? err.message : String(err);
-      this.ctx?.logger?.error?.('YouTube upload failed', { error });
+      const errorMessage = this.extractErrorMessage(err);
+      this.ctx?.logger?.error?.('YouTube upload failed', { error: errorMessage });
 
       // Handle specific YouTube API errors
-      if (error.includes('quotaExceeded')) {
+      if (errorMessage.includes('quotaExceeded')) {
         throw new Error('YouTube API quota exceeded. Try again tomorrow.');
       }
-      if (error.includes('unauthorized')) {
+      if (errorMessage.includes('unauthorized')) {
         throw new Error('YouTube authorization failed. Check your API key or OAuth token.');
       }
-      throw new Error(`YouTube upload failed: ${error}`);
+      throw new Error(`YouTube upload failed: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Extract error message from unknown error type
+   */
+  private extractErrorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (typeof err === 'string') return err;
+    return String(err);
   }
 
   /**
    * Process a YouTube URL and generate shorts
    */
-  async processVideo(url: string, segmentCount: number = 3, uploadToPlatforms: boolean = true): Promise<ShortResult[]> {
+  async processVideo(
+    url: string,
+    segmentCount: number = 3,
+    uploadToPlatforms: boolean = true
+  ): Promise<ShortResult[]> {
     const tmpDir = join(this.config.outputDir, `tmp-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
     const videoPath = join(tmpDir, 'video.mp4');
@@ -427,7 +452,7 @@ class YouTubeShortsFeature implements FeatureModule {
               result.youtubeVideoId = videoId;
               result.youtubeUrl = videoUrl;
             } catch (uploadErr) {
-              const uploadError = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+              const uploadError = this.extractErrorMessage(uploadErr);
               result.error = `Upload failed: ${uploadError}`;
               this.ctx?.logger?.error?.(`YouTube upload failed for segment ${i}`, { error: uploadError });
             }
@@ -435,7 +460,7 @@ class YouTubeShortsFeature implements FeatureModule {
 
           results.push(result);
         } catch (err) {
-          const error = err instanceof Error ? err.message : String(err);
+          const error = this.extractErrorMessage(err);
           this.ctx?.logger?.error?.(`Failed to generate short ${i}`, { error });
           results.push({
             outputPath: outPath,
@@ -455,138 +480,6 @@ class YouTubeShortsFeature implements FeatureModule {
         // Ignore cleanup errors
       }
     }
-  }
-
-  /**
-   * Publish a short video to YouTube Shorts
-   * Uses YouTube Data API v3
-   */
-  async publishToYouTube(
-    videoPath: string,
-    title: string,
-    description: string
-  ): Promise<{ success: boolean; videoId?: string; url?: string; error?: string }> {
-    const apiKey = process.env.YOUTUBE_API_KEY;
-    const accessToken = process.env.YOUTUBE_ACCESS_TOKEN;
-
-    if (!apiKey && !accessToken) {
-      return {
-        success: false,
-        error: 'YouTube API credentials not configured. Set YOUTUBE_API_KEY or YOUTUBE_ACCESS_TOKEN',
-      };
-    }
-
-    if (!existsSync(videoPath)) {
-      return { success: false, error: `Video file not found: ${videoPath}` };
-    }
-
-    try {
-      // Read video file as base64
-      const videoBuffer = require('fs').readFileSync(videoPath);
-      const videoBase64 = videoBuffer.toString('base64');
-
-      // Upload using YouTube Data API v3
-      const endpoint = 'https://www.googleapis.com/upload/youtube/v3/videos';
-
-      // First, initiate the upload
-      const metadata = {
-        snippet: {
-          title: title.substring(0, 100),
-          description: description.substring(0, 5000),
-          tags: ['shorts', 'generated'],
-          categoryId: '22', // People & Blogs
-        },
-        status: {
-          privacyStatus: this.config.youtube?.privacyStatus || 'unlisted',
-          selfDeclaredMadeForKids: false,
-        },
-      };
-
-      const initResponse = await fetch(`${endpoint}?part=snippet,status&uploadType=resumable`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          ...(apiKey && !accessToken ? { 'X-Goog-Api-Key': apiKey } : {}),
-        },
-        body: JSON.stringify(metadata),
-      });
-
-      if (!initResponse.ok) {
-        const errorText = await initResponse.text();
-        return { success: false, error: `YouTube API error: ${errorText}` };
-      }
-
-      const location = initResponse.headers.get('Location');
-      if (!location) {
-        return { success: false, error: 'No upload URL received from YouTube' };
-      }
-
-      // Upload the video data
-      const uploadResponse = await fetch(location, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'video/mp4',
-        },
-        body: videoBase64,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        return { success: false, error: `Upload failed: ${errorText}` };
-      }
-
-      const result = await uploadResponse.json();
-      const videoId = result.id as string;
-
-      return {
-        success: true,
-        videoId,
-        url: `https://youtube.com/shorts/${videoId}`,
-      };
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err);
-      return { success: false, error: `YouTube upload error: ${error}` };
-    }
-  }
-
-  /**
-   * Publish shorts to all configured platforms
-   */
-  async publishShorts(
-    results: ShortResult[],
-    videoUrl: string,
-    baseTitle: string
-  ): Promise<Record<string, { success: boolean; url?: string; error?: string }>> {
-    const publishResults: Record<string, { success: boolean; url?: string; error?: string }> = {};
-
-    for (const result of results) {
-      if (!result.success) continue;
-
-      const shortTitle = `${baseTitle} - ${result.segment.caption}`;
-      const shortDescription = `Generated short from ${videoUrl}\n\nGenerated by AG-Claw YouTube Shorts Generator`;
-
-      for (const platform of this.config.platforms) {
-        if (platform === 'youtube') {
-          const ytResult = await this.publishToYouTube(
-            result.outputPath,
-            shortTitle,
-            shortDescription
-          );
-          publishResults[`youtube:${result.outputPath}`] = ytResult;
-
-          if (ytResult.success) {
-            this.ctx?.logger?.info?.('Published to YouTube Shorts', {
-              url: ytResult.url,
-              videoId: ytResult.videoId,
-            });
-          }
-        }
-        // Other platforms (telegram, twitter) would be handled here
-      }
-    }
-
-    return publishResults;
   }
 }
 
