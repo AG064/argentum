@@ -16,43 +16,7 @@ jobs:
       - name: Send push notification
         if: github.event_name == 'push'
         run: |
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1 | cut -c1-200)
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=@ag_claw" \
-            -d "text=🔔 *${{ github.actor }}* pushed to main
-
-\`$COMMIT_MSG\`" \
-            -d "parse_mode=Markdown" \
-            -d "disable_web_page_preview=true"
-
-      - name: Send release notification
-        if: github.event_name == 'release'
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          NAME="${{ github.event.release.name }}"
-          BODY="${{ github.event.release.body }}"
-          BODY=$(echo "$BODY" | head -c 3500)
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=@ag_claw" \
-            -d "text=🚀 *Release: $TAG*
-
-$NAME
-
-$BODY" \
-            -d "parse_mode=Markdown" \
-            -d "disable_web_page_preview=true"
-
-      - name: Send merged PR notification
-        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          PR_NUM="${{ github.event.pull_request.number }}"
-          BODY="${{ github.event.pull_request.body }}"
-          BODY=$(echo "$BODY" | head -c 1500)
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=@ag_claw" \
-            -d "text=✅ *PR #$PR_NUM* merged by *${{ github.actor }}*
-
-$TITLE" \
-            -d "parse_mode=Markdown" \
-            -d "disable_web_page_preview=true"
+            -d "text=🔔 ${{ github.actor }} pushed to main" \
+            -d "parse_mode=Markdown"
