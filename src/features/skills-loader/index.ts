@@ -329,8 +329,9 @@ class SkillsLoaderFeature {
         scripts.push(
           ...fs
             .readdirSync(scriptsDir)
-            .filter((f) =>
-              f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts'),
+            .filter(
+              (f) =>
+                f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts'),
             ),
         );
       }

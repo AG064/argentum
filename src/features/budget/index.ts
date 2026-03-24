@@ -1,4 +1,3 @@
- 
 /**
  * Budget Enforcement Feature
  *
@@ -62,9 +61,7 @@ export function calculateCost(model: string, usage: TokenUsage): number {
   const pricing = _MODEL_PRICING_MAP[model];
   if (pricing) {
     return (
-      (usage.promptTokens * pricing.input +
-        usage.completionTokens * pricing.output) /
-      1_000_000
+      (usage.promptTokens * pricing.input + usage.completionTokens * pricing.output) / 1_000_000
     );
   }
 
@@ -72,20 +69,14 @@ export function calculateCost(model: string, usage: TokenUsage): number {
     if (key.endsWith('/*')) {
       const prefix = key.slice(0, -2);
       if (model.startsWith(prefix)) {
-        return (
-          (usage.promptTokens * val.input +
-            usage.completionTokens * val.output) /
-          1_000_000
-        );
+        return (usage.promptTokens * val.input + usage.completionTokens * val.output) / 1_000_000;
       }
     }
   }
 
   const fallback = _MODEL_PRICING_MAP['unknown'] ?? { input: 0.5, output: 2 };
   return (
-    (usage.promptTokens * fallback.input +
-      usage.completionTokens * fallback.output) /
-    1_000_000
+    (usage.promptTokens * fallback.input + usage.completionTokens * fallback.output) / 1_000_000
   );
 }
 
@@ -96,13 +87,10 @@ export interface ValidationResult {
   error?: string;
 }
 
-export function validateBudgetConfig(
-  input: BudgetConfigInput,
-): ValidationResult {
+export function validateBudgetConfig(input: BudgetConfigInput): ValidationResult {
   if (
     input.globalMonthlyLimit !== undefined &&
-    (typeof input.globalMonthlyLimit !== 'number' ||
-      input.globalMonthlyLimit < 0)
+    (typeof input.globalMonthlyLimit !== 'number' || input.globalMonthlyLimit < 0)
   ) {
     return {
       valid: false,
@@ -111,8 +99,7 @@ export function validateBudgetConfig(
   }
   if (
     input.globalDailyLimit !== undefined &&
-    (typeof input.globalDailyLimit !== 'number' ||
-      input.globalDailyLimit < 0)
+    (typeof input.globalDailyLimit !== 'number' || input.globalDailyLimit < 0)
   ) {
     return {
       valid: false,
@@ -167,10 +154,7 @@ class BudgetFeature implements FeatureModule {
   private ctx!: FeatureContext;
   private alertedAgents: Set<string> = new Set();
 
-  async init(
-    config: Record<string, unknown>,
-    context: FeatureContext,
-  ): Promise<void> {
+  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
 
     const input = config as BudgetConfigInput;
@@ -180,18 +164,10 @@ class BudgetFeature implements FeatureModule {
       ...(input.globalMonthlyLimit !== undefined
         ? { globalMonthlyLimit: input.globalMonthlyLimit }
         : {}),
-      ...(input.globalDailyLimit !== undefined
-        ? { globalDailyLimit: input.globalDailyLimit }
-        : {}),
-      ...(input.perAgentLimit !== undefined
-        ? { perAgentLimit: input.perAgentLimit }
-        : {}),
-      ...(input.alertThreshold !== undefined
-        ? { alertThreshold: input.alertThreshold }
-        : {}),
-      ...(input.blockOnExhausted !== undefined
-        ? { blockOnExhausted: input.blockOnExhausted }
-        : {}),
+      ...(input.globalDailyLimit !== undefined ? { globalDailyLimit: input.globalDailyLimit } : {}),
+      ...(input.perAgentLimit !== undefined ? { perAgentLimit: input.perAgentLimit } : {}),
+      ...(input.alertThreshold !== undefined ? { alertThreshold: input.alertThreshold } : {}),
+      ...(input.blockOnExhausted !== undefined ? { blockOnExhausted: input.blockOnExhausted } : {}),
       ...(input.dbPath ? { dbPath: input.dbPath } : {}),
     };
 
@@ -202,9 +178,7 @@ class BudgetFeature implements FeatureModule {
     this.log('info', 'Budget enforcement active', {
       globalMonthlyLimit: `$${this.config.globalMonthlyLimit}/month`,
       globalDailyLimit: `$${this.config.globalDailyLimit}/day`,
-      perAgentLimit: this.config.perAgentLimit
-        ? `$${this.config.perAgentLimit}/agent`
-        : 'none',
+      perAgentLimit: this.config.perAgentLimit ? `$${this.config.perAgentLimit}/agent` : 'none',
       alertThreshold: `${Math.round(this.config.alertThreshold * 100)}%`,
       blockOnExhausted: this.config.blockOnExhausted,
     });
@@ -230,9 +204,7 @@ class BudgetFeature implements FeatureModule {
           monthlyLimit: `$${this.config.globalMonthlyLimit}`,
           dailyUsage: `$${_daily.totalCost.toFixed(4)}`,
           dailyLimit: `$${this.config.globalDailyLimit}`,
-          percentUsed: Math.round(
-            (usage.totalCost / this.config.globalMonthlyLimit) * 100,
-          ),
+          percentUsed: Math.round((usage.totalCost / this.config.globalMonthlyLimit) * 100),
         },
       };
     } catch {
@@ -242,9 +214,7 @@ class BudgetFeature implements FeatureModule {
 
   // ─── Configuration API ─────────────────────────────────────────────────
 
-  updateConfig(
-    input: BudgetConfigInput,
-  ): { success: boolean; error?: string } {
+  updateConfig(input: BudgetConfigInput): { success: boolean; error?: string } {
     const validation = validateBudgetConfig(input);
     if (!validation.valid) {
       return { success: false, error: validation.error };
@@ -295,8 +265,7 @@ class BudgetFeature implements FeatureModule {
         default: DEFAULT_CONFIG.globalDailyLimit,
       },
       perAgentLimit: {
-        value:
-          this.config.perAgentLimit ?? DEFAULT_CONFIG.globalMonthlyLimit,
+        value: this.config.perAgentLimit ?? DEFAULT_CONFIG.globalMonthlyLimit,
         default: DEFAULT_CONFIG.globalMonthlyLimit,
       },
       alertThreshold: {
@@ -316,12 +285,7 @@ class BudgetFeature implements FeatureModule {
 
   // ─── Cost Recording ────────────────────────────────────────────────────
 
-  recordCost(
-    agentId: string,
-    usage: TokenUsage,
-    provider: string,
-    model: string,
-  ): number {
+  recordCost(agentId: string, usage: TokenUsage, provider: string, model: string): number {
     this.ensureDb();
     const cost = calculateCost(model, usage);
 
@@ -330,15 +294,7 @@ class BudgetFeature implements FeatureModule {
         `INSERT INTO budget_usage (agent_id, provider, model, prompt_tokens, completion_tokens, cost_usd, timestamp)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(
-        agentId,
-        provider,
-        model,
-        usage.promptTokens,
-        usage.completionTokens,
-        cost,
-        Date.now(),
-      );
+      .run(agentId, provider, model, usage.promptTokens, usage.completionTokens, cost, Date.now());
 
     this.checkAndAlert(agentId);
     return cost;
@@ -351,21 +307,16 @@ class BudgetFeature implements FeatureModule {
     const _daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
 
-    const agentLimit =
-      this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
+    const agentLimit = this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
 
     const dailyAllowed = _daily.totalCost < this.config.globalDailyLimit;
     const monthlyAllowed = monthly.totalCost < this.config.globalMonthlyLimit;
     const agentAllowed = agentLimit === 0 || monthly.totalCost < agentLimit;
 
     const monthlyPercent =
-      this.config.globalMonthlyLimit > 0
-        ? monthly.totalCost / this.config.globalMonthlyLimit
-        : 1;
+      this.config.globalMonthlyLimit > 0 ? monthly.totalCost / this.config.globalMonthlyLimit : 1;
     const dailyPercent =
-      this.config.globalDailyLimit > 0
-        ? _daily.totalCost / this.config.globalDailyLimit
-        : 1;
+      this.config.globalDailyLimit > 0 ? _daily.totalCost / this.config.globalDailyLimit : 1;
     const maxPercent = Math.max(monthlyPercent, dailyPercent);
 
     const exhausted = !dailyAllowed || !monthlyAllowed || !agentAllowed;
@@ -403,18 +354,14 @@ class BudgetFeature implements FeatureModule {
     this.ensureDb();
     const _daily = this.getAgentDailyUsage(agentId);
     const monthly = this.getAgentMonthlyUsage(agentId);
-    const agentLimit =
-      this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
+    const agentLimit = this.config.perAgentLimit ?? this.config.globalMonthlyLimit;
 
     return {
       agent: agentId,
       totalTokens: monthly.totalTokens,
       totalCost: monthly.totalCost,
       limit: agentLimit,
-      percentUsed:
-        agentLimit > 0
-          ? Math.round((monthly.totalCost / agentLimit) * 100)
-          : 0,
+      percentUsed: agentLimit > 0 ? Math.round((monthly.totalCost / agentLimit) * 100) : 0,
       canProceed: monthly.totalCost < agentLimit,
       period: 'monthly',
     };
@@ -422,9 +369,9 @@ class BudgetFeature implements FeatureModule {
 
   getBudgetReport(): BudgetReport {
     this.ensureDb();
-    const agents = this.db
-      .prepare('SELECT DISTINCT agent_id FROM budget_usage')
-      .all() as Array<{ agent_id: string }>;
+    const agents = this.db.prepare('SELECT DISTINCT agent_id FROM budget_usage').all() as Array<{
+      agent_id: string;
+    }>;
 
     const byAgent: BudgetStatus[] = agents.map((a) => this.getUsage(a.agent_id));
 
@@ -442,8 +389,7 @@ class BudgetFeature implements FeatureModule {
 
     if (
       this.config.globalMonthlyLimit > 0 &&
-      monthly.totalCost / this.config.globalMonthlyLimit >=
-        this.config.alertThreshold
+      monthly.totalCost / this.config.globalMonthlyLimit >= this.config.alertThreshold
     ) {
       alerts.unshift(
         `GLOBAL: ${Math.round((monthly.totalCost / this.config.globalMonthlyLimit) * 100)}% of monthly budget used`,
@@ -467,9 +413,7 @@ class BudgetFeature implements FeatureModule {
     };
   }
 
-  getHistory(
-    days: number = 30,
-  ): Array<{
+  getHistory(days: number = 30): Array<{
     date: string;
     totalCost: number;
     totalTokens: number;
@@ -513,9 +457,7 @@ class BudgetFeature implements FeatureModule {
 
   resetAgent(agentId: string): { changes: number } {
     this.ensureDb();
-    const info = this.db
-      .prepare('DELETE FROM budget_usage WHERE agent_id = ?')
-      .run(agentId);
+    const info = this.db.prepare('DELETE FROM budget_usage WHERE agent_id = ?').run(agentId);
     this.alertedAgents.delete(agentId);
     return { changes: info.changes };
   }
@@ -597,9 +539,7 @@ class BudgetFeature implements FeatureModule {
     }
   }
 
-  private getAgentDailyUsage(
-    agentId: string,
-  ): { totalTokens: number; totalCost: number } {
+  private getAgentDailyUsage(agentId: string): { totalTokens: number; totalCost: number } {
     const dayStart = this.getDayStart();
     const row = this.db
       .prepare(
@@ -613,9 +553,7 @@ class BudgetFeature implements FeatureModule {
     return { totalTokens: row.tokens, totalCost: row.cost };
   }
 
-  private getAgentMonthlyUsage(
-    agentId: string,
-  ): { totalTokens: number; totalCost: number } {
+  private getAgentMonthlyUsage(agentId: string): { totalTokens: number; totalCost: number } {
     const monthStart = this.getMonthStart();
     const row = this.db
       .prepare(
@@ -659,11 +597,7 @@ class BudgetFeature implements FeatureModule {
 
   private getDayStart(): number {
     const now = new Date();
-    return new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    ).getTime();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   }
 
   private getMonthStart(): number {

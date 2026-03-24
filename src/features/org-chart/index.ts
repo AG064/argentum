@@ -36,7 +36,6 @@ import {
   type HealthStatus,
 } from '../../core/plugin-loader';
 
-
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
 class OrgChartFeature implements FeatureModule {
@@ -104,8 +103,14 @@ class OrgChartFeature implements FeatureModule {
 
   async healthCheck(): Promise<HealthStatus> {
     try {
-      const row = this.db.prepare('SELECT COUNT(*) as c FROM org_nodes WHERE status = ?').get('active') as { c: number };
-      return { healthy: true, message: `${row.c} active agents`, details: { ceoId: this.config.ceoId } };
+      const row = this.db
+        .prepare('SELECT COUNT(*) as c FROM org_nodes WHERE status = ?')
+        .get('active') as { c: number };
+      return {
+        healthy: true,
+        message: `${row.c} active agents`,
+        details: { ceoId: this.config.ceoId },
+      };
     } catch {
       return { healthy: false, message: 'Org chart database unavailable' };
     }
@@ -117,12 +122,17 @@ class OrgChartFeature implements FeatureModule {
    * Get all org nodes as a flat list.
    */
   getAllNodes(): OrgNode[] {
-    const rows = this.db
-      .prepare('SELECT * FROM org_nodes ORDER BY hired_at ASC')
-      .all() as Array<{
-      id: string; name: string; role: string; parent_id: string | null;
-      agent_type: string; config: string; budget: string | null;
-      status: string; hired_at: number; notes: string | null;
+    const rows = this.db.prepare('SELECT * FROM org_nodes ORDER BY hired_at ASC').all() as Array<{
+      id: string;
+      name: string;
+      role: string;
+      parent_id: string | null;
+      agent_type: string;
+      config: string;
+      budget: string | null;
+      status: string;
+      hired_at: number;
+      notes: string | null;
     }>;
 
     return rows.map((r) => ({
@@ -157,13 +167,20 @@ class OrgChartFeature implements FeatureModule {
    * Get a single node by ID.
    */
   getNode(id: string): OrgNode | null {
-    const row = this.db
-      .prepare('SELECT * FROM org_nodes WHERE id = ?')
-      .get(id) as {
-        id: string; name: string; role: string; parent_id: string | null;
-        agent_type: string; config: string; budget: string | null;
-        status: string; hired_at: number; notes: string | null;
-      } | undefined;
+    const row = this.db.prepare('SELECT * FROM org_nodes WHERE id = ?').get(id) as
+      | {
+          id: string;
+          name: string;
+          role: string;
+          parent_id: string | null;
+          agent_type: string;
+          config: string;
+          budget: string | null;
+          status: string;
+          hired_at: number;
+          notes: string | null;
+        }
+      | undefined;
 
     if (!row) return null;
 
@@ -264,10 +281,16 @@ class OrgChartFeature implements FeatureModule {
    */
   getAgentTasks(agentId: string): TaskAssignment[] {
     const rows = this.db
-      .prepare('SELECT * FROM task_assignments WHERE agent_id = ? ORDER BY priority DESC, assigned_at ASC')
+      .prepare(
+        'SELECT * FROM task_assignments WHERE agent_id = ? ORDER BY priority DESC, assigned_at ASC',
+      )
       .all(agentId) as Array<{
-      task_id: string; agent_id: string; assigned_at: number;
-      priority: number; status: string; description: string;
+      task_id: string;
+      agent_id: string;
+      assigned_at: number;
+      priority: number;
+      status: string;
+      description: string;
     }>;
 
     return rows.map((r) => ({
@@ -368,7 +391,11 @@ class OrgChartFeature implements FeatureModule {
 
     const lines: string[] = [];
     const statusIcon = (s: OrgStatus) =>
-      s === 'active' ? '\x1b[32m●\x1b[0m' : s === 'paused' ? '\x1b[33m◌\x1b[0m' : '\x1b[31m○\x1b[0m';
+      s === 'active'
+        ? '\x1b[32m●\x1b[0m'
+        : s === 'paused'
+          ? '\x1b[33m◌\x1b[0m'
+          : '\x1b[31m○\x1b[0m';
     const budgetBar = (b: BudgetConfig | undefined): string => {
       if (!b) return '';
       const pct = Math.min(100, Math.round((b.spent / b.monthlyLimit) * 100));
@@ -496,15 +523,17 @@ class OrgChartFeature implements FeatureModule {
       },
     };
 
-    return defaults[role] ?? {
-      role,
-      agentType: 'custom',
-      config: {
-        description: `Custom ${role} role`,
-        specialties: [],
-        maxConcurrentTasks: 1,
-      },
-    };
+    return (
+      defaults[role] ?? {
+        role,
+        agentType: 'custom',
+        config: {
+          description: `Custom ${role} role`,
+          specialties: [],
+          maxConcurrentTasks: 1,
+        },
+      }
+    );
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────
@@ -554,18 +583,22 @@ class OrgChartFeature implements FeatureModule {
     const existing = this.getNode(this.config.ceoId);
     if (!existing) {
       this.ctx.logger.info('Creating CEO node for AG-Claw');
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT OR IGNORE INTO org_nodes (id, name, role, agent_type, config, status, hired_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        this.config.ceoId,
-        'AG-Claw',
-        'CEO',
-        'ag-claw',
-        JSON.stringify({ description: 'AG-Claw CEO - top level orchestrator' }),
-        'active',
-        Date.now(),
-      );
+      `,
+        )
+        .run(
+          this.config.ceoId,
+          'AG-Claw',
+          'CEO',
+          'ag-claw',
+          JSON.stringify({ description: 'AG-Claw CEO - top level orchestrator' }),
+          'active',
+          Date.now(),
+        );
     }
   }
 }

@@ -5,7 +5,11 @@
  */
 
 export { getPolicyEngine, resetPolicyEngine, type PolicyEngine } from './policy-engine/index';
-export { getCredentialManager, resetCredentialManager, type CredentialManager } from './credential-manager/index';
+export {
+  getCredentialManager,
+  resetCredentialManager,
+  type CredentialManager,
+} from './credential-manager/index';
 export { getSandboxExecutor, resetSandboxExecutor, type SandboxExecutor } from './sandbox/index';
 export { getApprovalUI, type ApprovalUI } from './approval-ui/index';
 export { getBlueprintLoader, type BlueprintLoader } from './blueprint/index';

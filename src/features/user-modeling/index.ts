@@ -210,9 +210,7 @@ class UserModelingFeature implements FeatureModule {
     lines.push(`- Preferred language: ${this.preferences.preferredLanguage}`);
 
     if (this.preferences.topicsOfInterest.length > 0) {
-      lines.push(
-        `- Interests: ${this.preferences.topicsOfInterest.slice(0, 10).join(', ')}`,
-      );
+      lines.push(`- Interests: ${this.preferences.topicsOfInterest.slice(0, 10).join(', ')}`);
     }
 
     lines.push(`- Communication style: ${this.preferences.communicationStyle}`);
@@ -225,10 +223,7 @@ class UserModelingFeature implements FeatureModule {
   /**
    * Update specific preference manually
    */
-  updatePreference<K extends keyof UserPreferences>(
-    key: K,
-    value: UserPreferences[K],
-  ): void {
+  updatePreference<K extends keyof UserPreferences>(key: K, value: UserPreferences[K]): void {
     this.preferences[key] = value;
     this.preferences.lastUpdated = Date.now();
     this.saveModel();
@@ -324,8 +319,15 @@ class UserModelingFeature implements FeatureModule {
         }
 
         const communicationStyle = yaml['communicationStyle'] as string | undefined;
-        if (communicationStyle && ['questioner', 'directive', 'collaborative', 'mixed'].includes(communicationStyle)) {
-          this.preferences.communicationStyle = communicationStyle as 'questioner' | 'directive' | 'collaborative' | 'mixed';
+        if (
+          communicationStyle &&
+          ['questioner', 'directive', 'collaborative', 'mixed'].includes(communicationStyle)
+        ) {
+          this.preferences.communicationStyle = communicationStyle as
+            | 'questioner'
+            | 'directive'
+            | 'collaborative'
+            | 'mixed';
         }
 
         const prefersExplanations = yaml['prefersExplanations'] as boolean | undefined;
@@ -335,7 +337,10 @@ class UserModelingFeature implements FeatureModule {
 
         const technicalLevel = yaml['technicalLevel'] as string | undefined;
         if (technicalLevel && ['beginner', 'intermediate', 'advanced'].includes(technicalLevel)) {
-          this.preferences.technicalLevel = technicalLevel as 'beginner' | 'intermediate' | 'advanced';
+          this.preferences.technicalLevel = technicalLevel as
+            | 'beginner'
+            | 'intermediate'
+            | 'advanced';
         }
 
         const activeHours = yaml['activeHours'] as number[] | undefined;
@@ -344,8 +349,15 @@ class UserModelingFeature implements FeatureModule {
         }
 
         const sessionFrequency = yaml['sessionFrequency'] as string | undefined;
-        if (sessionFrequency && ['daily', 'few-times-week', 'weekly', 'occasional'].includes(sessionFrequency)) {
-          this.preferences.sessionFrequency = sessionFrequency as 'daily' | 'few-times-week' | 'weekly' | 'occasional';
+        if (
+          sessionFrequency &&
+          ['daily', 'few-times-week', 'weekly', 'occasional'].includes(sessionFrequency)
+        ) {
+          this.preferences.sessionFrequency = sessionFrequency as
+            | 'daily'
+            | 'few-times-week'
+            | 'weekly'
+            | 'occasional';
         }
 
         const firstSeen = yaml['firstSeen'] as number | undefined;
@@ -367,7 +379,9 @@ class UserModelingFeature implements FeatureModule {
     }
 
     // Parse topic suggestions from body
-    const topicMatches = body.match(/#{1,2}\s*(?:topics?|interests?|learned about):?\s*([^\n#-]+)/gi);
+    const topicMatches = body.match(
+      /#{1,2}\s*(?:topics?|interests?|learned about):?\s*([^\n#-]+)/gi,
+    );
     if (topicMatches) {
       for (const match of topicMatches) {
         const topics = match
@@ -449,10 +463,7 @@ class UserModelingFeature implements FeatureModule {
     return result;
   }
 
-  private updatePreferencesFromSample(
-    sample: ConversationSample,
-    topics?: string[],
-  ): void {
+  private updatePreferencesFromSample(sample: ConversationSample, topics?: string[]): void {
     // Update response length based on message length
     if (sample.messageLength < 100) {
       this.preferences.responseLength = 'brief';

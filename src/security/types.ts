@@ -11,7 +11,14 @@
 
 // ─── Agent Actions ─────────────────────────────────────────────────────────────
 
-export type ActionResource = `file://${string}` | `http://${string}` | `https://${string}` | `exec://${string}` | `network://${string}` | `api://${string}` | `env://${string}`;
+export type ActionResource =
+  | `file://${string}`
+  | `http://${string}`
+  | `https://${string}`
+  | `exec://${string}`
+  | `network://${string}`
+  | `api://${string}`
+  | `env://${string}`;
 
 export type ActionType = 'read' | 'write' | 'delete' | 'exec' | 'network' | 'api' | 'env';
 
@@ -52,7 +59,7 @@ export interface Policy {
   updatedAt: number;
 }
 
-export type PolicyDecision = 
+export type PolicyDecision =
   | { allowed: true; policy?: Policy; reason: string }
   | { allowed: false; policy?: Policy; reason: string; requiresApproval?: boolean };
 
@@ -97,15 +104,15 @@ export interface MintedKey {
 
 export interface SandboxConfig {
   enabled: boolean;
-  allowedPaths: string[];      // whitelist - must be absolute or ~ expanded
-  deniedPaths: string[];       // blacklist - takes precedence
+  allowedPaths: string[]; // whitelist - must be absolute or ~ expanded
+  deniedPaths: string[]; // blacklist - takes precedence
   maxMemoryMb?: number;
   maxCpuPercent?: number;
   networkIsolation: boolean;
   allowExec: boolean;
-  maxExecutionTimeMs: number;  // default 30000
-  maxOutputSizeKb?: number;     // default 512
-  allowedLanguages: string[];  // ['javascript', 'python', 'bash']
+  maxExecutionTimeMs: number; // default 30000
+  maxOutputSizeKb?: number; // default 512
+  allowedLanguages: string[]; // ['javascript', 'python', 'bash']
 }
 
 export interface SandboxResult {
@@ -143,10 +150,10 @@ export interface ApprovalRequest {
   details: ApprovalDetails;
   status: 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
   requestedAt: number;
-  expiresAt: number;       // auto-expire if not acted upon
+  expiresAt: number; // auto-expire if not acted upon
   respondedAt?: number;
-  respondedBy?: string;     // user ID who responded
-  notes?: string;           // user's notes when responding
+  respondedBy?: string; // user ID who responded
+  notes?: string; // user's notes when responding
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -182,11 +189,11 @@ export type AuditSeverity = 'debug' | 'info' | 'warning' | 'error' | 'critical';
 
 export interface AuditEntry {
   id: string;
-  timestamp: number;          // unix ms
-  isoTime: string;            // ISO 8601
+  timestamp: number; // unix ms
+  isoTime: string; // ISO 8601
   action: AuditAction;
   severity: AuditSeverity;
-  actor?: string;             // agentId or userId
+  actor?: string; // agentId or userId
   resource?: string;
   details: Record<string, unknown>;
   decision?: 'allow' | 'deny' | 'approve' | 'block';
@@ -229,9 +236,9 @@ export interface BlueprintCredentials {
 }
 
 export interface BlueprintApproval {
-  criticalActions: string[];  // resource patterns that require approval
+  criticalActions: string[]; // resource patterns that require approval
   autoExpireSeconds?: number; // default 300 (5 min)
-  notifyChannels?: string[];  // ['telegram', 'email']
+  notifyChannels?: string[]; // ['telegram', 'email']
 }
 
 export interface Blueprint {
@@ -265,7 +272,7 @@ export interface SecurityStats {
 
 export interface SecurityCLIOptions {
   format?: 'table' | 'json' | 'yaml';
-  since?: number;         // timestamp
+  since?: number; // timestamp
   until?: number;
   actor?: string;
   action?: string;

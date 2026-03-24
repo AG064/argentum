@@ -1,6 +1,6 @@
 /**
  * AG-Claw Dashboard Server
- * 
+ *
  * A lightweight secure web server for the AG-Claw dashboard.
  * Features:
  * - HTTP Basic Auth
@@ -76,47 +76,50 @@ const DEFAULT_CONFIG: ServerConfig = {
  */
 function loadConfig(): ServerConfig {
   const config = { ...DEFAULT_CONFIG };
-  
+
   // Try to load from agclaw.json
   const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
   const configPath = path.join(workDir, 'agclaw.json');
-  
+
   if (fs.existsSync(configPath)) {
     try {
       const agclawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      
+
       if (agclawConfig.dashboard) {
         config.port = agclawConfig.dashboard.port || config.port;
         config.host = agclawConfig.dashboard.host || config.host;
-        
+
         if (agclawConfig.dashboard.auth) {
           config.auth.username = agclawConfig.dashboard.auth.username || config.auth.username;
           if (agclawConfig.dashboard.auth.password) {
             config.auth.passwordHash = hashPassword(agclawConfig.dashboard.auth.password);
           }
         }
-        
+
         if (agclawConfig.dashboard.rateLimit) {
-          config.rateLimit.windowMs = agclawConfig.dashboard.rateLimit.windowMs || config.rateLimit.windowMs;
-          config.rateLimit.maxRequests = agclawConfig.dashboard.rateLimit.maxRequests || config.rateLimit.maxRequests;
+          config.rateLimit.windowMs =
+            agclawConfig.dashboard.rateLimit.windowMs || config.rateLimit.windowMs;
+          config.rateLimit.maxRequests =
+            agclawConfig.dashboard.rateLimit.maxRequests || config.rateLimit.maxRequests;
         }
-        
+
         if (agclawConfig.dashboard.cors) {
-          config.cors.allowedOrigins = agclawConfig.dashboard.cors.allowedOrigins || config.cors.allowedOrigins;
+          config.cors.allowedOrigins =
+            agclawConfig.dashboard.cors.allowedOrigins || config.cors.allowedOrigins;
         }
       }
     } catch (err) {
       console.warn('[Dashboard Server] Failed to parse agclaw.json:', (err as Error).message);
     }
   }
-  
+
   // Generate password hash if not set
   if (!config.auth.passwordHash) {
     const defaultPassword = process.env.AGCLAW_DASHBOARD_PASS || 'admin';
     config.auth.passwordHash = hashPassword(defaultPassword);
     console.warn('[Dashboard Server] Using default password. Set AGCLAW_DASHBOARD_PASS to change.');
   }
-  
+
   return config;
 }
 
@@ -141,16 +144,16 @@ function parseBasicAuth(authHeader: string): { username: string; password: strin
   if (!authHeader || !authHeader.startsWith('Basic ')) {
     return null;
   }
-  
+
   try {
     const base64Credentials = authHeader.slice(6);
     const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
     const [username, password] = credentials.split(':');
-    
+
     if (!username || !password) {
       return null;
     }
-    
+
     return { username, password };
   } catch {
     return null;
@@ -163,16 +166,16 @@ function parseBasicAuth(authHeader: string): { username: string; password: strin
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const entry = rateLimits.get(ip);
-  
+
   if (!entry || now > entry.resetAt) {
     rateLimits.set(ip, { count: 1, resetAt: now + config.rateLimit.windowMs });
     return true;
   }
-  
+
   if (entry.count >= config.rateLimit.maxRequests) {
     return false;
   }
-  
+
   entry.count++;
   return true;
 }
@@ -198,7 +201,7 @@ function serveStatic(filePath: string, res: http.ServerResponse, mimeType?: stri
       }
       return;
     }
-    
+
     const ext = path.extname(filePath).toLowerCase();
     const contentType = mimeType || getMimeType(ext);
     sendResponse(res, 200, contentType, data);
@@ -231,7 +234,12 @@ function getMimeType(ext: string): string {
 /**
  * Send HTTP response
  */
-function sendResponse(res: http.ServerResponse, statusCode: number, contentType: string, data: Buffer | string): void {
+function sendResponse(
+  res: http.ServerResponse,
+  statusCode: number,
+  contentType: string,
+  data: Buffer | string,
+): void {
   res.writeHead(statusCode, {
     'Content-Type': contentType,
     'Cache-Control': 'no-cache',
@@ -264,7 +272,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   const parsedUrl = url.parse(req.url || '/', true);
   const pathname = parsedUrl.pathname || '/';
   const ip = req.socket.remoteAddress || 'unknown';
-  
+
   // Check rate limit
   if (!checkRateLimit(ip)) {
     res.writeHead(429, {
@@ -274,7 +282,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     res.end('Too Many Requests');
     return;
   }
-  
+
   // CORS preflight
   if (req.method === 'OPTIONS' && config.cors.enabled) {
     res.writeHead(204, {
@@ -286,7 +294,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     res.end();
     return;
   }
-  
+
   // Apply CORS
   if (config.cors.enabled) {
     const origin = req.headers.origin;
@@ -294,19 +302,19 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       res.setHeader('Access-Control-Allow-Origin', origin);
     }
   }
-  
+
   // WebSocket upgrade
   if (pathname === '/ws') {
     // WebSocket handling is done separately
     return;
   }
-  
+
   // API endpoints
   if (pathname.startsWith('/api/')) {
     handleAPIRequest(req, res, pathname, parsedUrl);
     return;
   }
-  
+
   // Health check (no auth required)
   if (pathname === '/health') {
     sendJSON(res, 200, {
@@ -317,12 +325,16 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     });
     return;
   }
-  
+
   // Auth check for all other requests
   const authHeader = req.headers.authorization;
   const auth = parseBasicAuth(authHeader || '');
-  
-  if (!auth || auth.username !== config.auth.username || !verifyPassword(auth.password, config.auth.passwordHash)) {
+
+  if (
+    !auth ||
+    auth.username !== config.auth.username ||
+    !verifyPassword(auth.password, config.auth.passwordHash)
+  ) {
     res.writeHead(401, {
       'WWW-Authenticate': 'Basic realm="AG-Claw Dashboard"',
       'Content-Type': 'text/html',
@@ -339,23 +351,23 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     `);
     return;
   }
-  
+
   // Serve static files
   let filePath: string;
-  
+
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(config.staticDir, 'index.html');
   } else {
     filePath = path.join(config.staticDir, pathname);
   }
-  
+
   // Security: prevent directory traversal
   const normalizedPath = path.normalize(filePath);
   if (!normalizedPath.startsWith(config.staticDir)) {
     sendError(res, 403, 'Forbidden');
     return;
   }
-  
+
   serveStatic(normalizedPath, res);
 }
 
@@ -366,23 +378,27 @@ function handleAPIRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   pathname: string,
-  parsedUrl: url.UrlWithParsedQuery
+  parsedUrl: url.UrlWithParsedQuery,
 ): void {
   // Auth check for API
   const authHeader = req.headers.authorization;
   const auth = parseBasicAuth(authHeader || '');
-  
-  if (!auth || auth.username !== config.auth.username || !verifyPassword(auth.password, config.auth.passwordHash)) {
+
+  if (
+    !auth ||
+    auth.username !== config.auth.username ||
+    !verifyPassword(auth.password, config.auth.passwordHash)
+  ) {
     sendJSON(res, 401, { error: 'Unauthorized' });
     return;
   }
-  
+
   // Parse body for POST requests
   const chunks: Buffer[] = [];
   req.on('data', (chunk: Buffer) => chunks.push(chunk));
   req.on('end', () => {
     let body: unknown = {};
-    
+
     if (chunks.length > 0) {
       try {
         body = JSON.parse(Buffer.concat(chunks).toString());
@@ -390,7 +406,7 @@ function handleAPIRequest(
         // Ignore invalid JSON
       }
     }
-    
+
     // Route API requests
     if (pathname === '/api/budget') {
       handleBudgetAPI(req, res, body);
@@ -421,7 +437,7 @@ function getSystemStats() {
   const memUsage = process.memoryUsage();
   return {
     uptime: process.uptime(),
-    memoryUsage: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)  } MB`,
+    memoryUsage: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
     cpuUsage: 0, // Would need os module for accurate reading
     activeAgents: 4,
     wsClients: wsClients.size,
@@ -455,7 +471,13 @@ function handleOrgChartAPI(req: http.IncomingMessage, res: http.ServerResponse, 
       agentType: 'CTO',
       children: [
         { name: 'Alice', role: 'Engineer', status: 'active', agentType: 'coder', children: [] },
-        { name: 'Bob', role: 'Researcher', status: 'active', agentType: 'researcher', children: [] },
+        {
+          name: 'Bob',
+          role: 'Researcher',
+          status: 'active',
+          agentType: 'researcher',
+          children: [],
+        },
       ],
     },
     stats: {
@@ -466,15 +488,34 @@ function handleOrgChartAPI(req: http.IncomingMessage, res: http.ServerResponse, 
       totalSpent: 3470000,
     },
     nodes: [
-      { id: 'agent-001', name: 'Alice', role: 'Engineer', status: 'active', agentType: 'coder', tasks: [] },
-      { id: 'agent-002', name: 'Bob', role: 'Researcher', status: 'active', agentType: 'researcher', tasks: [] },
+      {
+        id: 'agent-001',
+        name: 'Alice',
+        role: 'Engineer',
+        status: 'active',
+        agentType: 'coder',
+        tasks: [],
+      },
+      {
+        id: 'agent-002',
+        name: 'Bob',
+        role: 'Researcher',
+        status: 'active',
+        agentType: 'researcher',
+        tasks: [],
+      },
     ],
   });
 }
 
-function handleOrgAPI(req: http.IncomingMessage, res: http.ServerResponse, pathname: string, body: unknown) {
+function handleOrgAPI(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  pathname: string,
+  body: unknown,
+) {
   const action = pathname.replace('/api/org/', '');
-  
+
   switch (action) {
     case 'hire':
       sendJSON(res, 200, { success: true, message: 'Agent hired (demo)' });
@@ -496,7 +537,11 @@ function handleOrgAPI(req: http.IncomingMessage, res: http.ServerResponse, pathn
   }
 }
 
-function handleSelfImprovingAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
+function handleSelfImprovingAPI(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  body: unknown,
+) {
   sendJSON(res, 200, {
     enabled: true,
     lastRunTime: Date.now() - 3 * 60 * 60 * 1000,
@@ -534,11 +579,29 @@ function handleTrajectoryAPI(req: http.IncomingMessage, res: http.ServerResponse
 function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
   sendJSON(res, 200, {
     installed: [
-      { name: 'clawhub', version: '1.2.0', category: 'utility', description: 'Install and manage skills.' },
-      { name: 'weather', version: '1.0.0', category: 'utility', description: 'Get weather forecasts.' },
+      {
+        name: 'clawhub',
+        version: '1.2.0',
+        category: 'utility',
+        description: 'Install and manage skills.',
+      },
+      {
+        name: 'weather',
+        version: '1.0.0',
+        category: 'utility',
+        description: 'Get weather forecasts.',
+      },
     ],
     marketplace: [
-      { name: 'slack-bot', slug: 'slack-bot', version: '1.0.0', category: 'integration', author: 'community', description: 'Send messages to Slack.', stars: 42 },
+      {
+        name: 'slack-bot',
+        slug: 'slack-bot',
+        version: '1.0.0',
+        category: 'integration',
+        author: 'community',
+        description: 'Send messages to Slack.',
+        stars: 42,
+      },
     ],
   });
 }
@@ -548,34 +611,38 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
  */
 function setupWebSocket(server: http.Server): void {
   const wss = new WebSocketServer({ server, path: '/ws' });
-  
+
   wss.on('connection', (ws: WebSocket, req) => {
     // Auth check for WebSocket
     const authHeader = req.headers.authorization;
     const auth = parseBasicAuth(authHeader || '');
-    
-    if (!auth || auth.username !== config.auth.username || !verifyPassword(auth.password, config.auth.passwordHash)) {
+
+    if (
+      !auth ||
+      auth.username !== config.auth.username ||
+      !verifyPassword(auth.password, config.auth.passwordHash)
+    ) {
       ws.close(4001, 'Unauthorized');
       return;
     }
-    
+
     wsClients.add(ws);
     console.log(`[Dashboard WS] Client connected (${wsClients.size} total)`);
-    
+
     ws.on('close', () => {
       wsClients.delete(ws);
       console.log(`[Dashboard WS] Client disconnected (${wsClients.size} total)`);
     });
-    
+
     ws.on('error', (err) => {
       console.error('[Dashboard WS] Error:', err.message);
       wsClients.delete(ws);
     });
-    
+
     // Send welcome message
     ws.send(JSON.stringify({ type: 'connected', message: 'AG-Claw Dashboard connected' }));
   });
-  
+
   // Broadcast to all clients
   globalBroadcast = (data: unknown) => {
     const message = JSON.stringify(data);
@@ -604,34 +671,36 @@ let config: ServerConfig;
  */
 export async function startDashboardServer(options?: Partial<ServerConfig>): Promise<http.Server> {
   config = loadConfig();
-  
+
   // Override with provided options
   if (options) {
     config = { ...config, ...options };
   }
-  
+
   // Ensure static directory exists
   if (!fs.existsSync(config.staticDir)) {
     console.error(`[Dashboard Server] Static directory not found: ${config.staticDir}`);
     console.error('[Dashboard Server] Run: npm run build  (to build the dashboard)');
     throw new Error(`Static directory not found: ${config.staticDir}`);
   }
-  
+
   return new Promise((resolve, reject) => {
     const server = http.createServer(handleRequest);
-    
+
     // Setup WebSocket
     setupWebSocket(server);
-    
+
     // Handle server errors
     server.on('error', (err) => {
       if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
         console.error(`[Dashboard Server] Port ${config.port} is already in use.`);
-        console.error('[Dashboard Server] Try a different port: agclaw dashboard start --port 3001');
+        console.error(
+          '[Dashboard Server] Try a different port: agclaw dashboard start --port 3001',
+        );
       }
       reject(err);
     });
-    
+
     // Start listening
     server.listen(config.port, config.host, () => {
       console.log('');
@@ -639,16 +708,16 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.log('  ║         AG-Claw Dashboard Server Started                  ║');
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
-      console.log(`  ║  Auth:     HTTP Basic Auth (user: ${  config.auth.username  })            ║`);
-      console.log(`  ║  WebSocket: ws://${  config.host  }:${  config.port  }/ws               ║`);
+      console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
+      console.log(`  ║  WebSocket: ws://${config.host}:${config.port}/ws               ║`);
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log('  ║  Remote Access:                                        ║');
-      console.log(`  ║    SSH:  ssh -L 3000:localhost:${  config.port  } user@host        ║`);
+      console.log(`  ║    SSH:  ssh -L 3000:localhost:${config.port} user@host        ║`);
       console.log('  ║    Then open: http://localhost:3000                    ║');
       console.log('  ╚══════════════════════════════════════════════════════════╝');
       console.log('');
       console.log('[Dashboard Server] Press Ctrl+C to stop');
-      
+
       resolve(server);
     });
   });
@@ -659,11 +728,11 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
  */
 export function stopDashboardServer(server: http.Server): void {
   console.log('[Dashboard Server] Shutting down...');
-  
+
   // Close all WebSocket connections
   wsClients.forEach((ws) => ws.close());
   wsClients.clear();
-  
+
   // Close HTTP server
   server.close(() => {
     console.log('[Dashboard Server] Stopped');
@@ -674,11 +743,11 @@ export function stopDashboardServer(server: http.Server): void {
 if (require.main === module) {
   const args = process.argv.slice(2);
   const command = args[0];
-  
+
   if (command === 'start') {
     const portIdx = args.indexOf('--port');
     const port = portIdx !== -1 ? parseInt(args[portIdx + 1] || '3000', 10) : undefined;
-    
+
     startDashboardServer(port ? { port } : undefined)
       .then((server) => {
         process.on('SIGINT', () => {

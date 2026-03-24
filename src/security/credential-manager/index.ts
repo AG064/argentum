@@ -1,5 +1,3 @@
- 
-
 /**
  * AG-Claw Credential Manager
  *
@@ -21,12 +19,7 @@ import { createLogger, type Logger } from '../../core/logger';
 import { encrypt, decrypt } from '../encrypted-secrets';
 import { getPolicyEngine, PolicyEngine } from '../policy-engine/index.js';
 
-import type {
-  CredentialConfig,
-  StoredCredential,
-  MintedKey,
-  AuditEntry,
-} from '../types';
+import type { CredentialConfig, StoredCredential, MintedKey, AuditEntry } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,9 +60,19 @@ const MINTED_KEYS_TABLE = `
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const SENSITIVE_KEYS = new Set([
-  'password', 'passwd', 'secret', 'token', 'api_key', 'apikey',
-  'authorization', 'credential', 'private_key', 'access_key',
-  'client_secret', 'refresh_token', 'bearer',
+  'password',
+  'passwd',
+  'secret',
+  'token',
+  'api_key',
+  'apikey',
+  'authorization',
+  'credential',
+  'private_key',
+  'access_key',
+  'client_secret',
+  'refresh_token',
+  'bearer',
 ]);
 
 function containsSensitive(text: string): boolean {
@@ -135,12 +138,14 @@ export class CredentialManager {
 
     const keyEnv = process.env.AGCLAW_MASTER_KEY;
     if (!keyEnv) {
-      throw new Error('AGCLAW_MASTER_KEY environment variable is required for credential management');
+      throw new Error(
+        'AGCLAW_MASTER_KEY environment variable is required for credential management',
+      );
     }
 
     // Derive a stable 32-byte key
     const { pbkdf2Sync } = require('crypto');
-     
+
     this.masterKey = pbkdf2Sync(keyEnv, 'ag-claw-credential-salt', 100000, 32, 'sha256') as Buffer;
     return this.masterKey;
   }
@@ -196,12 +201,19 @@ export class CredentialManager {
       credential.metadata ? JSON.stringify(credential.metadata) : null,
     );
 
-    this.logAudit('credential.rotate', 'info', undefined, `credential://${credential.provider}/${credential.name}`, {
-      credentialId: credential.id,
-      provider: credential.provider,
-      type: credential.type,
-      ttlSeconds: credential.ttlSeconds,
-    }, true);
+    this.logAudit(
+      'credential.rotate',
+      'info',
+      undefined,
+      `credential://${credential.provider}/${credential.name}`,
+      {
+        credentialId: credential.id,
+        provider: credential.provider,
+        type: credential.type,
+        ttlSeconds: credential.ttlSeconds,
+      },
+      true,
+    );
 
     return credential;
   }
@@ -212,7 +224,9 @@ export class CredentialManager {
   retrieve(id: string): StoredCredential | null {
     if (!this.db) throw new Error('Database not initialized');
 
-    const row = this.db.prepare('SELECT * FROM security_credentials WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare('SELECT * FROM security_credentials WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined;
     if (!row) return null;
 
     const masterKey = this.getMasterKey();
@@ -229,7 +243,9 @@ export class CredentialManager {
     }
 
     // Update last_used_at
-    this.db.prepare('UPDATE security_credentials SET last_used_at = ? WHERE id = ?').run(Date.now(), id);
+    this.db
+      .prepare('UPDATE security_credentials SET last_used_at = ? WHERE id = ?')
+      .run(Date.now(), id);
 
     return {
       id: row.id as string,
@@ -255,7 +271,9 @@ export class CredentialManager {
   listCredentials(): Omit<StoredCredential, 'encryptedValue' | 'iv' | 'salt' | 'tag'>[] {
     if (!this.db) throw new Error('Database not initialized');
 
-    const rows = this.db.prepare('SELECT * FROM security_credentials ORDER BY provider, name').all() as Record<string, unknown>[];
+    const rows = this.db
+      .prepare('SELECT * FROM security_credentials ORDER BY provider, name')
+      .all() as Record<string, unknown>[];
     return rows.map((row) => ({
       id: row.id as string,
       provider: row.provider as string,
@@ -317,15 +335,24 @@ export class CredentialManager {
     stmt.run(keyId, credentialId, keyHash, resource, expiresAt, now);
 
     // Log
-    this.logAudit('credential.mint', 'info', undefined, resource, {
-      credentialId,
-      keyId,
-      ttlSeconds: ttl,
-      expiresAt,
-    }, true);
+    this.logAudit(
+      'credential.mint',
+      'info',
+      undefined,
+      resource,
+      {
+        credentialId,
+        keyId,
+        ttlSeconds: ttl,
+        expiresAt,
+      },
+      true,
+    );
 
     // Update last_used_at
-    this.db.prepare('UPDATE security_credentials SET last_used_at = ? WHERE id = ?').run(now, credentialId);
+    this.db
+      .prepare('UPDATE security_credentials SET last_used_at = ? WHERE id = ?')
+      .run(now, credentialId);
 
     return { key, expiresAt, resource };
   }
@@ -381,15 +408,26 @@ export class CredentialManager {
       const provider = row.provider as string;
       const name = row.name as string;
 
-      this.logger.info(`Credential expiring soon, rotation needed`, { credentialId, provider, name });
-
-      // Emit event for external rotation handler
-      this.logAudit('credential.expire', 'warning', undefined, `credential://${provider}/${name}`, {
+      this.logger.info(`Credential expiring soon, rotation needed`, {
         credentialId,
         provider,
         name,
-        expiresAt: row.expires_at,
-      }, false);
+      });
+
+      // Emit event for external rotation handler
+      this.logAudit(
+        'credential.expire',
+        'warning',
+        undefined,
+        `credential://${provider}/${name}`,
+        {
+          credentialId,
+          provider,
+          name,
+          expiresAt: row.expires_at,
+        },
+        false,
+      );
 
       // In a real system, this would trigger a rotation via the credential provider's API
       // For now, we just log it
@@ -457,9 +495,21 @@ export class CredentialManager {
     const now = Date.now();
     const fiveMin = now + 5 * 60 * 1000;
 
-    const total = (this.db.prepare('SELECT COUNT(*) as c FROM security_credentials').get() as { c: number }).c;
-    const expiringSoon = (this.db.prepare('SELECT COUNT(*) as c FROM security_credentials WHERE expires_at <= ? AND expires_at > ?').get(fiveMin, now) as { c: number }).c;
-    const expired = (this.db.prepare('SELECT COUNT(*) as c FROM security_credentials WHERE expires_at <= ?').get(now) as { c: number }).c;
+    const total = (
+      this.db.prepare('SELECT COUNT(*) as c FROM security_credentials').get() as { c: number }
+    ).c;
+    const expiringSoon = (
+      this.db
+        .prepare(
+          'SELECT COUNT(*) as c FROM security_credentials WHERE expires_at <= ? AND expires_at > ?',
+        )
+        .get(fiveMin, now) as { c: number }
+    ).c;
+    const expired = (
+      this.db
+        .prepare('SELECT COUNT(*) as c FROM security_credentials WHERE expires_at <= ?')
+        .get(now) as { c: number }
+    ).c;
 
     return { total, expiringSoon, expired };
   }
