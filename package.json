@@ -31,11 +31,12 @@
     "test:ci": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --ci --coverage --coverage-reporters=text-summary --coverage-reporters=lcov",
     "build:watch": "tsc --watch --preserveWatchOutput",
     "build:prod": "tsc --noEmit && tsc",
-    "clean": "rm -rf dist .tsbuildinfo coverage",
+    "clean": "rm -rf dist .tsbuildinfo",
     "rebuild": "npm run clean && npm run build",
     "docker:build": "docker compose -f docker/docker-compose.yml build",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",
-    "docker:down": "docker compose -f docker/docker-compose.yml down"
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "prebuild": "npm run clean"
   },
   "keywords": [
     "ai-agent",
