@@ -1,20 +1,4 @@
-# These are supported funding model platforms
-
-github:
-  - AG064
-
-patreon:
-  - ag064
-
-ko_fi: ag064
-
-tidelift: "npm/ag-claw"
-
-open_collective:
-
-buy_me_a_coffee:
-  - ag064
-
-custom:
-  - name: "Crypto (TRC20)"
-    url: "your-tron-address-here"
+github: AG064
+patreon: ag_claw
+open_collective: ag-claw
+custom: ["https://t.me/ag_064"]
