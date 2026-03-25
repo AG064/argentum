@@ -15,6 +15,7 @@
 [![Forks](https://img.shields.io/github/forks/AG064/ag-claw?style=flat-square)](https://github.com/AG064/ag-claw/network/members)
 [![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram)](https://t.me/ag_claw)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://github.com/AG064/ag-claw/actions/workflows/ci.yml)
+[![DockerHub](https://img.shields.io/docker/image-size/ag064/ag-claw?style=flat-square)](https://hub.docker.com/r/ag064/ag-claw)
 
 </p>
 
@@ -57,7 +58,13 @@ chmod +x agclaw-linux-x64
 ./agclaw-linux-x64 --help
 ```
 
-**Option 3 — From npm (coming soon)**
+**Option 3 — Docker**
+```bash
+docker pull ag064/ag-claw:latest
+docker run -it ag064/ag-claw
+```
+
+**Option 4 — From npm (coming soon)**
 ```bash
 npm install -g ag-claw
 ```
