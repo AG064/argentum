@@ -65,6 +65,12 @@ features:
   browser-automation:
     enabled: true
 
+  computer-control:
+    enabled: false          # Vision-based desktop automation (disabled by default)
+    screenshot_interval_ms: 1000
+    platform: auto          # auto, linux, macos, windows
+    display_number: 0
+
   webhooks:
     enabled: true
 
