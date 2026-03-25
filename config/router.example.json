@@ -1,0 +1,43 @@
+{
+  "$schema": "./router.schema.json",
+  "comment": "Copy this file to router.json and configure your routing rules",
+  "router": {
+    "enabled": true,
+    "defaultAgent": "agx",
+    "idMappings": {
+      "USER_FRIENDLY_NAME": {
+        "numericId": "REPLACE_WITH_NUMERIC_ID",
+        "username": "@username",
+        "description": "Description of this user or chat"
+      }
+    },
+    "rules": [
+      {
+        "condition": "sender_id",
+        "value": "USER_FRIENDLY_NAME",
+        "targetAgent": "target-agent-name",
+        "targetWorkspace": "/optional/path/to/workspace"
+      },
+      {
+        "condition": "chat_id",
+        "value": "CHAT_FRIENDLY_NAME",
+        "targetAgent": "target-agent-name"
+      },
+      {
+        "condition": "chat_type",
+        "value": "group",
+        "targetAgent": "group-handler"
+      },
+      {
+        "condition": "keyword",
+        "value": ["admin", "/admin"],
+        "targetAgent": "admin-agent"
+      },
+      {
+        "condition": "always",
+        "value": "",
+        "targetAgent": "agx"
+      }
+    ]
+  }
+}

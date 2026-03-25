@@ -1,8 +1,11 @@
 /**
  * Router Agent — Central routing for multi-user AG-Claw
- * 
+ *
  * Receives all messages, determines routing rules,
  * and forwards to appropriate agent session.
+ *
+ * IMPORTANT: All routing IDs must be configured via config file.
+ * No user/chat IDs should be hardcoded in this module.
  */
 
 import { EventEmitter } from 'events';
@@ -10,9 +13,11 @@ import { sessions_spawn, sessions_send } from '../sessions';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
+export type ConditionType = 'sender_id' | 'chat_id' | 'chat_type' | 'keyword' | 'always';
+
 export interface RoutingRule {
   /** Match condition type */
-  condition: 'sender_id' | 'chat_id' | 'chat_type' | 'keyword' | 'always';
+  condition: ConditionType;
   /** Value to match against */
   value: string | string[] | RegExp;
   /** Target agent ID to route to */
@@ -26,10 +31,21 @@ export interface RouterConfig {
   rules: RoutingRule[];
   /** Default agent when no rules match */
   defaultAgent: string;
+  /** ID mappings for friendly names (optional) */
+  idMappings?: Record<string, IdMapping>;
+}
+
+export interface IdMapping {
+  /** Numeric Telegram ID */
+  numericId: string;
+  /** Optional username (resolved via Telegram API if needed) */
+  username?: string;
+  /** Human-readable description */
+  description?: string;
 }
 
 export interface MessageContext {
-  /** Sender identifier (e.g. telegram:386565331) */
+  /** Sender identifier (e.g. telegram:386565331 or just 386565331) */
   sender: {
     id: string;
     username?: string;
@@ -55,6 +71,48 @@ export interface RouteResult {
   sessionKey?: string;
 }
 
+// ─── ID Resolution ────────────────────────────────────────────────────────
+
+/**
+ * Normalize an ID to numeric format
+ * Accepts: numeric (386565331), with prefix (telegram:386565331), or mapped name (anneka)
+ */
+export function normalizeId(
+  id: string,
+  config: RouterConfig
+): string {
+  // Already numeric
+  if (/^\d+$/.test(id)) {
+    return id;
+  }
+
+  // Has platform prefix (e.g., telegram:386565331)
+  if (id.includes(':')) {
+    return id.split(':')[1];
+  }
+
+  // Check ID mappings (friendly names)
+  if (config.idMappings && config.idMappings[id]) {
+    return config.idMappings[id].numericId;
+  }
+
+  // Return as-is (might be username or other identifier)
+  return id;
+}
+
+/**
+ * Check if an ID matches, handling normalization
+ */
+export function idMatches(
+  ruleValue: string,
+  contextId: string,
+  config: RouterConfig
+): boolean {
+  const normalizedRule = normalizeId(ruleValue, config);
+  const normalizedContext = normalizeId(contextId, config);
+  return normalizedRule === normalizedContext;
+}
+
 // ─── Router Agent ─────────────────────────────────────────────────────────
 
 export class RouterAgent extends EventEmitter {
@@ -64,7 +122,28 @@ export class RouterAgent extends EventEmitter {
 
   constructor(config: RouterConfig) {
     super();
+    this.validateConfig(config);
     this.config = config;
+  }
+
+  /**
+   * Validate that config has required fields
+   */
+  private validateConfig(config: RouterConfig): void {
+    if (!config.rules || !Array.isArray(config.rules)) {
+      throw new Error('Router config must have a "rules" array');
+    }
+    if (!config.defaultAgent || typeof config.defaultAgent !== 'string') {
+      throw new Error('Router config must have a "defaultAgent" string');
+    }
+    for (const rule of config.rules) {
+      if (!rule.condition || !rule.targetAgent) {
+        throw new Error('Each routing rule must have "condition" and "targetAgent"');
+      }
+      if (!['sender_id', 'chat_id', 'chat_type', 'keyword', 'always'].includes(rule.condition)) {
+        throw new Error(`Invalid condition type: ${rule.condition}`);
+      }
+    }
   }
 
   /**
@@ -81,7 +160,7 @@ export class RouterAgent extends EventEmitter {
     // Find matching rule
     for (const rule of this.config.rules) {
       if (this.matches(rule, ctx)) {
-        const targetWorkspace = rule.targetWorkspace 
+        const targetWorkspace = rule.targetWorkspace
           || this.agentWorkspaces.get(rule.targetAgent);
 
         // Get or create session for target agent
@@ -110,7 +189,7 @@ export class RouterAgent extends EventEmitter {
    */
   async forwardMessage(ctx: MessageContext, response: string): Promise<void> {
     const route = await this.route(ctx);
-    
+
     if (route.sessionKey) {
       await sessions_send(route.sessionKey, response);
     }
@@ -122,17 +201,17 @@ export class RouterAgent extends EventEmitter {
   private matches(rule: RoutingRule, ctx: MessageContext): boolean {
     switch (rule.condition) {
       case 'sender_id':
-        return ctx.sender.id === rule.value;
+        return idMatches(rule.value as string, ctx.sender.id, this.config);
 
       case 'chat_id':
-        return ctx.chat.id === rule.value;
+        return idMatches(rule.value as string, ctx.chat.id, this.config);
 
       case 'chat_type':
         return ctx.chat.type === rule.value;
 
       case 'keyword':
         if (Array.isArray(rule.value)) {
-          return rule.value.some(k => 
+          return rule.value.some(k =>
             ctx.message.toLowerCase().includes(k.toLowerCase())
           );
         }
@@ -157,7 +236,7 @@ export class RouterAgent extends EventEmitter {
     workspace?: string
   ): Promise<string | undefined> {
     const cacheKey = `${agentId}:${workspace || 'default'}`;
-    
+
     if (this.activeSessions.has(cacheKey)) {
       return this.activeSessions.get(cacheKey);
     }
@@ -168,29 +247,64 @@ export class RouterAgent extends EventEmitter {
   }
 }
 
+// ─── Config Loading ────────────────────────────────────────────────────────
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+/**
+ * Load router config from JSON file
+ * Returns default config if file doesn't exist (graceful degradation)
+ */
+export function loadRouterConfig(configPath?: string): RouterConfig {
+  const defaultConfigPath = path.resolve(process.cwd(), 'config/router.json');
+  const finalPath = configPath || defaultConfigPath;
+
+  try {
+    if (fs.existsSync(finalPath)) {
+      const content = fs.readFileSync(finalPath, 'utf-8');
+      const config = JSON.parse(content) as RouterConfig;
+
+      // Validate loaded config
+      if (!config.rules || !Array.isArray(config.rules)) {
+        console.error(`[Router] Invalid config at ${finalPath}: missing "rules" array`);
+        return getEmptyConfig();
+      }
+      if (!config.defaultAgent) {
+        console.error(`[Router] Invalid config at ${finalPath}: missing "defaultAgent"`);
+        return getEmptyConfig();
+      }
+
+      console.log(`[Router] Loaded config from ${finalPath}`);
+      return config;
+    } else {
+      console.warn(`[Router] Config not found at ${finalPath}, using empty config`);
+      return getEmptyConfig();
+    }
+  } catch (error) {
+    console.error(`[Router] Failed to load config from ${finalPath}:`, error);
+    return getEmptyConfig();
+  }
+}
+
+/**
+ * Get an empty/default config that only allows default routing
+ */
+function getEmptyConfig(): RouterConfig {
+  return {
+    rules: [],
+    defaultAgent: 'agx',
+  };
+}
+
 // ─── Default Configuration ────────────────────────────────────────────────
+//
+// DEFAULT CONFIG IS NOW EMPTY - ALL IDs MUST BE CONFIGURED VIA CONFIG FILE
+// See config/router.example.json for reference
+//
 
 export const defaultRouterConfig: RouterConfig = {
-  rules: [
-    // Аня — личный чат
-    {
-      condition: 'sender_id',
-      value: 'telegram:836565331', // TODO: actual Anna ID
-      targetAgent: 'anneka',
-    },
-    // Home чат
-    {
-      condition: 'chat_id',
-      value: 'telegram:-100HOMECHAT', // TODO: actual Home chat ID
-      targetAgent: 'home',
-    },
-    // Fallback
-    {
-      condition: 'always',
-      value: '',
-      targetAgent: 'agx',
-    },
-  ],
+  rules: [],
   defaultAgent: 'agx',
 };
 
