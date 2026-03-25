@@ -61,3 +61,5 @@ export {
   type MemoryEntry,
   type HierarchicalMemory,
 } from './hierarchical-memory';
+
+export { MemoryGitSync, type MemoryChunk, type GitSyncConfig } from './memory-sync';

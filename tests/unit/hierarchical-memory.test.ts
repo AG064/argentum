@@ -63,7 +63,8 @@ describe('HierarchicalMemoryStore', () => {
   });
 
   test('auto-promotes to long-tier when importance >= 0.7', () => {
-    const entry = makeEntry({ importance: 0.9, tier: MemoryTier.SHORT });
+    // Start at MID tier so auto-promote goes MID → LONG (one step)
+    const entry = makeEntry({ importance: 0.9, tier: MemoryTier.MID });
     store.store(entry);
     const results = store.retrieve('', 10);
     expect(results[0]!.tier).toBe(MemoryTier.LONG);
@@ -120,7 +121,7 @@ describe('HierarchicalMemoryStore', () => {
   // -------------------------------------------------------------------------
 
   test('promote moves short -> mid', () => {
-    const entry = makeEntry({ tier: MemoryTier.SHORT });
+    const entry = makeEntry({ tier: MemoryTier.SHORT, importance: 0.1, accessCount: 1 });
     store.store(entry);
     store.promote(entry.id);
     const results = store.retrieve('', 10);
@@ -128,7 +129,7 @@ describe('HierarchicalMemoryStore', () => {
   });
 
   test('promote moves mid -> long', () => {
-    const entry = makeEntry({ tier: MemoryTier.MID });
+    const entry = makeEntry({ tier: MemoryTier.MID, importance: 0.1, accessCount: 1 });
     store.store(entry);
     store.promote(entry.id);
     const results = store.retrieve('', 10);
