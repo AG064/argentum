@@ -9,7 +9,8 @@
  */
 
 import { EventEmitter } from 'events';
-// Stub: sessions will be integrated later
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -248,9 +249,6 @@ export class RouterAgent extends EventEmitter {
 }
 
 // ─── Config Loading ────────────────────────────────────────────────────────
-
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * Load router config from JSON file

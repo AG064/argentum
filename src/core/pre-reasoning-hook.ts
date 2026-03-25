@@ -113,7 +113,7 @@ function extractCritical(toolResults: string[]): string {
     // Look for error-like patterns
     const errorMatch = result.match(/error[:\s]+(.+)/i);
     if (errorMatch && errorMatch[1] && !critical.includes(errorMatch[1])) {
-      critical.push('ERROR: ' + errorMatch[1].trim().slice(0, 140));
+      critical.push(`ERROR: ${errorMatch[1]}`.trim().slice(0, 140));
     }
   }
   return critical.slice(0, 5).join(' | ') || 'None';

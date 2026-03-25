@@ -508,7 +508,7 @@ export class ModelRouter {
    */
   private invalidateCache(modelId: string): void {
     for (const key of this.cache.keys()) {
-      if (key.startsWith(modelId + ':')) {
+      if (key.startsWith()) {
         this.cache.delete(key);
       }
     }
