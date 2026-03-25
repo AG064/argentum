@@ -124,6 +124,39 @@ const CronSchedulerConfigSchema = FeatureToggleSchema.extend({
   maxJobs: z.number().default(500),
 }).default({});
 
+/** Model routing scoring weights configuration */
+export const ModelRoutingWeightsSchema = z.object({
+  costEfficiency: z.number().min(0).max(3).default(1.2),
+  latency: z.number().min(0).max(3).default(1.0),
+  capabilityMatch: z.number().min(0).max(3).default(1.5),
+  contextLengthFit: z.number().min(0).max(3).default(0.8),
+  toolSupport: z.number().min(0).max(3).default(1.3),
+  recentSuccessRate: z.number().min(0).max(3).default(1.4),
+  tokenEfficiency: z.number().min(0).max(3).default(0.7),
+  specializationMatch: z.number().min(0).max(3).default(1.1),
+  reliability: z.number().min(0).max(3).default(1.3),
+  throughput: z.number().min(0).max(3).default(0.6),
+  customWeight: z.number().min(0).max(3).default(1.0),
+}).default({});
+
+/** Model routing configuration schema */
+export const ModelRoutingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  cacheScoresMs: z.number().int().min(1000).max(600000).default(60000),
+  weights: ModelRoutingWeightsSchema.default({}),
+  models: z.array(z.object({
+    modelId: z.string(),
+    costPer1K: z.number(),
+    latency: z.number(),
+    capabilities: z.array(z.string()),
+    contextLength: z.number().optional(),
+    toolSupport: z.boolean().optional(),
+    reliability: z.number().optional(),
+    specialization: z.array(z.string()).optional(),
+    throughput: z.number().optional(),
+  })).optional(),
+}).default({});
+
 /** LLM provider configuration schema */
 export const LLMProviderConfigSchema = z.object({
   base_url: z.string().url(),
@@ -147,6 +180,7 @@ export const LLMConfigSchema = z
 export const ConfigSchema = z.object({
   server: ServerConfigSchema.default({}),
   llm: LLMConfigSchema.default({}),
+  modelRouting: ModelRoutingConfigSchema.default({}),
   features: z
     .object({
       'webchat': WebchatConfigSchema.default({}),
