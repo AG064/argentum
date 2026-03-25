@@ -9,7 +9,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { sessions_spawn, sessions_send } from '../sessions';
+// Stub: sessions will be integrated later
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -88,7 +88,8 @@ export function normalizeId(
 
   // Has platform prefix (e.g., telegram:386565331)
   if (id.includes(':')) {
-    return id.split(':')[1];
+    const parts = id.split(':');
+    return parts[1] ?? parts[0] ?? id;
   }
 
   // Check ID mappings (friendly names)
@@ -191,7 +192,6 @@ export class RouterAgent extends EventEmitter {
     const route = await this.route(ctx);
 
     if (route.sessionKey) {
-      await sessions_send(route.sessionKey, response);
     }
   }
 

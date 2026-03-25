@@ -211,11 +211,10 @@ export class ModelRouter {
     }));
 
     scored.sort((a, b) => b.score - a.score);
-
-    const selected = scored[0].model;
-    logger.debug(`[ModelRouter] Selected: ${selected.modelId} (score: ${scored[0].score.toFixed(2)})`);
-
-    return selected.modelId;
+    const top = scored[0];
+    if (!top) return '';
+    logger.debug(`[ModelRouter] Selected: ${top.model.modelId} (score: ${top.score.toFixed(2)})`);
+    return top.model.modelId;
   }
 
   /**

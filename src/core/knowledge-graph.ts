@@ -168,7 +168,7 @@ export class KnowledgeGraphMemory {
     });
 
     // Record initial version
-    this.recordVersion(id, entity, now, now);
+    this.recordVersion(id, entity as Entity, now, now);
 
     log.debug('Entity added', { id, type: entity.type, name: entity.name });
     return id;
