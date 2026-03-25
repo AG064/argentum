@@ -48,16 +48,17 @@ describe('HierarchicalMemoryStore', () => {
 
   test('stores an entry with auto-generated id when id is empty', () => {
     const entry = makeEntry({ id: '' });
-    store.store(entry);
+    const stored = store.store(entry);
     const results = store.retrieve('', 10);
     expect(results).toHaveLength(1);
     expect(results[0]!.id).toBeTruthy();
+    expect(stored.id).toBeTruthy();
   });
 
   test('stores an entry and retrieves it', () => {
     const entry = makeEntry({ content: 'hello world', tier: MemoryTier.SHORT });
     store.store(entry);
-    const results = store.retrieve('hello', 5);
+    const results = store.retrieve('', 10);
     expect(results).toHaveLength(1);
     expect(results[0]!.content).toBe('hello world');
   });
@@ -90,12 +91,10 @@ describe('HierarchicalMemoryStore', () => {
     expect(results[0]!.content).toContain('typescript');
   });
 
-  test('retrieve returns empty array for no matches (keyword-only filter)', () => {
+  test('retrieve returns entries sorted by recency when no keywords match', () => {
     store.store(makeEntry({ content: 'foo bar', tier: MemoryTier.SHORT }));
     const results = store.retrieve('zzznomatchxxx', 5);
-    // When no keywords match, fall back to recency (returns the entry)
-    // Only strict keyword filtering would return 0 — we fall back to recency
-    // So this test verifies non-matching keyword query returns something
+    // Falls back to recency when no keywords match
     expect(results.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -121,48 +120,42 @@ describe('HierarchicalMemoryStore', () => {
   // -------------------------------------------------------------------------
 
   test('promote moves short -> mid', () => {
-    const entry = makeEntry({ tier: MemoryTier.SHORT, importance: 0.1, accessCount: 1 });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.SHORT, importance: 0.1, accessCount: 1 }));
     store.promote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.MID);
   });
 
   test('promote moves mid -> long', () => {
-    const entry = makeEntry({ tier: MemoryTier.MID, importance: 0.1, accessCount: 1 });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.MID, importance: 0.1, accessCount: 1 }));
     store.promote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.LONG);
   });
 
   test('promote does nothing for long-tier entry', () => {
-    const entry = makeEntry({ tier: MemoryTier.LONG });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.LONG }));
     store.promote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.LONG);
   });
 
   test('demote moves long -> mid', () => {
-    const entry = makeEntry({ tier: MemoryTier.LONG });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.LONG }));
     store.demote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.MID);
   });
 
   test('demote moves mid -> short', () => {
-    const entry = makeEntry({ tier: MemoryTier.MID });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.MID }));
     store.demote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.SHORT);
   });
 
   test('demote does nothing for short-tier entry', () => {
-    const entry = makeEntry({ tier: MemoryTier.SHORT });
-    store.store(entry);
+    const entry = store.store(makeEntry({ tier: MemoryTier.SHORT }));
     store.demote(entry.id);
     const results = store.retrieve('', 10);
     expect(results.find((r) => r.id === entry.id)?.tier).toBe(MemoryTier.SHORT);
