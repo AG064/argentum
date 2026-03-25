@@ -1,21 +1,40 @@
 <p align="center">
   <h1 align="center">AG-Claw</h1>
-  <p align="center"><strong>59 modular features. 8 channels. Zero subscriptions.</strong></p>
+  <p align="center"><strong>Modular AI Agent Framework. Self-hosted. Zero subscriptions.</strong></p>
 </p>
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-0.3.4-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/typescript-5.3-blue.svg?style=flat-square)](https://www.typescriptlang.org)
+[![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square&label=build)](https://github.com/AG064/ag-claw/actions)
 [![Stars](https://img.shields.io/github/stars/AG064/ag-claw?style=flat-square)](https://github.com/AG064/ag-claw/stargazers)
+[![Forks](https://img.shields.io/github/forks/AG064/ag-claw?style=flat-square)](https://github.com/AG064/ag-claw/network/members)
 [![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram)](https://t.me/ag_claw)
-[![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/CI.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
-[![Binary](https://img.shields.io/badge/binary-62MB-blue?style=flat-square)](https://github.com/AG064/ag-claw/releases/latest)
-[![npm](https://img.shields.io/badge/npm-coming%20soon-blue?style=flat-square)](#)
+[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://github.com/AG064/ag-claw/actions/workflows/ci.yml)
 
 </p>
+
+---
+
+## 📊 Project Statistics
+
+| Metric | Value |
+|--------|-------|
+| **Features** | 65+ modular plugins |
+| **Channels** | 8 (Telegram, Discord, Email, Webchat, WhatsApp, Slack, SMS, Signal) |
+| **Memory Backends** | 5 (SQLite, Semantic, Knowledge Graph, Hierarchical, Git Sync) |
+| **Lines of Code** | 45,000+ TypeScript |
+| **TypeScript Errors** | 0 |
+| **Test Coverage** | 15+ security tests |
+| **Docker** | ✅ Ready |
+| **Self-hosted** | ✅ Full |
+| **Subscriptions** | 0 |
+
+
 
 ---
 
