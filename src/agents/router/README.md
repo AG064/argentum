@@ -4,22 +4,102 @@
 
 Router Agent is the central entry point that receives ALL messages and routes them to the appropriate agent based on user/chat identification.
 
+**IMPORTANT: All user and chat IDs must be configured via config file. No IDs are hardcoded in the router code.**
+
 ## Architecture
 
 ```
 Message → Router → [AGX | Anneka | Home | ...] → Response
                  ↓
-           Routing Rules
+           Routing Rules (from config)
 ```
 
-## Routing Rules
+## Configuration
 
-| Condition | Target Agent | Workspace | Description |
-|-----------|-------------|-----------|-------------|
-| `sender.id == ЛЁША_ID` | AGX | workspace/ | Лёша's personal agent |
-| `sender.id == АНЯ_ID` | Anneka | workspace-anneka/ | Аня's personal agent |
-| `chat.id == HOME_CHAT_ID` | Home | workspace-home/ | Shared family chat |
-| `default` | AGX | workspace/ | Fallback |
+All routing is controlled via `config/router.json`:
+
+```json
+{
+  "router": {
+    "enabled": true,
+    "defaultAgent": "agx",
+    "idMappings": {
+      "anneka": {
+        "numericId": "836565331",
+        "username": "@anneka",
+        "description": "Anneka's Telegram account"
+      },
+      "homeChat": {
+        "numericId": "123456789",
+        "description": "Family group chat"
+      }
+    },
+    "rules": [
+      {
+        "condition": "sender_id",
+        "value": "anneka",
+        "targetAgent": "anneka"
+      },
+      {
+        "condition": "chat_id",
+        "value": "homeChat",
+        "targetAgent": "home"
+      },
+      {
+        "condition": "always",
+        "value": "",
+        "targetAgent": "agx"
+      }
+    ]
+  }
+}
+```
+
+### ID Formats
+
+The router accepts IDs in multiple formats:
+
+| Format | Example | Resolution |
+|--------|---------|------------|
+| Numeric | `386565331` | Used directly |
+| Platform prefix | `telegram:386565331` | Strips prefix |
+| Friendly name | `anneka` | Looks up in `idMappings` |
+| Username | `@xiwka` | Resolves via Telegram API (future) |
+
+### Condition Types
+
+| Condition | Description |
+|-----------|-------------|
+| `sender_id` | Match message sender |
+| `chat_id` | Match chat where message was sent |
+| `chat_type` | Match chat type (`direct`, `group`, `channel`) |
+| `keyword` | Match message content (string or array) |
+| `always` | Always match (fallback) |
+
+### ID Mappings
+
+Use `idMappings` to define friendly names for IDs:
+
+```json
+{
+  "idMappings": {
+    "FRIENDLY_NAME": {
+      "numericId": "123456789",
+      "username": "@username",
+      "description": "Optional description"
+    }
+  }
+}
+```
+
+Then reference friendly names in rules:
+```json
+{
+  "condition": "sender_id",
+  "value": "FRIENDLY_NAME",
+  "targetAgent": "target"
+}
+```
 
 ## Privacy Model
 
@@ -34,92 +114,122 @@ Message → Router → [AGX | Anneka | Home | ...] → Response
     ▼           ▼           ▼
 ┌──────┐  ┌──────┐  ┌──────────┐
 │ AGX  │  │Anneka│  │   Home   │
-│(Лёша)│  │ (Аня) │  │ (shared)│
 └──┬───┘  └───┬───┘  └────┬─────┘
    │          │            │
    └────┬─────┴────────────┘
         │
-        └── Shared context (AGX ↔ Home, Anneka ↔ Home)
-            AGX ↔ Anneka = ISOLATED
+        └── Shared context (configurable per agent)
+            AGX ↔ Anneka = ISOLATED (unless configured)
 ```
 
-## Implementation
+## Example Configurations
 
-```typescript
-// src/agents/router/index.ts
+### Basic Single User
 
-export interface RouterConfig {
-  rules: RoutingRule[];
-  defaultAgent: string;
-}
-
-export interface RoutingRule {
-  condition: 'sender_id' | 'chat_id' | 'keyword' | 'always';
-  value: string | string[] | RegExp;
-  targetAgent: string;
-  targetWorkspace?: string;
-}
-
-export class RouterAgent {
-  constructor(private config: RouterConfig) {}
-
-  route(context: MessageContext): RouteResult {
-    for (const rule of this.config.rules) {
-      if (this.evaluate(rule, context)) {
-        return {
-          agent: rule.targetAgent,
-          workspace: rule.targetWorkspace,
-        };
-      }
-    }
-    return { agent: this.config.defaultAgent };
-  }
-
-  private evaluate(rule: RoutingRule, ctx: MessageContext): boolean {
-    switch (rule.condition) {
-      case 'sender_id':
-        return ctx.sender.id === rule.value;
-      case 'chat_id':
-        return ctx.chat.id === rule.value;
-      case 'keyword':
-        return Array.isArray(rule.value) 
-          && rule.value.some(k => ctx.message.includes(k));
-      case 'always':
-        return true;
-    }
-  }
-}
-```
-
-## Session Management
-
-When routing to a target agent:
-1. Check if active session exists for that agent
-2. If yes → send to existing session
-3. If no → create new session with target workspace
-4. Sessions persist across messages (per chat)
-
-## AG-Claw Integration
-
-Add to `config/default.json`:
 ```json
 {
-  "agents": {
-    "router": {
-      "enabled": true,
-      "routes": [
-        { "sender_id": "836565331", "target": "anneka" },
-        { "chat_id": "-100HOMECHAT", "target": "home" },
-        { "always": true, "target": "agx" }
-      ]
-    }
+  "router": {
+    "defaultAgent": "agx",
+    "rules": [
+      {
+        "condition": "always",
+        "value": "",
+        "targetAgent": "agx"
+      }
+    ]
   }
 }
 ```
 
-## Future Extensibility
+### Multi-User with Specific Routing
 
-- Database backend for routing rules
-- Learning-based routing (router learns user preferences)
-- Priority queues per user
-- Rate limiting per route
+```json
+{
+  "router": {
+    "defaultAgent": "agx",
+    "idMappings": {
+      "alice": { "numericId": "111111111" },
+      "bob": { "numericId": "222222222" },
+      "familyGroup": { "numericId": "-1003333333333" }
+    },
+    "rules": [
+      { "condition": "sender_id", "value": "alice", "targetAgent": "alice-agent" },
+      { "condition": "sender_id", "value": "bob", "targetAgent": "bob-agent" },
+      { "condition": "chat_id", "value": "familyGroup", "targetAgent": "home" },
+      { "condition": "always", "value": "", "targetAgent": "agx" }
+    ]
+  }
+}
+```
+
+### Keyword-Based Routing
+
+```json
+{
+  "router": {
+    "defaultAgent": "agx",
+    "rules": [
+      {
+        "condition": "keyword",
+        "value": ["admin", "/admin"],
+        "targetAgent": "admin"
+      },
+      {
+        "condition": "keyword",
+        "value": ["help", "/help"],
+        "targetAgent": "helpdesk"
+      },
+      {
+        "condition": "always",
+        "value": "",
+        "targetAgent": "agx"
+      }
+    ]
+  }
+}
+```
+
+## Adding to AG-Claw
+
+1. Create `config/router.json` with your routing rules
+2. Register agents with their workspaces:
+
+```typescript
+import { RouterAgent, loadRouterConfig } from './agents/router';
+
+const config = loadRouterConfig();
+const router = new RouterAgent(config);
+
+router.registerAgent('agx', '/path/to/workspace');
+router.registerAgent('anneka', '/path/to/workspace-anneka');
+router.registerAgent('home', '/path/to/workspace-home');
+```
+
+## Graceful Degradation
+
+If the config file is missing or invalid:
+- Router logs a warning
+- Falls back to empty rules array
+- All messages route to `defaultAgent`
+- No crash occurs
+
+## Best Practices
+
+1. **Never hardcode IDs** - Always use `idMappings` for readability
+2. **Use friendly names** - Makes config self-documenting
+3. **Keep rules in priority order** - First match wins
+4. **Always have a fallback** - `always` condition as last rule
+5. **Document new mappings** - Add `description` field for future reference
+
+## File Structure
+
+```
+ag-claw/
+├── config/
+│   └── router.json          # Your routing configuration
+├── src/
+│   └── agents/
+│       └── router/
+│           ├── index.ts     # Router implementation
+│           └── README.md    # This file
+```
