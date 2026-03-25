@@ -6,6 +6,7 @@
  *   - Logger, createLogger(), featureLogger() — structured logging
  *   - PluginLoader — feature loading and lifecycle management
  *   - LLMProvider, Message, ToolDefinition, LLMResponse, createLLMProvider() — LLM abstraction
+ *   - HierarchicalMemoryStore, MemoryTier, MemoryEntry — three-tier memory system
  */
 
 export { ConfigManager, getConfig, ConfigSchema, type AGClawConfig } from './config';
@@ -42,3 +43,21 @@ export type {
   ProviderConfig,
   LLMConfig,
 } from './llm-provider';
+
+export {
+  ModelRouter,
+  getModelRouter,
+  resetModelRouter,
+  DEFAULT_SCORING_WEIGHTS,
+  type ModelScore,
+  type RoutingCriteria,
+  type ScoringWeights,
+  type ModelRouterConfig,
+} from './model-router';
+
+export {
+  HierarchicalMemoryStore,
+  MemoryTier,
+  type MemoryEntry,
+  type HierarchicalMemory,
+} from './hierarchical-memory';
