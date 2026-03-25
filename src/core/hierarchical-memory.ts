@@ -43,7 +43,7 @@ export interface MemoryEntry {
 }
 
 export interface HierarchicalMemory {
-  store(entry: MemoryEntry): void;
+  store(entry: MemoryEntry): MemoryEntry;
   retrieve(query: string, maxResults: number): MemoryEntry[];
   promote(id: string): void;
   demote(id: string): void;
@@ -111,7 +111,7 @@ function contentSimilarity(a: string, b: string): number {
 // Implementation
 // ---------------------------------------------------------------------------
 
-export class HierarchicalMemoryStore implements HierarchicalMemory {
+export class HierarchicalMemoryStore {
   private db: Database.Database;
   private flushPending = false;
 
@@ -152,8 +152,9 @@ export class HierarchicalMemoryStore implements HierarchicalMemory {
   // store
   // -------------------------------------------------------------------------
 
-  store(entry: MemoryEntry): void {
+  store(entry: MemoryEntry): MemoryEntry { // line 155
     const now = Date.now();
+    const id = entry.id || generateId();
 
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO memory_entries
@@ -163,7 +164,7 @@ export class HierarchicalMemoryStore implements HierarchicalMemory {
     `);
 
     const row = {
-      id: entry.id || generateId(),
+      id,
       tier: entry.tier,
       content: entry.content,
       importance: entry.importance,
@@ -188,6 +189,8 @@ export class HierarchicalMemoryStore implements HierarchicalMemory {
     if (entry.importance >= LONG_MIN_IMPORTANCE && entry.tier !== MemoryTier.LONG) {
       this.promoteInternal(row.id);
     }
+
+    return { ...entry, id };
   }
 
   // -------------------------------------------------------------------------
@@ -230,11 +233,12 @@ export class HierarchicalMemoryStore implements HierarchicalMemory {
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score);
 
-    // If nothing matched keywords, fall back to recency order
-    const finalResults = scored.length > 0 ? scored : rows.map((r) => ({ entry: this.rowToEntry(r), score: 0 }));
-    return finalResults.slice(0, maxResults);
+    // If nothing matched keywords, fall back to recency
+    if (scored.length === 0) {
+      return rows.map((r) => this.rowToEntry(r)).slice(0, maxResults);
+    }
 
-    return scored.map((s) => s.entry);
+    return scored.slice(0, maxResults).map((s) => s.entry);
   }
 
   // -------------------------------------------------------------------------
