@@ -119,7 +119,7 @@ export class MCPMemory extends EventEmitter {
       env: config.env ?? {},
       namespace: config.namespace ?? 'default',
     };
-    this.logger = new Logger('MCPMemory');
+    this.logger = new Logger({ name: 'MCPMemory' });
   }
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -597,10 +597,4 @@ function resolveEnum(
 // ─── Exports ───────────────────────────────────────────────────────────────────
 
 export { MCPMemoryFeature };
-export type {
-  MCPConfig,
-  MCPProvider,
-  MemorySearchResult,
-};
-
 export default MCPMemoryFeature;
