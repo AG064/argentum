@@ -189,7 +189,7 @@ async function initKnowledgeGraph3D(containerId) {
   container.innerHTML = '';
 
   // Create 3D graph
-  const Graph = window.3DForceGraph;
+  const Graph = window["3DForceGraph"];
 
   graphInstance = Graph({
     containerId: containerId,
@@ -589,7 +589,7 @@ function focusOnNeighbors(node) {
  */
 async function ensure3DForceGraphLoaded() {
   // Check if already loaded
-  if (window.3DForceGraph) return Promise.resolve();
+  if (window["3DForceGraph"]) return Promise.resolve();
 
   return new Promise(function(resolve, reject) {
     // Load Three.js first

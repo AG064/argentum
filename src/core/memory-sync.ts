@@ -96,7 +96,7 @@ export class MemoryGitSync {
       const filename = `${chunk.type}_${chunk.id}.json${this.config.compress ? '.gz' : ''}`;
       const filepath = join(this.chunksDir, filename);
 
-      let content = JSON.stringify(chunk);
+      const content = JSON.stringify(chunk);
 
       if (this.config.compress && content.length > 100) {
         const compressed = await this.compress(content);

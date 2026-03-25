@@ -68,7 +68,7 @@ export function compactResult(
   } catch {
     // If we can't write to disk, return truncated version
     return {
-      compact: result.slice(0, threshold) + '... (truncation failed)',
+      compact: `${result.slice(0, threshold)}... (truncation failed)`,
       wasCompacted: true,
     };
   }
