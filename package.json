@@ -1,7 +1,7 @@
 {
   "name": "ag-claw",
   "version": "0.3.4",
-  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
+  "description": "59 modular features. 8 channels. Self-hosted AI agent framework \u2014 zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -104,5 +104,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/AG064/ag-claw.git"
+  },
+  "overrides": {
+    "undici": "~6.40.0"
   }
 }
