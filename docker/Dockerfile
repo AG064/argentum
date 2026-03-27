@@ -15,7 +15,7 @@ COPY src/ ./src/
 RUN npm run build
 
 # Prune dev dependencies
-RUN npm prune --production
+RUN npm prune --production --legacy-peer-deps
 
 # ============================================
 # Stage 2: Production
