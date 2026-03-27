@@ -129,7 +129,7 @@ jobs:
       
       - name: Build Docker image
         run: |
-          docker build -t ag-claw:test .
+          docker build -t ag-claw:test -f docker/Dockerfile .
           docker run ag-claw:test --version || true
       
       - name: Verify Docker
@@ -156,7 +156,7 @@ jobs:
       - name: Docker install
         if: matrix.install_method == 'docker'
         run: |
-          docker build -t ag-claw:test .
+          docker build -t ag-claw:test -f docker/Dockerfile .
           docker run ag-claw:test --version || true
       
       - name: Binary install
