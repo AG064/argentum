@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copy dependency manifests first (cache layer)
 COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Copy source and build
 COPY tsconfig.json ./
