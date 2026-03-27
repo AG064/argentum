@@ -157,7 +157,7 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
     case 'Compound':
       // Handle multiple expressions (e.g., from jsep parsing)
       if (Array.isArray(node.body)) {
-        return node.body.reduce((acc, n) => evalNode(n, vars), undefined);
+        return node.body.reduce((_acc: unknown, n: { type: string }) => evalNode(n, vars), undefined);
       }
       return evalNode(node.body, vars);
   }
