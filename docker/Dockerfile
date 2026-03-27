@@ -5,7 +5,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency manifests first (cache layer)
+# Copy dependency manifests first (cache layer, updated 2026-03-27)
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts --legacy-peer-deps
 
