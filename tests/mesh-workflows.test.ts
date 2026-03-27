@@ -18,12 +18,12 @@ describe('mesh-workflows evaluateCondition', () => {
     });
   });
 
-  test('logical expression with variables (unsupported operator -> fails safe)', async () => {
+  test('logical expression with variables (and operator works correctly)', async () => {
     const handler = (mesh as any).stepHandlers.get('condition');
     const step = { config: { condition: 'stock > 0 && price < 50' }, nextSteps: ['a', 'b'] };
     const r = await handler(step, { price: 40, stock: 2 }, {} as any);
-    // current evaluator does not support && and should return result:false and warn
-    expect(r.result).toBe(false);
+    // evaluator supports &&: stock=2 (>0), price=40 (<50) => true && true = true
+    expect(r.result).toBe(true);
   });
 
   afterAll(async () => {
