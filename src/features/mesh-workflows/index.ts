@@ -125,6 +125,9 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
         case '!==':
           return left !== right;
       }
+      // Handle LogicalExpression operators in BinaryExpression case (jsep quirk)
+      if (node.operator === '&&') return evalNode(node.left, vars) && evalNode(node.right, vars);
+      if (node.operator === '||') return evalNode(node.left, vars) || evalNode(node.right, vars);
       throw new Error(`Unsupported operator: ${node.operator}`);
     }
     case 'LogicalExpression': {
@@ -151,8 +154,12 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
       const prop = node.computed ? evalNode(node.property, vars) : node.property.name;
       return obj ? obj[prop] : undefined;
     }
-    default:
-      throw new Error(`Unsupported node type: ${node.type}`);
+    case 'Compound':
+      // Handle multiple expressions (e.g., from jsep parsing)
+      if (Array.isArray(node.body)) {
+        return node.body.reduce((acc, n) => evalNode(n, vars), undefined);
+      }
+      return evalNode(node.body, vars);
   }
 }
 
