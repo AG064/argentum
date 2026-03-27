@@ -18,11 +18,26 @@ describe('mesh-workflows evaluateCondition', () => {
     });
   });
 
-  test('logical expression with variables (and operator works correctly)', async () => {
+  test('&& operator returns true when both conditions are true', async () => {
     const handler = (mesh as any).stepHandlers.get('condition');
     const step = { config: { condition: 'stock > 0 && price < 50' }, nextSteps: ['a', 'b'] };
     const r = await handler(step, { price: 40, stock: 2 }, {} as any);
-    // evaluator supports &&: stock=2 (>0), price=40 (<50) => true && true = true
+    expect(r.result).toBe(true);
+    expect(r.nextStep).toBe('a'); // first nextStep when true
+  });
+
+  test('&& operator returns false when first condition is false', async () => {
+    const handler = (mesh as any).stepHandlers.get('condition');
+    const step = { config: { condition: 'stock > 0 && price < 50' }, nextSteps: ['a', 'b'] };
+    const r = await handler(step, { price: 60, stock: 2 }, {} as any);
+    expect(r.result).toBe(false);
+    expect(r.nextStep).toBe('b'); // second nextStep when false
+  });
+
+  test('|| operator returns true when at least one condition is true', async () => {
+    const handler = (mesh as any).stepHandlers.get('condition');
+    const step = { config: { condition: 'stock > 10 || price < 50' }, nextSteps: ['a', 'b'] };
+    const r = await handler(step, { price: 40, stock: 5 }, {} as any);
     expect(r.result).toBe(true);
   });
 
