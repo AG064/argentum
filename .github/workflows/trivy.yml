@@ -2,7 +2,7 @@ name: Trivy Security Scan
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, development]
     paths:
       - 'Dockerfile'
       - 'docker/**'
@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t ag-claw:${{ github.sha }} ./docker
+        run: docker build -t ag-claw:${{ github.sha }} -f docker/Dockerfile .
 
       - name: Run Trivy
         uses: aquasecurity/trivy-action@master
