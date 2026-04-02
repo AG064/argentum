@@ -1,7 +1,7 @@
 {
   "name": "ag-claw",
   "version": "0.3.4",
-  "description": "59 modular features. 8 channels. Self-hosted AI agent framework \u2014 zero subscriptions, total control.",
+  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -53,6 +53,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.1",
+    "@memtensor/memos-cloud-openclaw-plugin": "^0.1.11",
     "@types/uuid": "^10.0.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.0.0",
