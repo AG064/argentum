@@ -362,7 +362,7 @@ function createBuiltinTools(): Tool[] {
         const { existsSync } = await import('fs');
         const { join } = await import('path');
 
-        const homeDir = process.env['HOME'] || '/home/ag064';
+        const homeDir = process.env.HOME || '/home/ag064';
         const scriptPath = join(
           homeDir,
           '.openclaw',
@@ -399,7 +399,7 @@ function createBuiltinTools(): Tool[] {
         return new Promise((resolve) => {
           const env = {
             ...process.env,
-            GEMINI_API_KEY: process.env['GEMINI_API_KEY'] || 'your_gemini_api_key_here',
+            GEMINI_API_KEY: process.env.GEMINI_API_KEY || 'your_gemini_api_key_here',
           };
 
           const proc = spawn('uv', args, { env });
