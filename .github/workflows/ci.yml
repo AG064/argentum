@@ -135,7 +135,7 @@ jobs:
       - name: Verify Docker
         run: |
           docker images ag-claw:test
-          test $(docker images ag-claw:test -q | wc -l) -gt 0
+          test "$(docker images ag-claw:test -q | wc -l)" -gt 0
 
   installation-test:
     name: Installation Test

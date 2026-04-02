@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # Security updates - auto-merge enabled
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "development"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
@@ -12,17 +12,42 @@ updates:
     commit-message:
       prefix: "fix"
       include: "scope"
-    # Auto-approve and auto-merge security updates
     reviewers:
       - "AG064"
 
-  # Docker base image updates
+  # Root Dockerfile used by release/publish workflows
   - package-ecosystem: "docker"
-    directory: "/docker"
+    directory: "/"
+    target-branch: "development"
     schedule:
       interval: "weekly"
     labels:
       - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Runtime image under /docker used by local and CI container builds
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "development"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "security"
       - "automated"
     commit-message:
       prefix: "chore"
