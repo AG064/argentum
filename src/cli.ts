@@ -147,6 +147,7 @@ function cmdHelp(): void {
   print('    security credentials  Manage credentials');
   print('    security sandbox      Show sandbox config');
   print('    security blueprint    Blueprint management');
+  print('    image "prompt"        Generate image (--resolution 1K|2K|4K, --edit, --output)');
   print('    version               Show version');
   print('    help                  Show this help');
   print('');
@@ -207,6 +208,147 @@ function cmdACP(): void {
   } catch (err: any) {
     error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function cmdImage(): void {
+  // agclaw image "prompt" [--resolution 1K|2K|4K] [--edit input.png] [--output name.png]
+  const subArgs = args.slice(1);
+
+  if (subArgs.length === 0 || subArgs[0] === 'help' || subArgs[0] === '--help' || subArgs[0] === '-h') {
+    banner();
+    print('  \x1b[1mImage Generation\x1b[0m');
+    print('');
+    print('  \x1b[1mUsage:\x1b[0m');
+    print('    agclaw image "prompt text" [options]');
+    print('');
+    print('  \x1b[1mOptions:\x1b[0m');
+    print('    --resolution, -r   Resolution: 1K (default), 2K, 4K');
+    print('    --edit, -e          Input image path for editing (optional)');
+    print('    --output, -o        Output filename (default: generated timestamped name)');
+    print('');
+    print('  \x1b[1mExamples:\x1b[0m');
+    print('    agclaw image "a sunset over mountains"');
+    print('    agclaw image "a cat" --resolution 2K --output cat.png');
+    print('    agclaw image "make it blue" --edit input.png --output result.png');
+    print('');
+    print('  \x1b[1mProviders:\x1b[0m');
+    print('    Primary:   Gemini 3 Pro Image (gemini-3-pro-image)');
+    print('    Fallback: SiliconFlow FLUX.1-dev (automatic on quota error)');
+    print('');
+    return;
+  }
+
+  // Parse arguments
+  const promptParts: string[] = [];
+  let resolution = '1K';
+  let inputImage: string | undefined;
+  let outputFilename: string | undefined;
+
+  for (let i = 0; i < subArgs.length; i++) {
+    const arg = subArgs[i] as string | undefined;
+    if (!arg) continue;
+    if (arg === '--resolution' || arg === '-r') {
+      const val = subArgs[++i];
+      if (val && ['1K', '2K', '4K'].includes(val)) {
+        resolution = val;
+      } else {
+        error('Invalid resolution. Use: 1K, 2K, or 4K');
+        return;
+      }
+    } else if (arg === '--edit' || arg === '-e') {
+      inputImage = subArgs[++i] ?? undefined;
+    } else if (arg === '--output' || arg === '-o') {
+      outputFilename = subArgs[++i] ?? undefined;
+    } else if (!arg.startsWith('-')) {
+      promptParts.push(arg);
+    }
+  }
+
+  const prompt = promptParts.join(' ');
+  if (!prompt.trim()) {
+    error('Prompt cannot be empty. Use: agclaw image "your prompt"');
+    return;
+  }
+
+  if (!outputFilename) {
+    const timestamp = Date.now();
+    const safePrompt = prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_');
+    outputFilename = `image_${safePrompt}_${timestamp}.png`;
+  }
+
+  banner();
+  info(`Generating image...`);
+  print(`  Prompt:      ${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}`);
+  print(`  Resolution:  ${resolution}`);
+  if (inputImage) print(`  Input image: ${inputImage}`);
+  print(`  Output:      ${outputFilename}`);
+  print('');
+
+  const { spawn } = require('child_process');
+  const homeDir = process.env['HOME'] || '/home/ag064';
+  const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
+
+  const scriptArgs = [
+    'run',
+    'python3',
+    scriptPath,
+    '--prompt',
+    prompt,
+    '--filename',
+    outputFilename,
+    '--resolution',
+    resolution,
+  ];
+
+  if (inputImage) {
+    scriptArgs.push('--input-image', inputImage);
+  }
+
+  const env = {
+    ...process.env,
+    GEMINI_API_KEY: process.env['GEMINI_API_KEY'] || 'your_gemini_api_key_here',
+  };
+
+  const start = Date.now();
+  const proc = spawn('uv', scriptArgs, { env });
+
+  let stdout = '';
+  let stderr = '';
+
+  proc.stdout?.on('data', (d: any) => {
+    const line = d.toString();
+    stdout += line;
+    process.stdout.write(`  ${line}`);
+  });
+
+  proc.stderr?.on('data', (d: any) => {
+    const line = d.toString();
+    stderr += line;
+    // Only show non-quiet lines
+    if (!line.includes('[SiliconFlow]') && !line.includes('[Gemini]') && !line.startsWith('  ')) {
+      process.stderr.write(`  \x1b[90m${line}\x1b[0m`);
+    }
+  });
+
+  proc.on('close', (code: any) => {
+    const duration = ((Date.now() - start) / 1000).toFixed(1);
+
+    print('');
+    if (code === 0) {
+      success(`Image generated in ${duration}s`);
+      print(`  Saved to: ${outputFilename}`);
+    } else {
+      warn(`Script exited with code ${code} (${duration}s)`);
+      if (stderr) {
+        print(`  \x1b[31m${stderr.slice(0, 300)}\x1b[0m`);
+      }
+    }
+  });
+
+  proc.on('error', (err: any) => {
+    error(`Failed to start uv: ${err.message}`);
+    error('Make sure "uv" is installed: curl -LsSf https://astral.sh/uv/install.sh | sh');
+  });
 }
 
 function cmdVersion(): void {
@@ -3499,6 +3641,11 @@ async function main(): Promise<void> {
     case 'security':
     case 'security-cmd':
       await cmdSecurity();
+      break;
+    case 'image':
+    case 'img':
+    case 'generate':
+      cmdImage();
       break;
     default:
       error(`Unknown command: ${command}`);
