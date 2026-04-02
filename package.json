@@ -1,7 +1,7 @@
 {
   "name": "ag-claw",
   "version": "0.3.4",
-  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
+  "description": "59 modular features. 8 channels. Self-hosted AI agent framework \u2014 zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -36,7 +36,8 @@
     "docker:build": "docker compose -f docker/docker-compose.yml build",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f docker/docker-compose.yml down",
-    "prebuild": "npm run clean"
+    "prebuild": "npm run clean",
+    "postinstall": "node scripts/postinstall-patch.js"
   },
   "keywords": [
     "ai-agent",
@@ -106,10 +107,21 @@
     "url": "https://github.com/AG064/ag-claw.git"
   },
   "overrides": {
-    "undici": "~6.40.0",
-    "minimatch": "^10.2.5",
+    "minimatch": "9.0.7",
+    "eslint-plugin-import": {
+      "minimatch": "9.0.0"
+    },
+    "undici": "~6.21.0",
     "cross-spawn": "^7.0.6",
     "glob": "^11.0.1",
-    "brace-expansion": "^3.0.2"
+    "brace-expansion": "^3.0.2",
+    "@eslint/eslintrc": {
+      "minimatch": "9.0.7"
+    },
+    "eslint-plugin-unicorn": {
+      "@eslint/eslintrc": {
+        "minimatch": "9.0.7"
+      }
+    }
   }
 }

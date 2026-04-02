@@ -13,9 +13,9 @@
  */
 
 import { spawn } from 'child_process';
-import { join, dirname } from 'path';
-import { homedir } from 'os';
 import { existsSync, readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join, dirname } from 'path';
 
 export interface SkillEvolutionConfig {
   /** Path to OpenSpace installation (default: ~/OpenSpace) */
@@ -113,14 +113,14 @@ export class SkillEvolution {
   async evolveSkill(skillName: string, metrics?: Record<string, number>): Promise<EvolveResult> {
     console.log(`[SkillEvolution] AUTO-IMPROVE: evolving ${skillName}`);
     
-    // If metrics provided, use them; otherwise let OpenSpace analyze
+    let result: string;
     if (metrics) {
       const metricsFile = `/tmp/skill-metrics-${Date.now()}.json`;
       const fs = await import('fs');
       fs.writeFileSync(metricsFile, JSON.stringify(metrics));
-      var result = await this.runOpenSpace(['skill-evolve', skillName, '--metrics', metricsFile]);
+      result = await this.runOpenSpace(['skill-evolve', skillName, '--metrics', metricsFile]);
     } else {
-      var result = await this.runOpenSpace(['skill-evolve', skillName]);
+      result = await this.runOpenSpace(['skill-evolve', skillName]);
     }
     
     try {
