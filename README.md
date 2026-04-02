@@ -147,6 +147,12 @@ tailscale serve https
 | 🪝 Webhooks | 🌐 Browser Automation | 📦 Container Sandbox |
 | ✈️ Air-Gapped Mode | 🎛️ Task Checkout | |
 
+### Image Generation
+| | | |
+|---|---|---|
+| 🎨 AI Image Generation | 🔄 Auto Fallback | 📐 Multi-Resolution |
+| 🖼️ Image Editing | ⏱️ Progress Tracking | 🌐 Local Processing |
+
 ### Security
 | | | |
 |---|---|---|
@@ -217,6 +223,12 @@ agclaw agents                      # List configured agents
 agclaw sessions                    # View conversation sessions
 agclaw memory search <query>       # Search semantic memory
 agclaw memory stats                # Show memory statistics
+
+# Image generation
+agclaw image "prompt"              # Generate image with Gemini + SiliconFlow fallback
+agclaw image --resolution 2K       # Set resolution: 1K, 2K, or 4K
+agclaw image --edit input.png      # Edit an existing image
+agclaw image --output name.png     # Custom output filename
 
 # Configuration
 agclaw config                      # Show full config
