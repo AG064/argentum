@@ -22,6 +22,9 @@ RUN npm prune --production --legacy-peer-deps
 # ============================================
 FROM node:20-alpine
 
+# Patch Alpine system CVEs (tar, zlib, etc.)
+RUN apk update && apk upgrade --no-cache
+
 # Install wget for health checks (smaller than curl)
 RUN apk add --no-cache wget
 
