@@ -72,7 +72,8 @@ export interface ScoringWeights {
 export interface ModelRouterConfig {
   weights?: Partial<ScoringWeights>;
   cacheScoresMs?: number;
-  defaultWeights: ScoringWeights;
+  includeDefaultModels?: boolean;
+  defaultWeights?: ScoringWeights;
 }
 
 // ─── Default Weights (15 dimensions) ───────────────────────────────────────
@@ -154,8 +155,10 @@ export class ModelRouter {
     this.models = new Map();
 
     // Initialize with default models
-    for (const model of DEFAULT_MODELS) {
-      this.models.set(model.modelId, { ...model });
+    if (config?.includeDefaultModels ?? true) {
+      for (const model of DEFAULT_MODELS) {
+        this.models.set(model.modelId, { ...model });
+      }
     }
   }
 

@@ -12,7 +12,7 @@ describe('ModelRouter', () => {
   describe('selectModel', () => {
     it('should select a model when preferCheap is true', () => {
       // Create router with only models we control
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/cheap-model',
@@ -53,7 +53,7 @@ describe('ModelRouter', () => {
     });
 
     it('should select a model within maxCost limit', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/cheap-model',
@@ -94,7 +94,7 @@ describe('ModelRouter', () => {
     });
 
     it('should filter out models exceeding maxLatency', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/slow-model',
@@ -131,7 +131,7 @@ describe('ModelRouter', () => {
     });
 
     it('should filter by required capabilities', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/basic-model',
@@ -168,7 +168,7 @@ describe('ModelRouter', () => {
     });
 
     it('should filter by required tools', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/no-tools',
@@ -205,7 +205,7 @@ describe('ModelRouter', () => {
     });
 
     it('should filter by minContextLength', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/small-context',
@@ -242,7 +242,7 @@ describe('ModelRouter', () => {
     });
 
     it('should return a valid modelId string', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model-a',
@@ -266,7 +266,7 @@ describe('ModelRouter', () => {
     });
 
     it('should return first available model when no criteria match', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/expensive',
@@ -293,7 +293,7 @@ describe('ModelRouter', () => {
 
   describe('registerModel', () => {
     it('should register a new model', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       const newModel: ModelScore = {
         modelId: 'test/new-model',
         score: 0,
@@ -315,7 +315,7 @@ describe('ModelRouter', () => {
     });
 
     it('should override existing model with same id', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       const model1: ModelScore = {
         modelId: 'test/model',
         score: 0,
@@ -342,7 +342,7 @@ describe('ModelRouter', () => {
 
   describe('getModels', () => {
     it('should return registered models', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model-a',
@@ -365,7 +365,7 @@ describe('ModelRouter', () => {
     });
 
     it('should return a copy, not the original', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       const models1 = router.getModels();
       const models2 = router.getModels();
       expect(models1).not.toBe(models2);
@@ -374,7 +374,7 @@ describe('ModelRouter', () => {
 
   describe('recordSuccess / recordFailure', () => {
     it('should increment successful requests', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -400,7 +400,7 @@ describe('ModelRouter', () => {
     });
 
     it('should increment total requests on failure without increasing success', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -426,7 +426,7 @@ describe('ModelRouter', () => {
     });
 
     it('should record lastSuccessAt timestamp', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -451,7 +451,7 @@ describe('ModelRouter', () => {
     });
 
     it('should record lastFailureAt timestamp', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -478,7 +478,7 @@ describe('ModelRouter', () => {
 
   describe('scoreModel', () => {
     it('should return a positive score', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -502,7 +502,7 @@ describe('ModelRouter', () => {
     });
 
     it('should return different scores for different models', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/cheap',
@@ -541,7 +541,7 @@ describe('ModelRouter', () => {
     });
 
     it('should clear cache when weights change', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
@@ -571,7 +571,7 @@ describe('ModelRouter', () => {
 
   describe('weights', () => {
     it('should get current weights', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       const weights = router.getWeights();
       expect(weights).toHaveProperty('costEfficiency');
       expect(weights).toHaveProperty('latency');
@@ -579,7 +579,7 @@ describe('ModelRouter', () => {
     });
 
     it('should set new weights', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.setWeights({ costEfficiency: 3, latency: 2 });
       const weights = router.getWeights();
       expect(weights.costEfficiency).toBe(3);
@@ -587,7 +587,7 @@ describe('ModelRouter', () => {
     });
 
     it('should merge partial weights', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       const before = router.getWeights();
       router.setWeights({ costEfficiency: 5 });
       const after = router.getWeights();
@@ -598,7 +598,7 @@ describe('ModelRouter', () => {
 
   describe('updateMetrics', () => {
     it('should update model metrics', () => {
-      const router = new ModelRouter();
+      const router = new ModelRouter({ includeDefaultModels: false });
       router.registerModels([
         {
           modelId: 'test/model',
