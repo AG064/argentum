@@ -106,6 +106,10 @@
     "url": "https://github.com/AG064/ag-claw.git"
   },
   "overrides": {
-    "undici": "~6.40.0"
+    "undici": "~6.40.0",
+    "minimatch": "^10.2.5",
+    "cross-spawn": "^7.0.6",
+    "glob": "^11.0.1",
+    "brace-expansion": "^3.0.2"
   }
 }
