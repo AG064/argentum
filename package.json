@@ -107,21 +107,10 @@
     "url": "https://github.com/AG064/ag-claw.git"
   },
   "overrides": {
-    "minimatch": "9.0.7",
-    "eslint-plugin-import": {
-      "minimatch": "9.0.0"
-    },
+    "minimatch": "9.0.9",
     "undici": "~6.21.0",
     "cross-spawn": "^7.0.6",
     "glob": "^11.0.1",
-    "brace-expansion": "^3.0.2",
-    "@eslint/eslintrc": {
-      "minimatch": "9.0.7"
-    },
-    "eslint-plugin-unicorn": {
-      "@eslint/eslintrc": {
-        "minimatch": "9.0.7"
-      }
-    }
+    "brace-expansion": "^3.0.2"
   }
 }
