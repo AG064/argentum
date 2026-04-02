@@ -285,7 +285,7 @@ function cmdImage(): void {
   print('');
 
   const { spawn } = require('child_process');
-  const homeDir = process.env['HOME'] || '/home/ag064';
+  const homeDir = process.env.HOME || '/home/ag064';
   const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
 
   const scriptArgs = [
@@ -306,7 +306,7 @@ function cmdImage(): void {
 
   const env = {
     ...process.env,
-    GEMINI_API_KEY: process.env['GEMINI_API_KEY'] || 'your_gemini_api_key_here',
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || 'your_gemini_api_key_here',
   };
 
   const start = Date.now();
