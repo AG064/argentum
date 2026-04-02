@@ -168,14 +168,24 @@ export class SkillEvolution {
    * Run OpenSpace CLI command
    */
   private async runOpenSpace(args: string[]): Promise<string> {
+    // Build env with MiniMax/OpenAI-compatible LLM
+    const env: Record<string, string> = {
+      ...process.env,
+      // LiteLLM reads these for minimax/MiniMax-M2.7 calls
+      MINIMAX_API_KEY: this.config.apiKey,
+      MINIMAX_API_BASE: 'https://api.minimax.io/v1',
+      MINIMAX_MODEL: 'MiniMax-M2.7',
+      // OpenSpace model selection
+      OPENSPACE_MODEL: 'minimax/MiniMax-M2.7',
+    };
+    if (this.config.llmEndpoint) {
+      env.LITELLM_ENDPOINT = this.config.llmEndpoint;
+    }
+
     return new Promise((resolve, reject) => {
       const proc = spawn('openspace', args, {
         cwd: this.openSpacePath,
-        env: {
-          ...process.env,
-          OPENROUTER_API_KEY: this.config.apiKey,
-          LITELLM_ENDPOINT: this.config.llmEndpoint,
-        },
+        env,
         timeout: 60000,
       });
 
@@ -221,19 +231,19 @@ export class SkillEvolution {
  */
 export async function createSkillEvolution(): Promise<SkillEvolution> {
   const credsPath = join(homedir(), '.openclaw', 'credentials', 'telegram.json');
-  let apiKey = '';
+  let minimaxKey = '';
   
   if (existsSync(credsPath)) {
     try {
       const creds = JSON.parse(readFileSync(credsPath, 'utf-8'));
-      apiKey = creds.openrouter ?? creds.gemini ?? '';
+      minimaxKey = creds.minimax ?? '';
     } catch {
       // Use env vars
     }
   }
   
   return new SkillEvolution({
-    llmProvider: apiKey ? 'openrouter' : 'openrouter',
-    apiKey: apiKey || process.env.OPENROUTER_API_KEY || '',
+    llmProvider: 'minimax',
+    apiKey: minimaxKey || process.env.MINIMAX_API_KEY || '',
   });
 }
