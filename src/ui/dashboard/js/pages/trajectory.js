@@ -248,6 +248,8 @@ async function handleExportTrajectory(e) {
     /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     // safe: Components.spinner() returns static trusted HTML, 'Exporting...' is a static string
     /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+    // safe: Components.spinner() returns static trusted HTML, 'Exporting...' is a static string
+    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     btn.innerHTML = Components.spinner() + ' Exporting...';
   }
 
