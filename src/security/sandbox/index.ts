@@ -456,6 +456,8 @@ export class SandboxExecutor {
     const startTime = Date.now();
 
     return new Promise((resolve) => {
+      // nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell
+      // This is intentional - sandbox executes user-provided bash code in a restricted environment
       const child = spawn('bash', ['-c', code], {
         timeout: timeoutMs,
         cwd: workingDir ?? '/tmp',
