@@ -709,7 +709,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
-      console.log(`  ║  WebSocket: ws://${config.host}:${config.port}/ws               ║`);
+      console.log(`  ║  WebSocket: wss://${config.host}:${config.port}/ws    ║`);
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log('  ║  Remote Access:                                        ║');
       console.log(`  ║    SSH:  ssh -L 3000:localhost:${config.port} user@host        ║`);
