@@ -360,7 +360,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(config.staticDir, 'index.html');
   } else {
-    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal
+    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     // Path traversal is prevented by normalization + startsWith check below
     filePath = path.join(config.staticDir, pathname);
   }
