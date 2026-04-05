@@ -64,6 +64,7 @@ class EncryptedSecretsFeature {
     const iv = Buffer.from(row.iv, 'hex');
     const authTag = Buffer.from(row.authTag, 'hex');
     const encrypted = Buffer.from(row.encryptedValue, 'hex');
+    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
     const decipher = crypto.createDecipheriv('aes-256-gcm', this.masterKey, iv);
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(

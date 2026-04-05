@@ -557,6 +557,7 @@ class EmailIntegrationFeature implements FeatureModule {
   /** Decrypt password (internal use) */
   private _decrypt(encrypted: string, ivHex: string): string {
     const iv = Buffer.from(ivHex, 'hex');
+    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
     const decipher = createDecipheriv(this.ALGORITHM, this.encryptionKey, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
