@@ -234,7 +234,7 @@ const API = {
 
       return await response.json();
     } catch (error) {
-      console.error(`[API] Request failed: ${endpoint}`, error);
+      console.error(`[API] Request failed: ${endpoint} - ${error}`);
       throw error;
     }
   },
