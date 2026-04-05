@@ -713,6 +713,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
+      /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
       console.log(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log('  ║  Remote Access:                                        ║');
