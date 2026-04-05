@@ -241,8 +241,7 @@ class YouTubeShortsFeature implements FeatureModule {
    */
   private isToolAvailable(cmd: string): boolean {
     try {
-      // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
-      // Intentional use of execSync to check if a command exists
+      /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
       execSync(`which ${cmd}`, { stdio: 'ignore' });
       return true;
     } catch {
@@ -265,7 +264,7 @@ class YouTubeShortsFeature implements FeatureModule {
     this.ctx?.logger?.info?.('Downloading video', { url, outputPath });
 
     // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
-    // Intentional use of execSync to run yt-dlp for video downloading
+    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
     execSync(cmd, { stdio: 'inherit' });
     return outputPath;
   }
@@ -317,8 +316,7 @@ class YouTubeShortsFeature implements FeatureModule {
     ].join(' ');
 
     this.ctx?.logger?.info?.('Generating short', { segment, outputPath });
-    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
-    // Intentional use of execSync to run ffmpeg for video processing
+    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
     execSync(cmd, { stdio: 'ignore' });
   }
 
