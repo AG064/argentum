@@ -2464,6 +2464,12 @@ async function cmdSkill(): Promise<void> {
 
         if (refPath) {
           // Level 2: specific reference file
+          // Validate refPath to avoid path traversal (disallow absolute paths and '..')
+          if (path.isAbsolute(refPath) || refPath.includes('..') || refPath.includes(path.sep)) {
+            error('Invalid reference path');
+            return;
+          }
+
           info(`Loading ${skillName}/${refPath} (Level 2)...`);
           print('');
           const content = skillsLoader.skillViewRef(skillName, refPath);
@@ -2534,7 +2540,14 @@ async function cmdSkill(): Promise<void> {
       // Treat as "run" — execute a script from an installed skill
       const skillName = subcommand;
       const skillsDir = path.join(clawhubWorkDir, 'skills');
-      const skillPath = path.join(skillsDir, skillName);
+      // Validate skillName to prevent path traversal. Resolve and ensure it stays within skillsDir
+      const resolvedSkillPath = path.resolve(skillsDir, skillName);
+      const skillsDirResolved = path.resolve(skillsDir) + path.sep;
+      if (!resolvedSkillPath.startsWith(skillsDirResolved)) {
+        error('Path traversal attempt detected for skill name');
+        return;
+      }
+      const skillPath = resolvedSkillPath;
       if (!fs.existsSync(skillPath)) {
         error(`Unknown command or skill: ${skillName}`);
         print('');
@@ -2557,7 +2570,15 @@ async function cmdSkill(): Promise<void> {
         }
         return;
       }
-      const scriptPath = path.join(skillPath, 'scripts', scriptName);
+      // Validate scriptName and ensure it resolves inside the skill's scripts directory
+      const scriptsDir = path.join(skillPath, 'scripts');
+      const resolvedScriptPath = path.resolve(scriptsDir, scriptName);
+      const scriptsDirResolved = path.resolve(scriptsDir) + path.sep;
+      if (!resolvedScriptPath.startsWith(scriptsDirResolved)) {
+        error('Path traversal attempt detected for script name');
+        return;
+      }
+      const scriptPath = resolvedScriptPath;
       if (!fs.existsSync(scriptPath)) {
         error(`Script '${scriptName}' not found`);
         return;
