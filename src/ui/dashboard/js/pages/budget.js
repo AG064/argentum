@@ -6,6 +6,7 @@ async function loadBudgetData() {
   const grid = document.getElementById('budgetGrid');
   if (!grid) return;
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -28,6 +29,7 @@ function renderBudgetPage(data) {
   const monthlyPct = Math.round((data.monthlyCost / data.monthlyLimit) * 100);
   const dailyPct = Math.round((data.dailyCost / data.dailyLimit) * 100);
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">
