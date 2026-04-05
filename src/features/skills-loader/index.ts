@@ -441,6 +441,8 @@ class SkillsLoaderFeature {
         throw new Error(`Unsupported script type: ${scriptName}`);
       }
 
+      // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
+      // Intentional use of execSync to run skill scripts (install.sh, etc.)
       return execSync(command, {
         cwd: skill.path,
         timeout: 30000,

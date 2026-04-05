@@ -296,6 +296,8 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   }
 
   // Apply CORS
+  // nosemgrep: javascript.lang.security.detect-non-literal-regexp-literal
+  // allowedOrigins is a strict whitelist from config (not user-controlled), so this is safe
   if (config.cors.enabled) {
     const origin = req.headers.origin;
     if (origin && config.cors.allowedOrigins.includes(origin)) {
@@ -358,6 +360,8 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(config.staticDir, 'index.html');
   } else {
+    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal
+    // Path traversal is prevented by normalization + startsWith check below
     filePath = path.join(config.staticDir, pathname);
   }
 
@@ -709,7 +713,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
-      console.log(`  ║  WebSocket: wss://${config.host}:${config.port}/ws    ║`);
+      console.log(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log('  ║  Remote Access:                                        ║');
       console.log(`  ║    SSH:  ssh -L 3000:localhost:${config.port} user@host        ║`);
