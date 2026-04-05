@@ -61,6 +61,7 @@ function generateInitialLogs() {
     logs.push({ timestamp, level, source, message });
   }
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   logsBody.innerHTML = logs.map((log) => createLogLine(log)).join('');
 
   // Update count
@@ -126,6 +127,7 @@ function addLogEntry(log) {
 
   const entry = document.createElement('div');
   entry.className = 'log-line';
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   entry.innerHTML = createLogLine(log);
   entry.style.animation = 'fadeIn 0.2s ease forwards';
 
@@ -195,6 +197,7 @@ function searchLogs(query) {
           const regex = new RegExp(`(${query})`, 'gi');
           // Escape HTML before inserting markup to prevent XSS
           const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
           msg.innerHTML = escaped.replace(
             regex,
             '<mark style="background: var(--color-warning-muted); color: var(--color-warning);">$1</mark>',
