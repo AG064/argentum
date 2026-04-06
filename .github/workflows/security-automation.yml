@@ -1,0 +1,169 @@
+name: Security Automation
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      vulnerabilities: ${{ steps.audit.outputs.vulnerabilities }}
+      has_vulnerabilities: ${{ steps.audit.outputs.has_vulnerabilities }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run npm audit
+        id: audit
+        run: |
+          npm audit --json > npm-audit.json || true
+          node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          const vulnerabilities = audit.metadata?.vulnerabilities ?? {};
+          const total = (vulnerabilities.high ?? 0) + (vulnerabilities.critical ?? 0);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `vulnerabilities=${total}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_vulnerabilities=${String(total > 0)}\n`);
+          NODE
+
+      - name: Show audit summary
+        if: always()
+        run: npm audit --audit-level=high || true
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Tests
+        env:
+          CI: 'true'
+        run: npm test
+
+  enforce-audit:
+    name: Enforce High/Critical Audit Policy
+    needs: validate
+    if: github.event_name != 'schedule' && needs.validate.outputs.has_vulnerabilities == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail for unresolved vulnerabilities
+        run: |
+          echo "High or critical vulnerabilities detected by npm audit: ${{ needs.validate.outputs.vulnerabilities }}"
+          exit 1
+
+  auto-fix:
+    name: Auto-fix Audit Findings
+    needs: validate
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.validate.outputs.has_vulnerabilities == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Apply npm audit fix
+        run: npm audit fix --package-lock-only --legacy-peer-deps || true
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --quiet -- package-lock.json package.json; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reinstall after audit fix
+        if: steps.changes.outputs.updated == 'true'
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify fixes
+        if: steps.changes.outputs.updated == 'true'
+        env:
+          CI: 'true'
+        run: |
+          echo "Running TypeScript checks..."
+          npm run typecheck
+          echo "Running ESLint..."
+          npm run lint
+          echo "Building project..."
+          npm run build
+          echo "Running test suite..."
+          npm test
+          echo "Re-running npm audit..."
+          npm audit --audit-level=high
+
+      - name: Create pull request
+        if: steps.changes.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="security/auto-fix-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add package-lock.json package.json
+          git commit -m "fix: auto-resolve npm audit findings"
+          git push --set-upstream origin "$BRANCH"
+          cat > /tmp/security-autofix-pr.md <<'EOF'
+          ## Summary
+
+          - apply `npm audit fix` updates when high or critical vulnerabilities are detected
+          - verify lint, build, tests, and audit still pass before opening this PR
+          - keep dependency maintenance automated while leaving reviewable changes in a pull request
+          EOF
+          gh pr create \
+            --base development \
+            --head "$BRANCH" \
+            --title "fix: auto-resolve npm audit findings" \
+            --body-file /tmp/security-autofix-pr.md
+
+  auto-merge-dependabot:
+    name: Auto-merge Dependabot
+    needs: [validate]
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' && needs.validate.outputs.has_vulnerabilities == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Approve and enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "$PR_NUMBER" --approve || true
+          gh pr merge "$PR_NUMBER" --auto --squash --delete-branch

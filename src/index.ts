@@ -331,6 +331,121 @@ function createBuiltinTools(): Tool[] {
         }
       },
     },
+    {
+      name: 'generate_image',
+      description:
+        'Generate an AI image from a text prompt using Gemini 3 Pro Image (with automatic SiliconFlow FLUX.1-dev fallback on quota errors). Supports resolutions 1K, 2K, 4K and image editing.',
+      parameters: {
+        prompt: {
+          type: 'string',
+          description: 'Text description of the image to generate',
+          required: true,
+        },
+        filename: {
+          type: 'string',
+          description: 'Output filename (e.g., image.png)',
+          required: true,
+        },
+        resolution: {
+          type: 'string',
+          description: 'Image resolution: 1K (1024x1024, default), 2K (2048x2048), 4K',
+          required: false,
+        },
+        inputImage: {
+          type: 'string',
+          description: 'Optional input image filename (simple filename only, no path separators) for editing',
+          required: false,
+        },
+      },
+      execute: async (params) => {
+        const { spawn } = await import('child_process');
+        const { existsSync } = await import('fs');
+        const { join, basename: pathBasename } = await import('path');
+
+        const homeDir = process.env.HOME || '/home/ag064';
+        const scriptPath = join(
+          homeDir,
+          '.openclaw',
+          'workspace',
+          'skills',
+          'image-gen',
+          'scripts',
+          'generate_image.py',
+        );
+
+        if (!existsSync(scriptPath)) {
+          return `Error: generate_image.py not found at ${scriptPath}`;
+        }
+
+        const prompt = params['prompt'] as string;
+        const filename = params['filename'] as string;
+        const resolution = (params['resolution'] as string) || '1K';
+        const inputImage = params['inputImage'] as string | undefined;
+
+        if (!prompt?.trim()) return 'Error: prompt is required';
+        if (!filename?.trim()) return 'Error: filename is required';
+
+        // Returns true only if the value contains '..' as a path segment (not as part of a filename)
+        const hasParentTraversalSegment = (value: string): boolean => {
+          const normalized = value.replace(/\\/g, '/');
+          return normalized.split('/').some((segment) => segment === '..');
+        };
+
+        // Validate filename and inputImage to prevent path traversal:
+        // basename check rejects any path with directory components on any platform
+        if (pathBasename(filename) !== filename || hasParentTraversalSegment(filename)) {
+          return 'Error: filename must be a simple filename without path separators or traversal sequences';
+        }
+        if (inputImage && (pathBasename(inputImage) !== inputImage || hasParentTraversalSegment(inputImage))) {
+          return 'Error: inputImage must be a simple filename without path separators or traversal sequences';
+        }
+
+        const args = [
+          'run', 'python3', scriptPath,
+          '--prompt', prompt,
+          '--filename', filename,
+          '--resolution', resolution,
+        ];
+
+        if (inputImage) {
+          args.push('--input-image', inputImage);
+        }
+
+        return new Promise((resolve) => {
+          const env = {
+            ...process.env,
+            ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
+          };
+
+          const proc = spawn('uv', args, { env });
+          let stdout = '';
+          let stderr = '';
+
+          const timer = setTimeout(() => {
+            proc.kill('SIGKILL');
+            resolve('Error: Image generation timed out after 180s');
+          }, 180_000);
+
+          proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+          proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+          proc.on('close', (code) => {
+            clearTimeout(timer);
+            if (code === 0) {
+              const usedFallback = stderr.includes('[SiliconFlow') || stderr.includes('fallback');
+              resolve(`Image generated successfully and saved to: ${filename}\nProvider: ${usedFallback ? 'SiliconFlow FLUX.1-dev (fallback)' : 'Gemini 3 Pro Image'}`);
+            } else {
+              resolve(`Image generation failed (exit code ${code}). Check stderr: ${stderr.slice(0, 500)}`);
+            }
+          });
+
+          proc.on('error', (err) => {
+            clearTimeout(timer);
+            resolve(`Error: Failed to start uv - ${err.message}. Make sure "uv" is installed.`);
+          });
+        });
+      },
+    },
   ];
 }
 
