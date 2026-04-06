@@ -5,6 +5,7 @@
  * and endpoint management.
  */
 
+import { randomBytes } from 'crypto';
 import express, { type Request, type Response, type Handler } from 'express';
 
 import {
@@ -241,7 +242,7 @@ class ApiGatewayFeature implements FeatureModule {
 
   /** Create an API token */
   createToken(name: string, _expiresInDays?: number): ApiToken {
-    const key = `ak_${Date.now()}_${Math.random().toString(36).slice(2, 16)}`;
+    const key = `ak_${randomBytes(24).toString('hex')}`;
     const token: ApiToken = {
       key,
       name,

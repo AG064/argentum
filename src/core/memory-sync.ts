@@ -9,7 +9,7 @@ import { createGzip } from 'zlib';
 import { createHash } from 'crypto';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 export interface MemoryChunk {
   id: string;
@@ -36,10 +36,16 @@ export class MemoryGitSync {
   private indexFile: string;
 
   constructor(config: GitSyncConfig) {
+    const branch = config.branch ?? 'main';
+    // Validate branch name: reject values starting with '-' or containing unsafe chars
+    if (/^-|[^a-zA-Z0-9/_.-]/.test(branch)) {
+      throw new Error(`Invalid branch name: ${branch}`);
+    }
+
     this.config = {
       enabled: config.enabled ?? false,
       repoPath: config.repoPath,
-      branch: config.branch ?? 'main',
+      branch,
       commitMessage: config.commitMessage ?? 'chore(memory): sync memories',
       compress: config.compress ?? true,
       maxChunkSize: config.maxChunkSize ?? 1024 * 1024, // 1MB
@@ -122,7 +128,7 @@ export class MemoryGitSync {
 
     // Git add
     try {
-      execSync(`git add "${this.chunksDir}" "${this.indexFile}"`, {
+      execFileSync('git', ['add', this.chunksDir, this.indexFile], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
@@ -198,19 +204,19 @@ export class MemoryGitSync {
 
     // Pull first
     try {
-      execSync(`git fetch origin "${this.config.branch}"`, {
+      execFileSync('git', ['fetch', 'origin', this.config.branch], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
-      execSync(`git stash`, {
+      execFileSync('git', ['stash'], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
-      execSync(`git pull origin "${this.config.branch}"`, {
+      execFileSync('git', ['pull', 'origin', this.config.branch], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
-      execSync(`git stash pop`, {
+      execFileSync('git', ['stash', 'pop'], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
@@ -222,13 +228,13 @@ export class MemoryGitSync {
 
     // Commit and push
     try {
-      const { execSync: exec } = require('child_process');
-      exec(`git add -A`, { cwd: this.config.repoPath, stdio: 'ignore' });
-      exec(`git commit -m "${this.config.commitMessage}"`, {
+      const { execFileSync: exec } = require('child_process');
+      exec('git', ['add', '-A'], { cwd: this.config.repoPath, stdio: 'ignore' });
+      exec('git', ['commit', '-m', this.config.commitMessage], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
-      exec(`git push origin "${this.config.branch}"`, {
+      exec('git', ['push', 'origin', this.config.branch], {
         cwd: this.config.repoPath,
         stdio: 'ignore',
       });
@@ -244,12 +250,12 @@ export class MemoryGitSync {
    */
   async push(): Promise<void> {
     try {
-      execSync(`git add -A`, { cwd: this.config.repoPath, stdio: 'pipe' });
-      execSync(`git commit -m "${this.config.commitMessage}"`, {
+      execFileSync('git', ['add', '-A'], { cwd: this.config.repoPath, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', this.config.commitMessage], {
         cwd: this.config.repoPath,
         stdio: 'pipe',
       });
-      execSync(`git push origin "${this.config.branch}"`, {
+      execFileSync('git', ['push', 'origin', this.config.branch], {
         cwd: this.config.repoPath,
         stdio: 'pipe',
       });
@@ -264,7 +270,7 @@ export class MemoryGitSync {
    */
   async pull(): Promise<void> {
     try {
-      execSync(`git pull origin "${this.config.branch}"`, {
+      execFileSync('git', ['pull', 'origin', this.config.branch], {
         cwd: this.config.repoPath,
         stdio: 'pipe',
       });
@@ -279,7 +285,7 @@ export class MemoryGitSync {
    */
   async status(): Promise<{ lastSync: number | null; pending: number; conflicts: number }> {
     try {
-      const log = execSync(`git log -1 --format="%ct"`, {
+      const log = execFileSync('git', ['log', '-1', '--format=%ct'], {
         cwd: this.config.repoPath,
         encoding: 'utf8',
         stdio: 'pipe',
