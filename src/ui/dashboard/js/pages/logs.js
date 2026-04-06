@@ -194,7 +194,8 @@ function searchLogs(query) {
       line.querySelectorAll('.message').forEach((msg) => {
         const content = msg.textContent;
         if (content.toLowerCase().includes(lowerQuery)) {
-          const regex = new RegExp(`(${query})`, 'gi');
+          const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(${escapedQuery})`, 'gi');
           // Escape HTML before inserting markup to prevent XSS
           const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */

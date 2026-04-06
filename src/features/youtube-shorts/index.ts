@@ -14,8 +14,8 @@
  * - YOUTUBE_ACCESS_TOKEN (OAuth2 access token)
  */
 
-import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { execFileSync } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 
@@ -241,8 +241,7 @@ class YouTubeShortsFeature implements FeatureModule {
    */
   private isToolAvailable(cmd: string): boolean {
     try {
-      /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-      execSync(`which ${cmd}`, { stdio: 'ignore' });
+      execFileSync('which', [cmd], { stdio: 'ignore' });
       return true;
     } catch {
       return false;
@@ -260,12 +259,15 @@ class YouTubeShortsFeature implements FeatureModule {
     const tmpDir = join(this.config.outputDir, 'tmp');
     mkdirSync(tmpDir, { recursive: true });
 
-    const cmd = `yt-dlp -f "bestvideo[height<=${this.config.quality}]" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
+    const ytdlpArgs = [
+      '-f', `bestvideo[height<=${this.config.quality}]`,
+      '--merge-output-format', 'mp4',
+      '-o', outputPath,
+      url,
+    ];
     this.ctx?.logger?.info?.('Downloading video', { url, outputPath });
 
-    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
-    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-    execSync(cmd, { stdio: 'inherit' });
+    execFileSync('yt-dlp', ytdlpArgs, { stdio: 'inherit' });
     return outputPath;
   }
 
@@ -301,23 +303,21 @@ class YouTubeShortsFeature implements FeatureModule {
 
     const { start, end, caption } = segment;
     const duration = end - start;
-    const escaped = caption.replace(/'/g, "'\\''");
 
     // Crop to 9:16 vertical, add caption
-    const cmd = [
-      'ffmpeg',
-      '-i', `"${videoPath}"`,
+    const drawtext = `crop=ih*9/16:ih,drawtext=text='${caption.replace(/[':]/g, '')}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-60:borderw=2:bordercolor=black`;
+    const ffmpegArgs = [
+      '-i', videoPath,
       '-ss', String(start),
       '-t', String(duration),
-      '-vf', `"crop=ih*9/16:ih,drawtext=text='${escaped}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-60:borderw=2:bordercolor=black"`,
+      '-vf', drawtext,
       '-c:a', 'copy',
-      `"${outputPath}"`,
+      outputPath,
       '-y',
-    ].join(' ');
+    ];
 
     this.ctx?.logger?.info?.('Generating short', { segment, outputPath });
-    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-    execSync(cmd, { stdio: 'ignore' });
+    execFileSync('ffmpeg', ffmpegArgs, { stdio: 'ignore' });
   }
 
   /**
@@ -479,9 +479,7 @@ class YouTubeShortsFeature implements FeatureModule {
     } finally {
       // Cleanup tmp directory
       try {
-        // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
-        // Intentional use of execSync to clean up temporary files
-        execSync(`rm -rf "${tmpDir}"`, { stdio: 'ignore' });
+        rmSync(tmpDir, { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
       }

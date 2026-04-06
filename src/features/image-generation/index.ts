@@ -10,7 +10,7 @@
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve as resolvePath } from 'path';
 
 import {
   type FeatureModule,
@@ -223,7 +223,7 @@ class ImageGenerationFeature implements FeatureModule {
         });
 
         resolve({
-          path: filename,
+          path: resolvePath(filename),
           provider: usedFallback ? 'siliconflow' : 'gemini',
           resolution,
           stdout,
