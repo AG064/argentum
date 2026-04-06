@@ -14,6 +14,7 @@ const path = require('path');
 // Configuration
 const PORT = process.env.DASHBOARD_PORT || 3002;
 const STATIC_DIR = path.resolve(path.join(__dirname, '../ui/dashboard'));
+const STATIC_DIR_REAL = fs.realpathSync(STATIC_DIR);
 const ALLOWED_ORIGINS = (process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002').split(',').map(o => o.trim());
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB max request body
 
@@ -393,28 +394,23 @@ const server = http.createServer(async (req, res) => {
 
   // Static files - resolve and normalize to prevent path traversal
   const requestedPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const safePath = path.normalize(path.resolve(STATIC_DIR, requestedPath));
-  const normalizedStaticDir = path.normalize(STATIC_DIR);
+  const safePath = path.resolve(STATIC_DIR_REAL, requestedPath);
 
-  // Security: prevent directory traversal
-  // Check both: (1) path is a child of STATIC_DIR (with separator to prevent prefix attacks),
-  // and (2) exact match for STATIC_DIR itself (serves index.html)
-  if (!safePath.startsWith(normalizedStaticDir + path.sep) && safePath !== normalizedStaticDir) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
+  let realPath;
+  try {
+    realPath = fs.realpathSync(safePath);
+  } catch {
+    // File doesn't exist yet - fall through to readFile handler for SPA fallback
   }
 
-  // Security: check for symlinks to prevent symlink-based traversal
-  try {
-    const realPath = fs.realpathSync(safePath);
-    if (!realPath.startsWith(normalizedStaticDir)) {
+  // Security: prevent directory traversal and symlink-based traversal
+  if (realPath) {
+    const allowedPrefix = STATIC_DIR_REAL.endsWith(path.sep) ? STATIC_DIR_REAL : STATIC_DIR_REAL + path.sep;
+    if (realPath !== STATIC_DIR_REAL && !realPath.startsWith(allowedPrefix)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
     }
-  } catch {
-    // File doesn't exist yet - fall through to readFile handler
   }
 
   // Security: only serve files with allowed extensions
@@ -426,7 +422,7 @@ const server = http.createServer(async (req, res) => {
   }
   const contentType = mimeTypes[ext] || 'text/html';
 
-  fs.readFile(safePath, (err, content) => {
+  fs.readFile(realPath || safePath, (err, content) => {
     if (err) {
       if (err.code === 'ENOENT') {
         // Serve index.html for SPA routing
