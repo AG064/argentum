@@ -43,10 +43,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Update README DockerHub badge
-        uses: docker/metadata-action@v5
-        with:
-          images: ag064/ag-claw
-          flavor: latest=true
-          tags: latest

@@ -9,6 +9,8 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import { detectPlatform, type Platform } from './platform';
 import { createLogger } from '../../core/logger';
@@ -92,6 +94,22 @@ function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stde
   });
 }
 
+function runCommandBuffer(cmd: string, args: string[]): Promise<{ stdout: Buffer; stderr: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args);
+    const chunks: Buffer[] = [];
+    let stderr = '';
+    child.stdout?.on('data', (d: Buffer) => { chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)); });
+    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.on('close', (code) => {
+      resolve({ stdout: Buffer.concat(chunks), stderr, exitCode: code ?? 0 });
+    });
+    child.on('error', () => {
+      resolve({ stdout: Buffer.concat(chunks), stderr, exitCode: 1 });
+    });
+  });
+}
+
 class LinuxComputerControl implements ComputerControl {
   private display: string;
 
@@ -110,15 +128,16 @@ class LinuxComputerControl implements ComputerControl {
     let lastError = '';
     for (const tool of tools) {
       try {
-        const result = await runCommand(tool.cmd, tool.args);
-        if (result.exitCode === 0 && result.stdout) {
-          // Convert to base64 and get dimensions via file
+        const result = await runCommandBuffer(tool.cmd, tool.args);
+        if (result.exitCode === 0 && result.stdout.length > 0) {
+          // Encode raw PNG bytes to base64 and get dimensions
+          const base64Data = result.stdout.toString('base64');
           const dims = await this.getScreenshotDimensions(result.stdout);
           return {
             width: dims.width,
             height: dims.height,
             format: 'png',
-            data: result.stdout.trim(),
+            data: base64Data,
           };
         }
         lastError = result.stderr || 'no output';
@@ -130,12 +149,11 @@ class LinuxComputerControl implements ComputerControl {
     throw new Error(`All screenshot tools failed. Last error: ${lastError}`);
   }
 
-  private async getScreenshotDimensions(imageData: string): Promise<{ width: number; height: number }> {
+  private async getScreenshotDimensions(imageData: Buffer): Promise<{ width: number; height: number }> {
     // Write temp file to get dimensions
-    const tmpFile = `/tmp/ag-claw-screenshot-${Date.now()}.png`;
-    const buf = Buffer.from(imageData, 'base64');
+    const tmpFile = join(tmpdir(), `ag-claw-screenshot-${Date.now()}.png`);
     const fs = await import('fs');
-    fs.writeFileSync(tmpFile, buf);
+    fs.writeFileSync(tmpFile, imageData);
 
     const result = await runCommand('file', [tmpFile]);
     const match = result.stdout.match(/(\d+)\s*x\s*(\d+)/);
@@ -197,8 +215,8 @@ class LinuxComputerControl implements ComputerControl {
   }
 
   async mouseScroll(amount: number): Promise<void> {
-    // ydotool scroll <clicks> — positive is up, negative is down
-    await runCommand('ydotool', ['mousemove', '--relative', '0', String(-amount * 10)]);
+    // ydotool wheel: positive amount = scroll up, negative = scroll down
+    await runCommand('ydotool', ['wheel', '--', String(amount)]);
   }
 
   async keyPress(key: string): Promise<void> {
@@ -249,7 +267,7 @@ class LinuxComputerControl implements ComputerControl {
 
 class MacOSComputerControl implements ComputerControl {
   async screenshot(): Promise<ScreenshotResult> {
-    const tmpFile = `/tmp/ag-claw-screenshot-${Date.now()}.png`;
+    const tmpFile = join(tmpdir(), `ag-claw-screenshot-${Date.now()}.png`);
     await runCommand('screencapture', ['-x', tmpFile]);
     const fs = await import('fs');
     const data = fs.readFileSync(tmpFile).toString('base64');

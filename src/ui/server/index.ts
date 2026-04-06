@@ -146,7 +146,7 @@ function loadConfig(): ServerConfig {
           console.warn('[Dashboard Server] Could not persist password hash to disk.');
         }
 
-        console.warn(`[Dashboard Server] Generated dashboard password: ${randomPass}`);
+        console.warn(`[Dashboard Server] Generated dashboard password written to: ${hashFile}`);
         console.warn('[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.');
       }
     } else {

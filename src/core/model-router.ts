@@ -510,8 +510,9 @@ export class ModelRouter {
    * Clear score cache
    */
   private invalidateCache(modelId: string): void {
+    const prefix = `${modelId}:`;
     for (const key of this.cache.keys()) {
-      if (key.startsWith(modelId)) {
+      if (key.startsWith(prefix)) {
         this.cache.delete(key);
       }
     }
