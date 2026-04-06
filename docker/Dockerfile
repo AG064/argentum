@@ -5,9 +5,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency manifests first (cache layer)
+# Copy dependency manifests first (cache layer, updated 2026-03-27)
 COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Copy source and build
 COPY tsconfig.json ./
@@ -15,7 +15,7 @@ COPY src/ ./src/
 RUN npm run build
 
 # Prune dev dependencies
-RUN npm prune --production
+RUN npm prune --production --legacy-peer-deps
 
 # ============================================
 # Stage 2: Production

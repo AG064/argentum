@@ -5,10 +5,10 @@
 # Server settings - the gateway HTTP server
 server:
   port: 18789
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   cors:
     enabled: true
-    origins: ["*"]
+    origins: ["http://localhost:18789", "http://127.0.0.1:18789"]
   rateLimit:
     enabled: true
     windowMs: 60000
@@ -64,6 +64,12 @@ features:
   # Automation
   browser-automation:
     enabled: true
+
+  computer-control:
+    enabled: false          # Vision-based desktop automation (disabled by default)
+    screenshot_interval_ms: 1000
+    platform: auto          # auto, linux, macos, windows
+    display_number: 0
 
   webhooks:
     enabled: true
