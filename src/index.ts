@@ -353,7 +353,7 @@ function createBuiltinTools(): Tool[] {
         },
         inputImage: {
           type: 'string',
-          description: 'Optional path to input image for editing',
+          description: 'Optional input image filename (simple filename only, no path separators) for editing',
           required: false,
         },
       },
@@ -385,12 +385,18 @@ function createBuiltinTools(): Tool[] {
         if (!prompt?.trim()) return 'Error: prompt is required';
         if (!filename?.trim()) return 'Error: filename is required';
 
+        // Returns true only if the value contains '..' as a path segment (not as part of a filename)
+        const hasParentTraversalSegment = (value: string): boolean => {
+          const normalized = value.replace(/\\/g, '/');
+          return normalized.split('/').some((segment) => segment === '..');
+        };
+
         // Validate filename and inputImage to prevent path traversal:
         // basename check rejects any path with directory components on any platform
-        if (pathBasename(filename) !== filename || filename.includes('..')) {
+        if (pathBasename(filename) !== filename || hasParentTraversalSegment(filename)) {
           return 'Error: filename must be a simple filename without path separators or traversal sequences';
         }
-        if (inputImage && (pathBasename(inputImage) !== inputImage || inputImage.includes('..'))) {
+        if (inputImage && (pathBasename(inputImage) !== inputImage || hasParentTraversalSegment(inputImage))) {
           return 'Error: inputImage must be a simple filename without path separators or traversal sequences';
         }
 

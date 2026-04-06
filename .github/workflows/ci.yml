@@ -76,9 +76,7 @@ jobs:
         run: npm run build
       
       - name: Verify build output
-        run: |
-          ls -la dist/
-          test -f dist/index.js || exit 1
+        run: node -e "const fs=require('fs');if(!fs.existsSync('dist/index.js'))throw new Error('dist/index.js not found');"
 
   integration-tests:
     name: Integration Tests
