@@ -157,8 +157,9 @@ function sendJson(res, statusCode, data, reqOrigin) {
 }
 
 // Send error response
+// Note: 501 (Not Implemented) and 503 (Service Unavailable) pass through because
+// they contain actionable client-facing information, unlike 500/502 which may leak internals.
 function sendError(res, statusCode, message, reqOrigin) {
-  // Only expose error details for client errors (4xx), not server errors (5xx)
   const safeMessage = statusCode >= 500 && statusCode !== 501 && statusCode !== 503
     ? 'Internal server error'
     : message;
@@ -395,7 +396,9 @@ const server = http.createServer(async (req, res) => {
   const safePath = path.normalize(path.resolve(STATIC_DIR, requestedPath));
   const normalizedStaticDir = path.normalize(STATIC_DIR);
 
-  // Security: prevent directory traversal (check resolved path stays within STATIC_DIR)
+  // Security: prevent directory traversal
+  // Check both: (1) path is a child of STATIC_DIR (with separator to prevent prefix attacks),
+  // and (2) exact match for STATIC_DIR itself (serves index.html)
   if (!safePath.startsWith(normalizedStaticDir + path.sep) && safePath !== normalizedStaticDir) {
     res.writeHead(403);
     res.end('Forbidden');
