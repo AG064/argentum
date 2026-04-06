@@ -2487,9 +2487,14 @@ async function cmdSkill(): Promise<void> {
 
         if (refPath) {
           // Level 2: specific reference file
-          // Validate refPath to avoid path traversal (normalize first, then check for '..' segments and absolute paths)
-          const normalizedRef = path.normalize(refPath);
-          if (path.isAbsolute(normalizedRef) || normalizedRef.split(path.sep).includes('..')) {
+          // Only simple filenames are allowed (no directory components on any platform).
+          // Disallowing both '/' and '\\' ensures cross-platform path traversal prevention.
+          if (
+            path.isAbsolute(refPath) ||
+            refPath.includes('..') ||
+            refPath.includes('/') ||
+            refPath.includes('\\')
+          ) {
             error('Invalid reference path');
             return;
           }
