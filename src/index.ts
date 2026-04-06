@@ -360,7 +360,7 @@ function createBuiltinTools(): Tool[] {
       execute: async (params) => {
         const { spawn } = await import('child_process');
         const { existsSync } = await import('fs');
-        const { join } = await import('path');
+        const { join, basename: pathBasename } = await import('path');
 
         const homeDir = process.env.HOME || '/home/ag064';
         const scriptPath = join(
@@ -384,6 +384,15 @@ function createBuiltinTools(): Tool[] {
 
         if (!prompt?.trim()) return 'Error: prompt is required';
         if (!filename?.trim()) return 'Error: filename is required';
+
+        // Validate filename and inputImage to prevent path traversal:
+        // basename check rejects any path with directory components on any platform
+        if (pathBasename(filename) !== filename || filename.includes('..')) {
+          return 'Error: filename must be a simple filename without path separators or traversal sequences';
+        }
+        if (inputImage && (pathBasename(inputImage) !== inputImage || inputImage.includes('..'))) {
+          return 'Error: inputImage must be a simple filename without path separators or traversal sequences';
+        }
 
         const args = [
           'run', 'python3', scriptPath,
