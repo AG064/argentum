@@ -2488,10 +2488,18 @@ async function cmdSkill(): Promise<void> {
         if (refPath) {
           // Level 2: specific reference file
           // Only simple filenames are allowed (no directory components on any platform).
-          // Disallowing both '/' and '\\' ensures cross-platform path traversal prevention.
+          // Check '..' as a path segment (after normalization) rather than a substring to allow
+          // legitimate filenames like 'release..notes.md' while still blocking traversal.
+          const normalizedRefPath = path.normalize(refPath);
+          const hasParentTraversalSegment = normalizedRefPath
+            .split(/[\\/]+/)
+            .some((segment) => segment === '..');
+
           if (
             path.isAbsolute(refPath) ||
-            refPath.includes('..') ||
+            hasParentTraversalSegment ||
+            // Also reject any path separators to ensure only simple filenames are accepted
+            // (e.g., block 'docs/readme.md' which is not traversal but still a directory component)
             refPath.includes('/') ||
             refPath.includes('\\')
           ) {
