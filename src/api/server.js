@@ -137,7 +137,7 @@ function parseBody(req) {
       size += chunk.length;
       if (size > MAX_BODY_SIZE) {
         req.destroy();
-        reject(new Error('Request body too large'));
+        reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
         return;
       }
       body += chunk;
@@ -400,7 +400,9 @@ const server = http.createServer(async (req, res) => {
         req.params = match.params;
         await match.handler(req, res);
       } catch (error) {
-        sendError(res, 500, 'Internal server error', req);
+        const statusCode = error?.statusCode || 500;
+        const message = statusCode === 413 ? 'Payload too large' : 'Internal server error';
+        sendError(res, statusCode, message, req);
       }
     } else {
       sendError(res, 404, 'API endpoint not found', req);
