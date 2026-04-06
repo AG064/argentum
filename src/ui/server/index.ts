@@ -141,6 +141,7 @@ function loadConfig(): ServerConfig {
 
         try {
           fs.writeFileSync(hashFile, config.auth.passwordHash, { mode: 0o600 });
+          try { fs.chmodSync(hashFile, 0o600); } catch { /* chmod may fail on some platforms */ }
         } catch {
           console.warn('[Dashboard Server] Could not persist password hash to disk.');
         }
