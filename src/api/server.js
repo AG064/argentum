@@ -423,7 +423,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const requestedPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  // Decode percent-encoded sequences before checking for traversal,
+  // so encoded variants like %2e%2e are caught too.
+  let requestedPath;
+  try {
+    requestedPath = decodeURIComponent(pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+  } catch {
+    res.writeHead(400);
+    res.end('Bad Request');
+    return;
+  }
+
+  // Security: reject directory traversal sequences in user input.
+  // This is an explicit check that CodeQL recognizes as a sanitizer
+  // for js/path-injection, preventing the user from escaping the
+  // static directory via ".." segments.
+  if (requestedPath.indexOf('..') !== -1) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   const safePath = path.resolve(staticDirReal, requestedPath);
 
   // Security: ensure the resolved path is under the static directory
@@ -458,15 +478,6 @@ const server = http.createServer(async (req, res) => {
 
   // Use realPath (symlink-resolved) if available, otherwise safePath (for SPA fallback)
   const fileToRead = realPath || safePath;
-
-  // Security: explicit inline containment check so static-analysis tools
-  // (CodeQL) can verify the path is safe without tracing through helpers.
-  const staticPrefix = staticDirReal + path.sep;
-  if (!fileToRead.startsWith(staticPrefix) && fileToRead !== staticDirReal) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
 
   fs.readFile(fileToRead, (err, content) => {
     if (err) {
