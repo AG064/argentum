@@ -182,7 +182,7 @@ class ImageGenerationFeature implements FeatureModule {
       const proc = spawn('uv', args, {
         env: {
           ...process.env,
-          GEMINI_API_KEY: apiKey || process.env.GEMINI_API_KEY || 'your_gemini_api_key_here',
+          ...(apiKey || process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: apiKey || process.env.GEMINI_API_KEY } : {}),
           SILICONFLOW_API_KEY: fallbackApiKey || process.env.SILICONFLOW_API_KEY,
         },
       });

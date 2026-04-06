@@ -5,10 +5,10 @@
 # Server settings - the gateway HTTP server
 server:
   port: 18789
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   cors:
     enabled: true
-    origins: ["*"]
+    origins: ["http://localhost:18789", "http://127.0.0.1:18789"]
   rateLimit:
     enabled: true
     windowMs: 60000
