@@ -8,7 +8,7 @@
     "agclaw": "bin/agclaw.js"
   },
   "scripts": {
-    "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
+    "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule --ignoreConfig",
     "postbuild": "chmod +x bin/agclaw.js || true",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js start",
