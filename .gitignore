@@ -9,3 +9,14 @@ logs/
 *.enc.json
 .env
 agclaw-*
+
+# Credentials (NEVER commit)
+credentials/
+*.kdbx
+secrets/
+.env
+.env.local
+
+# OpenSpace fork
+OpenSpace/
+.tsbuildinfo

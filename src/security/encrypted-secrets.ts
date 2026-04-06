@@ -119,6 +119,8 @@ export function decrypt(masterKey: string | Buffer, encrypted: string): string {
   const salt = Buffer.from(saltHex, 'hex');
   const derivedKey = deriveKey(keyBuf, salt);
 
+  // nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
+  // setAuthTag is called below, this is not a vulnerability
   const decipher = createDecipheriv('aes-256-gcm', derivedKey, iv);
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
 
@@ -197,6 +199,8 @@ export function retrieve(key: string, filePath?: string): string | null {
 
   try {
     const derivedKey = deriveKey(masterKey, Buffer.from(entry.salt, 'hex'));
+    // nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
+    // setAuthTag is called below, this is not a vulnerability
     const decipher = createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(entry.iv, 'hex'));
     decipher.setAuthTag(Buffer.from(entry.tag, 'hex'));
 

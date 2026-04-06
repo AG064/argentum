@@ -50,6 +50,9 @@ function evalNode(node, vars) {
         case '!==':
           return left !== right;
       }
+      // Handle LogicalExpression operators in BinaryExpression case (jsep quirk)
+      if (node.operator === '&&') return evalNode(node.left, vars) && evalNode(node.right, vars);
+      if (node.operator === '||') return evalNode(node.left, vars) || evalNode(node.right, vars);
       throw new Error('Unsupported operator: ' + node.operator);
     }
     case 'LogicalExpression': {

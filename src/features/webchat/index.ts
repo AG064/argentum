@@ -194,7 +194,13 @@ function md(text) {
     .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
     .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     .replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(m, text, href) {
+      if (/^https?:\\/\\//i.test(href)) {
+        const safeHref = href.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return '<a href="' + safeHref + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+      }
+      return text;
+    })
     .replace(/\\n/g, '<br>');
   // Wrap consecutive <li> in <ul>
   h = h.replace(/(<li>.*?<\\/li>(?:<br>)?)+/g, m => '<ul>' + m.replace(/<br>/g,'') + '</ul>');
@@ -236,7 +242,7 @@ function clearHistory() {
 function saveHistory() {
   const msgs = [];
   document.querySelectorAll('.message').forEach(el => {
-    msgs.push({ role: el.classList.contains('user') ? 'user' : 'assistant', content: el.innerHTML, time: Date.now() });
+    msgs.push({ role: el.classList.contains('user') ? 'user' : 'assistant', content: el.textContent || '', time: Date.now() });
   });
   localStorage.setItem('agclaw-history-' + roomId, JSON.stringify(msgs.slice(-200)));
 }
@@ -246,8 +252,9 @@ function loadHistory() {
     const saved = JSON.parse(localStorage.getItem('agclaw-history-' + roomId) || '[]');
     saved.forEach(m => {
       const el = document.createElement('div');
-      el.className = 'message ' + m.role;
-      el.innerHTML = m.content;
+      const role = (m.role === 'user' || m.role === 'assistant') ? m.role : 'assistant';
+      el.className = 'message ' + role;
+      el.innerHTML = md(m.content || '');
       document.getElementById('messages').appendChild(el);
     });
   } catch {}
