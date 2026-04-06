@@ -78,7 +78,7 @@ export interface VisionProvider {
 
 function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { shell: true });
+    const child = spawn(cmd, args);
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', (d) => { stdout += d.toString(); });
