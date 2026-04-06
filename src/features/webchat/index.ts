@@ -194,8 +194,11 @@ function md(text) {
     .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
     .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     .replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(m, text, url) {
-      if (/^https?:\\/\\//i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(m, text, href) {
+      if (/^https?:\\/\\//i.test(href)) {
+        var safeHref = href.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return '<a href="' + safeHref + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+      }
       return text;
     })
     .replace(/\\n/g, '<br>');

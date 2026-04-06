@@ -36,10 +36,16 @@ export class MemoryGitSync {
   private indexFile: string;
 
   constructor(config: GitSyncConfig) {
+    const branch = config.branch ?? 'main';
+    // Validate branch name: reject values starting with '-' or containing unsafe chars
+    if (/^-|[^a-zA-Z0-9/_.\-]/.test(branch)) {
+      throw new Error(`Invalid branch name: ${branch}`);
+    }
+
     this.config = {
       enabled: config.enabled ?? false,
       repoPath: config.repoPath,
-      branch: config.branch ?? 'main',
+      branch,
       commitMessage: config.commitMessage ?? 'chore(memory): sync memories',
       compress: config.compress ?? true,
       maxChunkSize: config.maxChunkSize ?? 1024 * 1024, // 1MB

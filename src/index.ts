@@ -399,7 +399,7 @@ function createBuiltinTools(): Tool[] {
         return new Promise((resolve) => {
           const env = {
             ...process.env,
-            GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+            ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
           };
 
           const proc = spawn('uv', args, { env });
