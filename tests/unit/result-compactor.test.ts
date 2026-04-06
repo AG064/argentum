@@ -4,9 +4,10 @@
 
 import { rmSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { compactResult, compactResults } from '../../src/core/result-compactor';
 
-const TEST_OUTPUT_DIR = '/tmp/ag-claw-results-test';
+const TEST_OUTPUT_DIR = join(tmpdir(), 'ag-claw-results-test');
 
 // Clean up test artifacts
 function cleanup(): void {

@@ -71,7 +71,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          HIGH="$(grep -c '"severity": "HIGH"' trivy-results.sarif || echo "0")"
+          HIGH="$(grep -c 'HIGH' trivy-full.txt 2>/dev/null || echo "0")"
           if [ "$HIGH" -gt 0 ] && [ "$HIGH" -lt "$TRIVY_HIGH_ISSUE_THRESHOLD" ]; then
             {
               echo "Trivy found **$HIGH HIGH** vulnerabilities in the Docker image."
