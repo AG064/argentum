@@ -1,14 +1,14 @@
 {
   "name": "ag-claw",
   "version": "0.4.0",
-  "description": "59 modular features. 8 channels. Self-hosted AI agent framework \u2014 zero subscriptions, total control.",
+  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "agclaw": "bin/agclaw.js"
   },
   "scripts": {
-    "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
+    "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule --ignoreConfig",
     "postbuild": "chmod +x bin/agclaw.js || true",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js start",
