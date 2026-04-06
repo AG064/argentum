@@ -2487,9 +2487,22 @@ async function cmdSkill(): Promise<void> {
 
         if (refPath) {
           // Level 2: specific reference file
-          // Validate refPath to avoid path traversal (normalize first, then check for '..' segments and absolute paths)
-          const normalizedRef = path.normalize(refPath);
-          if (path.isAbsolute(normalizedRef) || normalizedRef.split(path.sep).includes('..')) {
+          // Only simple filenames are allowed (no directory components on any platform).
+          // Check '..' as a path segment (after normalization) rather than a substring to allow
+          // legitimate filenames like 'release..notes.md' while still blocking traversal.
+          const normalizedRefPath = path.normalize(refPath);
+          const hasParentTraversalSegment = normalizedRefPath
+            .split(/[\\/]+/)
+            .some((segment) => segment === '..');
+
+          if (
+            path.isAbsolute(refPath) ||
+            hasParentTraversalSegment ||
+            // Also reject any path separators to ensure only simple filenames are accepted
+            // (e.g., block 'docs/readme.md' which is not traversal but still a directory component)
+            refPath.includes('/') ||
+            refPath.includes('\\')
+          ) {
             error('Invalid reference path');
             return;
           }
