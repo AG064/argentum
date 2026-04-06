@@ -50,7 +50,7 @@ class WebchatChannel implements FeatureModule {
   private config: WebchatChannelConfig = {
     enabled: false,
     port: 3001,
-    corsOrigins: ['*'],
+    corsOrigins: ['http://localhost:3001', 'http://127.0.0.1:3001'],
     sessionTimeoutMs: 3600000,
     maxMessageLength: 10000,
   };

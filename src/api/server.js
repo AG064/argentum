@@ -13,7 +13,9 @@ const path = require('path');
 
 // Configuration
 const PORT = process.env.DASHBOARD_PORT || 3002;
-const STATIC_DIR = path.join(__dirname, '../ui/dashboard');
+const STATIC_DIR = path.resolve(path.join(__dirname, '../ui/dashboard'));
+const ALLOWED_ORIGINS = (process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002').split(',').map(o => o.trim());
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB max request body
 
 // MIME types
 const mimeTypes = {
@@ -98,11 +100,20 @@ for (let i = 0; i < 100; i++) {
   });
 }
 
-// Parse JSON body
+// Parse JSON body with size limit
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (chunk) => (body += chunk));
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -114,20 +125,42 @@ function parseBody(req) {
   });
 }
 
+// Get allowed origin for CORS
+function getCorsOrigin(reqOrigin) {
+  if (ALLOWED_ORIGINS.includes(reqOrigin)) {
+    return reqOrigin;
+  }
+  return '';
+}
+
+// Security headers applied to all responses
+function setSecurityHeaders(res, reqOrigin) {
+  const origin = getCorsOrigin(reqOrigin || '');
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+}
+
 // Send JSON response
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, reqOrigin) {
+  setSecurityHeaders(res, reqOrigin);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(data));
 }
 
 // Send error response
-function sendError(res, statusCode, message) {
-  sendJson(res, statusCode, { error: message });
+function sendError(res, statusCode, message, reqOrigin) {
+  // Don't expose internal error details to clients in production
+  const safeMessage = statusCode >= 500 ? 'Internal server error' : message;
+  sendJson(res, statusCode, { error: safeMessage }, reqOrigin);
 }
 
 // Route handlers
@@ -317,27 +350,33 @@ const server = http.createServer(async (req, res) => {
 
   // CORS preflight
   if (method === 'OPTIONS') {
-    res.writeHead(200, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    });
+    const origin = getCorsOrigin(req.headers.origin || '');
+    if (origin) {
+      res.writeHead(200, {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      });
+    } else {
+      res.writeHead(204);
+    }
     res.end();
     return;
   }
 
   // API routes
   if (pathname.startsWith('/api/')) {
+    const reqOrigin = req.headers.origin;
     const handler = matchRoute(method, pathname);
     if (handler) {
       try {
         const query = parsedUrl.query;
-        handler({ query, params: {} }, res);
+        handler({ query, params: {}, headers: req.headers }, res);
       } catch (error) {
-        sendError(res, 500, error.message);
+        sendError(res, 500, 'Internal server error', reqOrigin);
       }
     } else {
-      sendError(res, 404, 'API endpoint not found');
+      sendError(res, 404, 'API endpoint not found', reqOrigin);
     }
     return;
   }
@@ -349,20 +388,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Static files
-  let filePath = path.join(STATIC_DIR, pathname === '/' ? 'index.html' : pathname);
+  // Static files - resolve to prevent path traversal
+  const safePath = path.resolve(STATIC_DIR, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
 
-  // Security: prevent directory traversal
-  if (!filePath.startsWith(STATIC_DIR)) {
+  // Security: prevent directory traversal (check resolved path stays within STATIC_DIR)
+  if (!safePath.startsWith(STATIC_DIR + path.sep) && safePath !== STATIC_DIR) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
 
-  const ext = path.extname(filePath);
+  // Security: check for symlinks to prevent symlink-based traversal
+  try {
+    const realPath = fs.realpathSync(safePath);
+    if (!realPath.startsWith(STATIC_DIR)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+  } catch {
+    // File doesn't exist yet - fall through to readFile handler
+  }
+
+  const ext = path.extname(safePath);
   const contentType = mimeTypes[ext] || 'application/octet-stream';
 
-  fs.readFile(filePath, (err, content) => {
+  fs.readFile(safePath, (err, content) => {
     if (err) {
       if (err.code === 'ENOENT') {
         // Serve index.html for SPA routing
