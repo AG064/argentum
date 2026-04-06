@@ -9,6 +9,8 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import { detectPlatform, type Platform } from './platform';
 import { createLogger } from '../../core/logger';
@@ -149,7 +151,7 @@ class LinuxComputerControl implements ComputerControl {
 
   private async getScreenshotDimensions(imageData: Buffer): Promise<{ width: number; height: number }> {
     // Write temp file to get dimensions
-    const tmpFile = `/tmp/ag-claw-screenshot-${Date.now()}.png`;
+    const tmpFile = join(tmpdir(), `ag-claw-screenshot-${Date.now()}.png`);
     const fs = await import('fs');
     fs.writeFileSync(tmpFile, imageData);
 
@@ -265,7 +267,7 @@ class LinuxComputerControl implements ComputerControl {
 
 class MacOSComputerControl implements ComputerControl {
   async screenshot(): Promise<ScreenshotResult> {
-    const tmpFile = `/tmp/ag-claw-screenshot-${Date.now()}.png`;
+    const tmpFile = join(tmpdir(), `ag-claw-screenshot-${Date.now()}.png`);
     await runCommand('screencapture', ['-x', tmpFile]);
     const fs = await import('fs');
     const data = fs.readFileSync(tmpFile).toString('base64');
