@@ -459,16 +459,20 @@ const server = http.createServer(async (req, res) => {
   // Use realPath (symlink-resolved) if available, otherwise safePath (for SPA fallback)
   const fileToRead = realPath || safePath;
 
+  // Security: explicit inline containment check so static-analysis tools
+  // (CodeQL) can verify the path is safe without tracing through helpers.
+  const staticPrefix = staticDirReal + path.sep;
+  if (!fileToRead.startsWith(staticPrefix) && fileToRead !== staticDirReal) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   fs.readFile(fileToRead, (err, content) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        // Serve index.html for SPA routing
+        // Serve index.html for SPA routing (constant path, not user-controlled)
         const indexPath = path.join(staticDirReal, 'index.html');
-        if (!isPathUnderStaticDir(indexPath)) {
-          res.writeHead(404);
-          res.end('Not Found');
-          return;
-        }
         fs.readFile(indexPath, (err, content) => {
           if (err) {
             res.writeHead(404);
