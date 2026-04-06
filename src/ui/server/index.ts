@@ -115,9 +115,16 @@ function loadConfig(): ServerConfig {
 
   // Generate password hash if not set
   if (!config.auth.passwordHash) {
-    const defaultPassword = process.env.AGCLAW_DASHBOARD_PASS || 'admin';
-    config.auth.passwordHash = hashPassword(defaultPassword);
-    console.warn('[Dashboard Server] Using default password. Set AGCLAW_DASHBOARD_PASS to change.');
+    const envPass = process.env.AGCLAW_DASHBOARD_PASS;
+    if (!envPass) {
+      // Generate a random password and print it once for the user
+      const randomPass = crypto.randomBytes(16).toString('hex');
+      config.auth.passwordHash = hashPassword(randomPass);
+      console.warn(`[Dashboard Server] No password configured. Generated random password: ${randomPass}`);
+      console.warn('[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.');
+    } else {
+      config.auth.passwordHash = hashPassword(envPass);
+    }
   }
 
   return config;

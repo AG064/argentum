@@ -306,7 +306,7 @@ function cmdImage(): void {
 
   const env = {
     ...process.env,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || 'your_gemini_api_key_here',
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   };
 
   const start = Date.now();
