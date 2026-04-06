@@ -13,7 +13,37 @@ const path = require('path');
 
 // Configuration
 const PORT = process.env.DASHBOARD_PORT || 3002;
-const STATIC_DIR = path.join(__dirname, '../ui/dashboard');
+const STATIC_DIR = path.resolve(path.join(__dirname, '../ui/dashboard'));
+const ALLOWED_ORIGINS = (process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002').split(',').map(o => o.trim());
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB max request body
+
+// Lazily resolved real path for static dir (avoids crash if assets are missing at startup)
+let _staticDirReal = null;
+let _staticDirResolutionFailed = false;
+
+function getStaticDirReal() {
+  if (_staticDirReal) return _staticDirReal;
+  if (_staticDirResolutionFailed) return null;
+  try {
+    _staticDirReal = fs.realpathSync(STATIC_DIR);
+    return _staticDirReal;
+  } catch {
+    _staticDirResolutionFailed = true;
+    console.warn(
+      `[Dashboard] Static assets directory unavailable: ${STATIC_DIR}. ` +
+      'Dashboard file serving will be disabled until assets are present.'
+    );
+    return null;
+  }
+}
+
+function isPathUnderStaticDir(p) {
+  const staticDirReal = getStaticDirReal();
+  if (!p || !staticDirReal) return false;
+  const normalized = path.resolve(p);
+  const allowedPrefix = staticDirReal.endsWith(path.sep) ? staticDirReal : staticDirReal + path.sep;
+  return normalized === staticDirReal || normalized.startsWith(allowedPrefix);
+}
 
 // MIME types
 const mimeTypes = {
@@ -98,11 +128,20 @@ for (let i = 0; i < 100; i++) {
   });
 }
 
-// Parse JSON body
+// Parse JSON body with size limit
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (chunk) => (body += chunk));
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -114,20 +153,45 @@ function parseBody(req) {
   });
 }
 
+// Get allowed origin for CORS
+function getCorsOrigin(reqOrigin) {
+  if (ALLOWED_ORIGINS.includes(reqOrigin)) {
+    return reqOrigin;
+  }
+  return '';
+}
+
+// Security headers applied to all responses
+function setSecurityHeaders(res, reqOrigin) {
+  const origin = getCorsOrigin(reqOrigin || '');
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+}
+
 // Send JSON response
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, req) {
+  setSecurityHeaders(res, req ? req.headers.origin : undefined);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(data));
 }
 
 // Send error response
-function sendError(res, statusCode, message) {
-  sendJson(res, statusCode, { error: message });
+// Note: 501 (Not Implemented) and 503 (Service Unavailable) pass through because
+// they contain actionable client-facing information, unlike 500/502 which may leak internals.
+function sendError(res, statusCode, message, req) {
+  const safeMessage = statusCode >= 500 && statusCode !== 501 && statusCode !== 503
+    ? 'Internal server error'
+    : message;
+  sendJson(res, statusCode, { error: safeMessage }, req);
 }
 
 // Route handlers
@@ -138,7 +202,7 @@ const routes = {
       status: 'healthy',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
-    });
+    }, req);
   },
 
   // System stats
@@ -152,21 +216,21 @@ const routes = {
       cpuUsage: cpuUsage.toFixed(1) + '%',
       memoryUsage: memoryUsage.toFixed(1) + ' GB',
       requestsPerMinute: Math.floor(Math.random() * 500) + 100,
-    });
+    }, req);
   },
 
   // Get all agents
   'GET /api/agents': (req, res) => {
-    sendJson(res, 200, mockData.agents);
+    sendJson(res, 200, mockData.agents, req);
   },
 
   // Get single agent
   'GET /api/agents/:id': (req, res) => {
     const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
-      sendJson(res, 200, agent);
+      sendJson(res, 200, agent, req);
     } else {
-      sendError(res, 404, 'Agent not found');
+      sendError(res, 404, 'Agent not found', req);
     }
   },
 
@@ -175,9 +239,9 @@ const routes = {
     const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
       agent.status = 'online';
-      sendJson(res, 200, { success: true, agent });
+      sendJson(res, 200, { success: true, agent }, req);
     } else {
-      sendError(res, 404, 'Agent not found');
+      sendError(res, 404, 'Agent not found', req);
     }
   },
 
@@ -186,15 +250,15 @@ const routes = {
     const agent = mockData.agents.find((a) => a.id === req.params.id);
     if (agent) {
       agent.status = 'offline';
-      sendJson(res, 200, { success: true, agent });
+      sendJson(res, 200, { success: true, agent }, req);
     } else {
-      sendError(res, 404, 'Agent not found');
+      sendError(res, 404, 'Agent not found', req);
     }
   },
 
   // Get all skills
   'GET /api/skills': (req, res) => {
-    sendJson(res, 200, mockData.skills);
+    sendJson(res, 200, mockData.skills, req);
   },
 
   // Get logs
@@ -214,7 +278,7 @@ const routes = {
     sendJson(res, 200, {
       logs,
       total: mockData.logs.length,
-    });
+    }, req);
   },
 
   // Add log entry
@@ -227,7 +291,7 @@ const routes = {
       message: body.message || '',
     };
     mockData.logs.push(logEntry);
-    sendJson(res, 201, logEntry);
+    sendJson(res, 201, logEntry, req);
   },
 
   // Get memories
@@ -252,7 +316,7 @@ const routes = {
         content: '847 files backed up',
       },
     ];
-    sendJson(res, 200, { memories, total: memories.length });
+    sendJson(res, 200, { memories, total: memories.length }, req);
   },
 
   // Get settings
@@ -263,21 +327,21 @@ const routes = {
       autoUpdate: true,
       llmProvider: 'minimax',
       llmModel: 'MiniMax-M2.7',
-    });
+    }, req);
   },
 
   // Update settings
   'PUT /api/settings': async (req, res) => {
     const body = await parseBody(req);
-    sendJson(res, 200, { success: true, settings: body });
+    sendJson(res, 200, { success: true, settings: body }, req);
   },
 };
 
 // Find matching route
-function matchRoute(method, path) {
+function matchRoute(method, reqPath) {
   // Exact match
-  const key = `${method} ${path}`;
-  if (routes[key]) return routes[key];
+  const key = `${method} ${reqPath}`;
+  if (routes[key]) return { handler: routes[key], params: {} };
 
   // Parameter match
   for (const route of Object.keys(routes)) {
@@ -285,7 +349,7 @@ function matchRoute(method, path) {
     if (routeMethod !== method) continue;
 
     const routeParts = routePath.split('/');
-    const pathParts = path.split('/');
+    const pathParts = reqPath.split('/');
 
     if (routeParts.length !== pathParts.length) continue;
 
@@ -302,7 +366,7 @@ function matchRoute(method, path) {
     }
 
     if (match) {
-      return (req, res) => routes[route]({ ...req, params });
+      return { handler: routes[route], params };
     }
   }
 
@@ -315,29 +379,31 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
   const method = req.method;
 
+  // Apply security headers to every response
+  setSecurityHeaders(res, req.headers.origin);
+
   // CORS preflight
   if (method === 'OPTIONS') {
-    res.writeHead(200, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    });
+    res.writeHead(200);
     res.end();
     return;
   }
 
   // API routes
   if (pathname.startsWith('/api/')) {
-    const handler = matchRoute(method, pathname);
-    if (handler) {
+    const match = matchRoute(method, pathname);
+    if (match) {
       try {
-        const query = parsedUrl.query;
-        handler({ query, params: {} }, res);
+        // Attach query and params to the real req object so handlers
+        // can use both Node stream methods (parseBody) and route metadata.
+        req.query = parsedUrl.query;
+        req.params = match.params;
+        await match.handler(req, res);
       } catch (error) {
-        sendError(res, 500, error.message);
+        sendError(res, 500, 'Internal server error', req);
       }
     } else {
-      sendError(res, 404, 'API endpoint not found');
+      sendError(res, 404, 'API endpoint not found', req);
     }
     return;
   }
@@ -350,23 +416,75 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Static files
-  let filePath = path.join(STATIC_DIR, pathname === '/' ? 'index.html' : pathname);
+  const staticDirReal = getStaticDirReal();
+  if (!staticDirReal) {
+    res.writeHead(503);
+    res.end('Dashboard assets not available');
+    return;
+  }
 
-  // Security: prevent directory traversal
-  if (!filePath.startsWith(STATIC_DIR)) {
+  // Decode percent-encoded sequences before checking for traversal,
+  // so encoded variants like %2e%2e are caught too.
+  let requestedPath;
+  try {
+    requestedPath = decodeURIComponent(pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+  } catch {
+    res.writeHead(400);
+    res.end('Bad Request');
+    return;
+  }
+
+  // Security: reject directory traversal sequences in user input.
+  // This is an explicit check that CodeQL recognizes as a sanitizer
+  // for js/path-injection, preventing the user from escaping the
+  // static directory via ".." segments.
+  if (requestedPath.indexOf('..') !== -1) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
 
-  const ext = path.extname(filePath);
-  const contentType = mimeTypes[ext] || 'application/octet-stream';
+  const safePath = path.resolve(staticDirReal, requestedPath);
 
-  fs.readFile(filePath, (err, content) => {
+  // Security: ensure the resolved path is under the static directory
+  if (!isPathUnderStaticDir(safePath)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  let realPath;
+  try {
+    realPath = fs.realpathSync(safePath);
+  } catch {
+    // File doesn't exist yet - fall through to readFile handler for SPA fallback
+  }
+
+  // Security: prevent symlink-based traversal
+  if (realPath && !isPathUnderStaticDir(realPath)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  // Security: only serve files with allowed extensions
+  const ext = path.extname(safePath);
+  if (ext && !mimeTypes[ext]) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+  const contentType = mimeTypes[ext] || 'text/html';
+
+  // Use realPath (symlink-resolved) if available, otherwise safePath (for SPA fallback)
+  const fileToRead = realPath || safePath;
+
+  fs.readFile(fileToRead, (err, content) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        // Serve index.html for SPA routing
-        fs.readFile(path.join(STATIC_DIR, 'index.html'), (err, content) => {
+        // Serve index.html for SPA routing (constant path, not user-controlled)
+        const indexPath = path.join(staticDirReal, 'index.html');
+        fs.readFile(indexPath, (err, content) => {
           if (err) {
             res.writeHead(404);
             res.end('Not Found');

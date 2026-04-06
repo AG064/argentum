@@ -115,9 +115,43 @@ function loadConfig(): ServerConfig {
 
   // Generate password hash if not set
   if (!config.auth.passwordHash) {
-    const defaultPassword = process.env.AGCLAW_DASHBOARD_PASS || 'admin';
-    config.auth.passwordHash = hashPassword(defaultPassword);
-    console.warn('[Dashboard Server] Using default password. Set AGCLAW_DASHBOARD_PASS to change.');
+    const envPass = process.env.AGCLAW_DASHBOARD_PASS;
+    if (!envPass) {
+      // Try to load a previously persisted hash
+      const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+      const hashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
+      let loaded = false;
+
+      try {
+        if (fs.existsSync(hashFile)) {
+          const savedHash = fs.readFileSync(hashFile, 'utf8').trim();
+          if (savedHash) {
+            config.auth.passwordHash = savedHash;
+            loaded = true;
+          }
+        }
+      } catch {
+        // Ignore read errors, will generate a new password
+      }
+
+      if (!loaded) {
+        // Generate a random password and persist the hash so it survives restarts
+        const randomPass = crypto.randomBytes(16).toString('hex');
+        config.auth.passwordHash = hashPassword(randomPass);
+
+        try {
+          fs.writeFileSync(hashFile, config.auth.passwordHash, { mode: 0o600 });
+          try { fs.chmodSync(hashFile, 0o600); } catch { /* chmod may fail on some platforms */ }
+        } catch {
+          console.warn('[Dashboard Server] Could not persist password hash to disk.');
+        }
+
+        console.warn(`[Dashboard Server] Generated dashboard password: ${randomPass}`);
+        console.warn('[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.');
+      }
+    } else {
+      config.auth.passwordHash = hashPassword(envPass);
+    }
   }
 
   return config;
