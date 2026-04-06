@@ -158,8 +158,10 @@ function sendJson(res, statusCode, data, reqOrigin) {
 
 // Send error response
 function sendError(res, statusCode, message, reqOrigin) {
-  // Don't expose internal error details to clients in production
-  const safeMessage = statusCode >= 500 ? 'Internal server error' : message;
+  // Only expose error details for client errors (4xx), not server errors (5xx)
+  const safeMessage = statusCode >= 500 && statusCode !== 501 && statusCode !== 503
+    ? 'Internal server error'
+    : message;
   sendJson(res, statusCode, { error: safeMessage }, reqOrigin);
 }
 
@@ -388,11 +390,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Static files - resolve to prevent path traversal
-  const safePath = path.resolve(STATIC_DIR, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+  // Static files - resolve and normalize to prevent path traversal
+  const requestedPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const safePath = path.normalize(path.resolve(STATIC_DIR, requestedPath));
+  const normalizedStaticDir = path.normalize(STATIC_DIR);
 
   // Security: prevent directory traversal (check resolved path stays within STATIC_DIR)
-  if (!safePath.startsWith(STATIC_DIR + path.sep) && safePath !== STATIC_DIR) {
+  if (!safePath.startsWith(normalizedStaticDir + path.sep) && safePath !== normalizedStaticDir) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -401,7 +405,7 @@ const server = http.createServer(async (req, res) => {
   // Security: check for symlinks to prevent symlink-based traversal
   try {
     const realPath = fs.realpathSync(safePath);
-    if (!realPath.startsWith(STATIC_DIR)) {
+    if (!realPath.startsWith(normalizedStaticDir)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -410,8 +414,14 @@ const server = http.createServer(async (req, res) => {
     // File doesn't exist yet - fall through to readFile handler
   }
 
+  // Security: only serve files with allowed extensions
   const ext = path.extname(safePath);
-  const contentType = mimeTypes[ext] || 'application/octet-stream';
+  if (ext && !mimeTypes[ext]) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+  const contentType = mimeTypes[ext] || 'text/html';
 
   fs.readFile(safePath, (err, content) => {
     if (err) {
