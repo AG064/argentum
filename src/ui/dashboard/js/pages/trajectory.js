@@ -245,11 +245,7 @@ async function handleExportTrajectory(e) {
   if (btn) {
     btn.disabled = true;
     /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     // safe: Components.spinner() returns static trusted HTML, 'Exporting...' is a static string
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-    // safe: Components.spinner() returns static trusted HTML, 'Exporting...' is a static string
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     btn.innerHTML = Components.spinner() + ' Exporting...';
   }
 

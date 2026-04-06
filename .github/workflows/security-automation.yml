@@ -153,8 +153,8 @@ jobs:
 
   auto-merge-dependabot:
     name: Auto-merge Dependabot
-    needs: [validate, enforce-audit]
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    needs: [validate]
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' && needs.validate.outputs.has_vulnerabilities == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
