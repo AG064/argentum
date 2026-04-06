@@ -18,6 +18,15 @@ const STATIC_DIR_REAL = fs.realpathSync(STATIC_DIR);
 const ALLOWED_ORIGINS = (process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002').split(',').map(o => o.trim());
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB max request body
 
+function isPathUnderStaticDir(p) {
+  if (!p) {
+    return false;
+  }
+  const normalized = path.resolve(p);
+  const allowedPrefix = STATIC_DIR_REAL.endsWith(path.sep) ? STATIC_DIR_REAL : STATIC_DIR_REAL + path.sep;
+  return normalized === STATIC_DIR_REAL || normalized.startsWith(allowedPrefix);
+}
+
 // MIME types
 const mimeTypes = {
   '.html': 'text/html',
@@ -396,6 +405,13 @@ const server = http.createServer(async (req, res) => {
   const requestedPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const safePath = path.resolve(STATIC_DIR_REAL, requestedPath);
 
+  // Security: ensure the resolved path is under the static directory
+  if (!isPathUnderStaticDir(safePath)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   let realPath;
   try {
     realPath = fs.realpathSync(safePath);
@@ -404,13 +420,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Security: prevent directory traversal and symlink-based traversal
-  if (realPath) {
-    const allowedPrefix = STATIC_DIR_REAL.endsWith(path.sep) ? STATIC_DIR_REAL : STATIC_DIR_REAL + path.sep;
-    if (realPath !== STATIC_DIR_REAL && !realPath.startsWith(allowedPrefix)) {
-      res.writeHead(403);
-      res.end('Forbidden');
-      return;
-    }
+  if (realPath && !isPathUnderStaticDir(realPath)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
   }
 
   // Security: only serve files with allowed extensions
