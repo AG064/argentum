@@ -285,8 +285,15 @@ function cmdImage(): void {
   print('');
 
   const { spawn } = require('child_process');
+  const { existsSync: fsExistsSync } = require('fs');
   const homeDir = process.env.HOME || '/home/ag064';
   const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
+
+  if (!fsExistsSync(scriptPath)) {
+    error(`Script not found: ${scriptPath}`);
+    error('Run "agclaw setup" or ensure the image-gen skill is installed.');
+    return;
+  }
 
   const scriptArgs = [
     'run',
@@ -309,11 +316,21 @@ function cmdImage(): void {
     ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
   };
 
+  const IMAGE_TIMEOUT_MS = 180_000;
   const start = Date.now();
   const proc = spawn('uv', scriptArgs, { env });
 
   let stdout = '';
   let stderr = '';
+  let settled = false;
+
+  const timer = setTimeout(() => {
+    if (!settled) {
+      settled = true;
+      proc.kill('SIGKILL');
+      error(`Image generation timed out after ${IMAGE_TIMEOUT_MS / 1000}s`);
+    }
+  }, IMAGE_TIMEOUT_MS);
 
   proc.stdout?.on('data', (d: any) => {
     const line = d.toString();
@@ -331,6 +348,9 @@ function cmdImage(): void {
   });
 
   proc.on('close', (code: any) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
     const duration = ((Date.now() - start) / 1000).toFixed(1);
 
     print('');
@@ -346,6 +366,9 @@ function cmdImage(): void {
   });
 
   proc.on('error', (err: any) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
     error(`Failed to start uv: ${err.message}`);
     error('Make sure "uv" is installed: curl -LsSf https://astral.sh/uv/install.sh | sh');
   });
@@ -2464,8 +2487,8 @@ async function cmdSkill(): Promise<void> {
 
         if (refPath) {
           // Level 2: specific reference file
-          // Validate refPath to avoid path traversal (disallow absolute paths and '..')
-          if (path.isAbsolute(refPath) || refPath.includes('..') || refPath.includes(path.sep)) {
+          // Validate refPath to avoid path traversal (disallow absolute paths, '..', and any path separator)
+          if (path.isAbsolute(refPath) || refPath.includes('..') || refPath.includes('/') || refPath.includes('\\')) {
             error('Invalid reference path');
             return;
           }

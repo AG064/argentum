@@ -160,6 +160,8 @@ function evalNode(node: any, vars: Record<string, unknown>): any {
         return node.body.reduce((_acc: unknown, n: { type: string }) => evalNode(n, vars), undefined);
       }
       return evalNode(node.body, vars);
+    default:
+      throw new Error(`Unsupported node type: ${(node as { type: string }).type}`);
   }
 }
 
