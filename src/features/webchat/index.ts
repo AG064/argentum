@@ -196,7 +196,7 @@ function md(text) {
     .replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>')
     .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(m, text, href) {
       if (/^https?:\\/\\//i.test(href)) {
-        var safeHref = href.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const safeHref = href.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         return '<a href="' + safeHref + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
       }
       return text;

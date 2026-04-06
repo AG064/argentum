@@ -38,7 +38,7 @@ export class MemoryGitSync {
   constructor(config: GitSyncConfig) {
     const branch = config.branch ?? 'main';
     // Validate branch name: reject values starting with '-' or containing unsafe chars
-    if (/^-|[^a-zA-Z0-9/_.\-]/.test(branch)) {
+    if (/^-|[^a-zA-Z0-9/_.-]/.test(branch)) {
       throw new Error(`Invalid branch name: ${branch}`);
     }
 
