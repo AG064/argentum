@@ -15,8 +15,9 @@
  */
 
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { createHash } from 'crypto';
 
 import { google } from 'googleapis';
@@ -304,20 +305,27 @@ class YouTubeShortsFeature implements FeatureModule {
     const { start, end, caption } = segment;
     const duration = end - start;
 
-    // Crop to 9:16 vertical, add caption
-    const drawtext = `crop=ih*9/16:ih,drawtext=text='${caption.replace(/[':]/g, '')}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-60:borderw=2:bordercolor=black`;
-    const ffmpegArgs = [
-      '-i', videoPath,
-      '-ss', String(start),
-      '-t', String(duration),
-      '-vf', drawtext,
-      '-c:a', 'copy',
-      outputPath,
-      '-y',
-    ];
+    // Write caption to a temp file and use textfile= to avoid FFmpeg filter injection
+    const captionDir = mkdtempSync(join(tmpdir(), 'agclaw-caption-'));
+    const captionFile = join(captionDir, 'caption.txt');
+    try {
+      writeFileSync(captionFile, caption, 'utf8');
+      const drawtext = `crop=ih*9/16:ih,drawtext=textfile=${captionFile}:fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-60:borderw=2:bordercolor=black`;
+      const ffmpegArgs = [
+        '-i', videoPath,
+        '-ss', String(start),
+        '-t', String(duration),
+        '-vf', drawtext,
+        '-c:a', 'copy',
+        outputPath,
+        '-y',
+      ];
 
-    this.ctx?.logger?.info?.('Generating short', { segment, outputPath });
-    execFileSync('ffmpeg', ffmpegArgs, { stdio: 'ignore' });
+      this.ctx?.logger?.info?.('Generating short', { segment, outputPath });
+      execFileSync('ffmpeg', ffmpegArgs, { stdio: 'ignore' });
+    } finally {
+      rmSync(captionDir, { recursive: true, force: true });
+    }
   }
 
   /**
