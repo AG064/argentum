@@ -12,10 +12,11 @@
  * Compact:  merges entries with >0.85 similarity in the same tier
  */
 
-import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { createHash } from 'crypto';
+
+import Database from 'better-sqlite3';
 
 import { featureLogger } from './logger';
 
