@@ -11,9 +11,10 @@
  *   - task:    visible within a specific task
  */
 
-import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
+
+import Database from 'better-sqlite3';
 
 import { featureLogger } from './logger';
 import { generateId } from '../utils/id';

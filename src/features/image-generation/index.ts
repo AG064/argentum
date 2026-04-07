@@ -85,7 +85,7 @@ class ImageGenerationFeature implements FeatureModule {
     this.ctx = context;
 
     if (config['scriptPath'] && typeof config['scriptPath'] === 'string') {
-      this.scriptPath = config['scriptPath'] as string;
+      this.scriptPath = config['scriptPath'];
     }
 
     if (!existsSync(this.scriptPath)) {

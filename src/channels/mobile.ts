@@ -165,7 +165,7 @@ class MobileChannel implements FeatureModule {
         const registration: DeviceRegistration = {
           userId: userId as string,
           deviceId: deviceId as string,
-          platform: platform as 'ios' | 'android',
+          platform,
           token: token as string,
           topics: (topics as string[]) ?? [],
           registeredAt: Date.now(),
