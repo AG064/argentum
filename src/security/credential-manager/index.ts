@@ -17,7 +17,7 @@ import Database from 'better-sqlite3';
 
 import { createLogger, type Logger } from '../../core/logger';
 import { encrypt, decrypt } from '../encrypted-secrets';
-import { getPolicyEngine, PolicyEngine } from '../policy-engine/index.js';
+import { getPolicyEngine, type PolicyEngine } from '../policy-engine/index.js';
 
 import type { CredentialConfig, StoredCredential, MintedKey, AuditEntry } from '../types';
 

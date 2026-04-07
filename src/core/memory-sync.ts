@@ -5,11 +5,11 @@
  * Uses checksums for deduplication.
  */
 
-import { createGzip } from 'zlib';
+import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import { execFileSync } from 'child_process';
+import { createGzip } from 'zlib';
 
 export interface MemoryChunk {
   id: string;

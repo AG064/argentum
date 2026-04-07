@@ -51,7 +51,7 @@ function extractGoal(toolResults: string[]): string {
   for (const result of toolResults) {
     for (const pattern of GOAL_PATTERNS) {
       const match = result.match(pattern);
-      if (match && match[1]) {
+      if (match?.[1]) {
         return match[1].trim().slice(0, 200);
       }
     }
@@ -67,7 +67,7 @@ function extractDecisions(toolResults: string[]): string[] {
   for (const result of toolResults) {
     for (const pattern of DECISION_PATTERNS) {
       const match = result.match(pattern);
-      if (match && match[1]) {
+      if (match?.[1]) {
         const decision = match[1].trim();
         if (decision && decision.length > 2 && decision.length < 300) {
           decisions.push(decision);
@@ -85,13 +85,13 @@ function inferNextSteps(toolResults: string[]): string {
   for (const result of toolResults) {
     for (const pattern of NEXT_PATTERNS) {
       const match = result.match(pattern);
-      if (match && match[1]) {
+      if (match?.[1]) {
         return match[1].trim().slice(0, 300);
       }
     }
     // Look for TODO comments
     const todoMatch = result.match(/\/\/\s*TODO[:\s]*(.+)/);
-    if (todoMatch && todoMatch[1]) {
+    if (todoMatch?.[1]) {
       return todoMatch[1].trim().slice(0, 300);
     }
   }
@@ -106,13 +106,13 @@ function extractCritical(toolResults: string[]): string {
   for (const result of toolResults) {
     for (const pattern of CRITICAL_PATTERNS) {
       const match = result.match(pattern);
-      if (match && match[1]) {
+      if (match?.[1]) {
         critical.push(match[1].trim().slice(0, 150));
       }
     }
     // Look for error-like patterns
     const errorMatch = result.match(/error[:\s]+(.+)/i);
-    if (errorMatch && errorMatch[1] && !critical.includes(errorMatch[1])) {
+    if (errorMatch?.[1] && !critical.includes(errorMatch[1])) {
       critical.push(`ERROR: ${errorMatch[1]}`.trim().slice(0, 140));
     }
   }

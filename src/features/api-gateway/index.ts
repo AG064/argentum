@@ -6,6 +6,7 @@
  */
 
 import { randomBytes } from 'crypto';
+
 import express, { type Request, type Response, type Handler } from 'express';
 
 import {
@@ -317,7 +318,7 @@ class ApiGatewayFeature implements FeatureModule {
     }
 
     const endpoint = this.findEndpoint(req.method, req.path);
-    if (!endpoint || !endpoint.rateLimited) {
+    if (!endpoint?.rateLimited) {
       next();
       return;
     }
@@ -366,7 +367,7 @@ class ApiGatewayFeature implements FeatureModule {
     const endpoint = this.findEndpoint(req.method, req.path);
 
     // If no endpoint found or endpoint doesn't require auth, continue
-    if (!endpoint || !endpoint.requiresAuth) {
+    if (!endpoint?.requiresAuth) {
       return next();
     }
 

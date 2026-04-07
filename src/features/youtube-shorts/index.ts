@@ -15,13 +15,12 @@
  */
 
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
 import { createHash } from 'crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import { google } from 'googleapis';
-import type { youtube_v3 } from 'googleapis';
 
 import {
   type FeatureModule,
@@ -29,6 +28,9 @@ import {
   type FeatureMeta,
   type HealthStatus,
 } from '../../core/plugin-loader';
+
+import type { youtube_v3 } from 'googleapis';
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

@@ -94,7 +94,7 @@ export function normalizeId(
   }
 
   // Check ID mappings (friendly names)
-  if (config.idMappings && config.idMappings[id]) {
+  if (config.idMappings?.[id]) {
     return config.idMappings[id].numericId;
   }
 
