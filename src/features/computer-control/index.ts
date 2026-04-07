@@ -159,7 +159,7 @@ class LinuxComputerControl implements ComputerControl {
     const match = result.stdout.match(/(\d+)\s*x\s*(\d+)/);
     fs.unlinkSync(tmpFile);
 
-    if (match && match[1] && match[2]) {
+    if (match?.[1] && match[2]) {
       return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
     }
     return { width: 1920, height: 1080 }; // fallback
@@ -482,7 +482,7 @@ class ComputerControlFeature implements FeatureModule {
 
     const platform: Platform = this.config.platform === 'auto'
       ? detectPlatform()
-      : this.config.platform as Platform;
+      : this.config.platform;
 
     this.log.info(`Initializing computer control for platform: ${platform}`);
 

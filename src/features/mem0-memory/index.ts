@@ -6,13 +6,14 @@
  */
 
 import { MemoryClient, type Message } from 'mem0ai';
+
+import { featureLogger } from '../../core/logger';
 import {
   type FeatureModule,
   type FeatureContext,
   type FeatureMeta,
   type HealthStatus,
 } from '../../core/plugin-loader';
-import { featureLogger } from '../../core/logger';
 
 export interface Mem0Config {
   enabled: boolean;

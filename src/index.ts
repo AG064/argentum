@@ -465,8 +465,8 @@ class AGClaw {
     const configManager = getConfig();
     this.config = configManager.get();
     this.logger = createLogger({
-      level: this.config.logging.level as 'debug' | 'info' | 'warn' | 'error',
-      format: this.config.logging.format as 'json' | 'pretty',
+      level: this.config.logging.level,
+      format: this.config.logging.format,
     });
     this.pluginLoader = new PluginLoader(this.config);
 
