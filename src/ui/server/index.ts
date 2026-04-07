@@ -175,7 +175,7 @@ function verifyPassword(password: string, hash: string): boolean {
  * Parse Basic Auth header
  */
 function parseBasicAuth(authHeader: string): { username: string; password: string } | null {
-  if (!authHeader?.startsWith('Basic ')) {
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
     return null;
   }
 
@@ -367,7 +367,8 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   const auth = parseBasicAuth(authHeader || '');
 
   if (
-    auth?.username !== config.auth.username ||
+    !auth ||
+    auth.username !== config.auth.username ||
     !verifyPassword(auth.password, config.auth.passwordHash)
   ) {
     res.writeHead(401, {
@@ -422,7 +423,8 @@ function handleAPIRequest(
   const auth = parseBasicAuth(authHeader || '');
 
   if (
-    auth?.username !== config.auth.username ||
+    !auth ||
+    auth.username !== config.auth.username ||
     !verifyPassword(auth.password, config.auth.passwordHash)
   ) {
     sendJSON(res, 401, { error: 'Unauthorized' });
@@ -654,7 +656,8 @@ function setupWebSocket(server: http.Server): void {
     const auth = parseBasicAuth(authHeader || '');
 
     if (
-      auth?.username !== config.auth.username ||
+      !auth ||
+      auth.username !== config.auth.username ||
       !verifyPassword(auth.password, config.auth.passwordHash)
     ) {
       ws.close(4001, 'Unauthorized');
