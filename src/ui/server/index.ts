@@ -17,8 +17,8 @@ import * as https from 'https';
 import * as path from 'path';
 import * as url from 'url';
 
-import { WebSocketServer, WebSocket } from 'ws';
 import bcrypt from 'bcryptjs';
+import { WebSocketServer, WebSocket } from 'ws';
 
 // Types
 interface AuthConfig {

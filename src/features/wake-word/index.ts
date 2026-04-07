@@ -281,7 +281,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
    */
   simulateDetection(wordId: string, matchedText?: string): boolean {
     const word = this.wakeWords.find((w) => w.id === wordId);
-    if (!word || !word.enabled) return false;
+    if (!word?.enabled) return false;
 
     const detection: Detection = {
       wordId: word.id,

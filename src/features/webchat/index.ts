@@ -6,8 +6,8 @@
  * and chat history persistence.
  */
 
-import { Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
 import { randomBytes as _randomBytes } from 'crypto';
+import { Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
 
 import { WebSocketServer, WebSocket } from 'ws';
 
