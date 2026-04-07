@@ -591,7 +591,7 @@ export class PolicyEngine {
    */
   approve(requestId: string, userId: string, notes?: string): boolean {
     const request = this.approvalStore.requests.get(requestId);
-    if (request?.status !== 'pending') return false;
+    if (!request || request.status !== 'pending') return false;
 
     if (Date.now() > request.expiresAt) {
       request.status = 'expired';
@@ -623,7 +623,7 @@ export class PolicyEngine {
    */
   deny(requestId: string, userId: string, notes?: string): boolean {
     const request = this.approvalStore.requests.get(requestId);
-    if (request?.status !== 'pending') return false;
+    if (!request || request.status !== 'pending') return false;
 
     request.status = 'denied';
     request.respondedAt = Date.now();

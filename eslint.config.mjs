@@ -228,6 +228,7 @@ export default tseslint.config(
     files: ['src/**/*.ts'],
     rules: {
       'require-await': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'warn',
       '@typescript-eslint/require-await': 'off',
       'import/no-default-export': 'off',
       '@typescript-eslint/no-require-imports': 'off',
