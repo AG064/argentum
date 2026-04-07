@@ -54,7 +54,6 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
-    "@types/uuid": "^11.0.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",
