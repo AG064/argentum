@@ -5,10 +5,14 @@
  * Targets TypeScript with strict rules, JSDoc enforcement,
  * and plugin-based rules for import/order, promise correctness, etc.
  */
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import tseslint from 'typescript-eslint';
 import importPlugin from 'eslint-plugin-import-x';
 import jestPlugin from 'eslint-plugin-jest';
 import js from '@eslint/js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
   // ── Global ignores ──────────────────────────────────────────────────────
@@ -38,22 +42,13 @@ export default tseslint.config(
       sourceType: 'module',
       parserOptions: {
         project: './tsconfig.json',
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: __dirname,
       },
     },
 
     plugins: {
       import: importPlugin,
       jest: jestPlugin,
-    },
-
-    settings: {
-      'import/resolver': {
-        typescript: {
-          project: './tsconfig.json',
-          alwaysTryTypes: true,
-        },
-      },
     },
 
     rules: {
@@ -179,20 +174,9 @@ export default tseslint.config(
     },
   },
 
-  // ── Override: JS files ──────────────────────────────────────────────────
-  {
-    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
-    rules: {
-      '@typescript-eslint/no-require-imports': 'off',
-      '@typescript-eslint/no-var-requires': 'off',
-      '@typescript-eslint/consistent-type-imports': 'off',
-      'import/no-default-export': 'off',
-    },
-  },
-
   // ── Override: Test files ────────────────────────────────────────────────
   {
-    files: ['tests/**/*.ts', 'tests/**/*.js', '**/*.test.ts', '**/*.spec.ts'],
+    files: ['tests/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
@@ -201,25 +185,6 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/unbound-method': 'off',
       'import/no-extraneous-dependencies': 'off',
-    },
-  },
-
-  // ── Override: Script files ──────────────────────────────────────────────
-  {
-    files: ['scripts/**/*.ts', 'scripts/**/*.js'],
-    rules: {
-      'no-console': 'off',
-      'import/no-extraneous-dependencies': 'off',
-    },
-  },
-
-  // ── Override: Bin files ─────────────────────────────────────────────────
-  {
-    files: ['bin/**/*.js'],
-    rules: {
-      'no-console': 'off',
-      '@typescript-eslint/no-require-imports': 'off',
-      'import/no-default-export': 'off',
     },
   },
 
