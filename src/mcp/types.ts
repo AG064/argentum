@@ -112,7 +112,7 @@ export const MCPToolSchema = z.object({
   title: z.string().optional(),
   inputSchema: z.object({
     type: z.literal('object'),
-    properties: z.record(z.unknown()),
+    properties: z.record(z.string(), z.unknown()),
     required: z.array(z.string()).optional(),
   }),
 });
@@ -131,7 +131,7 @@ export type ToolsListResponse = z.infer<typeof ToolsListResponseSchema>;
 
 export const ToolsCallRequestSchema = z.object({
   name: z.string(),
-  arguments: z.record(z.unknown()).optional(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type ToolsCallRequest = z.infer<typeof ToolsCallRequestSchema>;
@@ -230,7 +230,7 @@ export type PromptsListResponse = z.infer<typeof PromptsListResponseSchema>;
 
 export const PromptsGetRequestSchema = z.object({
   name: z.string(),
-  arguments: z.record(z.string()).optional(),
+  arguments: z.record(z.string(), z.string()).optional(),
 });
 
 export const PromptMessageSchema = z.object({
