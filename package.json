@@ -85,7 +85,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/parser": "^8.58.1",
     "eslint": "^10.2.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-jest": "^29.15.1",
