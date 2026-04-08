@@ -2196,6 +2196,7 @@ async function cmdOnboard(): Promise<void> {
   });
 
   let selectedPreset: { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> };
+  let usedKey = ''; // API key collected during discovery, used to skip the later prompt
   if (providerChoice === 'custom') {
     const custName = (await text({ message: 'Provider name:', initialValue: 'custom' })) as string;
     const custUrl = (await text({ message: 'Base URL:', initialValue: 'https://' })) as string;
@@ -2226,28 +2227,29 @@ async function cmdOnboard(): Promise<void> {
     let liveModels: DiscoveredModel[] = [];
 
     if (discoveryMethod === 'discover') {
-      const discoveryKey = await password({
-        message: `${provider.api_key_env} (needed for discovery):`,
-        mask: '*',
-      });
+      // Step 1: try discovery WITHOUT API key first (many providers allow this)
+      process.stdout.write(`  Querying ${provider.base_url}/models (no key)... `);
+      liveModels = await discoverModels(provider, '');
 
-      const keyValue: string = discoveryKey && !isCancel(discoveryKey) ? String(discoveryKey).trim() : '';
-      if (!keyValue) {
-        log.warn('No API key — falling back to curated list');
+      if (liveModels.length === 0) {
+        // No results — ask for key and retry
+        const discoveryKey = await password({
+          message: `${provider.api_key_env} (required for this provider):`,
+          mask: '*',
+        });
+        usedKey = discoveryKey && !isCancel(discoveryKey) ? String(discoveryKey).trim() : '';
+
+        if (usedKey) {
+          process.stdout.write(`  Querying ${provider.base_url}/models (with key)... `);
+          liveModels = await discoverModels(provider, usedKey);
+          process.stdout.write(liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no models\n');
+        }
       } else {
-        const envPath = path.join(getWorkDir(), '.env');
-        fs.appendFileSync(envPath, `${provider.api_key_env}=${keyValue}\n`);
-        log.success(`Saved ${provider.api_key_env}`);
+        process.stdout.write(`OK (${liveModels.length} models)\n`);
       }
-
-      process.stdout.write(`  Querying ${provider.base_url}/models... `);
-      if (keyValue) {
-        liveModels = await discoverModels(provider, keyValue);
-      }
-      process.stdout.write(liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no response\n');
 
       if (liveModels.length > 0) {
-        log.success(`${liveModels.length} models discovered`);
+        log.success(`${liveModels.length} models discovered — pick one`);
         chosenModel = String(
           await select({
             message: `${provider.label} models (live):`,
@@ -2259,7 +2261,7 @@ async function cmdOnboard(): Promise<void> {
           }),
         );
       } else {
-        log.warn('Discovery returned no models — using curated list');
+        log.warn('Discovery failed — using curated list');
       }
     }
 
@@ -2300,13 +2302,17 @@ async function cmdOnboard(): Promise<void> {
   log.success(`Selected: ${selectedPreset.name} (${selectedPreset.base_url})`);
 
   // API key
-  const apiKeyVal = await password({
-    message: `${selectedPreset.api_key_env} (Enter to skip):`,
-    mask: '*',
-  });
-  if (typeof apiKeyVal === 'string' && apiKeyVal.trim()) {
+  // If we already asked for key during discovery, don't ask again
+  if (!usedKey) {
+    const apiKeyVal = await password({
+      message: `${selectedPreset.api_key_env} (Enter to skip):`,
+      mask: '*',
+    });
+    usedKey = typeof apiKeyVal === 'string' ? apiKeyVal.trim() : '';
+  }
+  if (usedKey) {
     const envPath = path.join(getWorkDir(), '.env');
-    fs.appendFileSync(envPath, `${selectedPreset.api_key_env}=${apiKeyVal.trim()}\n`);
+    fs.appendFileSync(envPath, `${selectedPreset.api_key_env}=${usedKey}\n`);
     log.success(`Saved ${selectedPreset.api_key_env} to .env`);
   }
 
