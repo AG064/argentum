@@ -382,7 +382,8 @@ function cmdVersion(): void {
 
 function cmdInit(): void {
   const workDir = getWorkDir();
-  const configPath = path.join(workDir, 'agclaw.json');
+  const configDir = path.join(workDir, 'config');
+  const configPath = path.join(configDir, 'default.yaml');
   const dataDir = path.join(workDir, 'data');
 
   banner();
@@ -390,7 +391,7 @@ function cmdInit(): void {
 
   // Create config
   if (fs.existsSync(configPath)) {
-    warn('agclaw.json already exists, skipping');
+    warn('config/default.yaml already exists, skipping');
   } else {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
@@ -400,29 +401,19 @@ function cmdInit(): void {
         port: 3000,
         host: '0.0.0.0',
       },
-      features: {
-        'life-domains': { enabled: true },
-        'skills-library': { enabled: true },
-        'goal-decomposition': { enabled: true },
-        'sqlite-memory': { enabled: true },
-        'cron-scheduler': { enabled: true },
-        'webchat': { enabled: false },
-        'webhooks': { enabled: false },
-        'api-gateway': { enabled: false },
-        'audit-log': { enabled: true },
-        'encrypted-secrets': { enabled: false },
-        'acp-harness': { enabled: false },
-      },
+      features: {},
       logging: {
         level: 'info',
       },
       llm: {
         providers: {},
         default: '',
+        fallback: [],
       },
     };
+    fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-    success('Created agclaw.json');
+    success('Created config/default.yaml');
   }
 
   // Create data directory
@@ -459,6 +450,28 @@ function cmdInit(): void {
 async function cmdStart(): Promise<void> {
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
+
+  // First-run check: if no config exists, prompt to onboard
+  const configPath = path.join(process.cwd(), 'config', 'default.yaml');
+  const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
+  if (!fs.existsSync(configPath) && !fs.existsSync(legacyConfigPath)) {
+    banner();
+    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print('');
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    rl.close();
+    if (answer !== 'n') {
+      await cmdOnboard();
+    } else {
+      print('');
+      info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+    }
+    return;
+  }
 
   banner();
   info(`Starting AG-Claw server on port ${port}...`);
@@ -2318,6 +2331,13 @@ async function cmdOnboard(): Promise<void> {
     fs.mkdirSync(dataDir, { recursive: true });
   }
   success('\x1b[32m✓\x1b[0m Data directory ready');
+
+  // Save config to config/default.yaml
+  const configDir = path.join(getWorkDir(), 'config');
+  fs.mkdirSync(configDir, { recursive: true });
+  const configFilePath = path.join(configDir, 'default.yaml');
+  fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2));
+  success(`\x1b[32m✓\x1b[0m Config saved to config/default.yaml`);
 
   rl.close();
 
