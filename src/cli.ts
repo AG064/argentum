@@ -2043,6 +2043,19 @@ async function cmdOnboard(): Promise<void> {
 
   // Step 2: LLM Provider + Model selection
   const MODEL_DB: Record<string, Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>> = {
+    minimax: [
+      { value: 'MiniMax-M2.7', label: 'MiniMax M2.7', ctx: '1M', price: '$0.10/M', free: false },
+      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 Highspeed', ctx: '1M', price: '$0.30/M', free: false },
+    ],
+    groq: [
+      { value: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', ctx: '128k', price: 'FREE', free: true },
+      { value: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick', ctx: '128k', price: '$0.20/M', free: false },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'deepseek-ai/deepseek-llm-70b-chat', label: 'DeepSeek LLM 70B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'qwen/qwen3-30b-a3b-instruct', label: 'Qwen 3 30B', ctx: '32k', price: 'FREE', free: true },
+    ],
     nvidia: [
       { value: 'deepseek-ai/deepseek-v3.2', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
       { value: 'meta/llama-3.3-nemotron-70b-instruct', label: 'Llama 3.3 Nemotron 70B', ctx: '128k', price: '$0.16/M' },
@@ -2107,6 +2120,30 @@ async function cmdOnboard(): Promise<void> {
   };
 
   const PROVIDERS = [
+    {
+      value: 'minimax',
+      label: 'MiniMax',
+      hint: 'api.minimax.io — M2.7 reasoning, cheap',
+      base_url: 'https://api.minimax.io/v1',
+      api_key_env: 'MINIMAX_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'groq',
+      label: 'Groq',
+      hint: 'api.groq.com — fast inference, mostly free models',
+      base_url: 'https://api.groq.com/openai/v1',
+      api_key_env: 'GROQ_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'ollama',
+      label: 'Ollama',
+      hint: 'localhost:11434 — run models locally (free)',
+      base_url: 'http://127.0.0.1:11434/v1',
+      api_key_env: 'OLLAMA_API_KEY',
+      api: 'openai' as const,
+    },
     {
       value: 'nvidia',
       label: 'NVIDIA',
