@@ -5,6 +5,7 @@
  * Can be used by other features via direct import.
  */
 
+import { mkdirSync } from 'fs';
 import path from 'path';
 
 import Database from 'better-sqlite3';
@@ -38,7 +39,9 @@ class RateLimitingFeature implements FeatureModule {
   };
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dataDir = path.join(process.cwd(), 'data');
+    mkdirSync(dataDir, { recursive: true });
+    const dbPath = process.env.AGCLAW_DB_PATH || path.join(dataDir, 'agclaw.db');
     this.db = new Database(dbPath);
   }
 
