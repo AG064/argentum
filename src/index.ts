@@ -499,7 +499,7 @@ class AGClaw {
   /** Start the AG-Claw framework */
   async start(): Promise<void> {
     this.logger.info('Starting AG-Claw Framework', {
-      version: '0.1.0',
+      version: '0.4.0',
       nodeVersion: process.version,
       platform: process.platform,
     });
@@ -549,6 +549,21 @@ class AGClaw {
     // Load and enable features
     await this.pluginLoader.loadAll();
     await this.pluginLoader.enableAll();
+
+    // Register webchat message handler so messages reach the agent
+    this.pluginLoader.registerHook('webchat:message', async (data: unknown) => {
+      const { content, userId, roomId } = data as { content: string; userId: string; roomId: string };
+      this.logger.debug('Webchat message received', { userId, roomId });
+      try {
+        const response = await this.agent.handleMessage(content ?? '');
+        const webchatFeature = this.pluginLoader.listFeatures().find((f) => f.name === 'webchat');
+        if (webchatFeature && (webchatFeature as any).sendAssistantMessage) {
+          (webchatFeature as any).sendAssistantMessage(roomId, response);
+        }
+      } catch (err) {
+        this.logger.error('Webchat agent error', { error: err instanceof Error ? err.message : String(err) });
+      }
+    });
 
     // Emit startup hook for OMEGA Memory features (auto-capture, consolidation, checkpoint)
     (await this.pluginLoader['emitHook']?.('system:start', { timestamp: Date.now() })) ??
