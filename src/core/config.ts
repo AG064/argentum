@@ -21,14 +21,14 @@ const ServerConfigSchema = z.object({
       enabled: z.boolean().default(true),
       origins: z.array(z.string()).default(['*']),
     })
-    .default({}),
+    .default({ enabled: true, origins: ['*'] }),
   rateLimit: z
     .object({
       enabled: z.boolean().default(true),
       windowMs: z.number().int().default(60000),
       maxRequests: z.number().int().default(100),
     })
-    .default({}),
+    .default({ enabled: true, windowMs: 60000, maxRequests: 100 }),
 });
 
 /** Feature toggle schema */
@@ -82,20 +82,20 @@ const MultiAgentCoordinationConfigSchema = FeatureToggleSchema.extend({
   heartbeatIntervalMs: z.number().default(30_000),
   offlineTimeoutMs: z.number().default(60_000),
   maxAgents: z.number().default(100),
-}).default({});
+});
 
 /** Role-Based Access config */
 const RoleBasedAccessConfigSchema = FeatureToggleSchema.extend({
   dbPath: z.string().default('./data/role-based-access.db'),
   defaultRole: z.string().default('viewer'),
-}).default({});
+});
 
 /** Shared Knowledge Base config */
 const SharedKnowledgeBaseConfigSchema = FeatureToggleSchema.extend({
   dbPath: z.string().default('./data/shared-knowledge-base.db'),
   maxArticles: z.number().default(10_000),
   maxVersionsPerArticle: z.number().default(20),
-}).default({});
+});
 
 /** Health Monitoring config */
 const HealthMonitoringConfigSchema = FeatureToggleSchema.extend({
@@ -104,7 +104,7 @@ const HealthMonitoringConfigSchema = FeatureToggleSchema.extend({
   cpuWarningThreshold: z.number().default(80),
   memoryWarningThreshold: z.number().default(80),
   diskWarningThreshold: z.number().default(80),
-}).default({});
+});
 
 /** Auto-Update config */
 const AutoUpdateConfigSchema = FeatureToggleSchema.extend({
@@ -115,14 +115,14 @@ const AutoUpdateConfigSchema = FeatureToggleSchema.extend({
   autoApply: z.boolean().default(false),
   backupBeforeUpdate: z.boolean().default(true),
   backupPath: z.string().default('./data/backups'),
-}).default({});
+});
 
 /** Cron Scheduler config */
 const CronSchedulerConfigSchema = FeatureToggleSchema.extend({
   dbPath: z.string().default('./data/cron-scheduler.db'),
   timezone: z.string().optional(),
   maxJobs: z.number().default(500),
-}).default({});
+});
 
 /** Model routing scoring weights configuration */
 export const ModelRoutingWeightsSchema = z.object({
@@ -137,13 +137,25 @@ export const ModelRoutingWeightsSchema = z.object({
   reliability: z.number().min(0).max(3).default(1.3),
   throughput: z.number().min(0).max(3).default(0.6),
   customWeight: z.number().min(0).max(3).default(1.0),
-}).default({});
+});
 
 /** Model routing configuration schema */
 export const ModelRoutingConfigSchema = z.object({
   enabled: z.boolean().default(true),
   cacheScoresMs: z.number().int().min(1000).max(600000).default(60000),
-  weights: ModelRoutingWeightsSchema.default({}),
+  weights: ModelRoutingWeightsSchema.default({
+    costEfficiency: 1.2,
+    latency: 1.0,
+    capabilityMatch: 1.5,
+    contextLengthFit: 0.8,
+    toolSupport: 1.3,
+    recentSuccessRate: 1.4,
+    tokenEfficiency: 0.7,
+    specializationMatch: 1.1,
+    reliability: 1.3,
+    throughput: 0.6,
+    customWeight: 1.0,
+  }),
   models: z.array(z.object({
     modelId: z.string(),
     costPer1K: z.number(),
@@ -155,7 +167,7 @@ export const ModelRoutingConfigSchema = z.object({
     specialization: z.array(z.string()).optional(),
     throughput: z.number().optional(),
   })).optional(),
-}).default({});
+});
 
 /** LLM provider configuration schema */
 export const LLMProviderConfigSchema = z.object({
@@ -164,13 +176,13 @@ export const LLMProviderConfigSchema = z.object({
   api_key_env: z.string().optional(),
   api: z.enum(['openai', 'anthropic']).default('openai'),
   models: z.array(z.string()).min(1),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
 });
 
 /** LLM configuration schema */
 export const LLMConfigSchema = z
   .object({
-    providers: z.record(LLMProviderConfigSchema).default({}),
+    providers: z.record(z.string(), LLMProviderConfigSchema).default({}),
     default: z.string().default(''),
     fallback: z.array(z.string()).optional(),
   })
@@ -178,60 +190,255 @@ export const LLMConfigSchema = z
 
 /** Root configuration schema */
 export const ConfigSchema = z.object({
-  server: ServerConfigSchema.default({}),
-  llm: LLMConfigSchema.default({}),
-  modelRouting: ModelRoutingConfigSchema.default({}),
+  server: ServerConfigSchema.default({
+    port: 3000,
+    host: '0.0.0.0',
+    cors: { enabled: true, origins: ['*'] },
+    rateLimit: { enabled: true, windowMs: 60000, maxRequests: 100 },
+  }),
+  llm: LLMConfigSchema,
+  modelRouting: ModelRoutingConfigSchema.default({
+    enabled: true,
+    cacheScoresMs: 60000,
+    weights: {
+      costEfficiency: 1.2,
+      latency: 1.0,
+      capabilityMatch: 1.5,
+      contextLengthFit: 0.8,
+      toolSupport: 1.3,
+      recentSuccessRate: 1.4,
+      tokenEfficiency: 0.7,
+      specializationMatch: 1.1,
+      reliability: 1.3,
+      throughput: 0.6,
+      customWeight: 1.0,
+    },
+  }),
   features: z
     .object({
-      'webchat': WebchatConfigSchema.default({}),
-      'voice': VoiceConfigSchema.default({}),
-      'knowledge-graph': KnowledgeGraphConfigSchema.default({}),
-      'multimodal-memory': FeatureToggleSchema.default({}),
-      'browser-automation': FeatureToggleSchema.default({}),
-      'webhooks': FeatureToggleSchema.default({}),
-      'mesh-workflows': FeatureToggleSchema.default({}),
-      'live-canvas': FeatureToggleSchema.default({}),
-      'container-sandbox': FeatureToggleSchema.default({}),
-      'air-gapped': FeatureToggleSchema.default({}),
-      'morning-briefing': FeatureToggleSchema.default({}),
-      'evening-recap': FeatureToggleSchema.default({}),
-      'smart-recommendations': FeatureToggleSchema.default({}),
-      'group-management': FeatureToggleSchema.default({}),
+      'webchat': WebchatConfigSchema.default({
+        enabled: false,
+        port: 3001,
+        maxConnections: 1000,
+        messageHistory: 100,
+      }),
+      'voice': VoiceConfigSchema.default({
+        enabled: false,
+        provider: 'elevenlabs',
+        voice: 'default',
+        model: 'eleven_multilingual_v2',
+        sttProvider: 'whisper',
+      }),
+      'knowledge-graph': KnowledgeGraphConfigSchema.default({
+        enabled: false,
+        backend: 'sqlite',
+        path: './data/knowledge.db',
+      }),
+      'multimodal-memory': FeatureToggleSchema.default({ enabled: false }),
+      'browser-automation': FeatureToggleSchema.default({ enabled: false }),
+      'webhooks': FeatureToggleSchema.default({ enabled: false }),
+      'mesh-workflows': FeatureToggleSchema.default({ enabled: false }),
+      'live-canvas': FeatureToggleSchema.default({ enabled: false }),
+      'container-sandbox': FeatureToggleSchema.default({ enabled: false }),
+      'air-gapped': FeatureToggleSchema.default({ enabled: false }),
+      'morning-briefing': FeatureToggleSchema.default({ enabled: false }),
+      'evening-recap': FeatureToggleSchema.default({ enabled: false }),
+      'smart-recommendations': FeatureToggleSchema.default({ enabled: false }),
+      'group-management': FeatureToggleSchema.default({ enabled: false }),
       'budget': FeatureToggleSchema.extend({
         monthlyLimit: z.number().default(1_000_000),
-        perAgentLimits: z.record(z.number()).default({}),
+        perAgentLimits: z.record(z.string(), z.number()).default({}),
         alertThreshold: z.number().default(80),
         hardStop: z.boolean().default(true),
         dbPath: z.string().default('./data/budget.db'),
-      }).default({}),
+      }).default({
+        enabled: false,
+        monthlyLimit: 1_000_000,
+        perAgentLimits: {},
+        alertThreshold: 80,
+        hardStop: true,
+        dbPath: './data/budget.db',
+      }),
       'goals': FeatureToggleSchema.extend({
         dbPath: z.string().default('./data/goals.db'),
-      }).default({}),
+      }).default({ enabled: false, dbPath: './data/goals.db' }),
       'task-checkout': FeatureToggleSchema.extend({
         dbPath: z.string().default('./data/task-checkout.db'),
         leaseDurationMs: z.number().default(1_800_000),
         maxLeasesPerAgent: z.number().default(10),
-      }).default({}),
+      }).default({
+        enabled: false,
+        dbPath: './data/task-checkout.db',
+        leaseDurationMs: 1_800_000,
+        maxLeasesPerAgent: 10,
+      }),
       'company-templates': FeatureToggleSchema.extend({
         templatesPath: z.string().default('./data/templates'),
-      }).default({}),
+      }).default({ enabled: false, templatesPath: './data/templates' }),
       'governance': FeatureToggleSchema.extend({
         dbPath: z.string().default('./data/governance.db'),
         autoApproveRisk: z.enum(['none', 'low', 'medium']).default('low'),
         ticketExpiryMs: z.number().default(86_400_000),
         requiredApprovers: z.number().default(1),
         approvers: z.array(z.string()).default([]),
-      }).default({}),
-      'multi-agent-coordination': MultiAgentCoordinationConfigSchema.default({}),
-      'role-based-access': RoleBasedAccessConfigSchema.default({}),
-      'shared-knowledge-base': SharedKnowledgeBaseConfigSchema.default({}),
-      'health-monitoring': HealthMonitoringConfigSchema.default({}),
-      'auto-update': AutoUpdateConfigSchema.default({}),
-      'cron-scheduler': CronSchedulerConfigSchema.default({}),
+      }).default({
+        enabled: false,
+        dbPath: './data/governance.db',
+        autoApproveRisk: 'low',
+        ticketExpiryMs: 86_400_000,
+        requiredApprovers: 1,
+        approvers: [],
+      }),
+      'multi-agent-coordination': MultiAgentCoordinationConfigSchema.default({
+        enabled: false,
+        dbPath: './data/multi-agent-coordination.db',
+        heartbeatIntervalMs: 30_000,
+        offlineTimeoutMs: 60_000,
+        maxAgents: 100,
+      }),
+      'role-based-access': RoleBasedAccessConfigSchema.default({
+        enabled: false,
+        dbPath: './data/role-based-access.db',
+        defaultRole: 'viewer',
+      }),
+      'shared-knowledge-base': SharedKnowledgeBaseConfigSchema.default({
+        enabled: false,
+        dbPath: './data/shared-knowledge-base.db',
+        maxArticles: 10_000,
+        maxVersionsPerArticle: 20,
+      }),
+      'health-monitoring': HealthMonitoringConfigSchema.default({
+        enabled: false,
+        collectionIntervalMs: 30_000,
+        diskCheckPath: '/',
+        cpuWarningThreshold: 80,
+        memoryWarningThreshold: 80,
+        diskWarningThreshold: 80,
+      }),
+      'auto-update': AutoUpdateConfigSchema.default({
+        enabled: false,
+        dbPath: './data/auto-update.db',
+        repoOwner: 'AG064',
+        repoName: 'ag-claw',
+        checkIntervalHours: 24,
+        autoApply: false,
+        backupBeforeUpdate: true,
+        backupPath: './data/backups',
+      }),
+      'cron-scheduler': CronSchedulerConfigSchema.default({
+        enabled: false,
+        dbPath: './data/cron-scheduler.db',
+        maxJobs: 500,
+      }),
     })
-    .default({}),
-  memory: MemoryConfigSchema.default({}),
-  security: SecurityConfigSchema.default({}),
+    .default({
+      'webchat': {
+        enabled: false,
+        port: 3001,
+        maxConnections: 1000,
+        messageHistory: 100,
+      },
+      'voice': {
+        enabled: false,
+        provider: 'elevenlabs',
+        voice: 'default',
+        model: 'eleven_multilingual_v2',
+        sttProvider: 'whisper',
+      },
+      'knowledge-graph': {
+        enabled: false,
+        backend: 'sqlite',
+        path: './data/knowledge.db',
+      },
+      'multimodal-memory': { enabled: false },
+      'browser-automation': { enabled: false },
+      'webhooks': { enabled: false },
+      'mesh-workflows': { enabled: false },
+      'live-canvas': { enabled: false },
+      'container-sandbox': { enabled: false },
+      'air-gapped': { enabled: false },
+      'morning-briefing': { enabled: false },
+      'evening-recap': { enabled: false },
+      'smart-recommendations': { enabled: false },
+      'group-management': { enabled: false },
+      'budget': {
+        enabled: false,
+        monthlyLimit: 1_000_000,
+        perAgentLimits: {},
+        alertThreshold: 80,
+        hardStop: true,
+        dbPath: './data/budget.db',
+      },
+      'goals': { enabled: false, dbPath: './data/goals.db' },
+      'task-checkout': {
+        enabled: false,
+        dbPath: './data/task-checkout.db',
+        leaseDurationMs: 1_800_000,
+        maxLeasesPerAgent: 10,
+      },
+      'company-templates': { enabled: false, templatesPath: './data/templates' },
+      'governance': {
+        enabled: false,
+        dbPath: './data/governance.db',
+        autoApproveRisk: 'low',
+        ticketExpiryMs: 86_400_000,
+        requiredApprovers: 1,
+        approvers: [],
+      },
+      'multi-agent-coordination': {
+        enabled: false,
+        dbPath: './data/multi-agent-coordination.db',
+        heartbeatIntervalMs: 30_000,
+        offlineTimeoutMs: 60_000,
+        maxAgents: 100,
+      },
+      'role-based-access': {
+        enabled: false,
+        dbPath: './data/role-based-access.db',
+        defaultRole: 'viewer',
+      },
+      'shared-knowledge-base': {
+        enabled: false,
+        dbPath: './data/shared-knowledge-base.db',
+        maxArticles: 10_000,
+        maxVersionsPerArticle: 20,
+      },
+      'health-monitoring': {
+        enabled: false,
+        collectionIntervalMs: 30_000,
+        diskCheckPath: '/',
+        cpuWarningThreshold: 80,
+        memoryWarningThreshold: 80,
+        diskWarningThreshold: 80,
+      },
+      'auto-update': {
+        enabled: false,
+        dbPath: './data/auto-update.db',
+        repoOwner: 'AG064',
+        repoName: 'ag-claw',
+        checkIntervalHours: 24,
+        autoApply: false,
+        backupBeforeUpdate: true,
+        backupPath: './data/backups',
+      },
+      'cron-scheduler': {
+        enabled: false,
+        dbPath: './data/cron-scheduler.db',
+        maxJobs: 500,
+      },
+    }),
+  memory: MemoryConfigSchema.default({
+    primary: 'sqlite',
+    path: './data/memory.db',
+    selfEvolving: false,
+    compressionThreshold: 10000,
+  }),
+  security: SecurityConfigSchema.default({
+    policy: 'config/security-policy.yaml',
+    secrets: 'encrypted',
+    auditLog: true,
+    allowlistMode: 'permissive',
+  }),
   channels: z
     .object({
       telegram: z
@@ -239,12 +446,12 @@ export const ConfigSchema = z.object({
           enabled: z.boolean().default(true),
           token: z.string().optional(),
         })
-        .default({}),
+        .default({ enabled: true }),
       webchat: z
         .object({
           enabled: z.boolean().default(true),
         })
-        .default({}),
+        .default({ enabled: true }),
       mobile: z
         .object({
           enabled: z.boolean().default(false),
@@ -254,16 +461,30 @@ export const ConfigSchema = z.object({
           requireAuth: z.boolean().default(false),
           authToken: z.string().optional(),
         })
-        .default({}),
+        .default({
+          enabled: false,
+          httpPort: 3003,
+          httpPath: '/mobile',
+          requireAuth: false,
+        }),
     })
-    .default({}),
+    .default({
+      telegram: { enabled: true },
+      webchat: { enabled: true },
+      mobile: {
+        enabled: false,
+        httpPort: 3003,
+        httpPath: '/mobile',
+        requireAuth: false,
+      },
+    }),
   logging: z
     .object({
       level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
       format: z.enum(['json', 'pretty']).default('pretty'),
       file: z.string().optional(),
     })
-    .default({}),
+    .default({ level: 'info', format: 'pretty' }),
 });
 
 export type AGClawConfig = z.infer<typeof ConfigSchema>;
