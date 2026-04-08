@@ -49,37 +49,14 @@ function warn(text: string): void {
 
 function banner(): void {
   print('');
-  print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m███████║██████╔╝██║     ███████║██║   ██║███████╗\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██║██╔══██╗██║     ██╔══██║██║   ██║╚════██║\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m',
-  );
-  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print(
-    '  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m',
-  );
-  print(
-    `  \x1b[1m\x1b[36m║                    \x1b[32mv${VERSION}\x1b[36m                            ║\x1b[0m`,
-  );
-  print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚══════════════════════════════════════════════════════════╝\x1b[0m');
-  print('');
-  print('  \x1b[90m░▒▓█ AI Agent System █▓▒░\x1b[0m');
+  print('  /------------------------------------------------------------\\');
+  print('  |                                                            |');
+  print('  |              A G - C L A W                                  |');
+  print('  |         Modular AI Agent Framework                          |');
+  print('  |                    v' + VERSION + '                                     |');
+  print('  |              github.com/AG064/ag-claw                       |');
+  print('  |                                                            |');
+  print('  \\------------------------------------------------------------/');
   print('');
 }
 
