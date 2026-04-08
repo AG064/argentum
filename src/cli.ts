@@ -2041,28 +2041,90 @@ async function cmdOnboard(): Promise<void> {
   });
   if (typeof nameVal === 'string' && nameVal.trim()) config.name = nameVal.trim();
 
-  // Step 2: LLM Provider
-  const providerChoice = await select({
-    message: 'Choose your LLM provider:',
-    options: [
-      { value: 'nvidia', label: 'NVIDIA', hint: 'integrate.api.nvidia.com' },
-      { value: 'openrouter', label: 'OpenRouter', hint: 'openrouter.ai/api/v1' },
-      { value: 'google', label: 'Google Gemini', hint: 'generativelanguage.googleapis.com' },
-      { value: 'anthropic', label: 'Anthropic Claude', hint: 'api.anthropic.com' },
-      { value: 'openai', label: 'OpenAI GPT', hint: 'api.openai.com' },
-      { value: 'custom', label: 'Custom', hint: 'enter your own base URL' },
+  // Step 2: LLM Provider + Model selection
+  const MODEL_DB: Record<string, Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>> = {
+    nvidia: [
+      { value: 'deepseek-ai/deepseek-v3.2', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
+      { value: 'meta/llama-3.3-nemotron-70b-instruct', label: 'Llama 3.3 Nemotron 70B', ctx: '128k', price: '$0.16/M' },
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M' },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M' },
     ],
+    openrouter: [
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M', free: true },
+      { value: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
+      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', ctx: '128k', price: '$0.80/M', free: true },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M', free: true },
+      { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
+    ],
+    google: [
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', ctx: '1M', price: '$1.25/M' },
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', ctx: '1M', price: 'FREE', free: true },
+    ],
+    anthropic: [
+      { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
+      { value: 'claude-opus-4-20250514', label: 'Claude Opus 4', ctx: '200k', price: '$15.00/M' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', ctx: '200k', price: '$0.80/M' },
+    ],
+    openai: [
+      { value: 'gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o mini', ctx: '128k', price: '$0.15/M' },
+      { value: 'o3', label: 'GPT o3', ctx: '200k', price: '$10.00/M' },
+      { value: 'o4-mini', label: 'GPT o4-mini', ctx: '128k', price: '$1.10/M' },
+    ],
+  };
+
+  const PROVIDERS = [
+    {
+      value: 'nvidia',
+      label: 'NVIDIA',
+      hint: 'integrate.api.nvidia.com — deepseek free, fast',
+      base_url: 'https://integrate.api.nvidia.com/v1',
+      api_key_env: 'NVIDIA_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'openrouter',
+      label: 'OpenRouter',
+      hint: 'openrouter.ai — many free models',
+      base_url: 'https://openrouter.ai/api/v1',
+      api_key_env: 'OPENROUTER_API_KEY',
+      api: 'openai' as const,
+      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
+    },
+    {
+      value: 'google',
+      label: 'Google Gemini',
+      hint: 'generativelanguage.googleapis — 1M context free tier',
+      base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      api_key_env: 'GOOGLE_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'anthropic',
+      label: 'Anthropic Claude',
+      hint: 'api.anthropic.com — best reasoning models',
+      base_url: 'https://api.anthropic.com',
+      api_key_env: 'ANTHROPIC_API_KEY',
+      api: 'anthropic' as const,
+    },
+    {
+      value: 'openai',
+      label: 'OpenAI',
+      hint: 'api.openai.com — GPT-4o family',
+      base_url: 'https://api.openai.com/v1',
+      api_key_env: 'OPENAI_API_KEY',
+      api: 'openai' as const,
+    },
+    { value: 'custom', label: 'Custom', hint: 'enter your own base URL', base_url: '', api_key_env: 'MY_API_KEY', api: 'openai' as const },
+  ];
+
+  const providerChoice = await select({
+    message: 'Select LLM provider:',
+    options: PROVIDERS.map((p) => ({ value: p.value, label: p.label, hint: p.hint })),
     initialValue: 'nvidia',
   });
-
-  // Resolve preset from choice
-  const presets: Record<string, { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }> = {
-    nvidia: { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
-    openrouter: { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
-    google: { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
-    anthropic: { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
-    openai: { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
-  };
 
   let selectedPreset: { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> };
   if (providerChoice === 'custom') {
@@ -2078,7 +2140,27 @@ async function cmdOnboard(): Promise<void> {
       model: custModel?.trim() || '',
     };
   } else {
-    selectedPreset = presets[providerChoice as string] ?? presets['nvidia'];
+    const provider = PROVIDERS.find((p) => p.value === providerChoice) ?? PROVIDERS[0]!;
+    const models = MODEL_DB[providerChoice as string] ?? [];
+
+    const modelChoice = await select({
+      message: `Model for ${provider.label}:`,
+      options: models.map((m) => ({
+        value: m.value,
+        label: `${m.label} ${m.free ? '(FREE)' : ''}`,
+        hint: `${m.ctx} context · ${m.price}`,
+      })),
+    });
+
+    selectedPreset = {
+      name: provider.value,
+      base_url: provider.base_url,
+      api_key_env: provider.api_key_env,
+      api: provider.api,
+      model: modelChoice as string,
+      ...(provider.headers ? { headers: provider.headers } : {}),
+    };
+    log.success(`${selectedPreset.model} selected`);
   }
 
   config.llm.providers[selectedPreset.name] = {
