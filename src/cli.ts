@@ -48,16 +48,15 @@ function warn(text: string): void {
 }
 
 function banner(): void {
-  print('');
-  print('  /------------------------------------------------------------\\');
-  print('  |                                                            |');
-  print('  |              A G - C L A W                                  |');
-  print('  |         Modular AI Agent Framework                          |');
-  print('  |                    v' + VERSION + '                                     |');
-  print('  |              github.com/AG064/ag-claw                       |');
-  print('  |                                                            |');
-  print('  \\------------------------------------------------------------/');
-  print('');
+  console.log(`
+  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
+ ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
+ ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
+ ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
+ ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
+  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+
+     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
 }
 
 function getWorkDir(): string {
@@ -2007,17 +2006,20 @@ async function cmdBudget(): Promise<void> {
 }
 
 async function cmdOnboard(): Promise<void> {
-  const readline = require('readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+  const { intro, outro, text, select, confirm, multiselect, log, password } =
+    await import('@clack/prompts');
 
-  banner();
-  print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
-  print('  \x1b[1m\x1b[32m│   Welcome to AG-Claw Setup Wizard!         │\x1b[0m');
-  print('  \x1b[1m\x1b[32m└─────────────────────────────────────────────┘\x1b[0m');
-  print('');
-  print('  \x1b[90mThis wizard will guide you through the initial setup.\x1b[0m');
-  print('');
+  intro(`
+  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
+ ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
+ ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
+ ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
+ ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
+  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+
+     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
+  log.step('Welcome! This wizard will set up your AG-Claw instance.');
+  log.info('Press Ctrl+C at any time to cancel.');
 
   const config: any = {
     $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
@@ -2032,304 +2034,169 @@ async function cmdOnboard(): Promise<void> {
     },
   };
 
-  // Step 1: Instance name
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 1: Instance Configuration                 ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG-Claw): ');
-  if (name.trim()) config.name = name.trim();
-  print('');
-  print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${config.name}\x1b[0m`);
-  print('');
+    // Step 1: Instance name
+  const nameVal = await text({
+    message: 'Instance name:',
+    initialValue: 'My AG-Claw',
+  });
+  if (typeof nameVal === 'string' && nameVal.trim()) config.name = nameVal.trim();
 
   // Step 2: LLM Provider
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 2: LLM Provider                          ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  print('  \x1b[90mChoose a provider or add your own OpenAI-compatible API.\x1b[0m');
-  print('');
-  print('  \x1b[1m\x1b[33m╭──────────────╮\x1b[0m  \x1b[37mProvider Presets:\x1b[0m');
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m1\x1b[0m \x1b[37mOpenRouter   \x1b[90mopenrouter.ai/api/v1\x1b[0m   \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m2\x1b[0m \x1b[37mNVIDIA       \x1b[90mintegrate.api.nvidia.com\x1b[0m \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m3\x1b[0m \x1b[37mGoogle Gemini\x1b[90mgenerativelanguage.googleapis\x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m4\x1b[0m \x1b[37mAnthropic   \x1b[90mapi.anthropic.com\x1b[0m        \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m5\x1b[0m \x1b[37mOpenAI      \x1b[90mapi.openai.com\x1b[0m               \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m6\x1b[0m \x1b[37mCustom      \x1b[90myour own base_url\x1b[0m          \x1b[33m│\x1b[0m',
-  );
-  print('  \x1b[1m\x1b[33m╰──────────────╯\x1b[0m');
-  print('');
-  const providerChoice = await ask('  \x1b[33m▶\x1b[0m Choose (1-6, default: 2): ');
+  const providerChoice = await select({
+    message: 'Choose your LLM provider:',
+    options: [
+      { value: 'nvidia', label: 'NVIDIA', hint: 'integrate.api.nvidia.com' },
+      { value: 'openrouter', label: 'OpenRouter', hint: 'openrouter.ai/api/v1' },
+      { value: 'google', label: 'Google Gemini', hint: 'generativelanguage.googleapis.com' },
+      { value: 'anthropic', label: 'Anthropic Claude', hint: 'api.anthropic.com' },
+      { value: 'openai', label: 'OpenAI GPT', hint: 'api.openai.com' },
+      { value: 'custom', label: 'Custom', hint: 'enter your own base URL' },
+    ],
+    initialValue: 'nvidia',
+  });
 
-  interface Preset {
-    name: string;
-    base_url: string;
-    api_key_env: string;
-    api: string;
-    model: string;
-    headers?: Record<string, string>;
-  }
-  const presets: Record<string, Preset> = {
-    1: {
-      name: 'openrouter',
-      base_url: 'https://openrouter.ai/api/v1',
-      api_key_env: 'OPENROUTER_API_KEY',
-      api: 'openai',
-      model: 'auto',
-      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
-    },
-    2: {
-      name: 'nvidia',
-      base_url: 'https://integrate.api.nvidia.com/v1',
-      api_key_env: 'NVIDIA_API_KEY',
-      api: 'openai',
-      model: 'deepseek-ai/deepseek-v3.2',
-    },
-    3: {
-      name: 'google',
-      base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      api_key_env: 'GOOGLE_API_KEY',
-      api: 'openai',
-      model: 'gemini-2.5-flash',
-    },
-    4: {
-      name: 'anthropic',
-      base_url: 'https://api.anthropic.com',
-      api_key_env: 'ANTHROPIC_API_KEY',
-      api: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
-    },
-    5: {
-      name: 'openai',
-      base_url: 'https://api.openai.com/v1',
-      api_key_env: 'OPENAI_API_KEY',
-      api: 'openai',
-      model: 'gpt-4o',
-    },
+  // Resolve preset from choice
+  const presets: Record<string, { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> }> = {
+    nvidia: { name: 'nvidia', base_url: 'https://integrate.api.nvidia.com/v1', api_key_env: 'NVIDIA_API_KEY', api: 'openai', model: 'deepseek-ai/deepseek-v3.2' },
+    openrouter: { name: 'openrouter', base_url: 'https://openrouter.ai/api/v1', api_key_env: 'OPENROUTER_API_KEY', api: 'openai', model: 'auto', headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' } },
+    google: { name: 'google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/', api_key_env: 'GOOGLE_API_KEY', api: 'openai', model: 'gemini-2.5-flash' },
+    anthropic: { name: 'anthropic', base_url: 'https://api.anthropic.com', api_key_env: 'ANTHROPIC_API_KEY', api: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    openai: { name: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY', api: 'openai', model: 'gpt-4o' },
   };
 
-  let preset: Preset;
-  if (providerChoice.trim() === '6') {
-    print('');
-    print('  \x1b[33m▶\x1b[0m Custom Provider Setup:');
-    const custName = await ask('    \x1b[90mProvider name:\x1b[0m ');
-    const custUrl = await ask('    \x1b[90mBase URL:\x1b[0m ');
-    const custModel = await ask('    \x1b[90mDefault model:\x1b[0m ');
-    const custApi =
-      (await ask('    \x1b[90mAPI style [openai|anthropic] (default: openai):\x1b[0m ')) ||
-      'openai';
-    const custKeyEnv = await ask('    \x1b[90mAPI key env var (e.g. MY_API_KEY):\x1b[0m ');
-    preset = {
-      name: custName.trim() || 'custom',
-      base_url: custUrl.trim(),
-      api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY',
-      api: custApi,
-      model: custModel.trim(),
+  let selectedPreset: { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> };
+  if (providerChoice === 'custom') {
+    const custName = (await text({ message: 'Provider name:', initialValue: 'custom' })) as string;
+    const custUrl = (await text({ message: 'Base URL:', initialValue: 'https://' })) as string;
+    const custModel = (await text({ message: 'Default model:', initialValue: '' })) as string;
+    const custKeyEnv = (await text({ message: 'API key env var name:', initialValue: 'MY_API_KEY' })) as string;
+    selectedPreset = {
+      name: custName?.trim() || 'custom',
+      base_url: custUrl?.trim() || '',
+      api_key_env: custKeyEnv?.trim() || 'MY_API_KEY',
+      api: 'openai',
+      model: custModel?.trim() || '',
     };
   } else {
-    preset = presets[providerChoice.trim()] ?? presets['2']!;
+    selectedPreset = presets[providerChoice as string] ?? presets['nvidia'];
   }
 
-  config.llm.providers[preset.name] = {
-    base_url: preset.base_url,
-    api_key_env: preset.api_key_env,
-    api: preset.api as any,
-    models: [preset.model],
-    ...(preset.headers ? { headers: preset.headers } : {}),
+  config.llm.providers[selectedPreset.name] = {
+    base_url: selectedPreset.base_url,
+    api_key_env: selectedPreset.api_key_env,
+    api: selectedPreset.api as any,
+    models: [selectedPreset.model],
+    ...(selectedPreset.headers ? { headers: selectedPreset.headers } : {}),
   };
-  config.llm.default = preset.name;
+  config.llm.default = selectedPreset.name;
+  log.success(`Selected: ${selectedPreset.name} (${selectedPreset.base_url})`);
 
-  print('');
-  print(
-    `  \x1b[32m✓\x1b[0m Selected: \x1b[1m${preset.name}\x1b[0m (\x1b[90m${preset.base_url}\x1b[0m)`,
-  );
-
-  // Ask for API key
-  print('');
-  const apiKey = await ask(
-    `  \x1b[33m▶\x1b[0m \x1b[33m${preset.api_key_env}\x1b[0m (press Enter to skip): `,
-  );
-  if (apiKey.trim()) {
+  // API key
+  const apiKeyVal = await password({
+    message: `${selectedPreset.api_key_env} (Enter to skip):`,
+    mask: true,
+  });
+  if (typeof apiKeyVal === 'string' && apiKeyVal.trim()) {
     const envPath = path.join(getWorkDir(), '.env');
-    fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
-    success(`\x1b[32m✓\x1b[0m Saved \x1b[1m${preset.api_key_env}\x1b[0m to .env`);
+    fs.appendFileSync(envPath, `${selectedPreset.api_key_env}=${apiKeyVal.trim()}\n`);
+    log.success(`Saved ${selectedPreset.api_key_env} to .env`);
   }
 
-  // Ask for additional models
-  print('');
-  const addModels = await ask(
-    '  \x1b[33m▶\x1b[0m Add fallback models (comma-separated, or Enter to skip): ',
-  );
-  if (addModels.trim()) {
-    config.llm.providers[preset.name].models.push(
-      ...addModels
-        .trim()
-        .split(',')
-        .map((m: string) => m.trim()),
+  // Fallback models
+  const addModels = await text({
+    message: 'Fallback models (comma-separated, Enter to skip):',
+    initialValue: '',
+  });
+  if (typeof addModels === 'string' && addModels.trim()) {
+    (config.llm.providers[selectedPreset.name].models as string[]).push(
+      ...addModels.split(',').map((m: string) => m.trim()),
     );
   }
-  print('');
 
-  // Step 3: Telegram
-  print('  \x1b[1mStep 3: Telegram (optional)\x1b[0m');
-  const setupTg = await ask('  Set up Telegram bot? (y/N): ');
-  if (setupTg.toLowerCase() === 'y') {
-    const botToken = await ask('  Bot token: ');
-    if (botToken.trim()) {
-      const userId = await ask('  \x1b[33m▶\x1b[0m Your Telegram user ID (e.g. tg:123456): ');
-      config.features.telegram = {
+  // Telegram setup
+  const setupTg = await confirm({ message: 'Set up Telegram bot?', initialValue: false });
+  if (setupTg === true) {
+    const botToken = await password({ message: 'Bot token:', mask: false });
+    if (typeof botToken === 'string' && botToken.trim()) {
+      config.features = config.features ?? {};
+      (config.features as any).telegram = {
         enabled: true,
         botToken: botToken.trim(),
-        allowFrom: userId.trim() ? [userId.trim()] : [],
+        allowFrom: [],
         dmPolicy: 'pairing',
         groupPolicy: 'allowlist',
       };
-      success('Telegram configured');
+      log.success('Telegram configured');
     }
   }
-  print('');
 
-  // Step 4: Features (user selects what to install)
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 4: Features (optional)                           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
-  print('  \x1b[90mSelect features to enable, or press Enter to skip (minimal install)\x1b[0m');
-  print('');
+  // Features selection
+  const selectedCats = await multiselect({
+    message: 'Select feature categories to enable:',
+    options: [
+      { value: 'core', label: 'Core', description: 'sqlite-memory, cron-scheduler, audit-log' },
+      { value: 'comm', label: 'Communication', description: 'telegram, webchat, discord-bot, slack' },
+      { value: 'memory', label: 'Memory', description: 'knowledge-graph, semantic-search' },
+      { value: 'productivity', label: 'Productivity', description: 'goals, life-domains, task-checkout' },
+      { value: 'automation', label: 'Automation', description: 'browser-automation, webhooks, file-watcher' },
+      { value: 'monitoring', label: 'Monitoring', description: 'health-monitoring, budget, email' },
+      { value: 'skills', label: 'Skills', description: 'skills-library, skill-loader, skill-evolution' },
+    ],
+    required: false,
+  });
 
-  const featureCategories: Record<string, { desc: string; features: string[] }> = {
-    'Core': {
-      desc: 'Essential modules',
-      features: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
-    },
-    'Communication': {
-      desc: 'Telegram, Webchat, Slack, etc.',
-      features: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
-    },
-    'Memory': {
-      desc: 'Knowledge graph, semantic search, etc.',
-      features: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
-    },
-    'Productivity': {
-      desc: 'Goals, tasks, life domains',
-      features: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
-    },
-    'Automation': {
-      desc: 'Browser, file watching, webhooks',
-      features: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
-    },
-    'Monitoring': {
-      desc: 'Health checks, budget tracking',
-      features: ['health-monitoring', 'budget', 'email-integration'],
-    },
-    'Skills': {
-      desc: 'Skill management and loading',
-      features: ['skills-library', 'skill-loader', 'skill-evolution'],
-    },
+  const featureMap: Record<string, string[]> = {
+    core: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
+    comm: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
+    memory: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
+    productivity: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
+    automation: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
+    monitoring: ['health-monitoring', 'budget', 'email-integration'],
+    skills: ['skills-library', 'skill-loader', 'skill-evolution'],
   };
 
-  // Show categories
-  const categoryKeys: string[] = Object.keys(featureCategories);
-  categoryKeys.forEach((cat, i) => {
-    const entry = featureCategories[cat];
-    if (entry) {
-      print(`  \x1b[33m${i + 1}\x1b[0m \x1b[1m${cat}\x1b[0m - ${entry.desc}`);
-      print(`     \x1b[90m${entry.features.join(', ')}\x1b[0m`);
+  const allSelectedFeatures: string[] = [];
+  if (Array.isArray(selectedCats)) {
+    for (const cat of selectedCats) {
+      const features = featureMap[cat as string];
+      if (features) allSelectedFeatures.push(...features);
     }
-  });
-  print('');
-
-  const featureSelect = await ask('  Select categories (e.g. 1,3,5 or "all" or Enter for none): ');
-  let selectedFeatures: string[] = [];
-
-  if (featureSelect.trim().toLowerCase() === 'all') {
-    // Enable all features
-    categoryKeys.forEach(cat => {
-      const entry = featureCategories[cat];
-      if (entry) selectedFeatures.push(...entry.features);
-    });
-  } else if (featureSelect.trim()) {
-    // Parse selected numbers
-    const parts = featureSelect.split(',').map(s => parseInt(s.trim(), 10));
-    parts.forEach(num => {
-      if (!isNaN(num) && num >= 1 && num <= categoryKeys.length) {
-        const cat = categoryKeys[num - 1];
-        const entry = cat ? featureCategories[cat] : undefined;
-        if (entry) selectedFeatures.push(...entry.features);
-      }
-    });
   }
-
-  // Remove duplicates
-  selectedFeatures = [...new Set(selectedFeatures)];
-
-  // Enable selected features in config
-  for (const f of selectedFeatures) {
-    config.features[f] = { enabled: true };
+  for (const f of [...new Set(allSelectedFeatures)]) {
+    config.features = config.features ?? {};
+    (config.features as any)[f] = { enabled: true };
   }
+  log.info(allSelectedFeatures.length > 0
+    ? `Enabled ${allSelectedFeatures.length} features`
+    : 'Minimal install - no extra features selected');
 
-  if (selectedFeatures.length > 0) {
-    print(`  \x1b[32m✓\x1b[0m Enabled \x1b[1m${selectedFeatures.length}\x1b[0m features`);
-  } else {
-    print('  \x1b[90mNo features selected - minimal install\x1b[0m');
-  }
-  print('  \x1b[90mYou can enable more later with: agclaw feature enable <name>\x1b[0m');
-  print('');
-
-  // Step 5: Port
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 5: Server Configuration                     ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  const port = await ask('  \x1b[33m▶\x1b[0m Server port (default: 3000): ');
-  if (port.trim() && !isNaN(parseInt(port))) {
-    config.server.port = parseInt(port);
-  }
-  print('');
-  print(`  \x1b[32m✓\x1b[0m Server port: \x1b[1m${config.server.port}\x1b[0m`);
-  print('');
+  // Server port
+  const portVal = await text({ message: 'Server port:', initialValue: '3000' });
+  const portNum = parseInt(portVal as string ?? '3000');
+  if (!isNaN(portNum)) config.server.port = portNum;
 
   // Save config
-  const configPath = path.join(getWorkDir(), 'agclaw.json');
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  success('\x1b[32m✓\x1b[0m Configuration saved to \x1b[1magclaw.json\x1b[0m');
-
-  // Create data dir
-  const dataDir = path.join(getWorkDir(), 'data');
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-  success('\x1b[32m✓\x1b[0m Data directory ready');
-
-  // Save config to config/default.yaml
   const configDir = path.join(getWorkDir(), 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const configFilePath = path.join(configDir, 'default.yaml');
   fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2));
-  success(`\x1b[32m✓\x1b[0m Config saved to config/default.yaml`);
+  log.success('Config saved to config/default.yaml');
 
-  rl.close();
+  // Create data dir
+  const dataDir = path.join(getWorkDir(), 'data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  log.success('Data directory ready');
 
-  print('');
-  print('  \x1b[1m\x1b[32m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[32m║           ✅ SETUP COMPLETE!                    ║\x1b[0m');
-  print('  \x1b[1m\x1b[32m╚═══════════════════════════════════════════════╝\x1b[0m');
-  print('');
-  print('  \x1b[1m\x1b[37mNext steps:\x1b[0m');
-  print(`    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ${config.server.port}\x1b[0m`);
-  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
-  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
-  print('');
-  print('  \x1b[90mThank you for choosing AG-Claw! 🚀\x1b[0m');
-  print('');
+  outro(`
+  Setup complete!
+
+  Next steps:
+    agclaw gateway start --port ${config.server.port}
+    agclaw status
+    agclaw skill search <query>
+
+  Thank you for choosing AG-Claw!
+`);
 }
 
 async function cmdSkill(): Promise<void> {
