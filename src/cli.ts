@@ -20,6 +20,7 @@ import 'dotenv/config';
 
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
+import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
 const VERSION = '0.4.0';
 const args = process.argv.slice(2);
@@ -2006,7 +2007,7 @@ async function cmdBudget(): Promise<void> {
 }
 
 async function cmdOnboard(): Promise<void> {
-  const { intro, outro, text, select, confirm, multiselect, log, password } =
+  const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
     await import('@clack/prompts');
 
   intro(`
@@ -2209,26 +2210,83 @@ async function cmdOnboard(): Promise<void> {
     };
   } else {
     const provider = PROVIDERS.find((p) => p.value === providerChoice) ?? PROVIDERS[0]!;
-    const models = MODEL_DB[providerChoice as string] ?? [];
 
-    const modelChoice = await select({
-      message: `Model for ${provider.label}:`,
-      options: models.map((m) => ({
-        value: m.value,
-        label: `${m.label} ${m.free ? '(FREE)' : ''}`,
-        hint: `${m.ctx} context · ${m.price}`,
-      })),
+    // Step 2a: Choose discovery method
+    const discoveryMethodRaw = await select({
+      message: `How to pick model for ${provider.label}?`,
+      options: [
+        { value: 'discover', label: 'Discover Live', hint: 'fetch models from provider API now' },
+        { value: 'curated', label: 'Quick Pick', hint: 'curated list (works offline)' },
+      ],
     });
+    const discoveryMethod = isCancel(discoveryMethodRaw) ? 'curated' : String(discoveryMethodRaw);
+
+    // chosenModel is always assigned by one of the branches below
+    let chosenModel = '';
+    let liveModels: DiscoveredModel[] = [];
+
+    if (discoveryMethod === 'discover') {
+      const discoveryKey = await password({
+        message: `${provider.api_key_env} (needed for discovery):`,
+        mask: '*',
+      });
+
+      const keyValue: string = discoveryKey && !isCancel(discoveryKey) ? String(discoveryKey).trim() : '';
+      if (!keyValue) {
+        log.warn('No API key — falling back to curated list');
+      } else {
+        const envPath = path.join(getWorkDir(), '.env');
+        fs.appendFileSync(envPath, `${provider.api_key_env}=${keyValue}\n`);
+        log.success(`Saved ${provider.api_key_env}`);
+      }
+
+      process.stdout.write(`  Querying ${provider.base_url}/models... `);
+      if (keyValue) {
+        liveModels = await discoverModels(provider, keyValue);
+      }
+      process.stdout.write(liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no response\n');
+
+      if (liveModels.length > 0) {
+        log.success(`${liveModels.length} models discovered`);
+        chosenModel = String(
+          await select({
+            message: `${provider.label} models (live):`,
+            options: liveModels.map((m) => ({
+              value: m.value,
+              label: `${m.label} ${m.free ? '(FREE)' : ''}`,
+              hint: `${m.ctx} context · ${m.price}`,
+            })),
+          }),
+        );
+      } else {
+        log.warn('Discovery returned no models — using curated list');
+      }
+    }
+
+    if (!chosenModel) {
+      // Curated list fallback
+      const models = MODEL_DB[providerChoice as string] ?? [];
+      chosenModel = String(
+        await select({
+          message: `${provider.label} model (curated):`,
+          options: models.map((m) => ({
+            value: m.value,
+            label: `${m.label} ${m.free ? '(FREE)' : ''}`,
+            hint: `${m.ctx} context · ${m.price}`,
+          })),
+        }),
+      );
+    }
 
     selectedPreset = {
       name: provider.value,
       base_url: provider.base_url,
       api_key_env: provider.api_key_env,
       api: provider.api,
-      model: modelChoice as string,
+      model: chosenModel,
       ...(provider.headers ? { headers: provider.headers } : {}),
     };
-    log.success(`${selectedPreset.model} selected`);
+    log.success(`${chosenModel} selected`);
   }
 
   config.llm.providers[selectedPreset.name] = {
@@ -2244,7 +2302,7 @@ async function cmdOnboard(): Promise<void> {
   // API key
   const apiKeyVal = await password({
     message: `${selectedPreset.api_key_env} (Enter to skip):`,
-    mask: true,
+    mask: '*',
   });
   if (typeof apiKeyVal === 'string' && apiKeyVal.trim()) {
     const envPath = path.join(getWorkDir(), '.env');
@@ -2266,8 +2324,8 @@ async function cmdOnboard(): Promise<void> {
   // Telegram setup
   const setupTg = await confirm({ message: 'Set up Telegram bot?', initialValue: false });
   if (setupTg === true) {
-    const botToken = await password({ message: 'Bot token:', mask: false });
-    if (typeof botToken === 'string' && botToken.trim()) {
+    const botToken = await password({ message: 'Bot token:', mask: '' });
+    if (typeof botToken === 'string' && (botToken as string).trim()) {
       config.features = config.features ?? {};
       (config.features as any).telegram = {
         enabled: true,
@@ -2284,13 +2342,13 @@ async function cmdOnboard(): Promise<void> {
   const selectedCats = await multiselect({
     message: 'Select feature categories to enable:',
     options: [
-      { value: 'core', label: 'Core', description: 'sqlite-memory, cron-scheduler, audit-log' },
-      { value: 'comm', label: 'Communication', description: 'telegram, webchat, discord-bot, slack' },
-      { value: 'memory', label: 'Memory', description: 'knowledge-graph, semantic-search' },
-      { value: 'productivity', label: 'Productivity', description: 'goals, life-domains, task-checkout' },
-      { value: 'automation', label: 'Automation', description: 'browser-automation, webhooks, file-watcher' },
-      { value: 'monitoring', label: 'Monitoring', description: 'health-monitoring, budget, email' },
-      { value: 'skills', label: 'Skills', description: 'skills-library, skill-loader, skill-evolution' },
+      { value: 'core', label: 'Core', hint: 'sqlite-memory, cron-scheduler, audit-log' },
+      { value: 'comm', label: 'Communication', hint: 'telegram, webchat, discord-bot, slack' },
+      { value: 'memory', label: 'Memory', hint: 'knowledge-graph, semantic-search' },
+      { value: 'productivity', label: 'Productivity', hint: 'goals, life-domains, task-checkout' },
+      { value: 'automation', label: 'Automation', hint: 'browser-automation, webhooks, file-watcher' },
+      { value: 'monitoring', label: 'Monitoring', hint: 'health-monitoring, budget, email' },
+      { value: 'skills', label: 'Skills', hint: 'skills-library, skill-loader, skill-evolution' },
     ],
     required: false,
   });
