@@ -259,7 +259,7 @@ export class PluginLoader {
   }
 
   /** Register a hook handler */
-  private registerHook(event: string, handler: HookHandler): void {
+  registerHook(event: string, handler: HookHandler): void {
     const handlers = this.hooks.get(event) ?? [];
     handlers.push(handler);
     this.hooks.set(event, handlers);

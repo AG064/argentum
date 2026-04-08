@@ -21,7 +21,7 @@ import 'dotenv/config';
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
 
-const VERSION = '0.2.0';
+const VERSION = '0.4.0';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
 
@@ -2209,29 +2209,90 @@ async function cmdOnboard(): Promise<void> {
   }
   print('');
 
-  // Step 4: Features
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 4: Core Features                          ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  print('  \x1b[90mEnabling recommended features...\x1b[0m');
-  const defaults = [
-    'life-domains',
-    'skills-library',
-    'goal-decomposition',
-    'sqlite-memory',
-    'cron-scheduler',
-    'audit-log',
-    'knowledge-graph',
-    'webhooks',
-    'file-watcher',
-    'budget',
-  ];
-  for (const f of defaults) {
+  // Step 4: Features (user selects what to install)
+  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
+  print('  \x1b[1m\x1b[36m║  Step 4: Features (optional)                           ║\x1b[0m');
+  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
+  print('  \x1b[90mSelect features to enable, or press Enter to skip (minimal install)\x1b[0m');
+  print('');
+
+  const featureCategories: Record<string, { desc: string; features: string[] }> = {
+    'Core': {
+      desc: 'Essential modules',
+      features: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
+    },
+    'Communication': {
+      desc: 'Telegram, Webchat, Slack, etc.',
+      features: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
+    },
+    'Memory': {
+      desc: 'Knowledge graph, semantic search, etc.',
+      features: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
+    },
+    'Productivity': {
+      desc: 'Goals, tasks, life domains',
+      features: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
+    },
+    'Automation': {
+      desc: 'Browser, file watching, webhooks',
+      features: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
+    },
+    'Monitoring': {
+      desc: 'Health checks, budget tracking',
+      features: ['health-monitoring', 'budget', 'email-integration'],
+    },
+    'Skills': {
+      desc: 'Skill management and loading',
+      features: ['skills-library', 'skill-loader', 'skill-evolution'],
+    },
+  };
+
+  // Show categories
+  const categoryKeys: string[] = Object.keys(featureCategories);
+  categoryKeys.forEach((cat, i) => {
+    const entry = featureCategories[cat];
+    if (entry) {
+      print(`  \x1b[33m${i + 1}\x1b[0m \x1b[1m${cat}\x1b[0m - ${entry.desc}`);
+      print(`     \x1b[90m${entry.features.join(', ')}\x1b[0m`);
+    }
+  });
+  print('');
+
+  const featureSelect = await ask('  Select categories (e.g. 1,3,5 or "all" or Enter for none): ');
+  let selectedFeatures: string[] = [];
+
+  if (featureSelect.trim().toLowerCase() === 'all') {
+    // Enable all features
+    categoryKeys.forEach(cat => {
+      const entry = featureCategories[cat];
+      if (entry) selectedFeatures.push(...entry.features);
+    });
+  } else if (featureSelect.trim()) {
+    // Parse selected numbers
+    const parts = featureSelect.split(',').map(s => parseInt(s.trim(), 10));
+    parts.forEach(num => {
+      if (!isNaN(num) && num >= 1 && num <= categoryKeys.length) {
+        const cat = categoryKeys[num - 1];
+        const entry = cat ? featureCategories[cat] : undefined;
+        if (entry) selectedFeatures.push(...entry.features);
+      }
+    });
+  }
+
+  // Remove duplicates
+  selectedFeatures = [...new Set(selectedFeatures)];
+
+  // Enable selected features in config
+  for (const f of selectedFeatures) {
     config.features[f] = { enabled: true };
   }
-  print(
-    `  \x1b[32m✓\x1b[0m \x1b[1m${defaults.length}\x1b[0m features enabled: \x1b[33m${defaults.join(', ')}\x1b[0m`,
-  );
+
+  if (selectedFeatures.length > 0) {
+    print(`  \x1b[32m✓\x1b[0m Enabled \x1b[1m${selectedFeatures.length}\x1b[0m features`);
+  } else {
+    print('  \x1b[90mNo features selected - minimal install\x1b[0m');
+  }
+  print('  \x1b[90mYou can enable more later with: agclaw feature enable <name>\x1b[0m');
   print('');
 
   // Step 5: Port
