@@ -9,7 +9,6 @@
   },
   "scripts": {
     "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
-    "postbuild": "chmod +x bin/agclaw.js || true",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js start",
     "cli": "node dist/cli.js",
