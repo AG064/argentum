@@ -20,6 +20,7 @@ import 'dotenv/config';
 
 import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
+import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
 const VERSION = '0.4.0';
 const args = process.argv.slice(2);
@@ -48,6 +49,7 @@ function warn(text: string): void {
 }
 
 function banner(): void {
+<<<<<<< HEAD
   const glyphs = {
     A: [' ███  ', '█   █ ', '█████ ', '█   █ ', '█   █ ', '      '],
     G: [' ████ ', '█   █ ', '█     ', '█ ██  ', '█   █ ', ' ████ '],
@@ -78,6 +80,17 @@ function banner(): void {
   print('');
   print('  \x1b[90m░▒▓█ AI Agent System █▓▒░\x1b[0m');
   print('');
+=======
+  console.log(`
+  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
+ ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
+ ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
+ ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
+ ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
+  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+
+     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
+>>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 }
 
 function getWorkDir(): string {
@@ -379,7 +392,8 @@ function cmdVersion(): void {
 
 function cmdInit(): void {
   const workDir = getWorkDir();
-  const configPath = path.join(workDir, 'agclaw.json');
+  const configDir = path.join(workDir, 'config');
+  const configPath = path.join(configDir, 'default.yaml');
   const dataDir = path.join(workDir, 'data');
 
   banner();
@@ -387,7 +401,7 @@ function cmdInit(): void {
 
   // Create config
   if (fs.existsSync(configPath)) {
-    warn('agclaw.json already exists, skipping');
+    warn('config/default.yaml already exists, skipping');
   } else {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
@@ -397,29 +411,19 @@ function cmdInit(): void {
         port: 3000,
         host: '0.0.0.0',
       },
-      features: {
-        'life-domains': { enabled: true },
-        'skills-library': { enabled: true },
-        'goal-decomposition': { enabled: true },
-        'sqlite-memory': { enabled: true },
-        'cron-scheduler': { enabled: true },
-        'webchat': { enabled: false },
-        'webhooks': { enabled: false },
-        'api-gateway': { enabled: false },
-        'audit-log': { enabled: true },
-        'encrypted-secrets': { enabled: false },
-        'acp-harness': { enabled: false },
-      },
+      features: {},
       logging: {
         level: 'info',
       },
       llm: {
         providers: {},
         default: '',
+        fallback: [],
       },
     };
+    fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-    success('Created agclaw.json');
+    success('Created config/default.yaml');
   }
 
   // Create data directory
@@ -456,6 +460,28 @@ function cmdInit(): void {
 async function cmdStart(): Promise<void> {
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
+
+  // First-run check: if no config exists, prompt to onboard
+  const configPath = path.join(process.cwd(), 'config', 'default.yaml');
+  const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
+  if (!fs.existsSync(configPath) && !fs.existsSync(legacyConfigPath)) {
+    banner();
+    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print('');
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    rl.close();
+    if (answer !== 'n') {
+      await cmdOnboard();
+    } else {
+      print('');
+      info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+    }
+    return;
+  }
 
   banner();
   info(`Starting AG CLAW server on port ${port}...`);
@@ -2014,10 +2040,10 @@ async function cmdBudget(): Promise<void> {
 }
 
 async function cmdOnboard(): Promise<void> {
-  const readline = require('readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+  const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
+    await import('@clack/prompts');
 
+<<<<<<< HEAD
   banner();
   print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
   print('  \x1b[1m\x1b[32m│   Welcome to AG CLAW Setup Wizard!         │\x1b[0m');
@@ -2025,6 +2051,19 @@ async function cmdOnboard(): Promise<void> {
   print('');
   print('  \x1b[90mThis wizard will guide you through the initial setup.\x1b[0m');
   print('');
+=======
+  intro(`
+  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
+ ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
+ ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
+ ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
+ ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
+  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+
+     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
+  log.step('Welcome! This wizard will set up your AG-Claw instance.');
+  log.info('Press Ctrl+C at any time to cancel.');
+>>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 
   const config: any = {
     $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
@@ -2039,6 +2078,7 @@ async function cmdOnboard(): Promise<void> {
     },
   };
 
+<<<<<<< HEAD
   // Step 1: Instance name
   print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
   print('  \x1b[1m\x1b[36m║  Step 1: Instance Configuration                 ║\x1b[0m');
@@ -2048,36 +2088,94 @@ async function cmdOnboard(): Promise<void> {
   print('');
   print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${config.name}\x1b[0m`);
   print('');
+=======
+    // Step 1: Instance name
+  const nameVal = await text({
+    message: 'Instance name:',
+    initialValue: 'My AG-Claw',
+  });
+  if (typeof nameVal === 'string' && nameVal.trim()) config.name = nameVal.trim();
+>>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 
-  // Step 2: LLM Provider
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 2: LLM Provider                          ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  print('  \x1b[90mChoose a provider or add your own OpenAI-compatible API.\x1b[0m');
-  print('');
-  print('  \x1b[1m\x1b[33m╭──────────────╮\x1b[0m  \x1b[37mProvider Presets:\x1b[0m');
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m1\x1b[0m \x1b[37mOpenRouter   \x1b[90mopenrouter.ai/api/v1\x1b[0m   \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m2\x1b[0m \x1b[37mNVIDIA       \x1b[90mintegrate.api.nvidia.com\x1b[0m \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m3\x1b[0m \x1b[37mGoogle Gemini\x1b[90mgenerativelanguage.googleapis\x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m4\x1b[0m \x1b[37mAnthropic   \x1b[90mapi.anthropic.com\x1b[0m        \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m5\x1b[0m \x1b[37mOpenAI      \x1b[90mapi.openai.com\x1b[0m               \x1b[33m│\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[33m│\x1b[0m  \x1b[36m6\x1b[0m \x1b[37mCustom      \x1b[90myour own base_url\x1b[0m          \x1b[33m│\x1b[0m',
-  );
-  print('  \x1b[1m\x1b[33m╰──────────────╯\x1b[0m');
-  print('');
-  const providerChoice = await ask('  \x1b[33m▶\x1b[0m Choose (1-6, default: 2): ');
+  // Step 2: LLM Provider + Model selection
+  const MODEL_DB: Record<string, Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>> = {
+    minimax: [
+      { value: 'MiniMax-M2.7', label: 'MiniMax M2.7', ctx: '1M', price: '$0.10/M', free: false },
+      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 Highspeed', ctx: '1M', price: '$0.30/M', free: false },
+    ],
+    groq: [
+      { value: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', ctx: '128k', price: 'FREE', free: true },
+      { value: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick', ctx: '128k', price: '$0.20/M', free: false },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'deepseek-ai/deepseek-llm-70b-chat', label: 'DeepSeek LLM 70B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'qwen/qwen3-30b-a3b-instruct', label: 'Qwen 3 30B', ctx: '32k', price: 'FREE', free: true },
+    ],
+    nvidia: [
+      { value: 'deepseek-ai/deepseek-v3.2', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
+      { value: 'meta/llama-3.3-nemotron-70b-instruct', label: 'Llama 3.3 Nemotron 70B', ctx: '128k', price: '$0.16/M' },
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M' },
+      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B', ctx: '128k', price: '$0.15/M' },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M' },
+      { value: 'qwen/qwen3-30b-a3b-instruct', label: 'Qwen 3 30B', ctx: '32k', price: '$0.10/M' },
+      { value: 'meta/llama-3.2-11b-vision-instruct', label: 'Llama 3.2 11B Vision', ctx: '128k', price: '$0.10/M' },
+      { value: 'meta/llama-3.2-3b-instruct', label: 'Llama 3.2 3B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Nemotron 70B', ctx: '128k', price: '$0.16/M' },
+      { value: 'deepseek-ai/deepseek-coder-v2-16lite-instruct', label: 'DeepSeek Coder V2 16B', ctx: '128k', price: 'FREE', free: true },
+      { value: 'google/gemma-2-27b-it', label: 'Gemma 2 27B', ctx: '8k', price: '$0.10/M' },
+      { value: 'google/gemma-2-9b-it', label: 'Gemma 2 9B', ctx: '8k', price: 'FREE', free: true },
+      { value: 'snowfall/llama-3.3-70b-instruct-fp8', label: 'Llama 3.3 70B FP8', ctx: '128k', price: '$0.80/M' },
+      { value: 'allenai/llama-3.1-tulu-3-8b', label: 'Tulu 3 8B', ctx: '128k', price: 'FREE', free: true },
+    ],
+    openrouter: [
+      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M', free: true },
+      { value: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
+      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', ctx: '128k', price: '$0.80/M', free: true },
+      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M', free: true },
+      { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
+      { value: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4', ctx: '200k', price: '$15.00/M' },
+      { value: 'anthropic/claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', ctx: '200k', price: '$0.80/M' },
+      { value: 'openai/gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
+      { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini', ctx: '128k', price: '$0.15/M' },
+      { value: 'openai/o3', label: 'GPT o3', ctx: '200k', price: '$10.00/M' },
+      { value: 'openai/o4-mini', label: 'GPT o4-mini', ctx: '128k', price: '$1.10/M' },
+      { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      { value: 'mistralai/mistral-large-3-24b-instruct', label: 'Mistral Large 3 24B', ctx: '128k', price: '$1.00/M', free: true },
+      { value: 'qwen/qwen2.5-72b-instruct', label: 'Qwen 2.5 72B', ctx: '32k', price: '$0.70/M', free: true },
+      { value: 'deepseek-ai/deepseek-v2.5', label: 'DeepSeek V2.5', ctx: '128k', price: '$0.28/M', free: true },
+      { value: 'x-ai/grok-3', label: 'Grok 3', ctx: '131k', price: '$2.00/M' },
+    ],
+    google: [
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', ctx: '1M', price: '$1.25/M' },
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', ctx: '1M', price: 'FREE', free: true },
+      { value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash Experimental', ctx: '1M', price: 'FREE', free: true },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', ctx: '2M', price: '$1.25/M' },
+      { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B', ctx: '1M', price: '$0.038/M', free: true },
+    ],
+    anthropic: [
+      { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
+      { value: 'claude-opus-4-20250514', label: 'Claude Opus 4', ctx: '200k', price: '$15.00/M' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', ctx: '200k', price: '$0.80/M' },
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet', ctx: '200k', price: '$3.00/M' },
+      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus', ctx: '200k', price: '$15.00/M' },
+      { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet', ctx: '200k', price: '$3.00/M' },
+    ],
+    openai: [
+      { value: 'gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o mini', ctx: '128k', price: '$0.15/M' },
+      { value: 'o3', label: 'GPT o3', ctx: '200k', price: '$10.00/M' },
+      { value: 'o4-mini', label: 'GPT o4-mini', ctx: '128k', price: '$1.10/M' },
+      { value: 'gpt-4.5-turbo', label: 'GPT-4.5 Turbo', ctx: '128k', price: '$75.00/M' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', ctx: '128k', price: '$10.00/M' },
+      { value: 'gpt-4', label: 'GPT-4', ctx: '8k', price: '$30.00/M' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', ctx: '16k', price: '$0.50/M' },
+    ],
+  };
 
+<<<<<<< HEAD
   interface Preset {
     name: string;
     base_url: string;
@@ -2094,230 +2192,293 @@ async function cmdOnboard(): Promise<void> {
       api: 'openai',
       model: 'auto',
       headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG CLAW' },
+=======
+  const PROVIDERS = [
+    {
+      value: 'minimax',
+      label: 'MiniMax',
+      hint: 'api.minimax.io — M2.7 reasoning, cheap',
+      base_url: 'https://api.minimax.io/v1',
+      api_key_env: 'MINIMAX_API_KEY',
+      api: 'openai' as const,
+>>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
     },
-    2: {
-      name: 'nvidia',
+    {
+      value: 'groq',
+      label: 'Groq',
+      hint: 'api.groq.com — fast inference, mostly free models',
+      base_url: 'https://api.groq.com/openai/v1',
+      api_key_env: 'GROQ_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'ollama',
+      label: 'Ollama',
+      hint: 'localhost:11434 — run models locally (free)',
+      base_url: 'http://127.0.0.1:11434/v1',
+      api_key_env: 'OLLAMA_API_KEY',
+      api: 'openai' as const,
+    },
+    {
+      value: 'nvidia',
+      label: 'NVIDIA',
+      hint: 'integrate.api.nvidia.com — deepseek free, fast',
       base_url: 'https://integrate.api.nvidia.com/v1',
       api_key_env: 'NVIDIA_API_KEY',
-      api: 'openai',
-      model: 'deepseek-ai/deepseek-v3.2',
+      api: 'openai' as const,
     },
-    3: {
-      name: 'google',
+    {
+      value: 'openrouter',
+      label: 'OpenRouter',
+      hint: 'openrouter.ai — many free models',
+      base_url: 'https://openrouter.ai/api/v1',
+      api_key_env: 'OPENROUTER_API_KEY',
+      api: 'openai' as const,
+      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
+    },
+    {
+      value: 'google',
+      label: 'Google Gemini',
+      hint: 'generativelanguage.googleapis — 1M context free tier',
       base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
       api_key_env: 'GOOGLE_API_KEY',
-      api: 'openai',
-      model: 'gemini-2.5-flash',
+      api: 'openai' as const,
     },
-    4: {
-      name: 'anthropic',
+    {
+      value: 'anthropic',
+      label: 'Anthropic Claude',
+      hint: 'api.anthropic.com — best reasoning models',
       base_url: 'https://api.anthropic.com',
       api_key_env: 'ANTHROPIC_API_KEY',
-      api: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      api: 'anthropic' as const,
     },
-    5: {
-      name: 'openai',
+    {
+      value: 'openai',
+      label: 'OpenAI',
+      hint: 'api.openai.com — GPT-4o family',
       base_url: 'https://api.openai.com/v1',
       api_key_env: 'OPENAI_API_KEY',
-      api: 'openai',
-      model: 'gpt-4o',
+      api: 'openai' as const,
     },
-  };
+    { value: 'custom', label: 'Custom', hint: 'enter your own base URL', base_url: '', api_key_env: 'MY_API_KEY', api: 'openai' as const },
+  ];
 
-  let preset: Preset;
-  if (providerChoice.trim() === '6') {
-    print('');
-    print('  \x1b[33m▶\x1b[0m Custom Provider Setup:');
-    const custName = await ask('    \x1b[90mProvider name:\x1b[0m ');
-    const custUrl = await ask('    \x1b[90mBase URL:\x1b[0m ');
-    const custModel = await ask('    \x1b[90mDefault model:\x1b[0m ');
-    const custApi =
-      (await ask('    \x1b[90mAPI style [openai|anthropic] (default: openai):\x1b[0m ')) ||
-      'openai';
-    const custKeyEnv = await ask('    \x1b[90mAPI key env var (e.g. MY_API_KEY):\x1b[0m ');
-    preset = {
-      name: custName.trim() || 'custom',
-      base_url: custUrl.trim(),
-      api_key_env: custKeyEnv.trim() || 'CUSTOM_API_KEY',
-      api: custApi,
-      model: custModel.trim(),
+  const providerChoice = await select({
+    message: 'Select LLM provider:',
+    options: PROVIDERS.map((p) => ({ value: p.value, label: p.label, hint: p.hint })),
+    initialValue: 'nvidia',
+  });
+
+  let selectedPreset: { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> };
+  let usedKey = ''; // API key collected during discovery, used to skip the later prompt
+  if (providerChoice === 'custom') {
+    const custName = (await text({ message: 'Provider name:', initialValue: 'custom' })) as string;
+    const custUrl = (await text({ message: 'Base URL:', initialValue: 'https://' })) as string;
+    const custModel = (await text({ message: 'Default model:', initialValue: '' })) as string;
+    const custKeyEnv = (await text({ message: 'API key env var name:', initialValue: 'MY_API_KEY' })) as string;
+    selectedPreset = {
+      name: custName?.trim() || 'custom',
+      base_url: custUrl?.trim() || '',
+      api_key_env: custKeyEnv?.trim() || 'MY_API_KEY',
+      api: 'openai',
+      model: custModel?.trim() || '',
     };
   } else {
-    preset = presets[providerChoice.trim()] ?? presets['2']!;
+    const provider = PROVIDERS.find((p) => p.value === providerChoice) ?? PROVIDERS[0]!;
+
+    // Step 2a: Choose discovery method
+    const discoveryMethodRaw = await select({
+      message: `How to pick model for ${provider.label}?`,
+      options: [
+        { value: 'discover', label: 'Discover Live', hint: 'fetch models from provider API now' },
+        { value: 'curated', label: 'Quick Pick', hint: 'curated list (works offline)' },
+      ],
+    });
+    const discoveryMethod = isCancel(discoveryMethodRaw) ? 'curated' : String(discoveryMethodRaw);
+
+    // chosenModel is always assigned by one of the branches below
+    let chosenModel = '';
+    let liveModels: DiscoveredModel[] = [];
+
+    if (discoveryMethod === 'discover') {
+      // Step 1: try discovery WITHOUT API key first (many providers allow this)
+      process.stdout.write(`  Querying ${provider.base_url}/models (no key)... `);
+      liveModels = await discoverModels(provider, '');
+
+      if (liveModels.length === 0) {
+        // No results — ask for key and retry
+        const discoveryKey = await password({
+          message: `${provider.api_key_env} (required for this provider):`,
+          mask: '*',
+        });
+        usedKey = discoveryKey && !isCancel(discoveryKey) ? String(discoveryKey).trim() : '';
+
+        if (usedKey) {
+          process.stdout.write(`  Querying ${provider.base_url}/models (with key)... `);
+          liveModels = await discoverModels(provider, usedKey);
+          process.stdout.write(liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no models\n');
+        }
+      } else {
+        process.stdout.write(`OK (${liveModels.length} models)\n`);
+      }
+
+      if (liveModels.length > 0) {
+        log.success(`${liveModels.length} models discovered — pick one`);
+        chosenModel = String(
+          await select({
+            message: `${provider.label} models (live):`,
+            options: liveModels.map((m) => ({
+              value: m.value,
+              label: `${m.label} ${m.free ? '(FREE)' : ''}`,
+              hint: `${m.ctx} context · ${m.price}`,
+            })),
+          }),
+        );
+      } else {
+        log.warn('Discovery failed — using curated list');
+      }
+    }
+
+    if (!chosenModel) {
+      // Curated list fallback
+      const models = MODEL_DB[providerChoice as string] ?? [];
+      chosenModel = String(
+        await select({
+          message: `${provider.label} model (curated):`,
+          options: models.map((m) => ({
+            value: m.value,
+            label: `${m.label} ${m.free ? '(FREE)' : ''}`,
+            hint: `${m.ctx} context · ${m.price}`,
+          })),
+        }),
+      );
+    }
+
+    selectedPreset = {
+      name: provider.value,
+      base_url: provider.base_url,
+      api_key_env: provider.api_key_env,
+      api: provider.api,
+      model: chosenModel,
+      ...(provider.headers ? { headers: provider.headers } : {}),
+    };
+    log.success(`${chosenModel} selected`);
   }
 
-  config.llm.providers[preset.name] = {
-    base_url: preset.base_url,
-    api_key_env: preset.api_key_env,
-    api: preset.api as any,
-    models: [preset.model],
-    ...(preset.headers ? { headers: preset.headers } : {}),
+  config.llm.providers[selectedPreset.name] = {
+    base_url: selectedPreset.base_url,
+    api_key_env: selectedPreset.api_key_env,
+    api: selectedPreset.api as any,
+    models: [selectedPreset.model],
+    ...(selectedPreset.headers ? { headers: selectedPreset.headers } : {}),
   };
-  config.llm.default = preset.name;
+  config.llm.default = selectedPreset.name;
+  log.success(`Selected: ${selectedPreset.name} (${selectedPreset.base_url})`);
 
-  print('');
-  print(
-    `  \x1b[32m✓\x1b[0m Selected: \x1b[1m${preset.name}\x1b[0m (\x1b[90m${preset.base_url}\x1b[0m)`,
-  );
-
-  // Ask for API key
-  print('');
-  const apiKey = await ask(
-    `  \x1b[33m▶\x1b[0m \x1b[33m${preset.api_key_env}\x1b[0m (press Enter to skip): `,
-  );
-  if (apiKey.trim()) {
+  // API key
+  // If we already asked for key during discovery, don't ask again
+  if (!usedKey) {
+    const apiKeyVal = await password({
+      message: `${selectedPreset.api_key_env} (Enter to skip):`,
+      mask: '*',
+    });
+    usedKey = typeof apiKeyVal === 'string' ? apiKeyVal.trim() : '';
+  }
+  if (usedKey) {
     const envPath = path.join(getWorkDir(), '.env');
-    fs.appendFileSync(envPath, `${preset.api_key_env}=${apiKey.trim()}\n`);
-    success(`\x1b[32m✓\x1b[0m Saved \x1b[1m${preset.api_key_env}\x1b[0m to .env`);
+    fs.appendFileSync(envPath, `${selectedPreset.api_key_env}=${usedKey}\n`);
+    log.success(`Saved ${selectedPreset.api_key_env} to .env`);
   }
 
-  // Ask for additional models
-  print('');
-  const addModels = await ask(
-    '  \x1b[33m▶\x1b[0m Add fallback models (comma-separated, or Enter to skip): ',
-  );
-  if (addModels.trim()) {
-    config.llm.providers[preset.name].models.push(
-      ...addModels
-        .trim()
-        .split(',')
-        .map((m: string) => m.trim()),
+  // Fallback models
+  const addModels = await text({
+    message: 'Fallback models (comma-separated, Enter to skip):',
+    initialValue: '',
+  });
+  if (typeof addModels === 'string' && addModels.trim()) {
+    (config.llm.providers[selectedPreset.name].models as string[]).push(
+      ...addModels.split(',').map((m: string) => m.trim()),
     );
   }
-  print('');
 
-  // Step 3: Telegram
-  print('  \x1b[1mStep 3: Telegram (optional)\x1b[0m');
-  const setupTg = await ask('  Set up Telegram bot? (y/N): ');
-  if (setupTg.toLowerCase() === 'y') {
-    const botToken = await ask('  Bot token: ');
-    if (botToken.trim()) {
-      const userId = await ask('  \x1b[33m▶\x1b[0m Your Telegram user ID (e.g. tg:123456): ');
-      config.features.telegram = {
+  // Telegram setup
+  const setupTg = await confirm({ message: 'Set up Telegram bot?', initialValue: false });
+  if (setupTg === true) {
+    const botToken = await password({ message: 'Bot token:', mask: '' });
+    if (typeof botToken === 'string' && (botToken as string).trim()) {
+      config.features = config.features ?? {};
+      (config.features as any).telegram = {
         enabled: true,
         botToken: botToken.trim(),
-        allowFrom: userId.trim() ? [userId.trim()] : [],
+        allowFrom: [],
         dmPolicy: 'pairing',
         groupPolicy: 'allowlist',
       };
-      success('Telegram configured');
+      log.success('Telegram configured');
     }
   }
-  print('');
 
-  // Step 4: Features (user selects what to install)
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 4: Features (optional)                           ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
-  print('  \x1b[90mSelect features to enable, or press Enter to skip (minimal install)\x1b[0m');
-  print('');
+  // Features selection
+  const selectedCats = await multiselect({
+    message: 'Select feature categories to enable:',
+    options: [
+      { value: 'core', label: 'Core', hint: 'sqlite-memory, cron-scheduler, audit-log' },
+      { value: 'comm', label: 'Communication', hint: 'telegram, webchat, discord-bot, slack' },
+      { value: 'memory', label: 'Memory', hint: 'knowledge-graph, semantic-search' },
+      { value: 'productivity', label: 'Productivity', hint: 'goals, life-domains, task-checkout' },
+      { value: 'automation', label: 'Automation', hint: 'browser-automation, webhooks, file-watcher' },
+      { value: 'monitoring', label: 'Monitoring', hint: 'health-monitoring, budget, email' },
+      { value: 'skills', label: 'Skills', hint: 'skills-library, skill-loader, skill-evolution' },
+    ],
+    required: false,
+  });
 
-  const featureCategories: Record<string, { desc: string; features: string[] }> = {
-    'Core': {
-      desc: 'Essential modules',
-      features: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
-    },
-    'Communication': {
-      desc: 'Telegram, Webchat, Slack, etc.',
-      features: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
-    },
-    'Memory': {
-      desc: 'Knowledge graph, semantic search, etc.',
-      features: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
-    },
-    'Productivity': {
-      desc: 'Goals, tasks, life domains',
-      features: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
-    },
-    'Automation': {
-      desc: 'Browser, file watching, webhooks',
-      features: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
-    },
-    'Monitoring': {
-      desc: 'Health checks, budget tracking',
-      features: ['health-monitoring', 'budget', 'email-integration'],
-    },
-    'Skills': {
-      desc: 'Skill management and loading',
-      features: ['skills-library', 'skill-loader', 'skill-evolution'],
-    },
+  const featureMap: Record<string, string[]> = {
+    core: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
+    comm: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
+    memory: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
+    productivity: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
+    automation: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
+    monitoring: ['health-monitoring', 'budget', 'email-integration'],
+    skills: ['skills-library', 'skill-loader', 'skill-evolution'],
   };
 
-  // Show categories
-  const categoryKeys: string[] = Object.keys(featureCategories);
-  categoryKeys.forEach((cat, i) => {
-    const entry = featureCategories[cat];
-    if (entry) {
-      print(`  \x1b[33m${i + 1}\x1b[0m \x1b[1m${cat}\x1b[0m - ${entry.desc}`);
-      print(`     \x1b[90m${entry.features.join(', ')}\x1b[0m`);
+  const allSelectedFeatures: string[] = [];
+  if (Array.isArray(selectedCats)) {
+    for (const cat of selectedCats) {
+      const features = featureMap[cat as string];
+      if (features) allSelectedFeatures.push(...features);
     }
-  });
-  print('');
-
-  const featureSelect = await ask('  Select categories (e.g. 1,3,5 or "all" or Enter for none): ');
-  let selectedFeatures: string[] = [];
-
-  if (featureSelect.trim().toLowerCase() === 'all') {
-    // Enable all features
-    categoryKeys.forEach(cat => {
-      const entry = featureCategories[cat];
-      if (entry) selectedFeatures.push(...entry.features);
-    });
-  } else if (featureSelect.trim()) {
-    // Parse selected numbers
-    const parts = featureSelect.split(',').map(s => parseInt(s.trim(), 10));
-    parts.forEach(num => {
-      if (!isNaN(num) && num >= 1 && num <= categoryKeys.length) {
-        const cat = categoryKeys[num - 1];
-        const entry = cat ? featureCategories[cat] : undefined;
-        if (entry) selectedFeatures.push(...entry.features);
-      }
-    });
   }
-
-  // Remove duplicates
-  selectedFeatures = [...new Set(selectedFeatures)];
-
-  // Enable selected features in config
-  for (const f of selectedFeatures) {
-    config.features[f] = { enabled: true };
+  for (const f of [...new Set(allSelectedFeatures)]) {
+    config.features = config.features ?? {};
+    (config.features as any)[f] = { enabled: true };
   }
+  log.info(allSelectedFeatures.length > 0
+    ? `Enabled ${allSelectedFeatures.length} features`
+    : 'Minimal install - no extra features selected');
 
-  if (selectedFeatures.length > 0) {
-    print(`  \x1b[32m✓\x1b[0m Enabled \x1b[1m${selectedFeatures.length}\x1b[0m features`);
-  } else {
-    print('  \x1b[90mNo features selected - minimal install\x1b[0m');
-  }
-  print('  \x1b[90mYou can enable more later with: agclaw feature enable <name>\x1b[0m');
-  print('');
-
-  // Step 5: Port
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 5: Server Configuration                     ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  const port = await ask('  \x1b[33m▶\x1b[0m Server port (default: 3000): ');
-  if (port.trim() && !isNaN(parseInt(port))) {
-    config.server.port = parseInt(port);
-  }
-  print('');
-  print(`  \x1b[32m✓\x1b[0m Server port: \x1b[1m${config.server.port}\x1b[0m`);
-  print('');
+  // Server port
+  const portVal = await text({ message: 'Server port:', initialValue: '3000' });
+  const portNum = parseInt(portVal as string ?? '3000');
+  if (!isNaN(portNum)) config.server.port = portNum;
 
   // Save config
-  const configPath = path.join(getWorkDir(), 'agclaw.json');
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  success('\x1b[32m✓\x1b[0m Configuration saved to \x1b[1magclaw.json\x1b[0m');
+  const configDir = path.join(getWorkDir(), 'config');
+  fs.mkdirSync(configDir, { recursive: true });
+  const configFilePath = path.join(configDir, 'default.yaml');
+  fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2));
+  log.success('Config saved to config/default.yaml');
 
   // Create data dir
   const dataDir = path.join(getWorkDir(), 'data');
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-  success('\x1b[32m✓\x1b[0m Data directory ready');
+  fs.mkdirSync(dataDir, { recursive: true });
+  log.success('Data directory ready');
 
-  rl.close();
+  outro(`
+  Setup complete!
 
+<<<<<<< HEAD
   print('');
   print('  \x1b[1m\x1b[32m╔═══════════════════════════════════════════════╗\x1b[0m');
   print('  \x1b[1m\x1b[32m║           ✅ SETUP COMPLETE!                    ║\x1b[0m');
@@ -2330,6 +2491,15 @@ async function cmdOnboard(): Promise<void> {
   print('');
   print('  \x1b[90mThank you for choosing AG CLAW! 🚀\x1b[0m');
   print('');
+=======
+  Next steps:
+    agclaw gateway start --port ${config.server.port}
+    agclaw status
+    agclaw skill search <query>
+
+  Thank you for choosing AG-Claw!
+`);
+>>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 }
 
 async function cmdSkill(): Promise<void> {
