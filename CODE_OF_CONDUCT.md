@@ -37,8 +37,8 @@ This project is used by people of all skill levels — from students to professi
 
 If something happens and you want to report it:
 
-- GitHub Issues — tag [@ag_064](https://github.com/AG064)
-- Telegram — [@ag_064](https://t.me/ag_064)
+- GitHub Issues — tag [[REMOVED]](https://github.com/AG064)
+- Telegram — [[REMOVED]](https://t.me/AGClaw)
 
 Reports can be anonymous if you prefer.
 

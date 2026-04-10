@@ -46,7 +46,7 @@ export interface IdMapping {
 }
 
 export interface MessageContext {
-  /** Sender identifier (e.g. telegram:386565331 or just 386565331) */
+  /** Sender identifier (e.g. telegram:123456789 or just 123456789) */
   sender: {
     id: string;
     username?: string;
@@ -76,7 +76,7 @@ export interface RouteResult {
 
 /**
  * Normalize an ID to numeric format
- * Accepts: numeric (386565331), with prefix (telegram:386565331), or mapped name (anneka)
+ * Accepts: numeric (123456789), with prefix (telegram:123456789), or mapped name (anneka)
  */
 export function normalizeId(
   id: string,
@@ -87,7 +87,7 @@ export function normalizeId(
     return id;
   }
 
-  // Has platform prefix (e.g., telegram:386565331)
+  // Has platform prefix (e.g., telegram:123456789)
   if (id.includes(':')) {
     const parts = id.split(':');
     return parts[1] ?? parts[0] ?? id;

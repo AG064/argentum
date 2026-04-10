@@ -120,7 +120,7 @@ If you're adding a feature, look at `src/features/` for the pattern.
 ## Questions?
 
 - Open an issue for bugs or feature requests
-- Telegram: [@ag_064](https://t.me/ag_064)
+- Telegram: [[REMOVED]](https://t.me/AGClaw)
 - Check the [docs/](docs/) directory first — there's more detail there than in this file
 
 ## License
