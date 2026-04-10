@@ -48,30 +48,27 @@ function warn(text: string): void {
 }
 
 function banner(): void {
+  const glyphs = {
+    A: [' ███  ', '█   █ ', '█████ ', '█   █ ', '█   █ ', '      '],
+    G: [' ████ ', '█   █ ', '█     ', '█ ██  ', '█   █ ', ' ████ '],
+    C: [' ████ ', '█   █ ', '█     ', '█     ', '█   █ ', ' ████ '],
+    L: ['█     ', '█     ', '█     ', '█     ', '█     ', '██████'],
+    W: ['█   █ ', '█   █ ', '█ █ █ ', '██ ██ ', '█   █ ', '█   █ '],
+  };
+
+  const logoLines = Array.from({ length: 6 }, (_, i) =>
+    [glyphs.A[i], glyphs.G[i], '   ', glyphs.C[i], glyphs.L[i], glyphs.A[i], glyphs.W[i]].join(' '),
+  );
+
   print('');
   print('  \x1b[1m\x1b[36m╔══════════════════════════════════════════════════════════╗\x1b[0m');
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m███████║██████╔╝██║     ███████║██║   ██║███████╗\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██╔══██║██╔══██╗██║     ██╔══██║██║   ██║╚════██║\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║\x1b[36m   ║\x1b[0m',
-  );
-  print(
-    '  \x1b[1m\x1b[36m║   \x1b[33m╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝\x1b[36m   ║\x1b[0m',
-  );
+  for (const line of logoLines) {
+    print(`  \x1b[1m\x1b[36m║   \x1b[33m${line.padEnd(46, ' ')}\x1b[36m   ║\x1b[0m`);
+  }
   print('  \x1b[1m\x1b[36m║                                                           ║\x1b[0m');
   print(
-    '  \x1b[1m\x1b[36m║              \x1b[37mModular AI Agent Framework \x1b[36m             ║\x1b[0m',
+    '  \x1b[1m\x1b[36m║        \x1b[37mAG CLAW Modular AI Agent Framework \x1b[36m        ║\x1b[0m',
   );
   print(
     `  \x1b[1m\x1b[36m║                    \x1b[32mv${VERSION}\x1b[36m                            ║\x1b[0m`,
@@ -95,10 +92,10 @@ function cmdHelp(): void {
   print('    agclaw <command> [options]');
   print('');
   print('  \x1b[1mCommands:\x1b[0m');
-  print('    init                  Initialize AG-Claw in current directory');
-  print('    gateway start         Start AG-Claw server (background)');
-  print('    gateway stop          Stop AG-Claw server');
-  print('    gateway restart       Restart AG-Claw server');
+  print('    init                  Initialize AG CLAW in current directory');
+  print('    gateway start         Start AG CLAW server (background)');
+  print('    gateway stop          Stop AG CLAW server');
+  print('    gateway restart       Restart AG CLAW server');
   print('    gateway status        Check if server is running');
   print('    gateway logs          View server logs');
   print('    status                Show system and feature status');
@@ -375,7 +372,7 @@ function cmdImage(): void {
 }
 
 function cmdVersion(): void {
-  print(`AG-Claw v${VERSION}`);
+  print(`AG CLAW v${VERSION}`);
   print(`Node.js ${process.version}`);
   print(`Platform: ${process.platform} ${process.arch}`);
 }
@@ -386,7 +383,7 @@ function cmdInit(): void {
   const dataDir = path.join(workDir, 'data');
 
   banner();
-  info('Initializing AG-Claw...');
+  info('Initializing AG CLAW...');
 
   // Create config
   if (fs.existsSync(configPath)) {
@@ -394,7 +391,7 @@ function cmdInit(): void {
   } else {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-      name: 'My AG-Claw Instance',
+      name: 'My AG CLAW Instance',
       version: '1.0.0',
       server: {
         port: 3000,
@@ -439,7 +436,7 @@ function cmdInit(): void {
     fs.writeFileSync(
       envPath,
       [
-        '# AG-Claw Environment Variables',
+        '# AG CLAW Environment Variables',
         'AGCLAW_WORKDIR=.',
         'AGCLAW_PORT=3000',
         'AGCLAW_MASTER_KEY=',
@@ -452,7 +449,7 @@ function cmdInit(): void {
     success('Created .env.example');
   }
 
-  success('AG-Claw initialized!');
+  success('AG CLAW initialized!');
   info('Next: agclaw start --port 3000');
 }
 
@@ -461,7 +458,7 @@ async function cmdStart(): Promise<void> {
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
 
   banner();
-  info(`Starting AG-Claw server on port ${port}...`);
+  info(`Starting AG CLAW server on port ${port}...`);
 
   try {
     const configManager = getConfig();
@@ -638,7 +635,7 @@ function cmdConfig(): void {
   const configPath = path.join(workDir, 'agclaw.json');
 
   if (!fs.existsSync(configPath)) {
-    error('AG-Claw not initialized. Run: agclaw init');
+    error('AG CLAW not initialized. Run: agclaw init');
     return;
   }
 
@@ -1115,7 +1112,7 @@ async function cmdWatch(): Promise<void> {
   // For now, just show a message
   print('');
   warn('File watcher requires file-watcher feature to be enabled');
-  info('Enable it in config and restart AG-Claw server');
+  info('Enable it in config and restart AG CLAW server');
 }
 
 async function cmdGateway(): Promise<void> {
@@ -1162,7 +1159,7 @@ async function cmdGateway(): Promise<void> {
       const port = args.includes('--port')
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
-      info(`Starting AG-Claw gateway on port ${port}...`);
+      info(`Starting AG CLAW gateway on port ${port}...`);
 
       // Spawn gateway as background process
       const { spawn } = await import('child_process');
@@ -1219,7 +1216,7 @@ async function cmdGateway(): Promise<void> {
       const port = args.includes('--port')
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
-      info(`Restarting AG-Claw gateway on port ${port}...`);
+      info(`Restarting AG CLAW gateway on port ${port}...`);
 
       const { spawn } = await import('child_process');
       const gatewayPath = path.join(__dirname, 'cli.js');
@@ -1687,7 +1684,7 @@ async function cmdCron(): Promise<void> {
 
 async function cmdStatus(): Promise<void> {
   banner();
-  print('  \x1b[1mAG-Claw Status\x1b[0m');
+  print('  \x1b[1mAG CLAW Status\x1b[0m');
   print('');
   print(`  \x1b[1mVersion:\x1b[0m 0.2.0`);
   print(`  \x1b[1mConfig:\x1b[0m ${path.join(getWorkDir(), 'agclaw.json')}`);
@@ -2023,7 +2020,7 @@ async function cmdOnboard(): Promise<void> {
 
   banner();
   print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
-  print('  \x1b[1m\x1b[32m│   Welcome to AG-Claw Setup Wizard!         │\x1b[0m');
+  print('  \x1b[1m\x1b[32m│   Welcome to AG CLAW Setup Wizard!         │\x1b[0m');
   print('  \x1b[1m\x1b[32m└─────────────────────────────────────────────┘\x1b[0m');
   print('');
   print('  \x1b[90mThis wizard will guide you through the initial setup.\x1b[0m');
@@ -2031,7 +2028,7 @@ async function cmdOnboard(): Promise<void> {
 
   const config: any = {
     $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-    name: 'My AG-Claw Instance',
+    name: 'My AG CLAW Instance',
     version: '1.0.0',
     server: { port: 3000, host: '0.0.0.0' },
     features: {},
@@ -2046,7 +2043,7 @@ async function cmdOnboard(): Promise<void> {
   print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
   print('  \x1b[1m\x1b[36m║  Step 1: Instance Configuration                 ║\x1b[0m');
   print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG-Claw): ');
+  const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG CLAW): ');
   if (name.trim()) config.name = name.trim();
   print('');
   print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${config.name}\x1b[0m`);
@@ -2096,7 +2093,7 @@ async function cmdOnboard(): Promise<void> {
       api_key_env: 'OPENROUTER_API_KEY',
       api: 'openai',
       model: 'auto',
-      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
+      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG CLAW' },
     },
     2: {
       name: 'nvidia',
@@ -2331,7 +2328,7 @@ async function cmdOnboard(): Promise<void> {
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
   print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
   print('');
-  print('  \x1b[90mThank you for choosing AG-Claw! 🚀\x1b[0m');
+  print('  \x1b[90mThank you for choosing AG CLAW! 🚀\x1b[0m');
   print('');
 }
 
@@ -3148,7 +3145,7 @@ async function cmdSecurity(): Promise<void> {
     case 'help':
     default: {
       banner();
-      info('AG-Claw Security Commands:');
+      info('AG CLAW Security Commands:');
       print('');
       print('  \x1b[1magclaw security status\x1b[0m                Show security overview');
       print('  \x1b[1magclaw security policies\x1b[0m [list|add|remove|enable|disable]');
@@ -3203,7 +3200,7 @@ async function cmdTelegram(): Promise<void> {
       print('');
       const configPath = path.join(getWorkDir(), 'agclaw.json');
       if (!fs.existsSync(configPath)) {
-        error('AG-Claw not initialized. Run: agclaw init');
+        error('AG CLAW not initialized. Run: agclaw init');
         return;
       }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

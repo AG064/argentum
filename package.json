@@ -11,6 +11,7 @@
     "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js start",
+    "onboard": "tsx src/cli.ts onboard",
     "cli": "node dist/cli.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",

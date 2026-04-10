@@ -8,9 +8,18 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-import { watch } from 'chokidar';
+import type { FSWatcher } from 'chokidar';
 import { parse } from 'yaml';
 import { z } from 'zod';
+
+async function importChokidar(): Promise<typeof import('chokidar')> {
+  const dynamicImport = new Function(
+    'specifier',
+    'return import(specifier);',
+  ) as (specifier: string) => Promise<typeof import('chokidar')>;
+
+  return dynamicImport('chokidar');
+}
 
 /** Server configuration schema */
 const ServerConfigSchema = z.object({
@@ -492,27 +501,27 @@ export type AGClawConfig = z.infer<typeof ConfigSchema>;
 /** Configuration manager with hot-reload support */
 export class ConfigManager {
   private config: AGClawConfig;
+  private baseConfigPath: string;
   private configPath: string;
-  private watcher: ReturnType<typeof watch> | null = null;
+  private watcher: FSWatcher | null = null;
   private listeners: Set<(config: AGClawConfig) => void> = new Set();
 
   constructor(configPath?: string) {
-    this.configPath = configPath ?? resolve(process.cwd(), 'config/default.yaml');
+    this.baseConfigPath = resolve(process.cwd(), 'config/default.yaml');
+    const envConfigPath = process.env.AGCLAW_CONFIG_PATH;
+    this.configPath = configPath ?? resolve(process.cwd(), envConfigPath ?? 'agclaw.json');
     this.config = this.loadConfig();
   }
 
   /** Load and validate configuration from YAML file */
   private loadConfig(): AGClawConfig {
-    let fileConfig: Record<string, unknown> = {};
-
-    if (existsSync(this.configPath)) {
-      const raw = readFileSync(this.configPath, 'utf-8');
-      fileConfig = parse(raw) ?? {};
-    }
+    const baseConfig = this.loadConfigFile(this.baseConfigPath);
+    const fileConfig =
+      this.configPath === this.baseConfigPath ? {} : this.loadConfigFile(this.configPath);
 
     // Environment variable overrides
     const envOverrides = this.loadEnvOverrides();
-    const merged = this.deepMerge(fileConfig, envOverrides);
+    const merged = this.deepMerge(this.deepMerge(baseConfig, fileConfig), envOverrides);
 
     const result = ConfigSchema.safeParse(merged);
     if (!result.success) {
@@ -523,6 +532,22 @@ export class ConfigManager {
     return result.data;
   }
 
+  /** Load a single configuration file if it exists */
+  private loadConfigFile(filePath: string): Record<string, unknown> {
+    if (!existsSync(filePath)) {
+      return {};
+    }
+
+    const raw = readFileSync(filePath, 'utf-8');
+    const parsed = parse(raw);
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+
+    return {};
+  }
+
   /** Load configuration overrides from environment variables */
   private loadEnvOverrides(): Record<string, unknown> {
     const overrides: Record<string, unknown> = {};
@@ -530,14 +555,35 @@ export class ConfigManager {
     if (process.env.AGCLAW_PORT) {
       overrides['server'] = { port: parseInt(process.env.AGCLAW_PORT, 10) };
     }
+    if (process.env.AGCLAW_HOST) {
+      overrides['server'] = {
+        ...((overrides['server'] as Record<string, unknown>) ?? {}),
+        host: process.env.AGCLAW_HOST,
+      };
+    }
     if (process.env.AGCLAW_LOG_LEVEL) {
-      overrides['logging'] = { level: process.env.AGCLAW_LOG_LEVEL };
+      overrides['logging'] = {
+        ...((overrides['logging'] as Record<string, unknown>) ?? {}),
+        level: process.env.AGCLAW_LOG_LEVEL,
+      };
+    }
+    if (process.env.AGCLAW_LOG_FORMAT) {
+      overrides['logging'] = {
+        ...((overrides['logging'] as Record<string, unknown>) ?? {}),
+        format: process.env.AGCLAW_LOG_FORMAT,
+      };
     }
     if (process.env.AGCLAW_TELEGRAM_TOKEN) {
-      overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
+      overrides['channels'] = {
+        ...((overrides['channels'] as Record<string, unknown>) ?? {}),
+        telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN },
+      };
     }
     if (process.env.AGCLAW_SUPABASE_URL) {
-      overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
+      overrides['memory'] = {
+        ...((overrides['memory'] as Record<string, unknown>) ?? {}),
+        supabaseUrl: process.env.AGCLAW_SUPABASE_URL,
+      };
     }
     if (process.env.AGCLAW_SUPABASE_KEY) {
       overrides['memory'] = {
@@ -587,14 +633,26 @@ export class ConfigManager {
   enableHotReload(): void {
     if (this.watcher) return;
 
-    this.watcher = watch(this.configPath, { ignoreInitial: true });
-    this.watcher.on('change', () => {
-      console.log(`[Config] Reloading ${this.configPath}`);
-      this.config = this.loadConfig();
-      for (const listener of this.listeners) {
-        listener(this.config);
-      }
-    });
+    void this.startHotReloadWatcher();
+  }
+
+  private async startHotReloadWatcher(): Promise<void> {
+    try {
+      const chokidar = await importChokidar();
+
+      this.watcher = chokidar.watch(Array.from(new Set([this.baseConfigPath, this.configPath])), {
+        ignoreInitial: true,
+      });
+      this.watcher.on('change', () => {
+        console.log(`[Config] Reloading ${this.configPath}`);
+        this.config = this.loadConfig();
+        for (const listener of this.listeners) {
+          listener(this.config);
+        }
+      });
+    } catch (err) {
+      console.error('Failed to enable configuration hot reload:', err);
+    }
   }
 
   /** Register a listener for config changes */

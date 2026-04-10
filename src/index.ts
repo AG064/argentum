@@ -48,7 +48,7 @@ export class Agent {
     this.logger = createLogger().child({ feature: 'agent' });
     this.systemPrompt =
       systemPrompt ??
-      `You are AG-Claw, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
+      `You are AG CLAW, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
   }
 
   registerTool(tool: Tool): void {
@@ -498,7 +498,7 @@ class AGClaw {
 
   /** Start the AG-Claw framework */
   async start(): Promise<void> {
-    this.logger.info('Starting AG-Claw Framework', {
+    this.logger.info('Starting AG CLAW Framework', {
       version: '0.4.0',
       nodeVersion: process.version,
       platform: process.platform,
@@ -576,7 +576,7 @@ class AGClaw {
     const activeCount = features.filter((f) => f.state === 'active').length;
     const totalCount = features.length;
 
-    this.logger.info(`AG-Claw started successfully`, {
+    this.logger.info(`AG CLAW started successfully`, {
       features: `${activeCount}/${totalCount} active`,
       tools: this.agent.getToolNames().length,
       port: this.config.server.port,
@@ -767,7 +767,7 @@ class AGClaw {
       // Handle /start command
       bot.command('start', async (ctx) => {
         await ctx.reply(
-          '🤖 Welcome to AG-Claw!\n\n' +
+          '🤖 Welcome to AG CLAW!\n\n' +
             'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
             `Available tools: ${this.agent.getToolNames().join(', ')}`,
         );
@@ -777,7 +777,7 @@ class AGClaw {
       bot.command('help', async (ctx) => {
         const tools = this.agent.getToolNames();
         await ctx.reply(
-          `🤖 *AG-Claw Help*\n\n` +
+          `🤖 *AG CLAW Help*\n\n` +
             `Just send me any message and I will respond.\n\n` +
             `*Available tools:*\n${tools.map((t) => `• /${t}`).join('\n')}\n\n*Commands:*\n` +
             `/start - Welcome message\n` +
@@ -792,7 +792,7 @@ class AGClaw {
         const features = this.pluginLoader.listFeatures();
         const activeCount = features.filter((f) => f.state === 'active').length;
         await ctx.reply(
-          '📊 *AG-Claw Status*\n\n' +
+          '📊 *AG CLAW Status*\n\n' +
             `LLM: ${this.llmProvider.name}\n` +
             `Tools: ${this.agent.getToolNames().length}\n` +
             `Features: ${activeCount}/${features.length} active\n` +
@@ -954,7 +954,7 @@ class AGClaw {
     this.semanticMemory.close();
     this.logger.info('OMEGA Memory closed');
 
-    this.logger.info('AG-Claw shutdown complete');
+    this.logger.info('AG CLAW shutdown complete');
   }
 }
 
@@ -974,7 +974,7 @@ export function getAGClaw(): AGClaw {
 if (require.main === module) {
   const app = new AGClaw();
   app.start().catch((err) => {
-    console.error('Failed to start AG-Claw:', err);
+    console.error('Failed to start AG CLAW:', err);
     process.exit(1);
   });
 }
