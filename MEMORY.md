@@ -104,12 +104,18 @@
 - **HuggingFace:** (key in TOOLS.md)
 
 ## Nova Night Research (MemoAgent self-improvement)
-**Status 2026-04-08 4AM: StreamAgent, Agent Audit Trail (AAT), AgeMem — Anticipatory Memory + Formal Logging + RL-Optimized Ops**
+**Status 2026-04-10 4AM: Kimi k1.5 (RL scaling), MemGPT (OS-style paging), TinyLlama (1.1B SLM), Voyager (Minecraft lifelong learning)**
 
-### Latest: 2026-04-08 4AM — Anticipatory Memory, IETF Audit Logging, RL-Optimized Memory Ops
-- **StreamAgent** (arxiv:2508.01875, ICLR 2026) — Anticipatory memory via event forecasting. Lightweight A(·) anticipatory agent + hierarchical streaming KV-cache for selective token recall. Transforms memory from reactive DB to proactive planning partner — meta-controller prefetches episodes before user asks.
-- **Agent Audit Trail AAT** (IETF draft-sharif-agent-audit-trail-00) — IETF standard for AI decision logging with SHA-256 hash chaining + optional ECDSA signatures. Three layers: Reasoning / Action / Outcome. EU AI Act compliance. Chain-of-custody prevents memory poisoning.
-- **AgeMem** (arxiv:2603.07670v1) — Memory ops (store/retrieve/update/summarize/discard) as first-class RL actions with GRPO. Key insight: RL discovers discard strategies humans miss — dropping misleading memories.
+### Latest: 2026-04-10 4AM — RL Scaling, OS-Style Memory Paging, SLMs, Embodied Lifelong Learning
+- **Kimi k1.5** (arxiv:2501.12599, Moonshot AI, Jan 2025) — RL as new scaling axis for LLMs beyond pretraining data. Long2short: long-CoT activations improve short-CoT 550% on benchmarks. Partial rollouts reuse trajectory chunks for efficiency. Emergent self-improvement via scale (planning/reflection from RL).
+- **MemGPT** (arxiv:2310.08560, UC Berkeley, Oct 2023) — OS-style hierarchical memory tiers: fast (context window) / slow (external storage). LLM autonomously decides what to page in/out. Reflection: synthesizes context into higher-level summaries. Established virtual context management pattern for extended context.
+- **TinyLlama** (arxiv:2401.02385, Jan 2024) — 1.1B params, 1T pretraining tokens. FlashAttention + GroupedQueryAttention. Runs on consumer hardware. Shows massive pretraining compensates for small model size.
+- **Voyager** (arxiv:2305.16291, UC Berkeley/Salesforce, May 2023) — Lifelong learning agent in Minecraft. GPT-4-driven curriculum + ever-growing skill library (executable code) + self-verification loop. 3.3× more items, 15.3× faster tech tree vs prior art. Generalizes skills to new worlds.
+
+### Prior: 2026-04-08 4AM — Anticipatory Memory, IETF Audit Logging, RL-Optimized Memory Ops
+- **StreamAgent** (arxiv:2508.01875, ICLR 2026) — Anticipatory memory via event forecasting. Lightweight A(·) anticipatory agent + hierarchical streaming KV-cache for selective token recall.
+- **Agent Audit Trail AAT** (IETF draft-sharif-agent-audit-trail-00) — IETF standard for AI decision logging with SHA-256 hash chaining + optional ECDSA signatures.
+- **AgeMem** (arxiv:2603.07670v1) — Memory ops as first-class RL actions with GRPO. RL discovers discard strategies humans miss.
 
 ### Prior: 2026-04-05 4AM — Self-Awareness, Metacognition, Internal Self-Verification
 - **Gnosis** (arxiv:2512.20578, Jan 2026) — Frozen LLMs predict own failures via hidden states + attention patterns. ~5M params, beats 8B Skywork + Gemini 2.5 Pro. Zero-shot cross-scale. For MemoAgent: replaces critique network with self-awareness head monitoring policy hidden states.
