@@ -64,7 +64,7 @@ The router accepts IDs in multiple formats:
 | Numeric | `123456789` | Used directly |
 | Platform prefix | `telegram:123456789` | Strips prefix |
 | Friendly name | `anneka` | Looks up in `idMappings` |
-| Username | `@xiwka` | Resolves via Telegram API (future) |
+| Username | `[REMOVED]` | Resolves via Telegram API (future) |
 
 ### Condition Types
 
