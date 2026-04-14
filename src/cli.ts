@@ -22,7 +22,7 @@ import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.0.1';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
 
