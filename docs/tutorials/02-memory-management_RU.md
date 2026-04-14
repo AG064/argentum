@@ -287,9 +287,9 @@ mkdir -p data/memory
 cat > data/memory/personal-context.md << 'EOF'
 # Личный контекст
 
-## Об Алексее
+## Об Алисе
 - Full-stack разработчик, изучает TypeScript
-- Живёт в Нарве, Эстония
+- Живёт в Сан-Франциско, США
 - Доступен для удалённой работы
 - часовой пояс: America/Los_Angeles
 
