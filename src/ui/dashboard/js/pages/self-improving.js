@@ -404,7 +404,7 @@ function getMockSelfImprovingData() {
         id: '4',
         category: 'knowledge_gap',
         title: 'Limited knowledge of local events',
-        description: 'Agent struggles with queries about local Narva events. Need to integrate events API.',
+        description: 'Agent struggles with queries about local events. Need to integrate events API.',
         timestamp: Date.now() - 12 * 60 * 60 * 1000,
       },
       {

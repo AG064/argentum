@@ -86,7 +86,7 @@ Semantic memory stores facts and information in SQLite with full-text search. En
 curl -X POST http://localhost:18789/memory/store \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "Aleksey prefers dark mode in his IDE",
+    "content": "Alice prefers dark mode in her IDE",
     "tags": ["preference", "development"],
     "userId": "alice"
   }'
@@ -123,7 +123,7 @@ Response:
     "results": [
       {
         "id": "mem_abc123",
-        "content": "Aleksey prefers dark mode in his IDE",
+        "content": "Alice prefers dark mode in her IDE",
         "score": 0.94,
         "createdAt": "2026-03-23T10:00:00Z",
         "tags": ["preference", "development"]
@@ -176,10 +176,10 @@ An entity is a node with a type and properties:
 {
   "id": "entity_001",
   "type": "person",
-  "name": "Aleksey",
+  "name": "Alice",
   "properties": {
-    "location": "Narva, Estonia",
-    "timezone": "Europe/Tallinn"
+    "location": "San Francisco, US",
+    "timezone": "America/Los_Angeles"
   }
 }
 ```
@@ -198,18 +198,18 @@ A relation is a directed edge between entities:
 
 The agent automatically extracts entities and relations from conversations. When you say:
 
-> "I work at kood in Jõhvi"
+> "I work at Acme Corp"
 
 AG-Claw creates:
-- Entity: `kood` (type: organization)
-- Entity: `Aleksey` (type: person)
-- Relation: Aleksey → `works_at` → kood
+- Entity: `Acme Corp` (type: organization)
+- Entity: `Alice` (type: person)
+- Relation: Alice → `works_at` → Acme Corp
 
 ### Querying the Graph
 
 ```bash
 # Get all info about a specific entity
-curl "http://localhost:18789/memory/graph?entity=Aleksey"
+curl "http://localhost:18789/memory/graph?entity=Alice"
 ```
 
 ```json
@@ -220,10 +220,10 @@ curl "http://localhost:18789/memory/graph?entity=Aleksey"
       {
         "id": "entity_001",
         "type": "person",
-        "name": "Aleksey",
+        "name": "Alice",
         "properties": {
-          "location": "Narva, Estonia",
-          "timezone": "Europe/Tallinn"
+          "location": "San Francisco, US",
+          "timezone": "America/Los_Angeles"
         }
       }
     ],
@@ -267,7 +267,7 @@ curl -X POST http://localhost:18789/memory/graph/relation \
 
 ### Graph Traversal
 
-The knowledge graph supports traversal queries. Find all people who work at the same place as Aleksey:
+The knowledge graph supports traversal queries. Find all people who work at the same place as Alice:
 
 ```bash
 curl "http://localhost:18789/memory/graph/traverse?from=entity_001&type=works_at&depth=1"
@@ -287,11 +287,11 @@ mkdir -p data/memory
 cat > data/memory/personal-context.md << 'EOF'
 # Personal Context
 
-## About Aleksey
+## About Alice
 - Full-stack developer learning TypeScript
-- Based in Narva, Estonia
+- Based in San Francisco, US
 - Available for remote work
-- timezone: Europe/Tallinn
+- timezone: America/Los_Angeles
 
 ## Current Projects
 - Building an AI agent framework (AG-Claw)
@@ -300,7 +300,7 @@ cat > data/memory/personal-context.md << 'EOF'
 ## Skills
 - TypeScript, JavaScript, Java, Python
 - Linux, Docker, Git
-- Russian (native), English (B2-C1), Estonian (B1-B2)
+- English (native), Spanish (B2)
 
 ## Goals for 2026
 - Find a programming job
@@ -437,14 +437,14 @@ Look for log lines like:
 ```
 [memory] Searching semantic: query="TypeScript" limit=5 threshold=0.6
 [memory] Retrieved 3 results (score >= 0.6)
-[memory] Graph query: entity=Aleksey depth=2
+[memory] Graph query: entity=Alice depth=2
 [memory] Graph results: 4 entities, 7 relations
 ```
 
 ### Verify a Memory Was Stored
 
 ```bash
-curl "http://localhost:18789/memory/search?q=Aleksey%20TypeScript"
+curl "http://localhost:18789/memory/search?q=Alice%20TypeScript"
 ```
 
 ### Check Knowledge Graph Consistency

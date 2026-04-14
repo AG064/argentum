@@ -272,10 +272,10 @@ The primary memory layer. Stores facts, conversations, and learned information i
 # Store something explicitly
 curl -X POST http://localhost:18789/memory/store \
   -H "Content-Type: application/json" \
-  -d '{"content": "Aleksey is learning TypeScript", "tags": ["person", "learning"]}'
+  -d '{"content": "Alice is learning TypeScript", "tags": ["person", "learning"]}'
 
 # Search memory
-curl "http://localhost:18789/memory/search?q=Aleksey%20TypeScript"
+curl "http://localhost:18789/memory/search?q=Alice%20TypeScript"
 ```
 
 Key characteristics:
@@ -290,14 +290,14 @@ Stores entities and their relationships. Enables reasoning about connected facts
 
 ```bash
 # Query by entity
-curl "http://localhost:18789/memory/graph?entity=aleksey"
+curl "http://localhost:18789/memory/graph?entity=alice"
 ```
 
 Example knowledge graph entry:
 ```
-Entity: Aleksey (type: person)
-  - works_at: kood/jÃµhvi (type: educational_institution)
-  - speaks: Russian, English, Estonian
+Entity: Alice (type: person)
+  - works_at: Acme Corp (type: company)
+  - speaks: English, Spanish
   - interested_in: programming, AI, space, photography
 ```
 
@@ -310,7 +310,7 @@ Flat files on disk in the `data/memory/` directory. Watched by a file watcher â€
 ```bash
 # Create a memory file
 cat > data/memory/facts.md << 'EOF'
-# Facts about Aleksey
+# Facts about Alice
 
 ## Preferences
 - Morning person
@@ -407,7 +407,7 @@ See the [Developer Guide](./DEVELOPER_GUIDE.md#7-how-to-create-a-new-skill) for 
 Skills are typically invoked by the agent when relevant, but you can also call them directly:
 
 ```bash
-agclaw skills run weather --location "Tallinn"
+agclaw skills run weather --location "London"
 ```
 
 ---

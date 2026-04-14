@@ -9,7 +9,7 @@ const mockMemories = [
     type: 'semantic',
     title: 'User Preferences',
     content:
-      'User preferences updated: Preferred language set to English, timezone changed to Europe/Tallinn, notification preferences modified for email and Telegram channels.',
+      'User preferences updated: Preferred language set to English, timezone changed to UTC, notification preferences modified for email and Telegram channels.',
     timestamp: Date.now() - 2 * 60 * 60 * 1000,
   },
   {
