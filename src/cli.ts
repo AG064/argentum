@@ -2331,9 +2331,9 @@ async function cmdOnboard(): Promise<void> {
   const setupTg = await confirm({ message: 'Set up Telegram bot?', initialValue: false });
   if (setupTg === true) {
     const botToken = await password({ message: 'Bot token:', mask: '' });
-    if (typeof botToken === 'string' && (botToken as string).trim()) {
+    if (typeof botToken === 'string' && botToken.trim()) {
       config.features = config.features ?? {};
-      (config.features as any).telegram = {
+      (config.features as Record<string, unknown>).telegram = {
         enabled: true,
         botToken: botToken.trim(),
         allowFrom: [],
@@ -2378,7 +2378,7 @@ async function cmdOnboard(): Promise<void> {
   }
   for (const f of [...new Set(allSelectedFeatures)]) {
     config.features = config.features ?? {};
-    (config.features as any)[f] = { enabled: true };
+    (config.features as Record<string, unknown>)[f] = { enabled: true };
   }
   log.info(allSelectedFeatures.length > 0
     ? `Enabled ${allSelectedFeatures.length} features`
