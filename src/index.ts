@@ -499,7 +499,7 @@ class AGClaw {
   /** Start the AG-Claw framework */
   async start(): Promise<void> {
     this.logger.info('Starting AG-Claw Framework', {
-      version: '0.4.0',
+      version: '0.0.1',
       nodeVersion: process.version,
       platform: process.platform,
     });
