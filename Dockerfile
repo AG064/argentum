@@ -33,6 +33,7 @@ RUN apk add --no-cache wget
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
            /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && ! command -v npm && ! command -v npx && ! command -v corepack \
     && node -e "console.log('Node.js', process.version, 'ready (npm removed)')"
 
 # Create non-root user
