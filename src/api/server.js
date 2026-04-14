@@ -301,7 +301,7 @@ const routes = {
         id: 'mem_001',
         type: 'semantic',
         title: 'User Preferences',
-        content: 'Language: English, Timezone: Europe/Tallinn',
+        content: 'Language: English, Timezone: UTC',
       },
       {
         id: 'mem_002',
