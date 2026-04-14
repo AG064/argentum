@@ -106,6 +106,8 @@
 - **HuggingFace:** (key in TOOLS.md)
 
 ## Nova Night Research (MemoAgent self-improvement)
+**Status 2026-04-15 4AM: AgentWebBench (multi-agent web benchmark), PAC-Bench (privacy breaks multi-agent collab), Governance by Design (≤19% governance coverage in agent ecosystems), Distributed QRL (multi-agent RL infrastructure), SE-RL (ICLR 2026 — unified single/multi-agent self-evolution)**
+
 **Status 2026-04-14 4AM: SEARL (joint RL policy+tool graph memory), PsychAgent (experience-driven lifelong learning), Don't Overthink It (inter-rollout agreement as adaptive compute signal), YOCO (depth scaling / 100K+ context), ContextBudget (budget-aware context management), MSA (100M token sparse attention)**
 
 **Status 2026-04-13 4AM: DreamPRM-Code (process reward model for coding), EMLoC (multi-modal long context), HuggingGPT (LLM as controller), Reflexion (verbal reinforcement)**
@@ -208,3 +210,11 @@
 - Trivy security: WORKING (security-events permission fixed)
 
 ### Agent Contracts (arxiv:2601.08815)
+
+### Argentum (github.com/AG064/argentum)
+- **2026-04-14:** Created from OpenClaw (full history, 356K⭐ base)
+- **Version:** 0.0.1 — full rebrand, OpenClaw→Argentum, openclaw→argentum
+- **Worktree:** /home/agx/AGX/argentum-work (623MB full clone)
+- **Identity:** Silver (Argentum/Ag), next step in AI, self-improving, modular
+- **AGX relation:** AGX = personal prototype, Argentum = product version
+- **Source:** AG064/openclaw (fork of openclaw/openclaw)
