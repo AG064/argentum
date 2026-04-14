@@ -5,7 +5,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
