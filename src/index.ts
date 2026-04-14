@@ -48,7 +48,7 @@ export class Agent {
     this.logger = createLogger().child({ feature: 'agent' });
     this.systemPrompt =
       systemPrompt ??
-      `You are AG CLAW, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
+      `You are AG-Claw, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
   }
 
   registerTool(tool: Tool): void {
@@ -498,8 +498,8 @@ class AGClaw {
 
   /** Start the AG-Claw framework */
   async start(): Promise<void> {
-    this.logger.info('Starting AG CLAW Framework', {
-      version: '0.4.0',
+    this.logger.info('Starting AG-Claw Framework', {
+      version: '0.0.1',
       nodeVersion: process.version,
       platform: process.platform,
     });
@@ -767,7 +767,7 @@ class AGClaw {
       // Handle /start command
       bot.command('start', async (ctx) => {
         await ctx.reply(
-          '🤖 Welcome to AG CLAW!\n\n' +
+          '🤖 Welcome to AG-Claw!\n\n' +
             'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
             `Available tools: ${this.agent.getToolNames().join(', ')}`,
         );
@@ -777,7 +777,7 @@ class AGClaw {
       bot.command('help', async (ctx) => {
         const tools = this.agent.getToolNames();
         await ctx.reply(
-          `🤖 *AG CLAW Help*\n\n` +
+          `🤖 *AG-Claw Help*\n\n` +
             `Just send me any message and I will respond.\n\n` +
             `*Available tools:*\n${tools.map((t) => `• /${t}`).join('\n')}\n\n*Commands:*\n` +
             `/start - Welcome message\n` +
@@ -792,7 +792,7 @@ class AGClaw {
         const features = this.pluginLoader.listFeatures();
         const activeCount = features.filter((f) => f.state === 'active').length;
         await ctx.reply(
-          '📊 *AG CLAW Status*\n\n' +
+          '📊 *AG-Claw Status*\n\n' +
             `LLM: ${this.llmProvider.name}\n` +
             `Tools: ${this.agent.getToolNames().length}\n` +
             `Features: ${activeCount}/${features.length} active\n` +

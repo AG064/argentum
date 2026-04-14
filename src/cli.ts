@@ -22,7 +22,7 @@ import { getConfig } from './core/config';
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.0.1';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
 
@@ -105,10 +105,10 @@ function cmdHelp(): void {
   print('    agclaw <command> [options]');
   print('');
   print('  \x1b[1mCommands:\x1b[0m');
-  print('    init                  Initialize AG CLAW in current directory');
-  print('    gateway start         Start AG CLAW server (background)');
-  print('    gateway stop          Stop AG CLAW server');
-  print('    gateway restart       Restart AG CLAW server');
+  print('    init                  Initialize AG-Claw in current directory');
+  print('    gateway start         Start AG-Claw server (background)');
+  print('    gateway stop          Stop AG-Claw server');
+  print('    gateway restart       Restart AG-Claw server');
   print('    gateway status        Check if server is running');
   print('    gateway logs          View server logs');
   print('    status                Show system and feature status');
@@ -440,7 +440,7 @@ function cmdInit(): void {
     fs.writeFileSync(
       envPath,
       [
-        '# AG CLAW Environment Variables',
+        '# AG-Claw Environment Variables',
         'AGCLAW_WORKDIR=.',
         'AGCLAW_PORT=3000',
         'AGCLAW_MASTER_KEY=',
@@ -460,6 +460,28 @@ function cmdInit(): void {
 async function cmdStart(): Promise<void> {
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
+
+  // First-run check: if no config exists, prompt to onboard
+  const configPath = path.join(process.cwd(), 'config', 'default.yaml');
+  const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
+  if (!fs.existsSync(configPath) && !fs.existsSync(legacyConfigPath)) {
+    banner();
+    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print('');
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    rl.close();
+    if (answer !== 'n') {
+      await cmdOnboard();
+    } else {
+      print('');
+      info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+    }
+    return;
+  }
 
   // First-run check: if no config exists, prompt to onboard
   const configPath = path.join(process.cwd(), 'config', 'default.yaml');
@@ -1185,7 +1207,7 @@ async function cmdGateway(): Promise<void> {
       const port = args.includes('--port')
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
-      info(`Starting AG CLAW gateway on port ${port}...`);
+      info(`Starting AG-Claw gateway on port ${port}...`);
 
       // Spawn gateway as background process
       const { spawn } = await import('child_process');
@@ -1242,7 +1264,7 @@ async function cmdGateway(): Promise<void> {
       const port = args.includes('--port')
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
-      info(`Restarting AG CLAW gateway on port ${port}...`);
+      info(`Restarting AG-Claw gateway on port ${port}...`);
 
       const { spawn } = await import('child_process');
       const gatewayPath = path.join(__dirname, 'cli.js');
@@ -1710,7 +1732,7 @@ async function cmdCron(): Promise<void> {
 
 async function cmdStatus(): Promise<void> {
   banner();
-  print('  \x1b[1mAG CLAW Status\x1b[0m');
+  print('  \x1b[1mAG-Claw Status\x1b[0m');
   print('');
   print(`  \x1b[1mVersion:\x1b[0m 0.2.0`);
   print(`  \x1b[1mConfig:\x1b[0m ${path.join(getWorkDir(), 'agclaw.json')}`);
@@ -2043,15 +2065,6 @@ async function cmdOnboard(): Promise<void> {
   const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
     await import('@clack/prompts');
 
-<<<<<<< HEAD
-  banner();
-  print('  \x1b[1m\x1b[32m┌─────────────────────────────────────────────┐\x1b[0m');
-  print('  \x1b[1m\x1b[32m│   Welcome to AG CLAW Setup Wizard!         │\x1b[0m');
-  print('  \x1b[1m\x1b[32m└─────────────────────────────────────────────┘\x1b[0m');
-  print('');
-  print('  \x1b[90mThis wizard will guide you through the initial setup.\x1b[0m');
-  print('');
-=======
   intro(`
   ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
  ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
@@ -2063,11 +2076,10 @@ async function cmdOnboard(): Promise<void> {
      AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
   log.step('Welcome! This wizard will set up your AG-Claw instance.');
   log.info('Press Ctrl+C at any time to cancel.');
->>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 
   const config: any = {
     $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-    name: 'My AG CLAW Instance',
+    name: 'My AG-Claw Instance',
     version: '1.0.0',
     server: { port: 3000, host: '0.0.0.0' },
     features: {},
@@ -2078,24 +2090,12 @@ async function cmdOnboard(): Promise<void> {
     },
   };
 
-<<<<<<< HEAD
-  // Step 1: Instance name
-  print('  \x1b[1m\x1b[36m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[36m║  Step 1: Instance Configuration                 ║\x1b[0m');
-  print('  \x1b[1m\x1b[36m╚═══════════════════════════════════════════════╝\x1b[0m');
-  const name = await ask('  \x1b[33m▶\x1b[0m Name your instance (default: My AG CLAW): ');
-  if (name.trim()) config.name = name.trim();
-  print('');
-  print(`  \x1b[32m✓\x1b[0m Instance name: \x1b[1m${config.name}\x1b[0m`);
-  print('');
-=======
     // Step 1: Instance name
   const nameVal = await text({
     message: 'Instance name:',
     initialValue: 'My AG-Claw',
   });
   if (typeof nameVal === 'string' && nameVal.trim()) config.name = nameVal.trim();
->>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 
   // Step 2: LLM Provider + Model selection
   const MODEL_DB: Record<string, Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>> = {
@@ -2175,24 +2175,6 @@ async function cmdOnboard(): Promise<void> {
     ],
   };
 
-<<<<<<< HEAD
-  interface Preset {
-    name: string;
-    base_url: string;
-    api_key_env: string;
-    api: string;
-    model: string;
-    headers?: Record<string, string>;
-  }
-  const presets: Record<string, Preset> = {
-    1: {
-      name: 'openrouter',
-      base_url: 'https://openrouter.ai/api/v1',
-      api_key_env: 'OPENROUTER_API_KEY',
-      api: 'openai',
-      model: 'auto',
-      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG CLAW' },
-=======
   const PROVIDERS = [
     {
       value: 'minimax',
@@ -2201,7 +2183,6 @@ async function cmdOnboard(): Promise<void> {
       base_url: 'https://api.minimax.io/v1',
       api_key_env: 'MINIMAX_API_KEY',
       api: 'openai' as const,
->>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
     },
     {
       value: 'groq',
@@ -2405,9 +2386,9 @@ async function cmdOnboard(): Promise<void> {
   const setupTg = await confirm({ message: 'Set up Telegram bot?', initialValue: false });
   if (setupTg === true) {
     const botToken = await password({ message: 'Bot token:', mask: '' });
-    if (typeof botToken === 'string' && (botToken as string).trim()) {
+    if (typeof botToken === 'string' && botToken.trim()) {
       config.features = config.features ?? {};
-      (config.features as any).telegram = {
+      (config.features as Record<string, unknown>).telegram = {
         enabled: true,
         botToken: botToken.trim(),
         allowFrom: [],
@@ -2452,7 +2433,7 @@ async function cmdOnboard(): Promise<void> {
   }
   for (const f of [...new Set(allSelectedFeatures)]) {
     config.features = config.features ?? {};
-    (config.features as any)[f] = { enabled: true };
+    (config.features as Record<string, unknown>)[f] = { enabled: true };
   }
   log.info(allSelectedFeatures.length > 0
     ? `Enabled ${allSelectedFeatures.length} features`
@@ -2478,20 +2459,6 @@ async function cmdOnboard(): Promise<void> {
   outro(`
   Setup complete!
 
-<<<<<<< HEAD
-  print('');
-  print('  \x1b[1m\x1b[32m╔═══════════════════════════════════════════════╗\x1b[0m');
-  print('  \x1b[1m\x1b[32m║           ✅ SETUP COMPLETE!                    ║\x1b[0m');
-  print('  \x1b[1m\x1b[32m╚═══════════════════════════════════════════════╝\x1b[0m');
-  print('');
-  print('  \x1b[1m\x1b[37mNext steps:\x1b[0m');
-  print(`    \x1b[33m▶\x1b[0m \x1b[1magclaw gateway start --port ${config.server.port}\x1b[0m`);
-  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw status\x1b[0m');
-  print('    \x1b[33m▶\x1b[0m \x1b[1magclaw skill search <query>\x1b[0m');
-  print('');
-  print('  \x1b[90mThank you for choosing AG CLAW! 🚀\x1b[0m');
-  print('');
-=======
   Next steps:
     agclaw gateway start --port ${config.server.port}
     agclaw status
@@ -2499,7 +2466,6 @@ async function cmdOnboard(): Promise<void> {
 
   Thank you for choosing AG-Claw!
 `);
->>>>>>> 5022d175b27cb93176ba6194556b15a0107d3eb3
 }
 
 async function cmdSkill(): Promise<void> {
@@ -3315,7 +3281,7 @@ async function cmdSecurity(): Promise<void> {
     case 'help':
     default: {
       banner();
-      info('AG CLAW Security Commands:');
+      info('AG-Claw Security Commands:');
       print('');
       print('  \x1b[1magclaw security status\x1b[0m                Show security overview');
       print('  \x1b[1magclaw security policies\x1b[0m [list|add|remove|enable|disable]');
@@ -3370,7 +3336,7 @@ async function cmdTelegram(): Promise<void> {
       print('');
       const configPath = path.join(getWorkDir(), 'agclaw.json');
       if (!fs.existsSync(configPath)) {
-        error('AG CLAW not initialized. Run: agclaw init');
+        error('AG-Claw not initialized. Run: agclaw init');
         return;
       }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

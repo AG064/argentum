@@ -5,7 +5,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
@@ -219,13 +219,28 @@ git checkout -b feature/your-feature-name
 ```
 
 ---
+git clone https://github.com/AG064/ag-claw.git
+cd ag-claw
+npm install
+npm run build
+npm test
+git checkout -b feature/your-feature-name
+```
+
+---
 
 ## License
 
 MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
 
 ---
+MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
 
+---
+
+<p align="center">
+Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
+</p>
 <p align="center">
 Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
 </p>

@@ -31,7 +31,7 @@ async function fetchModelList(
     'Content-Type': 'application/json',
   };
   if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
+    headers.Authorization = `Bearer ${apiKey}`;
   }
 
   const res = await fetch(url, {

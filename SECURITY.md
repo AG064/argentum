@@ -60,6 +60,6 @@ See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUI
 Found a vulnerability? Do not open a public issue. Instead:
 
 - **GitHub Security Advisories**: [Report privately](https://github.com/AG064/ag-claw/security/advisories/new)
-- **Telegram**: @ag_064
+- **Telegram**: [REMOVED]
 
 Expected response: acknowledgment within 24–48 hours, fix timeline based on severity.

@@ -87,8 +87,7 @@ describe('compactResult', () => {
     expect(result.savedPath).toBeTruthy();
     // File path should not contain special characters
     if (result.savedPath) {
-      const normalizedPath = result.savedPath.replace(/\\/g, '/');
-      expect(normalizedPath).not.toMatch(/[^a-zA-Z0-9_\-.-\/]/);
+      expect(result.savedPath).not.toMatch(/[^a-zA-Z0-9_\-.-\/]/);
     }
   });
 

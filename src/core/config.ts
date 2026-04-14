@@ -8,18 +8,9 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-import type { FSWatcher } from 'chokidar';
+import { watch } from 'chokidar';
 import { parse } from 'yaml';
 import { z } from 'zod';
-
-async function importChokidar(): Promise<typeof import('chokidar')> {
-  const dynamicImport = new Function(
-    'specifier',
-    'return import(specifier);',
-  ) as (specifier: string) => Promise<typeof import('chokidar')>;
-
-  return dynamicImport('chokidar');
-}
 
 /** Server configuration schema */
 const ServerConfigSchema = z.object({
@@ -555,35 +546,14 @@ export class ConfigManager {
     if (process.env.AGCLAW_PORT) {
       overrides['server'] = { port: parseInt(process.env.AGCLAW_PORT, 10) };
     }
-    if (process.env.AGCLAW_HOST) {
-      overrides['server'] = {
-        ...((overrides['server'] as Record<string, unknown>) ?? {}),
-        host: process.env.AGCLAW_HOST,
-      };
-    }
     if (process.env.AGCLAW_LOG_LEVEL) {
-      overrides['logging'] = {
-        ...((overrides['logging'] as Record<string, unknown>) ?? {}),
-        level: process.env.AGCLAW_LOG_LEVEL,
-      };
-    }
-    if (process.env.AGCLAW_LOG_FORMAT) {
-      overrides['logging'] = {
-        ...((overrides['logging'] as Record<string, unknown>) ?? {}),
-        format: process.env.AGCLAW_LOG_FORMAT,
-      };
+      overrides['logging'] = { level: process.env.AGCLAW_LOG_LEVEL };
     }
     if (process.env.AGCLAW_TELEGRAM_TOKEN) {
-      overrides['channels'] = {
-        ...((overrides['channels'] as Record<string, unknown>) ?? {}),
-        telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN },
-      };
+      overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
     }
     if (process.env.AGCLAW_SUPABASE_URL) {
-      overrides['memory'] = {
-        ...((overrides['memory'] as Record<string, unknown>) ?? {}),
-        supabaseUrl: process.env.AGCLAW_SUPABASE_URL,
-      };
+      overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
     }
     if (process.env.AGCLAW_SUPABASE_KEY) {
       overrides['memory'] = {

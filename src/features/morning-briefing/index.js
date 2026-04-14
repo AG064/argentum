@@ -29,7 +29,7 @@ class MorningBriefingFeature {
       includeNews: true,
       includeTasks: true,
       includeInsights: true,
-      weatherLocation: 'Tallinn, Estonia',
+      weatherLocation: 'New York, US',
       newsTopics: ['technology', 'science'],
       maxNewsItems: 5,
     };
