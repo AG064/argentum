@@ -23,18 +23,10 @@ RUN npm prune --production --legacy-peer-deps
 FROM node:22-alpine
 
 # Patch Alpine system CVEs (openssl, zlib, etc.)
-RUN apk update && apk upgrade --no-cache
+RUN apk --no-cache upgrade
 
 # Install wget for health checks (smaller than curl)
 RUN apk add --no-cache wget
-
-# Remove npm/npx/corepack from production image (not needed at runtime,
-# eliminates Trivy alerts for bundled npm dependencies like tar, minimatch, etc.)
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
-           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
-           /usr/local/bin/yarn /usr/local/bin/yarnpkg \
-    && ! command -v npm && ! command -v npx && ! command -v corepack \
-    && node -e "console.log('Node.js', process.version, 'ready (npm removed)')"
 
 # Create non-root user
 RUN addgroup -g 1001 -S agclaw && \
