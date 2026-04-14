@@ -86,7 +86,7 @@ agclaw sessions export sess_abc123 > conversation.json
 curl -X POST http://localhost:18789/memory/store \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "Алексей предпочитает тёмную тему в IDE",
+    "content": "Алиса предпочитает тёмную тему в IDE",
     "tags": ["предпочтение", "разработка"],
     "userId": "alice"
   }'
@@ -123,7 +123,7 @@ curl "http://localhost:18789/memory/search?q=предпочтения&limit=5&th
     "results": [
       {
         "id": "mem_abc123",
-        "content": "Алексей предпочитает тёмную тему в IDE",
+        "content": "Алиса предпочитает тёмную тему в IDE",
         "score": 0.94,
         "createdAt": "2026-03-23T10:00:00Z",
         "tags": ["предпочтение", "разработка"]
@@ -176,10 +176,10 @@ curl "http://localhost:18789/memory/search?q=дедлайн&tags=проект"
 {
   "id": "entity_001",
   "type": "person",
-  "name": "Алексей",
+  "name": "Алиса",
   "properties": {
-    "location": "Нарва, Эстония",
-    "timezone": "Europe/Tallinn"
+    "location": "Сан-Франциско, США",
+    "timezone": "America/Los_Angeles"
   }
 }
 ```
@@ -198,18 +198,18 @@ curl "http://localhost:18789/memory/search?q=дедлайн&tags=проект"
 
 Агент автоматически извлекает сущности и отношения из разговоров. Когда вы говорите:
 
-> "Я работаю в kood в Jõhvi"
+> "Я работаю в Acme Corp"
 
 AG-Claw создаёт:
-- Сущность: `kood` (тип: организация)
-- Сущность: `Алексей` (тип: человек)
-- Отношение: Алексей → `работает_в` → kood
+- Сущность: `Acme Corp` (тип: компания)
+- Сущность: `Алиса` (тип: человек)
+- Отношение: Алиса → `работает_в` → Acme Corp
 
 ### Запросы к графу
 
 ```bash
 # Получить всю информацию о конкретной сущности
-curl "http://localhost:18789/memory/graph?entity=Алексей"
+curl "http://localhost:18789/memory/graph?entity=Алиса"
 ```
 
 ```json
@@ -220,10 +220,10 @@ curl "http://localhost:18789/memory/graph?entity=Алексей"
       {
         "id": "entity_001",
         "type": "person",
-        "name": "Алексей",
+        "name": "Алиса",
         "properties": {
-          "location": "Нарва, Эстония",
-          "timezone": "Europe/Tallinn"
+          "location": "Сан-Франциско, США",
+          "timezone": "America/Los_Angeles"
         }
       }
     ],
@@ -267,7 +267,7 @@ curl -X POST http://localhost:18789/memory/graph/relation \
 
 ### Обход графа
 
-Граф знаний поддерживает запросы обхода. Найти всех людей, которые работают в том же месте, что и Алексей:
+Граф знаний поддерживает запросы обхода. Найти всех людей, которые работают в том же месте, что и Алиса:
 
 ```bash
 curl "http://localhost:18789/memory/graph/traverse?from=entity_001&type=работает_в&depth=1"
@@ -291,7 +291,7 @@ cat > data/memory/personal-context.md << 'EOF'
 - Full-stack разработчик, изучает TypeScript
 - Живёт в Нарве, Эстония
 - Доступен для удалённой работы
-- часовой пояс: Europe/Tallinn
+- часовой пояс: America/Los_Angeles
 
 ## Текущие проекты
 - Создаёт AI-агент фреймворк (AG-Claw)
@@ -437,14 +437,14 @@ AGCLAW_LOG_LEVEL=debug agclaw gateway start
 ```
 [memory] Searching semantic: query="TypeScript" limit=5 threshold=0.6
 [memory] Retrieved 3 results (score >= 0.6)
-[memory] Graph query: entity=Aleksey depth=2
+[memory] Graph query: entity=Alice depth=2
 [memory] Graph results: 4 entities, 7 relations
 ```
 
 ### Проверить, что воспоминание сохранилось
 
 ```bash
-curl "http://localhost:18789/memory/search?q=Алексей%20TypeScript"
+curl "http://localhost:18789/memory/search?q=Алиса%20TypeScript"
 ```
 
 ### Проверить целостность графа знаний
