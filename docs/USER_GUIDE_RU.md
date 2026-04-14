@@ -251,10 +251,10 @@ AG-Claw имеет многослойную архитектуру памяти.
 # Явно сохранить что-то
 curl -X POST http://localhost:18789/memory/store \
   -H "Content-Type: application/json" \
-  -d '{"content": "Алексей изучает TypeScript", "tags": ["человек", "обучение"]}'
+  -d '{"content": "Алиса изучает TypeScript", "tags": ["человек", "обучение"]}'
 
 # Поиск в памяти
-curl "http://localhost:18789/memory/search?q=Алексей%20TypeScript"
+curl "http://localhost:18789/memory/search?q=Алиса%20TypeScript"
 ```
 
 Ключевые характеристики:
@@ -269,13 +269,13 @@ curl "http://localhost:18789/memory/search?q=Алексей%20TypeScript"
 
 ```bash
 # Запрос по сущности
-curl "http://localhost:18789/memory/graph?entity=aleksey"
+curl "http://localhost:18789/memory/graph?entity=alice"
 ```
 
 Пример записи графа знаний:
 ```
-Сущность: Алексей (тип: человек)
-  - работает_в: kood/jõhvi (тип: учебное_заведение)
+Сущность: Алиса (тип: человек)
+  - работает_в: Acme Corp (тип: компания)
   - говорит_на: русский, английский, эстонский
   - интересы: программирование, AI, космос, фотография
 ```
