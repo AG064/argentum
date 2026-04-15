@@ -106,6 +106,8 @@
 - **HuggingFace:** (key in TOOLS.md)
 
 ## Nova Night Research (MemoAgent self-improvement)
+**Status 2026-04-16 4AM: MemCoT (inference-time memory-driven CoT), SEARL/ACL (joint RL+tool graph), Mem²Evolve (experience+asset co-evolution), MIA (manager-planner-executor with test-time learning), Combee (parallel prompt learning, 17x speedup), CoEvoSkills (autonomous multi-file skill generation)**
+
 **Status 2026-04-15 4AM: AgentWebBench (multi-agent web benchmark), PAC-Bench (privacy breaks multi-agent collab), Governance by Design (≤19% governance coverage in agent ecosystems), Distributed QRL (multi-agent RL infrastructure), SE-RL (ICLR 2026 — unified single/multi-agent self-evolution)**
 
 **Status 2026-04-14 4AM: SEARL (joint RL policy+tool graph memory), PsychAgent (experience-driven lifelong learning), Don't Overthink It (inter-rollout agreement as adaptive compute signal), YOCO (depth scaling / 100K+ context), ContextBudget (budget-aware context management), MSA (100M token sparse attention)**
