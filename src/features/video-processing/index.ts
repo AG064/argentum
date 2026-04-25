@@ -5,7 +5,7 @@
  * and metadata retrieval. Gracefully degrades if ffmpeg is not available.
  */
 
-import { exec as execOriginal } from 'child_process';
+import { execFile as execFileOriginal } from 'child_process';
 import { mkdirSync, existsSync, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { promisify } from 'util';
@@ -19,7 +19,7 @@ import {
   type HealthStatus,
 } from '../../core/plugin-loader';
 
-const exec = promisify(execOriginal);
+const execFile = promisify(execFileOriginal);
 
 /** Video metadata */
 export interface VideoMetadata {
@@ -116,7 +116,7 @@ class VideoProcessingFeature implements FeatureModule {
     this.initDatabase();
 
     // Verify ffmpeg availability
-    this.verifyFfmpeg();
+    await this.verifyFfmpeg();
   }
 
   async start(): Promise<void> {
@@ -165,7 +165,7 @@ class VideoProcessingFeature implements FeatureModule {
    */
   private async verifyFfmpeg(): Promise<void> {
     try {
-      const { stdout } = await exec(`${this.ffmpegPath} -version`, { timeout: 10000 });
+      const { stdout } = await execFile(this.ffmpegPath, ['-version'], { timeout: 10000 });
       const versionLine = stdout?.split('\n')[0] ?? '';
       this.ctx.logger.info('ffmpeg found', { version: versionLine.trim() });
     } catch (err) {
@@ -227,7 +227,15 @@ class VideoProcessingFeature implements FeatureModule {
         vfFilter = `fps=1/${interval}`;
       }
 
-      const args: string[] = ['-i', videoPath, '-ss', startTime.toString()];
+      const args: string[] = [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        videoPath,
+        '-ss',
+        startTime.toString(),
+      ];
 
       if (endTime) {
         args.push('-t', (endTime - startTime).toString());
@@ -240,11 +248,9 @@ class VideoProcessingFeature implements FeatureModule {
       }
 
       args.push(join(outputDir, `frame_%04d.${format}`));
+      this.ctx.logger.debug('Running ffmpeg', { args });
 
-      const cmd = `${this.ffmpegPath} ${args.join(' ')} -hide_banner -loglevel error`;
-      this.ctx.logger.debug('Running ffmpeg', { cmd });
-
-      await exec(cmd, { timeout: 3600000 }); // 1hr timeout
+      await execFile(this.ffmpegPath, args, { timeout: 3600000 }); // 1hr timeout
 
       // Read output directory to find generated frames
       const files = readdirSync(outputDir)
@@ -304,8 +310,24 @@ class VideoProcessingFeature implements FeatureModule {
 
     try {
       // ffmpeg -i input -ss start -t duration -c copy output
-      const cmd = `${this.ffmpegPath} -i ${this.quote(videoPath)} -ss ${startTime} -t ${duration} -c copy ${this.quote(outPath)} -hide_banner -loglevel error`;
-      await exec(cmd, { timeout: 3600000 });
+      await execFile(
+        this.ffmpegPath,
+        [
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          videoPath,
+          '-ss',
+          startTime.toString(),
+          '-t',
+          duration.toString(),
+          '-c',
+          'copy',
+          outPath,
+        ],
+        { timeout: 3600000 },
+      );
 
       const stats = require('fs').statSync(outPath);
       const originalStats = require('fs').statSync(videoPath);
@@ -339,8 +361,21 @@ class VideoProcessingFeature implements FeatureModule {
 
     try {
       // Use ffprobe to get JSON metadata
-      const cmd = `ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,codec_name,avg_bitrate -of json ${this.quote(videoPath)}`;
-      const { stdout } = await exec(cmd, { timeout: 30000 });
+      const { stdout } = await execFile(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=width,height,r_frame_rate,codec_name,avg_bitrate,duration',
+          '-of',
+          'json',
+          videoPath,
+        ],
+        { timeout: 30000 },
+      );
 
       const probe = JSON.parse(stdout);
       const stream = probe.streams[0];
@@ -457,15 +492,6 @@ class VideoProcessingFeature implements FeatureModule {
     `,
       )
       .run(result, Date.now(), resultData, id);
-  }
-
-  /** Quote a path for shell */
-  private quote(path: string): string {
-    // Simple quoting for POSIX shells
-    if (path.includes(' ') || path.includes('(') || path.includes(')')) {
-      return `'${path.replace(/'/g, `'\\''`)}'`;
-    }
-    return path;
   }
 
   /** Get file extension */

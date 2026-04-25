@@ -30,8 +30,8 @@ jobs:
       - name: Run npm audit
         id: audit
         run: |
-          npm audit --json > npm-audit.json 2>&1 || true
-          npm audit --audit-level=high > audit-report.txt 2>&1 || true
+          npm audit --omit=dev --json > npm-audit.json 2>&1 || true
+          npm audit --omit=dev --audit-level=moderate > audit-report.txt 2>&1 || true
 
       - name: Check for dangerous patterns
         id: patterns
@@ -39,6 +39,7 @@ jobs:
           echo "Scanning for dangerous patterns..."
           DANGEROUS=$(grep -r -l -E "(eval\s*\(|new\s+Function\s*\(|child_process|exec\(|spawn\(|fork\()" --include="*.ts" --include="*.js" src/ 2>/dev/null | wc -l || echo "0")
           echo "pattern_found=$DANGEROUS"
+          echo "pattern_found=$DANGEROUS" >> $GITHUB_OUTPUT
           if [ "$DANGEROUS" -gt "0" ]; then
             echo "Found potentially dangerous patterns in $DANGEROUS file(s)"
           fi
@@ -63,7 +64,7 @@ jobs:
       - name: Create GitHub Issue if vulnerabilities found
         if: |
           vars.SHOULD_CREATE_ISSUE == 'true' &&
-          (steps.audit.outputs.vulnerabilities != '0' || steps.patterns.outputs.pattern_found != '0')
+          (steps.vuln_count.outputs.vulnerabilities != '0' || steps.patterns.outputs.pattern_found != '0')
         uses: actions/github-script@v7
         with:
           script: |
@@ -113,6 +114,6 @@ jobs:
               labels: ['security', 'automated']
             });
         env:
-          VULNERABILITIES: ${{ steps.audit.outputs.vulnerabilities }}
+          VULNERABILITIES: ${{ steps.vuln_count.outputs.vulnerabilities }}
           PATTERN_FOUND: ${{ steps.patterns.outputs.pattern_found }}
           SHOULD_CREATE_ISSUE: ${{ vars.CREATE_SECURITY_ISSUES }}

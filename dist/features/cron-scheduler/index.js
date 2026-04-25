@@ -224,7 +224,6 @@ class CronSchedulerFeature {
             await this.executeHandler(job, handler);
         }, {
             timezone: this.config.timezone,
-            scheduled: true,
         });
         this.cronJobs.set(job.id, cronJob);
     }

@@ -757,7 +757,7 @@ ag-claw/
 │   └── security-policy.yaml  # Security policy (allowlists, rate limits, sandbox)
 ├── docs/
 │   ├── architecture.md
-│   ├── features.md
+│   ├── FEATURES.md
 │   ├── installation.md
 │   └── developer-guide.md    # Этот файл
 ├── tests/                    # Jest tests
@@ -823,7 +823,7 @@ Log-level контролируется через `logging.level` в YAML или
 1. Fork репозитория
 2. Создайте feature branch (`git checkout -b feature/my-feature`)
 3. Добавьте фичу в `src/features/` (соблюдайте интерфейс `FeatureModule`)
-4. Обновите документацию (`docs/features.md` и эту)
+4. Обновите документацию (`docs/FEATURES.md` и эту)
 5. Запустите линтер и тесты
 6. Создайте Pull Request с описанием изменений
 

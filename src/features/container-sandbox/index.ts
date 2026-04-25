@@ -78,10 +78,23 @@ export function runInSandbox(
     const log = createLogger().child({ feature: 'container-sandbox' });
     log.debug('Sandbox exec', { command, image: config.image });
 
-    const proc = spawn('docker', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: config.timeoutMs + 5000, // slight buffer over container timeout
-    });
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn('docker', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: config.timeoutMs + 5000, // slight buffer over container timeout
+      });
+    } catch (err) {
+      resolvePromise({
+        success: false,
+        stdout: '',
+        stderr: `Failed to start sandbox: ${err instanceof Error ? err.message : String(err)}`,
+        exitCode: -1,
+        durationMs: Date.now() - startTime,
+        timedOut: false,
+      });
+      return;
+    }
 
     let stdout = '';
     let stderr = '';
@@ -98,11 +111,11 @@ export function runInSandbox(
       proc.kill('SIGKILL');
     }, config.timeoutMs);
 
-    proc.stdout.on('data', (chunk: Buffer) => {
+    proc.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
 
-    proc.stderr.on('data', (chunk: Buffer) => {
+    proc.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
     });
 
@@ -133,7 +146,7 @@ export function runInSandbox(
     });
 
     // Close stdin (no interactive input)
-    proc.stdin.end();
+    proc.stdin?.end();
   });
 }
 

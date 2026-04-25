@@ -138,8 +138,17 @@ export declare const ConfigSchema: z.ZodObject<{
         webchat: z.ZodDefault<z.ZodObject<{
             enabled: z.ZodDefault<z.ZodBoolean>;
             port: z.ZodDefault<z.ZodNumber>;
+            host: z.ZodDefault<z.ZodString>;
+            authToken: z.ZodOptional<z.ZodString>;
+            requireAuth: z.ZodDefault<z.ZodBoolean>;
             maxConnections: z.ZodDefault<z.ZodNumber>;
             messageHistory: z.ZodDefault<z.ZodNumber>;
+            maxMessageLength: z.ZodDefault<z.ZodNumber>;
+            maxPayloadBytes: z.ZodDefault<z.ZodNumber>;
+            maxFileSize: z.ZodDefault<z.ZodNumber>;
+            rateLimitWindowMs: z.ZodDefault<z.ZodNumber>;
+            maxMessagesPerWindow: z.ZodDefault<z.ZodNumber>;
+            allowedFileTypes: z.ZodDefault<z.ZodArray<z.ZodString>>;
         }, z.core.$strip>>;
         voice: z.ZodDefault<z.ZodObject<{
             enabled: z.ZodDefault<z.ZodBoolean>;
@@ -275,7 +284,9 @@ export declare const ConfigSchema: z.ZodObject<{
             timezone: z.ZodOptional<z.ZodString>;
             maxJobs: z.ZodDefault<z.ZodNumber>;
         }, z.core.$strip>>;
-    }, z.core.$strip>>;
+    }, z.core.$catchall<z.ZodObject<{
+        enabled: z.ZodDefault<z.ZodBoolean>;
+    }, z.core.$loose>>>>;
     memory: z.ZodDefault<z.ZodObject<{
         primary: z.ZodDefault<z.ZodEnum<{
             sqlite: "sqlite";
@@ -305,9 +316,13 @@ export declare const ConfigSchema: z.ZodObject<{
         telegram: z.ZodDefault<z.ZodObject<{
             enabled: z.ZodDefault<z.ZodBoolean>;
             token: z.ZodOptional<z.ZodString>;
+            allowedUsers: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
+            allowedChats: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
+            allowAll: z.ZodDefault<z.ZodBoolean>;
         }, z.core.$strip>>;
         webchat: z.ZodDefault<z.ZodObject<{
             enabled: z.ZodDefault<z.ZodBoolean>;
+            authToken: z.ZodOptional<z.ZodString>;
         }, z.core.$strip>>;
         mobile: z.ZodDefault<z.ZodObject<{
             enabled: z.ZodDefault<z.ZodBoolean>;
@@ -353,7 +368,7 @@ export declare class ConfigManager {
     /** Check if a feature is enabled */
     isFeatureEnabled(feature: keyof AGClawConfig['features']): boolean;
     /** Enable hot-reload watching */
-    enableHotReload(): void;
+    enableHotReload(): Promise<void>;
     /** Register a listener for config changes */
     onChange(listener: (config: AGClawConfig) => void): () => void;
     /** Stop watching for changes */

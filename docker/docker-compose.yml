@@ -6,7 +6,6 @@ services:
     container_name: ag-claw
     ports:
       - "3000:3000"
-      - "3001:3001"
     volumes:
       - ag-claw-data:/app/data
       - ag-claw-memory:/app/memory

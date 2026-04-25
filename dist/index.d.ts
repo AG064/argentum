@@ -46,6 +46,12 @@ export interface MemoryEntry {
     accessCount: number;
     metadata?: Record<string, unknown>;
 }
+export interface BuiltinToolOptions {
+    enableFilesystemTools?: boolean;
+    enableShellTool?: boolean;
+    enableImageTool?: boolean;
+}
+export declare function createBuiltinTools(options?: BuiltinToolOptions): Tool[];
 declare class AGClaw {
     private config;
     private logger;

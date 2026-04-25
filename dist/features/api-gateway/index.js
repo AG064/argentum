@@ -46,11 +46,15 @@ class ApiGatewayFeature {
         this.ctx = context;
         this.config = { ...this.config, ...config };
         // Load existing apiKeys from config into tokens
+        this.apiTokens.clear();
         for (const key of this.config.apiKeys) {
-            this.apiTokens.set(key, {
-                key,
+            const keyHash = this.hashApiKey(key);
+            this.apiTokens.set(keyHash, {
                 name: `Initial key ${key.slice(0, 8)}`,
+                keyHash,
+                keyPreview: this.previewApiKey(key),
                 createdAt: Date.now(),
+                scopes: ['*'],
             });
         }
     }
@@ -65,7 +69,11 @@ class ApiGatewayFeature {
         // API key authentication middleware
         this.app.use(this.authMiddleware.bind(this));
         // Add health check endpoint
-        this.app.get(`${this.config.path}/health`, this.healthCheckHandler.bind(this));
+        this.registerEndpoint('/health', 'GET', this.healthCheckHandler.bind(this), {
+            description: 'Gateway health check',
+            requiresAuth: false,
+            rateLimited: false,
+        });
         // Register configured endpoints
         this.registerDefaultEndpoints();
         // Start server
@@ -112,6 +120,7 @@ class ApiGatewayFeature {
             description: options?.description,
             requiresAuth: options?.requiresAuth ?? true,
             rateLimited: options?.rateLimited ?? true,
+            requiredScope: options?.requiredScope,
         };
         // Store in registry
         const methodEndpoints = this.endpoints.get(method) ?? [];
@@ -181,31 +190,86 @@ class ApiGatewayFeature {
         return all;
     }
     /** Create an API token */
-    createToken(name, _expiresInDays) {
+    createToken(name, expiresInDays, scopes = ['*']) {
         const key = `ak_${(0, crypto_1.randomBytes)(24).toString('hex')}`;
+        const keyHash = this.hashApiKey(key);
         const token = {
-            key,
             name,
+            key,
+            keyHash,
+            keyPreview: this.previewApiKey(key),
             createdAt: Date.now(),
             lastUsed: undefined,
+            expiresAt: typeof expiresInDays === 'number'
+                ? Date.now() + expiresInDays * 24 * 60 * 60 * 1000
+                : undefined,
+            scopes: this.normalizeScopes(scopes),
         };
-        this.apiTokens.set(key, token);
-        this.ctx.logger.info('API token created', { name, key: `${key.slice(0, 12)}...` });
+        const stored = {
+            name: token.name,
+            keyHash: token.keyHash,
+            keyPreview: token.keyPreview,
+            createdAt: token.createdAt,
+            lastUsed: token.lastUsed,
+            expiresAt: token.expiresAt,
+            scopes: token.scopes,
+        };
+        this.apiTokens.set(keyHash, stored);
+        this.ctx.logger.info('API token created', { name, keyPreview: token.keyPreview });
         return token;
     }
     /** Revoke an API token */
     revokeToken(key) {
-        return this.apiTokens.delete(key);
+        const keyHash = this.apiTokens.has(key) ? key : this.hashApiKey(key);
+        const token = this.apiTokens.get(keyHash);
+        if (!token || token.revokedAt)
+            return false;
+        token.revokedAt = Date.now();
+        this.apiTokens.set(keyHash, token);
+        return true;
     }
     /** List all tokens (without full keys) */
     listTokens() {
         return Array.from(this.apiTokens.values());
+    }
+    authenticateApiKey(apiKey) {
+        const keyHash = this.hashApiKey(apiKey);
+        const token = this.apiTokens.get(keyHash);
+        if (!token)
+            return null;
+        if (token.revokedAt)
+            return null;
+        if (token.expiresAt && token.expiresAt <= Date.now())
+            return null;
+        token.lastUsed = Date.now();
+        this.apiTokens.set(keyHash, token);
+        return token;
+    }
+    tokenHasScope(token, requiredScope) {
+        if (!token)
+            return false;
+        if (!requiredScope)
+            return true;
+        return token.scopes.includes('*') || token.scopes.includes(requiredScope);
     }
     /** Normalize path to include config.path prefix */
     normalizePath(path) {
         const base = this.config.path.replace(/\/+$/, '');
         const cleanPath = path.replace(/^\/+/, '');
         return `${base}/${cleanPath}`;
+    }
+    hashApiKey(key) {
+        return (0, crypto_1.createHash)('sha256').update(key).digest('hex');
+    }
+    previewApiKey(key) {
+        return key.length <= 12 ? `${key.slice(0, 4)}...` : `${key.slice(0, 8)}...${key.slice(-4)}`;
+    }
+    normalizeScopes(scopes) {
+        const normalized = scopes
+            .filter((scope) => typeof scope === 'string')
+            .map((scope) => scope.trim())
+            .filter(Boolean);
+        return normalized.length > 0 ? [...new Set(normalized)] : ['*'];
     }
     /** Request logger middleware */
     requestLogger(req, res, next) {
@@ -257,7 +321,7 @@ class ApiGatewayFeature {
             const apiKeyHeader = req.headers['x-api-key'];
             const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
             if (apiKey) {
-                key = apiKey;
+                key = this.hashApiKey(apiKey);
             }
             else {
                 key = req.ip ?? 'unknown';
@@ -289,8 +353,14 @@ class ApiGatewayFeature {
     /** Authentication middleware */
     authMiddleware(req, res, next) {
         const endpoint = this.findEndpoint(req.method, req.path);
-        // If no endpoint found or endpoint doesn't require auth, continue
-        if (!endpoint?.requiresAuth) {
+        if (!endpoint) {
+            if (this.isApiRequest(req.path)) {
+                res.status(404).json({ error: 'Not found', message: 'API endpoint not registered' });
+                return;
+            }
+            return next();
+        }
+        if (!endpoint.requiresAuth) {
             return next();
         }
         // Check for API key (handle string[] case)
@@ -300,15 +370,14 @@ class ApiGatewayFeature {
             res.status(401).json({ error: 'Unauthorized', message: 'API key required' });
             return;
         }
-        if (!this.apiTokens.has(apiKey)) {
+        const token = this.authenticateApiKey(apiKey);
+        if (!token) {
             res.status(401).json({ error: 'Unauthorized', message: 'Invalid API key' });
             return;
         }
-        // Update last used
-        const token = this.apiTokens.get(apiKey);
-        if (token) {
-            token.lastUsed = Date.now();
-            this.apiTokens.set(apiKey, token);
+        if (!this.tokenHasScope(token, endpoint.requiredScope)) {
+            res.status(403).json({ error: 'Forbidden', message: 'API key scope is not sufficient' });
+            return;
         }
         next();
     }
@@ -317,8 +386,31 @@ class ApiGatewayFeature {
         const methodEndpoints = this.endpoints.get(method.toUpperCase());
         if (!methodEndpoints)
             return undefined;
-        // Exact match only for now (could support params later)
-        return methodEndpoints.find((e) => e.path === path);
+        return methodEndpoints.find((e) => this.matchesEndpointPath(e.path, path));
+    }
+    matchesEndpointPath(pattern, actualPath) {
+        const normalizedPattern = this.normalizeComparablePath(pattern);
+        const normalizedActual = this.normalizeComparablePath(actualPath);
+        if (normalizedPattern === normalizedActual)
+            return true;
+        const patternSegments = normalizedPattern.split('/').filter(Boolean);
+        const actualSegments = normalizedActual.split('/').filter(Boolean);
+        if (patternSegments.length !== actualSegments.length)
+            return false;
+        return patternSegments.every((segment, index) => {
+            if (segment.startsWith(':'))
+                return (actualSegments[index]?.length ?? 0) > 0;
+            return segment === actualSegments[index];
+        });
+    }
+    normalizeComparablePath(path) {
+        if (path === '/')
+            return path;
+        return path.replace(/\/+$/, '');
+    }
+    isApiRequest(path) {
+        const base = this.config.path.replace(/\/+$/, '') || '/';
+        return path === base || path.startsWith(`${base}/`);
     }
     /** Health check handler */
     healthCheckHandler(_req, res) {
@@ -340,20 +432,35 @@ class ApiGatewayFeature {
         this.registerEndpoint('/tokens', 'GET', (_req, res) => {
             const tokens = this.listTokens().map((t) => ({
                 name: t.name,
+                keyPreview: t.keyPreview,
                 createdAt: t.createdAt,
                 lastUsed: t.lastUsed,
+                expiresAt: t.expiresAt,
+                scopes: t.scopes,
+                revokedAt: t.revokedAt,
             }));
             res.json({ tokens });
+        }, {
+            requiredScope: 'tokens:read',
         });
         // POST /api/tokens - Create new token
         this.registerEndpoint('/tokens', 'POST', (req, res) => {
-            const { name } = req.body;
+            const { name, expiresInDays, scopes } = req.body;
             if (!name) {
                 res.status(400).json({ error: 'Bad request', message: 'name is required' });
                 return;
             }
-            const token = this.createToken(name);
-            res.status(201).json({ token: token.key, name: token.name, createdAt: token.createdAt });
+            const token = this.createToken(name, typeof expiresInDays === 'number' ? expiresInDays : undefined, Array.isArray(scopes) ? scopes : ['*']);
+            res.status(201).json({
+                token: token.key,
+                keyPreview: token.keyPreview,
+                name: token.name,
+                createdAt: token.createdAt,
+                expiresAt: token.expiresAt,
+                scopes: token.scopes,
+            });
+        }, {
+            requiredScope: 'tokens:create',
         });
         // DELETE /api/tokens/:key - Revoke token
         this.registerEndpoint('/tokens/:key', 'DELETE', (req, res) => {
@@ -364,6 +471,8 @@ class ApiGatewayFeature {
                 return;
             }
             res.json({ success: true, message: 'Token revoked' });
+        }, {
+            requiredScope: 'tokens:revoke',
         });
         // GET /api/endpoints - List all registered endpoints
         this.registerEndpoint('/endpoints', 'GET', (_req, res) => {
@@ -375,6 +484,8 @@ class ApiGatewayFeature {
                 rateLimited: e.rateLimited,
             }));
             res.json({ endpoints });
+        }, {
+            requiredScope: 'endpoints:read',
         });
     }
 }

@@ -6,6 +6,8 @@
  */
 
 import { createHmac } from 'crypto';
+import { lookup } from 'dns/promises';
+import { isIP } from 'net';
 
 import {
   type FeatureModule,
@@ -137,6 +139,10 @@ class WebhooksFeature implements FeatureModule {
 
   /** Subscribe to outbound webhooks */
   subscribe(url: string, events: string[], secret: string): WebhookSubscription {
+    if (!this.validateUrl(url)) {
+      throw new Error('Webhook subscription URL must be a public HTTPS URL');
+    }
+
     const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const subscription: WebhookSubscription = {
       id,
@@ -162,18 +168,41 @@ class WebhooksFeature implements FeatureModule {
 
   private isInternalHostname(host: string): boolean {
     if (!host) return false;
-    const h = host.toLowerCase();
-    if (h === 'localhost' || h === '::1') return true;
+    const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+    if (h === 'localhost' || h.endsWith('.localhost')) return true;
     if (h.endsWith('.local')) return true;
-    // IPv4 checks
-    const parts = h.split('.');
-    if (parts.length === 4) {
-      const [a, b] = parts.map((p) => parseInt(p, 10));
-      if (a === 127) return true;
-      if (a === 10) return true;
-      if (a === 192 && b === 168) return true;
-      if (a === 169 && b === 254) return true;
-      if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+    if (isIP(h) === 4) return this.isPrivateIpv4(h);
+    if (isIP(h) === 6) return this.isPrivateIpv6(h);
+    return false;
+  }
+
+  private isPrivateIpv4(host: string): boolean {
+    const parts = host.split('.');
+    const [a, b] = parts.map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => p === '' || Number.isNaN(parseInt(p, 10)))) {
+      return true;
+    }
+
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+    if (a === 192 && (b === 0 || b === 168)) return true;
+    if (a === 198 && b !== undefined && (b === 18 || b === 19 || b === 51)) return true;
+    if (a === 203 && b === 0) return true;
+    if (a !== undefined && a >= 224) return true;
+    return false;
+  }
+
+  private isPrivateIpv6(host: string): boolean {
+    if (host === '::' || host === '::1') return true;
+    if (host.startsWith('fc') || host.startsWith('fd')) return true;
+    if (host.startsWith('fe80:')) return true;
+    if (host.startsWith('ff')) return true;
+    if (host.startsWith('2001:db8:')) return true;
+    if (host.startsWith('::ffff:')) {
+      const ipv4 = host.slice('::ffff:'.length);
+      return isIP(ipv4) === 4 ? this.isPrivateIpv4(ipv4) : true;
     }
     return false;
   }
@@ -181,10 +210,31 @@ class WebhooksFeature implements FeatureModule {
   private validateUrl(u: string): boolean {
     try {
       const parsed = new URL(u);
+      if (parsed.protocol !== 'https:') return false;
+      if (parsed.username || parsed.password) return false;
       const host = parsed.hostname;
       if (this.isInternalHostname(host)) return false;
       return true;
     } catch {
+      return false;
+    }
+  }
+
+  private async validateDeliveryUrl(u: string): Promise<boolean> {
+    if (!this.validateUrl(u)) return false;
+
+    const parsed = new URL(u);
+    const host = parsed.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(host)) return true;
+
+    try {
+      const records = await lookup(host, { all: true, verbatim: true });
+      return records.every((record) => !this.isInternalHostname(record.address));
+    } catch (err) {
+      this.ctx.logger.warn('Blocked webhook delivery because hostname could not be resolved', {
+        url: u,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return false;
     }
   }
@@ -196,7 +246,7 @@ class WebhooksFeature implements FeatureModule {
     attempt = 1,
   ): Promise<void> {
     try {
-      if (!this.validateUrl(sub.url)) {
+      if (!(await this.validateDeliveryUrl(sub.url))) {
         this.ctx.logger.warn('Blocked webhook delivery to internal or invalid URL', {
           url: sub.url,
         });
@@ -208,6 +258,7 @@ class WebhooksFeature implements FeatureModule {
 
       const response = await fetch(sub.url, {
         method: 'POST',
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           'X-Webhook-Signature': `sha256=${signature}`,
@@ -216,6 +267,18 @@ class WebhooksFeature implements FeatureModule {
         },
         body,
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        const redirectTarget = location ? new URL(location, sub.url).toString() : '';
+        if (!redirectTarget || !(await this.validateDeliveryUrl(redirectTarget))) {
+          this.ctx.logger.warn('Blocked webhook redirect to internal or invalid URL', {
+            url: sub.url,
+            redirectTarget,
+          });
+        }
+        return;
+      }
 
       if (!response.ok && attempt < this.config.maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, this.config.retryDelayMs * attempt));

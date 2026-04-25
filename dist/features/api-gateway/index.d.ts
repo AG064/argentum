@@ -26,13 +26,21 @@ export interface ApiEndpoint {
     description?: string;
     requiresAuth: boolean;
     rateLimited: boolean;
+    requiredScope?: string;
 }
 /** API Token info */
 export interface ApiToken {
-    key: string;
     name: string;
+    keyHash: string;
+    keyPreview: string;
     createdAt: number;
     lastUsed?: number;
+    expiresAt?: number;
+    scopes: string[];
+    revokedAt?: number;
+}
+export interface CreatedApiToken extends ApiToken {
+    key: string;
 }
 /**
  * API Gateway feature — external REST API with authentication and rate limiting.
@@ -58,19 +66,25 @@ declare class ApiGatewayFeature implements FeatureModule {
         description?: string;
         requiresAuth?: boolean;
         rateLimited?: boolean;
+        requiredScope?: string;
     }): void;
     /** Remove an endpoint */
     removeEndpoint(path: string, method?: ApiEndpoint['method']): boolean;
     /** List all registered endpoints */
     listEndpoints(): ApiEndpoint[];
     /** Create an API token */
-    createToken(name: string, _expiresInDays?: number): ApiToken;
+    createToken(name: string, expiresInDays?: number, scopes?: string[]): CreatedApiToken;
     /** Revoke an API token */
     revokeToken(key: string): boolean;
     /** List all tokens (without full keys) */
     listTokens(): ApiToken[];
+    authenticateApiKey(apiKey: string): ApiToken | null;
+    tokenHasScope(token: ApiToken | null | undefined, requiredScope?: string): boolean;
     /** Normalize path to include config.path prefix */
     private normalizePath;
+    private hashApiKey;
+    private previewApiKey;
+    private normalizeScopes;
     /** Request logger middleware */
     private requestLogger;
     /** Error handler middleware */
@@ -81,6 +95,9 @@ declare class ApiGatewayFeature implements FeatureModule {
     private authMiddleware;
     /** Find registered endpoint for a method/path */
     private findEndpoint;
+    private matchesEndpointPath;
+    private normalizeComparablePath;
+    private isApiRequest;
     /** Health check handler */
     private healthCheckHandler;
     /** Register some default endpoints */

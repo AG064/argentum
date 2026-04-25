@@ -10,11 +10,19 @@ import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthS
 export interface WebchatConfig {
     enabled: boolean;
     port: number;
+    host: string;
+    authToken?: string;
+    requireAuth: boolean;
     maxConnections: number;
     maxMessageHistory: number;
+    messageHistory?: number;
+    maxMessageLength: number;
+    maxPayloadBytes: number;
     maxFileSize: number;
     allowedFileTypes: string[];
     uploadDir: string;
+    rateLimitWindowMs: number;
+    maxMessagesPerWindow: number;
 }
 /** Chat message structure */
 export interface ChatMessage {
@@ -54,6 +62,7 @@ declare class WebchatFeature implements FeatureModule {
     private clients;
     private messageHistory;
     private typingStates;
+    private clientRateLimits;
     private uploadedFiles;
     private config;
     private authToken;
@@ -64,6 +73,13 @@ declare class WebchatFeature implements FeatureModule {
     healthCheck(): Promise<HealthStatus>;
     /** Handle incoming WebSocket message */
     private handleMessage;
+    private assertSecureConfig;
+    private checkRateLimit;
+    private isAuthorizedHttpRequest;
+    private isSafeIdentifier;
+    private isSafeFilename;
+    private isAllowedFileType;
+    private estimatedDecodedBase64Size;
     /** Add message to room history with cap */
     private addMessageToHistory;
     /** Broadcast to all clients in a room */
