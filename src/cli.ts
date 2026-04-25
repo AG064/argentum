@@ -453,7 +453,7 @@ function cmdInit(): void {
         fallback: [],
       },
     };
-    fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(path.join(workDir, 'config'), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     success('Created config/default.yaml');
     success('Created .env');

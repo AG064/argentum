@@ -537,7 +537,7 @@ class AGClaw {
         const features = this.pluginLoader.listFeatures();
         const activeCount = features.filter((f) => f.state === 'active').length;
         const totalCount = features.length;
-        this.logger.info(`AG-Claw started successfully`, {
+        this.logger.info(`AG CLAW started successfully`, {
             features: `${activeCount}/${totalCount} active`,
             tools: this.agent.getToolNames().length,
             port: this.config.server.port,
@@ -873,7 +873,7 @@ class AGClaw {
         // Close OMEGA Memory
         this.semanticMemory.close();
         this.logger.info('OMEGA Memory closed');
-        this.logger.info('AG-Claw shutdown complete');
+        this.logger.info('AG CLAW shutdown complete');
     }
 }
 exports.AGClaw = AGClaw;
@@ -890,7 +890,7 @@ function getAGClaw() {
 if (require.main === module) {
     const app = new AGClaw();
     app.start().catch((err) => {
-        console.error('Failed to start AG-Claw:', err);
+        console.error('Failed to start AG CLAW:', err);
         process.exit(1);
     });
 }

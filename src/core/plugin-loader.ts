@@ -7,6 +7,7 @@
 
 import { readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
+import { pathToFileURL } from 'url';
 
 import { type AGClawConfig } from './config';
 import { type Logger, featureLogger } from './logger';
@@ -146,7 +147,7 @@ export class PluginLoader {
     this.logger.debug(`Loading feature: ${name}`, { path: modulePath });
 
     // Dynamic import of the feature module
-    const mod = await import(path);
+    const mod = await import(modulePath);
     const featureModule: FeatureModule =
       mod.default ??
       mod[name] ??

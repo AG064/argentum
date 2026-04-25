@@ -410,7 +410,7 @@ function cmdImage() {
     });
 }
 function cmdVersion() {
-    print(`AG-Claw v${VERSION}`);
+    print(`AG CLAW v${VERSION}`);
     print(`Node.js ${process.version}`);
     print(`Platform: ${process.platform} ${process.arch}`);
 }
@@ -419,12 +419,31 @@ function cmdInit() {
     const configPath = path.join(workDir, 'config', 'default.yaml');
     const dataDir = path.join(workDir, 'data');
     banner();
-    info('Initializing AG-Claw...');
+    info('Initializing AG CLAW...');
     if (fs.existsSync(configPath)) {
         warn('config/default.yaml already exists, skipping');
     }
     else {
-        (0, onboarding_1.writeOnboardingProfile)(workDir, (0, onboarding_1.createOnboardingProfile)(), { overwrite: false });
+        const defaultConfig = {
+            $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
+            name: 'My AG CLAW Instance',
+            version: '1.0.0',
+            server: {
+                port: 3000,
+                host: '0.0.0.0',
+            },
+            features: {},
+            logging: {
+                level: 'info',
+            },
+            llm: {
+                providers: {},
+                default: '',
+                fallback: [],
+            },
+        };
+        fs.mkdirSync(path.join(workDir, 'config'), { recursive: true });
+        fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
         success('Created config/default.yaml');
         success('Created .env');
         success('Created .env.example');
@@ -436,7 +455,22 @@ function cmdInit() {
     else {
         info('data/ directory already exists');
     }
-    success('AG-Claw initialized!');
+    // Create .env.example
+    const envPath = path.join(workDir, '.env.example');
+    if (!fs.existsSync(envPath)) {
+        fs.writeFileSync(envPath, [
+            '# AG-Claw Environment Variables',
+            'AGCLAW_WORKDIR=.',
+            'AGCLAW_PORT=3000',
+            'AGCLAW_MASTER_KEY=',
+            'OPENAI_API_KEY=',
+            'ANTHROPIC_API_KEY=',
+            'OPENROUTER_API_KEY=',
+            '',
+        ].join('\n'));
+        success('Created .env.example');
+    }
+    success('AG CLAW initialized!');
     info('Next: agclaw start --port 3000');
 }
 async function cmdStart() {
@@ -463,8 +497,30 @@ async function cmdStart() {
         }
         return;
     }
+    // First-run check: if no config exists, prompt to onboard
+    const configPath = path.join(process.cwd(), 'config', 'default.yaml');
+    const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
+    if (!fs.existsSync(configPath) && !fs.existsSync(legacyConfigPath)) {
+        banner();
+        print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+        print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+        print('');
+        const readline = require('readline');
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
+        const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+        rl.close();
+        if (answer !== 'n') {
+            await cmdOnboard();
+        }
+        else {
+            print('');
+            info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+        }
+        return;
+    }
     banner();
-    info(`Starting AG-Claw server on port ${port}...`);
+    info(`Starting AG CLAW server on port ${port}...`);
     try {
         const configManager = new config_1.ConfigManager(getProjectConfigPath(workDir));
         const config = configManager.get();
@@ -613,8 +669,8 @@ function cmdConfig() {
     const value = args[2];
     const workDir = getWorkDir();
     const configPath = getProjectConfigPath(workDir);
-    if (!projectConfigExists(workDir)) {
-        error('AG-Claw not initialized. Run: agclaw init');
+    if (!fs.existsSync(configPath)) {
+        error('AG CLAW not initialized. Run: agclaw init');
         return;
     }
     const config = readProjectConfig(configPath);
@@ -1073,7 +1129,7 @@ async function cmdWatch() {
     // For now, just show a message
     print('');
     warn('File watcher requires file-watcher feature to be enabled');
-    info('Enable it in config and restart AG-Claw server');
+    info('Enable it in config and restart AG CLAW server');
 }
 async function cmdGateway() {
     const subcommand = args[1] || 'status';

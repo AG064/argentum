@@ -540,25 +540,36 @@ class ConfigManager {
     constructor(configPath) {
         this.watcher = null;
         this.listeners = new Set();
-        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
+        this.baseConfigPath = (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
+        const envConfigPath = process.env.AGCLAW_CONFIG_PATH;
+        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), envConfigPath ?? 'agclaw.json');
         this.config = this.loadConfig();
     }
     /** Load and validate configuration from YAML file */
     loadConfig() {
-        let fileConfig = {};
-        if ((0, fs_1.existsSync)(this.configPath)) {
-            const raw = (0, fs_1.readFileSync)(this.configPath, 'utf-8');
-            fileConfig = (0, yaml_1.parse)(raw) ?? {};
-        }
+        const baseConfig = this.loadConfigFile(this.baseConfigPath);
+        const fileConfig = this.configPath === this.baseConfigPath ? {} : this.loadConfigFile(this.configPath);
         // Environment variable overrides
         const envOverrides = this.loadEnvOverrides();
-        const merged = this.deepMerge(fileConfig, envOverrides);
+        const merged = this.deepMerge(this.deepMerge(baseConfig, fileConfig), envOverrides);
         const result = exports.ConfigSchema.safeParse(merged);
         if (!result.success) {
             console.error('Configuration validation failed:', result.error.format());
             process.exit(1);
         }
         return result.data;
+    }
+    /** Load a single configuration file if it exists */
+    loadConfigFile(filePath) {
+        if (!(0, fs_1.existsSync)(filePath)) {
+            return {};
+        }
+        const raw = (0, fs_1.readFileSync)(filePath, 'utf-8');
+        const parsed = (0, yaml_1.parse)(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+        }
+        return {};
     }
     /** Load configuration overrides from environment variables */
     loadEnvOverrides() {
@@ -644,18 +655,28 @@ class ConfigManager {
         return this.config.features[feature]?.enabled ?? false;
     }
     /** Enable hot-reload watching */
-    async enableHotReload() {
+    enableHotReload() {
         if (this.watcher)
             return;
-        const { watch } = await Promise.resolve().then(() => __importStar(require('chokidar')));
-        this.watcher = watch(this.configPath, { ignoreInitial: true });
-        this.watcher.on('change', () => {
-            console.log(`[Config] Reloading ${this.configPath}`);
-            this.config = this.loadConfig();
-            for (const listener of this.listeners) {
-                listener(this.config);
-            }
-        });
+        void this.startHotReloadWatcher();
+    }
+    async startHotReloadWatcher() {
+        try {
+            const chokidar = await Promise.resolve().then(() => __importStar(require('chokidar')));
+            this.watcher = chokidar.watch(Array.from(new Set([this.baseConfigPath, this.configPath])), {
+                ignoreInitial: true,
+            });
+            this.watcher.on('change', () => {
+                console.log(`[Config] Reloading ${this.configPath}`);
+                this.config = this.loadConfig();
+                for (const listener of this.listeners) {
+                    listener(this.config);
+                }
+            });
+        }
+        catch (err) {
+            console.error('Failed to enable configuration hot reload:', err);
+        }
     }
     /** Register a listener for config changes */
     onChange(listener) {

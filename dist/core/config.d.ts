@@ -351,12 +351,15 @@ export type AGClawConfig = z.infer<typeof ConfigSchema>;
 /** Configuration manager with hot-reload support */
 export declare class ConfigManager {
     private config;
+    private baseConfigPath;
     private configPath;
     private watcher;
     private listeners;
     constructor(configPath?: string);
     /** Load and validate configuration from YAML file */
     private loadConfig;
+    /** Load a single configuration file if it exists */
+    private loadConfigFile;
     /** Load configuration overrides from environment variables */
     private loadEnvOverrides;
     /** Deep merge two objects */
@@ -368,7 +371,8 @@ export declare class ConfigManager {
     /** Check if a feature is enabled */
     isFeatureEnabled(feature: keyof AGClawConfig['features']): boolean;
     /** Enable hot-reload watching */
-    enableHotReload(): Promise<void>;
+    enableHotReload(): void;
+    private startHotReloadWatcher;
     /** Register a listener for config changes */
     onChange(listener: (config: AGClawConfig) => void): () => void;
     /** Stop watching for changes */
