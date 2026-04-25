@@ -5,7 +5,7 @@
  * and endpoint management.
  */
 
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 
 import express, { type Request, type Response, type Handler } from 'express';
 
@@ -45,6 +45,7 @@ export interface ApiEndpoint {
 export interface ApiToken {
   name: string;
   keyHash: string;
+  keySalt: string;
   keyPreview: string;
   createdAt: number;
   lastUsed?: number;
@@ -88,6 +89,7 @@ class ApiGatewayFeature implements FeatureModule {
   private endpoints: Map<string, ApiEndpoint[]> = new Map(); // keyed by method
   private apiTokens: Map<string, ApiToken> = new Map();
   private active = false;
+  private readonly callerTokens = new WeakMap<object, ApiToken>();
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -96,10 +98,12 @@ class ApiGatewayFeature implements FeatureModule {
     // Load existing apiKeys from config into tokens
     this.apiTokens.clear();
     for (const key of this.config.apiKeys) {
-      const keyHash = this.hashApiKey(key);
+      const salt = this.generateSalt();
+      const keyHash = this.hashApiKey(key, salt);
       this.apiTokens.set(keyHash, {
         name: `Initial key ${key.slice(0, 8)}`,
         keyHash,
+        keySalt: salt,
         keyPreview: this.previewApiKey(key),
         createdAt: Date.now(),
         scopes: ['*'],
@@ -267,11 +271,13 @@ class ApiGatewayFeature implements FeatureModule {
   /** Create an API token */
   createToken(name: string, expiresInDays?: number, scopes: string[] = ['*']): CreatedApiToken {
     const key = `ak_${randomBytes(24).toString('hex')}`;
-    const keyHash = this.hashApiKey(key);
+    const salt = this.generateSalt();
+    const keyHash = this.hashApiKey(key, salt);
     const token: CreatedApiToken = {
       name,
       key,
       keyHash,
+      keySalt: salt,
       keyPreview: this.previewApiKey(key),
       createdAt: Date.now(),
       lastUsed: undefined,
@@ -284,6 +290,7 @@ class ApiGatewayFeature implements FeatureModule {
     const stored: ApiToken = {
       name: token.name,
       keyHash: token.keyHash,
+      keySalt: token.keySalt,
       keyPreview: token.keyPreview,
       createdAt: token.createdAt,
       lastUsed: token.lastUsed,
@@ -297,9 +304,10 @@ class ApiGatewayFeature implements FeatureModule {
 
   /** Revoke an API token */
   revokeToken(key: string): boolean {
-    const keyHash = this.apiTokens.has(key) ? key : this.hashApiKey(key);
-    const token = this.apiTokens.get(keyHash);
-    if (!token || token.revokedAt) return false;
+    const entry = this.findTokenByKey(key);
+    if (!entry) return false;
+    const [keyHash, token] = entry;
+    if (token.revokedAt) return false;
     token.revokedAt = Date.now();
     this.apiTokens.set(keyHash, token);
     return true;
@@ -311,9 +319,9 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   authenticateApiKey(apiKey: string): ApiToken | null {
-    const keyHash = this.hashApiKey(apiKey);
-    const token = this.apiTokens.get(keyHash);
-    if (!token) return null;
+    const entry = this.findTokenByKey(apiKey);
+    if (!entry) return null;
+    const [keyHash, token] = entry;
     if (token.revokedAt) return null;
     if (token.expiresAt && token.expiresAt <= Date.now()) return null;
 
@@ -335,8 +343,33 @@ class ApiGatewayFeature implements FeatureModule {
     return `${base}/${cleanPath}`;
   }
 
-  private hashApiKey(key: string): string {
-    return createHash('sha256').update(key).digest('hex');
+  /** Derive a hash for an API key using scrypt with the provided salt */
+  private hashApiKey(key: string, salt: string): string {
+    return scryptSync(key, salt, 64).toString('hex');
+  }
+
+  /** Generate a random salt for key hashing */
+  private generateSalt(): string {
+    return randomBytes(16).toString('hex');
+  }
+
+  /**
+   * Find a stored token entry by matching the raw API key.
+   * Uses scrypt to re-derive the hash with the stored salt, then constant-time
+   * comparison to prevent timing attacks.
+   *
+   * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
+   */
+  private findTokenByKey(apiKey: string): [string, ApiToken] | null {
+    for (const [hash, token] of this.apiTokens) {
+      const computed = this.hashApiKey(apiKey, token.keySalt);
+      const computedBuf = Buffer.from(computed, 'hex');
+      const storedBuf = Buffer.from(hash, 'hex');
+      if (computedBuf.length === storedBuf.length && timingSafeEqual(computedBuf, storedBuf)) {
+        return [hash, token];
+      }
+    }
+    return null;
   }
 
   private previewApiKey(key: string): string {
@@ -476,6 +509,9 @@ class ApiGatewayFeature implements FeatureModule {
       return;
     }
 
+    // Attach caller token to request for downstream handlers (e.g., scope enforcement)
+    this.callerTokens.set(req, token);
+
     next();
   }
 
@@ -552,10 +588,37 @@ class ApiGatewayFeature implements FeatureModule {
         res.status(400).json({ error: 'Bad request', message: 'name is required' });
         return;
       }
+
+      // Restrict created token scopes to a subset of the caller's own scopes
+      // to prevent privilege escalation.
+      const callerToken = this.callerTokens.get(req);
+      if (!callerToken) {
+        // authMiddleware must have populated this; if it didn't, refuse to proceed.
+        res.status(403).json({ error: 'Forbidden', message: 'Caller identity could not be determined' });
+        return;
+      }
+      const callerScopes = callerToken.scopes;
+      const requestedScopes: string[] = Array.isArray(scopes) ? scopes : ['*'];
+      let grantedScopes: string[];
+      if (callerScopes.includes('*')) {
+        // Caller has wildcard — may grant any scope including '*'
+        grantedScopes = requestedScopes;
+      } else {
+        // Caller may only grant scopes they already hold (no '*' escalation)
+        grantedScopes = requestedScopes.filter((s) => s !== '*' && callerScopes.includes(s));
+        if (grantedScopes.length === 0) {
+          res.status(403).json({
+            error: 'Forbidden',
+            message: 'Requested scopes exceed caller privileges',
+          });
+          return;
+        }
+      }
+
       const token = this.createToken(
         name,
         typeof expiresInDays === 'number' ? expiresInDays : undefined,
-        Array.isArray(scopes) ? scopes : ['*'],
+        grantedScopes,
       );
       res.status(201).json({
         token: token.key,
