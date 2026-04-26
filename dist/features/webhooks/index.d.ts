@@ -62,7 +62,10 @@ declare class WebhooksFeature implements FeatureModule {
     /** Dispatch event to all matching subscribers */
     dispatch(event: WebhookEvent): Promise<void>;
     private isInternalHostname;
+    private isPrivateIpv4;
+    private isPrivateIpv6;
     private validateUrl;
+    private validateDeliveryUrl;
     /** Deliver webhook with retry logic */
     private deliverWithRetry;
     /** Unsubscribe */

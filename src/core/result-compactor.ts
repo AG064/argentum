@@ -9,14 +9,14 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const COMPACT_THRESHOLD = 2000;
-const OUTPUT_DIR = '/tmp/ag-claw-results';
+const DEFAULT_OUTPUT_DIR = join(process.cwd(), 'data', 'ag-claw-results');
 
 /**
  * Ensure output directory exists
  */
-function ensureOutputDir(): void {
-  if (!existsSync(OUTPUT_DIR)) {
-    mkdirSync(OUTPUT_DIR, { recursive: true });
+function ensureOutputDir(outputDir: string): void {
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true });
   }
 }
 
@@ -48,8 +48,9 @@ export function compactResult(
   toolName: string,
   result: string,
   threshold: number = COMPACT_THRESHOLD,
+  outputDir: string = process.env.AGCLAW_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
 ): CompactionResult {
-  ensureOutputDir();
+  ensureOutputDir(outputDir);
 
   if (result.length <= threshold) {
     return {
@@ -61,7 +62,7 @@ export function compactResult(
   const timestampStr = timestamp();
   const safeToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const fileName = `${timestampStr}_${safeToolName}.txt`;
-  const filePath = join(OUTPUT_DIR, fileName);
+  const filePath = join(outputDir, fileName);
 
   try {
     writeFileSync(filePath, result, 'utf-8');
@@ -90,11 +91,12 @@ export function compactResult(
 export function compactResults(
   results: Record<string, string>,
   threshold: number = COMPACT_THRESHOLD,
+  outputDir: string = process.env.AGCLAW_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
 ): Record<string, CompactionResult> {
   const compacted: Record<string, CompactionResult> = {};
 
   for (const [toolName, result] of Object.entries(results)) {
-    compacted[toolName] = compactResult(toolName, result, threshold);
+    compacted[toolName] = compactResult(toolName, result, threshold, outputDir);
   }
 
   return compacted;

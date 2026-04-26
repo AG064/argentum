@@ -26,13 +26,22 @@ export interface ApiEndpoint {
     description?: string;
     requiresAuth: boolean;
     rateLimited: boolean;
+    requiredScope?: string;
 }
 /** API Token info */
 export interface ApiToken {
-    key: string;
     name: string;
+    keyHash: string;
+    keySalt: string;
+    keyPreview: string;
     createdAt: number;
     lastUsed?: number;
+    expiresAt?: number;
+    scopes: string[];
+    revokedAt?: number;
+}
+export interface CreatedApiToken extends ApiToken {
+    key: string;
 }
 /**
  * API Gateway feature — external REST API with authentication and rate limiting.
@@ -49,6 +58,7 @@ declare class ApiGatewayFeature implements FeatureModule {
     private endpoints;
     private apiTokens;
     private active;
+    private readonly callerTokens;
     init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     start(): Promise<void>;
     stop(): Promise<void>;
@@ -58,29 +68,57 @@ declare class ApiGatewayFeature implements FeatureModule {
         description?: string;
         requiresAuth?: boolean;
         rateLimited?: boolean;
+        requiredScope?: string;
     }): void;
     /** Remove an endpoint */
     removeEndpoint(path: string, method?: ApiEndpoint['method']): boolean;
     /** List all registered endpoints */
     listEndpoints(): ApiEndpoint[];
     /** Create an API token */
-    createToken(name: string, _expiresInDays?: number): ApiToken;
+    createToken(name: string, expiresInDays?: number, scopes?: string[]): CreatedApiToken;
     /** Revoke an API token */
     revokeToken(key: string): boolean;
     /** List all tokens (without full keys) */
     listTokens(): ApiToken[];
+    authenticateApiKey(apiKey: string): ApiToken | null;
+    tokenHasScope(token: ApiToken | null | undefined, requiredScope?: string): boolean;
     /** Normalize path to include config.path prefix */
     private normalizePath;
+    /** Derive a hash for an API key using scrypt with the provided salt */
+    private hashApiKey;
+    /** Generate a random salt for key hashing */
+    private generateSalt;
+    /**
+     * Find a stored token entry by matching the raw API key.
+     * Uses scrypt to re-derive the hash with the stored salt, then constant-time
+     * comparison to prevent timing attacks.
+     *
+     * Intentionally scans the full token set to reduce timing differences between
+     * matching and non-matching keys.
+     *
+     * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
+     */
+    private findTokenByKey;
+    private previewApiKey;
+    private normalizeScopes;
     /** Request logger middleware */
     private requestLogger;
     /** Error handler middleware */
     private errorHandler;
+    private getRateLimitConfig;
+    private getIpRateLimitKey;
+    private getRateLimitKey;
+    private createPreAuthRateLimiter;
+    private respondIfRateLimited;
     /** Rate limiting middleware */
     private rateLimitMiddleware;
     /** Authentication middleware */
     private authMiddleware;
     /** Find registered endpoint for a method/path */
     private findEndpoint;
+    private matchesEndpointPath;
+    private normalizeComparablePath;
+    private isApiRequest;
     /** Health check handler */
     private healthCheckHandler;
     /** Register some default endpoints */

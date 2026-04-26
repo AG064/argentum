@@ -8,7 +8,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-import { watch } from 'chokidar';
+import type { FSWatcher } from 'chokidar';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
@@ -35,6 +35,7 @@ const ServerConfigSchema = z.object({
 const FeatureToggleSchema = z.object({
   enabled: z.boolean().default(false),
 });
+const GenericFeatureConfigSchema = FeatureToggleSchema.passthrough();
 
 /** Voice feature config */
 const VoiceConfigSchema = FeatureToggleSchema.extend({
@@ -48,8 +49,19 @@ const VoiceConfigSchema = FeatureToggleSchema.extend({
 /** Webchat feature config */
 const WebchatConfigSchema = FeatureToggleSchema.extend({
   port: z.number().int().default(3001),
+  host: z.string().default('127.0.0.1'),
+  authToken: z.string().min(16).optional(),
+  requireAuth: z.boolean().default(true),
   maxConnections: z.number().int().default(1000),
   messageHistory: z.number().int().default(100),
+  maxMessageLength: z.number().int().min(1).max(100_000).default(10_000),
+  maxPayloadBytes: z.number().int().min(1024).default(1024 * 1024),
+  maxFileSize: z.number().int().min(1).default(10 * 1024 * 1024),
+  rateLimitWindowMs: z.number().int().min(1000).default(60_000),
+  maxMessagesPerWindow: z.number().int().min(1).default(60),
+  allowedFileTypes: z
+    .array(z.string())
+    .default(['image/*', 'text/*', 'application/pdf', 'application/json']),
 });
 
 /** Knowledge Graph config */
@@ -73,7 +85,7 @@ const SecurityConfigSchema = z.object({
   policy: z.string().default('config/security-policy.yaml'),
   secrets: z.enum(['encrypted', 'env', 'file']).default('encrypted'),
   auditLog: z.boolean().default(true),
-  allowlistMode: z.enum(['strict', 'permissive']).default('permissive'),
+  allowlistMode: z.enum(['strict', 'permissive']).default('strict'),
 });
 
 /** Multi-Agent Coordination config */
@@ -219,8 +231,16 @@ export const ConfigSchema = z.object({
       'webchat': WebchatConfigSchema.default({
         enabled: false,
         port: 3001,
+        host: '127.0.0.1',
+        requireAuth: true,
         maxConnections: 1000,
         messageHistory: 100,
+        maxMessageLength: 10_000,
+        maxPayloadBytes: 1024 * 1024,
+        maxFileSize: 10 * 1024 * 1024,
+        rateLimitWindowMs: 60_000,
+        maxMessagesPerWindow: 60,
+        allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
       }),
       'voice': VoiceConfigSchema.default({
         enabled: false,
@@ -331,12 +351,21 @@ export const ConfigSchema = z.object({
         maxJobs: 500,
       }),
     })
+    .catchall(GenericFeatureConfigSchema)
     .default({
       'webchat': {
         enabled: false,
         port: 3001,
+        host: '127.0.0.1',
+        requireAuth: true,
         maxConnections: 1000,
         messageHistory: 100,
+        maxMessageLength: 10_000,
+        maxPayloadBytes: 1024 * 1024,
+        maxFileSize: 10 * 1024 * 1024,
+        rateLimitWindowMs: 60_000,
+        maxMessagesPerWindow: 60,
+        allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
       },
       'voice': {
         enabled: false,
@@ -437,21 +466,25 @@ export const ConfigSchema = z.object({
     policy: 'config/security-policy.yaml',
     secrets: 'encrypted',
     auditLog: true,
-    allowlistMode: 'permissive',
+    allowlistMode: 'strict',
   }),
   channels: z
     .object({
       telegram: z
         .object({
-          enabled: z.boolean().default(true),
+          enabled: z.boolean().default(false),
           token: z.string().optional(),
+          allowedUsers: z.array(z.number()).default([]),
+          allowedChats: z.array(z.number()).default([]),
+          allowAll: z.boolean().default(false),
         })
-        .default({ enabled: true }),
+        .default({ enabled: false, allowedUsers: [], allowedChats: [], allowAll: false }),
       webchat: z
         .object({
-          enabled: z.boolean().default(true),
+          enabled: z.boolean().default(false),
+          authToken: z.string().min(16).optional(),
         })
-        .default({ enabled: true }),
+        .default({ enabled: false }),
       mobile: z
         .object({
           enabled: z.boolean().default(false),
@@ -469,8 +502,8 @@ export const ConfigSchema = z.object({
         }),
     })
     .default({
-      telegram: { enabled: true },
-      webchat: { enabled: true },
+      telegram: { enabled: false, allowedUsers: [], allowedChats: [], allowAll: false },
+      webchat: { enabled: false },
       mobile: {
         enabled: false,
         httpPort: 3003,
@@ -552,6 +585,41 @@ export class ConfigManager {
     if (process.env.AGCLAW_TELEGRAM_TOKEN) {
       overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
     }
+    if (process.env.AGCLAW_TELEGRAM_ENABLED) {
+      overrides['channels'] = {
+        ...((overrides['channels'] as object) ?? {}),
+        telegram: {
+          ...(((overrides['channels'] as Record<string, object> | undefined)?.['telegram']) ?? {}),
+          enabled: process.env.AGCLAW_TELEGRAM_ENABLED === 'true',
+        },
+      };
+    }
+    if (process.env.AGCLAW_WEBCHAT_ENABLED) {
+      overrides['channels'] = {
+        ...((overrides['channels'] as object) ?? {}),
+        webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+      };
+      overrides['features'] = {
+        ...((overrides['features'] as object) ?? {}),
+        webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+      };
+    }
+    if (process.env.AGCLAW_WEBCHAT_AUTH_TOKEN) {
+      overrides['channels'] = {
+        ...((overrides['channels'] as object) ?? {}),
+        webchat: {
+          ...(((overrides['channels'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
+          authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+        },
+      };
+      overrides['features'] = {
+        ...((overrides['features'] as object) ?? {}),
+        webchat: {
+          ...(((overrides['features'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
+          authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+        },
+      };
+    }
     if (process.env.AGCLAW_SUPABASE_URL) {
       overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
     }
@@ -608,7 +676,7 @@ export class ConfigManager {
 
   private async startHotReloadWatcher(): Promise<void> {
     try {
-      const chokidar = await importChokidar();
+      const chokidar = await import('chokidar');
 
       this.watcher = chokidar.watch(Array.from(new Set([this.baseConfigPath, this.configPath])), {
         ignoreInitial: true,

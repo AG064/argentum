@@ -3,7 +3,7 @@
  */
 
 import { rmSync, existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { tmpdir } from 'os';
 import { compactResult, compactResults } from '../../src/core/result-compactor';
 
@@ -87,7 +87,7 @@ describe('compactResult', () => {
     expect(result.savedPath).toBeTruthy();
     // File path should not contain special characters
     if (result.savedPath) {
-      expect(result.savedPath).not.toMatch(/[^a-zA-Z0-9_\-.-\/]/);
+      expect(basename(result.savedPath)).not.toMatch(/[^a-zA-Z0-9_\-.]/);
     }
   });
 

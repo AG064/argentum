@@ -41,10 +41,24 @@ function runInSandbox(command, options = {}) {
         const args = buildDockerArgs(config, command);
         const log = (0, logger_1.createLogger)().child({ feature: 'container-sandbox' });
         log.debug('Sandbox exec', { command, image: config.image });
-        const proc = (0, child_process_1.spawn)('docker', args, {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: config.timeoutMs + 5000, // slight buffer over container timeout
-        });
+        let proc;
+        try {
+            proc = (0, child_process_1.spawn)('docker', args, {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                timeout: config.timeoutMs + 5000, // slight buffer over container timeout
+            });
+        }
+        catch (err) {
+            resolvePromise({
+                success: false,
+                stdout: '',
+                stderr: `Failed to start sandbox: ${err instanceof Error ? err.message : String(err)}`,
+                exitCode: -1,
+                durationMs: Date.now() - startTime,
+                timedOut: false,
+            });
+            return;
+        }
         let stdout = '';
         let stderr = '';
         let timedOut = false;
@@ -58,10 +72,10 @@ function runInSandbox(command, options = {}) {
             }
             proc.kill('SIGKILL');
         }, config.timeoutMs);
-        proc.stdout.on('data', (chunk) => {
+        proc.stdout?.on('data', (chunk) => {
             stdout += chunk.toString();
         });
-        proc.stderr.on('data', (chunk) => {
+        proc.stderr?.on('data', (chunk) => {
             stderr += chunk.toString();
         });
         proc.on('close', (code) => {
@@ -88,7 +102,7 @@ function runInSandbox(command, options = {}) {
             });
         });
         // Close stdin (no interactive input)
-        proc.stdin.end();
+        proc.stdin?.end();
     });
 }
 /**

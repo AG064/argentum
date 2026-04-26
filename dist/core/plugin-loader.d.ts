@@ -43,6 +43,10 @@ export interface FeatureContext {
 }
 /** Hook handler type */
 export type HookHandler = (data: unknown) => Promise<void | unknown>;
+/** Resolve the entry file for a feature directory */
+export declare function resolveFeatureEntryPath(featureDirPath: string): string | null;
+/** Convert a filesystem path into a native ESM import specifier */
+export declare function toModuleImportSpecifier(modulePath: string): string;
 /**
  * Plugin loader for AG-Claw features.
  *
@@ -66,7 +70,7 @@ export declare class PluginLoader {
     /** Load all features from the features directory */
     loadAll(): Promise<void>;
     /** Load a single feature module */
-    loadFeature(name: string, path: string): Promise<void>;
+    loadFeature(name: string, modulePath: string): Promise<void>;
     /** Enable and initialize a feature */
     enableFeature(name: string): Promise<void>;
     /** Disable a feature */

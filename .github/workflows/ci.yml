@@ -13,13 +13,16 @@ jobs:
   quality-checks:
     name: Quality Checks
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['20', '22']
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
       
       - name: Install dependencies
@@ -104,6 +107,8 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       
@@ -117,10 +122,36 @@ jobs:
         run: npm ci --legacy-peer-deps
       
       - name: Security audit
-        run: npm audit --audit-level=high || true
+        run: npm audit --omit=dev --audit-level=moderate
       
       - name: Snyk (if available)
-        run: npx snyk test || true
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: npx snyk test
+
+  onboarding-smoke:
+    name: Onboarding Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify non-interactive onboarding
+        run: |
+          mkdir -p "$RUNNER_TEMP/agclaw-onboarding"
+          cd "$RUNNER_TEMP/agclaw-onboarding"
+          node "$GITHUB_WORKSPACE/dist/cli.js" onboard --yes
+          node "$GITHUB_WORKSPACE/dist/cli.js" doctor
 
   docker-build:
     name: Docker Build

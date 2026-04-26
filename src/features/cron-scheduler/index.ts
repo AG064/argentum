@@ -307,7 +307,6 @@ class CronSchedulerFeature implements FeatureModule {
       },
       {
         timezone: this.config.timezone,
-        scheduled: true,
       },
     );
 
