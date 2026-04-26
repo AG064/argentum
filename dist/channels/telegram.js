@@ -19,7 +19,7 @@ const grammy_1 = require("grammy");
 class TelegramChannel {
     meta = {
         name: 'telegram',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Telegram channel integration via grammY',
         dependencies: [],
     };

@@ -15,7 +15,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class RateLimitingFeature {
     meta = {
         name: 'rate-limiting',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Sliding window rate limiting with configurable limits',
         dependencies: [],
     };

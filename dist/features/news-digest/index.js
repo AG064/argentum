@@ -20,7 +20,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class NewsDigestFeature {
     meta = {
         name: 'news-digest',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'RSS/Atom feed aggregation with caching',
         dependencies: [],
     };

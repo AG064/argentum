@@ -5,7 +5,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-v0.0.1-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
@@ -106,7 +106,7 @@ docker run -it ag064/ag-claw
 ```
 
 **Windows installer or portable binary**:
-Download `agclaw-v0.0.1-win-x64.msi` or `agclaw-v0.0.1-win-x64.exe` from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest).
+Download `agclaw-v0.0.2-win-x64.msi` or `agclaw-v0.0.2-win-x64.exe` from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest).
 
 **Portable binary** (no dependencies):
 Download from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest) and pick the one for your OS:

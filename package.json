@@ -1,6 +1,6 @@
 {
   "name": "ag-claw",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

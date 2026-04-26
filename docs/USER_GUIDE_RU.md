@@ -691,7 +691,7 @@ agclaw backup restore backup-2026-03-18T18-58-44
 ```json
 {
   "name": "AG-Claw",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "server": {
     "port": 18789,
     "host": "0.0.0.0",

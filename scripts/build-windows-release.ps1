@@ -106,7 +106,9 @@ if (-not $SkipMsi) {
 }
 
 $hashes = Get-ChildItem -Path $outputDir -File |
-  Where-Object { $_.Extension -in @(".exe", ".msi") } |
+  Where-Object {
+    $_.Extension -in @(".exe", ".msi") -and $_.BaseName -like "agclaw-v$version-*"
+  } |
   Sort-Object Name |
   ForEach-Object {
     $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName

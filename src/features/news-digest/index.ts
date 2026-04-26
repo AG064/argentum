@@ -57,7 +57,7 @@ export interface NewsSource {
 class NewsDigestFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'news-digest',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'RSS/Atom feed aggregation with caching',
     dependencies: [],
   };

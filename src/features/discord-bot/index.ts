@@ -67,7 +67,7 @@ export interface DiscordBotFeatureConfig {
 class DiscordBotFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'discord-bot',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Discord bot integration with message sending and event handling',
     dependencies: [],
   };

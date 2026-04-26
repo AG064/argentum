@@ -371,7 +371,7 @@ const DOMAIN_KEYWORDS: Record<string, string[]> = {
 class LifeDomainsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'life-domains',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Memory structured by life domains with auto-classification',
     dependencies: [],
   };

@@ -19,7 +19,7 @@ const semantic_1 = require("../../memory/semantic");
 class ConsolidationFeature {
     meta = {
         name: 'consolidation',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Periodic memory consolidation: dedup, decay, merge, prune',
         dependencies: [],
     };

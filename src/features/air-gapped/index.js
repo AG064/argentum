@@ -68,7 +68,7 @@ class AirGappedFeature {
   constructor() {
     this.meta = {
       name: 'air-gapped',
-      version: '0.0.1',
+      version: '0.0.2',
       description: 'Fully offline operation mode with local models',
       dependencies: [],
     };

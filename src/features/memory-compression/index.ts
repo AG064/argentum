@@ -46,7 +46,7 @@ export interface CompressionStats {
 class MemoryCompressionFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'memory-compression',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Compress and archive old memory entries',
     dependencies: [],
   };

@@ -28,7 +28,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class DocumentAnalysisFeature {
     meta = {
         name: 'document-analysis',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Document analysis for PDF, DOCX, TXT, MD with text extraction and insights',
         dependencies: [],
     };

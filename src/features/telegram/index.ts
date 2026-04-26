@@ -44,7 +44,7 @@ interface TelegramMessage {
 class TelegramFeature {
   readonly meta = {
     name: 'telegram',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Telegram bot integration via Grammy',
     dependencies: ['allowlists'],
   };

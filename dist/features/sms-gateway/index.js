@@ -27,7 +27,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SmsGatewayFeature {
     meta = {
         name: 'sms-gateway',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Pluggable SMS gateway with provider abstraction and SQLite logging',
         dependencies: [],
     };

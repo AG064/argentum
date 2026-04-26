@@ -46,7 +46,7 @@ const path = __importStar(require("path"));
 class SessionsFeature {
     meta = {
         name: 'sessions',
-        version: '0.0.1',
+        version: '0.0.2',
         description: 'Session management for conversations and agent interactions',
         dependencies: ['sqlite-memory'],
     };

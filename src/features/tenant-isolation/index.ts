@@ -19,7 +19,7 @@ export interface TenantIsolationConfig {
 class TenantIsolationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'tenant-isolation',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Provide tenant-scoped data isolation, quotas and cross-tenant access control',
     dependencies: [],
   };

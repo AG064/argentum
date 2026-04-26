@@ -22,7 +22,7 @@ class GoalDecompositionFeature {
   constructor() {
     this.meta = {
       name: 'goal-decomposition',
-      version: '0.0.1',
+      version: '0.0.2',
       description: 'Decompose goals into tasks and track dependencies (SQLite)',
       dependencies: [],
     };

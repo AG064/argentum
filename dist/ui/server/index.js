@@ -333,7 +333,7 @@ function handleRequest(req, res) {
     if (pathname === '/health') {
         sendJSON(res, 200, {
             status: 'ok',
-            version: '0.0.1',
+            version: '0.0.2',
             uptime: process.uptime(),
             wsClients: wsClients.size,
         });
@@ -570,13 +570,13 @@ function handleSkillsAPI(req, res, body) {
         installed: [
             {
                 name: 'clawhub',
-                version: '0.0.1',
+                version: '0.0.2',
                 category: 'utility',
                 description: 'Install and manage skills.',
             },
             {
                 name: 'weather',
-                version: '0.0.1',
+                version: '0.0.2',
                 category: 'utility',
                 description: 'Get weather forecasts.',
             },
@@ -585,7 +585,7 @@ function handleSkillsAPI(req, res, body) {
             {
                 name: 'slack-bot',
                 slug: 'slack-bot',
-                version: '0.0.1',
+                version: '0.0.2',
                 category: 'integration',
                 author: 'community',
                 description: 'Send messages to Slack.',

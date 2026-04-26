@@ -41,7 +41,7 @@ import {
 class OrgChartFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'org-chart',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Organizational chart with AG-Claw as CEO and subagents as team members',
     dependencies: [],
   };

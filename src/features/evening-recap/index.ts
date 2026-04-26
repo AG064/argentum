@@ -59,7 +59,7 @@ export type RecapHandler = (recap: EveningRecap) => Promise<void>;
 class EveningRecapFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'evening-recap',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'End-of-day summary with accomplishments and metrics',
     dependencies: [],
   };

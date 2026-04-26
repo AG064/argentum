@@ -30,7 +30,7 @@ import {
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.0.1';
+const VERSION = '0.0.2';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
 
@@ -460,7 +460,7 @@ function cmdInit(): void {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
       name: 'My AG CLAW Instance',
-      version: '0.0.1',
+      version: '0.0.2',
       server: {
         port: 3000,
         host: '0.0.0.0',

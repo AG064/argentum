@@ -71,8 +71,8 @@ AG-Claw will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `agclaw-v0.0.1-win-x64.msi` for a normal Windows install
-- `agclaw-v0.0.1-win-x64.exe` for a portable executable
+- `agclaw-v0.0.2-win-x64.msi` for a normal Windows install
+- `agclaw-v0.0.2-win-x64.exe` for a portable executable
 
 The MSI installs `agclaw.exe` into `Program Files\AG-Claw` and adds it to the system `PATH`, so a new terminal can run:
 

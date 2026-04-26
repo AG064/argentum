@@ -74,7 +74,7 @@ export interface ContentFilteringConfig {
 class ContentFilteringFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'content-filtering',
-    version: '0.0.1',
+    version: '0.0.2',
     description: 'Content filtering for profanity, PII, and sensitive data with custom rules',
     dependencies: [],
   };
