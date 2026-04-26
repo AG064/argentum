@@ -423,6 +423,49 @@ class ApiGatewayFeature implements FeatureModule {
     });
   }
 
+  private getRateLimitConfig(): NonNullable<ApiGatewayConfig['rateLimit']> {
+    return this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
+  }
+
+  private getRateLimitKey(req: Request, byApiKey: boolean): string {
+    if (!byApiKey) {
+      return req.ip ?? 'unknown';
+    }
+
+    const apiKeyHeader = req.headers['x-api-key'];
+    const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+    if (!apiKey) {
+      return req.ip ?? 'unknown';
+    }
+
+    return this.findTokenByKey(apiKey)?.[0] ?? (req.ip ?? 'unknown');
+  }
+
+  private respondIfRateLimited(req: Request, res: Response): boolean {
+    const rl = this.getRateLimitConfig();
+    const key = this.getRateLimitKey(req, rl.byApiKey);
+
+    try {
+      const result = rateLimiting.check(key, rl.max, rl.windowMs);
+
+      if (!result.allowed) {
+        res.status(429).json({
+          error: 'Too many requests',
+          retryAfter: Math.ceil(rl.windowMs / 1000),
+          limit: rl.max,
+          window: rl.windowMs,
+        });
+        return true;
+      }
+    } catch (err) {
+      this.ctx.logger.warn('Rate limiting check failed, allowing', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    return false;
+  }
+
   /** Rate limiting middleware */
   private async rateLimitMiddleware(
     req: Request,
@@ -436,45 +479,13 @@ class ApiGatewayFeature implements FeatureModule {
     }
 
     const endpoint = this.findEndpoint(req.method, req.path);
-    if (!endpoint?.rateLimited) {
+    if (!endpoint?.rateLimited || endpoint.requiresAuth) {
       next();
       return;
     }
 
-    // Ensure rate limiting config exists
-    const rl = this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
-
-    // Rate limit by API key or IP
-    let key: string;
-    if (rl.byApiKey) {
-      const apiKeyHeader = req.headers['x-api-key'];
-      const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-      if (apiKey) {
-        key = this.findTokenByKey(apiKey)?.[0] ?? (req.ip ?? 'unknown');
-      } else {
-        key = req.ip ?? 'unknown';
-      }
-    } else {
-      key = req.ip ?? 'unknown';
-    }
-
-    // Use rate-limiting feature
-    try {
-      const result = rateLimiting.check(key, rl.max, rl.windowMs);
-
-      if (!result.allowed) {
-        res.status(429).json({
-          error: 'Too many requests',
-          retryAfter: Math.ceil(rl.windowMs / 1000),
-          limit: rl.max,
-          window: rl.windowMs,
-        });
-        return;
-      }
-    } catch (err) {
-      this.ctx.logger.warn('Rate limiting check failed, allowing', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if (this.respondIfRateLimited(req, res)) {
+      return;
     }
 
     next();
@@ -490,6 +501,12 @@ class ApiGatewayFeature implements FeatureModule {
         return;
       }
       return next();
+    }
+
+    // Throttle protected endpoints before validating credentials so repeated
+    // unauthorized requests cannot bypass rate limiting.
+    if (endpoint.requiresAuth && endpoint.rateLimited && this.respondIfRateLimited(req, res)) {
+      return;
     }
 
     if (!endpoint.requiresAuth) {

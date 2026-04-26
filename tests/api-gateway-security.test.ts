@@ -1,4 +1,5 @@
 import apiGateway from '../src/features/api-gateway';
+import rateLimiting from '../src/features/rate-limiting';
 
 describe('API gateway security', () => {
   const instance = apiGateway as any;
@@ -68,5 +69,39 @@ describe('API gateway security', () => {
 
     expect(instance.tokenHasScope(token, 'tokens:read')).toBe(true);
     expect(instance.tokenHasScope(token, 'tokens:write')).toBe(false);
+  });
+
+  test('rate limits repeated unauthorized requests on protected endpoints', () => {
+    (rateLimiting as any).initDb();
+    const originalRateLimit = instance.config.rateLimit;
+    instance.config.rateLimit = { windowMs: 60000, max: 1, byApiKey: false };
+    rateLimiting.reset('127.0.0.1');
+
+    const req: any = {
+      method: 'DELETE',
+      path: '/api/tokens/ak_test',
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    const next = jest.fn();
+
+    instance.authMiddleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+
+    res.status.mockClear();
+    res.json.mockClear();
+    next.mockClear();
+
+    instance.authMiddleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(next).not.toHaveBeenCalled();
+
+    rateLimiting.reset('127.0.0.1');
+    instance.config.rateLimit = originalRateLimit;
   });
 });
