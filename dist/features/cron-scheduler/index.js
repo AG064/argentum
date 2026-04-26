@@ -11,7 +11,7 @@ const node_cron_1 = __importDefault(require("node-cron"));
 class CronSchedulerFeature {
     meta = {
         name: 'cron-scheduler',
-        version: '0.1.0',
+        version: '0.0.2',
         description: 'Cron-like job scheduler with persistent storage and custom handlers',
         dependencies: [],
     };
@@ -224,7 +224,6 @@ class CronSchedulerFeature {
             await this.executeHandler(job, handler);
         }, {
             timezone: this.config.timezone,
-            scheduled: true,
         });
         this.cronJobs.set(job.id, cronJob);
     }

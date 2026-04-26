@@ -10,7 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  portable-binaries:
+    name: Portable binaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,30 +23,99 @@ jobs:
 
       - run: npm ci
       - run: npm run build
-      - run: npm install -g pkg
 
-      - name: Build Linux binary
-        run: pkg dist/cli.js --targets node18-linux-x64 --output agclaw-linux-x64
+      - name: Read package version
+        id: package
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build Windows binary
-        run: pkg dist/cli.js --targets node18-win-x64 --output agclaw-win.exe
+      - name: Install executable packager
+        run: npm install -g @yao-pkg/pkg@6.6.0
 
-      - name: Build macOS binary
-        run: pkg dist/cli.js --targets node18-macos-x64 --output agclaw-macos
+      - name: Build portable release binaries
+        shell: bash
+        run: |
+          mkdir -p artifacts/release
+          pkg --config package.json dist/cli.js --targets node18-linux-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-linux-x64" --compress GZip --no-bytecode --public-packages "*" --public
+          pkg --config package.json dist/cli.js --targets node18-win-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-win-x64.exe" --compress GZip --no-bytecode --public-packages "*" --public
+          pkg --config package.json dist/cli.js --targets node18-macos-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-macos-x64" --compress GZip --no-bytecode --public-packages "*" --public
+
+      - name: Smoke test Linux binary
+        run: ./artifacts/release/agclaw-v${{ steps.package.outputs.version }}-linux-x64 --version
+
+      - name: Write portable checksums
+        shell: bash
+        run: |
+          cd artifacts/release
+          sha256sum agclaw-v${{ steps.package.outputs.version }}-linux-x64 agclaw-v${{ steps.package.outputs.version }}-win-x64.exe agclaw-v${{ steps.package.outputs.version }}-macos-x64 > SHA256SUMS-portable.txt
+
+      - name: Upload portable artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agclaw-portable-binaries
+          path: |
+            artifacts/release/agclaw-v*-linux-x64
+            artifacts/release/agclaw-v*-win-x64.exe
+            artifacts/release/agclaw-v*-macos-x64
+            artifacts/release/SHA256SUMS-portable.txt
 
       - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            agclaw-linux-x64
-            agclaw-win.exe
-            agclaw-macos
+            artifacts/release/agclaw-v*-linux-x64
+            artifacts/release/agclaw-v*-win-x64.exe
+            artifacts/release/agclaw-v*-macos-x64
+            artifacts/release/SHA256SUMS-portable.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows-installer:
+    name: Windows MSI installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - run: npm ci
+
+      - name: Build Windows EXE and MSI
+        shell: pwsh
+        run: .\scripts\build-windows-release.ps1 -OutDir artifacts\release
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agclaw-windows-installer
+          path: |
+            artifacts/release/agclaw-v*-win-x64.exe
+            artifacts/release/agclaw-v*-win-x64.msi
+            artifacts/release/SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            artifacts/release/agclaw-v*-win-x64.msi
+            artifacts/release/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   notify:
-    needs: build
+    needs:
+      - portable-binaries
+      - windows-installer
     runs-on: ubuntu-latest
     steps:
       - name: Notify success
-        run: |
-          echo "Release ${{ github.ref_name }} built successfully!"
+        run: echo "Release ${{ github.ref_name }} artifacts built successfully."

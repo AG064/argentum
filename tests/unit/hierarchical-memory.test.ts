@@ -6,7 +6,7 @@ import { rmSync } from 'fs';
 import { join } from 'path';
 import { HierarchicalMemoryStore, MemoryTier, type MemoryEntry } from '../../src/core/hierarchical-memory';
 
-const TEST_DB = '/tmp/test-hierarchical-memory.db';
+const TEST_DB = join(process.cwd(), 'data', 'test-tmp', 'test-hierarchical-memory.db');
 
 function makeEntry(overrides: Partial<MemoryEntry> = {}): MemoryEntry {
   return {

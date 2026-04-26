@@ -61,7 +61,7 @@ const path_1 = require("path");
 class TtsEngineFeature {
     meta = {
         name: 'tts-engine',
-        version: '0.1.0',
+        version: '0.0.2',
         description: 'Text-to-speech engine with provider abstraction and audio caching',
         dependencies: [],
     };

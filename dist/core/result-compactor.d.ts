@@ -20,7 +20,7 @@ export interface CompactionResult {
  * @param threshold - Character threshold before compaction (default 2000)
  * @returns CompactionResult with compact string and path to full result if saved
  */
-export declare function compactResult(toolName: string, result: string, threshold?: number): CompactionResult;
+export declare function compactResult(toolName: string, result: string, threshold?: number, outputDir?: string): CompactionResult;
 /**
  * Compact multiple tool results
  *
@@ -28,5 +28,5 @@ export declare function compactResult(toolName: string, result: string, threshol
  * @param threshold - Character threshold per result
  * @returns Record of toolName -> CompactionResult
  */
-export declare function compactResults(results: Record<string, string>, threshold?: number): Record<string, CompactionResult>;
+export declare function compactResults(results: Record<string, string>, threshold?: number, outputDir?: string): Record<string, CompactionResult>;
 //# sourceMappingURL=result-compactor.d.ts.map

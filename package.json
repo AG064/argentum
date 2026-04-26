@@ -1,6 +1,6 @@
 {
   "name": "ag-claw",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,6 +11,7 @@
     "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli.js start",
+    "onboard": "tsx src/cli.ts onboard",
     "cli": "node dist/cli.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
@@ -21,13 +22,13 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
     "format:all": "prettier --write \"**/*.{ts,js,json,md,yaml,yml}\" --ignore-path .prettierignore",
-    "test": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js",
-    "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --watch",
-    "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --coverage --coverage-reporters=text-summary --coverage-reporters=lcov --coverage-reporters=html",
-    "test:unit": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js \"tests/unit\" --passWithNoTests",
-    "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js \"tests/integration\" --passWithNoTests",
-    "test:e2e": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js \"tests/e2e\" --passWithNoTests",
-    "test:ci": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --ci --coverage --coverage-reporters=text-summary --coverage-reporters=lcov",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js --coverage --coverage-reporters=text-summary --coverage-reporters=lcov --coverage-reporters=html",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js tests/unit --passWithNoTests",
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js tests/integration --passWithNoTests",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js tests/e2e --passWithNoTests",
+    "test:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js --ci --coverage --coverage-reporters=text-summary --coverage-reporters=lcov",
     "build:watch": "tsc --watch --preserveWatchOutput",
     "build:prod": "tsc --noEmit && tsc",
     "clean": "rimraf dist .tsbuildinfo",
@@ -35,8 +36,22 @@
     "docker:build": "docker compose -f docker/docker-compose.yml build",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "package:win": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1",
+    "package:win:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 -SkipMsi",
     "prebuild": "npm run clean",
     "postinstall": "node scripts/postinstall-patch.js"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "config/**/*.yaml",
+      "config/**/*.json",
+      "docs/dashboard.html",
+      "src/ui/dashboard/**/*",
+      "dist/ui/**/*"
+    ]
   },
   "keywords": [
     "ai-agent",
@@ -59,14 +74,15 @@
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.1",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.4.1",
     "googleapis": "^171.4.0",
     "grammy": "^1.42.0",
     "jsep": "^1.4.0",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.2.1",
     "openai": "^6.33.0",
     "pino": "^10.3.1",
     "pino-pretty": "^10.3.1",
-    "sanitize-html": "^2.17.2",
+    "sanitize-html": "^2.17.3",
     "ws": "^8.16.0",
     "yaml": "^2.3.4",
     "zod": "^4.3.6"
@@ -111,6 +127,7 @@
     "undici": "~6.21.0",
     "cross-spawn": "^7.0.6",
     "glob": "^11.0.1",
-    "brace-expansion": "^3.0.2"
+    "brace-expansion": "^3.0.2",
+    "postcss": "^8.5.10"
   }
 }

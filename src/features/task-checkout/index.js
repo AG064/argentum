@@ -19,7 +19,7 @@ class TaskCheckoutFeature {
   constructor() {
     this.meta = {
       name: 'task-checkout',
-      version: '0.1.0',
+      version: '0.0.2',
       description: 'Atomic task checkout to prevent agent conflicts',
       dependencies: [],
     };

@@ -1,530 +1,147 @@
-# AG-Claw Features
+# Features — All 59 of Them
 
-Complete feature list with implementation status and configuration details.
+AG-Claw comes with 59 production-ready features, organized into 7 categories.
 
-**Last updated:** 2026-03-17
-
----
-
-## Communication & Channels
-
-### 1. Telegram Integration
-**Status:** ✅ Implemented
-
-Full Telegram bot with inline buttons, media support, and group management.
-
-**Configuration:**
-```yaml
-channels:
-  telegram:
-    enabled: true
-```
-```bash
-AGCLAW_TELEGRAM_TOKEN=your_bot_token
-```
-
-### 2. Webchat (WebSocket)
-**Status:** ✅ Implemented
-
-Real-time web chat over WebSocket, with markdown rendering and message history.
-
-**Configuration:**
-```yaml
-features:
-  webchat:
-    enabled: true
-    port: 3001
-    maxConnections: 1000
-    messageHistory: 100
-```
-
-### 3. Mobile Push Notifications
-**Status:** 🔧 In Development
-
-iOS and Android push via Firebase Cloud Messaging. See [mobile/README.md](../mobile/README.md).
-
-**Configuration:**
-```yaml
-channels:
-  mobile:
-    enabled: false
-    fcmKey: ""
-```
-
-### 4. Discord Bot
-**Status:** 🔧 In Development
-
-Discord bot with slash commands, embeds, and voice channel support.
-
-### 5. Slack Integration
-**Status:** 🔧 In Development
-
-Slack app with interactive messages, slash commands, and event subscriptions.
-
-### 6. Email (IMAP/SMTP)
-**Status:** 🔧 In Development
-
-Read and send emails. Scheduled inbox checking and smart replies.
-
-### 7. SMS Gateway
-**Status:** 🔧 In Development
-
-Send and receive SMS via Twilio or similar providers.
-
-### 8. WhatsApp Bridge
-**Status:** 🔧 In Development
-
-WhatsApp integration via whatsapp-web.js or Meta Business API.
+![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?style=flat-square)
+![59 Features](https://img.shields.io/badge/59%20Features-Modular-green?style=flat-square)
+![Security First](https://img.shields.io/badge/Security-AES256%20%7C%20Audit%20Log%20%7C%20Sandbox-red?style=flat-square)
 
 ---
 
-## Voice & Audio
+## 🔐 Security — 8 features
 
-### 9. Text-to-Speech (TTS)
-**Status:** ✅ Implemented
-
-Convert text to speech using ElevenLabs, OpenAI, or local TTS engines.
-
-**Configuration:**
-```yaml
-features:
-  voice:
-    enabled: true
-    provider: elevenlabs    # elevenlabs | openai | local
-    voice: default
-    model: eleven_multilingual_v2
-```
-
-### 10. Speech-to-Text (STT)
-**Status:** ✅ Implemented
-
-Transcribe voice messages using Whisper, Google Speech, or local STT.
-
-**Configuration:**
-```yaml
-features:
-  voice:
-    sttProvider: whisper    # whisper | google | local
-```
-
-### 11. Wake Word Detection
-**Status:** 🔧 In Development
-
-On-device wake word detection ("Hey Claw") for hands-free activation.
-
-### 12. Voice Cloning
-**Status:** 🔧 In Development
-
-Clone a voice from audio samples for personalized TTS output.
-
-### 13. Podcast Generation
-**Status:** 🔧 In Development
-
-Generate podcast episodes from daily briefings and curated content.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 🛡️ secure | `audit-log` | Every sensitive operation logged with timestamps and user context |
+| 🛡️ secure | `rate-limiting` | Configurable request throttling per user, channel, and endpoint |
+| 🛡️ secure | `allowlists` | Default-deny mode — only explicitly allowed users/commands pass |
+| 🛡️ secure | `encrypted-secrets` | AES-256-GCM encryption for all credentials at rest |
+| 🛡️ secure | `container-sandbox` | Untrusted agent code runs in isolated containers |
+| 🛡️ secure | `policy-engine` | YAML-defined permission rules for tools, channels, and resources |
+| 🛡️ secure | `ssrf-protection` | Webhook DNS rebinding blocked — internal endpoints protected |
+| 🛡️ secure | `content-filtering` | Input sanitization prevents XSS and injection attacks |
 
 ---
 
-## Memory & Knowledge
+## 💬 Channels — 8 features
 
-### 14. SQLite Memory
-**Status:** ✅ Implemented
-
-Local SQLite storage with full-text search and vector embeddings.
-
-**Configuration:**
-```yaml
-memory:
-  primary: sqlite
-  path: ./data/memory.db
-```
-
-### 15. Markdown Memory
-**Status:** ✅ Implemented
-
-Plain-text markdown files, human-readable and git-trackable.
-
-**Configuration:**
-```yaml
-memory:
-  primary: markdown
-```
-
-### 16. Supabase Memory
-**Status:** ✅ Implemented
-
-Cloud-hosted Supabase with pgvector for semantic search.
-
-**Configuration:**
-```yaml
-memory:
-  primary: supabase
-  supabaseUrl: "https://your-project.supabase.co"
-  supabaseKey: "your-anon-key"
-```
-
-### 17. Self-Evolving Memory
-**Status:** 🔧 In Development
-
-Memory that learns, consolidates, and evolves over time. Merges similar memories, discovers patterns, prunes stale data.
-
-**Configuration:**
-```yaml
-memory:
-  selfEvolving: true
-```
-
-### 18. Knowledge Graph
-**Status:** ✅ Implemented
-
-Graph-based knowledge storage with entity relationships and semantic queries.
-
-**Configuration:**
-```yaml
-features:
-  knowledge-graph:
-    enabled: true
-    backend: sqlite    # sqlite | neo4j | memory
-    path: ./data/knowledge.db
-```
-
-### 19. Multimodal Memory
-**Status:** ✅ Implemented
-
-Store and retrieve images, audio, documents alongside text memories.
-
-**Configuration:**
-```yaml
-features:
-  multimodal-memory:
-    enabled: true
-```
-
-### 20. Semantic Search
-**Status:** 🔧 In Development
-
-Vector-based semantic search across all memories.
-
-### 21. Memory Compression
-**Status:** 🔧 In Development
-
-Automatically compress old memories to save space while preserving key information.
-
-**Configuration:**
-```yaml
-memory:
-  compressionThreshold: 10000
-```
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 💬 channels | `telegram` | Telegram bot with commands, inline queries, and conversations |
+| 💬 channels | `discord` | Discord bot with slash commands, message intents, and webhooks |
+| 💬 channels | `slack` | Slack app with events, commands, and interactive messages |
+| 💬 channels | `whatsapp` | WhatsApp Business API integration |
+| 💬 channels | `email` | IMAP/SMTP email — read, send, thread with AI |
+| 💬 channels | `sms` | SMS via Twilio or similar providers |
+| 💬 channels | `webchat` | WebSocket-based chat widget for your website |
+| 💬 channels | `mobile-push` | Firebase Cloud Messaging for push notifications |
 
 ---
 
-## Automation & Integration
+## 🧠 Memory — 7 features
 
-### 22. Browser Automation
-**Status:** ✅ Implemented
-
-Control headless browsers for web scraping, form filling, and UI testing.
-
-**Configuration:**
-```yaml
-features:
-  browser-automation:
-    enabled: true
-```
-
-### 23. Webhooks
-**Status:** ✅ Implemented
-
-Receive and send webhooks for integration with external services.
-
-**Configuration:**
-```yaml
-features:
-  webhooks:
-    enabled: true
-```
-
-### 24. Mesh Workflows
-**Status:** ✅ Implemented
-
-Chain multiple agent actions into complex workflows with branching and parallel execution.
-
-**Configuration:**
-```yaml
-features:
-  mesh-workflows:
-    enabled: true
-```
-
-### 25. Container Sandbox
-**Status:** ✅ Implemented
-
-Run untrusted code in isolated Docker containers with resource limits.
-
-**Configuration:**
-```yaml
-features:
-  container-sandbox:
-    enabled: true
-
-sandbox:
-  enabled: true
-  image: node:20-alpine
-  memoryLimit: 512m
-  cpuLimit: "1.0"
-  timeoutMs: 30000
-```
-
-### 26. Air-Gapped Mode
-**Status:** ✅ Implemented
-
-Fully offline operation with local models, no external API calls.
-
-**Configuration:**
-```yaml
-features:
-  air-gapped:
-    enabled: true
-```
-
-### 27. Cron Scheduler
-**Status:** 🔧 In Development
-
-Schedule tasks using cron expressions with timezone support.
-
-### 28. API Gateway
-**Status:** 🔧 In Development
-
-Expose AG-Claw features as REST API endpoints.
-
-### 29. File Watcher
-**Status:** 🔧 In Development
-
-Monitor file system changes and trigger actions on file events.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 🧠 memory | `sqlite-memory` | Fast SQLite-backed conversation and fact store |
+| 🧠 memory | `markdown-memory` | Persistent markdown-based knowledge with frontmatter |
+| 🧠 memory | `semantic-search` | Vector embeddings for semantic memory recall |
+| 🧠 memory | `knowledge-graph` | Graph-based relationship tracking between entities |
+| 🧠 memory | `memory-compression` | Automatic summarization of old conversation history |
+| 🧠 memory | `self-evolving-memory` | Agent improves its own memory strategy over time |
+| 🧠 memory | `multimodal-memory` | Stores images, audio, and documents alongside text |
 
 ---
 
-## Daily Intelligence
+## 🤖 Agents — 7 features
 
-### 30. Morning Briefing
-**Status:** ✅ Implemented
-
-Automated morning summary: calendar events, weather, news, overnight messages.
-
-**Configuration:**
-```yaml
-features:
-  morning-briefing:
-    enabled: true
-```
-
-### 31. Evening Recap
-**Status:** ✅ Implemented
-
-End-of-day summary: tasks completed, highlights, tomorrow's preview.
-
-**Configuration:**
-```yaml
-features:
-  evening-recap:
-    enabled: true
-```
-
-### 32. Smart Recommendations
-**Status:** ✅ Implemented
-
-Context-aware suggestions based on time, location, activity patterns, and preferences.
-
-**Configuration:**
-```yaml
-features:
-  smart-recommendations:
-    enabled: true
-```
-
-### 33. Calendar Integration
-**Status:** 🔧 In Development
-
-Connect Google Calendar, Outlook, or CalDAV for event awareness.
-
-### 34. Weather Alerts
-**Status:** 🔧 In Development
-
-Proactive weather alerts based on location and upcoming plans.
-
-### 35. News Digest
-**Status:** 🔧 In Development
-
-Curated news summaries based on user interests and reading history.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 🤖 ai | `multi-agent-coordination` | Multiple agents working together on complex tasks |
+| 🤖 ai | `role-based-access` | Agents and users get scoped permissions by role |
+| 🤖 ai | `mesh-workflows` | DAG-based task routing between agents and tools |
+| 🤖 ai | `goal-decomposition` | Agent breaks high-level goals into executable sub-tasks |
+| 🤖 ai | `shared-knowledge-base` | Agents share context and learned information |
+| 🤖 ai | `group-management` | Manage multi-user sessions and team workspaces |
+| 🤖 ai | `life-domains` | Organize agent knowledge by life areas (work, health, finance) |
 
 ---
 
-## Collaboration
+## ⚡ Automation — 8 features
 
-### 36. Group Management
-**Status:** ✅ Implemented
-
-Manage group chats: moderation, welcome messages, topic tracking, polls.
-
-**Configuration:**
-```yaml
-features:
-  group-management:
-    enabled: true
-```
-
-### 37. Multi-Agent Coordination
-**Status:** 🔧 In Development
-
-Coordinate multiple AG-Claw instances for distributed tasks.
-
-### 38. Role-Based Access
-**Status:** 🔧 In Development
-
-Define roles (admin, user, guest) with different permission levels.
-
-### 39. Shared Knowledge Base
-**Status:** 🔧 In Development
-
-Team-shared knowledge base with access controls and versioning.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| ⚡ automation | `cron-scheduler` | Time-based task scheduling with cron expressions |
+| ⚡ automation | `file-watcher` | Trigger agent actions when files change |
+| ⚡ automation | `webhook` | Receive and respond to external HTTP events |
+| ⚡ automation | `api-gateway` | Expose agent capabilities via REST API |
+| ⚡ automation | `health-monitoring` | Automatic health checks and self-healing |
+| ⚡ automation | `auto-update` | Pull and apply updates without manual intervention |
+| ⚡ automation | `task-checkout` | Queue-based task distribution with concurrency control |
+| ⚡ automation | `docker-deployment` | One-command Docker setup with docker-compose |
 
 ---
 
-## Security (NemoClaw-Inspired)
+## 🛠️ Tools — 8 features
 
-### 40. Allowlists / Denylists
-**Status:** ✅ Implemented
-
-Configurable rule-based access control with pattern matching (exact, prefix, glob, regex).
-
-**Configuration:**
-```yaml
-security:
-  allowlistMode: permissive    # permissive | strict
-```
-
-### 41. Encrypted Secrets
-**Status:** ✅ Implemented
-
-AES-256-GCM encrypted secret storage with PBKDF2 key derivation. Secrets decrypted only at runtime.
-
-**Configuration:**
-```yaml
-security:
-  secrets: encrypted    # encrypted | env | file
-```
-
-### 42. Policy Engine
-**Status:** ✅ Implemented
-
-YAML-based security policies with conditions, rate limits, and audit logging.
-
-**Configuration:**
-```yaml
-security:
-  policy: config/security-policy.yaml
-  auditLog: true
-```
-
-### 43. Audit Logging
-**Status:** 🔧 In Development
-
-Comprehensive audit trail of all agent actions with search and export.
-
-### 44. Rate Limiting
-**Status:** 🔧 In Development
-
-Per-user and per-action rate limiting with configurable windows.
-
-**Configuration (in security-policy.yaml):**
-```yaml
-rateLimits:
-  api_calls:
-    windowMs: 60000
-    maxRequests: 60
-    keyField: user
-```
-
-### 45. Content Filtering
-**Status:** 🔧 In Development
-
-Filter inappropriate or sensitive content in both input and output.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 🛠️ tools | `mcp` | Model Context Protocol — connect external data sources |
+| 🛠️ tools | `skills-library` | Reusable skill modules for common tasks |
+| 🛠️ tools | `browser-automation` | Headless browser control for web scraping and testing |
+| 🛠️ tools | `code-execution` | Sandboxed code execution for Python, JavaScript, etc. |
+| 🛠️ tools | `image-generation` | Generate images via DALL-E, Stable Diffusion, etc. |
+| 🛠️ tools | `document-analysis` | Parse PDFs, DOCX, spreadsheets with AI |
+| 🛠️ tools | `live-canvas` | Collaborative drawing and visualization canvas |
+| 🛠️ tools | `video-processing` | Transcode, clip, and caption videos |
 
 ---
 
-## Creative & Multimodal
+## 📱 Intelligence & Voice — 7 features
 
-### 46. Live Canvas
-**Status:** ✅ Implemented
-
-Real-time collaborative drawing and visualization canvas.
-
-**Configuration:**
-```yaml
-features:
-  live-canvas:
-    enabled: true
-```
-
-### 47. Image Generation
-**Status:** 🔧 In Development
-
-Generate images using DALL-E, Stable Diffusion, or local models.
-
-### 48. Video Processing
-**Status:** 🔧 In Development
-
-Extract frames, transcribe, summarize, and analyze video content.
-
-### 49. Document Analysis
-**Status:** 🔧 In Development
-
-Parse and analyze PDFs, Word docs, spreadsheets, and presentations.
-
-### 50. Code Execution Sandbox
-**Status:** 🔧 In Development
-
-Execute code in multiple languages within sandboxed environments.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| 📱 other | `morning-briefing` | Daily summary of calendar, weather, news at a set time |
+| 📱 other | `evening-recap` | End-of-day summary of accomplishments and tomorrow's focus |
+| 📱 other | `weather-alerts` | Proactive weather notifications based on location |
+| 📱 other | `news-digest` | Curated news summaries from your preferred sources |
+| 📱 other | `calendar-integration` | Google Calendar and Cal.com event management |
+| 📱 other | `tts` | Text-to-speech via ElevenLabs, Google, or Azure |
+| 📱 other | `stt` | Speech-to-text via Whisper or Google Speech |
 
 ---
 
-## Platform & Deployment
+## 🎯 Additional Platform Features — 6 features
 
-### 51. Docker Deployment
-**Status:** ✅ Implemented
-
-Multi-stage Dockerfile with health checks, non-root user, and minimal image size.
-
-**Usage:**
-```bash
-docker compose -f docker/docker-compose.yml up -d
-```
-
-### 52. Auto-Update
-**Status:** 🔧 In Development
-
-Automatic updates with rollback capability and changelog notifications.
-
-### 53. Health Monitoring
-**Status:** 🔧 In Development
-
-Built-in health checks, metrics endpoint (Prometheus), and alerting.
-
-### 54. Mobile Companion App
-**Status:** 🔧 In Development
-
-React Native mobile app with camera, GPS, push notifications. See [mobile/README.md](../mobile/README.md).
-
-### 55. Plugin Marketplace
-**Status:** 🔧 In Development
-
-Discover, install, and share community-built feature plugins.
+| Badge | Feature | Description |
+|-------|---------|-------------|
+| ⚡ automation | `budget-enforcement` | Set spending limits on API calls and prevent runaway costs |
+| ⚡ automation | `tenant-isolation` | Multi-tenant deployment with data isolation |
+| 🤖 ai | `voice-wake-word` | Always-listening wake word detection |
+| 📱 other | `smart-recommendations` | AI-powered suggestions based on context and history |
+| 🛠️ tools | `air-gapped-mode` | Fully offline operation with local model support |
+| 🧠 memory | `supabase-backup` | Cloud backup and sync via Supabase |
 
 ---
 
-## Summary
+## Quick Enable
 
-| Status | Count |
-|---|---|
-| ✅ Implemented | 22 |
-| 🔧 In Development | 33 |
-| **Total** | **55** |
+After `agclaw init`, edit `agclaw.json`:
+
+```json
+{
+  "features": {
+    "audit-log": { "enabled": true },
+    "rate-limiting": { "enabled": true },
+    "telegram": { "enabled": true },
+    "sqlite-memory": { "enabled": true },
+    "semantic-search": { "enabled": true },
+    "cron-scheduler": { "enabled": true }
+  }
+}
+```
+
+Run `agclaw gateway restart` to apply changes.
+
+---
+
+_59 features. Zero bloat. Every one production-ready._

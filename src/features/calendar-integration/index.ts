@@ -66,7 +66,7 @@ export interface RecurrenceRule {
 class CalendarIntegrationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'calendar-integration',
-    version: '0.1.0',
+    version: '0.0.2',
     description: 'Local calendar with events and reminders',
     dependencies: [],
   };

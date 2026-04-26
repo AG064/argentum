@@ -7,6 +7,7 @@
 
 import { readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
+import { pathToFileURL } from 'url';
 
 import { type AGClawConfig } from './config';
 import { type Logger, featureLogger } from './logger';
@@ -58,6 +59,26 @@ export interface FeatureContext {
 /** Hook handler type */
 export type HookHandler = (data: unknown) => Promise<void | unknown>;
 
+/** Resolve the entry file for a feature directory */
+export function resolveFeatureEntryPath(featureDirPath: string): string | null {
+  const jsEntry = join(featureDirPath, 'index.js');
+  if (existsSync(jsEntry)) {
+    return jsEntry;
+  }
+
+  const tsEntry = join(featureDirPath, 'index.ts');
+  if (existsSync(tsEntry)) {
+    return tsEntry;
+  }
+
+  return null;
+}
+
+/** Convert a filesystem path into a native ESM import specifier */
+export function toModuleImportSpecifier(modulePath: string): string {
+  return modulePath.startsWith('file:') ? modulePath : pathToFileURL(modulePath).href;
+}
+
 /** Feature registry entry */
 interface FeatureEntry {
   module: FeatureModule;
@@ -104,12 +125,12 @@ export class PluginLoader {
     this.logger.info(`Scanning ${featureDirs.length} feature directories`);
 
     for (const dir of featureDirs) {
-      const featurePath = join(this.featuresPath, dir.name, 'index.js');
-      const featureTsPath = join(this.featuresPath, dir.name, 'index.ts');
+      const featureDirPath = join(this.featuresPath, dir.name);
+      const featureEntryPath = resolveFeatureEntryPath(featureDirPath);
 
-      if (existsSync(featurePath) || existsSync(featureTsPath)) {
+      if (featureEntryPath) {
         try {
-          await this.loadFeature(dir.name, join(this.featuresPath, dir.name));
+          await this.loadFeature(dir.name, featureEntryPath);
         } catch (err) {
           this.logger.error(`Failed to load feature: ${dir.name}`, {
             error: err instanceof Error ? err.message : String(err),
@@ -122,11 +143,11 @@ export class PluginLoader {
   }
 
   /** Load a single feature module */
-  async loadFeature(name: string, path: string): Promise<void> {
-    this.logger.debug(`Loading feature: ${name}`, { path });
+  async loadFeature(name: string, modulePath: string): Promise<void> {
+    this.logger.debug(`Loading feature: ${name}`, { path: modulePath });
 
     // Dynamic import of the feature module
-    const mod = await import(path);
+    const mod = await import(modulePath);
     const featureModule: FeatureModule =
       mod.default ??
       mod[name] ??

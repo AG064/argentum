@@ -40,9 +40,28 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PluginLoader = void 0;
+exports.resolveFeatureEntryPath = resolveFeatureEntryPath;
+exports.toModuleImportSpecifier = toModuleImportSpecifier;
 const fs_1 = require("fs");
 const path_1 = require("path");
+const url_1 = require("url");
 const logger_1 = require("./logger");
+/** Resolve the entry file for a feature directory */
+function resolveFeatureEntryPath(featureDirPath) {
+    const jsEntry = (0, path_1.join)(featureDirPath, 'index.js');
+    if ((0, fs_1.existsSync)(jsEntry)) {
+        return jsEntry;
+    }
+    const tsEntry = (0, path_1.join)(featureDirPath, 'index.ts');
+    if ((0, fs_1.existsSync)(tsEntry)) {
+        return tsEntry;
+    }
+    return null;
+}
+/** Convert a filesystem path into a native ESM import specifier */
+function toModuleImportSpecifier(modulePath) {
+    return modulePath.startsWith('file:') ? modulePath : (0, url_1.pathToFileURL)(modulePath).href;
+}
 /**
  * Plugin loader for AG-Claw features.
  *
@@ -74,11 +93,11 @@ class PluginLoader {
         const featureDirs = entries.filter((e) => e.isDirectory());
         this.logger.info(`Scanning ${featureDirs.length} feature directories`);
         for (const dir of featureDirs) {
-            const featurePath = (0, path_1.join)(this.featuresPath, dir.name, 'index.js');
-            const featureTsPath = (0, path_1.join)(this.featuresPath, dir.name, 'index.ts');
-            if ((0, fs_1.existsSync)(featurePath) || (0, fs_1.existsSync)(featureTsPath)) {
+            const featureDirPath = (0, path_1.join)(this.featuresPath, dir.name);
+            const featureEntryPath = resolveFeatureEntryPath(featureDirPath);
+            if (featureEntryPath) {
                 try {
-                    await this.loadFeature(dir.name, (0, path_1.join)(this.featuresPath, dir.name));
+                    await this.loadFeature(dir.name, featureEntryPath);
                 }
                 catch (err) {
                     this.logger.error(`Failed to load feature: ${dir.name}`, {
@@ -90,10 +109,10 @@ class PluginLoader {
         this.resolveDependencies();
     }
     /** Load a single feature module */
-    async loadFeature(name, path) {
-        this.logger.debug(`Loading feature: ${name}`, { path });
+    async loadFeature(name, modulePath) {
+        this.logger.debug(`Loading feature: ${name}`, { path: modulePath });
         // Dynamic import of the feature module
-        const mod = await Promise.resolve(`${path}`).then(s => __importStar(require(s)));
+        const mod = await Promise.resolve(`${modulePath}`).then(s => __importStar(require(s)));
         const featureModule = mod.default ??
             mod[name] ??
             Object.values(mod).find((v) => typeof v === 'object' && v !== null && 'meta' in v && 'init' in v);

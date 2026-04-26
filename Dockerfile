@@ -51,8 +51,8 @@ USER agclaw
 
 # Ports:
 #   3000 - AG-Claw gateway HTTP
-#   3001 - Webchat WebSocket
-EXPOSE 3000 3001
+# Webchat is opt-in and bound to loopback by default.
+EXPOSE 3000
 
 # Health check against the gateway
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

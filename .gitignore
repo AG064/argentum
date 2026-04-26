@@ -3,6 +3,13 @@ dist/
 *.js.map
 *.d.ts.map
 data/
+artifacts/
+.npm-cache/
+.pkg-cache/
+.dotnet-home/
+.nuget-packages/
+.appdata/
+.localappdata/
 memory/
 logs/
 .env

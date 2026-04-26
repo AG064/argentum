@@ -5,12 +5,44 @@
  * Loads and validates configuration from YAML files with environment variable overrides.
  * Supports hot-reloading via chokidar file watcher.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigManager = exports.ConfigSchema = exports.LLMConfigSchema = exports.LLMProviderConfigSchema = exports.ModelRoutingConfigSchema = exports.ModelRoutingWeightsSchema = void 0;
 exports.getConfig = getConfig;
 const fs_1 = require("fs");
 const path_1 = require("path");
-const chokidar_1 = require("chokidar");
 const yaml_1 = require("yaml");
 const zod_1 = require("zod");
 /** Server configuration schema */
@@ -35,6 +67,7 @@ const ServerConfigSchema = zod_1.z.object({
 const FeatureToggleSchema = zod_1.z.object({
     enabled: zod_1.z.boolean().default(false),
 });
+const GenericFeatureConfigSchema = FeatureToggleSchema.passthrough();
 /** Voice feature config */
 const VoiceConfigSchema = FeatureToggleSchema.extend({
     provider: zod_1.z.enum(['elevenlabs', 'openai', 'local']).default('elevenlabs'),
@@ -46,8 +79,19 @@ const VoiceConfigSchema = FeatureToggleSchema.extend({
 /** Webchat feature config */
 const WebchatConfigSchema = FeatureToggleSchema.extend({
     port: zod_1.z.number().int().default(3001),
+    host: zod_1.z.string().default('127.0.0.1'),
+    authToken: zod_1.z.string().min(16).optional(),
+    requireAuth: zod_1.z.boolean().default(true),
     maxConnections: zod_1.z.number().int().default(1000),
     messageHistory: zod_1.z.number().int().default(100),
+    maxMessageLength: zod_1.z.number().int().min(1).max(100000).default(10000),
+    maxPayloadBytes: zod_1.z.number().int().min(1024).default(1024 * 1024),
+    maxFileSize: zod_1.z.number().int().min(1).default(10 * 1024 * 1024),
+    rateLimitWindowMs: zod_1.z.number().int().min(1000).default(60000),
+    maxMessagesPerWindow: zod_1.z.number().int().min(1).default(60),
+    allowedFileTypes: zod_1.z
+        .array(zod_1.z.string())
+        .default(['image/*', 'text/*', 'application/pdf', 'application/json']),
 });
 /** Knowledge Graph config */
 const KnowledgeGraphConfigSchema = FeatureToggleSchema.extend({
@@ -68,7 +112,7 @@ const SecurityConfigSchema = zod_1.z.object({
     policy: zod_1.z.string().default('config/security-policy.yaml'),
     secrets: zod_1.z.enum(['encrypted', 'env', 'file']).default('encrypted'),
     auditLog: zod_1.z.boolean().default(true),
-    allowlistMode: zod_1.z.enum(['strict', 'permissive']).default('permissive'),
+    allowlistMode: zod_1.z.enum(['strict', 'permissive']).default('strict'),
 });
 /** Multi-Agent Coordination config */
 const MultiAgentCoordinationConfigSchema = FeatureToggleSchema.extend({
@@ -203,8 +247,16 @@ exports.ConfigSchema = zod_1.z.object({
         'webchat': WebchatConfigSchema.default({
             enabled: false,
             port: 3001,
+            host: '127.0.0.1',
+            requireAuth: true,
             maxConnections: 1000,
             messageHistory: 100,
+            maxMessageLength: 10000,
+            maxPayloadBytes: 1024 * 1024,
+            maxFileSize: 10 * 1024 * 1024,
+            rateLimitWindowMs: 60000,
+            maxMessagesPerWindow: 60,
+            allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
         }),
         'voice': VoiceConfigSchema.default({
             enabled: false,
@@ -315,12 +367,21 @@ exports.ConfigSchema = zod_1.z.object({
             maxJobs: 500,
         }),
     })
+        .catchall(GenericFeatureConfigSchema)
         .default({
         'webchat': {
             enabled: false,
             port: 3001,
+            host: '127.0.0.1',
+            requireAuth: true,
             maxConnections: 1000,
             messageHistory: 100,
+            maxMessageLength: 10000,
+            maxPayloadBytes: 1024 * 1024,
+            maxFileSize: 10 * 1024 * 1024,
+            rateLimitWindowMs: 60000,
+            maxMessagesPerWindow: 60,
+            allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
         },
         'voice': {
             enabled: false,
@@ -421,21 +482,25 @@ exports.ConfigSchema = zod_1.z.object({
         policy: 'config/security-policy.yaml',
         secrets: 'encrypted',
         auditLog: true,
-        allowlistMode: 'permissive',
+        allowlistMode: 'strict',
     }),
     channels: zod_1.z
         .object({
         telegram: zod_1.z
             .object({
-            enabled: zod_1.z.boolean().default(true),
+            enabled: zod_1.z.boolean().default(false),
             token: zod_1.z.string().optional(),
+            allowedUsers: zod_1.z.array(zod_1.z.number()).default([]),
+            allowedChats: zod_1.z.array(zod_1.z.number()).default([]),
+            allowAll: zod_1.z.boolean().default(false),
         })
-            .default({ enabled: true }),
+            .default({ enabled: false, allowedUsers: [], allowedChats: [], allowAll: false }),
         webchat: zod_1.z
             .object({
-            enabled: zod_1.z.boolean().default(true),
+            enabled: zod_1.z.boolean().default(false),
+            authToken: zod_1.z.string().min(16).optional(),
         })
-            .default({ enabled: true }),
+            .default({ enabled: false }),
         mobile: zod_1.z
             .object({
             enabled: zod_1.z.boolean().default(false),
@@ -453,8 +518,8 @@ exports.ConfigSchema = zod_1.z.object({
         }),
     })
         .default({
-        telegram: { enabled: true },
-        webchat: { enabled: true },
+        telegram: { enabled: false, allowedUsers: [], allowedChats: [], allowAll: false },
+        webchat: { enabled: false },
         mobile: {
             enabled: false,
             httpPort: 3003,
@@ -475,25 +540,36 @@ class ConfigManager {
     constructor(configPath) {
         this.watcher = null;
         this.listeners = new Set();
-        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
+        this.baseConfigPath = (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
+        const envConfigPath = process.env.AGCLAW_CONFIG_PATH;
+        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), envConfigPath ?? 'agclaw.json');
         this.config = this.loadConfig();
     }
     /** Load and validate configuration from YAML file */
     loadConfig() {
-        let fileConfig = {};
-        if ((0, fs_1.existsSync)(this.configPath)) {
-            const raw = (0, fs_1.readFileSync)(this.configPath, 'utf-8');
-            fileConfig = (0, yaml_1.parse)(raw) ?? {};
-        }
+        const baseConfig = this.loadConfigFile(this.baseConfigPath);
+        const fileConfig = this.configPath === this.baseConfigPath ? {} : this.loadConfigFile(this.configPath);
         // Environment variable overrides
         const envOverrides = this.loadEnvOverrides();
-        const merged = this.deepMerge(fileConfig, envOverrides);
+        const merged = this.deepMerge(this.deepMerge(baseConfig, fileConfig), envOverrides);
         const result = exports.ConfigSchema.safeParse(merged);
         if (!result.success) {
             console.error('Configuration validation failed:', result.error.format());
             process.exit(1);
         }
         return result.data;
+    }
+    /** Load a single configuration file if it exists */
+    loadConfigFile(filePath) {
+        if (!(0, fs_1.existsSync)(filePath)) {
+            return {};
+        }
+        const raw = (0, fs_1.readFileSync)(filePath, 'utf-8');
+        const parsed = (0, yaml_1.parse)(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+        }
+        return {};
     }
     /** Load configuration overrides from environment variables */
     loadEnvOverrides() {
@@ -506,6 +582,41 @@ class ConfigManager {
         }
         if (process.env.AGCLAW_TELEGRAM_TOKEN) {
             overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
+        }
+        if (process.env.AGCLAW_TELEGRAM_ENABLED) {
+            overrides['channels'] = {
+                ...(overrides['channels'] ?? {}),
+                telegram: {
+                    ...((overrides['channels']?.['telegram']) ?? {}),
+                    enabled: process.env.AGCLAW_TELEGRAM_ENABLED === 'true',
+                },
+            };
+        }
+        if (process.env.AGCLAW_WEBCHAT_ENABLED) {
+            overrides['channels'] = {
+                ...(overrides['channels'] ?? {}),
+                webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+            };
+            overrides['features'] = {
+                ...(overrides['features'] ?? {}),
+                webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+            };
+        }
+        if (process.env.AGCLAW_WEBCHAT_AUTH_TOKEN) {
+            overrides['channels'] = {
+                ...(overrides['channels'] ?? {}),
+                webchat: {
+                    ...((overrides['channels']?.['webchat']) ?? {}),
+                    authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+                },
+            };
+            overrides['features'] = {
+                ...(overrides['features'] ?? {}),
+                webchat: {
+                    ...((overrides['features']?.['webchat']) ?? {}),
+                    authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+                },
+            };
         }
         if (process.env.AGCLAW_SUPABASE_URL) {
             overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
@@ -547,14 +658,25 @@ class ConfigManager {
     enableHotReload() {
         if (this.watcher)
             return;
-        this.watcher = (0, chokidar_1.watch)(this.configPath, { ignoreInitial: true });
-        this.watcher.on('change', () => {
-            console.log(`[Config] Reloading ${this.configPath}`);
-            this.config = this.loadConfig();
-            for (const listener of this.listeners) {
-                listener(this.config);
-            }
-        });
+        void this.startHotReloadWatcher();
+    }
+    async startHotReloadWatcher() {
+        try {
+            const chokidar = await Promise.resolve().then(() => __importStar(require('chokidar')));
+            this.watcher = chokidar.watch(Array.from(new Set([this.baseConfigPath, this.configPath])), {
+                ignoreInitial: true,
+            });
+            this.watcher.on('change', () => {
+                console.log(`[Config] Reloading ${this.configPath}`);
+                this.config = this.loadConfig();
+                for (const listener of this.listeners) {
+                    listener(this.config);
+                }
+            });
+        }
+        catch (err) {
+            console.error('Failed to enable configuration hot reload:', err);
+        }
     }
     /** Register a listener for config changes */
     onChange(listener) {

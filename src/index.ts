@@ -201,8 +201,14 @@ export interface MemoryEntry {
 
 // ─── Built-in Tools ───────────────────────────────────────────────────────────
 
-function createBuiltinTools(): Tool[] {
-  return [
+export interface BuiltinToolOptions {
+  enableFilesystemTools?: boolean;
+  enableShellTool?: boolean;
+  enableImageTool?: boolean;
+}
+
+export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
+  const tools: Tool[] = [
     {
       name: 'web_search',
       description:
@@ -247,6 +253,10 @@ function createBuiltinTools(): Tool[] {
         return new Date().toISOString();
       },
     },
+  ];
+
+  if (options.enableFilesystemTools) {
+    tools.push(
     {
       name: 'read_file',
       description: 'Read the contents of a file. Only safe paths are allowed.',
@@ -255,12 +265,17 @@ function createBuiltinTools(): Tool[] {
       },
       execute: async (params) => {
         const { readFileSync, existsSync } = await import('fs');
+        const { resolve, relative, isAbsolute } = await import('path');
         const filePath = params['path'] as string;
 
         if (!filePath) return 'Error: path parameter is required';
 
-        // Security: only allow reading within workspace
-        const safePath = filePath.replace(/\.\./g, '');
+        const root = resolve(process.env.AGCLAW_TOOL_ROOT ?? process.cwd());
+        const safePath = resolve(root, filePath);
+        const rel = relative(root, safePath);
+        if (rel.startsWith('..') || isAbsolute(rel)) {
+          return `Error: Path is outside the configured tool root: ${root}`;
+        }
         if (!existsSync(safePath)) {
           return `Error: File not found: ${safePath}`;
         }
@@ -282,23 +297,34 @@ function createBuiltinTools(): Tool[] {
       },
       execute: async (params) => {
         const { writeFileSync, mkdirSync } = await import('fs');
-        const { dirname } = await import('path');
+        const { dirname, resolve, relative, isAbsolute } = await import('path');
         const filePath = params['path'] as string;
         const content = params['content'] as string;
 
         if (!filePath || content === undefined)
           return 'Error: path and content parameters are required';
 
+        const root = resolve(process.env.AGCLAW_TOOL_ROOT ?? process.cwd());
+        const safePath = resolve(root, filePath);
+        const rel = relative(root, safePath);
+        if (rel.startsWith('..') || isAbsolute(rel)) {
+          return `Error: Path is outside the configured tool root: ${root}`;
+        }
+
         try {
-          mkdirSync(dirname(filePath), { recursive: true });
-          writeFileSync(filePath, content, 'utf-8');
-          return `File written successfully: ${filePath} (${content.length} chars)`;
+          mkdirSync(dirname(safePath), { recursive: true });
+          writeFileSync(safePath, content, 'utf-8');
+          return `File written successfully: ${safePath} (${content.length} chars)`;
         } catch (err) {
           return `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
-    {
+    );
+  }
+
+  if (options.enableShellTool) {
+    tools.push({
       name: 'run_command',
       description: 'Execute a shell command. Returns stdout and stderr.',
       parameters: {
@@ -330,8 +356,11 @@ function createBuiltinTools(): Tool[] {
           return `Command failed: ${e.message}\n${e.stderr ?? ''}`;
         }
       },
-    },
-    {
+    });
+  }
+
+  if (options.enableImageTool) {
+    tools.push({
       name: 'generate_image',
       description:
         'Generate an AI image from a text prompt using Gemini 3 Pro Image (with automatic SiliconFlow FLUX.1-dev fallback on quota errors). Supports resolutions 1K, 2K, 4K and image editing.',
@@ -445,8 +474,10 @@ function createBuiltinTools(): Tool[] {
           });
         });
       },
-    },
-  ];
+    });
+  }
+
+  return tools;
 }
 
 // ─── AG-Claw Main Application ────────────────────────────────────────────────
@@ -499,7 +530,7 @@ class AGClaw {
   /** Start the AG-Claw framework */
   async start(): Promise<void> {
     this.logger.info('Starting AG-Claw Framework', {
-      version: '0.0.1',
+      version: '0.0.2',
       nodeVersion: process.version,
       platform: process.platform,
     });
@@ -538,8 +569,18 @@ class AGClaw {
     // Initialize Agent
     this.agent = new Agent(this.llmProvider);
 
+    const enableDangerousTools = process.env.AGCLAW_ENABLE_DANGEROUS_TOOLS === 'true' || process.env.AGCLAW_ENABLE_DANGEROUS_TOOLS === '1';
+    const enableImageTool = process.env.AGCLAW_ENABLE_IMAGE_TOOL === 'true' || process.env.AGCLAW_ENABLE_IMAGE_TOOL === '1';
+    if (enableDangerousTools) {
+      this.logger.warn('Dangerous built-in filesystem and shell tools are enabled by environment override');
+    }
+
     // Register built-in tools
-    for (const tool of createBuiltinTools()) {
+    for (const tool of createBuiltinTools({
+      enableFilesystemTools: enableDangerousTools,
+      enableShellTool: enableDangerousTools,
+      enableImageTool,
+    })) {
       this.agent.registerTool(tool);
     }
 
@@ -576,7 +617,7 @@ class AGClaw {
     const activeCount = features.filter((f) => f.state === 'active').length;
     const totalCount = features.length;
 
-    this.logger.info(`AG-Claw started successfully`, {
+    this.logger.info(`AG CLAW started successfully`, {
       features: `${activeCount}/${totalCount} active`,
       tools: this.agent.getToolNames().length,
       port: this.config.server.port,
@@ -591,7 +632,7 @@ class AGClaw {
     const channels = this.config.channels as Record<string, Record<string, unknown>> | undefined;
 
     // Start Telegram if configured
-    if (channels?.['telegram']?.['enabled'] !== false) {
+    if (channels?.['telegram']?.['enabled'] === true) {
       const token =
         (channels?.['telegram']?.['token'] as string) ??
         process.env.AGCLAW_TELEGRAM_TOKEN ??
@@ -612,7 +653,7 @@ class AGClaw {
     }
 
     // Webchat could be started here too
-    if (channels?.['webchat']?.['enabled']) {
+    if (channels?.['webchat']?.['enabled'] === true) {
       this.logger.info('Webchat channel enabled (not yet implemented in entry point)');
     }
   }
@@ -628,10 +669,14 @@ class AGClaw {
 
       const allowedUsers = (channelConfig?.['allowedUsers'] as number[] | undefined) ?? [];
       const allowedChats = (channelConfig?.['allowedChats'] as number[] | undefined) ?? [];
+      const allowAll = channelConfig?.['allowAll'] === true;
+      if (!allowAll && allowedUsers.length === 0 && allowedChats.length === 0) {
+        this.logger.warn('Telegram channel has no allowlist; messages will be rejected');
+      }
 
       // Check access
       const isAllowed = (ctx: { from?: { id: number }; chat?: { id: number } }): boolean => {
-        if (allowedUsers.length === 0 && allowedChats.length === 0) return true;
+        if (allowAll) return true;
         const userId = ctx.from?.id;
         const chatId = ctx.chat?.id;
         if (userId && allowedUsers.includes(userId)) return true;
@@ -651,6 +696,10 @@ class AGClaw {
 
         const text = ctx.message.text;
         if (!text) return;
+        if (text.length > 10_000) {
+          await ctx.reply('Message is too long.');
+          return;
+        }
 
         this.logger.info('Telegram message received', {
           userId: ctx.from?.id,
@@ -954,7 +1003,7 @@ class AGClaw {
     this.semanticMemory.close();
     this.logger.info('OMEGA Memory closed');
 
-    this.logger.info('AG-Claw shutdown complete');
+    this.logger.info('AG CLAW shutdown complete');
   }
 }
 
@@ -974,7 +1023,7 @@ export function getAGClaw(): AGClaw {
 if (require.main === module) {
   const app = new AGClaw();
   app.start().catch((err) => {
-    console.error('Failed to start AG-Claw:', err);
+    console.error('Failed to start AG CLAW:', err);
     process.exit(1);
   });
 }

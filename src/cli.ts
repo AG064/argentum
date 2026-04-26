@@ -18,11 +18,19 @@ import * as path from 'path';
 
 import 'dotenv/config';
 
-import { getConfig } from './core/config';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+
+import { ConfigManager, ConfigSchema } from './core/config';
+import {
+  createOnboardingProfile,
+  generateWebchatAuthToken,
+  writeOnboardingProfile,
+  type ProviderName,
+} from './core/onboarding';
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.0.1';
+const VERSION = '0.0.2';
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
 
@@ -62,6 +70,87 @@ function banner(): void {
 
 function getWorkDir(): string {
   return process.env.AGCLAW_WORKDIR || process.cwd();
+}
+
+function hasFlag(...flags: string[]): boolean {
+  return flags.some((flag) => args.includes(flag));
+}
+
+function getArgValue(flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function getProjectConfigPath(workDir = getWorkDir()): string {
+  const yamlPath = path.join(workDir, 'config', 'default.yaml');
+  const legacyPath = path.join(workDir, 'agclaw.json');
+  if (fs.existsSync(yamlPath)) return yamlPath;
+  if (fs.existsSync(legacyPath)) return legacyPath;
+  return yamlPath;
+}
+
+function projectConfigExists(workDir = getWorkDir()): boolean {
+  return fs.existsSync(path.join(workDir, 'config', 'default.yaml')) || fs.existsSync(path.join(workDir, 'agclaw.json'));
+}
+
+function resolveFeaturesDir(): string | null {
+  const candidates = [
+    path.join(__dirname, 'features'),
+    path.join(__dirname, '..', 'src', 'features'),
+    path.join(__dirname, 'src', 'features'),
+    path.join(process.cwd(), 'dist', 'features'),
+    path.join(process.cwd(), 'src', 'features'),
+  ];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (fs.existsSync(normalized) && fs.statSync(normalized).isDirectory()) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function readProjectConfig(configPath = getProjectConfigPath()): Record<string, unknown> {
+  const raw = fs.readFileSync(configPath, 'utf8');
+  if (configPath.endsWith('.json')) {
+    return JSON.parse(raw) as Record<string, unknown>;
+  }
+  return (parseYaml(raw) ?? {}) as Record<string, unknown>;
+}
+
+function writeProjectConfig(configPath: string, config: Record<string, unknown>): void {
+  if (configPath.endsWith('.json')) {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    return;
+  }
+  fs.writeFileSync(configPath, stringifyYaml(config, { lineWidth: 120 }));
+}
+
+function appendEnvEntries(workDir: string, entries: Record<string, string>): void {
+  const envPath = path.join(workDir, '.env');
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const lines = existing ? [existing.replace(/\s*$/, '')] : [];
+
+  for (const [key, value] of Object.entries(entries)) {
+    if (!value || new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=`, 'm').test(existing)) {
+      continue;
+    }
+    lines.push(`${key}=${/[\s"'#=]/.test(value) ? JSON.stringify(value) : value}`);
+  }
+
+  fs.writeFileSync(envPath, `${lines.filter(Boolean).join('\n')}\n`);
+}
+
+function parseNumberCsv(value: string): number[] {
+  return value
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter(Number.isFinite);
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -352,28 +441,26 @@ function cmdImage(): void {
 }
 
 function cmdVersion(): void {
-  print(`AG-Claw v${VERSION}`);
+  print(`AG CLAW v${VERSION}`);
   print(`Node.js ${process.version}`);
   print(`Platform: ${process.platform} ${process.arch}`);
 }
 
 function cmdInit(): void {
   const workDir = getWorkDir();
-  const configDir = path.join(workDir, 'config');
-  const configPath = path.join(configDir, 'default.yaml');
+  const configPath = path.join(workDir, 'config', 'default.yaml');
   const dataDir = path.join(workDir, 'data');
 
   banner();
-  info('Initializing AG-Claw...');
+  info('Initializing AG CLAW...');
 
-  // Create config
   if (fs.existsSync(configPath)) {
     warn('config/default.yaml already exists, skipping');
   } else {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-      name: 'My AG-Claw Instance',
-      version: '1.0.0',
+      name: 'My AG CLAW Instance',
+      version: '0.0.2',
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -388,12 +475,13 @@ function cmdInit(): void {
         fallback: [],
       },
     };
-    fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(path.join(workDir, 'config'), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     success('Created config/default.yaml');
+    success('Created .env');
+    success('Created .env.example');
   }
 
-  // Create data directory
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
     success('Created data/ directory');
@@ -420,13 +508,34 @@ function cmdInit(): void {
     success('Created .env.example');
   }
 
-  success('AG-Claw initialized!');
+  success('AG CLAW initialized!');
   info('Next: agclaw start --port 3000');
 }
 
 async function cmdStart(): Promise<void> {
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : 3000;
+  const workDir = getWorkDir();
+
+  // First-run check: if no config exists, prompt to onboard
+  if (!projectConfigExists(workDir)) {
+    banner();
+    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print('');
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    rl.close();
+    if (answer !== 'n') {
+      await cmdOnboard();
+    } else {
+      print('');
+      info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+    }
+    return;
+  }
 
   // First-run check: if no config exists, prompt to onboard
   const configPath = path.join(process.cwd(), 'config', 'default.yaml');
@@ -451,10 +560,10 @@ async function cmdStart(): Promise<void> {
   }
 
   banner();
-  info(`Starting AG-Claw server on port ${port}...`);
+  info(`Starting AG CLAW server on port ${port}...`);
 
   try {
-    const configManager = getConfig();
+    const configManager = new ConfigManager(getProjectConfigPath(workDir));
     const config = configManager.get();
 
     const pluginLoader = new PluginLoader(config);
@@ -551,8 +660,8 @@ function cmdFeatures(): void {
   info('Available features:');
   print('');
 
-  const featuresDir = path.join(__dirname, 'src', 'features');
-  if (!fs.existsSync(featuresDir)) {
+  const featuresDir = resolveFeaturesDir();
+  if (!featuresDir || !fs.existsSync(featuresDir)) {
     error('Features directory not found');
     return;
   }
@@ -570,7 +679,7 @@ function cmdFeatures(): void {
   for (const name of features) {
     // Try to read meta
     try {
-      const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
+      const distPath = path.join(featuresDir, name, 'index.js');
       if (fs.existsSync(distPath)) {
         // intentionally empty
       }
@@ -592,8 +701,9 @@ function cmdFeature(): void {
     return;
   }
 
-  const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
-  const srcPath = path.join(__dirname, '..', 'src', 'features', name, 'index.ts');
+  const featuresDir = resolveFeaturesDir();
+  const distPath = featuresDir ? path.join(featuresDir, name, 'index.js') : '';
+  const srcPath = featuresDir ? path.join(featuresDir, name, 'index.ts') : '';
 
   if (!fs.existsSync(distPath) && !fs.existsSync(srcPath)) {
     error(`Feature '${name}' not found`);
@@ -604,7 +714,7 @@ function cmdFeature(): void {
   info(`Feature: ${name}`);
 
   try {
-    const feature = require(distPath).default;
+    const feature = require(fs.existsSync(distPath) ? distPath : srcPath).default;
     print('');
     print(`  Name: ${feature.meta.name}`);
     print(`  Version: ${feature.meta.version}`);
@@ -625,14 +735,14 @@ function cmdConfig(): void {
   const key = args[1];
   const value = args[2];
   const workDir = getWorkDir();
-  const configPath = path.join(workDir, 'agclaw.json');
+  const configPath = getProjectConfigPath(workDir);
 
   if (!fs.existsSync(configPath)) {
-    error('AG-Claw not initialized. Run: agclaw init');
+    error('AG CLAW not initialized. Run: agclaw init');
     return;
   }
 
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const config = readProjectConfig(configPath);
 
   if (!key) {
     // Show all config
@@ -668,7 +778,7 @@ function cmdConfig(): void {
   } catch {
     obj[keys[keys.length - 1] ?? ''] = value;
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  writeProjectConfig(configPath, config);
   success(`Set ${key} = ${value}`);
 }
 
@@ -684,9 +794,21 @@ async function cmdDoctor(): Promise<void> {
       fix: 'Upgrade Node.js to v18 or later',
     },
     {
-      name: 'agclaw.json exists',
-      check: () => fs.existsSync(path.join(getWorkDir(), 'agclaw.json')),
-      fix: 'Run: agclaw init',
+      name: 'config/default.yaml exists',
+      check: () => projectConfigExists(),
+      fix: 'Run: agclaw onboard --yes',
+    },
+    {
+      name: 'configuration validates',
+      check: () => {
+        try {
+          ConfigSchema.parse(readProjectConfig());
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      fix: 'Review config/default.yaml or run: agclaw onboard --yes --force',
     },
     {
       name: 'data/ directory exists',
@@ -695,7 +817,10 @@ async function cmdDoctor(): Promise<void> {
     },
     {
       name: 'Features compiled',
-      check: () => fs.existsSync(path.join(__dirname, 'src', 'features')),
+      check: () =>
+        fs.existsSync(path.join(__dirname, 'features')) ||
+        fs.existsSync(path.join(__dirname, 'src', 'features')) ||
+        fs.existsSync(path.join(__dirname, '..', 'src', 'features')),
       fix: 'Run: npm run build',
     },
     {
@@ -740,7 +865,7 @@ async function cmdConnect(): Promise<void> {
   print('    • WhatsApp (Business API)');
   print('    • GitHub (webhooks, issues)');
   print('');
-  info('Configure via environment variables or agclaw.json [integrations] section');
+  info('Configure via environment variables or config/default.yaml [integrations] section');
   info('Example: agclaw config integrations.telegram.botToken <token>');
 }
 
@@ -1105,7 +1230,7 @@ async function cmdWatch(): Promise<void> {
   // For now, just show a message
   print('');
   warn('File watcher requires file-watcher feature to be enabled');
-  info('Enable it in config and restart AG-Claw server');
+  info('Enable it in config and restart AG CLAW server');
 }
 
 async function cmdGateway(): Promise<void> {
@@ -1277,7 +1402,7 @@ async function cmdPlugins(): Promise<void> {
 
   print('');
   print(`  Total: ${features.length} plugins`);
-  info('Enable/disable in agclaw.json [features]');
+  info('Enable/disable in config/default.yaml [features]');
 }
 
 async function cmdBackup(): Promise<void> {
@@ -1297,9 +1422,12 @@ async function cmdBackup(): Promise<void> {
       let count = 0;
 
       // Backup config
-      const configPath = path.join(workDir, 'agclaw.json');
+      const configPath = getProjectConfigPath(workDir);
       if (fs.existsSync(configPath)) {
-        fs.copyFileSync(configPath, path.join(backupPath, 'agclaw.json'));
+        const targetName = configPath.endsWith('.json') ? 'agclaw.json' : path.join('config', 'default.yaml');
+        const targetPath = path.join(backupPath, targetName);
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.copyFileSync(configPath, targetPath);
         count++;
       }
 
@@ -1328,7 +1456,7 @@ async function cmdBackup(): Promise<void> {
         JSON.stringify(
           {
             timestamp: new Date().toISOString(),
-            version: '0.2.0',
+            version: VERSION,
             files: count,
           },
           null,
@@ -1385,9 +1513,15 @@ async function cmdBackup(): Promise<void> {
       info(`Restoring from: ${name}`);
 
       // Restore config
-      const configBackup = path.join(backupPath, 'agclaw.json');
-      if (fs.existsSync(configBackup)) {
-        fs.copyFileSync(configBackup, path.join(workDir, 'agclaw.json'));
+      const yamlConfigBackup = path.join(backupPath, 'config', 'default.yaml');
+      const jsonConfigBackup = path.join(backupPath, 'agclaw.json');
+      if (fs.existsSync(yamlConfigBackup)) {
+        const restorePath = path.join(workDir, 'config', 'default.yaml');
+        fs.mkdirSync(path.dirname(restorePath), { recursive: true });
+        fs.copyFileSync(yamlConfigBackup, restorePath);
+        print('  ✓ config/default.yaml');
+      } else if (fs.existsSync(jsonConfigBackup)) {
+        fs.copyFileSync(jsonConfigBackup, path.join(workDir, 'agclaw.json'));
         print('  ✓ agclaw.json');
       }
 
@@ -1676,17 +1810,19 @@ async function cmdCron(): Promise<void> {
 }
 
 async function cmdStatus(): Promise<void> {
+  const workDir = getWorkDir();
+  const configPath = getProjectConfigPath(workDir);
   banner();
   print('  \x1b[1mAG-Claw Status\x1b[0m');
   print('');
-  print(`  \x1b[1mVersion:\x1b[0m 0.2.0`);
-  print(`  \x1b[1mConfig:\x1b[0m ${path.join(getWorkDir(), 'agclaw.json')}`);
-  print(`  \x1b[1mData:\x1b[0m ${path.join(getWorkDir(), 'data')}`);
+  print(`  \x1b[1mVersion:\x1b[0m v${VERSION}`);
+  print(`  \x1b[1mConfig:\x1b[0m ${configPath}`);
+  print(`  \x1b[1mData:\x1b[0m ${path.join(workDir, 'data')}`);
   print(`  \x1b[1mUptime:\x1b[0m ${process.uptime().toFixed(0)}s`);
   print('');
 
   // Check data directories
-  const dataDir = path.join(getWorkDir(), 'data');
+  const dataDir = path.join(workDir, 'data');
   if (fs.existsSync(dataDir)) {
     const dbs = fs.readdirSync(dataDir).filter((f) => f.endsWith('.db'));
     print(`  \x1b[1mDatabases:\x1b[0m ${dbs.length}`);
@@ -1702,17 +1838,17 @@ async function cmdStatus(): Promise<void> {
   print('');
 
   // Quick health check – just file existence
-  const requiredFiles = ['agclaw.json', '.env'];
+  const requiredFiles = ['config/default.yaml', '.env'];
   print('  \x1b[1mConfiguration:\x1b[0m');
   for (const f of requiredFiles) {
-    const exists = fs.existsSync(path.join(getWorkDir(), f));
+    const exists = fs.existsSync(path.join(workDir, f));
     const status = exists ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
     print(`    ${status} ${f}`);
   }
   print('');
 
   // Show gateway status
-  const pidPath = path.join(getWorkDir(), 'data', '.gateway.pid');
+  const pidPath = path.join(workDir, 'data', '.gateway.pid');
   if (fs.existsSync(pidPath)) {
     const pid = fs.readFileSync(pidPath, 'utf8').trim();
     print(`  \x1b[1mGateway:\x1b[0m PID ${pid} (running)`);
@@ -2007,6 +2143,37 @@ async function cmdBudget(): Promise<void> {
 }
 
 async function cmdOnboard(): Promise<void> {
+  if (hasFlag('--yes', '--defaults', '--non-interactive')) {
+    const port = Number(getArgValue('--port') ?? 3000);
+    const provider = (getArgValue('--provider') as ProviderName | undefined) ?? 'nvidia';
+    const featureCategories = hasFlag('--with-webchat') ? ['comm'] : [];
+    const webchatAuthToken = hasFlag('--with-webchat') ? generateWebchatAuthToken() : undefined;
+    const profile = createOnboardingProfile({
+      provider,
+      model: getArgValue('--model'),
+      port,
+      featureCategories,
+      webchatAuthToken,
+    });
+
+    try {
+      writeOnboardingProfile(getWorkDir(), profile, { overwrite: hasFlag('--force') });
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      info('Use --force to overwrite an existing config/default.yaml');
+      process.exitCode = 1;
+      return;
+    }
+
+    banner();
+    success('Onboarding profile written');
+    info(`Config: ${path.join(getWorkDir(), 'config', 'default.yaml')}`);
+    info(`Data: ${path.join(getWorkDir(), 'data')}`);
+    for (const warning of profile.warnings) warn(warning);
+    info('Next: agclaw doctor');
+    return;
+  }
+
   const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
     await import('@clack/prompts');
 
@@ -2022,18 +2189,8 @@ async function cmdOnboard(): Promise<void> {
   log.step('Welcome! This wizard will set up your AG-Claw instance.');
   log.info('Press Ctrl+C at any time to cancel.');
 
-  const config: any = {
-    $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-    name: 'My AG-Claw Instance',
-    version: '1.0.0',
-    server: { port: 3000, host: '0.0.0.0' },
-    features: {},
-    llm: {
-      providers: {},
-      default: '',
-      fallback: [],
-    },
-  };
+  const config: any = createOnboardingProfile().config;
+  const envEntries: Record<string, string> = {};
 
     // Step 1: Instance name
   const nameVal = await text({
@@ -2291,6 +2448,7 @@ async function cmdOnboard(): Promise<void> {
     log.success(`${chosenModel} selected`);
   }
 
+  config.llm.providers = {};
   config.llm.providers[selectedPreset.name] = {
     base_url: selectedPreset.base_url,
     api_key_env: selectedPreset.api_key_env,
@@ -2311,8 +2469,7 @@ async function cmdOnboard(): Promise<void> {
     usedKey = typeof apiKeyVal === 'string' ? apiKeyVal.trim() : '';
   }
   if (usedKey) {
-    const envPath = path.join(getWorkDir(), '.env');
-    fs.appendFileSync(envPath, `${selectedPreset.api_key_env}=${usedKey}\n`);
+    envEntries[selectedPreset.api_key_env] = usedKey;
     log.success(`Saved ${selectedPreset.api_key_env} to .env`);
   }
 
@@ -2332,15 +2489,45 @@ async function cmdOnboard(): Promise<void> {
   if (setupTg === true) {
     const botToken = await password({ message: 'Bot token:', mask: '' });
     if (typeof botToken === 'string' && botToken.trim()) {
-      config.features = config.features ?? {};
-      (config.features as Record<string, unknown>).telegram = {
-        enabled: true,
-        botToken: botToken.trim(),
-        allowFrom: [],
-        dmPolicy: 'pairing',
-        groupPolicy: 'allowlist',
-      };
-      log.success('Telegram configured');
+      const allowAll = await confirm({
+        message: 'Allow all Telegram users? Only choose this for a private trusted bot.',
+        initialValue: false,
+      });
+      const allowedUsersRaw =
+        allowAll === true
+          ? ''
+          : ((await text({
+              message: 'Allowed Telegram user IDs (comma-separated, Enter to skip):',
+              initialValue: '',
+            })) as string);
+      const allowedChatsRaw =
+        allowAll === true
+          ? ''
+          : ((await text({
+              message: 'Allowed Telegram chat IDs (comma-separated, Enter to skip):',
+              initialValue: '',
+            })) as string);
+      const allowedUsers = parseNumberCsv(allowedUsersRaw);
+      const allowedChats = parseNumberCsv(allowedChatsRaw);
+
+      if (allowAll === true || allowedUsers.length > 0 || allowedChats.length > 0) {
+        config.channels.telegram = {
+          enabled: true,
+          allowedUsers,
+          allowedChats,
+          allowAll: allowAll === true,
+        };
+        envEntries.AGCLAW_TELEGRAM_TOKEN = botToken.trim();
+        log.success('Telegram configured');
+      } else {
+        config.channels.telegram = {
+          enabled: false,
+          allowedUsers: [],
+          allowedChats: [],
+          allowAll: false,
+        };
+        log.warn('Telegram left disabled because no allowlist was provided');
+      }
     }
   }
 
@@ -2361,7 +2548,7 @@ async function cmdOnboard(): Promise<void> {
 
   const featureMap: Record<string, string[]> = {
     core: ['sqlite-memory', 'cron-scheduler', 'audit-log'],
-    comm: ['telegram', 'webchat', 'slack-integration', 'discord-bot', 'whatsapp-bridge'],
+    comm: ['webchat'],
     memory: ['knowledge-graph', 'semantic-search', 'markdown-memory', 'multimodal-memory'],
     productivity: ['goals', 'life-domains', 'task-checkout', 'goal-decomposition'],
     automation: ['browser-automation', 'file-watcher', 'webhooks', 'container-sandbox'],
@@ -2378,6 +2565,27 @@ async function cmdOnboard(): Promise<void> {
   }
   for (const f of [...new Set(allSelectedFeatures)]) {
     config.features = config.features ?? {};
+    if (f === 'webchat') {
+      const token = generateWebchatAuthToken();
+      (config.features as Record<string, unknown>)[f] = {
+        enabled: true,
+        port: 3001,
+        host: '127.0.0.1',
+        requireAuth: true,
+        maxConnections: 1000,
+        messageHistory: 100,
+        maxMessageLength: 10_000,
+        maxPayloadBytes: 1024 * 1024,
+        maxFileSize: 10 * 1024 * 1024,
+        rateLimitWindowMs: 60_000,
+        maxMessagesPerWindow: 60,
+        allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
+      };
+      config.channels.webchat = { enabled: true };
+      envEntries.AGCLAW_WEBCHAT_AUTH_TOKEN = token;
+      continue;
+    }
+
     (config.features as Record<string, unknown>)[f] = { enabled: true };
   }
   log.info(allSelectedFeatures.length > 0
@@ -2387,13 +2595,21 @@ async function cmdOnboard(): Promise<void> {
   // Server port
   const portVal = await text({ message: 'Server port:', initialValue: '3000' });
   const portNum = parseInt(portVal as string ?? '3000');
-  if (!isNaN(portNum)) config.server.port = portNum;
+  if (!isNaN(portNum)) {
+    config.server.port = portNum;
+    config.server.cors = {
+      enabled: true,
+      origins: [`http://127.0.0.1:${portNum}`, `http://localhost:${portNum}`],
+    };
+  }
 
   // Save config
   const configDir = path.join(getWorkDir(), 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const configFilePath = path.join(configDir, 'default.yaml');
-  fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2));
+  ConfigSchema.parse(config);
+  fs.writeFileSync(configFilePath, stringifyYaml(config, { lineWidth: 120 }));
+  appendEnvEntries(getWorkDir(), envEntries);
   log.success('Config saved to config/default.yaml');
 
   // Create data dir
@@ -2415,15 +2631,16 @@ async function cmdOnboard(): Promise<void> {
 
 async function cmdSkill(): Promise<void> {
   const subcommand = args[1] || 'list';
-  const { execSync } = require('child_process');
+  const { execFileSync } = require('child_process');
 
   // Default skills dir: OpenClaw workspace
   const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
   const clawhubWorkDir = process.env.AGCLAW_WORKDIR || defaultWorkDir;
+  const clawhubBin = process.platform === 'win32' ? 'clawhub.cmd' : 'clawhub';
 
-  const runClawhub = (cmd: string): string => {
+  const runClawhub = (clawhubArgs: string[]): string => {
     try {
-      return execSync(`clawhub ${cmd} --workdir "${clawhubWorkDir}" --no-input`, {
+      return execFileSync(clawhubBin, [...clawhubArgs, '--workdir', clawhubWorkDir, '--no-input'], {
         encoding: 'utf8',
         timeout: 30000,
         env: { ...process.env, CLAWHUB_WORKDIR: clawhubWorkDir },
@@ -2439,7 +2656,7 @@ async function cmdSkill(): Promise<void> {
       banner();
       info('Installed skills:');
       print('');
-      const result = runClawhub('list');
+      const result = runClawhub(['list']);
       print(result);
       break;
     }
@@ -2453,7 +2670,7 @@ async function cmdSkill(): Promise<void> {
       banner();
       info(`Searching for: ${query}`);
       print('');
-      const result = runClawhub(`search "${query}"`);
+      const result = runClawhub(['search', query]);
       print(result);
       break;
     }
@@ -2468,7 +2685,7 @@ async function cmdSkill(): Promise<void> {
       banner();
       info(`Installing: ${slug}`);
       print('');
-      const result = runClawhub(`install ${slug}`);
+      const result = runClawhub(['install', slug]);
       print(result);
       if (!result.includes('error')) {
         success(`Skill '${slug}' installed`);
@@ -2486,7 +2703,7 @@ async function cmdSkill(): Promise<void> {
       }
       banner();
       info(`Uninstalling: ${slug}`);
-      const result = runClawhub(`uninstall ${slug}`);
+      const result = runClawhub(['uninstall', slug]);
       print(result);
       break;
     }
@@ -2500,7 +2717,7 @@ async function cmdSkill(): Promise<void> {
       } else {
         info('Updating all installed skills...');
       }
-      const result = runClawhub(slug ? `update ${slug}` : 'update');
+      const result = runClawhub(slug ? ['update', slug] : ['update']);
       print(result);
       break;
     }
@@ -2509,7 +2726,7 @@ async function cmdSkill(): Promise<void> {
       banner();
       info('Browse latest skills from ClawHub:');
       print('');
-      const result = runClawhub('explore');
+      const result = runClawhub(['explore']);
       print(result);
       break;
     }
@@ -2524,7 +2741,7 @@ async function cmdSkill(): Promise<void> {
       banner();
       info(`Inspecting: ${slug}`);
       print('');
-      const result = runClawhub(`inspect ${slug}`);
+      const result = runClawhub(['inspect', slug]);
       print(result);
       break;
     }
@@ -2533,7 +2750,7 @@ async function cmdSkill(): Promise<void> {
       const skillPath = args[2] || '.';
       banner();
       info(`Publishing: ${skillPath}`);
-      const result = runClawhub(`publish "${skillPath}"`);
+      const result = runClawhub(['publish', skillPath]);
       print(result);
       break;
     }
@@ -2544,7 +2761,7 @@ async function cmdSkill(): Promise<void> {
         error('Usage: agclaw skill star <skill-slug>');
         return;
       }
-      runClawhub(`star ${slug}`);
+      runClawhub(['star', slug]);
       success(`Starred: ${slug}`);
       break;
     }
@@ -2555,7 +2772,7 @@ async function cmdSkill(): Promise<void> {
         error('Usage: agclaw skill unstar <skill-slug>');
         return;
       }
-      runClawhub(`unstar ${slug}`);
+      runClawhub(['unstar', slug]);
       success(`Unstarred: ${slug}`);
       break;
     }
@@ -2563,7 +2780,7 @@ async function cmdSkill(): Promise<void> {
     case 'sync': {
       banner();
       info('Syncing local skills with ClawHub...');
-      const result = runClawhub('sync');
+      const result = runClawhub(['sync']);
       print(result);
       break;
     }
@@ -2706,7 +2923,7 @@ async function cmdSkill(): Promise<void> {
         print('');
         // Future: query agentskills.io API
         // For now, fall back to ClawHub search
-        const result = runClawhub(`search "${query}"`);
+        const result = runClawhub(['search', query]);
         print(result);
       }
       break;
@@ -2760,14 +2977,27 @@ async function cmdSkill(): Promise<void> {
         return;
       }
       const scriptArgs = args.slice(3);
-      let cmd: string;
-      if (scriptName.endsWith('.sh')) cmd = `bash "${scriptPath}"`;
-      else if (scriptName.endsWith('.js')) cmd = `node "${scriptPath}"`;
-      else if (scriptName.endsWith('.py')) cmd = `python3 "${scriptPath}"`;
-      else cmd = `npx tsx "${scriptPath}"`;
-      if (scriptArgs.length) cmd += ` ${scriptArgs.map((a: string) => `"${a}"`).join(' ')}`;
+      let command: string;
+      let commandArgs: string[];
+      if (scriptName.endsWith('.sh')) {
+        command = 'bash';
+        commandArgs = [scriptPath, ...scriptArgs];
+      } else if (scriptName.endsWith('.js')) {
+        command = 'node';
+        commandArgs = [scriptPath, ...scriptArgs];
+      } else if (scriptName.endsWith('.py')) {
+        command = process.platform === 'win32' ? 'python' : 'python3';
+        commandArgs = [scriptPath, ...scriptArgs];
+      } else {
+        command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+        commandArgs = ['tsx', scriptPath, ...scriptArgs];
+      }
       try {
-        const result = execSync(cmd, { cwd: skillPath, timeout: 30000, encoding: 'utf8' });
+        const result = execFileSync(command, commandArgs, {
+          cwd: skillPath,
+          timeout: 30000,
+          encoding: 'utf8',
+        });
         print(result);
       } catch (err: any) {
         error(err.message);
@@ -3279,31 +3509,23 @@ async function cmdTelegram(): Promise<void> {
     case 'status': {
       info('Telegram bot status');
       print('');
-      const configPath = path.join(getWorkDir(), 'agclaw.json');
-      if (!fs.existsSync(configPath)) {
+      const configPath = getProjectConfigPath();
+      if (!projectConfigExists()) {
         error('AG-Claw not initialized. Run: agclaw init');
         return;
       }
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const tg = config.features?.telegram;
+      const config = readProjectConfig(configPath);
+      const tg = (config.channels as any)?.telegram;
       if (!tg) {
         warn('Telegram not configured');
-        info('Add to agclaw.json:');
-        print('  {');
-        print('    "features": {');
-        print('      "telegram": {');
-        print('        "enabled": true,');
-        print('        "botToken": "YOUR_BOT_TOKEN"');
-        print('      }');
-        print('    }');
-        print('  }');
+        info('Run: agclaw onboard');
         return;
       }
       print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
-      print(`  Bot Token: ${tg.botToken ? `***${tg.botToken.slice(-8)}` : 'NOT SET'}`);
-      print(`  DM Policy: ${tg.dmPolicy || 'pairing'}`);
-      print(`  Group Policy: ${tg.groupPolicy || 'allowlist'}`);
-      print(`  Allowed Users: ${(tg.allowFrom || []).join(', ') || 'none'}`);
+      print(`  Bot Token: ${process.env.AGCLAW_TELEGRAM_TOKEN ? 'set via env' : 'NOT SET'}`);
+      print(`  Allow All: ${tg.allowAll ? 'yes' : 'no'}`);
+      print(`  Allowed Users: ${(tg.allowedUsers || []).join(', ') || 'none'}`);
+      print(`  Allowed Chats: ${(tg.allowedChats || []).join(', ') || 'none'}`);
       break;
     }
 
@@ -3330,7 +3552,7 @@ async function cmdTelegram(): Promise<void> {
       }
       info(`Adding ${userId} to allowed users`);
       // Would update config and/or database
-      success('User added (update agclaw.json to persist)');
+      success('User added (update config/default.yaml to persist)');
       break;
     }
 
@@ -3340,19 +3562,12 @@ async function cmdTelegram(): Promise<void> {
       print(
         JSON.stringify(
           {
-            features: {
+            channels: {
               telegram: {
                 enabled: true,
-                botToken: 'YOUR_BOT_TOKEN',
-                allowFrom: ['tg:YOUR_USER_ID'],
-                groupPolicy: 'allowlist',
-                groups: {
-                  '-100XXXXXXXXXX': { requireMention: false },
-                },
-                dmPolicy: 'pairing',
-                streaming: 'partial',
-                reactionNotifications: 'minimal',
-                markdown: { tables: 'code' },
+                allowedUsers: [123456789],
+                allowedChats: [],
+                allowAll: false,
               },
             },
           },

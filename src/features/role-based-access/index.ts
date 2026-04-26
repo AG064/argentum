@@ -37,7 +37,7 @@ export interface RoleBasedAccessConfig {
 class RoleBasedAccessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'role-based-access',
-    version: '0.1.0',
+    version: '0.0.2',
     description: 'Manage roles and permissions for users and agents',
     dependencies: [],
   };

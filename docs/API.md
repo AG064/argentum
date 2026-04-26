@@ -30,7 +30,7 @@ Currently uses token-based auth via the `Authorization` header. Set the token in
 Include it in requests:
 
 ```
-Authorization: Bearer your-secret-token
+Authorization: Bearer <token>
 ```
 
 For local development, the token is optional (set `security.auth: false` to disable).
@@ -50,7 +50,7 @@ Health check endpoint. Returns status of the gateway and all active features.
 ```json
 {
   "status": "ok",
-  "version": "0.2.0",
+  "version": "0.0.2",
   "uptime": 3600,
   "node": "v20.19.0",
   "features": {
@@ -493,7 +493,7 @@ List all available features.
   "features": [
     {
       "name": "sqlite-memory",
-      "version": "0.1.0",
+      "version": "0.0.2",
       "description": "SQLite-backed semantic memory",
       "state": "active",
       "enabled": true,
@@ -501,7 +501,7 @@ List all available features.
     },
     {
       "name": "knowledge-graph",
-      "version": "0.1.0",
+      "version": "0.0.2",
       "description": "Entity relationship graph",
       "state": "active",
       "enabled": true,
@@ -551,7 +551,7 @@ Get details of a specific feature.
 ```json
 {
   "name": "sqlite-memory",
-  "version": "0.1.0",
+  "version": "0.0.2",
   "description": "SQLite-backed semantic memory",
   "state": "active",
   "enabled": true,

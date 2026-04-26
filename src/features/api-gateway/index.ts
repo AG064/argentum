@@ -5,9 +5,10 @@
  * and endpoint management.
  */
 
-import { randomBytes } from 'crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 
 import express, { type Request, type Response, type Handler } from 'express';
+import expressRateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import {
   type FeatureModule,
@@ -38,14 +39,24 @@ export interface ApiEndpoint {
   description?: string;
   requiresAuth: boolean;
   rateLimited: boolean;
+  requiredScope?: string;
 }
 
 /** API Token info */
 export interface ApiToken {
-  key: string;
   name: string;
+  keyHash: string;
+  keySalt: string;
+  keyPreview: string;
   createdAt: number;
   lastUsed?: number;
+  expiresAt?: number;
+  scopes: string[];
+  revokedAt?: number;
+}
+
+export interface CreatedApiToken extends ApiToken {
+  key: string;
 }
 
 /**
@@ -57,7 +68,7 @@ export interface ApiToken {
 class ApiGatewayFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'api-gateway',
-    version: '0.1.0',
+    version: '0.0.2',
     description: 'REST API for external integrations with auth and rate limiting',
     dependencies: ['rate-limiting'],
   };
@@ -79,17 +90,24 @@ class ApiGatewayFeature implements FeatureModule {
   private endpoints: Map<string, ApiEndpoint[]> = new Map(); // keyed by method
   private apiTokens: Map<string, ApiToken> = new Map();
   private active = false;
+  private readonly callerTokens = new WeakMap<object, ApiToken>();
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = { ...this.config, ...(config as Partial<ApiGatewayConfig>) };
 
     // Load existing apiKeys from config into tokens
+    this.apiTokens.clear();
     for (const key of this.config.apiKeys) {
-      this.apiTokens.set(key, {
-        key,
+      const salt = this.generateSalt();
+      const keyHash = this.hashApiKey(key, salt);
+      this.apiTokens.set(keyHash, {
         name: `Initial key ${key.slice(0, 8)}`,
+        keyHash,
+        keySalt: salt,
+        keyPreview: this.previewApiKey(key),
         createdAt: Date.now(),
+        scopes: ['*'],
       });
     }
   }
@@ -102,14 +120,21 @@ class ApiGatewayFeature implements FeatureModule {
     this.app.use(this.requestLogger.bind(this));
     this.app.use(this.errorHandler.bind(this));
 
-    // Set up rate limiting middleware
-    this.app.use(this.rateLimitMiddleware.bind(this));
-
-    // API key authentication middleware
-    this.app.use(this.authMiddleware.bind(this));
+    // Apply a CodeQL-recognized IP limiter immediately before API key auth so
+    // protected routes throttle unauthorized traffic before credential validation.
+    // The project limiter still runs after auth for configured endpoint quotas.
+    this.app.use(
+      this.createPreAuthRateLimiter(),
+      this.authMiddleware.bind(this),
+      this.rateLimitMiddleware.bind(this),
+    );
 
     // Add health check endpoint
-    this.app.get(`${this.config.path}/health`, this.healthCheckHandler.bind(this));
+    this.registerEndpoint('/health', 'GET', this.healthCheckHandler.bind(this), {
+      description: 'Gateway health check',
+      requiresAuth: false,
+      rateLimited: false,
+    });
 
     // Register configured endpoints
     this.registerDefaultEndpoints();
@@ -153,7 +178,12 @@ class ApiGatewayFeature implements FeatureModule {
     path: string,
     method: ApiEndpoint['method'],
     handler: Handler,
-    options?: { description?: string; requiresAuth?: boolean; rateLimited?: boolean },
+    options?: {
+      description?: string;
+      requiresAuth?: boolean;
+      rateLimited?: boolean;
+      requiredScope?: string;
+    },
   ): void {
     if (!this.app) {
       throw new Error('API Gateway not started. Call start() first.');
@@ -167,6 +197,7 @@ class ApiGatewayFeature implements FeatureModule {
       description: options?.description,
       requiresAuth: options?.requiresAuth ?? true,
       rateLimited: options?.rateLimited ?? true,
+      requiredScope: options?.requiredScope,
     };
 
     // Store in registry
@@ -242,22 +273,48 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Create an API token */
-  createToken(name: string, _expiresInDays?: number): ApiToken {
+  createToken(name: string, expiresInDays?: number, scopes: string[] = ['*']): CreatedApiToken {
     const key = `ak_${randomBytes(24).toString('hex')}`;
-    const token: ApiToken = {
-      key,
+    const salt = this.generateSalt();
+    const keyHash = this.hashApiKey(key, salt);
+    const token: CreatedApiToken = {
       name,
+      key,
+      keyHash,
+      keySalt: salt,
+      keyPreview: this.previewApiKey(key),
       createdAt: Date.now(),
       lastUsed: undefined,
+      expiresAt:
+        typeof expiresInDays === 'number'
+          ? Date.now() + expiresInDays * 24 * 60 * 60 * 1000
+          : undefined,
+      scopes: this.normalizeScopes(scopes),
     };
-    this.apiTokens.set(key, token);
-    this.ctx.logger.info('API token created', { name, key: `${key.slice(0, 12)}...` });
+    const stored: ApiToken = {
+      name: token.name,
+      keyHash: token.keyHash,
+      keySalt: token.keySalt,
+      keyPreview: token.keyPreview,
+      createdAt: token.createdAt,
+      lastUsed: token.lastUsed,
+      expiresAt: token.expiresAt,
+      scopes: token.scopes,
+    };
+    this.apiTokens.set(keyHash, stored);
+    this.ctx.logger.info('API token created', { name, keyPreview: token.keyPreview });
     return token;
   }
 
   /** Revoke an API token */
   revokeToken(key: string): boolean {
-    return this.apiTokens.delete(key);
+    const entry = this.findTokenByKey(key);
+    if (!entry) return false;
+    const [keyHash, token] = entry;
+    if (token.revokedAt) return false;
+    token.revokedAt = Date.now();
+    this.apiTokens.set(keyHash, token);
+    return true;
   }
 
   /** List all tokens (without full keys) */
@@ -265,11 +322,76 @@ class ApiGatewayFeature implements FeatureModule {
     return Array.from(this.apiTokens.values());
   }
 
+  authenticateApiKey(apiKey: string): ApiToken | null {
+    const entry = this.findTokenByKey(apiKey);
+    if (!entry) return null;
+    const [keyHash, token] = entry;
+    if (token.revokedAt) return null;
+    if (token.expiresAt && token.expiresAt <= Date.now()) return null;
+
+    token.lastUsed = Date.now();
+    this.apiTokens.set(keyHash, token);
+    return token;
+  }
+
+  tokenHasScope(token: ApiToken | null | undefined, requiredScope?: string): boolean {
+    if (!token) return false;
+    if (!requiredScope) return true;
+    return token.scopes.includes('*') || token.scopes.includes(requiredScope);
+  }
+
   /** Normalize path to include config.path prefix */
   private normalizePath(path: string): string {
     const base = this.config.path.replace(/\/+$/, '');
     const cleanPath = path.replace(/^\/+/, '');
     return `${base}/${cleanPath}`;
+  }
+
+  /** Derive a hash for an API key using scrypt with the provided salt */
+  private hashApiKey(key: string, salt: string): string {
+    return scryptSync(key, salt, 64).toString('hex');
+  }
+
+  /** Generate a random salt for key hashing */
+  private generateSalt(): string {
+    return randomBytes(16).toString('hex');
+  }
+
+  /**
+   * Find a stored token entry by matching the raw API key.
+   * Uses scrypt to re-derive the hash with the stored salt, then constant-time
+   * comparison to prevent timing attacks.
+   *
+   * Intentionally scans the full token set to reduce timing differences between
+   * matching and non-matching keys.
+   *
+   * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
+   */
+  private findTokenByKey(apiKey: string): [string, ApiToken] | null {
+    let match: [string, ApiToken] | null = null;
+
+    for (const [hash, token] of this.apiTokens) {
+      const computed = this.hashApiKey(apiKey, token.keySalt);
+      const computedBuf = Buffer.from(computed, 'hex');
+      const storedBuf = Buffer.from(hash, 'hex');
+      if (computedBuf.length === storedBuf.length && timingSafeEqual(computedBuf, storedBuf)) {
+        match = [hash, token];
+      }
+    }
+
+    return match;
+  }
+
+  private previewApiKey(key: string): string {
+    return key.length <= 12 ? `${key.slice(0, 4)}...` : `${key.slice(0, 8)}...${key.slice(-4)}`;
+  }
+
+  private normalizeScopes(scopes: string[]): string[] {
+    const normalized = scopes
+      .filter((scope): scope is string => typeof scope === 'string')
+      .map((scope) => scope.trim())
+      .filter(Boolean);
+    return normalized.length > 0 ? [...new Set(normalized)] : ['*'];
   }
 
   /** Request logger middleware */
@@ -305,6 +427,78 @@ class ApiGatewayFeature implements FeatureModule {
     });
   }
 
+  private getRateLimitConfig(): NonNullable<ApiGatewayConfig['rateLimit']> {
+    return this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
+  }
+
+  private getIpRateLimitKey(req: Request): string {
+    return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? '0.0.0.0');
+  }
+
+  private getRateLimitKey(req: Request, byApiKey: boolean): string {
+    if (!byApiKey) {
+      return this.getIpRateLimitKey(req);
+    }
+
+    const apiKeyHeader = req.headers['x-api-key'];
+    const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+    if (!apiKey) {
+      return this.getIpRateLimitKey(req);
+    }
+
+    return this.findTokenByKey(apiKey)?.[0] ?? this.getIpRateLimitKey(req);
+  }
+
+  private createPreAuthRateLimiter(): Handler {
+    const rl = this.getRateLimitConfig();
+
+    return expressRateLimit({
+      windowMs: rl.windowMs,
+      limit: rl.max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => this.getIpRateLimitKey(req),
+      skip: (req) => {
+        if (req.path.endsWith('/health')) return true;
+        const endpoint = this.findEndpoint(req.method, req.path);
+        return !endpoint?.rateLimited || !endpoint.requiresAuth;
+      },
+      handler: (_req, res) => {
+        res.status(429).json({
+          error: 'Too many requests',
+          retryAfter: Math.ceil(rl.windowMs / 1000),
+          limit: rl.max,
+          window: rl.windowMs,
+        });
+      },
+    });
+  }
+
+  private respondIfRateLimited(req: Request, res: Response): boolean {
+    const rl = this.getRateLimitConfig();
+    const key = this.getRateLimitKey(req, rl.byApiKey);
+
+    try {
+      const result = rateLimiting.check(key, rl.max, rl.windowMs);
+
+      if (!result.allowed) {
+        res.status(429).json({
+          error: 'Too many requests',
+          retryAfter: Math.ceil(rl.windowMs / 1000),
+          limit: rl.max,
+          window: rl.windowMs,
+        });
+        return true;
+      }
+    } catch (err) {
+      this.ctx.logger.warn('Rate limiting check failed, allowing', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    return false;
+  }
+
   /** Rate limiting middleware */
   private async rateLimitMiddleware(
     req: Request,
@@ -323,40 +517,8 @@ class ApiGatewayFeature implements FeatureModule {
       return;
     }
 
-    // Ensure rate limiting config exists
-    const rl = this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
-
-    // Rate limit by API key or IP
-    let key: string;
-    if (rl.byApiKey) {
-      const apiKeyHeader = req.headers['x-api-key'];
-      const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-      if (apiKey) {
-        key = apiKey;
-      } else {
-        key = req.ip ?? 'unknown';
-      }
-    } else {
-      key = req.ip ?? 'unknown';
-    }
-
-    // Use rate-limiting feature
-    try {
-      const result = rateLimiting.check(key, rl.max, rl.windowMs);
-
-      if (!result.allowed) {
-        res.status(429).json({
-          error: 'Too many requests',
-          retryAfter: Math.ceil(rl.windowMs / 1000),
-          limit: rl.max,
-          window: rl.windowMs,
-        });
-        return;
-      }
-    } catch (err) {
-      this.ctx.logger.warn('Rate limiting check failed, allowing', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if (this.respondIfRateLimited(req, res)) {
+      return;
     }
 
     next();
@@ -366,8 +528,15 @@ class ApiGatewayFeature implements FeatureModule {
   private authMiddleware(req: Request, res: Response, next: express.NextFunction): void {
     const endpoint = this.findEndpoint(req.method, req.path);
 
-    // If no endpoint found or endpoint doesn't require auth, continue
-    if (!endpoint?.requiresAuth) {
+    if (!endpoint) {
+      if (this.isApiRequest(req.path)) {
+        res.status(404).json({ error: 'Not found', message: 'API endpoint not registered' });
+        return;
+      }
+      return next();
+    }
+
+    if (!endpoint.requiresAuth) {
       return next();
     }
 
@@ -379,17 +548,19 @@ class ApiGatewayFeature implements FeatureModule {
       return;
     }
 
-    if (!this.apiTokens.has(apiKey)) {
+    const token = this.authenticateApiKey(apiKey);
+    if (!token) {
       res.status(401).json({ error: 'Unauthorized', message: 'Invalid API key' });
       return;
     }
 
-    // Update last used
-    const token = this.apiTokens.get(apiKey);
-    if (token) {
-      token.lastUsed = Date.now();
-      this.apiTokens.set(apiKey, token);
+    if (!this.tokenHasScope(token, endpoint.requiredScope)) {
+      res.status(403).json({ error: 'Forbidden', message: 'API key scope is not sufficient' });
+      return;
     }
+
+    // Attach caller token to request for downstream handlers (e.g., scope enforcement)
+    this.callerTokens.set(req, token);
 
     next();
   }
@@ -399,8 +570,32 @@ class ApiGatewayFeature implements FeatureModule {
     const methodEndpoints = this.endpoints.get(method.toUpperCase() as ApiEndpoint['method']);
     if (!methodEndpoints) return undefined;
 
-    // Exact match only for now (could support params later)
-    return methodEndpoints.find((e) => e.path === path);
+    return methodEndpoints.find((e) => this.matchesEndpointPath(e.path, path));
+  }
+
+  private matchesEndpointPath(pattern: string, actualPath: string): boolean {
+    const normalizedPattern = this.normalizeComparablePath(pattern);
+    const normalizedActual = this.normalizeComparablePath(actualPath);
+    if (normalizedPattern === normalizedActual) return true;
+
+    const patternSegments = normalizedPattern.split('/').filter(Boolean);
+    const actualSegments = normalizedActual.split('/').filter(Boolean);
+    if (patternSegments.length !== actualSegments.length) return false;
+
+    return patternSegments.every((segment, index) => {
+      if (segment.startsWith(':')) return (actualSegments[index]?.length ?? 0) > 0;
+      return segment === actualSegments[index];
+    });
+  }
+
+  private normalizeComparablePath(path: string): string {
+    if (path === '/') return path;
+    return path.replace(/\/+$/, '');
+  }
+
+  private isApiRequest(path: string): boolean {
+    const base = this.config.path.replace(/\/+$/, '') || '/';
+    return path === base || path.startsWith(`${base}/`);
   }
 
   /** Health check handler */
@@ -424,21 +619,67 @@ class ApiGatewayFeature implements FeatureModule {
     this.registerEndpoint('/tokens', 'GET', (_req, res) => {
       const tokens = this.listTokens().map((t) => ({
         name: t.name,
+        keyPreview: t.keyPreview,
         createdAt: t.createdAt,
         lastUsed: t.lastUsed,
+        expiresAt: t.expiresAt,
+        scopes: t.scopes,
+        revokedAt: t.revokedAt,
       }));
       res.json({ tokens });
+    }, {
+      requiredScope: 'tokens:read',
     });
 
     // POST /api/tokens - Create new token
     this.registerEndpoint('/tokens', 'POST', (req, res) => {
-      const { name } = req.body;
+      const { name, expiresInDays, scopes } = req.body;
       if (!name) {
         res.status(400).json({ error: 'Bad request', message: 'name is required' });
         return;
       }
-      const token = this.createToken(name);
-      res.status(201).json({ token: token.key, name: token.name, createdAt: token.createdAt });
+
+      // Restrict created token scopes to a subset of the caller's own scopes
+      // to prevent privilege escalation.
+      const callerToken = this.callerTokens.get(req);
+      if (!callerToken) {
+        // authMiddleware must have populated this; if it didn't, refuse to proceed.
+        res.status(403).json({ error: 'Forbidden', message: 'Caller identity could not be determined' });
+        return;
+      }
+      const callerScopes = callerToken.scopes;
+      const requestedScopes: string[] = Array.isArray(scopes) ? scopes : ['*'];
+      let grantedScopes: string[];
+      if (callerScopes.includes('*')) {
+        // Caller has wildcard — may grant any scope including '*'
+        grantedScopes = requestedScopes;
+      } else {
+        // Caller may only grant scopes they already hold (no '*' escalation)
+        grantedScopes = requestedScopes.filter((s) => s !== '*' && callerScopes.includes(s));
+        if (grantedScopes.length === 0) {
+          res.status(403).json({
+            error: 'Forbidden',
+            message: 'Requested scopes exceed caller privileges',
+          });
+          return;
+        }
+      }
+
+      const token = this.createToken(
+        name,
+        typeof expiresInDays === 'number' ? expiresInDays : undefined,
+        grantedScopes,
+      );
+      res.status(201).json({
+        token: token.key,
+        keyPreview: token.keyPreview,
+        name: token.name,
+        createdAt: token.createdAt,
+        expiresAt: token.expiresAt,
+        scopes: token.scopes,
+      });
+    }, {
+      requiredScope: 'tokens:create',
     });
 
     // DELETE /api/tokens/:key - Revoke token
@@ -450,6 +691,8 @@ class ApiGatewayFeature implements FeatureModule {
         return;
       }
       res.json({ success: true, message: 'Token revoked' });
+    }, {
+      requiredScope: 'tokens:revoke',
     });
 
     // GET /api/endpoints - List all registered endpoints
@@ -462,6 +705,8 @@ class ApiGatewayFeature implements FeatureModule {
         rateLimited: e.rateLimited,
       }));
       res.json({ endpoints });
+    }, {
+      requiredScope: 'endpoints:read',
     });
   }
 }

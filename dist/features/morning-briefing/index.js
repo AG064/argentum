@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class MorningBriefingFeature {
     meta = {
         name: 'morning-briefing',
-        version: '0.1.0',
+        version: '0.0.2',
         description: 'Daily personalized morning briefing generator',
         dependencies: [],
     };

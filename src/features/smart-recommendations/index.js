@@ -102,7 +102,7 @@ class SmartRecommendationsFeature {
   constructor() {
     this.meta = {
       name: 'smart-recommendations',
-      version: '0.2.0',
+      version: '0.0.2',
       description: 'Proactive recommendations with behavior learning and briefings',
       dependencies: [],
     };

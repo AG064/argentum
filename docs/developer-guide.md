@@ -125,7 +125,7 @@ ELEVENLABS_API_KEY=sk_xxxxx
 
 # Supabase (опционально, для облачной памяти)
 SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
 # Мастер-ключ для зашифрованных секретов (автогенерируется если не задан)
 # AGCLAW_MASTER_KEY=xxxxx
@@ -698,7 +698,7 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
     "createdAt": 1742301234567
   },
   "headers": {
-    "user-agent": "AG-Claw/0.2.0"
+    "user-agent": "AG-Claw/0.0.2"
   },
   "timestamp": 1742301234567,
   "signature": "sha256=abc123def456..."  // HMAC-SHA256 от тела JSON с secret подписчика
@@ -757,7 +757,7 @@ ag-claw/
 │   └── security-policy.yaml  # Security policy (allowlists, rate limits, sandbox)
 ├── docs/
 │   ├── architecture.md
-│   ├── features.md
+│   ├── FEATURES.md
 │   ├── installation.md
 │   └── developer-guide.md    # Этот файл
 ├── tests/                    # Jest tests
@@ -823,7 +823,7 @@ Log-level контролируется через `logging.level` в YAML или
 1. Fork репозитория
 2. Создайте feature branch (`git checkout -b feature/my-feature`)
 3. Добавьте фичу в `src/features/` (соблюдайте интерфейс `FeatureModule`)
-4. Обновите документацию (`docs/features.md` и эту)
+4. Обновите документацию (`docs/FEATURES.md` и эту)
 5. Запустите линтер и тесты
 6. Создайте Pull Request с описанием изменений
 
@@ -893,4 +893,4 @@ const results = await knowledgeGraph.query(`
 
 ---
 
-*AG-Claw v0.2.0 — Documentation last updated: 2026-03-17*
+*AG-Claw v0.0.2 — Documentation last updated: 2026-03-17*

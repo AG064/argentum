@@ -28,7 +28,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class DiscordBotFeature {
     meta = {
         name: 'discord-bot',
-        version: '0.1.0',
+        version: '0.0.2',
         description: 'Discord bot integration with message sending and event handling',
         dependencies: [],
     };

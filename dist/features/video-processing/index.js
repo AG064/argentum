@@ -14,7 +14,7 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const util_1 = require("util");
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
-const exec = (0, util_1.promisify)(child_process_1.exec);
+const execFile = (0, util_1.promisify)(child_process_1.execFile);
 /**
  * VideoProcessing — video manipulation with ffmpeg.
  *
@@ -29,7 +29,7 @@ const exec = (0, util_1.promisify)(child_process_1.exec);
 class VideoProcessingFeature {
     meta = {
         name: 'video-processing',
-        version: '0.1.0',
+        version: '0.0.2',
         description: 'Video processing with ffmpeg (frame extraction, trimming, metadata)',
         dependencies: [],
     };
@@ -57,7 +57,7 @@ class VideoProcessingFeature {
         this.initDirectories();
         this.initDatabase();
         // Verify ffmpeg availability
-        this.verifyFfmpeg();
+        await this.verifyFfmpeg();
     }
     async start() {
         this.ctx.logger.info('VideoProcessing active', {
@@ -98,7 +98,7 @@ class VideoProcessingFeature {
      */
     async verifyFfmpeg() {
         try {
-            const { stdout } = await exec(`${this.ffmpegPath} -version`, { timeout: 10000 });
+            const { stdout } = await execFile(this.ffmpegPath, ['-version'], { timeout: 10000 });
             const versionLine = stdout?.split('\n')[0] ?? '';
             this.ctx.logger.info('ffmpeg found', { version: versionLine.trim() });
         }
@@ -144,7 +144,15 @@ class VideoProcessingFeature {
                 // jpg quality
                 vfFilter = `fps=1/${interval}`;
             }
-            const args = ['-i', videoPath, '-ss', startTime.toString()];
+            const args = [
+                '-hide_banner',
+                '-loglevel',
+                'error',
+                '-i',
+                videoPath,
+                '-ss',
+                startTime.toString(),
+            ];
             if (endTime) {
                 args.push('-t', (endTime - startTime).toString());
             }
@@ -153,9 +161,8 @@ class VideoProcessingFeature {
                 args.push('-q:v', quality.toString());
             }
             args.push((0, path_1.join)(outputDir, `frame_%04d.${format}`));
-            const cmd = `${this.ffmpegPath} ${args.join(' ')} -hide_banner -loglevel error`;
-            this.ctx.logger.debug('Running ffmpeg', { cmd });
-            await exec(cmd, { timeout: 3600000 }); // 1hr timeout
+            this.ctx.logger.debug('Running ffmpeg', { args });
+            await execFile(this.ffmpegPath, args, { timeout: 3600000 }); // 1hr timeout
             // Read output directory to find generated frames
             const files = (0, fs_1.readdirSync)(outputDir)
                 .filter((f) => f.startsWith('frame_') && f.endsWith(`.${format}`))
@@ -203,8 +210,20 @@ class VideoProcessingFeature {
         this.logJobStart(jobId, 'trim', videoPath, { startTime, endTime, outputPath: outPath });
         try {
             // ffmpeg -i input -ss start -t duration -c copy output
-            const cmd = `${this.ffmpegPath} -i ${this.quote(videoPath)} -ss ${startTime} -t ${duration} -c copy ${this.quote(outPath)} -hide_banner -loglevel error`;
-            await exec(cmd, { timeout: 3600000 });
+            await execFile(this.ffmpegPath, [
+                '-hide_banner',
+                '-loglevel',
+                'error',
+                '-i',
+                videoPath,
+                '-ss',
+                startTime.toString(),
+                '-t',
+                duration.toString(),
+                '-c',
+                'copy',
+                outPath,
+            ], { timeout: 3600000 });
             const stats = require('fs').statSync(outPath);
             const originalStats = require('fs').statSync(videoPath);
             this.logJobComplete(jobId, true, { outputSize: stats.size });
@@ -234,8 +253,17 @@ class VideoProcessingFeature {
         }
         try {
             // Use ffprobe to get JSON metadata
-            const cmd = `ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,codec_name,avg_bitrate -of json ${this.quote(videoPath)}`;
-            const { stdout } = await exec(cmd, { timeout: 30000 });
+            const { stdout } = await execFile('ffprobe', [
+                '-v',
+                'error',
+                '-select_streams',
+                'v:0',
+                '-show_entries',
+                'stream=width,height,r_frame_rate,codec_name,avg_bitrate,duration',
+                '-of',
+                'json',
+                videoPath,
+            ], { timeout: 30000 });
             const probe = JSON.parse(stdout);
             const stream = probe.streams[0];
             // Parse frame rate (e.g., "30/1" -> 30)
@@ -331,14 +359,6 @@ class VideoProcessingFeature {
       WHERE id = ?
     `)
             .run(result, Date.now(), resultData, id);
-    }
-    /** Quote a path for shell */
-    quote(path) {
-        // Simple quoting for POSIX shells
-        if (path.includes(' ') || path.includes('(') || path.includes(')')) {
-            return `'${path.replace(/'/g, `'\\''`)}'`;
-        }
-        return path;
     }
     /** Get file extension */
     ext(path) {

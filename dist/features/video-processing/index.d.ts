@@ -110,8 +110,6 @@ declare class VideoProcessingFeature implements FeatureModule {
     private logJobStart;
     /** Log job completion */
     private logJobComplete;
-    /** Quote a path for shell */
-    private quote;
     /** Get file extension */
     private ext;
 }

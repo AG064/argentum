@@ -20,7 +20,7 @@ class GovernanceFeature {
   constructor() {
     this.meta = {
       name: 'governance',
-      version: '0.1.0',
+      version: '0.0.2',
       description: 'Approval gates and governance for sensitive actions',
       dependencies: [],
     };

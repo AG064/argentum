@@ -22,11 +22,19 @@ import {
 export interface WebchatConfig {
   enabled: boolean;
   port: number;
+  host: string;
+  authToken?: string;
+  requireAuth: boolean;
   maxConnections: number;
   maxMessageHistory: number;
+  messageHistory?: number;
+  maxMessageLength: number;
+  maxPayloadBytes: number;
   maxFileSize: number; // bytes
   allowedFileTypes: string[];
   uploadDir: string;
+  rateLimitWindowMs: number;
+  maxMessagesPerWindow: number;
 }
 
 /** Chat message structure */
@@ -176,6 +184,7 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 const MAX_MSG_LEN = 10000;
 let ws, userId = 'user_' + Math.random().toString(36).slice(2, 8);
 let roomId = new URLSearchParams(location.search).get('room') || 'default';
+let token = new URLSearchParams(location.search).get('token') || '';
 let pendingFiles = [];
 
 // Simple Markdown parser
@@ -263,7 +272,8 @@ function loadHistory() {
 // WebSocket
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host + '/ws?room=' + roomId + '&user=' + userId);
+  const auth = token ? '&token=' + encodeURIComponent(token) : '';
+  ws = new WebSocket(proto + '://' + location.host + '/ws?room=' + encodeURIComponent(roomId) + '&user=' + encodeURIComponent(userId) + auth);
   ws.onopen = () => addMessage('system', 'Connected to AG-Claw');
   ws.onclose = () => { addMessage('system', 'Disconnected. Reconnecting...'); setTimeout(connect, 3000); };
   ws.onmessage = (e) => {
@@ -372,7 +382,7 @@ connect();
 class WebchatFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webchat',
-    version: '0.2.0',
+    version: '0.0.2',
     description: 'Full-featured web chat UI with Markdown, file upload, themes',
     dependencies: [],
   };
@@ -382,40 +392,47 @@ class WebchatFeature implements FeatureModule {
   private clients: Map<string, Client> = new Map();
   private messageHistory: Map<string, ChatMessage[]> = new Map(); // roomId -> messages
   private typingStates: Map<string, TypingState> = new Map();
+  private clientRateLimits: Map<string, { windowStart: number; count: number }> = new Map();
   private uploadedFiles: Map<string, { data: Buffer; filename: string; mimeType: string }> =
     new Map();
   private config: WebchatConfig = {
     enabled: false,
     port: 3001,
+    host: '127.0.0.1',
+    requireAuth: true,
     maxConnections: 1000,
     maxMessageHistory: 500,
+    maxMessageLength: 10_000,
+    maxPayloadBytes: 1024 * 1024,
     maxFileSize: 10 * 1024 * 1024,
     allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
     uploadDir: './uploads',
+    rateLimitWindowMs: 60_000,
+    maxMessagesPerWindow: 60,
   };
   private authToken: string | null = null;
   private ctx!: FeatureContext;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
-    this.config = { ...this.config, ...(config as Partial<WebchatConfig>) };
-    // Optional auth token for simple bearer authentication
-    this.authToken = (config as any).authToken ?? null;
+    const partial = config as Partial<WebchatConfig>;
+    this.config = {
+      ...this.config,
+      ...partial,
+      maxMessageHistory:
+        partial.maxMessageHistory ?? partial.messageHistory ?? this.config.maxMessageHistory,
+    };
+    this.authToken = partial.authToken ?? process.env.AGCLAW_WEBCHAT_AUTH_TOKEN ?? null;
   }
 
   async start(): Promise<void> {
+    this.assertSecureConfig();
+
     this.httpServer = new HttpServer((req: IncomingMessage, res: ServerResponse) => {
-      // Basic auth check for HTTP endpoints if authToken is set
-      const authHeader = req.headers['authorization'];
-      if (this.authToken) {
-        if (
-          !authHeader ||
-          (Array.isArray(authHeader) ? authHeader[0] : authHeader) !== `Bearer ${this.authToken}`
-        ) {
-          res.writeHead(401);
-          res.end('Unauthorized');
-          return;
-        }
+      if (!this.isAuthorizedHttpRequest(req)) {
+        res.writeHead(401);
+        res.end('Unauthorized');
+        return;
       }
 
       // Serve HTML UI
@@ -426,7 +443,7 @@ class WebchatFeature implements FeatureModule {
       }
       // Serve uploaded files
       if (req.url?.startsWith('/files/')) {
-        const fileId = req.url.slice(7);
+        const fileId = req.url.slice(7).split('?')[0] ?? '';
         const file = this.uploadedFiles.get(fileId);
         if (file) {
           res.writeHead(200, { 'Content-Type': file.mimeType, 'Content-Length': file.data.length });
@@ -441,13 +458,17 @@ class WebchatFeature implements FeatureModule {
       res.end('Not found');
     });
 
-    this.server = new WebSocketServer({ server: this.httpServer, path: '/ws' });
+    this.server = new WebSocketServer({
+      server: this.httpServer,
+      path: '/ws',
+      maxPayload: this.config.maxPayloadBytes,
+    });
 
     this.server.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       // WebSocket token check
-      const wsUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
-      const token = wsUrl.searchParams.get('token');
-      if (this.authToken && token !== this.authToken) {
+      const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const token = parsedUrl.searchParams.get('token');
+      if (this.config.requireAuth && token !== this.authToken) {
         // Close with application-defined code 4001 for auth failure
         ws.close(4001, 'Unauthorized');
         this.ctx.logger.warn('WebSocket connection rejected due to invalid token');
@@ -459,9 +480,17 @@ class WebchatFeature implements FeatureModule {
       }
 
       const clientId = this.generateId();
-      const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host}`);
       const roomId = parsedUrl.searchParams.get('room') ?? 'default';
       const userId = parsedUrl.searchParams.get('user') ?? `anon-${clientId}`;
+
+      if (!this.isSafeIdentifier(roomId) || !this.isSafeIdentifier(userId)) {
+        ws.close(1008, 'Invalid room or user identifier');
+        this.ctx.logger.warn('WebSocket connection rejected due to invalid identifiers', {
+          roomId,
+          userId,
+        });
+        return;
+      }
 
       const client: Client = {
         ws,
@@ -494,6 +523,10 @@ class WebchatFeature implements FeatureModule {
 
       ws.on('message', (raw: Buffer) => {
         try {
+          if (raw.length > this.config.maxPayloadBytes) {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Payload too large' }));
+            return;
+          }
           const msg = JSON.parse(raw.toString());
           this.handleMessage(clientId, msg);
         } catch {
@@ -504,6 +537,7 @@ class WebchatFeature implements FeatureModule {
       ws.on('close', () => {
         const c = this.clients.get(clientId);
         this.clients.delete(clientId);
+        this.clientRateLimits.delete(clientId);
         if (c) {
           this.broadcastToRoom(c.roomId, {
             type: 'message',
@@ -525,9 +559,9 @@ class WebchatFeature implements FeatureModule {
       });
     });
 
-    this.httpServer.listen(this.config.port, () => {
+    this.httpServer.listen(this.config.port, this.config.host, () => {
       this.ctx.logger.info(
-        `Webchat server on :${this.config.port} (UI at http://localhost:${this.config.port}/)`,
+        `Webchat server on ${this.config.host}:${this.config.port} (UI at http://${this.config.host}:${this.config.port}/)`,
       );
     });
   }
@@ -537,6 +571,7 @@ class WebchatFeature implements FeatureModule {
       client.ws.close(1001, 'Server shutting down');
     }
     this.clients.clear();
+    this.clientRateLimits.clear();
     this.server?.close();
     this.httpServer?.close();
     // Clear typing timers
@@ -564,13 +599,27 @@ class WebchatFeature implements FeatureModule {
     const client = this.clients.get(clientId);
     if (!client) return;
 
+    if (!this.checkRateLimit(clientId)) {
+      client.ws.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+      return;
+    }
+
     switch (msg.type) {
       case 'chat': {
+        if (typeof msg.content !== 'string' || msg.content.length === 0) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Message content is required' }));
+          return;
+        }
+        if (msg.content.length > this.config.maxMessageLength) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long' }));
+          return;
+        }
+
         const chatMsg: ChatMessage = {
           id: this.generateId(),
           userId: client.userId,
           roomId: client.roomId,
-          content: msg.content ?? '',
+          content: msg.content,
           role: 'user',
           timestamp: Date.now(),
         };
@@ -601,6 +650,20 @@ class WebchatFeature implements FeatureModule {
       }
       case 'file': {
         if (!msg.data || !msg.filename) return;
+        const mimeType = msg.mimeType ?? 'application/octet-stream';
+        if (!this.isSafeFilename(msg.filename)) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid filename' }));
+          return;
+        }
+        if (!this.isAllowedFileType(mimeType)) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'File type not allowed' }));
+          return;
+        }
+        if (this.estimatedDecodedBase64Size(msg.data) > this.config.maxFileSize) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'File too large' }));
+          return;
+        }
+
         const buf = Buffer.from(msg.data, 'base64');
         if (buf.length > this.config.maxFileSize) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'File too large' }));
@@ -610,7 +673,7 @@ class WebchatFeature implements FeatureModule {
         this.uploadedFiles.set(fileId, {
           data: buf,
           filename: msg.filename,
-          mimeType: msg.mimeType ?? 'application/octet-stream',
+          mimeType,
         });
 
         const fileMsg: ChatMessage = {
@@ -624,7 +687,7 @@ class WebchatFeature implements FeatureModule {
             {
               id: fileId,
               filename: msg.filename,
-              mimeType: msg.mimeType ?? 'application/octet-stream',
+              mimeType,
               size: buf.length,
               url: `/files/${fileId}`,
             },
@@ -635,6 +698,67 @@ class WebchatFeature implements FeatureModule {
         break;
       }
     }
+  }
+
+  private assertSecureConfig(): void {
+    if (this.config.requireAuth && !this.authToken) {
+      throw new Error('Webchat authToken is required when requireAuth is enabled');
+    }
+  }
+
+  private checkRateLimit(clientId: string): boolean {
+    const now = Date.now();
+    const current = this.clientRateLimits.get(clientId);
+    if (!current || now - current.windowStart >= this.config.rateLimitWindowMs) {
+      this.clientRateLimits.set(clientId, { windowStart: now, count: 1 });
+      return true;
+    }
+
+    if (current.count >= this.config.maxMessagesPerWindow) {
+      return false;
+    }
+
+    current.count++;
+    this.clientRateLimits.set(clientId, current);
+    return true;
+  }
+
+  private isAuthorizedHttpRequest(req: IncomingMessage): boolean {
+    if (!this.config.requireAuth) return true;
+    if (!this.authToken) return false;
+
+    const authHeader = req.headers['authorization'];
+    const header = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    if (header === `Bearer ${this.authToken}`) return true;
+
+    try {
+      const parsed = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+      return parsed.searchParams.get('token') === this.authToken;
+    } catch {
+      return false;
+    }
+  }
+
+  private isSafeIdentifier(value: string): boolean {
+    return /^[A-Za-z0-9_.:-]{1,80}$/.test(value);
+  }
+
+  private isSafeFilename(value: string): boolean {
+    return /^[A-Za-z0-9_. -]{1,160}$/.test(value) && !value.includes('..');
+  }
+
+  private isAllowedFileType(mimeType: string): boolean {
+    return this.config.allowedFileTypes.some((allowed) => {
+      if (allowed.endsWith('/*')) {
+        return mimeType.startsWith(allowed.slice(0, -1));
+      }
+      return mimeType === allowed;
+    });
+  }
+
+  private estimatedDecodedBase64Size(value: string): number {
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    return Math.floor((value.length * 3) / 4) - padding;
   }
 
   /** Add message to room history with cap */

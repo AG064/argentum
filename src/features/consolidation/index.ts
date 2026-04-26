@@ -47,7 +47,7 @@ export interface ConsolidationResult {
 class ConsolidationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'consolidation',
-    version: '0.1.0',
+    version: '0.0.2',
     description: 'Periodic memory consolidation: dedup, decay, merge, prune',
     dependencies: [],
   };

@@ -5,7 +5,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
@@ -25,10 +25,13 @@
 git clone https://github.com/AG064/ag-claw.git
 cd ag-claw
 npm install
+npm run onboard
 npm run dev
 ```
 
-That's it. Your agent is live.
+`npm run onboard` launches the interactive setup wizard and writes your first `agclaw.json`.
+
+`npm run dev` starts AG-Claw using the saved configuration. If you skip the wizard, AG-Claw will boot with defaults and immediately start the server/webchat.
 
 Or use Docker:
 
@@ -84,21 +87,35 @@ You get 65+ features as plugins. Toggle what you need, ignore the rest. Everythi
 git clone https://github.com/AG064/ag-claw.git
 cd ag-claw
 npm install
+npm run onboard   # optional, but recommended for first-time setup
 npm run build
 npm start
 ```
+
+If you want the interactive onboarding wizard without building first, use:
+
+```bash
+npm run onboard
+```
+
+`npm start` starts the server/runtime, not the setup wizard.
 
 **Docker** (recommended for production):
 ```bash
 docker run -it ag064/ag-claw
 ```
 
-**Binary** (no dependencies):
-Download from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest) — pick the one for your OS:
+**Windows installer or portable binary**:
+Download `agclaw-v0.0.2-win-x64.msi` or `agclaw-v0.0.2-win-x64.exe` from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest).
+
+**Portable binary** (no dependencies):
+Download from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest) and pick the one for your OS:
 ```bash
 chmod +x agclaw-*
 ./agclaw-* --help
 ```
+
+Release packaging details live in [docs/RELEASE_PACKAGING.md](docs/RELEASE_PACKAGING.md).
 
 **npm** (coming soon):
 ```bash
@@ -111,6 +128,7 @@ npm install -g ag-claw
 
 ```bash
 agclaw init                    # Initialize in current directory
+agclaw onboard                 # Interactive setup wizard
 agclaw gateway start           # Start gateway
 agclaw gateway stop            # Stop gateway
 agclaw gateway status          # Check if running
@@ -206,13 +224,28 @@ git checkout -b feature/your-feature-name
 ```
 
 ---
+git clone https://github.com/AG064/ag-claw.git
+cd ag-claw
+npm install
+npm run build
+npm test
+git checkout -b feature/your-feature-name
+```
+
+---
 
 ## License
 
 MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
 
 ---
+MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
 
+---
+
+<p align="center">
+Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
+</p>
 <p align="center">
 Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
 </p>

@@ -13,7 +13,7 @@
  * Compatible with agentskills.io open standard.
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -91,7 +91,7 @@ interface SkillManifest {
  * ---
  * name: my-skill
  * description: Brief description
- * version: 1.0.0
+ * version: 0.0.2
  * ---
  */
 function parseFrontmatter(content: string): SkillFrontmatter | null {
@@ -151,7 +151,7 @@ function extractBody(content: string): string {
 class SkillsLoaderFeature {
   readonly meta = {
     name: 'skills-loader',
-    version: '0.3.0',
+    version: '0.0.2',
     description: 'Load OpenClaw skills with Hermes-style progressive disclosure',
     dependencies: [],
   };
@@ -295,7 +295,7 @@ class SkillsLoaderFeature {
       const frontmatter = parseFrontmatter(content) || {
         name,
         description: '',
-        version: '1.0.0',
+        version: '0.0.2',
       };
       const body = extractBody(content);
 
@@ -423,26 +423,34 @@ class SkillsLoaderFeature {
     const skill = this.skillView(skillName);
     if (!skill) throw new Error(`Skill '${skillName}' not found`);
 
-    const scriptPath = path.join(skill.path, 'scripts', scriptName);
+    const scriptsDir = path.resolve(skill.path, 'scripts');
+    const scriptPath = path.resolve(scriptsDir, scriptName);
+    if (!scriptPath.startsWith(`${scriptsDir}${path.sep}`)) {
+      throw new Error(`Invalid script path for skill '${skillName}'`);
+    }
     if (!fs.existsSync(scriptPath))
       throw new Error(`Script '${scriptName}' not found in skill '${skillName}'`);
 
     try {
       let command: string;
+      let commandArgs: string[];
       if (scriptName.endsWith('.sh')) {
-        command = `bash "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
+        command = 'bash';
+        commandArgs = [scriptPath, ...args];
       } else if (scriptName.endsWith('.js')) {
-        command = `node "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
+        command = 'node';
+        commandArgs = [scriptPath, ...args];
       } else if (scriptName.endsWith('.py')) {
-        command = `python3 "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
+        command = process.platform === 'win32' ? 'python' : 'python3';
+        commandArgs = [scriptPath, ...args];
       } else if (scriptName.endsWith('.ts')) {
-        command = `npx tsx "${scriptPath}" ${args.map((a) => `"${a}"`).join(' ')}`;
+        command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+        commandArgs = ['tsx', scriptPath, ...args];
       } else {
         throw new Error(`Unsupported script type: ${scriptName}`);
       }
 
-      /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-      return execSync(command, {
+      return execFileSync(command, commandArgs, {
         cwd: skill.path,
         timeout: 30000,
         encoding: 'utf8',
