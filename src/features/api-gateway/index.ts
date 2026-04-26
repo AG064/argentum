@@ -8,6 +8,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 
 import express, { type Request, type Response, type Handler } from 'express';
+import expressRateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import {
   type FeatureModule,
@@ -119,11 +120,14 @@ class ApiGatewayFeature implements FeatureModule {
     this.app.use(this.requestLogger.bind(this));
     this.app.use(this.errorHandler.bind(this));
 
-    // Set up rate limiting middleware
-    this.app.use(this.rateLimitMiddleware.bind(this));
-
-    // API key authentication middleware
-    this.app.use(this.authMiddleware.bind(this));
+    // Apply a CodeQL-recognized IP limiter immediately before API key auth so
+    // protected routes throttle unauthorized traffic before credential validation.
+    // The project limiter still runs after auth for configured endpoint quotas.
+    this.app.use(
+      this.createPreAuthRateLimiter(),
+      this.authMiddleware.bind(this),
+      this.rateLimitMiddleware.bind(this),
+    );
 
     // Add health check endpoint
     this.registerEndpoint('/health', 'GET', this.healthCheckHandler.bind(this), {
@@ -427,18 +431,47 @@ class ApiGatewayFeature implements FeatureModule {
     return this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
   }
 
+  private getIpRateLimitKey(req: Request): string {
+    return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? '0.0.0.0');
+  }
+
   private getRateLimitKey(req: Request, byApiKey: boolean): string {
     if (!byApiKey) {
-      return req.ip ?? 'unknown';
+      return this.getIpRateLimitKey(req);
     }
 
     const apiKeyHeader = req.headers['x-api-key'];
     const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
     if (!apiKey) {
-      return req.ip ?? 'unknown';
+      return this.getIpRateLimitKey(req);
     }
 
-    return this.findTokenByKey(apiKey)?.[0] ?? (req.ip ?? 'unknown');
+    return this.findTokenByKey(apiKey)?.[0] ?? this.getIpRateLimitKey(req);
+  }
+
+  private createPreAuthRateLimiter(): Handler {
+    const rl = this.getRateLimitConfig();
+
+    return expressRateLimit({
+      windowMs: rl.windowMs,
+      limit: rl.max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => this.getIpRateLimitKey(req),
+      skip: (req) => {
+        if (req.path.endsWith('/health')) return true;
+        const endpoint = this.findEndpoint(req.method, req.path);
+        return !endpoint?.rateLimited || !endpoint.requiresAuth;
+      },
+      handler: (_req, res) => {
+        res.status(429).json({
+          error: 'Too many requests',
+          retryAfter: Math.ceil(rl.windowMs / 1000),
+          limit: rl.max,
+          window: rl.windowMs,
+        });
+      },
+    });
   }
 
   private respondIfRateLimited(req: Request, res: Response): boolean {
@@ -479,7 +512,7 @@ class ApiGatewayFeature implements FeatureModule {
     }
 
     const endpoint = this.findEndpoint(req.method, req.path);
-    if (!endpoint?.rateLimited || endpoint.requiresAuth) {
+    if (!endpoint?.rateLimited) {
       next();
       return;
     }
@@ -501,12 +534,6 @@ class ApiGatewayFeature implements FeatureModule {
         return;
       }
       return next();
-    }
-
-    // Throttle protected endpoints before validating credentials so repeated
-    // unauthorized requests cannot bypass rate limiting.
-    if (endpoint.requiresAuth && endpoint.rateLimited && this.respondIfRateLimited(req, res)) {
-      return;
     }
 
     if (!endpoint.requiresAuth) {

@@ -5,12 +5,46 @@
  * REST API for external integrations with authentication, rate limiting,
  * and endpoint management.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const crypto_1 = require("crypto");
 const express_1 = __importDefault(require("express"));
+const express_rate_limit_1 = __importStar(require("express-rate-limit"));
 const rate_limiting_1 = __importDefault(require("../rate-limiting"));
 /**
  * API Gateway feature — external REST API with authentication and rate limiting.
@@ -42,16 +76,19 @@ class ApiGatewayFeature {
     endpoints = new Map(); // keyed by method
     apiTokens = new Map();
     active = false;
+    callerTokens = new WeakMap();
     async init(config, context) {
         this.ctx = context;
         this.config = { ...this.config, ...config };
         // Load existing apiKeys from config into tokens
         this.apiTokens.clear();
         for (const key of this.config.apiKeys) {
-            const keyHash = this.hashApiKey(key);
+            const salt = this.generateSalt();
+            const keyHash = this.hashApiKey(key, salt);
             this.apiTokens.set(keyHash, {
                 name: `Initial key ${key.slice(0, 8)}`,
                 keyHash,
+                keySalt: salt,
                 keyPreview: this.previewApiKey(key),
                 createdAt: Date.now(),
                 scopes: ['*'],
@@ -64,10 +101,10 @@ class ApiGatewayFeature {
         // Apply global middleware
         this.app.use(this.requestLogger.bind(this));
         this.app.use(this.errorHandler.bind(this));
-        // Set up rate limiting middleware
-        this.app.use(this.rateLimitMiddleware.bind(this));
-        // API key authentication middleware
-        this.app.use(this.authMiddleware.bind(this));
+        // Apply a CodeQL-recognized IP limiter immediately before API key auth so
+        // protected routes throttle unauthorized traffic before credential validation.
+        // The project limiter still runs after auth for configured endpoint quotas.
+        this.app.use(this.createPreAuthRateLimiter(), this.authMiddleware.bind(this), this.rateLimitMiddleware.bind(this));
         // Add health check endpoint
         this.registerEndpoint('/health', 'GET', this.healthCheckHandler.bind(this), {
             description: 'Gateway health check',
@@ -192,11 +229,13 @@ class ApiGatewayFeature {
     /** Create an API token */
     createToken(name, expiresInDays, scopes = ['*']) {
         const key = `ak_${(0, crypto_1.randomBytes)(24).toString('hex')}`;
-        const keyHash = this.hashApiKey(key);
+        const salt = this.generateSalt();
+        const keyHash = this.hashApiKey(key, salt);
         const token = {
             name,
             key,
             keyHash,
+            keySalt: salt,
             keyPreview: this.previewApiKey(key),
             createdAt: Date.now(),
             lastUsed: undefined,
@@ -208,6 +247,7 @@ class ApiGatewayFeature {
         const stored = {
             name: token.name,
             keyHash: token.keyHash,
+            keySalt: token.keySalt,
             keyPreview: token.keyPreview,
             createdAt: token.createdAt,
             lastUsed: token.lastUsed,
@@ -220,9 +260,11 @@ class ApiGatewayFeature {
     }
     /** Revoke an API token */
     revokeToken(key) {
-        const keyHash = this.apiTokens.has(key) ? key : this.hashApiKey(key);
-        const token = this.apiTokens.get(keyHash);
-        if (!token || token.revokedAt)
+        const entry = this.findTokenByKey(key);
+        if (!entry)
+            return false;
+        const [keyHash, token] = entry;
+        if (token.revokedAt)
             return false;
         token.revokedAt = Date.now();
         this.apiTokens.set(keyHash, token);
@@ -233,10 +275,10 @@ class ApiGatewayFeature {
         return Array.from(this.apiTokens.values());
     }
     authenticateApiKey(apiKey) {
-        const keyHash = this.hashApiKey(apiKey);
-        const token = this.apiTokens.get(keyHash);
-        if (!token)
+        const entry = this.findTokenByKey(apiKey);
+        if (!entry)
             return null;
+        const [keyHash, token] = entry;
         if (token.revokedAt)
             return null;
         if (token.expiresAt && token.expiresAt <= Date.now())
@@ -258,8 +300,35 @@ class ApiGatewayFeature {
         const cleanPath = path.replace(/^\/+/, '');
         return `${base}/${cleanPath}`;
     }
-    hashApiKey(key) {
-        return (0, crypto_1.createHash)('sha256').update(key).digest('hex');
+    /** Derive a hash for an API key using scrypt with the provided salt */
+    hashApiKey(key, salt) {
+        return (0, crypto_1.scryptSync)(key, salt, 64).toString('hex');
+    }
+    /** Generate a random salt for key hashing */
+    generateSalt() {
+        return (0, crypto_1.randomBytes)(16).toString('hex');
+    }
+    /**
+     * Find a stored token entry by matching the raw API key.
+     * Uses scrypt to re-derive the hash with the stored salt, then constant-time
+     * comparison to prevent timing attacks.
+     *
+     * Intentionally scans the full token set to reduce timing differences between
+     * matching and non-matching keys.
+     *
+     * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
+     */
+    findTokenByKey(apiKey) {
+        let match = null;
+        for (const [hash, token] of this.apiTokens) {
+            const computed = this.hashApiKey(apiKey, token.keySalt);
+            const computedBuf = Buffer.from(computed, 'hex');
+            const storedBuf = Buffer.from(hash, 'hex');
+            if (computedBuf.length === storedBuf.length && (0, crypto_1.timingSafeEqual)(computedBuf, storedBuf)) {
+                match = [hash, token];
+            }
+        }
+        return match;
     }
     previewApiKey(key) {
         return key.length <= 12 ? `${key.slice(0, 4)}...` : `${key.slice(0, 8)}...${key.slice(-4)}`;
@@ -301,6 +370,69 @@ class ApiGatewayFeature {
             message: process.env.NODE_ENV === 'development' ? err.message : undefined,
         });
     }
+    getRateLimitConfig() {
+        return this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
+    }
+    getIpRateLimitKey(req) {
+        return (0, express_rate_limit_1.ipKeyGenerator)(req.ip ?? req.socket.remoteAddress ?? '0.0.0.0');
+    }
+    getRateLimitKey(req, byApiKey) {
+        if (!byApiKey) {
+            return this.getIpRateLimitKey(req);
+        }
+        const apiKeyHeader = req.headers['x-api-key'];
+        const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+        if (!apiKey) {
+            return this.getIpRateLimitKey(req);
+        }
+        return this.findTokenByKey(apiKey)?.[0] ?? this.getIpRateLimitKey(req);
+    }
+    createPreAuthRateLimiter() {
+        const rl = this.getRateLimitConfig();
+        return (0, express_rate_limit_1.default)({
+            windowMs: rl.windowMs,
+            limit: rl.max,
+            standardHeaders: true,
+            legacyHeaders: false,
+            keyGenerator: (req) => this.getIpRateLimitKey(req),
+            skip: (req) => {
+                if (req.path.endsWith('/health'))
+                    return true;
+                const endpoint = this.findEndpoint(req.method, req.path);
+                return !endpoint?.rateLimited || !endpoint.requiresAuth;
+            },
+            handler: (_req, res) => {
+                res.status(429).json({
+                    error: 'Too many requests',
+                    retryAfter: Math.ceil(rl.windowMs / 1000),
+                    limit: rl.max,
+                    window: rl.windowMs,
+                });
+            },
+        });
+    }
+    respondIfRateLimited(req, res) {
+        const rl = this.getRateLimitConfig();
+        const key = this.getRateLimitKey(req, rl.byApiKey);
+        try {
+            const result = rate_limiting_1.default.check(key, rl.max, rl.windowMs);
+            if (!result.allowed) {
+                res.status(429).json({
+                    error: 'Too many requests',
+                    retryAfter: Math.ceil(rl.windowMs / 1000),
+                    limit: rl.max,
+                    window: rl.windowMs,
+                });
+                return true;
+            }
+        }
+        catch (err) {
+            this.ctx.logger.warn('Rate limiting check failed, allowing', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+        return false;
+    }
     /** Rate limiting middleware */
     async rateLimitMiddleware(req, res, next) {
         // Skip rate limiting for health check
@@ -313,40 +445,8 @@ class ApiGatewayFeature {
             next();
             return;
         }
-        // Ensure rate limiting config exists
-        const rl = this.config.rateLimit ?? { windowMs: 60000, max: 100, byApiKey: true };
-        // Rate limit by API key or IP
-        let key;
-        if (rl.byApiKey) {
-            const apiKeyHeader = req.headers['x-api-key'];
-            const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-            if (apiKey) {
-                key = this.hashApiKey(apiKey);
-            }
-            else {
-                key = req.ip ?? 'unknown';
-            }
-        }
-        else {
-            key = req.ip ?? 'unknown';
-        }
-        // Use rate-limiting feature
-        try {
-            const result = rate_limiting_1.default.check(key, rl.max, rl.windowMs);
-            if (!result.allowed) {
-                res.status(429).json({
-                    error: 'Too many requests',
-                    retryAfter: Math.ceil(rl.windowMs / 1000),
-                    limit: rl.max,
-                    window: rl.windowMs,
-                });
-                return;
-            }
-        }
-        catch (err) {
-            this.ctx.logger.warn('Rate limiting check failed, allowing', {
-                error: err instanceof Error ? err.message : String(err),
-            });
+        if (this.respondIfRateLimited(req, res)) {
+            return;
         }
         next();
     }
@@ -379,6 +479,8 @@ class ApiGatewayFeature {
             res.status(403).json({ error: 'Forbidden', message: 'API key scope is not sufficient' });
             return;
         }
+        // Attach caller token to request for downstream handlers (e.g., scope enforcement)
+        this.callerTokens.set(req, token);
         next();
     }
     /** Find registered endpoint for a method/path */
@@ -450,7 +552,33 @@ class ApiGatewayFeature {
                 res.status(400).json({ error: 'Bad request', message: 'name is required' });
                 return;
             }
-            const token = this.createToken(name, typeof expiresInDays === 'number' ? expiresInDays : undefined, Array.isArray(scopes) ? scopes : ['*']);
+            // Restrict created token scopes to a subset of the caller's own scopes
+            // to prevent privilege escalation.
+            const callerToken = this.callerTokens.get(req);
+            if (!callerToken) {
+                // authMiddleware must have populated this; if it didn't, refuse to proceed.
+                res.status(403).json({ error: 'Forbidden', message: 'Caller identity could not be determined' });
+                return;
+            }
+            const callerScopes = callerToken.scopes;
+            const requestedScopes = Array.isArray(scopes) ? scopes : ['*'];
+            let grantedScopes;
+            if (callerScopes.includes('*')) {
+                // Caller has wildcard — may grant any scope including '*'
+                grantedScopes = requestedScopes;
+            }
+            else {
+                // Caller may only grant scopes they already hold (no '*' escalation)
+                grantedScopes = requestedScopes.filter((s) => s !== '*' && callerScopes.includes(s));
+                if (grantedScopes.length === 0) {
+                    res.status(403).json({
+                        error: 'Forbidden',
+                        message: 'Requested scopes exceed caller privileges',
+                    });
+                    return;
+                }
+            }
+            const token = this.createToken(name, typeof expiresInDays === 'number' ? expiresInDays : undefined, grantedScopes);
             res.status(201).json({
                 token: token.key,
                 keyPreview: token.keyPreview,

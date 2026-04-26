@@ -71,7 +71,7 @@ describe('API gateway security', () => {
     expect(instance.tokenHasScope(token, 'tokens:write')).toBe(false);
   });
 
-  test('rate limits repeated unauthorized requests on protected endpoints', () => {
+  test('auth rejects unauthorized protected endpoints after rate limit passes', async () => {
     (rateLimiting as any).initDb();
     const originalRateLimit = instance.config.rateLimit;
     instance.config.rateLimit = { windowMs: 60000, max: 1, byApiKey: false };
@@ -89,19 +89,78 @@ describe('API gateway security', () => {
     };
     const next = jest.fn();
 
+    await instance.rateLimitMiddleware(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+
+    next.mockClear();
     instance.authMiddleware(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
 
+    rateLimiting.reset('127.0.0.1');
+    instance.config.rateLimit = originalRateLimit;
+  });
+
+  test('rate limit middleware throttles protected endpoints before auth runs', async () => {
+    (rateLimiting as any).initDb();
+    const originalRateLimit = instance.config.rateLimit;
+    instance.config.rateLimit = { windowMs: 60000, max: 1, byApiKey: false };
+    rateLimiting.reset('127.0.0.2');
+
+    const req: any = {
+      method: 'DELETE',
+      path: '/api/tokens/ak_test',
+      headers: {},
+      ip: '127.0.0.2',
+    };
+    const res: any = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    const next = jest.fn();
+
+    await instance.rateLimitMiddleware(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+
+    next.mockClear();
     res.status.mockClear();
     res.json.mockClear();
-    next.mockClear();
 
-    instance.authMiddleware(req, res, next);
+    await instance.rateLimitMiddleware(req, res, next);
     expect(res.status).toHaveBeenCalledWith(429);
     expect(next).not.toHaveBeenCalled();
 
-    rateLimiting.reset('127.0.0.1');
+    rateLimiting.reset('127.0.0.2');
     instance.config.rateLimit = originalRateLimit;
+  });
+
+  test('started gateway throttles protected HTTP requests before auth validation', async () => {
+    await instance.init(
+      {
+        enabled: true,
+        port: 0,
+        path: '/api',
+        apiKeys: [],
+        rateLimit: { windowMs: 60000, max: 1, byApiKey: true },
+      },
+      instance.ctx,
+    );
+
+    await instance.start();
+    const address = instance.server.address();
+    const port = typeof address === 'object' && address ? address.port : undefined;
+    expect(port).toBeTruthy();
+
+    try {
+      const first = await fetch(`http://127.0.0.1:${port}/api/tokens`);
+      expect(first.status).toBe(401);
+
+      const second = await fetch(`http://127.0.0.1:${port}/api/tokens`);
+      expect(second.status).toBe(429);
+    } finally {
+      await instance.stop();
+    }
   });
 });

@@ -32,6 +32,7 @@ export interface ApiEndpoint {
 export interface ApiToken {
     name: string;
     keyHash: string;
+    keySalt: string;
     keyPreview: string;
     createdAt: number;
     lastUsed?: number;
@@ -57,6 +58,7 @@ declare class ApiGatewayFeature implements FeatureModule {
     private endpoints;
     private apiTokens;
     private active;
+    private readonly callerTokens;
     init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     start(): Promise<void>;
     stop(): Promise<void>;
@@ -82,13 +84,32 @@ declare class ApiGatewayFeature implements FeatureModule {
     tokenHasScope(token: ApiToken | null | undefined, requiredScope?: string): boolean;
     /** Normalize path to include config.path prefix */
     private normalizePath;
+    /** Derive a hash for an API key using scrypt with the provided salt */
     private hashApiKey;
+    /** Generate a random salt for key hashing */
+    private generateSalt;
+    /**
+     * Find a stored token entry by matching the raw API key.
+     * Uses scrypt to re-derive the hash with the stored salt, then constant-time
+     * comparison to prevent timing attacks.
+     *
+     * Intentionally scans the full token set to reduce timing differences between
+     * matching and non-matching keys.
+     *
+     * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
+     */
+    private findTokenByKey;
     private previewApiKey;
     private normalizeScopes;
     /** Request logger middleware */
     private requestLogger;
     /** Error handler middleware */
     private errorHandler;
+    private getRateLimitConfig;
+    private getIpRateLimitKey;
+    private getRateLimitKey;
+    private createPreAuthRateLimiter;
+    private respondIfRateLimited;
     /** Rate limiting middleware */
     private rateLimitMiddleware;
     /** Authentication middleware */
