@@ -8,16 +8,23 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
+  checks: read
   contents: read
+  id-token: write
+  issues: read
+  pull-requests: read
+  security-events: write
 
 jobs:
   analysis:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ossf/scorecard-action@v2
+      - uses: ossf/scorecard-action@v2.4.3
         with:
-          results-file: results.sarif
+          results_file: results.sarif
+          results_format: sarif
       - uses: actions/upload-artifact@v4
         with:
           name: scorecard-results
