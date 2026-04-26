@@ -175,7 +175,7 @@ function evaluateCondition(condition: string, vars: Record<string, unknown> = {}
 class MeshWorkflowsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mesh-workflows',
-    version: '0.2.0',
+    version: '0.0.1',
     description: 'Goal decomposition, dependency graph, checkpoint/resume workflows',
     dependencies: ['checkpoint'],
   };
@@ -381,7 +381,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       name: `Goal: ${decomposed.goal.slice(0, 50)}`,
       description: decomposed.goal,
       goal: decomposed.goal,
-      version: '1.0.0',
+      version: '0.0.1',
       steps,
       entryStep: decomposed.executionPlan[0] ?? '',
       variables: {},

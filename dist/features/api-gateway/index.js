@@ -55,7 +55,7 @@ const rate_limiting_1 = __importDefault(require("../rate-limiting"));
 class ApiGatewayFeature {
     meta = {
         name: 'api-gateway',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'REST API for external integrations with auth and rate limiting',
         dependencies: ['rate-limiting'],
     };

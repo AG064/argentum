@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: SkillsLibraryConfig = {
 class SkillsLibraryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skills-library',
-    version: '0.1.0',
+    version: '0.0.1',
     description: 'Library of agent skills with versioning (SQLite)',
     dependencies: [],
   };

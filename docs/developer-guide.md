@@ -698,7 +698,7 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
     "createdAt": 1742301234567
   },
   "headers": {
-    "user-agent": "AG-Claw/0.2.0"
+    "user-agent": "AG-Claw/0.0.1"
   },
   "timestamp": 1742301234567,
   "signature": "sha256=abc123def456..."  // HMAC-SHA256 от тела JSON с secret подписчика
@@ -893,4 +893,4 @@ const results = await knowledgeGraph.query(`
 
 ---
 
-*AG-Claw v0.2.0 — Documentation last updated: 2026-03-17*
+*AG-Claw v0.0.1 — Documentation last updated: 2026-03-17*

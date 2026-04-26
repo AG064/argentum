@@ -247,7 +247,7 @@ curl -X POST http://localhost:18789/memory/graph/entity \
     "name": "AG-Claw",
     "type": "project",
     "properties": {
-      "version": "0.2.0",
+      "version": "0.0.1",
       "language": "TypeScript"
     }
   }'

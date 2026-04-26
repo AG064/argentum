@@ -10,7 +10,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class RoleBasedAccessFeature {
     meta = {
         name: 'role-based-access',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Manage roles and permissions for users and agents',
         dependencies: [],
     };

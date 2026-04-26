@@ -18,7 +18,7 @@ const net_1 = require("net");
 class WebhooksFeature {
     meta = {
         name: 'webhooks',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Webhook receiver and dispatcher with signature verification',
         dependencies: [],
     };

@@ -16,7 +16,7 @@ class WebchatChannel {
   constructor() {
     this.meta = {
       name: 'webchat-channel',
-      version: '0.1.0',
+      version: '0.0.1',
       description: 'Web-based chat with SSE streaming responses',
       dependencies: ['webchat'],
     };

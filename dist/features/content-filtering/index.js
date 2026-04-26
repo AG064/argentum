@@ -26,7 +26,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class ContentFilteringFeature {
     meta = {
         name: 'content-filtering',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Content filtering for profanity, PII, and sensitive data with custom rules',
         dependencies: [],
     };

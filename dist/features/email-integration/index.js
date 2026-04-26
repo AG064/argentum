@@ -26,7 +26,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class EmailIntegrationFeature {
     meta = {
         name: 'email-integration',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'IMAP/SMTP email integration with encrypted credential storage',
         dependencies: [],
     };

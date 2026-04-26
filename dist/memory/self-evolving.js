@@ -16,7 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class SelfEvolvingMemoryFeature {
     meta = {
         name: 'self-evolving-memory',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Memory consolidation, pattern discovery, and evolution',
         dependencies: [],
     };

@@ -204,7 +204,7 @@ Example from `audit-log`:
 ```typescript
 export default {
   name: 'audit-log',
-  version: '0.1.0',
+  version: '0.0.1',
   init() {
     this.db = new Database(dbPath);
     this.initTables();
@@ -345,7 +345,7 @@ import * as https from 'node:https';
 
 export default {
   name: 'stock-prices',
-  version: '0.1.0',
+  version: '0.0.1',
   dependencies: [],  // optional: list required features
 
   init() {
@@ -440,7 +440,7 @@ describe('stock-prices feature', () => {
   it('has correct metadata', () => {
     const feature = require('../../../src/features/stock-prices').default;
     expect(feature.name).toBe('stock-prices');
-    expect(feature.version).toBe('0.1.0');
+    expect(feature.version).toBe('0.0.1');
   });
 });
 ```
@@ -623,7 +623,7 @@ export async function execute(
 
 export const metadata = {
   name: 'my-skill',
-  version: '1.0.0',
+  version: '0.0.1',
   description: 'Does something useful',
   author: 'Your Name',
 };
@@ -649,9 +649,9 @@ AG-Claw uses [Semantic Versioning](https://semver.org/):
 #### 1. Update Version
 
 ```bash
-npm version patch     # 0.2.0 → 0.2.1
-npm version minor     # 0.2.0 → 0.3.0
-npm version major     # 0.2.0 → 1.0.0
+npm version patch     # patch release
+npm version minor     # minor release
+npm version major     # major release
 ```
 
 This updates `version` in `package.json` and creates a git tag.
@@ -677,8 +677,8 @@ Add entries under `## [unreleased]` with section headers:
 
 ```bash
 git add -A
-git commit -m "Release v0.2.1"
-git tag v0.2.1
+git commit -m "Release v0.0.1"
+git tag v0.0.1
 git push --tags
 ```
 
@@ -691,7 +691,7 @@ npm publish --access public
 #### 6. Create GitHub Release
 
 Use the tag to create a GitHub Release with:
-- Release title: `v0.2.1`
+- Release title: `v0.0.1`
 - Description from CHANGELOG.md
 - Any special upgrade instructions
 

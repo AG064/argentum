@@ -31,7 +31,7 @@ Verify the installation:
 
 ```bash
 agclaw --version
-# 0.2.0
+# 0.0.1
 ```
 
 ---
@@ -97,7 +97,7 @@ curl http://localhost:18789/health
   "success": true,
   "data": {
     "status": "ok",
-    "version": "0.2.0",
+    "version": "0.0.1",
     "uptime": 3,
     "features": "12/59 active",
     "memory": { "semantic": 0, "knowledge_graph": 0, "sessions": 0 }

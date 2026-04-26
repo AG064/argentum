@@ -46,7 +46,7 @@ export type CronHandler = (jobId: string) => Promise<void> | void;
 class CronSchedulerFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'cron-scheduler',
-    version: '0.1.0',
+    version: '0.0.1',
     description: 'Cron-like job scheduler with persistent storage and custom handlers',
     dependencies: [],
   };

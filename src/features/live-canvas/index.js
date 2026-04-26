@@ -16,7 +16,7 @@ class LiveCanvasFeature {
   constructor() {
     this.meta = {
       name: 'live-canvas',
-      version: '0.1.0',
+      version: '0.0.1',
       description: 'Real-time collaborative drawing and visualization canvas',
       dependencies: [],
     };

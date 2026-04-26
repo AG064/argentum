@@ -16,7 +16,7 @@ class MorningBriefingFeature {
   constructor() {
     this.meta = {
       name: 'morning-briefing',
-      version: '0.1.0',
+      version: '0.0.1',
       description: 'Daily personalized morning briefing generator',
       dependencies: [],
     };

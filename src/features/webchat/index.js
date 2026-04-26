@@ -301,7 +301,7 @@ class WebchatFeature {
   constructor() {
     this.meta = {
       name: 'webchat',
-      version: '0.2.0',
+      version: '0.0.1',
       description: 'Full-featured web chat UI with Markdown, file upload, themes',
       dependencies: [],
     };

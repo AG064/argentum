@@ -20,7 +20,7 @@ const semantic_1 = require("../../memory/semantic");
 class AutoCaptureFeature {
     meta = {
         name: 'auto-capture',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Automatic capture of decisions, lessons, errors, and preferences',
         dependencies: [],
     };

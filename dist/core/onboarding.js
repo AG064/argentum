@@ -139,7 +139,7 @@ function createOnboardingProfile(options = {}) {
     const config = {
         $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
         name: options.name?.trim() || 'My AG-Claw Instance',
-        version: '1.0.0',
+        version: '0.0.1',
         server: {
             port,
             host: '127.0.0.1',

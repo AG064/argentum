@@ -134,7 +134,7 @@ function scrubSecrets(obj: unknown): unknown {
 class CompanyTemplatesFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'company-templates',
-    version: '0.1.0',
+    version: '0.0.1',
     description: 'Portable company configuration templates with secret scrubbing',
     dependencies: [],
   };
@@ -182,7 +182,7 @@ class CompanyTemplatesFeature implements FeatureModule {
     const config = ctx.config;
 
     const bundle: TemplateBundle = {
-      version: '1.0.0',
+      version: '0.0.1',
       name,
       exportedAt: new Date().toISOString(),
       organization: {
@@ -198,7 +198,7 @@ class CompanyTemplatesFeature implements FeatureModule {
       skills: this.extractSkills(config),
       workflows: [],
       metadata: {
-        agClawVersion: '0.2.0',
+        agClawVersion: '0.0.1',
         exportedBy: 'company-templates',
       },
     };
@@ -358,7 +358,7 @@ class CompanyTemplatesFeature implements FeatureModule {
 
     return Object.entries(features).map(([name, cfg]) => ({
       name,
-      version: (cfg['version'] as string) ?? '0.1.0',
+      version: (cfg['version'] as string) ?? '0.0.1',
       enabled: (cfg['enabled'] as boolean) ?? false,
       config: scrubSecrets(cfg) as Record<string, unknown>,
     }));

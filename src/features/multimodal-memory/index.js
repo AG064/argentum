@@ -16,7 +16,7 @@ class MultimodalMemoryFeature {
   constructor() {
     this.meta = {
       name: 'multimodal-memory',
-      version: '0.1.0',
+      version: '0.0.1',
       description: 'Cross-modal memory storage with semantic search',
       dependencies: [],
     };

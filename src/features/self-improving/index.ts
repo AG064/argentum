@@ -64,7 +64,7 @@ const CONFIG_FILE = 'self-improving-config.json';
 class SelfImprovingLoop implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-improving',
-    version: '0.1.0',
+    version: '0.0.1',
     description: 'Reflection engine that analyzes behavior and continuously improves AG-Claw',
     dependencies: ['sqlite-memory', 'user-modeling'],
   };

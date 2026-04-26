@@ -36,8 +36,22 @@
     "docker:build": "docker compose -f docker/docker-compose.yml build",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "package:win": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1",
+    "package:win:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 -SkipMsi",
     "prebuild": "npm run clean",
     "postinstall": "node scripts/postinstall-patch.js"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "config/**/*.yaml",
+      "config/**/*.json",
+      "docs/dashboard.html",
+      "src/ui/dashboard/**/*",
+      "dist/ui/**/*"
+    ]
   },
   "keywords": [
     "ai-agent",

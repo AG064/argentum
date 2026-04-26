@@ -107,6 +107,26 @@ function getProjectConfigPath(workDir = getWorkDir()) {
 function projectConfigExists(workDir = getWorkDir()) {
     return fs.existsSync(path.join(workDir, 'config', 'default.yaml')) || fs.existsSync(path.join(workDir, 'agclaw.json'));
 }
+function resolveFeaturesDir() {
+    const candidates = [
+        path.join(__dirname, 'features'),
+        path.join(__dirname, '..', 'src', 'features'),
+        path.join(__dirname, 'src', 'features'),
+        path.join(process.cwd(), 'dist', 'features'),
+        path.join(process.cwd(), 'src', 'features'),
+    ];
+    const seen = new Set();
+    for (const candidate of candidates) {
+        const normalized = path.resolve(candidate);
+        if (seen.has(normalized))
+            continue;
+        seen.add(normalized);
+        if (fs.existsSync(normalized) && fs.statSync(normalized).isDirectory()) {
+            return normalized;
+        }
+    }
+    return null;
+}
 function readProjectConfig(configPath = getProjectConfigPath()) {
     const raw = fs.readFileSync(configPath, 'utf8');
     if (configPath.endsWith('.json')) {
@@ -427,7 +447,7 @@ function cmdInit() {
         const defaultConfig = {
             $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
             name: 'My AG CLAW Instance',
-            version: '1.0.0',
+            version: '0.0.1',
             server: {
                 port: 3000,
                 host: '0.0.0.0',
@@ -603,8 +623,8 @@ function cmdFeatures() {
     banner();
     info('Available features:');
     print('');
-    const featuresDir = path.join(__dirname, 'src', 'features');
-    if (!fs.existsSync(featuresDir)) {
+    const featuresDir = resolveFeaturesDir();
+    if (!featuresDir || !fs.existsSync(featuresDir)) {
         error('Features directory not found');
         return;
     }
@@ -618,7 +638,7 @@ function cmdFeatures() {
     for (const name of features) {
         // Try to read meta
         try {
-            const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
+            const distPath = path.join(featuresDir, name, 'index.js');
             if (fs.existsSync(distPath)) {
                 // intentionally empty
             }
@@ -638,8 +658,9 @@ function cmdFeature() {
         error('Usage: agclaw feature <name>');
         return;
     }
-    const distPath = path.join(__dirname, 'src', 'features', name, 'index.js');
-    const srcPath = path.join(__dirname, '..', 'src', 'features', name, 'index.ts');
+    const featuresDir = resolveFeaturesDir();
+    const distPath = featuresDir ? path.join(featuresDir, name, 'index.js') : '';
+    const srcPath = featuresDir ? path.join(featuresDir, name, 'index.ts') : '';
     if (!fs.existsSync(distPath) && !fs.existsSync(srcPath)) {
         error(`Feature '${name}' not found`);
         return;
@@ -647,7 +668,7 @@ function cmdFeature() {
     banner();
     info(`Feature: ${name}`);
     try {
-        const feature = require(distPath).default;
+        const feature = require(fs.existsSync(distPath) ? distPath : srcPath).default;
         print('');
         print(`  Name: ${feature.meta.name}`);
         print(`  Version: ${feature.meta.version}`);
@@ -1334,7 +1355,7 @@ async function cmdBackup() {
             // Create manifest
             fs.writeFileSync(path.join(backupPath, 'manifest.json'), JSON.stringify({
                 timestamp: new Date().toISOString(),
-                version: '0.2.0',
+                version: VERSION,
                 files: count,
             }, null, 2));
             success(`Backup created: ${backupPath}`);
@@ -1654,7 +1675,7 @@ async function cmdStatus() {
     banner();
     print('  \x1b[1mAG-Claw Status\x1b[0m');
     print('');
-    print(`  \x1b[1mVersion:\x1b[0m 0.2.0`);
+    print(`  \x1b[1mVersion:\x1b[0m v${VERSION}`);
     print(`  \x1b[1mConfig:\x1b[0m ${configPath}`);
     print(`  \x1b[1mData:\x1b[0m ${path.join(workDir, 'data')}`);
     print(`  \x1b[1mUptime:\x1b[0m ${process.uptime().toFixed(0)}s`);

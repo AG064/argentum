@@ -740,11 +740,11 @@ Output:
 
 ```
 NAME                    STATUS      HEALTH        VERSION
-sqlite-memory           active      ok            0.1.0
-semantic-search         active      ok            0.1.0
-audit-log               active      ok            0.1.0
-telegram                inactive    -             0.1.0
-morning-briefing         active      ok            0.1.0
+sqlite-memory           active      ok            0.0.1
+semantic-search         active      ok            0.0.1
+audit-log               active      ok            0.0.1
+telegram                inactive    -             0.0.1
+morning-briefing         active      ok            0.0.1
 ```
 
 ---
@@ -860,7 +860,7 @@ Quick reference for common endpoints:
 ```typescript
 interface AGClawConfig {
   name: string;                          // Instance name
-  version: string;                       // Config format version (const: "0.2.0")
+  version: string;                       // Config format version (const: "0.0.1")
 
   server: {
     port: number;                         // Gateway port (default: 18789)

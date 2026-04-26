@@ -69,7 +69,7 @@ class BrowserAutomationFeature {
   constructor() {
     this.meta = {
       name: 'browser-automation',
-      version: '0.2.0',
+      version: '0.0.1',
       description: 'Headless browser with Puppeteer/Playwright, proxy, multi-tab',
       dependencies: [],
     };

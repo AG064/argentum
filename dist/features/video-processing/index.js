@@ -29,7 +29,7 @@ const execFile = (0, util_1.promisify)(child_process_1.execFile);
 class VideoProcessingFeature {
     meta = {
         name: 'video-processing',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Video processing with ffmpeg (frame extraction, trimming, metadata)',
         dependencies: [],
     };

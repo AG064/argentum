@@ -17,7 +17,7 @@ const path_1 = require("path");
 class SkillLoaderFeature {
     meta = {
         name: 'skill-loader',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
         dependencies: [],
     };

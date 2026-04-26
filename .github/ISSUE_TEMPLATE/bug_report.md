@@ -28,7 +28,7 @@ assignees: @AG064
 
 - OS: [e.g., Ubuntu 22.04]
 - Node.js version: [e.g., v20.10.0]
-- AG-Claw version: [e.g., 0.2.0]
+- AG-Claw version: [e.g., v0.0.1]
 
 ## 📋 Additional Context
 

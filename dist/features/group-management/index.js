@@ -29,7 +29,7 @@ const ROLE_PERMISSIONS = {
 class GroupManagementFeature {
     meta = {
         name: 'group-management',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Multi-user group management with roles and permissions',
         dependencies: [],
     };

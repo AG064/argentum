@@ -9,7 +9,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class TenantIsolationFeature {
     meta = {
         name: 'tenant-isolation',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Provide tenant-scoped data isolation, quotas and cross-tenant access control',
         dependencies: [],
     };

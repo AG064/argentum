@@ -41,7 +41,7 @@ export interface SQLiteMemoryConfig {
 class SQLiteMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'sqlite-memory',
-    version: '0.1.0',
+    version: '0.0.1',
     description: 'SQLite-backed namespace key-value memory store with full-text search',
     dependencies: [],
   };

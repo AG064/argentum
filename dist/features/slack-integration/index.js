@@ -27,7 +27,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SlackIntegrationFeature {
     meta = {
         name: 'slack-integration',
-        version: '0.1.0',
+        version: '0.0.1',
         description: 'Slack bot integration with message sending and event handling',
         dependencies: [],
     };
