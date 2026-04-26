@@ -358,18 +358,24 @@ class ApiGatewayFeature implements FeatureModule {
    * Uses scrypt to re-derive the hash with the stored salt, then constant-time
    * comparison to prevent timing attacks.
    *
+   * Intentionally scans the full token set to reduce timing differences between
+   * matching and non-matching keys.
+   *
    * O(n) over stored tokens — acceptable for typical deployment sizes (< 1 000 tokens).
    */
   private findTokenByKey(apiKey: string): [string, ApiToken] | null {
+    let match: [string, ApiToken] | null = null;
+
     for (const [hash, token] of this.apiTokens) {
       const computed = this.hashApiKey(apiKey, token.keySalt);
       const computedBuf = Buffer.from(computed, 'hex');
       const storedBuf = Buffer.from(hash, 'hex');
       if (computedBuf.length === storedBuf.length && timingSafeEqual(computedBuf, storedBuf)) {
-        return [hash, token];
+        match = [hash, token];
       }
     }
-    return null;
+
+    return match;
   }
 
   private previewApiKey(key: string): string {
@@ -444,7 +450,7 @@ class ApiGatewayFeature implements FeatureModule {
       const apiKeyHeader = req.headers['x-api-key'];
       const apiKey = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
       if (apiKey) {
-        key = this.hashApiKey(apiKey);
+        key = this.findTokenByKey(apiKey)?.[0] ?? (req.ip ?? 'unknown');
       } else {
         key = req.ip ?? 'unknown';
       }
