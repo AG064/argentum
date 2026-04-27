@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Voice Feature for AG-Claw
+ * Voice Feature for Argentum
  *
  * Text-to-Speech (TTS), Speech-to-Text (STT) via ElevenLabs and OpenAI.
  */

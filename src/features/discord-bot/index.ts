@@ -263,7 +263,7 @@ class DiscordBotFeature implements FeatureModule {
       timestamp: now,
       author: {
         id: 'bot',
-        username: 'AG-Claw',
+        username: 'Argentum',
         bot: true,
       },
     };

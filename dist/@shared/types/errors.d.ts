@@ -1,10 +1,10 @@
 /**
- * Custom Error Classes for AG-Claw
+ * Custom Error Classes for Argentum
  *
  * Hierarchical error system with codes, context, and proper typing.
  * All errors extend DomainError for consistent handling.
  */
-/** Base error class for all AG-Claw errors */
+/** Base error class for all Argentum errors */
 export declare abstract class DomainError extends Error {
     readonly code: string;
     readonly context: Record<string, unknown>;

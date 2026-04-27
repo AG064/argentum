@@ -1,7 +1,7 @@
 "use strict";
 // @ts-nocheck
 /**
- * AG-Claw Approval UI / Human-in-the-Loop System
+ * Argentum Approval UI / Human-in-the-Loop System
  *
  * Provides:
  * - TUI for approving/denying actions in terminal
@@ -331,21 +331,21 @@ function formatExpiry(timestamp) {
 // ─── CLI Helpers ─────────────────────────────────────────────────────────────
 function printApprovalHelp() {
     console.log(`
-  \x1b[1magclaw security approve <request-id> [options]\x1b[0m
+  \x1b[1margentum security approve <request-id> [options]\x1b[0m
     Approve a pending security request.
 
     Options:
       --notes <text>   Add approval notes
       --agent <id>     Override agent ID
 
-  \x1b[1magclaw security deny <request-id> [options]\x1b[0m
+  \x1b[1margentum security deny <request-id> [options]\x1b[0m
     Deny a pending security request.
 
     Options:
       --notes <text>   Add denial reason/notes
       --agent <id>     Override agent ID
 
-  \x1b[1magclaw security approvals [options]\x1b[0m
+  \x1b[1margentum security approvals [options]\x1b[0m
     List pending approval requests.
 
     Options:
@@ -353,7 +353,7 @@ function printApprovalHelp() {
       --risk <level>   Filter by risk (low, medium, high, critical)
       --agent <id>     Filter by agent
 
-  \x1b[1magclaw security approval <request-id>\x1b[0m
+  \x1b[1margentum security approval <request-id>\x1b[0m
     Show detailed information about a specific approval request.
   `);
 }

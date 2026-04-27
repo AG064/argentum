@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Settings Page
+ * Argentum Dashboard - Settings Page
  */
 
 function loadSettings() {

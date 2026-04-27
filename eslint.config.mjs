@@ -1,5 +1,5 @@
 /**
- * ESLint Flat Configuration for AG-Claw (ESLint 10+)
+ * ESLint Flat Configuration for Argentum (ESLint 10+)
  *
  * Migrated from .eslintrc.js to flat config format.
  * Targets TypeScript with strict rules, JSDoc enforcement,

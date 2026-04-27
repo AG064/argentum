@@ -1,7 +1,7 @@
 /**
  * Self-Improving Loop Feature
  *
- * The reflection engine that makes AG-Claw get smarter over time.
+ * The reflection engine that makes Argentum get smarter over time.
  * Runs 5 phases during idle time or on schedule.
  *
  * Phase 1: Error Analysis     — Review failed tasks, user corrections
@@ -11,11 +11,11 @@
  * Phase 5: Self-Correction    — Update SOUL.md and response strategies
  *
  * CLI:
- *   agclaw improve           — Run full loop
- *   agclaw improve --phase skill   — Run specific phase
- *   agclaw improve --dry-run      — Show what would change
- *   agclaw improve --force        — Force run even if recently ran
- *   agclaw learnings           — Show accumulated lessons
+ *   argentum improve           — Run full loop
+ *   argentum improve --phase skill   — Run specific phase
+ *   argentum improve --dry-run      — Show what would change
+ *   argentum improve --force        — Force run even if recently ran
+ *   argentum learnings           — Show accumulated lessons
  */
 
 import * as fs from 'fs';
@@ -65,7 +65,7 @@ class SelfImprovingLoop implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-improving',
     version: '0.0.2',
-    description: 'Reflection engine that analyzes behavior and continuously improves AG-Claw',
+    description: 'Reflection engine that analyzes behavior and continuously improves Argentum',
     dependencies: ['sqlite-memory', 'user-modeling'],
   };
 

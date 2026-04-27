@@ -36,7 +36,7 @@ export interface FeatureHooks {
   onHook?(event: string, data: unknown, ctx: FeatureContext): Promise<void>;
   /** Periodic health check — return healthy = true */
   healthCheck?(ctx: FeatureContext): Promise<{ healthy: boolean; message?: string }>;
-  /** Called when AG-Claw is shutting down */
+  /** Called when Argentum is shutting down */
   onShutdown?(ctx: FeatureContext): Promise<void>;
 }
 

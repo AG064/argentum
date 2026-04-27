@@ -1,8 +1,8 @@
-# AG-Claw Mobile Companion App
+# Argentum Mobile Companion App
 
 ## Overview
 
-A cross-platform mobile app for AG-Claw, providing push notifications, camera access, GPS, screen recording, and direct communication with the AG-Claw gateway.
+A cross-platform mobile app for Argentum, providing push notifications, camera access, GPS, screen recording, and direct communication with the Argentum gateway.
 
 **Status:** Planning / In Development
 
@@ -12,22 +12,22 @@ A cross-platform mobile app for AG-Claw, providing push notifications, camera ac
 
 | Criteria | React Native + Expo | Flutter |
 |---|---|---|
-| Language | TypeScript (shared with AG-Claw) | Dart (new language to learn) |
+| Language | TypeScript (shared with Argentum) | Dart (new language to learn) |
 | Ecosystem | Massive npm ecosystem | Smaller package ecosystem |
 | OTA Updates | Expo EAS Update (instant) | Shorebird (limited) |
 | Dev Speed | Fast with Expo Go | Fast hot reload |
-| AG-Claw Integration | Direct TS code sharing | Requires bridging |
+| Argentum Integration | Direct TS code sharing | Requires bridging |
 | Community | Larger | Growing |
 
 **Decision: React Native + Expo**
 
-TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols, config schemas). Expo simplifies build/deploy and provides OTA updates without App Store review for JS changes.
+TypeScript means code sharing with Argentum core (API types, WebSocket protocols, config schemas). Expo simplifies build/deploy and provides OTA updates without App Store review for JS changes.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              AG-Claw Mobile App                  │
+│              Argentum Mobile App                  │
 │                                                  │
 │  ┌──────────────┐  ┌──────────────────────────┐ │
 │  │  Navigation  │  │     State Management     │ │
@@ -54,7 +54,7 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
           │                    │
           ▼                    ▼
 ┌─────────────────┐  ┌──────────────────┐
-│  AG-Claw GW     │  │  Push Services   │
+│  Argentum GW     │  │  Push Services   │
 │  (WebSocket +   │  │  (APNs / FCM)    │
 │   REST API)     │  │                  │
 └─────────────────┘  └──────────────────┘
@@ -70,14 +70,14 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
 - Silent notifications for background data sync
 
 ### 2. Camera Access
-- Take photos/videos and send to AG-Claw for multimodal analysis
+- Take photos/videos and send to Argentum for multimodal analysis
 - QR code scanning for device pairing
 - Document scanning mode (auto-crop, enhance)
 - Live preview with on-device ML for object detection
 - Expo Camera API with custom overlay UI
 
 ### 3. GPS / Location
-- Real-time location sharing with AG-Claw
+- Real-time location sharing with Argentum
 - Geofencing triggers (arrive/leave locations)
 - Background location tracking (opt-in, with clear privacy controls)
 - Location history for context-aware recommendations
@@ -85,12 +85,12 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
 
 ### 4. Screen Recording / Sharing
 - Screen capture for support/debugging sessions
-- Record screen as video and send to AG-Claw
+- Record screen as video and send to Argentum
 - Frame extraction for real-time analysis
 - Requires native modules (react-native-replay-kit on iOS, MediaProjection on Android)
 
 ### 5. Chat Interface
-- Real-time WebSocket chat with AG-Claw
+- Real-time WebSocket chat with Argentum
 - Message types: text, images, voice, files, code blocks, cards
 - Markdown rendering with syntax highlighting
 - Typing indicators and read receipts
@@ -99,7 +99,7 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
 ### 6. Voice Interaction
 - Push-to-talk and hands-free modes
 - On-device STT for offline dictation
-- TTS playback of AG-Claw responses
+- TTS playback of Argentum responses
 - Wake word detection ("Hey Claw")
 - Audio streaming for real-time voice conversations
 
@@ -112,10 +112,10 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
 ## Device Pairing
 
 ### Flow
-1. User opens AG-Claw mobile app
+1. User opens Argentum mobile app
 2. App displays QR code or pairing code
-3. User scans QR / enters code in AG-Claw webchat or CLI
-4. AG-Claw generates JWT token with device ID
+3. User scans QR / enters code in Argentum webchat or CLI
+4. Argentum generates JWT token with device ID
 5. Mobile app stores token securely (Expo SecureStore)
 6. WebSocket connection established with auth header
 
@@ -123,7 +123,7 @@ TypeScript means code sharing with AG-Claw core (API types, WebSocket protocols,
 - Device-bound JWT tokens (1-year expiry, refreshable)
 - Certificate pinning for API connections
 - Biometric auth (Face ID / Touch ID / fingerprint) to unlock app
-- Remote device wipe via AG-Claw admin command
+- Remote device wipe via Argentum admin command
 
 ## Directory Structure (Planned)
 
@@ -161,7 +161,7 @@ mobile/
 ├── utils/                  # Shared utilities
 │   ├── api.ts
 │   ├── storage.ts
-│   └── types.ts            # Shared with AG-Claw backend
+│   └── types.ts            # Shared with Argentum backend
 ├── assets/                 # Images, fonts, sounds
 ├── app.json                # Expo config
 ├── package.json
@@ -179,7 +179,7 @@ mobile/
 
 ### Commands
 ```bash
-# Create project (from ag-claw root)
+# Create project (from argentum root)
 npx create-expo-app mobile --template tabs
 cd mobile
 
@@ -204,7 +204,7 @@ npx eas build --platform all
 
 ## API Contract
 
-The mobile app talks to AG-Claw via:
+The mobile app talks to Argentum via:
 
 ### WebSocket (Primary)
 ```

@@ -1,4 +1,4 @@
-# Contributing to AG-Claw
+# Contributing to Argentum
 
 Here's the honest truth upfront: this project is maintained by one person (AG064) in their free time. Contributions are welcome, but response times may vary. That said, every PR gets read and every issue gets considered.
 
@@ -25,8 +25,8 @@ Here's the honest truth upfront: this project is maintained by one person (AG064
 
 ```bash
 # Fork on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/ag-claw.git
-cd ag-claw
+git clone https://github.com/YOUR_USERNAME/argentum.git
+cd argentum
 npm install
 ```
 
@@ -100,7 +100,7 @@ Before requesting review:
 
 ## Architecture Notes
 
-AG-Claw is built on OpenClaw. The key directories:
+Argentum is built on OpenClaw. The key directories:
 
 ```
 src/
@@ -120,7 +120,7 @@ If you're adding a feature, look at `src/features/` for the pattern.
 ## Questions?
 
 - Open an issue for bugs or feature requests
-- Telegram: [[REMOVED]](https://t.me/AGClaw)
+- Telegram: [[REMOVED]]
 - Check the [docs/](docs/) directory first — there's more detail there than in this file
 
 ## License

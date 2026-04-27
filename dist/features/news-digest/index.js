@@ -28,7 +28,7 @@ class NewsDigestFeature {
         enabled: false,
         dbPath: path_1.default.join(process.cwd(), 'data', 'news.db'),
         cacheMinutes: 15,
-        userAgent: 'AG-Claw/0.1 (RSS Reader)',
+        userAgent: 'Argentum/0.1 (RSS Reader)',
         maxArticlesPerSource: 50,
     };
     ctx;

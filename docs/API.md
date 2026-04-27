@@ -1,6 +1,6 @@
 # API Reference
 
-Complete REST API and WebSocket reference for AG-Claw Gateway.
+Complete REST API and WebSocket reference for Argentum Gateway.
 
 ---
 
@@ -17,7 +17,7 @@ All endpoints return JSON. All request bodies must be `Content-Type: application
 
 ## Authentication
 
-Currently uses token-based auth via the `Authorization` header. Set the token in `agclaw.json`:
+Currently uses token-based auth via the `Authorization` header. Set the token in `argentum.json`:
 
 ```json
 {
@@ -85,29 +85,29 @@ Prometheus-compatible metrics endpoint.
 **Response `200 OK`:**
 
 ```
-# HELP agclaw_messages_total Total messages processed
-# TYPE agclaw_messages_total counter
-agclaw_messages_total{channel="telegram"} 1542
-agclaw_messages_total{channel="webchat"} 238
+# HELP argentum_messages_total Total messages processed
+# TYPE argentum_messages_total counter
+argentum_messages_total{channel="telegram"} 1542
+argentum_messages_total{channel="webchat"} 238
 
-# HELP agclaw_tool_calls_total Total tool invocations
-# TYPE agclaw_tool_calls_total counter
-agclaw_tool_calls_total{tool="web_search"} 89
-agclaw_tool_calls_total{tool="memory_search"} 312
+# HELP argentum_tool_calls_total Total tool invocations
+# TYPE argentum_tool_calls_total counter
+argentum_tool_calls_total{tool="web_search"} 89
+argentum_tool_calls_total{tool="memory_search"} 312
 
-# HELP agclaw_llm_tokens_total Total LLM tokens used
-# TYPE agclaw_llm_tokens_total counter
-agclaw_llm_tokens_total{type="prompt"} 456789
-agclaw_llm_tokens_total{type="completion"} 123456
+# HELP argentum_llm_tokens_total Total LLM tokens used
+# TYPE argentum_llm_tokens_total counter
+argentum_llm_tokens_total{type="prompt"} 456789
+argentum_llm_tokens_total{type="completion"} 123456
 
-# HELP agclaw_memory_entries_total Memory entries by type
-# TYPE agclaw_memory_entries_total gauge
-agclaw_memory_entries_total{type="decision"} 234
-agclaw_memory_entries_total{type="lesson"} 567
+# HELP argentum_memory_entries_total Memory entries by type
+# TYPE argentum_memory_entries_total gauge
+argentum_memory_entries_total{type="decision"} 234
+argentum_memory_entries_total{type="lesson"} 567
 
-# HELP agclaw_features_active Number of active features
-# TYPE agclaw_features_active gauge
-agclaw_features_active 12
+# HELP argentum_features_active Number of active features
+# TYPE argentum_features_active gauge
+argentum_features_active 12
 ```
 
 ---
@@ -364,7 +364,7 @@ List all configured agents.
   "agents": [
     {
       "id": "default",
-      "name": "AG-Claw Assistant",
+      "name": "Argentum Assistant",
       "model": "anthropic/claude-sonnet-4-20250514",
       "tools": ["web_search", "read_file", "write_file", "run_command", "memory_search"],
       "status": "active"
@@ -385,7 +385,7 @@ Get details of a specific agent.
 ```json
 {
   "id": "default",
-  "name": "AG-Claw Assistant",
+  "name": "Argentum Assistant",
   "model": "anthropic/claude-sonnet-4-20250514",
   "systemPrompt": "You are a helpful AI assistant...",
   "maxIterations": 10,
@@ -580,7 +580,7 @@ Get current configuration (secrets masked).
 
 ```json
 {
-  "name": "My AG-Claw",
+  "name": "My Argentum",
   "server": {
     "port": 3000,
     "host": "0.0.0.0"
@@ -646,7 +646,7 @@ Receive an incoming webhook for a specific feature.
 
 ## WebSocket Events
 
-AG-Claw supports real-time communication via WebSocket at `/ws`.
+Argentum supports real-time communication via WebSocket at `/ws`.
 
 ### Connection
 
@@ -738,7 +738,7 @@ All API errors return a JSON body:
 Full TypeScript interface in `src/core/config.ts`. Key structure:
 
 ```typescript
-interface AGClawConfig {
+interface ArgentumConfig {
   // Instance identity
   name: string;
 

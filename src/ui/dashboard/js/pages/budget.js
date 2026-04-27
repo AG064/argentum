@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Budget Page
+ * Argentum Dashboard - Budget Page
  */
 
 async function loadBudgetData() {

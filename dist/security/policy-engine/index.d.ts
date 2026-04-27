@@ -1,5 +1,5 @@
 /**
- * AG-Claw Policy Engine
+ * Argentum Policy Engine
  *
  * Enterprise-grade policy engine with:
  * - Default-deny enforcement

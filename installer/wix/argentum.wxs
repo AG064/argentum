@@ -1,0 +1,59 @@
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="Argentum"
+    Manufacturer="AG"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="A002E425-E43E-49C7-90F0-723F9AD4C3C1"
+    Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Argentum is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Argentum">
+        <Component Id="ArgentumExeComponent" Guid="7A80F098-1922-4EE8-9839-1A3D18217DF2">
+          <File Id="ArgentumExe" Source="$(var.SourceExe)" Name="argentum.exe" KeyPath="yes" />
+          <Environment
+            Id="ArgentumPath"
+            Name="PATH"
+            Value="[INSTALLFOLDER]"
+            Permanent="no"
+            Part="last"
+            Action="set"
+            System="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Argentum">
+        <Component Id="StartMenuShortcutComponent" Guid="061C27C6-14B5-4C03-AE15-3A6DAD10B1A5">
+          <Shortcut
+            Id="StartMenuShortcut"
+            Name="Argentum"
+            Description="Launch Argentum"
+            Target="[#ArgentumExe]"
+            WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+          <RegistryValue
+            Root="HKLM"
+            Key="Software\AG064\Argentum"
+            Name="StartMenuShortcut"
+            Type="integer"
+            Value="1"
+            KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Argentum" Level="1">
+      <ComponentRef Id="ArgentumExeComponent" />
+      <ComponentRef Id="StartMenuShortcutComponent" />
+    </Feature>
+  </Package>
+</Wix>

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * AG-Claw Container Sandbox
+ * Argentum Container Sandbox
  *
  * Runs shell commands inside isolated Docker containers.
  * Features:

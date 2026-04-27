@@ -1,7 +1,7 @@
 /**
- * AG-Claw Dashboard Server
+ * Argentum Dashboard Server
  *
- * A lightweight secure web server for the AG-Claw dashboard.
+ * A lightweight secure web server for the Argentum dashboard.
  * Features:
  * - HTTP Basic Auth
  * - Static file serving

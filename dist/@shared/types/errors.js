@@ -1,13 +1,13 @@
 "use strict";
 /**
- * Custom Error Classes for AG-Claw
+ * Custom Error Classes for Argentum
  *
  * Hierarchical error system with codes, context, and proper typing.
  * All errors extend DomainError for consistent handling.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ErrorCodes = exports.RateLimitError = exports.CacheError = exports.PersistenceError = exports.CoordinationError = exports.ChannelError = exports.AgentError = exports.ValidationError = exports.ToolExecutionError = exports.MemoryError = exports.FeatureError = exports.LLMProviderError = exports.ConfigurationError = exports.DomainError = void 0;
-/** Base error class for all AG-Claw errors */
+/** Base error class for all Argentum errors */
 class DomainError extends Error {
     code;
     context;

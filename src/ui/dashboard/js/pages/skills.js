@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Skills Page
+ * Argentum Dashboard - Skills Page
  */
 
 // Mock skills data
@@ -7,7 +7,7 @@ const mockSkills = [
   {
     id: 'github',
     name: 'GitHub Integration',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description:
       'Seamless GitHub integration for repository management, issues, pull requests, and workflow automation.',
     icon: '🐙',
@@ -20,7 +20,7 @@ const mockSkills = [
   {
     id: 'deep-research-pro',
     name: 'Deep Research Pro',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description:
       'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
     icon: '🔍',
@@ -33,7 +33,7 @@ const mockSkills = [
   {
     id: 'telegram',
     name: 'Telegram Bot',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description:
       'Design Telegram Bot API workflows and command-driven conversations using direct HTTPS requests.',
     icon: '✈️',
@@ -71,7 +71,7 @@ const mockSkills = [
   {
     id: 'voice',
     name: 'Voice Assistant',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description: 'Text-to-speech and speech-to-text capabilities with ElevenLabs integration.',
     icon: '🎙️',
     rating: 4.4,
@@ -83,7 +83,7 @@ const mockSkills = [
   {
     id: 'calendar',
     name: 'Calendar Integration',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description: 'Google Calendar integration for scheduling, reminders, and event management.',
     icon: '📅',
     rating: 4.3,
@@ -95,7 +95,7 @@ const mockSkills = [
   {
     id: 'healthcheck',
     name: 'Health Monitor',
-    author: 'AG-Claw',
+    author: 'Argentum',
     description:
       'Host security hardening and risk-tolerance configuration for OpenClaw deployments.',
     icon: '🛡️',

@@ -26,7 +26,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ag064/ag-claw
+          images: ag064/argentum
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-

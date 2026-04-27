@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Logs Page
+ * Argentum Dashboard - Logs Page
  */
 
 // Log stream interval

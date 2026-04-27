@@ -31,12 +31,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t ag-claw:${{ github.sha }} -f docker/Dockerfile .
+        run: docker build -t argentum:${{ github.sha }} -f docker/Dockerfile .
 
       - name: Run Trivy (CRITICAL only)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ag-claw:${{ github.sha }}
+          image-ref: argentum:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL
@@ -45,7 +45,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.35.0
         continue-on-error: true
         with:
-          image-ref: ag-claw:${{ github.sha }}
+          image-ref: argentum:${{ github.sha }}
           format: table
           output: trivy-full.txt
           severity: HIGH,CRITICAL

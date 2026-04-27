@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Configuration Loader
+ * Argentum Configuration Loader
  *
  * Loads and validates configuration from YAML files with environment variable overrides.
  * Supports hot-reloading via chokidar file watcher.
@@ -541,8 +541,15 @@ class ConfigManager {
         this.watcher = null;
         this.listeners = new Set();
         this.baseConfigPath = (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
-        const envConfigPath = process.env.AGCLAW_CONFIG_PATH;
-        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), envConfigPath ?? 'agclaw.json');
+        const envConfigPath = process.env.ARGENTUM_CONFIG_PATH ?? process.env.AGCLAW_CONFIG_PATH;
+        const preferredConfigPath = (0, path_1.resolve)(process.cwd(), 'argentum.json');
+        const legacyConfigPath = (0, path_1.resolve)(process.cwd(), 'agclaw.json');
+        this.configPath =
+            configPath ??
+                (0, path_1.resolve)(process.cwd(), envConfigPath ??
+                    ((0, fs_1.existsSync)(preferredConfigPath) || !(0, fs_1.existsSync)(legacyConfigPath)
+                        ? 'argentum.json'
+                        : 'agclaw.json'));
         this.config = this.loadConfig();
     }
     /** Load and validate configuration from YAML file */

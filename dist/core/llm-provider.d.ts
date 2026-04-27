@@ -1,7 +1,7 @@
 /**
- * AG-Claw LLM Provider — Fully Configurable
+ * Argentum LLM Provider — Fully Configurable
  *
- * All providers are defined in agclaw.json. No hardcoded providers.
+ * All providers are defined in argentum.json. No hardcoded providers.
  * Any OpenAI-compatible API can be added by setting base_url + api_key.
  */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
@@ -71,7 +71,7 @@ export interface LLMConfig {
 /**
  * Create provider from config. No hardcoded providers.
  *
- * Config format in agclaw.json:
+ * Config format in argentum.json:
  * {
  *   "llm": {
  *     "providers": {

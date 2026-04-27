@@ -1,6 +1,6 @@
-# AG-Claw Developer Guide
+# Argentum Developer Guide
 
-Добро пожаловать в AG-Claw — модульный AI Agent Framework на базе OpenClaw. Это руководство для разработчиков, которые хотят понимать, расширять и вносить вклад в проект.
+Добро пожаловать в Argentum — модульный AI Agent Framework на базе OpenClaw. Это руководство для разработчиков, которые хотят понимать, расширять и вносить вклад в проект.
 
 ---
 
@@ -12,8 +12,8 @@
 
 ```bash
 # 1. Клонируйте репозиторий
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 
 # 2. Установите зависимости
 npm install
@@ -30,7 +30,7 @@ npm run build
 npm start
 ```
 
-По умолчанию AG-Claw будет доступен на `http://localhost:18789`.
+По умолчанию Argentum будет доступен на `http://localhost:18789`.
 
 #### Зависимости
 
@@ -139,11 +139,11 @@ SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
 ### 2.1 Обзор
 
-AG-Claw расширяет OpenClaw модульной плагин-системой, мультиканальностью и многослойной безопасностью.
+Argentum расширяет OpenClaw модульной плагин-системой, мультиканальностью и многослойной безопасностью.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AG-Claw Framework                       │
+│                      Argentum Framework                       │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │                  Core Layer                            │  │
@@ -239,7 +239,7 @@ unloaded -> loading -> active -> disabled
 ```typescript
 interface FeatureContext {
   logger: Logger;                              // Логгер области видимости фичи
-  config: AGClawConfig;                        // Полный конфиг
+  config: ArgentumConfig;                        // Полный конфиг
   registerHook(event, handler): void;          // Подписка на события
   emit(event, data): Promise<void>;            // Отправка событий другим фичам
 }
@@ -258,7 +258,7 @@ interface FeatureContext {
        enabled: true
        customOption: value
    ```
-4. Перезапустите AG-Claw. Плагин-лоудер подхватит автоматически.
+4. Перезапустите Argentum. Плагин-лоудер подхватит автоматически.
 
 ---
 
@@ -458,7 +458,7 @@ const sub = webhooks.subscribe(
 // Ручная отправка события
 await webhooks.dispatch({
   id: 'evt_123',
-  source: 'ag-claw',
+  source: 'argentum',
   type: 'user.created',
   payload: { userId: 42, email: 'user@example.com' },
   headers: {},
@@ -614,7 +614,7 @@ private validateUrl(u: string): boolean {
 
 ### 5.1 REST API Endpoints
 
-AG-Claw предоставляет несколько HTTP-эндпоинтов (в основном от фичей):
+Argentum предоставляет несколько HTTP-эндпоинтов (в основном от фичей):
 
 | Метод | Путь | Описание | Фича |
 |---|---|---|---|
@@ -690,7 +690,7 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
 ```json
 {
   "id": "evt_1234567890",
-  "source": "ag-claw",
+  "source": "argentum",
   "type": "user.created",
   "payload": {
     "userId": 42,
@@ -698,7 +698,7 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
     "createdAt": 1742301234567
   },
   "headers": {
-    "user-agent": "AG-Claw/0.0.2"
+    "user-agent": "Argentum/0.0.2"
   },
   "timestamp": 1742301234567,
   "signature": "sha256=abc123def456..."  // HMAC-SHA256 от тела JSON с secret подписчика
@@ -736,9 +736,9 @@ if (expected !== provided) throw new Error('Invalid signature');
 ### 6.1 Структура проекта
 
 ```
-ag-claw/
+argentum/
 ├── src/
-│   ├── index.ts              # Main entry (Agent, AGClaw class)
+│   ├── index.ts              # Main entry (Agent, Argentum class)
 │   ├── core/
 │   │   ├── config.ts         # Config manager (YAML + env, Zod validation)
 │   │   ├── plugin-loader.ts  # Feature loading, lifecycle, dependency resolution
@@ -893,4 +893,4 @@ const results = await knowledgeGraph.query(`
 
 ---
 
-*AG-Claw v0.0.2 — Documentation last updated: 2026-03-17*
+*Argentum v0.0.2 — Documentation last updated: 2026-03-17*

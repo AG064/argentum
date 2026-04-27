@@ -1,7 +1,7 @@
  
 // @ts-nocheck
 /**
- * AG-Claw Sandbox Executor
+ * Argentum Sandbox Executor
  *
  * Secure code execution environment with:
  * - Filesystem access control (whitelist/blacklist)

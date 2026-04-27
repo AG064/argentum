@@ -1,4 +1,4 @@
-# Router Agent — Multi-User Orchestrator for AG-Claw
+# Router Agent — Multi-User Orchestrator for Argentum
 
 ## Overview
 
@@ -189,7 +189,7 @@ Then reference friendly names in rules:
 }
 ```
 
-## Adding to AG-Claw
+## Adding to Argentum
 
 1. Create `config/router.json` with your routing rules
 2. Register agents with their workspaces:

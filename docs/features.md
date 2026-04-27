@@ -1,6 +1,6 @@
 # Features — All 59 of Them
 
-AG-Claw comes with 59 production-ready features, organized into 7 categories.
+Argentum comes with 59 production-ready features, organized into 7 categories.
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?style=flat-square)
 ![59 Features](https://img.shields.io/badge/59%20Features-Modular-green?style=flat-square)
@@ -125,7 +125,7 @@ AG-Claw comes with 59 production-ready features, organized into 7 categories.
 
 ## Quick Enable
 
-After `agclaw init`, edit `agclaw.json`:
+After `argentum init`, edit `argentum.json`:
 
 ```json
 {
@@ -140,7 +140,7 @@ After `agclaw init`, edit `agclaw.json`:
 }
 ```
 
-Run `agclaw gateway restart` to apply changes.
+Run `argentum gateway restart` to apply changes.
 
 ---
 

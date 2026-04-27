@@ -1,5 +1,5 @@
 /**
- * Router Agent — Central routing for multi-user AG-Claw
+ * Router Agent — Central routing for multi-user Argentum
  *
  * Receives all messages, determines routing rules,
  * and forwards to appropriate agent session.

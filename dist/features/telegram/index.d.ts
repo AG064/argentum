@@ -1,5 +1,5 @@
 /**
- * AG-Claw Telegram Integration
+ * Argentum Telegram Integration
  *
  * Based on OpenClaw's Telegram channel pattern:
  * - Grammy bot framework

@@ -1,6 +1,6 @@
 # Руководство по быстрому старту
 
-Запустите AG-Claw за 5 минут. Это руководство проведёт вас от установки до первого работающего агента.
+Запустите Argentum за 5 минут. Это руководство проведёт вас от установки до первого работающего агента.
 
 ---
 
@@ -16,12 +16,12 @@
 ## Шаг 1 — Установка
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 ```
 
-На этом всё. AG-Claw использует только быстрые JavaScript-зависимости — без нативной компиляции.
+На этом всё. Argentum использует только быстрые JavaScript-зависимости — без нативной компиляции.
 
 ---
 
@@ -31,10 +31,10 @@ npm install
 npm link
 ```
 
-Команда `agclaw` станет доступна глобально. Проверьте:
+Команда `argentum` станет доступна глобально. Проверьте:
 
 ```bash
-agclaw --version
+argentum --version
 ```
 
 ---
@@ -42,13 +42,13 @@ agclaw --version
 ## Шаг 3 — Инициализация и запуск
 
 ```bash
-agclaw init
+argentum init
 ```
 
-Эта команда создаёт файл конфигурации `agclaw.json` и директорию `data/`. Затем запустите шлюз:
+Эта команда создаёт файл конфигурации `argentum.json` и директорию `data/`. Затем запустите шлюз:
 
 ```bash
-agclaw gateway start --port 3000
+argentum gateway start --port 3000
 ```
 
 Проверьте работоспособность:
@@ -83,7 +83,7 @@ export OPENAI_API_KEY=sk-...
 Перезапустите, чтобы применить ключ:
 
 ```bash
-agclaw gateway restart
+argentum gateway restart
 ```
 
 ---
@@ -93,7 +93,7 @@ agclaw gateway restart
 Отправьте сообщение через Telegram (если настроен) или через веб-чат:
 
 ```bash
-# Через веб-чат (сначала включите в agclaw.json)
+# Через веб-чат (сначала включите в argentum.json)
 curl -X POST http://localhost:3000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Привет, что ты умеешь?", "userId": "test-user"}'
@@ -103,7 +103,7 @@ curl -X POST http://localhost:3000/chat \
 
 ```
 Пользователь: Привет
-Агент: Привет! Я AG-Claw, твой AI-ассистент. У меня есть доступ к инструментам,
+Агент: Привет! Я Argentum, твой AI-ассистент. У меня есть доступ к инструментам,
        которые позволяют мне искать в интернете, читать и записывать файлы,
        выполнять команды и управлять собственной памятью.
        Чем могу помочь?
@@ -113,7 +113,7 @@ curl -X POST http://localhost:3000/chat \
 
 ## Базовая настройка
 
-Отредактируйте `agclaw.json` для настройки вашего окружения:
+Отредактируйте `argentum.json` для настройки вашего окружения:
 
 ```json
 {
@@ -153,7 +153,7 @@ curl -X POST http://localhost:3000/chat \
 | `channels` | Настройка каналов связи |
 | `security` | Ограничение скорости, списки доступа, аудит |
 
-После редактирования перезапустите: `agclaw gateway restart`
+После редактирования перезапустите: `argentum gateway restart`
 
 ---
 
@@ -161,7 +161,7 @@ curl -X POST http://localhost:3000/chat \
 
 1. Создайте бота через [@BotFather](https://t.me/BotFather) в Telegram
 2. Скопируйте токен бота
-3. Добавьте его в `agclaw.json`:
+3. Добавьте его в `argentum.json`:
 
 ```json
 {
@@ -175,7 +175,7 @@ curl -X POST http://localhost:3000/chat \
 }
 ```
 
-4. Перезапустите: `agclaw gateway restart`
+4. Перезапустите: `argentum gateway restart`
 5. Откройте Telegram, найдите своего бота и отправьте `/start`
 
 ---
@@ -185,7 +185,7 @@ curl -X POST http://localhost:3000/chat \
 Запустите встроенную диагностику:
 
 ```bash
-agclaw doctor
+argentum doctor
 ```
 
 Ожидаемый результат:
@@ -211,7 +211,7 @@ agclaw doctor
 # Найдите и остановите процесс, занимающий порт
 lsof -ti:3000 | xargs kill -9
 # Или используйте другой порт
-agclaw gateway start --port 4000
+argentum gateway start --port 4000
 ```
 
 ### "LLM call failed: API key not set"
@@ -221,7 +221,7 @@ agclaw gateway start --port 4000
 echo $OPENROUTER_API_KEY
 # Если пусто — установите снова и перезапустите
 export OPENROUTER_API_KEY=sk-or-v1-...
-agclaw gateway restart
+argentum gateway restart
 ```
 
 ### "Feature failed to load: dependency not enabled"
@@ -229,8 +229,8 @@ agclaw gateway restart
 Некоторые функции зависят от других. Проверьте зависимости:
 
 ```bash
-agclaw feature <имя-функции>
-# Пример: agclaw feature knowledge-graph
+argentum feature <имя-функции>
+# Пример: argentum feature knowledge-graph
 ```
 
 Включите недостающие зависимости, затем перезапустите.
@@ -239,17 +239,17 @@ agclaw feature <имя-функции>
 
 ```bash
 # Сначала остановите шлюз
-agclaw gateway stop
+argentum gateway stop
 # Удалите файл блокировки
 rm -f ./data/*.db-shm ./data/*.wal
 # Перезапустите
-agclaw gateway start
+argentum gateway start
 ```
 
 ### Бот Telegram не отвечает
 
 1. Проверьте токен: `curl -s "https://api.telegram.org/botВАШ_ТОКЕН/getMe"`
-2. Посмотрите логи: `agclaw gateway logs`
+2. Посмотрите логи: `argentum gateway logs`
 3. Убедитесь, что `allowedUsers` пуст (принимает всех) или содержит ваш ID пользователя
 
 ### Поиск в памяти не возвращает результатов
@@ -258,9 +258,9 @@ agclaw gateway start
 
 ```bash
 # Сохраните тестовую запись напрямую
-agclaw memory store "тестовая память" "Это тестовая запись"
+argentum memory store "тестовая память" "Это тестовая запись"
 # Затем найдите её
-agclaw memory search "тест"
+argentum memory search "тест"
 ```
 
 ---
@@ -274,4 +274,4 @@ agclaw memory search "тест"
 
 ---
 
-*Возникли трудности? Создайте issue на [GitHub](https://github.com/AG064/ag-claw/issues) или спросите в сообществе.*
+*Возникли трудности? Создайте issue на [GitHub](https://github.com/AG064/argentum/issues) или спросите в сообществе.*

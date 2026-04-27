@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Policy Engine
+ * Argentum Policy Engine
  *
  * YAML-based security policies loaded from config/security-policy.yaml.
  * Evaluates actions against rules by role/agent, enforces rate limits

@@ -1,5 +1,5 @@
 /**
- * AG-Claw YouTube Shorts Generator
+ * Argentum YouTube Shorts Generator
  *
  * Takes a YouTube URL, downloads video, finds best moments,
  * cuts into vertical shorts with captions, and optionally
@@ -347,7 +347,7 @@ class YouTubeShortsFeature implements FeatureModule {
 
     const {
       title = `Short ${new Date().toISOString()}`,
-      description = 'Generated with AG-Claw YouTube Shorts',
+      description = 'Generated with Argentum YouTube Shorts',
       tags = [],
       privacyStatus = 'private',
     } = options;
@@ -459,7 +459,7 @@ class YouTubeShortsFeature implements FeatureModule {
             try {
               const { videoId, videoUrl } = await this.uploadToYouTube(outPath, {
                 title: `${segment.caption} #shorts`,
-                description: `Generated short video: ${segment.caption}\n\nCreated with AG-Claw`,
+                description: `Generated short video: ${segment.caption}\n\nCreated with Argentum`,
                 tags: ['shorts', 'ag-claw', 'generated'],
                 privacyStatus: 'public',
               });

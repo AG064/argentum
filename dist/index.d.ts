@@ -1,7 +1,7 @@
 /**
- * AG-Claw Entry Point
+ * Argentum Entry Point
  *
- * Bootstraps the AG-Claw agent framework:
+ * Bootstraps the Argentum agent framework:
  * - Loads configuration
  * - Initializes logging
  * - Starts the plugin loader
@@ -10,7 +10,7 @@
  * - Sets up graceful shutdown
  */
 import 'dotenv/config';
-import { type AGClawConfig } from './core/config';
+import { type ArgentumConfig } from './core/config';
 import { type LLMProvider, type Message } from './core/llm-provider';
 import { type MemoryGraph } from './memory/graph';
 import { type SemanticMemory } from './memory/semantic';
@@ -52,7 +52,7 @@ export interface BuiltinToolOptions {
     enableImageTool?: boolean;
 }
 export declare function createBuiltinTools(options?: BuiltinToolOptions): Tool[];
-declare class AGClaw {
+declare class Argentum {
     private config;
     private logger;
     private pluginLoader;
@@ -65,12 +65,12 @@ declare class AGClaw {
     /** Get the agent instance (for channels to use) */
     getAgent(): Agent;
     /** Get the config */
-    getConfig(): AGClawConfig;
+    getConfig(): ArgentumConfig;
     /** Get the semantic memory instance */
     getSemanticMemory(): SemanticMemory;
     /** Get the memory graph instance */
     getMemoryGraph(): MemoryGraph;
-    /** Start the AG-Claw framework */
+    /** Start the Argentum framework */
     start(): Promise<void>;
     /** Start configured channels (Telegram, Webchat) */
     private startChannels;
@@ -85,6 +85,6 @@ declare class AGClaw {
     /** Graceful shutdown */
     private shutdown;
 }
-export declare function getAGClaw(): AGClaw;
-export { AGClaw };
+export declare function getArgentum(): Argentum;
+export { Argentum };
 //# sourceMappingURL=index.d.ts.map

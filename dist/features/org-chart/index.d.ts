@@ -1,10 +1,10 @@
 /**
  * Org Chart Feature
  *
- * Manages organizational hierarchy where AG-Claw is CEO and subagents are team members.
+ * Manages organizational hierarchy where Argentum is CEO and subagents are team members.
  * Provides hire/fire/assign operations and system prompt injection.
  *
- * AG-Claw as CEO injects org context:
+ * Argentum as CEO injects org context:
  *   ## Your Team
  *   - CTO (coder agent): Handles all code tasks
  *   - Researcher (researcher agent): Handles research

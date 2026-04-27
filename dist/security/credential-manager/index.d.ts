@@ -1,5 +1,5 @@
 /**
- * AG-Claw Credential Manager
+ * Argentum Credential Manager
  *
  * Enterprise credential management with:
  * - AES-256-GCM encryption at rest

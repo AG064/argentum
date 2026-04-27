@@ -1,8 +1,8 @@
-# Conference Presentation: AG-Claw
+# Conference Presentation: Argentum
 
 ## Slide Deck Outline
 
-Use this outline to prepare a conference talk or workshop about AG-Claw. Each section includes timing suggestions and key talking points.
+Use this outline to prepare a conference talk or workshop about Argentum. Each section includes timing suggestions and key talking points.
 
 **Target Duration:** 30–45 minutes (adjustable)
 **Audience:** Developers, AI enthusiasts, technical decision-makers
@@ -12,13 +12,13 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 
 ## Slide 1 — Title Slide
 
-**Title:** AG-Claw: Modular AI Agent Framework — OpenClaw, Evolved
+**Title:** Argentum: Modular AI Agent Framework — OpenClaw, Evolved
 
 **Subtitle:** 59 Pluggable Features, Production-Ready Security, Zero Vendor Lock-In
 
 **Presenter:** [Your Name]
 **Event:** [Conference Name] | [Date]
-**Demo Repo:** github.com/AG064/ag-claw
+**Demo Repo:** github.com/AG064/argentum
 
 ---
 
@@ -39,9 +39,9 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 
 ---
 
-## Slide 3 — What Is AG-Claw?
+## Slide 3 — What Is Argentum?
 
-**Title:** AG-Claw at a Glance
+**Title:** Argentum at a Glance
 
 **Content:**
 - Modular AI agent framework built on OpenClaw
@@ -50,7 +50,7 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 - Production-ready security built in
 - Channels: Telegram, Discord, Slack, WhatsApp, Email, SMS, Webchat, Mobile Push
 
-**Demo Hook:** "Let me show you what a fresh AG-Claw install looks like in 60 seconds."
+**Demo Hook:** "Let me show you what a fresh Argentum install looks like in 60 seconds."
 
 ---
 
@@ -73,7 +73,7 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 
 ## Slide 5 — Architecture Overview
 
-**Title:** How AG-Claw Works
+**Title:** How Argentum Works
 
 **Content:**
 - Gateway + Plugin Loader + Agentic Tool Loop
@@ -91,7 +91,7 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 
 ## Slide 6 — The Memory System
 
-**Title:** AG-Claw Remembers: A Four-Layer Memory Architecture
+**Title:** Argentum Remembers: A Four-Layer Memory Architecture
 
 **Content:**
 - Layer 1: Semantic Memory (fast, searchable)
@@ -122,7 +122,7 @@ Use this outline to prepare a conference talk or workshop about AG-Claw. Each se
 
 **Comparison Table:**
 
-| Feature | OpenClaw | LangGraph | AG-Claw |
+| Feature | OpenClaw | LangGraph | Argentum |
 |---|---|---|---|
 | Encrypted secrets | ❌ | ❌ | ✅ |
 | Audit logging | ❌ | ❌ | ✅ |
@@ -185,7 +185,7 @@ Coordinator → delegates to → [Coding] [Research] [Review]
 
 **Talking Points:**
 - "Specialization beats generalization for complex tasks"
-- "AG-Claw makes this trivial to set up"
+- "Argentum makes this trivial to set up"
 
 ---
 
@@ -225,9 +225,9 @@ Coordinator → delegates to → [Coding] [Research] [Review]
 
 ## Slide 13 — Comparison with Alternatives
 
-**Title:** How AG-Claw Compares
+**Title:** How Argentum Compares
 
-| Feature | OpenClaw | LangGraph | AutoGen | AG-Claw |
+| Feature | OpenClaw | LangGraph | AutoGen | Argentum |
 |---|---|---|---|---|
 | Self-hosted | ✅ | ✅ | ✅ | ✅ |
 | Features | Fixed | 0 (build yourself) | 0 | **59** |
@@ -237,7 +237,7 @@ Coordinator → delegates to → [Coding] [Research] [Review]
 | Setup time | 5 min | Days | Days | **5 min** |
 
 **Talking Points:**
-- "AG-Claw gives you LangGraph's flexibility with OpenClaw's simplicity"
+- "Argentum gives you LangGraph's flexibility with OpenClaw's simplicity"
 - "59 features you'd spend months building from scratch"
 
 ---
@@ -248,9 +248,9 @@ Coordinator → delegates to → [Coding] [Research] [Review]
 
 **Content:**
 - Same configuration format (mostly)
-- Same CLI commands (just `agclaw` instead of `openclaw`)
+- Same CLI commands (just `argentum` instead of `openclaw`)
 - Copy your data files over
-- Run `agclaw init` and restart
+- Run `argentum init` and restart
 
 **Timeline:**
 - 0–5 min: Install and link
@@ -284,18 +284,18 @@ Coordinator → delegates to → [Coding] [Research] [Review]
 
 **Content:**
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install && npm link
-agclaw init
-agclaw gateway start
+argentum init
+argentum gateway start
 ```
 
 **Resources:**
-- Docs: [AG-Claw GitHub](./docs/)
+- Docs: [Argentum GitHub](./docs/)
 - Quick Start: [QUICK_START.md](./docs/QUICK_START.md)
 - User Guide: [USER_GUIDE.md](./docs/USER_GUIDE.md)
-- Issues: [github.com/AG064/ag-claw/issues](https://github.com/AG064/ag-claw/issues)
+- Issues: [github.com/AG064/argentum/issues](https://github.com/AG064/argentum/issues)
 
 ---
 
@@ -317,11 +317,11 @@ agclaw gateway start
 **Demo 1 (60-second setup):**
 ```
 Terminal recording or live:
-1. git clone https://github.com/AG064/ag-claw.git
-2. cd ag-claw && npm install
+1. git clone https://github.com/AG064/argentum.git
+2. cd argentum && npm install
 3. npm link
-4. agclaw init
-5. agclaw gateway start --port 3000
+4. argentum init
+5. argentum gateway start --port 3000
 6. curl http://localhost:3000/health
 7. curl -X POST http://localhost:3000/chat -d '{"message": "Hello!", "userId": "demo"}'
 ```
@@ -330,7 +330,7 @@ Terminal recording or live:
 ```
 1. curl -X POST http://localhost:3000/chat -d '{"message": "Remember that my favorite color is blue", "userId": "demo"}'
 2. curl -X POST http://localhost:3000/chat -d '{"message": "What is my favorite color?", "userId": "demo"}'
-3. agclaw memory stats
+3. argentum memory stats
 ```
 
 ### Timing Budget
@@ -338,7 +338,7 @@ Terminal recording or live:
 | Section | Minutes |
 |---|---|
 | Title + Problem | 3 |
-| What Is AG-Claw | 2 |
+| What Is Argentum | 2 |
 | Demo 1: Setup | 5 |
 | Architecture | 4 |
 | Memory System | 4 |
@@ -356,7 +356,7 @@ Terminal recording or live:
 ### Common Questions to Prepare For
 
 **Q: How does this compare to LangGraph?**
-A: LangGraph is a framework for building agent graphs — you build everything (memory, tools, channels) from scratch. AG-Claw gives you 59 pre-built features that work together out of the box.
+A: LangGraph is a framework for building agent graphs — you build everything (memory, tools, channels) from scratch. Argentum gives you 59 pre-built features that work together out of the box.
 
 **Q: Is this production-ready?**
 A: Yes. It has Docker deployment, health monitoring, rate limiting, audit logging, and automated backups. People are using it in production today.
@@ -368,4 +368,4 @@ A: The self-evolving memory feature automatically compresses old entries. For ve
 A: Yes. Supports OpenRouter (recommended), Anthropic, and OpenAI. You can also add custom LLM providers.
 
 **Q: What's the pricing?**
-A: AG-Claw itself is free (MIT). You just pay for your LLM API usage (OpenRouter, Anthropic, or OpenAI).
+A: Argentum itself is free (MIT). You just pay for your LLM API usage (OpenRouter, Anthropic, or OpenAI).

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Plugin Loader
+ * Argentum Plugin Loader
  *
  * Dynamically loads and manages feature modules at runtime.
  * Supports enable/disable, lifecycle hooks, and dependency resolution.
@@ -63,7 +63,7 @@ function toModuleImportSpecifier(modulePath) {
     return modulePath.startsWith('file:') ? modulePath : (0, url_1.pathToFileURL)(modulePath).href;
 }
 /**
- * Plugin loader for AG-Claw features.
+ * Plugin loader for Argentum features.
  *
  * Scans the features directory, loads modules, resolves dependencies,
  * and manages feature lifecycle.

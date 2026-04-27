@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide covers how to work with the AG-Claw codebase: project structure, development workflow, coding standards, testing, and how to extend the framework with new channels, features, and skills.
+This guide covers how to work with the Argentum codebase: project structure, development workflow, coding standards, testing, and how to extend the framework with new channels, features, and skills.
 
 ---
 
@@ -20,12 +20,12 @@ This guide covers how to work with the AG-Claw codebase: project structure, deve
 ## 1. Project Structure
 
 ```
-ag-claw/
+argentum/
 ├── bin/
-│   └── agclaw.js              # CLI entry point (Unix shebang)
+│   └── argentum.js              # CLI entry point (Unix shebang)
 ├── src/
 │   ├── index.ts               # Gateway entry, Agent class, Tool Loop
-│   ├── cli.ts                 # CLI implementation (agclaw command)
+│   ├── cli.ts                 # CLI implementation (argentum command)
 │   ├── core/                  # Non-feature core modules
 │   │   ├── config.ts          # Config loading + Zod validation
 │   │   ├── logger.ts          # Pino logger factory
@@ -80,9 +80,9 @@ ag-claw/
 
 **`src/core/`** — Framework internals. If you're modifying how features load or how the config system works, start here.
 
-**`src/channels/`** — One file per messaging platform. Each adapter normalizes incoming messages to AG-Claw's internal `Message` format and handles sending responses back.
+**`src/channels/`** — One file per messaging platform. Each adapter normalizes incoming messages to Argentum's internal `Message` format and handles sending responses back.
 
-**`src/features/`** — The bulk of AG-Claw. Each feature is a directory with an `index.ts` that exports a lifecycle object. Features are independent and configurable.
+**`src/features/`** — The bulk of Argentum. Each feature is a directory with an `index.ts` that exports a lifecycle object. Features are independent and configurable.
 
 **`src/memory/`** — The multi-layered memory system. `semantic.ts` handles vector-style search over SQLite. `graph.ts` manages the entity knowledge graph.
 
@@ -98,8 +98,8 @@ ag-claw/
 ### Install and Build
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run build
 ```
@@ -149,10 +149,10 @@ Required for development:
 
 ## 3. Coding Standards
 
-AG-Claw uses ESLint and Prettier to maintain consistent style. Configuration files:
-- ESLint: [`.eslintrc.js`](https://github.com/AG064/ag-claw/blob/main/.eslintrc.js)
-- Prettier: [`.prettierrc`](https://github.com/AG064/ag-claw/blob/main/.prettierrc)
-- Editor config: [`.editorconfig`](https://github.com/AG064/ag-claw/blob/main/.editorconfig)
+Argentum uses ESLint and Prettier to maintain consistent style. Configuration files:
+- ESLint: [`.eslintrc.js`](https://github.com/AG064/argentum/blob/main/.eslintrc.js)
+- Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/main/.prettierrc)
+- Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/main/.editorconfig)
 
 ### TypeScript Rules
 
@@ -223,7 +223,7 @@ export default {
 
 ## 4. Testing Guidelines
 
-AG-Claw uses Jest with TypeScript support via `ts-jest`. Test files live alongside source files or in `tests/` directories.
+Argentum uses Jest with TypeScript support via `ts-jest`. Test files live alongside source files or in `tests/` directories.
 
 ### Test Structure
 
@@ -420,7 +420,7 @@ this.registerTool(stockPricesTool);
 
 ### Step 4 — Enable in Configuration
 
-In `agclaw.json`:
+In `argentum.json`:
 
 ```json
 {
@@ -449,7 +449,7 @@ describe('stock-prices feature', () => {
 
 ## 6. How to Create a New Channel
 
-Channels translate between messaging platform protocols and AG-Claw's internal message format.
+Channels translate between messaging platform protocols and Argentum's internal message format.
 
 ### Internal Message Format
 
@@ -541,7 +541,7 @@ case 'slack':
 
 ### Step 4 — Configure
 
-In `agclaw.json`:
+In `argentum.json`:
 
 ```json
 {
@@ -559,7 +559,7 @@ In `agclaw.json`:
 
 ## 7. How to Create a New Skill
 
-Skills are reusable capability packs that can be installed via `agclaw skill install`. They live in the `skills/` directory.
+Skills are reusable capability packs that can be installed via `argentum skill install`. They live in the `skills/` directory.
 
 ### Skill Structure
 
@@ -593,13 +593,13 @@ Describe how to invoke the skill.
 ## Examples
 
 \`\`\`bash
-agclaw skill run my-skill --arg value
+argentum skill run my-skill --arg value
 \`\`\`
 
 ## Installation
 
 \`\`\`bash
-agclaw skill install my-skill
+argentum skill install my-skill
 \`\`\`
 ```
 
@@ -639,7 +639,7 @@ Skills can be published to any registry. The current implementation supports loc
 
 ### Versioning
 
-AG-Claw uses [Semantic Versioning](https://semver.org/):
+Argentum uses [Semantic Versioning](https://semver.org/):
 - **MAJOR** — Breaking changes to the API or config schema
 - **MINOR** — New features, backward-compatible
 - **PATCH** — Bug fixes, no feature changes
@@ -721,4 +721,4 @@ git push -u origin hotfix/fix-description
 
 ---
 
-*For questions about contributing, open an issue at [github.com/AG064/ag-claw](https://github.com/AG064/ag-claw).*
+*For questions about contributing, open an issue at [github.com/AG064/argentum](https://github.com/AG064/argentum).*

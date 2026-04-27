@@ -1,7 +1,7 @@
 /**
  * skill-evolution/index.ts
  * 
- * Bridge between AG-Claw and OpenSpace self-evolving skills engine.
+ * Bridge between Argentum and OpenSpace self-evolving skills engine.
  * OpenSpace: https://github.com/AG064/OpenSpace (AG064 fork)
  * 
  * Provides:
@@ -226,7 +226,7 @@ export class SkillEvolution {
 }
 
 /**
- * Create SkillEvolution instance from AG-Claw credentials
+ * Create SkillEvolution instance from Argentum credentials
  * Reads API keys from ~/.openclaw/credentials/telegram.json
  */
 export async function createSkillEvolution(): Promise<SkillEvolution> {

@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - UI Components
+ * Argentum Dashboard - UI Components
  * Reusable component builders
  */
 

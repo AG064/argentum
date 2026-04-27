@@ -12,7 +12,7 @@
  *   - Mobile (FCM push notifications)
  */
 
-export type { AGClawConfig } from '../core/config';
+export type { ArgentumConfig } from '../core/config';
 export type { Message } from '../core/llm-provider';
 export { Logger, createLogger } from '../core/logger';
 export { Agent } from '../index';

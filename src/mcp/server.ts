@@ -1,7 +1,7 @@
 /**
- * AG-Claw MCP Server
+ * Argentum MCP Server
  *
- * Model Context Protocol (MCP) server implementation for AG-Claw.
+ * Model Context Protocol (MCP) server implementation for Argentum.
  * Provides tools and resources compatible with Claude Code.
  */
 
@@ -183,7 +183,7 @@ export function createTool(
 }
 
 /**
- * Pre-built tools for AG-Claw
+ * Pre-built tools for Argentum
  */
 export const builtInTools = {
   Read: createTool(

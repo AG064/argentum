@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Skills Hub Page
+ * Argentum Dashboard - Skills Hub Page
  */
 
 async function loadSkillsHubData() {

@@ -1,6 +1,6 @@
 # Руководство 1: Ваш первый агент
 
-В этом руководстве вы запустите AG-Claw, настроите своего первого агента и проведёте полноценный разговор. К концу вы будете понимать, как сообщения проходят через систему и как настраивать поведение.
+В этом руководстве вы запустите Argentum, настроите своего первого агента и проведёте полноценный разговор. К концу вы будете понимать, как сообщения проходят через систему и как настраивать поведение.
 
 **Примерное время:** 15 минут  
 **Требования:** Node.js 18+, API-ключ OpenRouter или Anthropic
@@ -9,19 +9,19 @@
 
 ## Что вы создадите
 
-Полностью настроенный экземпляр AG-Claw, работающий локально, подключённый к языковой модели, с персистентной памятью и возможностью общаться через REST API или веб-интерфейс.
+Полностью настроенный экземпляр Argentum, работающий локально, подключённый к языковой модели, с персистентной памятью и возможностью общаться через REST API или веб-интерфейс.
 
 ---
 
-## Шаг 1 — Установка AG-Claw
+## Шаг 1 — Установка Argentum
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 ```
 
-Привяжите CLI, чтобы `agclaw` был доступен из любого места:
+Привяжите CLI, чтобы `argentum` был доступен из любого места:
 
 ```bash
 npm link
@@ -30,7 +30,7 @@ npm link
 Проверьте установку:
 
 ```bash
-agclaw --version
+argentum --version
 # 0.0.2
 ```
 
@@ -39,11 +39,11 @@ agclaw --version
 ## Шаг 2 — Инициализация проекта
 
 ```bash
-agclaw init
+argentum init
 ```
 
 Это создаёт:
-- `agclaw.json` — ваш файл конфигурации
+- `argentum.json` — ваш файл конфигурации
 - `data/` — каталог для SQLite-баз данных и данных сессий
 - `backups/` — каталог для автоматических резервных копий
 
@@ -74,13 +74,13 @@ export OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ## Шаг 4 — Запуск Gateway
 
 ```bash
-agclaw gateway start
+argentum gateway start
 ```
 
 Вы должны увидеть:
 
 ```
-✓ Config loaded (agclaw.json)
+✓ Config loaded (argentum.json)
 ✓ 12 features enabled
 ✓ Gateway listening on :18789
 ✓ Agent ready
@@ -123,7 +123,7 @@ curl -X POST http://localhost:18789/chat \
 {
   "success": true,
   "data": {
-    "reply": "Привет! Я AG-Claw, модульный AI-агент...",
+    "reply": "Привет! Я Argentum, модульный AI-агент...",
     "sessionId": "sess_abc123",
     "model": "anthropic/claude-sonnet-4-20250514",
     "tokens": { "prompt": 87, "completion": 42, "total": 129 },
@@ -138,7 +138,7 @@ curl -X POST http://localhost:18789/chat \
 
 ## Шаг 6 — Включите веб-чат (опционально)
 
-Модуль веб-чата предоставляет браузерный интерфейс. Включите его в `agclaw.json`:
+Модуль веб-чата предоставляет браузерный интерфейс. Включите его в `argentum.json`:
 
 ```json
 {
@@ -155,7 +155,7 @@ curl -X POST http://localhost:18789/chat \
 Перезапустите gateway:
 
 ```bash
-agclaw gateway restart
+argentum gateway restart
 ```
 
 Откройте `http://localhost:3000` в браузере для общения через веб-интерфейс.
@@ -168,7 +168,7 @@ agclaw gateway restart
 
 1. Создайте бота через [@BotFather](https://t.me/botfather) в Telegram
 2. Скопируйте токен, который даст BotFather
-3. Добавьте его в `agclaw.json`:
+3. Добавьте его в `argentum.json`:
 
 ```json
 {
@@ -205,8 +205,8 @@ agclaw gateway restart
 Измените имя и личность агента:
 
 ```bash
-agclaw config name "Tutorial Bot"
-agclaw config agent.systemPrompt "Ты — дружелюбный наставник, который объясняет понятия ясно и даёт примеры. Всегда начинай с краткого обзора перед подробностями."
+argentum config name "Tutorial Bot"
+argentum config agent.systemPrompt "Ты — дружелюбный наставник, который объясняет понятия ясно и даёт примеры. Всегда начинай с краткого обзора перед подробностями."
 ```
 
 Hot-reload применяет изменения немедленно. Отправьте ещё одно сообщение:
@@ -221,18 +221,18 @@ curl -X POST http://localhost:18789/chat \
 
 ## Шаг 9 — Сохраните воспоминание
 
-AG-Claw запоминает вещи между сессиями. Сохраните факт явно:
+Argentum запоминает вещи между сессиями. Сохраните факт явно:
 
 ```bash
 curl -X POST http://localhost:18789/memory/store \
   -H "Content-Type: application/json" \
-  -d '{"content": "Меня зовут Алиса, я изучаю AG-Claw", "tags": ["знакомство", "идентичность"]}'
+  -d '{"content": "Меня зовут Алиса, я изучаю Argentum", "tags": ["знакомство", "идентичность"]}'
 ```
 
 Найдите в памяти:
 
 ```bash
-curl "http://localhost:18789/memory/search?q=имя%20AG-Claw"
+curl "http://localhost:18789/memory/search?q=имя%20Argentum"
 ```
 
 Теперь в новом разговоре агент сможет ссылаться на эту информацию. Начните свежую сессию:
@@ -252,7 +252,7 @@ curl -X POST http://localhost:18789/chat \
 Посмотрите список всех доступных модулей:
 
 ```bash
-agclaw features list
+argentum features list
 ```
 
 Включите новый модуль, например утренний брифинг:
@@ -266,7 +266,7 @@ curl -X POST http://localhost:18789/features/morning-briefing \
 Или через CLI:
 
 ```bash
-agclaw features enable morning-briefing
+argentum features enable morning-briefing
 ```
 
 ---
@@ -291,7 +291,7 @@ agclaw features enable morning-briefing
 
 ## Что вы узнали
 
-- Как установить и инициализировать AG-Claw
+- Как установить и инициализировать Argentum
 - Как настроить API-ключ
 - Как запустить gateway и проверить работоспособность
 - Как отправлять сообщения через REST API
@@ -304,6 +304,6 @@ agclaw features enable morning-briefing
 
 ## Следующие шаги
 
-- **[Руководство 2: Управление памятью](./02-memory-management_RU.md)** — Глубокое погружение в многослойную систему памяти AG-Claw
-- **[Руководство пользователя](../USER_GUIDE_RU.md)** — Полный справочник по всем возможностям AG-Claw
-- **[Руководство разработчика](../DEVELOPER_GUIDE.md)** — Узнайте, как расширять AG-Claw собственными модулями и каналами
+- **[Руководство 2: Управление памятью](./02-memory-management_RU.md)** — Глубокое погружение в многослойную систему памяти Argentum
+- **[Руководство пользователя](../USER_GUIDE_RU.md)** — Полный справочник по всем возможностям Argentum
+- **[Руководство разработчика](../DEVELOPER_GUIDE.md)** — Узнайте, как расширять Argentum собственными модулями и каналами

@@ -1,7 +1,7 @@
 "use strict";
 // @ts-nocheck
 /**
- * AG-Claw Blueprint System
+ * Argentum Blueprint System
  *
  * YAML/JSON-driven security configuration.
  * Loads and validates blueprints from:
@@ -266,10 +266,10 @@ class BlueprintLoader {
      * Generate a default blueprint YAML.
      */
     static generateDefaultBlueprint() {
-        return `# AG-Claw Security Blueprint
+        return `# Argentum Security Blueprint
 # Version: 1.0
 #
-# This file configures AG-Claw's enterprise security settings.
+# This file configures Argentum's enterprise security settings.
 # Copy to ~/.ag-claw/blueprint.yaml and customize.
 
 version: "1.0"

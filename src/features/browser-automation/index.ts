@@ -4,11 +4,11 @@
  * Provides automated web browser interactions using Playwright.
  * 
  * Usage:
- *   agclaw browser navigate <url>
- *   agclaw browser click <selector>
- *   agclaw browser fill <selector> <text>
- *   agclaw browser screenshot [filename]
- *   agclaw browser install
+ *   argentum browser navigate <url>
+ *   argentum browser click <selector>
+ *   argentum browser fill <selector> <text>
+ *   argentum browser screenshot [filename]
+ *   argentum browser install
  * 
  * Requires: npm install && npx playwright install chromium
  */

@@ -10,12 +10,14 @@ artifacts/
 .nuget-packages/
 .appdata/
 .localappdata/
+.wix/
 memory/
 logs/
 .env
 *.enc.json
 .env
 agclaw-*
+argentum-*
 
 # Credentials (NEVER commit)
 credentials/

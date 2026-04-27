@@ -66,7 +66,7 @@ class NewsDigestFeature implements FeatureModule {
     enabled: false,
     dbPath: path.join(process.cwd(), 'data', 'news.db'),
     cacheMinutes: 15,
-    userAgent: 'AG-Claw/0.1 (RSS Reader)',
+    userAgent: 'Argentum/0.1 (RSS Reader)',
     maxArticlesPerSource: 50,
   };
   private ctx!: FeatureContext;

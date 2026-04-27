@@ -1,15 +1,15 @@
 # Tutorial 2: Memory Management
 
-AG-Claw has a sophisticated multi-layered memory system. This tutorial covers each layer in depth, shows how to work with them directly, and explains the automation that keeps memory useful over time.
+Argentum has a sophisticated multi-layered memory system. This tutorial covers each layer in depth, shows how to work with them directly, and explains the automation that keeps memory useful over time.
 
 **Estimated time:** 20 minutes  
-**Prerequisites:** A running AG-Claw instance (from [Tutorial 1](./01-first-agent.md))
+**Prerequisites:** A running Argentum instance (from [Tutorial 1](./01-first-agent.md))
 
 ---
 
 ## The Four Memory Layers
 
-AG-Claw organizes memory into four layers, each with a specific role:
+Argentum organizes memory into four layers, each with a specific role:
 
 | Layer | Technology | Purpose | Lifetime |
 |---|---|---|---|
@@ -62,16 +62,16 @@ curl -X POST http://localhost:18789/chat \
 
 ```bash
 # List all sessions
-agclaw sessions list
+argentum sessions list
 
 # View a specific session
-agclaw sessions view sess_abc123
+argentum sessions view sess_abc123
 
 # Clear a session (reset conversation)
-agclaw sessions clear sess_abc123
+argentum sessions clear sess_abc123
 
 # Export session as JSON
-agclaw sessions export sess_abc123 > conversation.json
+argentum sessions export sess_abc123 > conversation.json
 ```
 
 ---
@@ -140,7 +140,7 @@ When processing a message, the agent queries semantic memory for relevant contex
 
 > "I just started an internship at Binarwelt"
 
-AG-Claw automatically captures this as a memory entry with tags `["fact", "work", "internship"]`.
+Argentum automatically captures this as a memory entry with tags `["fact", "work", "internship"]`.
 
 ### Memory Tags
 
@@ -200,7 +200,7 @@ The agent automatically extracts entities and relations from conversations. When
 
 > "I work at Acme Corp"
 
-AG-Claw creates:
+Argentum creates:
 - Entity: `Acme Corp` (type: organization)
 - Entity: `Alice` (type: person)
 - Relation: Alice → `works_at` → Acme Corp
@@ -244,7 +244,7 @@ Add an entity directly:
 curl -X POST http://localhost:18789/memory/graph/entity \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "AG-Claw",
+    "name": "Argentum",
     "type": "project",
     "properties": {
       "version": "0.0.2",
@@ -277,7 +277,7 @@ curl "http://localhost:18789/memory/graph/traverse?from=entity_001&type=works_at
 
 ## Layer 4: Markdown Memory
 
-Markdown files on disk serve as a manually curated, human-readable memory layer. AG-Claw watches the `data/memory/` directory and automatically loads any `.md` files into context.
+Markdown files on disk serve as a manually curated, human-readable memory layer. Argentum watches the `data/memory/` directory and automatically loads any `.md` files into context.
 
 ### Creating Memory Files
 
@@ -294,7 +294,7 @@ cat > data/memory/personal-context.md << 'EOF'
 - timezone: America/Los_Angeles
 
 ## Current Projects
-- Building an AI agent framework (AG-Claw)
+- Building an AI agent framework (Argentum)
 - Job search for programming positions
 
 ## Skills
@@ -380,7 +380,7 @@ Low-relevance entries that haven't been accessed in a while gradually lose prior
 ### View Statistics
 
 ```bash
-agclaw memory stats
+argentum memory stats
 ```
 
 Output:
@@ -397,13 +397,13 @@ Compression ratio:   73%
 
 ```bash
 # Remove memories older than a date
-agclaw memory purge --before 2026-01-01
+argentum memory purge --before 2026-01-01
 
 # Purge by tag
-agclaw memory purge --tag temporary
+argentum memory purge --tag temporary
 
 # Show what would be purged without actually deleting
-agclaw memory purge --before 2026-01-01 --dry-run
+argentum memory purge --before 2026-01-01 --dry-run
 ```
 
 ### Export and Import
@@ -411,13 +411,13 @@ agclaw memory purge --before 2026-01-01 --dry-run
 Export all memories for backup or migration:
 
 ```bash
-agclaw memory export --format json > memories-backup-$(date +%Y%m%d).json
+argentum memory export --format json > memories-backup-$(date +%Y%m%d).json
 ```
 
 Import:
 
 ```bash
-agclaw memory import memories-backup-20260318.json
+argentum memory import memories-backup-20260318.json
 ```
 
 ---
@@ -429,7 +429,7 @@ agclaw memory import memories-backup-20260318.json
 Enable debug logging to see memory queries:
 
 ```bash
-AGCLAW_LOG_LEVEL=debug agclaw gateway start
+AGCLAW_LOG_LEVEL=debug argentum gateway start
 ```
 
 Look for log lines like:
@@ -461,7 +461,7 @@ curl "http://localhost:18789/memory/graph?orphans=true"
 
 ## Configuration Reference
 
-Full memory configuration in `agclaw.json`:
+Full memory configuration in `argentum.json`:
 
 ```json
 {

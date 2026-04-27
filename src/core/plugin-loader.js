@@ -1,6 +1,6 @@
 'use strict';
 /**
- * AG-Claw Plugin Loader
+ * Argentum Plugin Loader
  *
  * Dynamically loads and manages feature modules at runtime.
  * Supports enable/disable, lifecycle hooks, and dependency resolution.
@@ -63,7 +63,7 @@ const fs_1 = require('fs');
 const path_1 = require('path');
 const logger_1 = require('./logger');
 /**
- * Plugin loader for AG-Claw features.
+ * Plugin loader for Argentum features.
  *
  * Scans the features directory, loads modules, resolves dependencies,
  * and manages feature lifecycle.

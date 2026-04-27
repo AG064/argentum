@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Computer Control Feature
+ * Argentum Computer Control Feature
  *
  * Vision-based desktop automation through screenshot analysis
  * and mouse/keyboard control. Works on Linux (X11/Wayland/Hyprland),

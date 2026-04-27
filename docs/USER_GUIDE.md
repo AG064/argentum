@@ -1,6 +1,6 @@
 # User Guide
 
-A comprehensive guide to operating AG-Claw in production and daily use. This document covers architecture, configuration, memory management, security, deployment, monitoring, and more.
+A comprehensive guide to operating Argentum in production and daily use. This document covers architecture, configuration, memory management, security, deployment, monitoring, and more.
 
 ---
 
@@ -23,7 +23,7 @@ A comprehensive guide to operating AG-Claw in production and daily use. This doc
 
 ### Design Philosophy
 
-AG-Claw is built around three principles:
+Argentum is built around three principles:
 
 1. **Modularity over monolith** — every capability is a feature module you can enable or disable independently
 2. **Memory as a first-class citizen** — the agent does not just process messages; it remembers, learns, and evolves
@@ -36,7 +36,7 @@ AG-Claw is built around three principles:
 │                        Your Infrastructure                        │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐    │
-│   │                    AG-Claw Gateway                       │    │
+│   │                    Argentum Gateway                       │    │
 │   │                        :18789                            │    │
 │   ├───────────────┬────────────────────┬────────────────────┤    │
 │   │  Channels      │   Feature Modules  │   Core Framework    │    │
@@ -85,7 +85,7 @@ AG-Claw is built around three principles:
 
 ### The Agentic Tool Loop
 
-When a user sends a message, AG-Claw processes it through this loop:
+When a user sends a message, Argentum processes it through this loop:
 
 1. **Message received** — channel adapter normalizes the input into a standard `Message` format
 2. **Security check** — allowlists, rate limiting, content filtering enforced
@@ -105,7 +105,7 @@ Each feature is a self-contained module in `src/features/<name>/index.ts`. Featu
 - React to events in the system
 - Store and retrieve data
 
-Enabled features are listed in `agclaw.json` under the `features` key. You can enable or disable any feature without touching code.
+Enabled features are listed in `argentum.json` under the `features` key. You can enable or disable any feature without touching code.
 
 Current feature count: **59 features** including audit logging, semantic search, cron scheduling, morning briefings, mesh workflows, encrypted secrets, goal tracking, and many more.
 
@@ -115,36 +115,36 @@ Current feature count: **59 features** including audit logging, semantic search,
 
 ### Creating Your First Agent
 
-After running `agclaw init`, your agent is ready to use. The default configuration creates a general-purpose agent with sensible defaults. To customize:
+After running `argentum init`, your agent is ready to use. The default configuration creates a general-purpose agent with sensible defaults. To customize:
 
 ```bash
 # View current configuration
-agclaw config
+argentum config
 
 # Set a custom agent name
-agclaw config name "My Personal Assistant"
+argentum config name "My Personal Assistant"
 
 # Set a custom system prompt
-agclaw config agent.systemPrompt "You are a helpful coding assistant..."
+argentum config agent.systemPrompt "You are a helpful coding assistant..."
 
 # Show full config as JSON
-cat agclaw.json
+cat argentum.json
 ```
 
 The first time you start, the agent will guide you through setting up your API key. You can also set it as an environment variable before starting:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-v1-...
-agclaw gateway start
+argentum gateway start
 ```
 
 ### Managing Multiple Agents
 
-AG-Claw supports multiple agent profiles for different use cases. Create a specialized agent:
+Argentum supports multiple agent profiles for different use cases. Create a specialized agent:
 
 ```bash
 # Create a coding-focused agent
-agclaw agents create --name "coding-assistant" \
+argentum agents create --name "coding-assistant" \
   --system-prompt "You are an expert programmer specializing in TypeScript and Python..." \
   --model "anthropic/claude-sonnet-4-20250514"
 ```
@@ -152,7 +152,7 @@ agclaw agents create --name "coding-assistant" \
 List all configured agents:
 
 ```bash
-agclaw agents list
+argentum agents list
 ```
 
 Output:
@@ -166,23 +166,23 @@ coding-assistant    claude-sonnet-4-20250514        no
 Switch to a different agent:
 
 ```bash
-agclaw agents use "coding-assistant"
+argentum agents use "coding-assistant"
 ```
 
 Delete an agent profile:
 
 ```bash
-agclaw agents delete "coding-assistant"
+argentum agents delete "coding-assistant"
 ```
 
 ### Agent Configuration
 
-Key agent settings in `agclaw.json`:
+Key agent settings in `argentum.json`:
 
 ```json
 {
   "agent": {
-    "name": "AG-Claw Assistant",
+    "name": "Argentum Assistant",
     "systemPrompt": "You are a helpful AI assistant...",
     "maxIterations": 10,
     "temperature": 0.7,
@@ -202,20 +202,20 @@ Key agent settings in `agclaw.json`:
 
 ### Conversation Sessions
 
-AG-Claw maintains conversation history per user in `data/sessions.db`. Sessions include full message history, tool calls made, and LLM usage statistics.
+Argentum maintains conversation history per user in `data/sessions.db`. Sessions include full message history, tool calls made, and LLM usage statistics.
 
 ```bash
 # View recent sessions
-agclaw sessions list
+argentum sessions list
 
 # View a specific session's full history
-agclaw sessions view <session-id>
+argentum sessions view <session-id>
 
 # Clear a session's history (keeps the user, resets conversation)
-agclaw sessions clear <session-id>
+argentum sessions clear <session-id>
 
 # Export a session as JSON
-agclaw sessions export <session-id> > session.json
+argentum sessions export <session-id> > session.json
 ```
 
 Sessions are useful for:
@@ -229,10 +229,10 @@ You can override the default model per request via the API, or permanently via c
 
 ```bash
 # Use a different model for this session
-agclaw config model.defaultModel "openai/gpt-4o"
+argentum config model.defaultModel "openai/gpt-4o"
 
 # Restart to apply
-agclaw gateway restart
+argentum gateway restart
 ```
 
 Available providers:
@@ -244,7 +244,7 @@ Available providers:
 
 ## 3. Memory System Explained
 
-AG-Claw has a multi-layered memory architecture. Each layer serves a different purpose, from short-term context to long-term knowledge.
+Argentum has a multi-layered memory architecture. Each layer serves a different purpose, from short-term context to long-term knowledge.
 
 ### Memory Layers
 
@@ -332,16 +332,16 @@ Markdown files are parsed and integrated into the agent's context. This is usefu
 
 ```bash
 # Show memory statistics
-agclaw memory stats
+argentum memory stats
 
 # Clear old entries (before a certain date)
-agclaw memory purge --before 2026-01-01
+argentum memory purge --before 2026-01-01
 
 # Export all memories
-agclaw memory export > memories.json
+argentum memory export > memories.json
 
 # Import memories
-agclaw memory import memories.json
+argentum memory import memories.json
 ```
 
 The `self-evolving-memory` feature automatically:
@@ -357,7 +357,7 @@ Skills are reusable capability packs that extend what your agent can do. They li
 
 ### Built-in Skills
 
-AG-Claw ships with several skills already installed:
+Argentum ships with several skills already installed:
 
 | Skill | What It Does |
 |---|---|
@@ -371,7 +371,7 @@ AG-Claw ships with several skills already installed:
 ### Listing Installed Skills
 
 ```bash
-agclaw skills list
+argentum skills list
 ```
 
 Output:
@@ -388,10 +388,10 @@ xurl                1.0.0     yes
 
 ```bash
 # Install from a URL or local path
-agclaw skills install https://github.com/example/skill-repo
+argentum skills install https://github.com/example/skill-repo
 
 # Install from ClawHub marketplace
-agclaw skill install my-skill
+argentum skill install my-skill
 ```
 
 ### Creating Custom Skills
@@ -407,18 +407,18 @@ See the [Developer Guide](./DEVELOPER_GUIDE.md#7-how-to-create-a-new-skill) for 
 Skills are typically invoked by the agent when relevant, but you can also call them directly:
 
 ```bash
-agclaw skills run weather --location "London"
+argentum skills run weather --location "London"
 ```
 
 ---
 
 ## 5. Security Best Practices
 
-AG-Claw includes multiple security layers. Below are recommended practices for production deployments.
+Argentum includes multiple security layers. Below are recommended practices for production deployments.
 
 ### Enable Strict Mode
 
-Start with `security.policy: "strict"` in `agclaw.json`:
+Start with `security.policy: "strict"` in `argentum.json`:
 
 ```json
 {
@@ -452,7 +452,7 @@ This prevents unauthorized users from interacting with your agent even if they k
 
 ### Encrypted Secrets
 
-AG-Claw encrypts secrets at rest using AES-256-GCM. Set a secret key:
+Argentum encrypts secrets at rest using AES-256-GCM. Set a secret key:
 
 ```bash
 export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
@@ -462,10 +462,10 @@ Never commit API keys to version control. Use environment variables or the encry
 
 ```bash
 # Store a secret securely
-agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
+argentum secrets set OPENROUTER_API_KEY "sk-or-v1-..."
 
 # List stored secrets (values hidden)
-agclaw secrets list
+argentum secrets list
 ```
 
 ### Audit Logging
@@ -483,11 +483,11 @@ Enable the audit log to track all actions:
 View audit logs:
 
 ```bash
-agclaw audit list --limit 50
-agclaw audit search --actor alice --since 2026-03-22
+argentum audit list --limit 50
+argentum audit search --actor alice --since 2026-03-22
 ```
 
-The audit log is stored in `data/agclaw.db` in an immutable table — entries cannot be deleted or modified after the fact.
+The audit log is stored in `data/argentum.db` in an immutable table — entries cannot be deleted or modified after the fact.
 
 ### Rate Limiting
 
@@ -534,8 +534,8 @@ It automatically redacts:
 ```bash
 npm install
 npm link
-agclaw init
-agclaw gateway start
+argentum init
+argentum gateway start
 ```
 
 That's the entire setup. The gateway runs at `http://localhost:18789`.
@@ -545,13 +545,13 @@ That's the entire setup. The gateway runs at `http://localhost:18789`.
 A production-ready Docker setup is included:
 
 ```bash
-cd ag-claw/docker
+cd argentum/docker
 cp .env.example .env  # fill in your API keys
 docker compose up -d
 ```
 
 The Docker setup includes:
-- AG-Claw gateway container
+- Argentum gateway container
 - Health check endpoint
 - Volume mounts for data persistence
 - Restart policy
@@ -561,16 +561,16 @@ The Docker setup includes:
 For bare-metal Linux servers, create a systemd unit:
 
 ```ini
-# /etc/systemd/system/agclaw.service
+# /etc/systemd/system/argentum.service
 [Unit]
-Description=AG-Claw AI Agent
+Description=Argentum AI Agent
 After=network.target
 
 [Service]
 Type=simple
 User=ag064
-WorkingDirectory=/home/ag064/ag-claw
-ExecStart=/home/ag064/ag-claw/bin/agclaw.js gateway start
+WorkingDirectory=/home/ag064/argentum
+ExecStart=/home/ag064/argentum/bin/argentum.js gateway start
 Restart=always
 RestartSec=5
 Environment=OPENROUTER_API_KEY=sk-or-v1-...
@@ -581,17 +581,17 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable agclaw
-sudo systemctl start agclaw
-sudo systemctl status agclaw
+sudo systemctl enable argentum
+sudo systemctl start argentum
+sudo systemctl status argentum
 ```
 
 ### Reverse Proxy Setup
 
-For production, put AG-Claw behind nginx or Caddy with HTTPS:
+For production, put Argentum behind nginx or Caddy with HTTPS:
 
 ```nginx
-# /etc/nginx/sites-available/agclaw
+# /etc/nginx/sites-available/argentum
 server {
     listen 443 ssl;
     server_name yourdomain.com;
@@ -633,7 +633,7 @@ NODE_ENV=development
 
 ### Log Levels
 
-Set via `AGCLAW_LOG_LEVEL` or `agclaw.json`:
+Set via `AGCLAW_LOG_LEVEL` or `argentum.json`:
 
 ```bash
 export AGCLAW_LOG_LEVEL=debug  # debug, info, warn, error
@@ -655,19 +655,19 @@ export AGCLAW_LOG_FORMAT=json
 
 ```bash
 # Real-time gateway logs
-agclaw gateway logs
+argentum gateway logs
 
 # Filter by level
-agclaw gateway logs --level error
+argentum gateway logs --level error
 
 # Follow mode (like tail -f)
-agclaw gateway logs --follow
+argentum gateway logs --follow
 
 # Export logs to file
-agclaw gateway logs --export ./logs/$(date +%Y%m%d).log
+argentum gateway logs --export ./logs/$(date +%Y%m%d).log
 
 # Last 100 lines
-agclaw gateway logs --lines 100
+argentum gateway logs --lines 100
 ```
 
 ### Structured Log Format
@@ -695,27 +695,27 @@ curl http://localhost:18789/metrics
 Returns Prometheus-compatible metrics:
 
 ```
-# HELP agclaw_messages_total Total messages processed
-# TYPE agclaw_messages_total counter
-agclaw_messages_total 4821
+# HELP argentum_messages_total Total messages processed
+# TYPE argentum_messages_total counter
+argentum_messages_total 4821
 
-# HELP agclaw_tool_calls_total Tool invocations
-# TYPE agclaw_tool_calls_total counter
-agclaw_tool_calls_total{model="claude-sonnet-4",tool="read"} 1203
-agclaw_tool_calls_total{model="claude-sonnet-4",tool="web_search"} 387
+# HELP argentum_tool_calls_total Tool invocations
+# TYPE argentum_tool_calls_total counter
+argentum_tool_calls_total{model="claude-sonnet-4",tool="read"} 1203
+argentum_tool_calls_total{model="claude-sonnet-4",tool="web_search"} 387
 
-# HELP agclaw_llm_tokens_total Tokens used
-# TYPE agclaw_llm_tokens_total counter
-agclaw_llm_tokens_total{prompt_or_completion="prompt"} 892340
-agclaw_llm_tokens_total{prompt_or_completion="completion"} 412850
+# HELP argentum_llm_tokens_total Tokens used
+# TYPE argentum_llm_tokens_total counter
+argentum_llm_tokens_total{prompt_or_completion="prompt"} 892340
+argentum_llm_tokens_total{prompt_or_completion="completion"} 412850
 
-# HELP agclaw_memory_entries_total Memory entries
-# TYPE agclaw_memory_entries_total gauge
-agclaw_memory_entries_total 1247
+# HELP argentum_memory_entries_total Memory entries
+# TYPE argentum_memory_entries_total gauge
+argentum_memory_entries_total 1247
 
-# HELP agclaw_features_active Currently active features
-# TYPE agclaw_features_active gauge
-agclaw_features_active 12
+# HELP argentum_features_active Currently active features
+# TYPE argentum_features_active gauge
+argentum_features_active 12
 ```
 
 ### Health Checks
@@ -725,7 +725,7 @@ agclaw_features_active 12
 curl http://localhost:18789/health
 
 # Detailed status
-agclaw status
+argentum status
 ```
 
 ### Debugging Feature Issues
@@ -733,7 +733,7 @@ agclaw status
 List all features with their health status:
 
 ```bash
-agclaw features list --verbose
+argentum features list --verbose
 ```
 
 Output:
@@ -758,30 +758,30 @@ morning-briefing         active      ok            0.0.2
 ls ./backups/
 
 # Create a manual backup now
-agclaw backup create
+argentum backup create
 
 # Restore from a specific backup
-agclaw backup restore backup-2026-03-18T18-58-44
+argentum backup restore backup-2026-03-18T18-58-44
 ```
 
 ### What Gets Backed Up
 
-AG-Claw backs up all critical data files:
+Argentum backs up all critical data files:
 
 | File | Description |
 |---|---|
-| `data/agclaw.db` | Main SQLite database (audit log, decisions) |
+| `data/argentum.db` | Main SQLite database (audit log, decisions) |
 | `data/semantic-memory.db` | Semantic memory entries |
 | `data/knowledge.db` | Knowledge graph |
 | `data/sessions.db` | Conversation sessions |
 | `data/skills-library.db` | Installed skills |
 | `data/goals.db` | Goals and decomposition |
 | `data/life-domains.db` | Life domain tracking |
-| `agclaw.json` | Configuration |
+| `argentum.json` | Configuration |
 
 ### Automated Backups
 
-Enable in `agclaw.json`:
+Enable in `argentum.json`:
 
 ```json
 {
@@ -800,33 +800,33 @@ Backups run on the schedule you specify. Old backups beyond `retentionDays` are 
 
 1. Stop the gateway cleanly:
    ```bash
-   agclaw gateway stop
+   argentum gateway stop
    ```
 
 2. Restore files from a known-good backup:
    ```bash
-   agclaw backup restore <backup-name>
+   argentum backup restore <backup-name>
    ```
 
 3. Verify the restore:
    ```bash
-   agclaw gateway start
+   argentum gateway start
    curl http://localhost:18789/health
    ```
 
 4. Check session continuity:
    ```bash
-   agclaw sessions list
+   argentum sessions list
    ```
 
 5. Confirm memory is intact:
    ```bash
-   agclaw memory stats
+   argentum memory stats
    ```
 
 ### Migration Between Machines
 
-Copy the `data/` directory and `agclaw.json` to the new machine. Ensure the same `AGCLAW_SESSION_SECRET` is set to decrypt any encrypted secrets. Then run `agclaw gateway start`.
+Copy the `data/` directory and `argentum.json` to the new machine. Ensure the same `AGCLAW_SESSION_SECRET` is set to decrypt any encrypted secrets. Then run `argentum gateway start`.
 
 ---
 
@@ -858,7 +858,7 @@ Quick reference for common endpoints:
 ### Full Configuration Schema
 
 ```typescript
-interface AGClawConfig {
+interface ArgentumConfig {
   name: string;                          // Instance name
   version: string;                       // Config format version (const: "0.0.2")
 
@@ -960,8 +960,8 @@ interface AGClawConfig {
 | `OPENAI_API_KEY` | string | — | OpenAI key (Whisper STT, DALL-E) |
 | `AGCLAW_PORT` | number | `18789` | Gateway HTTP port |
 | `AGCLAW_HOST` | string | `0.0.0.0` | Gateway bind address |
-| `AGCLAW_DB_PATH` | string | `./data/agclaw.db` | SQLite database path |
-| `AGCLAW_CONFIG_PATH` | string | `./agclaw.json` | Config file path |
+| `AGCLAW_DB_PATH` | string | `./data/argentum.db` | SQLite database path |
+| `AGCLAW_CONFIG_PATH` | string | `./argentum.json` | Config file path |
 | `AGCLAW_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `AGCLAW_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
 | `AGCLAW_TELEGRAM_TOKEN` | string | — | Telegram bot token |
@@ -973,10 +973,10 @@ interface AGClawConfig {
 
 ### Hot-Reload
 
-AG-Claw watches `agclaw.json` for changes and applies them without restart. For environment variable changes, a restart is required:
+Argentum watches `argentum.json` for changes and applies them without restart. For environment variable changes, a restart is required:
 
 ```bash
-agclaw gateway restart
+argentum gateway restart
 ```
 
 ---

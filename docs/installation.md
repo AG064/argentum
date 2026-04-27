@@ -1,4 +1,4 @@
-# AG-Claw Installation Guide
+# Argentum Installation Guide
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -54,16 +54,16 @@ The fastest way to get running:
 
 ```bash
 # Download and run the installer
-curl -fsSL https://raw.githubusercontent.com/AG064/ag-claw/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AG064/argentum/main/install.sh | bash
 
 # Configure your API keys
 nano .env
 
-# Start AG-Claw
+# Start Argentum
 npm start
 ```
 
-AG-Claw will be available at `http://localhost:18789`.
+Argentum will be available at `http://localhost:18789`.
 
 ---
 
@@ -71,14 +71,14 @@ AG-Claw will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `agclaw-v0.0.2-win-x64.msi` for a normal Windows install
-- `agclaw-v0.0.2-win-x64.exe` for a portable executable
+- `argentum-v0.0.2-win-x64.msi` for a normal Windows install
+- `argentum-v0.0.2-win-x64.exe` for a portable executable
 
-The MSI installs `agclaw.exe` into `Program Files\AG-Claw` and adds it to the system `PATH`, so a new terminal can run:
+The MSI installs `argentum.exe` into `Program Files\Argentum` and adds it to the system `PATH`, so a new terminal can run:
 
 ```powershell
-agclaw --version
-agclaw onboard
+argentum --version
+argentum onboard
 ```
 
 See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.
@@ -91,8 +91,8 @@ See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.
 
 ```bash
 # Clone the repository
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 
 # Create your environment file
 cp .env.example .env
@@ -117,15 +117,15 @@ docker compose -f docker/docker-compose.yml --profile with-redis up -d
 ### Building the Image Manually
 
 ```bash
-docker build -f docker/Dockerfile -t ag-claw .
+docker build -f docker/Dockerfile -t argentum .
 docker run -d \
-  --name ag-claw \
+  --name argentum \
   -p 18789:18789 \
   -p 3001:3001 \
-  -v ag-claw-data:/app/data \
-  -v ag-claw-memory:/app/memory \
+  -v argentum-data:/app/data \
+  -v argentum-memory:/app/memory \
   --env-file .env \
-  ag-claw
+  argentum
 ```
 
 ---
@@ -135,8 +135,8 @@ docker run -d \
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 ```
 
 ### 2. Install Dependencies
@@ -162,7 +162,7 @@ nano .env
 npm run build
 ```
 
-### 5. Start AG-Claw
+### 5. Start Argentum
 
 **Production mode:**
 ```bash
@@ -295,7 +295,7 @@ newgrp docker
 This happens when multiple processes try to access the database. Stop all instances and restart:
 
 ```bash
-pkill -f "node.*ag-claw"
+pkill -f "node.*argentum"
 npm start
 ```
 
@@ -304,12 +304,12 @@ npm start
 ## Uninstalling
 
 ```bash
-# Stop AG-Claw
+# Stop Argentum
 # Ctrl+C or: docker compose down
 
 # Remove data (careful!)
 rm -rf data/ memory/ logs/
 
 # Remove the project
-cd .. && rm -rf ag-claw/
+cd .. && rm -rf argentum/
 ```

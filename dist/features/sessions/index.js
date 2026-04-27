@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Sessions
+ * Argentum Sessions
  *
  * Session management for conversations and agent interactions.
  * Stores messages, tracks context, manages history.

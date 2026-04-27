@@ -1,6 +1,6 @@
 'use strict';
 /**
- * AG-Claw Configuration Loader
+ * Argentum Configuration Loader
  *
  * Loads and validates configuration from YAML files with environment variable overrides.
  * Supports hot-reloading via chokidar file watcher.

@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get AG-Claw running in under 5 minutes. This guide walks you from installation to your first working agent.
+Get Argentum running in under 5 minutes. This guide walks you from installation to your first working agent.
 
 ---
 
@@ -16,12 +16,12 @@ Get AG-Claw running in under 5 minutes. This guide walks you from installation t
 ## Step 1 — Install
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 ```
 
-That's it. AG-Claw uses only fast, pure-JavaScript dependencies — no native compilation required.
+That's it. Argentum uses only fast, pure-JavaScript dependencies — no native compilation required.
 
 ---
 
@@ -31,10 +31,10 @@ That's it. AG-Claw uses only fast, pure-JavaScript dependencies — no native co
 npm link
 ```
 
-This makes the `agclaw` command available globally. Verify it:
+This makes the `argentum` command available globally. Verify it:
 
 ```bash
-agclaw --version
+argentum --version
 ```
 
 ---
@@ -42,13 +42,13 @@ agclaw --version
 ## Step 3 — Initialize and Launch
 
 ```bash
-agclaw init
+argentum init
 ```
 
-This creates an `agclaw.json` config file and a `data/` directory. Then start the gateway:
+This creates an `argentum.json` config file and a `data/` directory. Then start the gateway:
 
 ```bash
-agclaw gateway start --port 3000
+argentum gateway start --port 3000
 ```
 
 Check if it's healthy:
@@ -83,7 +83,7 @@ export OPENAI_API_KEY=sk-...
 Restart to pick up the key:
 
 ```bash
-agclaw gateway restart
+argentum gateway restart
 ```
 
 ---
@@ -93,7 +93,7 @@ agclaw gateway restart
 Send a message via Telegram (if configured) or the webchat:
 
 ```bash
-# Via webchat (enable in agclaw.json first)
+# Via webchat (enable in argentum.json first)
 curl -X POST http://localhost:3000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, what can you do?", "userId": "test-user"}'
@@ -103,7 +103,7 @@ Try asking the agent something:
 
 ```
 User: Hello
-Agent: Hi! I'm AG-Claw, your AI assistant. I have access to tools that let me search
+Agent: Hi! I'm Argentum, your AI assistant. I have access to tools that let me search
        the web, read and write files, run commands, and manage my own memory.
        What would you like to do?
 ```
@@ -112,7 +112,7 @@ Agent: Hi! I'm AG-Claw, your AI assistant. I have access to tools that let me se
 
 ## Basic Configuration
 
-Edit `agclaw.json` to customize your setup:
+Edit `argentum.json` to customize your setup:
 
 ```json
 {
@@ -152,7 +152,7 @@ Key configuration sections:
 | `channels` | Configure communication channels |
 | `security` | Rate limits, allowlists, audit logging |
 
-After editing, restart: `agclaw gateway restart`
+After editing, restart: `argentum gateway restart`
 
 ---
 
@@ -160,7 +160,7 @@ After editing, restart: `agclaw gateway restart`
 
 1. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram
 2. Copy your bot token
-3. Add it to `agclaw.json`:
+3. Add it to `argentum.json`:
 
 ```json
 {
@@ -174,7 +174,7 @@ After editing, restart: `agclaw gateway restart`
 }
 ```
 
-4. Restart: `agclaw gateway restart`
+4. Restart: `argentum gateway restart`
 5. Open Telegram, find your bot, and send `/start`
 
 ---
@@ -184,7 +184,7 @@ After editing, restart: `agclaw gateway restart`
 Run the built-in diagnostic:
 
 ```bash
-agclaw doctor
+argentum doctor
 ```
 
 Expected output:
@@ -210,7 +210,7 @@ Expected output:
 # Find and kill the process using the port
 lsof -ti:3000 | xargs kill -9
 # Or use a different port
-agclaw gateway start --port 4000
+argentum gateway start --port 4000
 ```
 
 ### "LLM call failed: API key not set"
@@ -220,7 +220,7 @@ agclaw gateway start --port 4000
 echo $OPENROUTER_API_KEY
 # If empty, set it again and restart
 export OPENROUTER_API_KEY=sk-or-v1-...
-agclaw gateway restart
+argentum gateway restart
 ```
 
 ### "Feature failed to load: dependency not enabled"
@@ -228,8 +228,8 @@ agclaw gateway restart
 Some features require others. Check dependencies:
 
 ```bash
-agclaw feature <feature-name>
-# Example: agclaw feature knowledge-graph
+argentum feature <feature-name>
+# Example: argentum feature knowledge-graph
 ```
 
 Enable missing dependencies, then restart.
@@ -238,17 +238,17 @@ Enable missing dependencies, then restart.
 
 ```bash
 # Stop the gateway first
-agclaw gateway stop
+argentum gateway stop
 # Remove the lock file
 rm -f ./data/*.db-shm ./data/*.wal
 # Restart
-agclaw gateway start
+argentum gateway start
 ```
 
 ### "Telegram bot not responding"
 
 1. Verify token: `curl -s "https://api.telegram.org/botYOUR_TOKEN/getMe"`
-2. Check logs: `agclaw gateway logs`
+2. Check logs: `argentum gateway logs`
 3. Ensure `allowedUsers` is empty (accepts all) or contains your user ID
 
 ### "Memory search returns no results"
@@ -257,9 +257,9 @@ Memory needs time to accumulate. Try:
 
 ```bash
 # Store a test memory directly
-agclaw memory store "test memory" "This is a test entry"
+argentum memory store "test memory" "This is a test entry"
 # Then search for it
-agclaw memory search "test"
+argentum memory search "test"
 ```
 
 ---
@@ -273,4 +273,4 @@ agclaw memory search "test"
 
 ---
 
-*Having trouble? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues) or ask in the community.*
+*Having trouble? Open an issue on [GitHub](https://github.com/AG064/argentum/issues) or ask in the community.*

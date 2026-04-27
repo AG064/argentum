@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Features module — optional plugin-like capabilities that extend AG-Claw.
+ * Features module — optional plugin-like capabilities that extend Argentum.
  *
  * Each feature lives in its own subdirectory under src/features/<name>/.
  * Features are discovered and loaded by PluginLoader based on config.

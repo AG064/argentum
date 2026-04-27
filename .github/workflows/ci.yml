@@ -148,8 +148,8 @@ jobs:
 
       - name: Verify non-interactive onboarding
         run: |
-          mkdir -p "$RUNNER_TEMP/agclaw-onboarding"
-          cd "$RUNNER_TEMP/agclaw-onboarding"
+          mkdir -p "$RUNNER_TEMP/argentum-onboarding"
+          cd "$RUNNER_TEMP/argentum-onboarding"
           node "$GITHUB_WORKSPACE/dist/cli.js" onboard --yes
           node "$GITHUB_WORKSPACE/dist/cli.js" doctor
 
@@ -161,13 +161,13 @@ jobs:
       
       - name: Build Docker image
         run: |
-          docker build -t ag-claw:test -f docker/Dockerfile .
-          docker run ag-claw:test --version || true
+          docker build -t argentum:test -f docker/Dockerfile .
+          docker run argentum:test --version || true
       
       - name: Verify Docker
         run: |
-          docker images ag-claw:test
-          test "$(docker images ag-claw:test -q | wc -l)" -gt 0
+          docker images argentum:test
+          test "$(docker images argentum:test -q | wc -l)" -gt 0
 
   installation-test:
     name: Installation Test
@@ -188,8 +188,8 @@ jobs:
       - name: Docker install
         if: matrix.install_method == 'docker'
         run: |
-          docker build -t ag-claw:test -f docker/Dockerfile .
-          docker run ag-claw:test --version || true
+          docker build -t argentum:test -f docker/Dockerfile .
+          docker run argentum:test --version || true
       
       - name: Binary install
         if: matrix.install_method == 'binary'

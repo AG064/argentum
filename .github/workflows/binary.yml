@@ -33,27 +33,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/release
-          pkg --config package.json dist/cli.js --targets node18-linux-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-linux-x64" --compress GZip --no-bytecode --public-packages "*" --public
-          pkg --config package.json dist/cli.js --targets node18-win-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-win-x64.exe" --compress GZip --no-bytecode --public-packages "*" --public
-          pkg --config package.json dist/cli.js --targets node18-macos-x64 --output "artifacts/release/agclaw-v${{ steps.package.outputs.version }}-macos-x64" --compress GZip --no-bytecode --public-packages "*" --public
+          pkg --config package.json dist/cli.js --targets node18-linux-x64 --output "artifacts/release/argentum-v${{ steps.package.outputs.version }}-linux-x64" --compress GZip --no-bytecode --public-packages "*" --public
+          pkg --config package.json dist/cli.js --targets node18-win-x64 --output "artifacts/release/argentum-v${{ steps.package.outputs.version }}-win-x64.exe" --compress GZip --no-bytecode --public-packages "*" --public
+          pkg --config package.json dist/cli.js --targets node18-macos-x64 --output "artifacts/release/argentum-v${{ steps.package.outputs.version }}-macos-x64" --compress GZip --no-bytecode --public-packages "*" --public
 
       - name: Smoke test Linux binary
-        run: ./artifacts/release/agclaw-v${{ steps.package.outputs.version }}-linux-x64 --version
+        run: ./artifacts/release/argentum-v${{ steps.package.outputs.version }}-linux-x64 --version
 
       - name: Write checksums
         shell: bash
         run: |
           cd artifacts/release
-          sha256sum agclaw-v${{ steps.package.outputs.version }}-linux-x64 agclaw-v${{ steps.package.outputs.version }}-win-x64.exe agclaw-v${{ steps.package.outputs.version }}-macos-x64 > SHA256SUMS-portable.txt
+          sha256sum argentum-v${{ steps.package.outputs.version }}-linux-x64 argentum-v${{ steps.package.outputs.version }}-win-x64.exe argentum-v${{ steps.package.outputs.version }}-macos-x64 > SHA256SUMS-portable.txt
 
       - name: Upload portable artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: agclaw-portable-binaries
+          name: argentum-portable-binaries
           path: |
-            artifacts/release/agclaw-v*-linux-x64
-            artifacts/release/agclaw-v*-win-x64.exe
-            artifacts/release/agclaw-v*-macos-x64
+            artifacts/release/argentum-v*-linux-x64
+            artifacts/release/argentum-v*-win-x64.exe
+            artifacts/release/argentum-v*-macos-x64
             artifacts/release/SHA256SUMS-portable.txt
 
   windows-installer:
@@ -81,8 +81,8 @@ jobs:
       - name: Upload Windows installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: agclaw-windows-installer
+          name: argentum-windows-installer
           path: |
-            artifacts/release/agclaw-v*-win-x64.exe
-            artifacts/release/agclaw-v*-win-x64.msi
+            artifacts/release/argentum-v*-win-x64.exe
+            artifacts/release/argentum-v*-win-x64.msi
             artifacts/release/SHA256SUMS.txt

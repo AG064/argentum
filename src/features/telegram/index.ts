@@ -1,5 +1,5 @@
 /**
- * AG-Claw Telegram Integration
+ * Argentum Telegram Integration
  *
  * Based on OpenClaw's Telegram channel pattern:
  * - Grammy bot framework
@@ -143,7 +143,7 @@ class TelegramFeature {
         return;
       }
       await ctx.reply(
-        '**AG-Claw** is online.\n\n' +
+        '**Argentum** is online.\n\n' +
           'Commands:\n' +
           '/status — system status\n' +
           '/features — list features\n' +
@@ -182,7 +182,7 @@ class TelegramFeature {
       const hours = Math.floor(uptime / 3600);
       const mins = Math.floor((uptime % 3600) / 60);
       await ctx.reply(
-        `**AG-Claw Status**\n` +
+        `**Argentum Status**\n` +
           `Uptime: ${hours}h ${mins}m\n` +
           `Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)} MB`,
         { parse_mode: 'Markdown' },
@@ -192,7 +192,7 @@ class TelegramFeature {
     // /features command
     this.bot.command('features', async (ctx) => {
       if (!this.isAllowed(`tg:${ctx.from?.id}`)) return;
-      await ctx.reply('Use `agclaw tools` on the server to list features.', {
+      await ctx.reply('Use `argentum tools` on the server to list features.', {
         parse_mode: 'Markdown',
       });
     });

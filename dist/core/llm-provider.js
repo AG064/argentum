@@ -1,8 +1,8 @@
 "use strict";
 /**
- * AG-Claw LLM Provider — Fully Configurable
+ * Argentum LLM Provider — Fully Configurable
  *
- * All providers are defined in agclaw.json. No hardcoded providers.
+ * All providers are defined in argentum.json. No hardcoded providers.
  * Any OpenAI-compatible API can be added by setting base_url + api_key.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -166,7 +166,7 @@ class AnthropicProvider {
 /**
  * Create provider from config. No hardcoded providers.
  *
- * Config format in agclaw.json:
+ * Config format in argentum.json:
  * {
  *   "llm": {
  *     "providers": {
@@ -208,8 +208,8 @@ function createLLMProvider(config) {
         }
         if (!apiKey) {
             const envHint = providerConfig.api_key_env
-                ? ` Set ${providerConfig.api_key_env} or api_key in agclaw.json`
-                : ' Set api_key or api_key_env in agclaw.json';
+                ? ` Set ${providerConfig.api_key_env} or api_key in argentum.json`
+                : ' Set api_key or api_key_env in argentum.json';
             throw new Error(`No API key for provider '${providerName}'.${envHint}`);
         }
         // Collect fallback models from fallback chain config
@@ -245,7 +245,7 @@ function createLLMProvider(config) {
     // Fallback: legacy direct params (for backwards compat)
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-        throw new Error('No LLM config found. Run: agclaw onboard');
+        throw new Error('No LLM config found. Run: argentum onboard');
     }
     return new OpenAICompatibleProvider({
         name: 'legacy',

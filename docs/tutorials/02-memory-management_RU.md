@@ -1,15 +1,15 @@
 # Руководство 2: Управление памятью
 
-AG-Claw имеет сложную многослойную систему памяти. Это руководство подробно рассматривает каждый слой, показывает, как работать с ними напрямую, и объясняет автоматизацию, которая поддерживает память полезной со временем.
+Argentum имеет сложную многослойную систему памяти. Это руководство подробно рассматривает каждый слой, показывает, как работать с ними напрямую, и объясняет автоматизацию, которая поддерживает память полезной со временем.
 
 **Примерное время:** 20 минут  
-**Требования:** Работающий экземпляр AG-Claw (из [Руководства 1](./01-first-agent_RU.md))
+**Требования:** Работающий экземпляр Argentum (из [Руководства 1](./01-first-agent_RU.md))
 
 ---
 
 ## Четыре слоя памяти
 
-AG-Claw организует память на четыре слоя, каждый со своей ролью:
+Argentum организует память на четыре слоя, каждый со своей ролью:
 
 | Слой | Технология | Назначение | Время жизни |
 |---|---|---|---|
@@ -62,16 +62,16 @@ curl -X POST http://localhost:18789/chat \
 
 ```bash
 # Список всех сессий
-agclaw sessions list
+argentum sessions list
 
 # Просмотр конкретной сессии
-agclaw sessions view sess_abc123
+argentum sessions view sess_abc123
 
 # Очистка сессии (сброс разговора)
-agclaw sessions clear sess_abc123
+argentum sessions clear sess_abc123
 
 # Экспорт сессии в JSON
-agclaw sessions export sess_abc123 > conversation.json
+argentum sessions export sess_abc123 > conversation.json
 ```
 
 ---
@@ -140,7 +140,7 @@ curl "http://localhost:18789/memory/search?q=предпочтения&limit=5&th
 
 > "Я начал стажировку в Binarwelt"
 
-AG-Claw автоматически сохраняет это как запись с тегами `["факт", "работа", "стажировка"]`.
+Argentum автоматически сохраняет это как запись с тегами `["факт", "работа", "стажировка"]`.
 
 ### Теги памяти
 
@@ -200,7 +200,7 @@ curl "http://localhost:18789/memory/search?q=дедлайн&tags=проект"
 
 > "Я работаю в Acme Corp"
 
-AG-Claw создаёт:
+Argentum создаёт:
 - Сущность: `Acme Corp` (тип: компания)
 - Сущность: `Алиса` (тип: человек)
 - Отношение: Алиса → `работает_в` → Acme Corp
@@ -244,7 +244,7 @@ curl "http://localhost:18789/memory/graph?entity=Алиса"
 curl -X POST http://localhost:18789/memory/graph/entity \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "AG-Claw",
+    "name": "Argentum",
     "type": "проект",
     "properties": {
       "version": "0.0.2",
@@ -277,7 +277,7 @@ curl "http://localhost:18789/memory/graph/traverse?from=entity_001&type=рабо
 
 ## Слой 4: Markdown память
 
-Markdown-файлы на диске служат вручную курируемым, читаемым слоем памяти. AG-Claw наблюдает за каталогом `data/memory/` и автоматически загружает любые `.md` файлы в контекст.
+Markdown-файлы на диске служат вручную курируемым, читаемым слоем памяти. Argentum наблюдает за каталогом `data/memory/` и автоматически загружает любые `.md` файлы в контекст.
 
 ### Создание файлов памяти
 
@@ -294,7 +294,7 @@ cat > data/memory/personal-context.md << 'EOF'
 - часовой пояс: America/Los_Angeles
 
 ## Текущие проекты
-- Создаёт AI-агент фреймворк (AG-Claw)
+- Создаёт AI-агент фреймворк (Argentum)
 - Поиск работы программистом
 
 ## Навыки
@@ -380,7 +380,7 @@ data/memory/
 ### Просмотр статистики
 
 ```bash
-agclaw memory stats
+argentum memory stats
 ```
 
 Вывод:
@@ -397,13 +397,13 @@ Session Memory:      8 активных сессий
 
 ```bash
 # Удалить воспоминания старше даты
-agclaw memory purge --before 2026-01-01
+argentum memory purge --before 2026-01-01
 
 # Очистить по тегу
-agclaw memory purge --tag temporary
+argentum memory purge --tag temporary
 
 # Показать, что будет удалено, без реального удаления
-agclaw memory purge --before 2026-01-01 --dry-run
+argentum memory purge --before 2026-01-01 --dry-run
 ```
 
 ### Экспорт и импорт
@@ -411,13 +411,13 @@ agclaw memory purge --before 2026-01-01 --dry-run
 Экспортировать все воспоминания для резервной копии или миграции:
 
 ```bash
-agclaw memory export --format json > memories-backup-$(date +%Y%m%d).json
+argentum memory export --format json > memories-backup-$(date +%Y%m%d).json
 ```
 
 Импорт:
 
 ```bash
-agclaw memory import memories-backup-20260318.json
+argentum memory import memories-backup-20260318.json
 ```
 
 ---
@@ -429,7 +429,7 @@ agclaw memory import memories-backup-20260318.json
 Включите debug-логирование, чтобы видеть запросы к памяти:
 
 ```bash
-AGCLAW_LOG_LEVEL=debug agclaw gateway start
+AGCLAW_LOG_LEVEL=debug argentum gateway start
 ```
 
 Ищите строки:
@@ -461,7 +461,7 @@ curl "http://localhost:18789/memory/graph?orphans=true"
 
 ## Справочник по конфигурации
 
-Полная конфигурация памяти в `agclaw.json`:
+Полная конфигурация памяти в `argentum.json`:
 
 ```json
 {

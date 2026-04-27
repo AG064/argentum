@@ -51,7 +51,7 @@ exports.PROVIDER_PRESETS = {
         defaultModel: 'google/gemma-3-27b-it',
         headers: {
             'HTTP-Referer': 'https://github.com/AG064/ag-claw',
-            'X-Title': 'AG-Claw',
+            'X-Title': 'Argentum',
         },
     },
     google: {
@@ -138,7 +138,7 @@ function createOnboardingProfile(options = {}) {
     }
     const config = {
         $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-        name: options.name?.trim() || 'My AG-Claw Instance',
+        name: options.name?.trim() || 'My Argentum Instance',
         version: '0.0.2',
         server: {
             port,
@@ -286,7 +286,7 @@ function createEnvExample(profile) {
     const providerName = config.llm?.default ?? 'nvidia';
     const apiKeyEnv = config.llm?.providers?.[providerName]?.api_key_env ?? 'NVIDIA_API_KEY';
     return [
-        '# AG-Claw Environment Variables',
+        '# Argentum Environment Variables',
         'AGCLAW_WORKDIR=.',
         `AGCLAW_PORT=${config.server?.port ?? 3000}`,
         'AGCLAW_MASTER_KEY=',

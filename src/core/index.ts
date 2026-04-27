@@ -9,7 +9,7 @@
  *   - HierarchicalMemoryStore, MemoryTier, MemoryEntry — three-tier memory system
  */
 
-export { ConfigManager, getConfig, ConfigSchema, type AGClawConfig } from './config';
+export { ConfigManager, getConfig, ConfigSchema, type ArgentumConfig } from './config';
 
 export {
   Logger,

@@ -1,10 +1,10 @@
-# Migration Guide: OpenClaw to AG-Claw
+# Migration Guide: OpenClaw to Argentum
 
-If you're currently running OpenClaw and want to switch to AG-Claw, this guide walks you through the process. The migration is designed to be straightforward, with most OpenClaw configurations being compatible with AG-Claw.
+If you're currently running OpenClaw and want to switch to Argentum, this guide walks you through the process. The migration is designed to be straightforward, with most OpenClaw configurations being compatible with Argentum.
 
 ---
 
-## Why Switch to AG-Claw?
+## Why Switch to Argentum?
 
 | Benefit | What It Means for You |
 |---|---|
@@ -25,7 +25,7 @@ Before migrating, ensure you have:
 - OpenClaw currently running (any version)
 - Node.js 18+ installed
 - A backup of your OpenClaw configuration and data
-- AG-Claw installed (`git clone https://github.com/AG064/ag-claw.git && cd ag-claw && npm install`)
+- Argentum installed (`git clone https://github.com/AG064/argentum.git && cd argentum && npm install`)
 
 ---
 
@@ -46,26 +46,26 @@ env | grep -i openclaw > ~/openclaw-env-backup.txt
 ```
 
 Specifically back up:
-- `agclaw.json` or `openclaw.json` (your config file)
+- `argentum.json` or `openclaw.json` (your config file)
 - Database files (`*.db`)
 - Memory files
 - Any custom skills or plugins
 
 ---
 
-## Step 2 — Map OpenClaw Concepts to AG-Claw
+## Step 2 — Map OpenClaw Concepts to Argentum
 
 ### Configuration Files
 
-| OpenClaw | AG-Claw | Notes |
+| OpenClaw | Argentum | Notes |
 |---|---|---|
-| `openclaw.json` | `agclaw.json` | Same format, same structure |
-| `~/.openclaw/` | `~/.ag-claw/` or `./data/` | AG-Claw uses `data/` in the working directory by default |
-| `config/default.json` | `config/default.yaml` | AG-Claw uses YAML for defaults |
+| `openclaw.json` | `argentum.json` | Same format, same structure |
+| `~/.openclaw/` | `~/.argentum/` or `./data/` | Argentum uses `data/` in the working directory by default |
+| `config/default.json` | `config/default.yaml` | Argentum uses YAML for defaults |
 
 ### Environment Variables
 
-| OpenClaw | AG-Claw |
+| OpenClaw | Argentum |
 |---|---|
 | `OPENCLAW_PORT` | `AGCLAW_PORT` |
 | `OPENCLAW_API_KEY` | `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` |
@@ -74,22 +74,22 @@ Specifically back up:
 
 ### CLI Commands
 
-| OpenClaw | AG-Claw |
+| OpenClaw | Argentum |
 |---|---|
-| `openclaw init` | `agclaw init` |
-| `openclaw gateway start` | `agclaw gateway start` |
-| `openclaw gateway stop` | `agclaw gateway stop` |
-| `openclaw config` | `agclaw config` |
-| `openclaw tools` | `agclaw tools` |
-| `openclaw status` | `agclaw gateway status` |
+| `openclaw init` | `argentum init` |
+| `openclaw gateway start` | `argentum gateway start` |
+| `openclaw gateway stop` | `argentum gateway stop` |
+| `openclaw config` | `argentum config` |
+| `openclaw tools` | `argentum tools` |
+| `openclaw status` | `argentum gateway status` |
 
-The CLI commands are nearly identical. If you have shell aliases for OpenClaw, simply replace `openclaw` with `agclaw`.
+The CLI commands are nearly identical. If you have shell aliases for OpenClaw, simply replace `openclaw` with `argentum`.
 
 ---
 
 ## Step 3 — Convert Your Configuration
 
-Your existing `openclaw.json` should work largely as-is with AG-Claw. However, review these common differences:
+Your existing `openclaw.json` should work largely as-is with Argentum. However, review these common differences:
 
 ### Before (OpenClaw)
 
@@ -108,7 +108,7 @@ Your existing `openclaw.json` should work largely as-is with AG-Claw. However, r
 }
 ```
 
-### After (AG-Claw)
+### After (Argentum)
 
 ```json
 {
@@ -129,17 +129,17 @@ Your existing `openclaw.json` should work largely as-is with AG-Claw. However, r
 }
 ```
 
-The key addition in AG-Claw is the `features` section, where you explicitly enable the capabilities you want.
+The key addition in Argentum is the `features` section, where you explicitly enable the capabilities you want.
 
 ### Feature Mapping
 
-OpenClaw's built-in capabilities map to AG-Claw features:
+OpenClaw's built-in capabilities map to Argentum features:
 
-| OpenClaw Capability | AG-Claw Feature |
+| OpenClaw Capability | Argentum Feature |
 |---|---|
 | Basic memory | `sqlite-memory` |
 | Telegram bot | `telegram` (channel) |
-| CLI commands | Built-in (`agclaw` CLI) |
+| CLI commands | Built-in (`argentum` CLI) |
 | Plugin system | `skills-library` + 59 features |
 | Webchat | `webchat` (channel) |
 | Scheduled tasks | `cron-scheduler` |
@@ -151,15 +151,15 @@ OpenClaw's built-in capabilities map to AG-Claw features:
 ## Step 4 — Install and Initialize
 
 ```bash
-cd ag-claw
+cd argentum
 
 # Link the CLI
 npm link
 
 # Initialize in a new directory (or use existing)
-agclaw init
+argentum init
 
-# Your existing agclaw.json will be detected and used
+# Your existing argentum.json will be detected and used
 ```
 
 ---
@@ -169,12 +169,12 @@ agclaw init
 ### Database Files
 
 ```bash
-# Copy OpenClaw databases to AG-Claw data directory
+# Copy OpenClaw databases to Argentum data directory
 cp ~/openclaw-backup/data/*.db ./data/
 
 # If using SQLite (default), this should work directly
 ls ./data/
-# Should show: agclaw.db, sessions.db, memory.db, etc.
+# Should show: argentum.db, sessions.db, memory.db, etc.
 ```
 
 ### Memory Files
@@ -187,13 +187,13 @@ cp -r ~/openclaw-backup/*.md ./data/ 2>/dev/null || true
 
 ### Environment Variables
 
-Update your shell profile with AG-Claw variable names:
+Update your shell profile with Argentum variable names:
 
 ```bash
 # Old OpenClaw
 export OPENCLAW_API_KEY=sk-or-v1-...
 
-# New AG-Claw
+# New Argentum
 export OPENROUTER_API_KEY=sk-or-v1-...
 
 # Old
@@ -210,7 +210,7 @@ export AGCLAW_TELEGRAM_TOKEN=...
 ### Run Diagnostics
 
 ```bash
-agclaw doctor
+argentum doctor
 ```
 
 Expected output:
@@ -229,7 +229,7 @@ Expected output:
 
 ```bash
 # Start the gateway
-agclaw gateway start --port 3000
+argentum gateway start --port 3000
 
 # Check health
 curl http://localhost:3000/health
@@ -243,7 +243,7 @@ curl -X POST http://localhost:3000/chat \
 ### Check Feature Status
 
 ```bash
-agclaw tools
+argentum tools
 ```
 
 This lists all 59 available features. Verify your expected features are active.
@@ -252,7 +252,7 @@ This lists all 59 available features. Verify your expected features are active.
 
 ## Step 7 — Migrate Custom Plugins
 
-If you had custom OpenClaw plugins, they need to be converted to AG-Claw skills/features.
+If you had custom OpenClaw plugins, they need to be converted to Argentum skills/features.
 
 ### OpenClaw Plugin Pattern
 
@@ -265,10 +265,10 @@ module.exports = {
 };
 ```
 
-### AG-Claw Feature Pattern
+### Argentum Feature Pattern
 
 ```typescript
-// AG-Claw feature
+// Argentum feature
 import { FeatureModule } from '../../core/types';
 
 class MyFeature implements FeatureModule {
@@ -299,26 +299,26 @@ See [Developer Guide](./DEVELOPER_GUIDE.md#how-to-add-a-new-feature) for full de
 ### "Config file not found"
 
 ```bash
-# AG-Claw looks for agclaw.json in the current directory
+# Argentum looks for argentum.json in the current directory
 # Copy your config to the new location
-cp ~/openclaw-backup/openclaw.json ./agclaw.json
+cp ~/openclaw-backup/openclaw.json ./argentum.json
 ```
 
 ### "Database locked" errors
 
 ```bash
-agclaw gateway stop
+argentum gateway stop
 rm -f ./data/*.db-shm ./data/*.wal
-agclaw gateway start
+argentum gateway start
 ```
 
 ### "Feature not found"
 
-Some OpenClaw features have different names in AG-Claw. Check `agclaw tools` for the exact name and enable it:
+Some OpenClaw features have different names in Argentum. Check `argentum tools` for the exact name and enable it:
 
 ```bash
-agclaw feature <name> enable
-agclaw gateway restart
+argentum feature <name> enable
+argentum gateway restart
 ```
 
 ### "Telegram not responding"
@@ -335,33 +335,33 @@ curl -s "https://api.telegram.org/bot$AGCLAW_TELEGRAM_TOKEN/getMe"
 
 ### "Memory search returns no results"
 
-If you copied old database files, the schema might differ. AG-Claw will automatically migrate on first start, but if you see issues:
+If you copied old database files, the schema might differ. Argentum will automatically migrate on first start, but if you see issues:
 
 ```bash
 # Re-index semantic memory
-agclaw memory reindex
+argentum memory reindex
 ```
 
 ---
 
 ## Post-Migration Checklist
 
-- [ ] AG-Claw installed and linked (`agclaw --version` works)
-- [ ] Configuration file migrated (`agclaw.json` in place)
+- [ ] Argentum installed and linked (`argentum --version` works)
+- [ ] Configuration file migrated (`argentum.json` in place)
 - [ ] Database files copied and accessible
-- [ ] Environment variables updated to AG-Claw names
-- [ ] Gateway starts successfully (`agclaw gateway start`)
+- [ ] Environment variables updated to Argentum names
+- [ ] Gateway starts successfully (`argentum gateway start`)
 - [ ] Health check passes (`curl http://localhost:3000/health`)
 - [ ] Telegram connection working (if used)
-- [ ] Memory search working (`agclaw memory search test`)
-- [ ] Custom plugins converted to AG-Claw features
+- [ ] Memory search working (`argentum memory search test`)
+- [ ] Custom plugins converted to Argentum features
 - [ ] Old OpenClaw instance shut down (free up port 3000)
 
 ---
 
 ## Removing OpenClaw
 
-After verifying AG-Claw is working correctly:
+After verifying Argentum is working correctly:
 
 ```bash
 # Uninstall OpenClaw globally (if installed)
@@ -383,7 +383,7 @@ source ~/.zshrc  # or source ~/.bashrc
 
 If you encounter issues not covered here:
 
-- **GitHub Issues**: [AG064/ag-claw/issues](https://github.com/AG064/ag-claw/issues)
+- **GitHub Issues**: [AG064/argentum/issues](https://github.com/AG064/argentum/issues)
 - **Documentation**: See [USER_GUIDE.md](./USER_GUIDE.md)
 - **Quick Start**: See [QUICK_START.md](./QUICK_START.md)
 
@@ -391,38 +391,38 @@ If you encounter issues not covered here:
 
 ## What's New After Migration
 
-Once you've migrated, explore these AG-Claw capabilities that weren't available in OpenClaw:
+Once you've migrated, explore these Argentum capabilities that weren't available in OpenClaw:
 
 ### Enable Powerful Features
 
 ```bash
 # Semantic search over your conversations
-agclaw feature semantic-search enable
+argentum feature semantic-search enable
 
 # Knowledge graph for entity relationships
-agclaw feature knowledge-graph enable
+argentum feature knowledge-graph enable
 
 # Morning briefings every day at 8am
-agclaw feature morning-briefing enable
+argentum feature morning-briefing enable
 
 # Cron scheduling for automation
-agclaw feature cron-scheduler enable
+argentum feature cron-scheduler enable
 
 # Discord bot (new channel!)
-agclaw feature discord-bot enable
+argentum feature discord-bot enable
 ```
 
 ### Try Advanced Memory
 
 ```bash
 # Search memory with natural language
-agclaw memory search "what did we decide about the API design"
+argentum memory search "what did we decide about the API design"
 
 # View memory statistics
-agclaw memory stats
+argentum memory stats
 
 # View knowledge graph
-agclaw memory graph stats
+argentum memory graph stats
 ```
 
 ### Run Docker in Production
@@ -434,4 +434,4 @@ npm run docker:up
 
 ---
 
-*Welcome to AG-Claw. Your agent just got a significant upgrade.*
+*Welcome to Argentum. Your agent just got a significant upgrade.*

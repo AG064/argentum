@@ -1,6 +1,6 @@
 # Руководство пользователя
 
-Подробное руководство по эксплуатации AG-Claw в продакшене и в повседневном использовании. Этот документ охватывает архитектуру, конфигурацию, управление памятью, безопасность, развёртывание, мониторинг и многое другое.
+Подробное руководство по эксплуатации Argentum в продакшене и в повседневном использовании. Этот документ охватывает архитектуру, конфигурацию, управление памятью, безопасность, развёртывание, мониторинг и многое другое.
 
 ---
 
@@ -23,7 +23,7 @@
 
 ### Философия проектирования
 
-AG-Claw построен на трёх принципах:
+Argentum построен на трёх принципах:
 
 1. **Модульность важнее монолита** — каждая возможность представляет собой модуль, который можно независимо включить или выключить
 2. **Память как полноценный гражданин** — агент не просто обрабатывает сообщения; он запоминает, учится и развивается
@@ -36,7 +36,7 @@ AG-Claw построен на трёх принципах:
 │                        Инфраструктура                            │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐    │
-│   │                   AG-Claw Gateway                        │    │
+│   │                   Argentum Gateway                        │    │
 │   │                       :18789                             │    │
 │   ├───────────────┬────────────────────┬────────────────────┤    │
 │   │  Каналы        │   Функциональные модули │   Ядро           │    │
@@ -85,7 +85,7 @@ AG-Claw построен на трёх принципах:
 
 ### Agentic Tool Loop
 
-Когда пользователь отправляет сообщение, AG-Claw обрабатывает его через следующий цикл:
+Когда пользователь отправляет сообщение, Argentum обрабатывает его через следующий цикл:
 
 1. **Сообщение получено** — адаптер канала нормализует входные данные в стандартный формат `Message`
 2. **Проверка безопасности** — применение allowlist, rate limiting, фильтрация контента
@@ -99,7 +99,7 @@ AG-Claw построен на трёх принципах:
 
 ### Система модулей
 
-Каждый модуль представляет собой самодостаточный компонент в `src/features/<name>/index.ts`. Модули независимы и настраиваются через `agclaw.json`. Вы можете включать или выключать любой модуль без изменения кода.
+Каждый модуль представляет собой самодостаточный компонент в `src/features/<name>/index.ts`. Модули независимы и настраиваются через `argentum.json`. Вы можете включать или выключать любой модуль без изменения кода.
 
 Текущее количество модулей: **59 модулей**, включая аудитлогирование, семантический поиск, планировщик задач, утренние отчёты, mesh-воркфлоры, зашифрованные секреты, отслеживание целей и многое другое.
 
@@ -109,36 +109,36 @@ AG-Claw построен на трёх принципах:
 
 ### Создание первого агента
 
-После выполнения `agclaw init` ваш агент готов к использованию. Конфигурация по умолчанию создаёт универсального агента. Для настройки:
+После выполнения `argentum init` ваш агент готов к использованию. Конфигурация по умолчанию создаёт универсального агента. Для настройки:
 
 ```bash
 # Просмотр текущей конфигурации
-agclaw config
+argentum config
 
 # Установить имя агента
-agclaw config name "Мой персональный ассистент"
+argentum config name "Мой персональный ассистент"
 
 # Установить системный промпт
-agclaw config agent.systemPrompt "Ты — полезный ассистент..."
+argentum config agent.systemPrompt "Ты — полезный ассистент..."
 
 # Показать полную конфигурацию
-cat agclaw.json
+cat argentum.json
 ```
 
 При первом запуске агент поможет настроить API-ключ. Также можно задать его через переменную окружения:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-v1-...
-agclaw gateway start
+argentum gateway start
 ```
 
 ### Управление несколькими агентами
 
-AG-Claw поддерживает несколько профилей агентов для разных сценариев использования:
+Argentum поддерживает несколько профилей агентов для разных сценариев использования:
 
 ```bash
 # Создать агента для программирования
-agclaw agents create --name "coding-assistant" \
+argentum agents create --name "coding-assistant" \
   --system-prompt "Ты — эксперт-программист, специализирующийся на TypeScript и Python..." \
   --model "anthropic/claude-sonnet-4-20250514"
 ```
@@ -146,29 +146,29 @@ agclaw agents create --name "coding-assistant" \
 Список всех агентов:
 
 ```bash
-agclaw agents list
+argentum agents list
 ```
 
 Переключиться на другого агента:
 
 ```bash
-agclaw agents use "coding-assistant"
+argentum agents use "coding-assistant"
 ```
 
 Удалить профиль агента:
 
 ```bash
-agclaw agents delete "coding-assistant"
+argentum agents delete "coding-assistant"
 ```
 
 ### Конфигурация агента
 
-Ключевые параметры агента в `agclaw.json`:
+Ключевые параметры агента в `argentum.json`:
 
 ```json
 {
   "agent": {
-    "name": "AG-Claw Ассистент",
+    "name": "Argentum Ассистент",
     "systemPrompt": "Ты — полезный AI-ассистент...",
     "maxIterations": 10,
     "temperature": 0.7,
@@ -188,30 +188,30 @@ agclaw agents delete "coding-assistant"
 
 ### Сессии разговора
 
-AG-Claw хранит историю разговоров для каждого пользователя в `data/sessions.db`. Сессии включают полную историю сообщений, вызовы инструментов и статистику использования LLM.
+Argentum хранит историю разговоров для каждого пользователя в `data/sessions.db`. Сессии включают полную историю сообщений, вызовы инструментов и статистику использования LLM.
 
 ```bash
 # Просмотр недавних сессий
-agclaw sessions list
+argentum sessions list
 
 # Просмотр конкретной сессии
-agclaw sessions view <session-id>
+argentum sessions view <session-id>
 
 # Очистка сессии (сбрасывает разговор)
-agclaw sessions clear <session-id>
+argentum sessions clear <session-id>
 
 # Экспорт сессии в JSON
-agclaw sessions export <session-id> > session.json
+argentum sessions export <session-id> > session.json
 ```
 
 ### Смена модели
 
 ```bash
 # Использовать другую модель по умолчанию
-agclaw config model.defaultModel "openai/gpt-4o"
+argentum config model.defaultModel "openai/gpt-4o"
 
 # Перезапустить для применения
-agclaw gateway restart
+argentum gateway restart
 ```
 
 Доступные провайдеры:
@@ -223,7 +223,7 @@ agclaw gateway restart
 
 ## 3. Система памяти
 
-AG-Claw имеет многослойную архитектуру памяти. Каждый слой служит разным целям — от краткосрочного контекста до долгосрочных знаний.
+Argentum имеет многослойную архитектуру памяти. Каждый слой служит разным целям — от краткосрочного контекста до долгосрочных знаний.
 
 ### Слои памяти
 
@@ -311,16 +311,16 @@ Markdown-файлы парсятся и интегрируются в конте
 
 ```bash
 # Показать статистику памяти
-agclaw memory stats
+argentum memory stats
 
 # Очистить старые записи (до определённой даты)
-agclaw memory purge --before 2026-01-01
+argentum memory purge --before 2026-01-01
 
 # Экспортировать все воспоминания
-agclaw memory export > memories.json
+argentum memory export > memories.json
 
 # Импортировать воспоминания
-agclaw memory import memories.json
+argentum memory import memories.json
 ```
 
 Модуль `self-evolving-memory` автоматически:
@@ -336,7 +336,7 @@ agclaw memory import memories.json
 
 ### Встроенные навыки
 
-В AG-Claw предустановлено несколько навыков:
+В Argentum предустановлено несколько навыков:
 
 | Навык | Что делает |
 |---|---|
@@ -350,17 +350,17 @@ agclaw memory import memories.json
 ### Список установленных навыков
 
 ```bash
-agclaw skills list
+argentum skills list
 ```
 
 ### Установка новых навыков
 
 ```bash
 # Установить из URL или локального пути
-agclaw skills install https://github.com/example/skill-repo
+argentum skills install https://github.com/example/skill-repo
 
 # Установить из ClawHub маркетплейса
-agclaw skill install my-skill
+argentum skill install my-skill
 ```
 
 ### Создание собственных навыков
@@ -376,18 +376,18 @@ agclaw skill install my-skill
 Навыки обычно вызываются агентом автоматически, но можно вызвать и напрямую:
 
 ```bash
-agclaw skills run weather --location "Таллинн"
+argentum skills run weather --location "Таллинн"
 ```
 
 ---
 
 ## 5. Лучшие практики безопасности
 
-AG-Claw включает несколько слоёв безопасности. Ниже — рекомендуемые практики для продакшен-развёртывания.
+Argentum включает несколько слоёв безопасности. Ниже — рекомендуемые практики для продакшен-развёртывания.
 
 ### Включите строгий режим
 
-Начните с `security.policy: "strict"` в `agclaw.json`:
+Начните с `security.policy: "strict"` в `argentum.json`:
 
 ```json
 {
@@ -421,7 +421,7 @@ AG-Claw включает несколько слоёв безопасности.
 
 ### Шифрование секретов
 
-AG-Claw шифрует секреты при хранении с помощью AES-256-GCM. Задайте ключ:
+Argentum шифрует секреты при хранении с помощью AES-256-GCM. Задайте ключ:
 
 ```bash
 export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
@@ -431,7 +431,7 @@ export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
 
 ```bash
 # Безопасно сохранить секрет
-agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
+argentum secrets set OPENROUTER_API_KEY "sk-or-v1-..."
 ```
 
 ### Аудитлогирование
@@ -449,11 +449,11 @@ agclaw secrets set OPENROUTER_API_KEY "sk-or-v1-..."
 Просмотр логов аудита:
 
 ```bash
-agclaw audit list --limit 50
-agclaw audit search --actor alice --since 2026-03-22
+argentum audit list --limit 50
+argentum audit search --actor alice --since 2026-03-22
 ```
 
-Лог аудита хранится в `data/agclaw.db` в неизменяемой таблице — записи нельзя удалить или изменить.
+Лог аудита хранится в `data/argentum.db` в неизменяемой таблице — записи нельзя удалить или изменить.
 
 ### Rate Limiting
 
@@ -498,8 +498,8 @@ agclaw audit search --actor alice --since 2026-03-22
 ```bash
 npm install
 npm link
-agclaw init
-agclaw gateway start
+argentum init
+argentum gateway start
 ```
 
 Готово. Gateway работает на `http://localhost:18789`.
@@ -507,7 +507,7 @@ agclaw gateway start
 ### Docker (рекомендуется для продакшена)
 
 ```bash
-cd ag-claw/docker
+cd argentum/docker
 cp .env.example .env  # заполните API-ключи
 docker compose up -d
 ```
@@ -515,16 +515,16 @@ docker compose up -d
 ### Systemd (Linux)
 
 ```ini
-# /etc/systemd/system/agclaw.service
+# /etc/systemd/system/argentum.service
 [Unit]
-Description=AG-Claw AI Agent
+Description=Argentum AI Agent
 After=network.target
 
 [Service]
 Type=simple
 User=ag064
-WorkingDirectory=/home/ag064/ag-claw
-ExecStart=/home/ag064/ag-claw/bin/agclaw.js gateway start
+WorkingDirectory=/home/ag064/argentum
+ExecStart=/home/ag064/argentum/bin/argentum.js gateway start
 Restart=always
 RestartSec=5
 Environment=OPENROUTER_API_KEY=sk-or-v1-...
@@ -535,9 +535,9 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable agclaw
-sudo systemctl start agclaw
-sudo systemctl status agclaw
+sudo systemctl enable argentum
+sudo systemctl start argentum
+sudo systemctl status argentum
 ```
 
 ### Обратный прокси (nginx)
@@ -588,16 +588,16 @@ export AGCLAW_LOG_FORMAT=json
 
 ```bash
 # Логи gateway в реальном времени
-agclaw gateway logs
+argentum gateway logs
 
 # Фильтр по уровню
-agclaw gateway logs --level error
+argentum gateway logs --level error
 
 # Режим отслеживания
-agclaw gateway logs --follow
+argentum gateway logs --follow
 
 # Экспорт
-agclaw gateway logs --export ./logs/$(date +%Y%m%d).log
+argentum gateway logs --export ./logs/$(date +%Y%m%d).log
 ```
 
 ### Метрики Prometheus
@@ -623,23 +623,23 @@ curl http://localhost:18789/health
 ls ./backups/
 
 # Создать резервную копию
-agclaw backup create
+argentum backup create
 
 # Восстановить из резервной копии
-agclaw backup restore backup-2026-03-18T18-58-44
+argentum backup restore backup-2026-03-18T18-58-44
 ```
 
 ### Что входит в резервную копию
 
 | Файл | Описание |
 |---|---|
-| `data/agclaw.db` | Основная база данных SQLite |
+| `data/argentum.db` | Основная база данных SQLite |
 | `data/semantic-memory.db` | Семантическая память |
 | `data/knowledge.db` | Граф знаний |
 | `data/sessions.db` | Сессии разговоров |
 | `data/skills-library.db` | Установленные навыки |
 | `data/goals.db` | Цели и декомпозиция |
-| `agclaw.json` | Конфигурация |
+| `argentum.json` | Конфигурация |
 
 ### Автоматическое резервное копирование
 
@@ -656,9 +656,9 @@ agclaw backup restore backup-2026-03-18T18-58-44
 
 ### Процедура восстановления
 
-1. Остановить gateway: `agclaw gateway stop`
-2. Восстановить файлы: `agclaw backup restore <backup-name>`
-3. Запустить: `agclaw gateway start`
+1. Остановить gateway: `argentum gateway stop`
+2. Восстановить файлы: `argentum backup restore <backup-name>`
+3. Запустить: `argentum gateway start`
 4. Проверить: `curl http://localhost:18789/health`
 
 ---
@@ -690,7 +690,7 @@ agclaw backup restore backup-2026-03-18T18-58-44
 
 ```json
 {
-  "name": "AG-Claw",
+  "name": "Argentum",
   "version": "0.0.2",
   "server": {
     "port": 18789,
@@ -699,7 +699,7 @@ agclaw backup restore backup-2026-03-18T18-58-44
     "rateLimit": { "enabled": true, "windowMs": 60000, "maxRequests": 100 }
   },
   "agent": {
-    "name": "AG-Claw Ассистент",
+    "name": "Argentum Ассистент",
     "maxIterations": 10,
     "temperature": 0.7
   },
@@ -747,7 +747,7 @@ agclaw backup restore backup-2026-03-18T18-58-44
 | `OPENAI_API_KEY` | OpenAI API ключ | Нет |
 | `AGCLAW_PORT` | Порт gateway (по умолчанию 18789) | Нет |
 | `AGCLAW_HOST` | Адрес привязки (по умолчанию 0.0.0.0) | Нет |
-| `AGCLAW_DB_PATH` | Путь к SQLite (по умолчанию ./data/agclaw.db) | Нет |
+| `AGCLAW_DB_PATH` | Путь к SQLite (по умолчанию ./data/argentum.db) | Нет |
 | `AGCLAW_LOG_LEVEL` | Уровень логирования | Нет |
 | `AGCLAW_LOG_FORMAT` | Формат логов (pretty/json) | Нет |
 | `AGCLAW_TELEGRAM_TOKEN` | Токен Telegram-бота | Нет |

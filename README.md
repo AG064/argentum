@@ -1,18 +1,18 @@
 <p align="center">
-  <h1 align="center">AG-Claw</h1>
+  <h1 align="center">Argentum</h1>
   <p align="center">Modular AI agent framework. Self-hosted. No subscriptions.</p>
 </p>
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
-[![Stars](https://img.shields.io/github/stars/AG064/ag-claw?style=flat-square)](https://github.com/AG064/ag-claw/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
+[![Stars](https://img.shields.io/github/stars/AG064/argentum?style=flat-square)](https://github.com/AG064/argentum/stargazers)
 [![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram)](https://t.me/ag_claw)
-[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://github.com/AG064/ag-claw/actions/workflows/ci.yml)
-[![DockerHub](https://img.shields.io/docker/image-size/ag064/ag-claw?style=flat-square)](https://hub.docker.com/r/ag064/ag-claw)
+[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://github.com/AG064/argentum/actions/workflows/ci.yml)
+[![DockerHub](https://img.shields.io/docker/image-size/ag064/argentum?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
 
 </p>
 
@@ -22,30 +22,30 @@
 
 ```bash
 # Clone and run
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run onboard
 npm run dev
 ```
 
-`npm run onboard` launches the interactive setup wizard and writes your first `agclaw.json`.
+`npm run onboard` launches the interactive setup wizard and writes your first `argentum.json`.
 
-`npm run dev` starts AG-Claw using the saved configuration. If you skip the wizard, AG-Claw will boot with defaults and immediately start the server/webchat.
+`npm run dev` starts Argentum using the saved configuration. If you skip the wizard, Argentum will boot with defaults and immediately start the server/webchat.
 
 Or use Docker:
 
 ```bash
-docker run -it ag064/ag-claw
+docker run -it ag064/argentum
 ```
 
-Or grab a binary from the [latest release](https://github.com/AG064/ag-claw/releases/latest).
+Or grab a binary from the [latest release](https://github.com/AG064/argentum/releases/latest).
 
 ---
 
 ## What Is This?
 
-AG-Claw is an AI agent framework built on top of OpenClaw. It gives you a modular system where you enable exactly the capabilities you need — Telegram bots, memory backends, automation tools, security layers, and more.
+Argentum is an AI agent framework built on top of OpenClaw. It gives you a modular system where you enable exactly the capabilities you need — Telegram bots, memory backends, automation tools, security layers, and more.
 
 Your data stays on your machine. No cloud dependency. No subscriptions.
 
@@ -65,7 +65,7 @@ Your data stays on your machine. No cloud dependency. No subscriptions.
 
 ---
 
-## Why AG-Claw
+## Why Argentum
 
 You get 65+ features as plugins. Toggle what you need, ignore the rest. Everything runs locally. No vendor lock-in.
 
@@ -84,8 +84,8 @@ You get 65+ features as plugins. Toggle what you need, ignore the rest. Everythi
 
 **From source** (recommended for development):
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run onboard   # optional, but recommended for first-time setup
 npm run build
@@ -102,24 +102,24 @@ npm run onboard
 
 **Docker** (recommended for production):
 ```bash
-docker run -it ag064/ag-claw
+docker run -it ag064/argentum
 ```
 
 **Windows installer or portable binary**:
-Download `agclaw-v0.0.2-win-x64.msi` or `agclaw-v0.0.2-win-x64.exe` from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest).
+Download `argentum-v0.0.2-win-x64.msi` or `argentum-v0.0.2-win-x64.exe` from [github.com/AG064/argentum/releases/latest](https://github.com/AG064/argentum/releases/latest).
 
 **Portable binary** (no dependencies):
-Download from [github.com/AG064/ag-claw/releases/latest](https://github.com/AG064/ag-claw/releases/latest) and pick the one for your OS:
+Download from [github.com/AG064/argentum/releases/latest](https://github.com/AG064/argentum/releases/latest) and pick the one for your OS:
 ```bash
-chmod +x agclaw-*
-./agclaw-* --help
+chmod +x argentum-*
+./argentum-* --help
 ```
 
 Release packaging details live in [docs/RELEASE_PACKAGING.md](docs/RELEASE_PACKAGING.md).
 
 **npm** (coming soon):
 ```bash
-npm install -g ag-claw
+npm install -g argentum
 ```
 
 ---
@@ -127,28 +127,28 @@ npm install -g ag-claw
 ## CLI Commands
 
 ```bash
-agclaw init                    # Initialize in current directory
-agclaw onboard                 # Interactive setup wizard
-agclaw gateway start           # Start gateway
-agclaw gateway stop            # Stop gateway
-agclaw gateway status          # Check if running
-agclaw gateway logs           # View logs
+argentum init                    # Initialize in current directory
+argentum onboard                 # Interactive setup wizard
+argentum gateway start           # Start gateway
+argentum gateway stop            # Stop gateway
+argentum gateway status          # Check if running
+argentum gateway logs           # View logs
 
-agclaw tools                   # List all features
-agclaw feature <name> enable   # Enable a feature
-agclaw feature <name> disable # Disable a feature
+argentum tools                   # List all features
+argentum feature <name> enable   # Enable a feature
+argentum feature <name> disable # Disable a feature
 
-agclaw agents                  # List configured agents
-agclaw sessions                # View conversation sessions
-agclaw memory search <query>   # Search memory
-agclaw memory stats            # Memory statistics
+argentum agents                  # List configured agents
+argentum sessions                # View conversation sessions
+argentum memory search <query>   # Search memory
+argentum memory stats            # Memory statistics
 
-agclaw config                  # Show config
-agclaw config <key>           # Get specific value
-agclaw config <key> <value>   # Set a value
+argentum config                  # Show config
+argentum config <key>           # Get specific value
+argentum config <key> <value>   # Set a value
 
-agclaw doctor                  # Diagnose issues
-agclaw connect                 # Setup integrations
+argentum doctor                  # Diagnose issues
+argentum connect                 # Setup integrations
 ```
 
 ---
@@ -156,7 +156,7 @@ agclaw connect                 # Setup integrations
 ## Architecture
 
 ```
-AG-Claw Gateway
+Argentum Gateway
 ├── Channels (Telegram, Discord, Webchat...)
 ├── Features (65+ plugins)
 │   ├── computer-control
@@ -203,7 +203,7 @@ cloudflared tunnel --url http://localhost:3000
 | Guide | What it's for |
 |---|---|
 | [Quick Start](docs/QUICK_START.md) | Up and running in 5 minutes |
-| [User Guide](docs/USER_GUIDE.md) | Operating AG-Claw day to day |
+| [User Guide](docs/USER_GUIDE.md) | Operating Argentum day to day |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Adding features and contributing |
 | [API Reference](docs/API.md) | REST endpoints and config schema |
 | [Migration Guide](docs/MIGRATION_FROM_OPENCLAW.md) | Switching from OpenClaw |
@@ -215,8 +215,8 @@ cloudflared tunnel --url http://localhost:3000
 ## Contributing
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run build
 npm test
@@ -224,8 +224,8 @@ git checkout -b feature/your-feature-name
 ```
 
 ---
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run build
 npm test
@@ -244,8 +244,8 @@ MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
 ---
 
 <p align="center">
-Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
+Questions? Open an issue on <a href="https://github.com/AG064/argentum/issues">GitHub</a>.
 </p>
 <p align="center">
-Questions? Open an issue on <a href="https://github.com/AG064/ag-claw/issues">GitHub</a>.
+Questions? Open an issue on <a href="https://github.com/AG064/argentum/issues">GitHub</a>.
 </p>

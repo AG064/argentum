@@ -1,13 +1,13 @@
 "use strict";
 /**
- * AG-Claw Skill Loader
+ * Argentum Skill Loader
  *
- * Loads SKILL.md files from AG-Claw feature directories and injects them
+ * Loads SKILL.md files from Argentum feature directories and injects them
  * into agent context. This is the OpenFang "Hand" pattern - domain expertise
  * bundled with features.
  *
  * Unlike the global skills-loader (which loads from ~/.openclaw/workspace/skills/),
- * this feature loads SKILL.md from AG-Claw's own feature directories.
+ * this feature loads SKILL.md from Argentum's own feature directories.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.skillLoader = void 0;

@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Main Application
+ * Argentum Dashboard - Main Application
  */
 
 // Global state
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initApp() {
-  console.log('[AG-Claw] Initializing dashboard...');
+  console.log('[Argentum] Initializing dashboard...');
 
   // Setup event listeners
   setupNavigation();
@@ -35,7 +35,7 @@ async function initApp() {
   // Start real-time updates
   startRealTimeUpdates();
 
-  console.log('[AG-Claw] Dashboard initialized');
+  console.log('[Argentum] Dashboard initialized');
 }
 
 // =============================================================================

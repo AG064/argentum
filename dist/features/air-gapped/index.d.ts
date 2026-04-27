@@ -43,7 +43,7 @@ export interface LocalResource {
 /**
  * Air-Gapped feature — fully offline operation mode.
  *
- * Enables AG-Claw to run in completely isolated environments
+ * Enables Argentum to run in completely isolated environments
  * using local models, encrypted storage, and strict network policies.
  */
 declare class AirGappedFeature implements FeatureModule {

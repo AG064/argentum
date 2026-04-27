@@ -37,27 +37,39 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 /**
- * AG-Claw CLI
+ * Argentum CLI
  *
  * Usage:
- *   agclaw init                    Initialize AG-Claw in current directory
- *   agclaw start [--port 3000]     Start AG-Claw server
- *   agclaw status                  Show system status
- *   agclaw features                List all features
- *   agclaw feature <name> <cmd>    Run feature command
- *   agclaw config [key] [value]    Show/set configuration
- *   agclaw doctor                  Diagnose setup issues
- *   agclaw help                    Show help
+ *   argentum init                    Initialize Argentum in current directory
+ *   argentum start [--port 3000]     Start Argentum server
+ *   argentum status                  Show system status
+ *   argentum features                List all features
+ *   argentum feature <name> <cmd>    Run feature command
+ *   argentum config [key] [value]    Show/set configuration
+ *   argentum doctor                  Diagnose setup issues
+ *   argentum help                    Show help
  */
 require("dotenv/config");
 const yaml_1 = require("yaml");
+const cli_launch_1 = require("./core/cli-launch");
 const config_1 = require("./core/config");
 const onboarding_1 = require("./core/onboarding");
 const plugin_loader_1 = require("./core/plugin-loader");
 const modelDiscovery_js_1 = require("./utils/modelDiscovery.js");
 const VERSION = '0.0.2';
+const PRIMARY_COMMAND = 'argentum';
+const LEGACY_COMMAND = 'agclaw';
+const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
+const LEGACY_WORKDIR_ENV = 'AGCLAW_WORKDIR';
+const SKIP_EXIT_PAUSE_ENV = 'ARGENTUM_SKIP_EXIT_PAUSE';
+const LEGACY_SKIP_EXIT_PAUSE_ENV = 'AGCLAW_SKIP_EXIT_PAUSE';
 const args = process.argv.slice(2);
-const command = args[0] || 'help';
+const launch = (0, cli_launch_1.resolveCliLaunch)(args, {
+    execPath: process.execPath,
+    isPackaged: Boolean(process.pkg),
+    platform: process.platform,
+});
+const command = launch.command;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function print(text) {
     process.stdout.write(`${text}\n`);
@@ -83,10 +95,22 @@ function banner() {
  ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
   ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
 
-     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
+     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
 }
 function getWorkDir() {
-    return process.env.AGCLAW_WORKDIR || process.cwd();
+    const configuredWorkDir = process.env[WORKDIR_ENV] || process.env[LEGACY_WORKDIR_ENV];
+    if (configuredWorkDir) {
+        return configuredWorkDir;
+    }
+    if (launch.command === 'launch') {
+        const argentumHome = path.join(homeDir(), '.argentum');
+        const legacyHome = path.join(homeDir(), '.ag-claw');
+        if (!fs.existsSync(argentumHome) && fs.existsSync(legacyHome)) {
+            return legacyHome;
+        }
+        return argentumHome;
+    }
+    return process.cwd();
 }
 function hasFlag(...flags) {
     return flags.some((flag) => args.includes(flag));
@@ -97,15 +121,20 @@ function getArgValue(flag) {
 }
 function getProjectConfigPath(workDir = getWorkDir()) {
     const yamlPath = path.join(workDir, 'config', 'default.yaml');
+    const argentumPath = path.join(workDir, 'argentum.json');
     const legacyPath = path.join(workDir, 'agclaw.json');
     if (fs.existsSync(yamlPath))
         return yamlPath;
+    if (fs.existsSync(argentumPath))
+        return argentumPath;
     if (fs.existsSync(legacyPath))
         return legacyPath;
     return yamlPath;
 }
 function projectConfigExists(workDir = getWorkDir()) {
-    return fs.existsSync(path.join(workDir, 'config', 'default.yaml')) || fs.existsSync(path.join(workDir, 'agclaw.json'));
+    return (fs.existsSync(path.join(workDir, 'config', 'default.yaml')) ||
+        fs.existsSync(path.join(workDir, 'argentum.json')) ||
+        fs.existsSync(path.join(workDir, 'agclaw.json')));
 }
 function resolveFeaturesDir() {
     const candidates = [
@@ -163,13 +192,13 @@ function parseNumberCsv(value) {
 function cmdHelp() {
     banner();
     print('  \x1b[1mUsage:\x1b[0m');
-    print('    agclaw <command> [options]');
+    print('    argentum <command> [options]');
     print('');
     print('  \x1b[1mCommands:\x1b[0m');
-    print('    init                  Initialize AG-Claw in current directory');
-    print('    gateway start         Start AG-Claw server (background)');
-    print('    gateway stop          Stop AG-Claw server');
-    print('    gateway restart       Restart AG-Claw server');
+    print('    init                  Initialize Argentum in current directory');
+    print('    gateway start         Start Argentum server (background)');
+    print('    gateway stop          Stop Argentum server');
+    print('    gateway restart       Restart Argentum server');
     print('    gateway status        Check if server is running');
     print('    gateway logs          View server logs');
     print('    status                Show system and feature status');
@@ -223,16 +252,16 @@ function cmdHelp() {
     print('    help                  Show this help');
     print('');
     print('  \x1b[1mExamples:\x1b[0m');
-    print('    agclaw init');
-    print('    agclaw start --port 3000');
-    print('    agclaw features');
-    print('    agclaw feature life-domains');
+    print('    argentum init');
+    print('    argentum start --port 3000');
+    print('    argentum features');
+    print('    argentum feature life-domains');
     print('');
 }
 function cmdACP() {
     const action = args[1];
     if (action !== 'run') {
-        error('Usage: agclaw acp run <code>');
+        error('Usage: argentum acp run <code>');
         return;
     }
     const code = args.slice(2).join(' ');
@@ -277,14 +306,14 @@ function cmdACP() {
     }
 }
 function cmdImage() {
-    // agclaw image "prompt" [--resolution 1K|2K|4K] [--edit input.png] [--output name.png]
+    // argentum image "prompt" [--resolution 1K|2K|4K] [--edit input.png] [--output name.png]
     const subArgs = args.slice(1);
     if (subArgs.length === 0 || subArgs[0] === 'help' || subArgs[0] === '--help' || subArgs[0] === '-h') {
         banner();
         print('  \x1b[1mImage Generation\x1b[0m');
         print('');
         print('  \x1b[1mUsage:\x1b[0m');
-        print('    agclaw image "prompt text" [options]');
+        print('    argentum image "prompt text" [options]');
         print('');
         print('  \x1b[1mOptions:\x1b[0m');
         print('    --resolution, -r   Resolution: 1K (default), 2K, 4K');
@@ -292,9 +321,9 @@ function cmdImage() {
         print('    --output, -o        Output filename (default: generated timestamped name)');
         print('');
         print('  \x1b[1mExamples:\x1b[0m');
-        print('    agclaw image "a sunset over mountains"');
-        print('    agclaw image "a cat" --resolution 2K --output cat.png');
-        print('    agclaw image "make it blue" --edit input.png --output result.png');
+        print('    argentum image "a sunset over mountains"');
+        print('    argentum image "a cat" --resolution 2K --output cat.png');
+        print('    argentum image "make it blue" --edit input.png --output result.png');
         print('');
         print('  \x1b[1mProviders:\x1b[0m');
         print('    Primary:   Gemini 3 Pro Image (gemini-3-pro-image)');
@@ -333,7 +362,7 @@ function cmdImage() {
     }
     const prompt = promptParts.join(' ');
     if (!prompt.trim()) {
-        error('Prompt cannot be empty. Use: agclaw image "your prompt"');
+        error('Prompt cannot be empty. Use: argentum image "your prompt"');
         return;
     }
     if (!outputFilename) {
@@ -355,7 +384,7 @@ function cmdImage() {
     const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
     if (!fsExistsSync(scriptPath)) {
         error(`Script not found: ${scriptPath}`);
-        error('Run "agclaw setup" or ensure the image-gen skill is installed.');
+        error('Run "argentum setup" or ensure the image-gen skill is installed.');
         return;
     }
     const scriptArgs = [
@@ -430,23 +459,49 @@ function cmdImage() {
     });
 }
 function cmdVersion() {
-    print(`AG CLAW v${VERSION}`);
+    print(`ARGENTUM v${VERSION}`);
     print(`Node.js ${process.version}`);
     print(`Platform: ${process.platform} ${process.arch}`);
+}
+async function cmdLaunch() {
+    const workDir = getWorkDir();
+    if (!projectConfigExists(workDir)) {
+        if (!process.stdin.isTTY || !process.stdout.isTTY) {
+            banner();
+            info('No Argentum configuration found.');
+            info(`Setup workspace: ${workDir}`);
+            info(`Run "${PRIMARY_COMMAND} onboard" from a terminal, or double-click argentum.exe to use the interactive setup wizard.`);
+            process.exitCode = 1;
+            return;
+        }
+        banner();
+        info('No Argentum configuration found. Starting first-run setup.');
+        info(`Setup workspace: ${workDir}`);
+        print('');
+        await cmdOnboard();
+        return;
+    }
+    banner();
+    success('Argentum is configured.');
+    info(`Workspace: ${workDir}`);
+    info(`Use "${PRIMARY_COMMAND} gateway start" to start the server.`);
+    info(`Use "${PRIMARY_COMMAND} help" to see all commands.`);
+    print('');
+    await cmdDoctor();
 }
 function cmdInit() {
     const workDir = getWorkDir();
     const configPath = path.join(workDir, 'config', 'default.yaml');
     const dataDir = path.join(workDir, 'data');
     banner();
-    info('Initializing AG CLAW...');
+    info('Initializing ARGENTUM...');
     if (fs.existsSync(configPath)) {
         warn('config/default.yaml already exists, skipping');
     }
     else {
         const defaultConfig = {
             $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
-            name: 'My AG CLAW Instance',
+            name: 'My ARGENTUM Instance',
             version: '0.0.2',
             server: {
                 port: 3000,
@@ -479,7 +534,7 @@ function cmdInit() {
     const envPath = path.join(workDir, '.env.example');
     if (!fs.existsSync(envPath)) {
         fs.writeFileSync(envPath, [
-            '# AG-Claw Environment Variables',
+            '# Argentum Environment Variables',
             'AGCLAW_WORKDIR=.',
             'AGCLAW_PORT=3000',
             'AGCLAW_MASTER_KEY=',
@@ -490,8 +545,8 @@ function cmdInit() {
         ].join('\n'));
         success('Created .env.example');
     }
-    success('AG CLAW initialized!');
-    info('Next: agclaw start --port 3000');
+    success('ARGENTUM initialized!');
+    info('Next: argentum start --port 3000');
 }
 async function cmdStart() {
     const portIdx = args.indexOf('--port');
@@ -500,7 +555,7 @@ async function cmdStart() {
     // First-run check: if no config exists, prompt to onboard
     if (!projectConfigExists(workDir)) {
         banner();
-        print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+        print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.');
         print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
         print('');
         const readline = require('readline');
@@ -513,16 +568,17 @@ async function cmdStart() {
         }
         else {
             print('');
-            info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+            info('Run \x1b[1margentum onboard\x1b[0m manually when ready.');
         }
         return;
     }
     // First-run check: if no config exists, prompt to onboard
     const configPath = path.join(process.cwd(), 'config', 'default.yaml');
+    const argentumConfigPath = path.join(process.cwd(), 'argentum.json');
     const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
-    if (!fs.existsSync(configPath) && !fs.existsSync(legacyConfigPath)) {
+    if (!fs.existsSync(configPath) && !fs.existsSync(argentumConfigPath) && !fs.existsSync(legacyConfigPath)) {
         banner();
-        print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1magclaw onboard\x1b[0m first to set up your instance.');
+        print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.');
         print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
         print('');
         const readline = require('readline');
@@ -535,12 +591,12 @@ async function cmdStart() {
         }
         else {
             print('');
-            info('Run \x1b[1magclaw onboard\x1b[0m manually when ready.');
+            info('Run \x1b[1margentum onboard\x1b[0m manually when ready.');
         }
         return;
     }
     banner();
-    info(`Starting AG CLAW server on port ${port}...`);
+    info(`Starting ARGENTUM server on port ${port}...`);
     try {
         const configManager = new config_1.ConfigManager(getProjectConfigPath(workDir));
         const config = configManager.get();
@@ -655,7 +711,7 @@ function cmdFeatures() {
 function cmdFeature() {
     const name = args[1];
     if (!name) {
-        error('Usage: agclaw feature <name>');
+        error('Usage: argentum feature <name>');
         return;
     }
     const featuresDir = resolveFeaturesDir();
@@ -691,7 +747,7 @@ function cmdConfig() {
     const workDir = getWorkDir();
     const configPath = getProjectConfigPath(workDir);
     if (!fs.existsSync(configPath)) {
-        error('AG CLAW not initialized. Run: agclaw init');
+        error('ARGENTUM not initialized. Run: argentum init');
         return;
     }
     const config = readProjectConfig(configPath);
@@ -746,7 +802,7 @@ async function cmdDoctor() {
         {
             name: 'config/default.yaml exists',
             check: () => projectConfigExists(),
-            fix: 'Run: agclaw onboard --yes',
+            fix: 'Run: argentum onboard --yes',
         },
         {
             name: 'configuration validates',
@@ -759,12 +815,12 @@ async function cmdDoctor() {
                     return false;
                 }
             },
-            fix: 'Review config/default.yaml or run: agclaw onboard --yes --force',
+            fix: 'Review config/default.yaml or run: argentum onboard --yes --force',
         },
         {
             name: 'data/ directory exists',
             check: () => fs.existsSync(path.join(getWorkDir(), 'data')),
-            fix: 'Run: agclaw init (creates data/)',
+            fix: 'Run: argentum init (creates data/)',
         },
         {
             name: 'Features compiled',
@@ -815,7 +871,7 @@ async function cmdConnect() {
     print('    • GitHub (webhooks, issues)');
     print('');
     info('Configure via environment variables or config/default.yaml [integrations] section');
-    info('Example: agclaw config integrations.telegram.botToken <token>');
+    info('Example: argentum config integrations.telegram.botToken <token>');
 }
 async function cmdAgents() {
     banner();
@@ -823,7 +879,7 @@ async function cmdAgents() {
     print('');
     // Could list registered agents from multi-agent-coordination feature
     success('Agent management available via multi-agent-coordination feature');
-    info('Use: agclaw feature multi-agent-coordination agents');
+    info('Use: argentum feature multi-agent-coordination agents');
 }
 async function cmdTools() {
     banner();
@@ -917,7 +973,7 @@ async function cmdSessions() {
                 .prepare("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT 20")
                 .all();
             if (sessions.length === 0) {
-                info('No sessions yet. Create one with: agclaw session create');
+                info('No sessions yet. Create one with: argentum session create');
                 db.close();
                 return;
             }
@@ -953,7 +1009,7 @@ async function cmdSessions() {
         case 'view': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw session show <id>');
+                error('Usage: argentum session show <id>');
                 return;
             }
             banner();
@@ -993,7 +1049,7 @@ async function cmdSessions() {
         case 'rm': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw session delete <id>');
+                error('Usage: argentum session delete <id>');
                 return;
             }
             const db = getDb();
@@ -1013,7 +1069,7 @@ async function cmdSessions() {
         case 'archive': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw session archive <id>');
+                error('Usage: argentum session archive <id>');
                 return;
             }
             const db = getDb();
@@ -1033,7 +1089,7 @@ async function cmdSessions() {
         case 'search': {
             const query = args.slice(2).join(' ');
             if (!query) {
-                error('Usage: agclaw session search <query>');
+                error('Usage: argentum session search <query>');
                 return;
             }
             banner();
@@ -1082,7 +1138,7 @@ async function cmdSessions() {
         case 'export': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw session export <id>');
+                error('Usage: argentum session export <id>');
                 return;
             }
             const db = getDb();
@@ -1122,7 +1178,7 @@ async function cmdSessions() {
         }
         default:
             error(`Unknown session command: ${subcommand}`);
-            print('  agclaw session [list|create|show|delete|archive|search|export|stats]');
+            print('  argentum session [list|create|show|delete|archive|search|export|stats]');
     }
 }
 function formatAgo(timestamp) {
@@ -1141,7 +1197,7 @@ function formatAgo(timestamp) {
 async function cmdWatch() {
     const target = args[1];
     if (!target) {
-        error('Usage: agclaw watch <path> [--pattern "*.ts"]');
+        error('Usage: argentum watch <path> [--pattern "*.ts"]');
         return;
     }
     banner();
@@ -1150,7 +1206,7 @@ async function cmdWatch() {
     // For now, just show a message
     print('');
     warn('File watcher requires file-watcher feature to be enabled');
-    info('Enable it in config and restart AG CLAW server');
+    info('Enable it in config and restart ARGENTUM server');
 }
 async function cmdGateway() {
     const subcommand = args[1] || 'status';
@@ -1196,7 +1252,7 @@ async function cmdGateway() {
             const port = args.includes('--port')
                 ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
                 : 3000;
-            info(`Starting AG-Claw gateway on port ${port}...`);
+            info(`Starting Argentum gateway on port ${port}...`);
             // Spawn gateway as background process
             const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
             const gatewayPath = path.join(__dirname, 'cli.js');
@@ -1215,7 +1271,7 @@ async function cmdGateway() {
             fs.writeFileSync(pidFile, String(child.pid));
             success(`Gateway started (PID: ${child.pid})`);
             info(`Log: ${path.join(workDir, 'data', 'gateway.log')}`);
-            info(`Stop: agclaw gateway stop`);
+            info(`Stop: argentum gateway stop`);
             break;
         }
         case 'stop': {
@@ -1251,7 +1307,7 @@ async function cmdGateway() {
             const port = args.includes('--port')
                 ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
                 : 3000;
-            info(`Restarting AG-Claw gateway on port ${port}...`);
+            info(`Restarting Argentum gateway on port ${port}...`);
             const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
             const gatewayPath = path.join(__dirname, 'cli.js');
             const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
@@ -1283,7 +1339,7 @@ async function cmdGateway() {
         }
         default:
             error(`Unknown gateway command: ${subcommand}`);
-            print('Usage: agclaw gateway [status|start|stop|restart|logs]');
+            print('Usage: argentum gateway [status|start|stop|restart|logs]');
     }
 }
 async function cmdPlugins() {
@@ -1329,7 +1385,9 @@ async function cmdBackup() {
             // Backup config
             const configPath = getProjectConfigPath(workDir);
             if (fs.existsSync(configPath)) {
-                const targetName = configPath.endsWith('.json') ? 'agclaw.json' : path.join('config', 'default.yaml');
+                const targetName = configPath.endsWith('.json')
+                    ? path.basename(configPath)
+                    : path.join('config', 'default.yaml');
                 const targetPath = path.join(backupPath, targetName);
                 fs.mkdirSync(path.dirname(targetPath), { recursive: true });
                 fs.copyFileSync(configPath, targetPath);
@@ -1393,7 +1451,7 @@ async function cmdBackup() {
         case 'restore': {
             const name = args[2];
             if (!name) {
-                error('Usage: agclaw backup restore <backup-name>');
+                error('Usage: argentum backup restore <backup-name>');
                 return;
             }
             const backupPath = path.join(backupDir, name);
@@ -1405,7 +1463,8 @@ async function cmdBackup() {
             info(`Restoring from: ${name}`);
             // Restore config
             const yamlConfigBackup = path.join(backupPath, 'config', 'default.yaml');
-            const jsonConfigBackup = path.join(backupPath, 'agclaw.json');
+            const jsonConfigBackup = path.join(backupPath, 'argentum.json');
+            const legacyJsonConfigBackup = path.join(backupPath, 'agclaw.json');
             if (fs.existsSync(yamlConfigBackup)) {
                 const restorePath = path.join(workDir, 'config', 'default.yaml');
                 fs.mkdirSync(path.dirname(restorePath), { recursive: true });
@@ -1413,7 +1472,11 @@ async function cmdBackup() {
                 print('  ✓ config/default.yaml');
             }
             else if (fs.existsSync(jsonConfigBackup)) {
-                fs.copyFileSync(jsonConfigBackup, path.join(workDir, 'agclaw.json'));
+                fs.copyFileSync(jsonConfigBackup, path.join(workDir, 'argentum.json'));
+                print('  ✓ argentum.json');
+            }
+            else if (fs.existsSync(legacyJsonConfigBackup)) {
+                fs.copyFileSync(legacyJsonConfigBackup, path.join(workDir, 'agclaw.json'));
                 print('  ✓ agclaw.json');
             }
             // Restore .env
@@ -1433,12 +1496,12 @@ async function cmdBackup() {
                 }
             }
             success('Restore complete');
-            info('Restart gateway: agclaw gateway restart');
+            info('Restart gateway: argentum gateway restart');
             break;
         }
         default:
             error(`Unknown backup command: ${subcommand}`);
-            print('  agclaw backup [create|list|restore]');
+            print('  argentum backup [create|list|restore]');
     }
 }
 async function cmdMemory() {
@@ -1454,7 +1517,7 @@ async function cmdMemory() {
         case 'search': {
             const query = args.slice(2).join(' ');
             if (!query) {
-                error('Usage: agclaw memory search <query>');
+                error('Usage: argentum memory search <query>');
                 db.close();
                 return;
             }
@@ -1526,7 +1589,7 @@ async function cmdMemory() {
         }
         default:
             error(`Unknown memory command: ${subcommand}`);
-            print('  agclaw memory [search|list|export]');
+            print('  argentum memory [search|list|export]');
             db.close();
     }
 }
@@ -1596,14 +1659,14 @@ async function cmdCron() {
             jobs.push(newJob);
             fs.writeFileSync(dbPath, JSON.stringify(jobs, null, 2));
             success(`Job created: ${id}`);
-            print(`  Run: agclaw cron run ${id}`);
+            print(`  Run: argentum cron run ${id}`);
             rl.close();
             break;
         }
         case 'run': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw cron run <id>');
+                error('Usage: argentum cron run <id>');
                 return;
             }
             if (!fs.existsSync(dbPath)) {
@@ -1629,7 +1692,7 @@ async function cmdCron() {
         case 'disable': {
             const id = args[2];
             if (!id) {
-                error(`Usage: agclaw cron ${subcommand} <id>`);
+                error(`Usage: argentum cron ${subcommand} <id>`);
                 return;
             }
             if (!fs.existsSync(dbPath)) {
@@ -1651,7 +1714,7 @@ async function cmdCron() {
         case 'rm': {
             const id = args[2];
             if (!id) {
-                error('Usage: agclaw cron remove <id>');
+                error('Usage: argentum cron remove <id>');
                 return;
             }
             const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
@@ -1666,14 +1729,14 @@ async function cmdCron() {
         }
         default:
             error(`Unknown cron command: ${subcommand}`);
-            print('  agclaw cron [list|add|run|enable|disable|remove]');
+            print('  argentum cron [list|add|run|enable|disable|remove]');
     }
 }
 async function cmdStatus() {
     const workDir = getWorkDir();
     const configPath = getProjectConfigPath(workDir);
     banner();
-    print('  \x1b[1mAG-Claw Status\x1b[0m');
+    print('  \x1b[1mArgentum Status\x1b[0m');
     print('');
     print(`  \x1b[1mVersion:\x1b[0m v${VERSION}`);
     print(`  \x1b[1mConfig:\x1b[0m ${configPath}`);
@@ -1804,7 +1867,7 @@ async function cmdBudget() {
             const amountStr = args[2];
             const limitType = (args[3] || 'monthly').toLowerCase();
             if (!amountStr) {
-                error('Usage: agclaw budget set-limit <amount> [monthly|daily|per-agent]');
+                error('Usage: argentum budget set-limit <amount> [monthly|daily|per-agent]');
                 return;
             }
             const amount = parseFloat(amountStr);
@@ -1956,15 +2019,15 @@ async function cmdBudget() {
             }
             print('');
             print('  \x1b[1mQuick commands:\x1b[0m');
-            print('    \x1b[36magclaw budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50');
-            print('    \x1b[36magclaw budget set-limit 5 daily\x1b[0m      Set daily limit to $5');
-            print('    \x1b[36magclaw budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20');
+            print('    \x1b[36margentum budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50');
+            print('    \x1b[36margentum budget set-limit 5 daily\x1b[0m      Set daily limit to $5');
+            print('    \x1b[36margentum budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20');
             print('');
             break;
         }
         default:
             error(`Unknown budget command: ${subcommand}`);
-            print('  agclaw budget [status|set-limit|history|reset|config]');
+            print('  argentum budget [status|set-limit|history|reset|config]');
     }
 }
 async function cmdOnboard() {
@@ -1995,7 +2058,7 @@ async function cmdOnboard() {
         info(`Data: ${path.join(getWorkDir(), 'data')}`);
         for (const warning of profile.warnings)
             warn(warning);
-        info('Next: agclaw doctor');
+        info('Next: argentum doctor');
         return;
     }
     const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } = await Promise.resolve().then(() => __importStar(require('@clack/prompts')));
@@ -2007,15 +2070,15 @@ async function cmdOnboard() {
  ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
   ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
 
-     AG-Claw  |  Modular AI Agent Framework  |  v${VERSION}`);
-    log.step('Welcome! This wizard will set up your AG-Claw instance.');
+     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
+    log.step('Welcome! This wizard will set up your Argentum instance.');
     log.info('Press Ctrl+C at any time to cancel.');
     const config = (0, onboarding_1.createOnboardingProfile)().config;
     const envEntries = {};
     // Step 1: Instance name
     const nameVal = await text({
         message: 'Instance name:',
-        initialValue: 'My AG-Claw',
+        initialValue: 'My Argentum',
     });
     if (typeof nameVal === 'string' && nameVal.trim())
         config.name = nameVal.trim();
@@ -2136,7 +2199,7 @@ async function cmdOnboard() {
             base_url: 'https://openrouter.ai/api/v1',
             api_key_env: 'OPENROUTER_API_KEY',
             api: 'openai',
-            headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'AG-Claw' },
+            headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'Argentum' },
         },
         {
             value: 'google',
@@ -2414,11 +2477,11 @@ async function cmdOnboard() {
   Setup complete!
 
   Next steps:
-    agclaw gateway start --port ${config.server.port}
-    agclaw status
-    agclaw skill search <query>
+    argentum gateway start --port ${config.server.port}
+    argentum status
+    argentum skill search <query>
 
-  Thank you for choosing AG-Claw!
+  Thank you for choosing Argentum!
 `);
 }
 async function cmdSkill() {
@@ -2453,7 +2516,7 @@ async function cmdSkill() {
         case 'search': {
             const query = args.slice(2).join(' ');
             if (!query) {
-                error('Usage: agclaw skill search <query>');
+                error('Usage: argentum skill search <query>');
                 return;
             }
             banner();
@@ -2467,7 +2530,7 @@ async function cmdSkill() {
         case 'add': {
             const slug = args[2];
             if (!slug) {
-                error('Usage: agclaw skill install <skill-slug>');
+                error('Usage: argentum skill install <skill-slug>');
                 return;
             }
             banner();
@@ -2485,7 +2548,7 @@ async function cmdSkill() {
         case 'rm': {
             const slug = args[2];
             if (!slug) {
-                error('Usage: agclaw skill uninstall <skill-slug>');
+                error('Usage: argentum skill uninstall <skill-slug>');
                 return;
             }
             banner();
@@ -2520,7 +2583,7 @@ async function cmdSkill() {
         case 'inspect': {
             const slug = args[2];
             if (!slug) {
-                error('Usage: agclaw skill info <skill-slug>');
+                error('Usage: argentum skill info <skill-slug>');
                 return;
             }
             banner();
@@ -2541,7 +2604,7 @@ async function cmdSkill() {
         case 'star': {
             const slug = args[2];
             if (!slug) {
-                error('Usage: agclaw skill star <skill-slug>');
+                error('Usage: argentum skill star <skill-slug>');
                 return;
             }
             runClawhub(['star', slug]);
@@ -2551,7 +2614,7 @@ async function cmdSkill() {
         case 'unstar': {
             const slug = args[2];
             if (!slug) {
-                error('Usage: agclaw skill unstar <skill-slug>');
+                error('Usage: argentum skill unstar <skill-slug>');
                 return;
             }
             runClawhub(['unstar', slug]);
@@ -2596,8 +2659,8 @@ async function cmdSkill() {
                 }
                 print(`  Total: ${skills.length} skills`);
                 print('');
-                info('Use: agclaw skill skill-view <name>  (Level 1 - full content)');
-                info('Use: agclaw skill skill-view <name> <ref-path>  (Level 2 - specific file)');
+                info('Use: argentum skill skill-view <name>  (Level 1 - full content)');
+                info('Use: argentum skill skill-view <name> <ref-path>  (Level 2 - specific file)');
             }
             catch (err) {
                 error(`Failed to load skills: ${err.message}`);
@@ -2612,7 +2675,7 @@ async function cmdSkill() {
             const skillName = args[2];
             const refPath = args[3];
             if (!skillName) {
-                error('Usage: agclaw skill skill-view <name> [ref-path]');
+                error('Usage: argentum skill skill-view <name> [ref-path]');
                 return;
             }
             banner();
@@ -2667,7 +2730,7 @@ async function cmdSkill() {
                     }
                     if (skill.references.length) {
                         print(`\x1b[1mReferences:\x1b[0m ${skill.references.join(', ')}`);
-                        info('Use: agclaw skill skill-view <name> <ref-path>  (Level 2)');
+                        info('Use: argentum skill skill-view <name> <ref-path>  (Level 2)');
                     }
                     print('');
                     print('\x1b[1m=== Full Content ===\x1b[0m');
@@ -2689,11 +2752,11 @@ async function cmdSkill() {
             info('Skills Hub (agentskills.io compatible)');
             print('');
             if (!query) {
-                info('Usage: agclaw skill skills-hub <search-query>');
+                info('Usage: argentum skill skills-hub <search-query>');
                 info('This feature queries agentskills.io registry (future)');
                 print('');
-                print('For now, use: agclaw skill explore  (browse ClawHub)');
-                print('           agclaw skill search <q>  (search ClawHub)');
+                print('For now, use: argentum skill explore  (browse ClawHub)');
+                print('           argentum skill search <q>  (search ClawHub)');
             }
             else {
                 info(`Searching hub for: ${query}`);
@@ -2720,7 +2783,7 @@ async function cmdSkill() {
             if (!fs.existsSync(skillPath)) {
                 error(`Unknown command or skill: ${skillName}`);
                 print('');
-                print('  agclaw skill [list|search|install|uninstall|update|explore|info|publish|star|sync]');
+                print('  argentum skill [list|search|install|uninstall|update|explore|info|publish|star|sync]');
                 return;
             }
             const scriptName = args[2];
@@ -2894,7 +2957,7 @@ async function cmdSecurity() {
                 const priority = parseInt(getArg('priority') || '0', 10);
                 const requiresApproval = args.includes('--requires-approval');
                 if (!name || !effect || !resource) {
-                    error('Usage: agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern> [--action <action>] [--priority <n>] [--requires-approval]');
+                    error('Usage: argentum security policies add --name <name> --effect <allow|deny|approve> --resource <pattern> [--action <action>] [--priority <n>] [--requires-approval]');
                     return;
                 }
                 const policy = policyEngine.addPolicy({
@@ -2914,7 +2977,7 @@ async function cmdSecurity() {
             if (policySubcommand === 'remove' || policySubcommand === 'rm') {
                 const policyId = args[3];
                 if (!policyId) {
-                    error('Usage: agclaw security policies remove <policy-id>');
+                    error('Usage: argentum security policies remove <policy-id>');
                     return;
                 }
                 const ok = policyEngine.removePolicy(policyId);
@@ -2927,7 +2990,7 @@ async function cmdSecurity() {
             if (policySubcommand === 'enable') {
                 const policyId = args[3];
                 if (!policyId) {
-                    error('Usage: agclaw security policies enable <policy-id>');
+                    error('Usage: argentum security policies enable <policy-id>');
                     return;
                 }
                 const ok = policyEngine.setPolicyEnabled(policyId, true);
@@ -2940,7 +3003,7 @@ async function cmdSecurity() {
             if (policySubcommand === 'disable') {
                 const policyId = args[3];
                 if (!policyId) {
-                    error('Usage: agclaw security policies disable <policy-id>');
+                    error('Usage: argentum security policies disable <policy-id>');
                     return;
                 }
                 const ok = policyEngine.setPolicyEnabled(policyId, false);
@@ -2951,11 +3014,11 @@ async function cmdSecurity() {
                 break;
             }
             info('Policy commands:');
-            print('  agclaw security policies list');
-            print('  agclaw security policies add --name <name> --effect <allow|deny|approve> --resource <pattern>');
-            print('  agclaw security policies remove <id>');
-            print('  agclaw security policies enable <id>');
-            print('  agclaw security policies disable <id>');
+            print('  argentum security policies list');
+            print('  argentum security policies add --name <name> --effect <allow|deny|approve> --resource <pattern>');
+            print('  argentum security policies remove <id>');
+            print('  argentum security policies enable <id>');
+            print('  argentum security policies disable <id>');
             break;
         }
         case 'approvals':
@@ -2976,7 +3039,7 @@ async function cmdSecurity() {
             if (approvalSubcommand === 'show') {
                 const approvalId = args[3];
                 if (!approvalId) {
-                    error('Usage: agclaw security approval show <id>');
+                    error('Usage: argentum security approval show <id>');
                     return;
                 }
                 const approval = policyEngine.getApproval(approvalId);
@@ -2990,7 +3053,7 @@ async function cmdSecurity() {
             if (approvalSubcommand === 'approve') {
                 const approvalId = args[3];
                 if (!approvalId) {
-                    error('Usage: agclaw security approve <id>');
+                    error('Usage: argentum security approve <id>');
                     return;
                 }
                 const userId = 'cli-user';
@@ -3004,7 +3067,7 @@ async function cmdSecurity() {
             if (approvalSubcommand === 'deny') {
                 const approvalId = args[3];
                 if (!approvalId) {
-                    error('Usage: agclaw security deny <id>');
+                    error('Usage: argentum security deny <id>');
                     return;
                 }
                 const userId = 'cli-user';
@@ -3016,10 +3079,10 @@ async function cmdSecurity() {
                 break;
             }
             info('Approval commands:');
-            print('  agclaw security approvals list');
-            print('  agclaw security approval show <id>');
-            print('  agclaw security approve <id>');
-            print('  agclaw security deny <id>');
+            print('  argentum security approvals list');
+            print('  argentum security approval show <id>');
+            print('  argentum security approve <id>');
+            print('  argentum security deny <id>');
             break;
         }
         case 'audit':
@@ -3096,8 +3159,8 @@ async function cmdSecurity() {
                 break;
             }
             info('Credential commands:');
-            print('  agclaw security credentials list');
-            print('  agclaw security credentials rotate [id]');
+            print('  argentum security credentials list');
+            print('  argentum security credentials rotate [id]');
             break;
         }
         case 'sandbox': {
@@ -3161,32 +3224,32 @@ async function cmdSecurity() {
                     print(content);
                 }
                 else {
-                    info('No blueprint found. Create with: agclaw security blueprint init');
+                    info('No blueprint found. Create with: argentum security blueprint init');
                 }
                 break;
             }
             info('Blueprint commands:');
-            print('  agclaw security blueprint init   Create default blueprint');
-            print('  agclaw security blueprint show  Show current blueprint');
+            print('  argentum security blueprint init   Create default blueprint');
+            print('  argentum security blueprint show  Show current blueprint');
             break;
         }
         case 'help':
         default: {
             banner();
-            info('AG-Claw Security Commands:');
+            info('Argentum Security Commands:');
             print('');
-            print('  \x1b[1magclaw security status\x1b[0m                Show security overview');
-            print('  \x1b[1magclaw security policies\x1b[0m [list|add|remove|enable|disable]');
-            print('  \x1b[1magclaw security approvals\x1b[0m [list|show|approve|deny]');
-            print('  \x1b[1magclaw security audit\x1b[0m [--since <date>] [--actor <id>] [--limit <n>]');
-            print('  \x1b[1magclaw security credentials\x1b[0m [list|rotate]');
-            print('  \x1b[1magclaw security sandbox\x1b[0m                   Show sandbox config');
-            print('  \x1b[1magclaw security blueprint\x1b[0m [init|show]');
+            print('  \x1b[1margentum security status\x1b[0m                Show security overview');
+            print('  \x1b[1margentum security policies\x1b[0m [list|add|remove|enable|disable]');
+            print('  \x1b[1margentum security approvals\x1b[0m [list|show|approve|deny]');
+            print('  \x1b[1margentum security audit\x1b[0m [--since <date>] [--actor <id>] [--limit <n>]');
+            print('  \x1b[1margentum security credentials\x1b[0m [list|rotate]');
+            print('  \x1b[1margentum security sandbox\x1b[0m                   Show sandbox config');
+            print('  \x1b[1margentum security blueprint\x1b[0m [init|show]');
             print('');
             print('  \x1b[1mExamples:\x1b[0m');
-            print('    agclaw security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read');
-            print('    agclaw security approve abc-123         Approve request');
-            print('    agclaw security deny def-456          Deny request');
+            print('    argentum security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read');
+            print('    argentum security approve abc-123         Approve request');
+            print('    argentum security deny def-456          Deny request');
             print('');
             break;
         }
@@ -3226,14 +3289,14 @@ async function cmdTelegram() {
             print('');
             const configPath = getProjectConfigPath();
             if (!projectConfigExists()) {
-                error('AG-Claw not initialized. Run: agclaw init');
+                error('Argentum not initialized. Run: argentum init');
                 return;
             }
             const config = readProjectConfig(configPath);
             const tg = config.channels?.telegram;
             if (!tg) {
                 warn('Telegram not configured');
-                info('Run: agclaw onboard');
+                info('Run: argentum onboard');
                 return;
             }
             print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
@@ -3261,7 +3324,7 @@ async function cmdTelegram() {
         case 'allow': {
             const userId = args[2];
             if (!userId) {
-                error('Usage: agclaw telegram allow tg:USER_ID');
+                error('Usage: argentum telegram allow tg:USER_ID');
                 return;
             }
             info(`Adding ${userId} to allowed users`);
@@ -3286,7 +3349,7 @@ async function cmdTelegram() {
         }
         default:
             error(`Unknown telegram command: ${subcommand}`);
-            print('Usage: agclaw telegram [status|pair|allow|config]');
+            print('Usage: argentum telegram [status|pair|allow|config]');
     }
 }
 // ─── Self-Improving Loop ──────────────────────────────────────────────────────
@@ -3337,10 +3400,10 @@ async function cmdImprove() {
         print(`  maxSkills:      ${cfg.maxSkillsPerRun} per run`);
         print('');
         print('  \x1b[1mUsage:\x1b[0m');
-        print('    agclaw improve              Run full loop');
-        print('    agclaw improve --phase skill  Run specific phase');
-        print('    agclaw improve --dry-run     Preview changes');
-        print('    agclaw improve --force       Force run');
+        print('    argentum improve              Run full loop');
+        print('    argentum improve --phase skill  Run specific phase');
+        print('    argentum improve --dry-run     Preview changes');
+        print('    argentum improve --force       Force run');
         return;
     }
     info(`Running self-improving loop (phase: ${phase})...`);
@@ -3457,7 +3520,7 @@ async function cmdLearnings() {
         print('  • Errors occur during task execution');
         print('  • Patterns are identified across sessions');
         print('');
-        print('  Run \x1b[1magclaw improve\x1b[0m to trigger a self-improvement cycle.');
+        print('  Run \x1b[1margentum improve\x1b[0m to trigger a self-improvement cycle.');
         return;
     }
     const byCategory = {};
@@ -3500,9 +3563,9 @@ async function cmdLearnings() {
     }
     print('');
     print('  \x1b[1mFilters:\x1b[0m');
-    print('    agclaw learnings --category mistake    Show only mistakes');
-    print('    agclaw learnings --limit 5             Show only 5 lessons');
-    print('    agclaw learnings --verbose             Show tags');
+    print('    argentum learnings --category mistake    Show only mistakes');
+    print('    argentum learnings --limit 5             Show only 5 lessons');
+    print('    argentum learnings --verbose             Show tags');
 }
 async function cmdTrajectory() {
     banner();
@@ -3525,7 +3588,7 @@ async function cmdTrajectory() {
             }
         }
         else {
-            print('  Feature not found. Run "agclaw init" to set up.');
+            print('  Feature not found. Run "argentum init" to set up.');
         }
     }
     catch (err) {
@@ -3553,7 +3616,7 @@ async function cmdOrg() {
             }
         }
         else {
-            print('  Feature not found. Run "agclaw init" to set up.');
+            print('  Feature not found. Run "argentum init" to set up.');
         }
     }
     catch (err) {
@@ -3608,6 +3671,9 @@ function formatAge(timestamp) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
     switch (command) {
+        case 'launch':
+            await cmdLaunch();
+            break;
         case 'help':
         case '--help':
         case '-h':
@@ -3726,11 +3792,32 @@ async function main() {
             break;
         default:
             error(`Unknown command: ${command}`);
-            print('Run "agclaw help" for usage information');
+            print('Run "argentum help" for usage information');
             process.exit(1);
     }
 }
-main().catch((err) => {
+async function pauseBeforeExitIfNeeded() {
+    if (!launch.pauseOnExit ||
+        process.env[SKIP_EXIT_PAUSE_ENV] === '1' ||
+        process.env[LEGACY_SKIP_EXIT_PAUSE_ENV] === '1') {
+        return;
+    }
+    if (!process.stdin.isTTY || !process.stdout.isTTY)
+        return;
+    print('');
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    await new Promise((resolve) => {
+        rl.question('Press Enter to close Argentum...', () => {
+            rl.close();
+            resolve();
+        });
+    });
+}
+main()
+    .then(pauseBeforeExitIfNeeded)
+    .catch(async (err) => {
     error(err.message);
-    process.exit(1);
+    process.exitCode = 1;
+    await pauseBeforeExitIfNeeded();
 });

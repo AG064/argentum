@@ -1,5 +1,5 @@
 /**
- * AG-Claw Structured Logger
+ * Argentum Structured Logger
  *
  * Pino-based logging with contextual metadata, log levels, and multiple transports.
  * Supports JSON output for production and pretty-print for development.
@@ -23,7 +23,7 @@ export interface LoggerConfig {
     context?: LogContext;
 }
 /**
- * Structured logger wrapping Pino with AG-Claw conventions.
+ * Structured logger wrapping Pino with Argentum conventions.
  *
  * Each feature and channel gets its own child logger with persistent context.
  *

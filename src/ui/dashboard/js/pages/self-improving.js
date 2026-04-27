@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Self-Improving Page
+ * Argentum Dashboard - Self-Improving Page
  */
 
 async function loadSelfImprovingData() {

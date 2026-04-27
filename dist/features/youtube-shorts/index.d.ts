@@ -1,5 +1,5 @@
 /**
- * AG-Claw YouTube Shorts Generator
+ * Argentum YouTube Shorts Generator
  *
  * Takes a YouTube URL, downloads video, finds best moments,
  * cuts into vertical shorts with captions, and optionally

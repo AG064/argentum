@@ -1,5 +1,5 @@
 /**
- * Telegram Channel for AG-Claw
+ * Telegram Channel for Argentum
  *
  * Full grammY-based Telegram bot with:
  * - Text and voice message handling

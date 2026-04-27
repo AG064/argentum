@@ -16,7 +16,7 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AG-Claw Chat</title>
+<title>Argentum Chat</title>
 <style>
   :root {
     --bg: #ffffff; --bg-secondary: #f5f5f5; --text: #1a1a1a;
@@ -93,7 +93,7 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <h1>AG-Claw Chat</h1>
+  <h1>Argentum Chat</h1>
   <div class="header-controls">
     <button onclick="toggleTheme()" id="themeBtn">Dark</button>
     <button onclick="clearHistory()">Clear</button>
@@ -101,7 +101,7 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 </div>
 <div class="messages" id="messages"></div>
 <div class="typing-indicator" id="typingIndicator">
-  <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span> AG-Claw is typing
+  <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span> Argentum is typing
 </div>
 <div class="input-area">
   <div class="drop-zone" id="dropZone">
@@ -208,7 +208,7 @@ function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const auth = token ? '&token=' + encodeURIComponent(token) : '';
   ws = new WebSocket(proto + '://' + location.host + '/ws?room=' + encodeURIComponent(roomId) + '&user=' + encodeURIComponent(userId) + auth);
-  ws.onopen = () => addMessage('system', 'Connected to AG-Claw');
+  ws.onopen = () => addMessage('system', 'Connected to Argentum');
   ws.onclose = () => { addMessage('system', 'Disconnected. Reconnecting...'); setTimeout(connect, 3000); };
   ws.onmessage = (e) => {
     const data = JSON.parse(e.data);

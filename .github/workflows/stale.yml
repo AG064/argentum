@@ -100,7 +100,7 @@ jobs:
             If you believe this was closed in error or you want to revive the discussion,
             please feel free to reopen it with a comment.
 
-            Thanks for understanding! The AG-Claw team
+            Thanks for understanding! The Argentum team
           days-before-stale: 0
           days-before-close: 0
           debug-only: ${{ github.event.inputs.operation == 'dry-run' }}

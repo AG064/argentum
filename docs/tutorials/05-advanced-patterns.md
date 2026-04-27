@@ -2,13 +2,13 @@
 
 *Estimated time: 35 minutes*
 
-This tutorial covers advanced AG-Claw patterns: multi-agent coordination, mesh workflows, task orchestration, and scaling for high-volume deployments.
+This tutorial covers advanced Argentum patterns: multi-agent coordination, mesh workflows, task orchestration, and scaling for high-volume deployments.
 
 ---
 
 ## Multi-Agent Coordination
 
-AG-Claw supports running multiple specialized agents that work together. This is useful for complex tasks that benefit from focused expertise.
+Argentum supports running multiple specialized agents that work together. This is useful for complex tasks that benefit from focused expertise.
 
 ### Architecture
 
@@ -31,7 +31,7 @@ AG-Claw supports running multiple specialized agents that work together. This is
 
 ### Setting Up Multiple Agents
 
-In `agclaw.json`:
+In `argentum.json`:
 
 ```json
 {
@@ -195,7 +195,7 @@ A mesh workflow is a directed graph where nodes are tasks and edges define depen
 
 ```bash
 # Via CLI
-agclaw workflow run deploy-service
+argentum workflow run deploy-service
 
 # Via API
 curl -X POST http://localhost:3000/workflows/run \
@@ -234,7 +234,7 @@ Schedule tasks to run automatically at specific times.
       "id": "database-backup",
       "cron": "0 2 * * *",
       "action": "run_command",
-      "command": "pg_dump -U agclaw agclaw_db > /backups/agclaw-$(date +%Y%m%d).sql",
+      "command": "pg_dump -U argentum argentum_db > /backups/argentum-$(date +%Y%m%d).sql",
       "enabled": true
     },
     {
@@ -337,7 +337,7 @@ curl -X POST http://localhost:3000/webhooks/outgoing \
 
 ### Stateless Gateway
 
-AG-Claw's gateway is designed to be mostly stateless. For horizontal scaling:
+Argentum's gateway is designed to be mostly stateless. For horizontal scaling:
 
 1. **Stateless components**: The gateway itself stores no state
 2. **Shared state**: Memory (SQLite), sessions, and configs use shared storage
@@ -364,8 +364,8 @@ This allows multiple gateway instances to share the same memory.
 ```yaml
 # docker-compose.yml for scaling
 services:
-  ag-claw-1:
-    image: ag-claw:latest
+  argentum-1:
+    image: argentum:latest
     deploy:
       replicas: 3
     # All instances share the same memory backend
@@ -431,14 +431,14 @@ if (checkout.acquired) {
 When mesh-workflows are active, additional metrics are available:
 
 ```
-# HELP agclaw_workflow_steps_total Workflow step executions
-# TYPE agclaw_workflow_steps_total counter
-agclaw_workflow_steps_total{workflow="deploy-service", step="build", result="success"} 45
-agclaw_workflow_steps_total{workflow="deploy-service", step="build", result="failure"} 2
+# HELP argentum_workflow_steps_total Workflow step executions
+# TYPE argentum_workflow_steps_total counter
+argentum_workflow_steps_total{workflow="deploy-service", step="build", result="success"} 45
+argentum_workflow_steps_total{workflow="deploy-service", step="build", result="failure"} 2
 
-# HELP agclaw_workflow_duration_seconds Workflow execution time
-# TYPE agclaw_workflow_duration_seconds histogram
-agclaw_workflow_duration_seconds{workflow="deploy-service"} 234.5
+# HELP argentum_workflow_duration_seconds Workflow execution time
+# TYPE argentum_workflow_duration_seconds histogram
+argentum_workflow_duration_seconds{workflow="deploy-service"} 234.5
 ```
 
 ### Tracing Agent Interactions
@@ -494,7 +494,7 @@ Long-running tasks should have explicit timeouts:
 In long-running deployments, monitor semantic memory size:
 
 ```bash
-agclaw memory stats
+argentum memory stats
 # If entries > compressionThreshold, consolidation should trigger
 ```
 
@@ -517,4 +517,4 @@ agclaw memory stats
 
 ---
 
-*Questions? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues).*
+*Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues).*

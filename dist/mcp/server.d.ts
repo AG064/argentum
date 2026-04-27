@@ -1,7 +1,7 @@
 /**
- * AG-Claw MCP Server
+ * Argentum MCP Server
  *
- * Model Context Protocol (MCP) server implementation for AG-Claw.
+ * Model Context Protocol (MCP) server implementation for Argentum.
  * Provides tools and resources compatible with Claude Code.
  */
 import { EventEmitter } from 'events';
@@ -55,7 +55,7 @@ export declare class MCPServer extends EventEmitter {
  */
 export declare function createTool(name: string, description: string, inputSchema: Record<string, any>, handler: (input: Record<string, any>) => Promise<any>): MCPTool;
 /**
- * Pre-built tools for AG-Claw
+ * Pre-built tools for Argentum
  */
 export declare const builtInTools: {
     Read: {

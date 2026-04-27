@@ -2,7 +2,7 @@
 
 *Estimated time: 25 minutes*
 
-This tutorial covers deploying AG-Claw in production. We'll look at Docker deployment, VPS setup, reverse proxy configuration, and production hardening.
+This tutorial covers deploying Argentum in production. We'll look at Docker deployment, VPS setup, reverse proxy configuration, and production hardening.
 
 ---
 
@@ -29,11 +29,11 @@ This tutorial focuses on Docker and VPS deployment.
 ### Build the Image
 
 ```bash
-cd ag-claw
+cd argentum
 npm run docker:build
 ```
 
-This builds the AG-Claw image with all dependencies baked in.
+This builds the Argentum image with all dependencies baked in.
 
 ### Configure Environment
 
@@ -70,7 +70,7 @@ docker compose -f docker/docker-compose.yml logs -f
 Or for a specific service:
 
 ```bash
-docker compose -f docker/docker-compose.yml logs -f ag-claw
+docker compose -f docker/docker-compose.yml logs -f argentum
 ```
 
 ### Stop the Container
@@ -89,9 +89,9 @@ The default `docker/docker-compose.yml` is a starting point. Customize it:
 version: '3.8'
 
 services:
-  ag-claw:
-    image: ag-claw:latest
-    container_name: ag-claw
+  argentum:
+    image: argentum:latest
+    container_name: argentum
     restart: unless-stopped
     ports:
       - "3000:3000"       # Gateway
@@ -103,7 +103,7 @@ services:
       - AGCLAW_API_TOKEN=${AGCLAW_API_TOKEN}
     volumes:
       - ./data:/app/data
-      - ./agclaw.json:/app/agclaw.json:ro
+      - ./argentum.json:/app/argentum.json:ro
       - ./memory:/app/memory:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -112,10 +112,10 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - ag-claw-net
+      - argentum-net
 
 networks:
-  ag-claw-net:
+  argentum-net:
     driver: bridge
 ```
 
@@ -153,17 +153,17 @@ curl -fsSL get.docker.com | bash
 apt install docker-compose -y
 
 # Create a non-root user (recommended)
-adduser agclaw
-usermod -aG docker agclaw
-su - agclaw
+adduser argentum
+usermod -aG docker argentum
+su - argentum
 ```
 
 ### Step 3 — Clone and Configure
 
 ```bash
-# As the agclaw user
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+# As the argentum user
+git clone https://github.com/AG064/argentum.git
+cd argentum
 
 # Create .env
 cat > .env << 'EOF'
@@ -190,31 +190,31 @@ If you prefer running without Docker:
 
 ```bash
 # Create the service file
-sudo cat > /etc/systemd/system/agclaw.service << 'EOF'
+sudo cat > /etc/systemd/system/argentum.service << 'EOF'
 [Unit]
-Description=AG-Claw AI Agent
+Description=Argentum AI Agent
 After=network.target
 
 [Service]
 Type=simple
-User=agclaw
-WorkingDirectory=/home/agclaw/ag-claw
-ExecStart=/usr/bin/node /home/agclaw/ag-claw/dist/cli.js gateway start
+User=argentum
+WorkingDirectory=/home/argentum/argentum
+ExecStart=/usr/bin/node /home/argentum/argentum/dist/cli.js gateway start
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
-EnvironmentFile=/home/agclaw/ag-claw/.env
+EnvironmentFile=/home/argentum/argentum/.env
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # Enable and start
-sudo systemctl enable agclaw
-sudo systemctl start agclaw
+sudo systemctl enable argentum
+sudo systemctl start argentum
 
 # Check status
-sudo systemctl status agclaw
+sudo systemctl status argentum
 ```
 
 ---
@@ -235,10 +235,10 @@ apt install -y caddy
 Configure `/etc/caddy/Caddyfile`:
 
 ```
-agclaw.example.com {
+argentum.example.com {
     reverse_proxy localhost:3000
     log {
-        output file /var/log/caddy/agclaw.log
+        output file /var/log/caddy/argentum.log
     }
 }
 ```
@@ -253,12 +253,12 @@ systemctl reload caddy
 apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Configure `/etc/nginx/sites-available/agclaw`:
+Configure `/etc/nginx/sites-available/argentum`:
 
 ```nginx
 server {
     listen 80;
-    server_name agclaw.example.com;
+    server_name argentum.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -276,9 +276,9 @@ server {
 Enable the site and get a certificate:
 
 ```bash
-ln -s /etc/nginx/sites-available/agclaw /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/argentum /etc/nginx/sites-enabled/
 nginx -t
-certbot --nginx -d agclaw.example.com
+certbot --nginx -d argentum.example.com
 systemctl reload nginx
 ```
 
@@ -345,7 +345,7 @@ For VPS, also configure off-server backups:
 
 ```bash
 # Example: Rsync backups to another machine
-0 2 * * * rsync -avz /home/agclaw/ag-claw/data/ backup@backup-server:/backups/ag-claw/
+0 2 * * * rsync -avz /home/argentum/argentum/data/ backup@backup-server:/backups/argentum/
 ```
 
 ### 5. Firewall
@@ -365,15 +365,15 @@ ufw enable
 Configure log rotation for the gateway logs:
 
 ```bash
-# /etc/logrotate.d/agclaw
-/home/agclaw/ag-claw/logs/*.log {
+# /etc/logrotate.d/argentum
+/home/argentum/argentum/logs/*.log {
     daily
     rotate 14
     compress
     delaycompress
     missingok
     notifempty
-    create 0644 agclaw agclaw
+    create 0644 argentum argentum
 }
 ```
 
@@ -387,22 +387,22 @@ Create a monitoring script:
 
 ```bash
 #!/bin/bash
-# /usr/local/bin/check-agclaw.sh
+# /usr/local/bin/check-argentum.sh
 
 response=$(curl -sf http://localhost:3000/health)
 if [ $? -ne 0 ]; then
-    echo "AG-Claw is down!"
+    echo "Argentum is down!"
     # Send alert (configure your alerting method)
     exit 1
 fi
 
-echo "AG-Claw is healthy: $response"
+echo "Argentum is healthy: $response"
 ```
 
 Add to crontab:
 
 ```bash
-*/5 * * * * /usr/local/bin/check-agclaw.sh >> /var/log/agclaw-health.log 2>&1
+*/5 * * * * /usr/local/bin/check-argentum.sh >> /var/log/argentum-health.log 2>&1
 ```
 
 ### Prometheus Metrics
@@ -423,7 +423,7 @@ Prometheus scrape config:
 
 ```yaml
 scrape_configs:
-  - job_name: 'ag-claw'
+  - job_name: 'argentum'
     static_configs:
       - targets: ['localhost:3000']
     metrics_path: '/metrics'
@@ -431,12 +431,12 @@ scrape_configs:
 
 ---
 
-## Updating AG-Claw
+## Updating Argentum
 
 ### Docker Update
 
 ```bash
-cd ag-claw
+cd argentum
 git pull
 npm run docker:build
 docker compose -f docker/docker-compose.yml down
@@ -446,11 +446,11 @@ npm run docker:up
 ### VPS Update (systemd)
 
 ```bash
-cd ag-claw
+cd argentum
 git pull
 npm install
 npm run build
-sudo systemctl restart agclaw
+sudo systemctl restart argentum
 ```
 
 ---
@@ -459,7 +459,7 @@ sudo systemctl restart agclaw
 
 | Problem | Solution |
 |---|---|
-| Container won't start | Check logs: `docker compose logs ag-claw` |
+| Container won't start | Check logs: `docker compose logs argentum` |
 | Health check failing | Verify port is correct; check `curl http://localhost:3000/health` directly |
 | Can't connect from internet | Check firewall: `ufw status`; check reverse proxy logs |
 | HTTPS not working | Verify domain DNS points to VPS; check Caddy/Nginx logs |
@@ -475,4 +475,4 @@ sudo systemctl restart agclaw
 
 ---
 
-*Questions? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues).*
+*Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues).*

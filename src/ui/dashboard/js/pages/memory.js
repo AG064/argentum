@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Memory Page
+ * Argentum Dashboard - Memory Page
  */
 
 // Mock memory data

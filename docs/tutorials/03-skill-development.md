@@ -2,7 +2,7 @@
 
 *Estimated time: 30 minutes*
 
-In this tutorial, you'll create a custom skill that adds new capabilities to your agent. Skills are the primary way to extend AG-Claw — they register tools that the agent can call during conversations.
+In this tutorial, you'll create a custom skill that adds new capabilities to your agent. Skills are the primary way to extend Argentum — they register tools that the agent can call during conversations.
 
 ---
 
@@ -199,10 +199,10 @@ features:
 npm run build
 
 # Enable the feature
-agclaw feature git-assistant enable
+argentum feature git-assistant enable
 
 # Restart the gateway
-agclaw gateway restart
+argentum gateway restart
 
 # Test via chat
 curl -X POST http://localhost:3000/chat \
@@ -385,7 +385,7 @@ execute: async (params) => {
 
 Once your skill works, consider sharing it:
 
-1. Add it to the AG-Claw repository via a pull request
+1. Add it to the Argentum repository via a pull request
 2. Document it in the skill library (`skills-library` feature)
 3. Write a usage guide
 
@@ -404,9 +404,9 @@ Once your skill works, consider sharing it:
 |---|---|
 | Tool not appearing | Rebuild with `npm run build` and restart the gateway |
 | Tool not called by agent | Improve the tool description — the LLM needs to understand when to use it |
-| Tool always returns error | Check `agclaw gateway logs` for the actual exception |
-| Feature won't load | Run `agclaw doctor` to diagnose dependency issues |
+| Tool always returns error | Check `argentum gateway logs` for the actual exception |
+| Feature won't load | Run `argentum doctor` to diagnose dependency issues |
 
 ---
 
-*Questions? Open an issue on [GitHub](https://github.com/AG064/ag-claw/issues).*
+*Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues).*

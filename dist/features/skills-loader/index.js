@@ -1,8 +1,8 @@
 "use strict";
 /**
- * AG-Claw Skills Loader
+ * Argentum Skills Loader
  *
- * Loads OpenClaw skills into AG-Claw ecosystem.
+ * Loads OpenClaw skills into Argentum ecosystem.
  * Any SKILL.md in ~/.openclaw/workspace/skills/ becomes available.
  *
  * Supports Hermes-style progressive disclosure (3 levels):

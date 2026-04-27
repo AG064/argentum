@@ -1,5 +1,5 @@
 /**
- * AG-Claw Configuration Loader
+ * Argentum Configuration Loader
  *
  * Loads and validates configuration from YAML files with environment variable overrides.
  * Supports hot-reloading via chokidar file watcher.
@@ -347,7 +347,7 @@ export declare const ConfigSchema: z.ZodObject<{
         file: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
-export type AGClawConfig = z.infer<typeof ConfigSchema>;
+export type ArgentumConfig = z.infer<typeof ConfigSchema>;
 /** Configuration manager with hot-reload support */
 export declare class ConfigManager {
     private config;
@@ -365,16 +365,16 @@ export declare class ConfigManager {
     /** Deep merge two objects */
     private deepMerge;
     /** Get current configuration */
-    get(): AGClawConfig;
+    get(): ArgentumConfig;
     /** Get a specific config section */
-    getSection<K extends keyof AGClawConfig>(section: K): AGClawConfig[K];
+    getSection<K extends keyof ArgentumConfig>(section: K): ArgentumConfig[K];
     /** Check if a feature is enabled */
-    isFeatureEnabled(feature: keyof AGClawConfig['features']): boolean;
+    isFeatureEnabled(feature: keyof ArgentumConfig['features']): boolean;
     /** Enable hot-reload watching */
     enableHotReload(): void;
     private startHotReloadWatcher;
     /** Register a listener for config changes */
-    onChange(listener: (config: AGClawConfig) => void): () => void;
+    onChange(listener: (config: ArgentumConfig) => void): () => void;
     /** Stop watching for changes */
     dispose(): void;
 }

@@ -1,5 +1,5 @@
 /**
- * AG-Claw Approval UI / Human-in-the-Loop System
+ * Argentum Approval UI / Human-in-the-Loop System
  *
  * Provides:
  * - TUI for approving/denying actions in terminal

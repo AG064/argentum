@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Org Chart Page
+ * Argentum Dashboard - Org Chart Page
  */
 
 async function loadOrgChartData() {
@@ -157,7 +157,7 @@ function renderAsciiTree(tree) {
     }
   }
   
-  lines.push(`⚡ AG-Claw Organization`);
+  lines.push(`⚡ Argentum Organization`);
   lines.push('');
   
   if (tree.children && tree.children.length > 0) {

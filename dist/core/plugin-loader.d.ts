@@ -1,10 +1,10 @@
 /**
- * AG-Claw Plugin Loader
+ * Argentum Plugin Loader
  *
  * Dynamically loads and manages feature modules at runtime.
  * Supports enable/disable, lifecycle hooks, and dependency resolution.
  */
-import { type AGClawConfig } from './config';
+import { type ArgentumConfig } from './config';
 import { type Logger } from './logger';
 /** Feature lifecycle states */
 export type FeatureState = 'unloaded' | 'loading' | 'active' | 'error' | 'disabled';
@@ -37,7 +37,7 @@ export interface HealthStatus {
 /** Context passed to features on init */
 export interface FeatureContext {
     logger: Logger;
-    config: AGClawConfig;
+    config: ArgentumConfig;
     registerHook: (event: string, handler: HookHandler) => void;
     emit: (event: string, data: unknown) => Promise<void>;
 }
@@ -48,7 +48,7 @@ export declare function resolveFeatureEntryPath(featureDirPath: string): string 
 /** Convert a filesystem path into a native ESM import specifier */
 export declare function toModuleImportSpecifier(modulePath: string): string;
 /**
- * Plugin loader for AG-Claw features.
+ * Plugin loader for Argentum features.
  *
  * Scans the features directory, loads modules, resolves dependencies,
  * and manages feature lifecycle.
@@ -66,7 +66,7 @@ export declare class PluginLoader {
     private featuresPath;
     private config;
     private logger;
-    constructor(config: AGClawConfig, featuresPath?: string);
+    constructor(config: ArgentumConfig, featuresPath?: string);
     /** Load all features from the features directory */
     loadAll(): Promise<void>;
     /** Load a single feature module */

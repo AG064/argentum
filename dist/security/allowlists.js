@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Allowlists
+ * Argentum Allowlists
  *
  * Loads command, path, and host allowlists from security-policy.yaml.
  * Supports glob patterns (docker *, curl https://*.example.com/*),

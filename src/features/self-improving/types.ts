@@ -2,7 +2,7 @@
  * Self-Improving Loop Types
  *
  * Types for the reflection engine that analyzes behavior,
- * creates skills from experience, and continuously improves AG-Claw.
+ * creates skills from experience, and continuously improves Argentum.
  */
 
 export interface SelfImprovingConfig {

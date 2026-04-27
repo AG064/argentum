@@ -1,18 +1,18 @@
 # Release Packaging
 
-AG-Claw releases publish portable binaries and a Windows MSI installer.
+Argentum releases publish portable binaries and a Windows MSI installer.
 
 ## Release assets
 
 For version `0.0.2`, the release workflow produces:
 
-- `agclaw-v0.0.2-win-x64.exe` - portable Windows CLI executable
-- `agclaw-v0.0.2-win-x64.msi` - Windows installer
-- `agclaw-v0.0.2-linux-x64` - portable Linux CLI executable
-- `agclaw-v0.0.2-macos-x64` - portable macOS CLI executable
+- `argentum-v0.0.2-win-x64.exe` - portable Windows CLI executable
+- `argentum-v0.0.2-win-x64.msi` - Windows installer
+- `argentum-v0.0.2-linux-x64` - portable Linux CLI executable
+- `argentum-v0.0.2-macos-x64` - portable macOS CLI executable
 - `SHA256SUMS-portable.txt` and `SHA256SUMS.txt` - checksums
 
-The MSI installs `agclaw.exe` under `Program Files\AG-Claw` and adds that folder to the system `PATH`.
+The MSI installs `argentum.exe` under `Program Files\Argentum` and adds that folder to the system `PATH`.
 
 ## Creating a GitHub release
 

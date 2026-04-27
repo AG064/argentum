@@ -1,6 +1,6 @@
 "use strict";
 /**
- * ACP Harness for AG-Claw
+ * ACP Harness for Argentum
  *
  * HTTP/WebSocket endpoint for running code in sandbox.
  * Allows remote agents to execute tasks securely.

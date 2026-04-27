@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Security Module
+ * Argentum Security Module
  *
  * Re-exports all security components for easy access.
  */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================
-# AG-Claw Installer
+# Argentum Installer
 # ============================================
 set -euo pipefail
 
@@ -22,7 +22,7 @@ for arg in "$@"; do
     --docker)    USE_DOCKER=true; shift ;;
     --dir=*)     INSTALL_DIR="${arg#*=}"; shift ;;
     --help|-h)
-      echo -e "${BOLD}AG-Claw Installer${NC}"
+      echo -e "${BOLD}Argentum Installer${NC}"
       echo ""
       echo "Usage: ./install.sh [OPTIONS]"
       echo ""
@@ -48,7 +48,7 @@ log_step()  { echo -e "${BOLD}${BLUE}==> $1${NC}"; }
 # ─── Banner ──────────────────────────────────
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║        AG-Claw Installer v0.0.2       ║${NC}"
+echo -e "${BLUE}║        Argentum Installer v0.0.2       ║${NC}"
 echo -e "${BLUE}║    Modular AI Agent Framework         ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════╝${NC}"
 echo ""
@@ -147,7 +147,7 @@ fi
 # .env file
 if [ ! -f ".env" ]; then
   cat > .env << 'EOF'
-# AG-Claw Environment Variables
+# Argentum Environment Variables
 # ──────────────────────────────
 
 # Telegram Bot (get token from @BotFather)
@@ -204,7 +204,7 @@ if [ "$USE_DOCKER" = true ]; then
 
   if docker compose -f docker/docker-compose.yml up -d 2>/dev/null || \
      docker-compose -f docker/docker-compose.yml up -d 2>/dev/null; then
-    log_ok "AG-Claw running in Docker"
+    log_ok "Argentum running in Docker"
     echo ""
     log_info "Gateway: http://localhost:18789"
     log_info "Webchat: http://localhost:3001"
@@ -221,7 +221,7 @@ else
   echo -e "${BOLD}Next steps:${NC}"
   echo -e "  1. Edit ${YELLOW}.env${NC} with your API keys"
   echo -e "  2. Review ${YELLOW}config/default.yaml${NC}"
-  echo -e "  3. Run AG-Claw:"
+  echo -e "  3. Run Argentum:"
   echo -e "     ${GREEN}npm start${NC}              production"
   echo -e "     ${GREEN}npm run dev${NC}            development"
   echo -e "     ${GREEN}./install.sh --docker${NC}  Docker"

@@ -1,5 +1,5 @@
 /**
- * AG-Claw Encrypted Secrets
+ * Argentum Encrypted Secrets
  *
  * AES-256-GCM encryption for sensitive values.
  * Master key from AGCLAW_MASTER_KEY env var (or passed explicitly).

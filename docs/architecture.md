@@ -1,4 +1,4 @@
-# AG-Claw Architecture
+# Argentum Architecture
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -12,7 +12,7 @@
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-How AG-Claw extends OpenClaw with a modular plugin system, multi-channel support, and a security layer inspired by NemoClaw.
+How Argentum extends OpenClaw with a modular plugin system, multi-channel support, and a security layer inspired by NemoClaw.
 
 ---
 
@@ -20,7 +20,7 @@ How AG-Claw extends OpenClaw with a modular plugin system, multi-channel support
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AG-Claw Framework                       │
+│                      Argentum Framework                       │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │                  Core Layer                            │  │
@@ -84,11 +84,11 @@ How AG-Claw extends OpenClaw with a modular plugin system, multi-channel support
 
 ---
 
-## How AG-Claw Extends OpenClaw
+## How Argentum Extends OpenClaw
 
-[OpenClaw](https://github.com/nickarora/openclaw) handles the core AI agent runtime: model communication, session management, and tool integration. AG-Claw builds on top of that.
+[OpenClaw](https://github.com/nickarora/openclaw) handles the core AI agent runtime: model communication, session management, and tool integration. Argentum builds on top of that.
 
-| Layer | OpenClaw | AG-Claw Extension |
+| Layer | OpenClaw | Argentum Extension |
 |---|---|---|
 | **Runtime** | Node.js agent runtime | Same runtime, wrapped with framework |
 | **Config** | Environment variables | YAML config with Zod validation, hot-reload |
@@ -98,7 +98,7 @@ How AG-Claw extends OpenClaw with a modular plugin system, multi-channel support
 | **Security** | Basic allowlist | Full policy engine, encrypted secrets, audit logging |
 | **Deployment** | Manual | Docker, install script, auto-update |
 
-AG-Claw does not fork OpenClaw. It wraps and extends it as a dependency, so you can still update the underlying runtime.
+Argentum does not fork OpenClaw. It wraps and extends it as a dependency, so you can still update the underlying runtime.
 
 ---
 
@@ -140,7 +140,7 @@ Features receive a shared context on init:
 ```typescript
 interface FeatureContext {
   logger: Logger;                              // Feature-scoped logger
-  config: AGClawConfig;                        // Full config object
+  config: ArgentumConfig;                      // Full config object
   registerHook(event, handler): void;          // Listen to events
   emit(event, data): Promise<void>;            // Emit events to other features
 ```
@@ -158,7 +158,7 @@ This lets features talk to each other without direct imports. Loose coupling.
        enabled: true
        customOption: value
    ```
-4. Restart AG-Claw. The plugin loader picks it up automatically.
+4. Restart Argentum. The plugin loader picks it up automatically.
 
 ---
 
@@ -166,7 +166,7 @@ This lets features talk to each other without direct imports. Loose coupling.
 
 ### Defense in Depth
 
-AG-Claw's security is layered, inspired by NemoClaw's isolation approach:
+Argentum's security is layered, inspired by NemoClaw's isolation approach:
 
 ```
 ┌──────────────────────────────────────────┐
@@ -238,7 +238,7 @@ When `container-sandbox` feature is enabled:
 
 ### Storage Backends
 
-AG-Claw supports pluggable memory backends:
+Argentum supports pluggable memory backends:
 
 ```
 ┌──────────────────────────────────────────┐
@@ -284,7 +284,7 @@ config/default.yaml
 └───────┬───────┘     └──────────────┘
         │
         ▼
-  AGClawConfig (typed)
+  ArgentumConfig (typed)
         │
         ├──▶ PluginLoader  (feature toggles)
         ├──▶ Features      (per-feature config)
@@ -309,7 +309,7 @@ Environment variables override YAML values:
 ### 1. Single Node (Default)
 
 ```
-User --> AG-Claw (Node.js) --> LLM API
+User --> Argentum (Node.js) --> LLM API
               │
               ├── SQLite (local)
               └── Features (in-process)
@@ -320,7 +320,7 @@ Everything runs in a single Node.js process. Simple, low overhead.
 ### 2. Docker
 
 ```
-User --> AG-Claw Container --> LLM API
+User --> Argentum Container --> LLM API
               │
               ├── Volume: /app/data
               ├── Volume: /app/memory
@@ -341,7 +341,7 @@ Gateway  ├──▶ Worker 2 (browser automation)
               └──▶ Shared Redis / Supabase
 ```
 
-Multiple AG-Claw instances sharing state via Redis and Supabase. Gateway routes tasks to specialized workers.
+Multiple Argentum instances sharing state via Redis and Supabase. Gateway routes tasks to specialized workers.
 
 ---
 

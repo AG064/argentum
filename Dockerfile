@@ -29,28 +29,28 @@ RUN apk --no-cache upgrade
 RUN apk add --no-cache wget
 
 # Create non-root user
-RUN addgroup -g 1001 -S agclaw && \
-    adduser -u 1001 -S agclaw -G agclaw
+RUN addgroup -g 1001 -S argentum && \
+    adduser -u 1001 -S argentum -G argentum
 
 WORKDIR /app
 
 # Copy built artifacts from builder
-COPY --from=builder --chown=agclaw:agclaw /app/dist ./dist
-COPY --from=builder --chown=agclaw:agclaw /app/node_modules ./node_modules
-COPY --from=builder --chown=agclaw:agclaw /app/package.json ./
+COPY --from=builder --chown=argentum:argentum /app/dist ./dist
+COPY --from=builder --chown=argentum:argentum /app/node_modules ./node_modules
+COPY --from=builder --chown=argentum:argentum /app/package.json ./
 
 # Copy config directory
-COPY --chown=agclaw:agclaw config/ ./config/
+COPY --chown=argentum:argentum config/ ./config/
 
 # Create writable directories
 RUN mkdir -p data memory logs && \
-    chown -R agclaw:agclaw /app
+    chown -R argentum:argentum /app
 
 # Switch to non-root user
-USER agclaw
+USER argentum
 
 # Ports:
-#   3000 - AG-Claw gateway HTTP
+#   3000 - Argentum gateway HTTP
 # Webchat is opt-in and bound to loopback by default.
 EXPOSE 3000
 

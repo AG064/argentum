@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Agents Page
+ * Argentum Dashboard - Agents Page
  */
 
 // Mock agent data

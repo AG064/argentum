@@ -1,5 +1,5 @@
 /**
- * AG-Claw Security Middleware
+ * Argentum Security Middleware
  *
  * Production security middleware providing:
  * - Helmet-style security headers

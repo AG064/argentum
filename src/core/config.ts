@@ -1,5 +1,5 @@
 /**
- * AG-Claw Configuration Loader
+ * Argentum Configuration Loader
  *
  * Loads and validates configuration from YAML files with environment variable overrides.
  * Supports hot-reloading via chokidar file watcher.
@@ -520,25 +520,35 @@ export const ConfigSchema = z.object({
     .default({ level: 'info', format: 'pretty' }),
 });
 
-export type AGClawConfig = z.infer<typeof ConfigSchema>;
+export type ArgentumConfig = z.infer<typeof ConfigSchema>;
 
 /** Configuration manager with hot-reload support */
 export class ConfigManager {
-  private config: AGClawConfig;
+  private config: ArgentumConfig;
   private baseConfigPath: string;
   private configPath: string;
   private watcher: FSWatcher | null = null;
-  private listeners: Set<(config: AGClawConfig) => void> = new Set();
+  private listeners: Set<(config: ArgentumConfig) => void> = new Set();
 
   constructor(configPath?: string) {
     this.baseConfigPath = resolve(process.cwd(), 'config/default.yaml');
-    const envConfigPath = process.env.AGCLAW_CONFIG_PATH;
-    this.configPath = configPath ?? resolve(process.cwd(), envConfigPath ?? 'agclaw.json');
+    const envConfigPath = process.env.ARGENTUM_CONFIG_PATH ?? process.env.AGCLAW_CONFIG_PATH;
+    const preferredConfigPath = resolve(process.cwd(), 'argentum.json');
+    const legacyConfigPath = resolve(process.cwd(), 'agclaw.json');
+    this.configPath =
+      configPath ??
+      resolve(
+        process.cwd(),
+        envConfigPath ??
+          (existsSync(preferredConfigPath) || !existsSync(legacyConfigPath)
+            ? 'argentum.json'
+            : 'agclaw.json'),
+      );
     this.config = this.loadConfig();
   }
 
   /** Load and validate configuration from YAML file */
-  private loadConfig(): AGClawConfig {
+  private loadConfig(): ArgentumConfig {
     const baseConfig = this.loadConfigFile(this.baseConfigPath);
     const fileConfig =
       this.configPath === this.baseConfigPath ? {} : this.loadConfigFile(this.configPath);
@@ -653,17 +663,17 @@ export class ConfigManager {
   }
 
   /** Get current configuration */
-  get(): AGClawConfig {
+  get(): ArgentumConfig {
     return this.config;
   }
 
   /** Get a specific config section */
-  getSection<K extends keyof AGClawConfig>(section: K): AGClawConfig[K] {
+  getSection<K extends keyof ArgentumConfig>(section: K): ArgentumConfig[K] {
     return this.config[section];
   }
 
   /** Check if a feature is enabled */
-  isFeatureEnabled(feature: keyof AGClawConfig['features']): boolean {
+  isFeatureEnabled(feature: keyof ArgentumConfig['features']): boolean {
     return this.config.features[feature]?.enabled ?? false;
   }
 
@@ -694,7 +704,7 @@ export class ConfigManager {
   }
 
   /** Register a listener for config changes */
-  onChange(listener: (config: AGClawConfig) => void): () => void {
+  onChange(listener: (config: ArgentumConfig) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

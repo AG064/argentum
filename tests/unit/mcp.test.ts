@@ -1,5 +1,5 @@
 /**
- * AG-Claw MCP Server Tests
+ * Argentum MCP Server Tests
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';

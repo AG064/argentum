@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - API Module
+ * Argentum Dashboard - API Module
  * Handles all backend communication including WebSocket connections
  */
 

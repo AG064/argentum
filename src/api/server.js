@@ -1,9 +1,9 @@
 /**
- * AG-Claw Dashboard - Simple API Server
+ * Argentum Dashboard - Simple API Server
  *
  * This is a minimal Express server that provides API endpoints
  * for the dashboard. In production, these would be integrated
- * with the main AG-Claw application.
+ * with the main Argentum application.
  */
 
 const http = require('http');
@@ -511,7 +511,7 @@ server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   AG-Claw Dashboard Server                                ║
+║   Argentum Dashboard Server                                ║
 ║                                                           ║
 ║   Local:    http://localhost:${PORT}                        ║
 ║   API:      http://localhost:${PORT}/api                   ║

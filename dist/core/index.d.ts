@@ -8,7 +8,7 @@
  *   - LLMProvider, Message, ToolDefinition, LLMResponse, createLLMProvider() — LLM abstraction
  *   - HierarchicalMemoryStore, MemoryTier, MemoryEntry — three-tier memory system
  */
-export { ConfigManager, getConfig, ConfigSchema, type AGClawConfig } from './config';
+export { ConfigManager, getConfig, ConfigSchema, type ArgentumConfig } from './config';
 export { Logger, createLogger, featureLogger, resetLogger, type LoggerConfig, type LogContext, type LogLevel, } from './logger';
 export { PluginLoader, type FeatureState, type FeatureMeta, type FeatureModule, type HealthStatus, type FeatureContext, type HookHandler, } from './plugin-loader';
 export { createLLMProvider } from './llm-provider';

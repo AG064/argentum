@@ -1,6 +1,6 @@
 # Security
 
-AG-Claw is the only AI agent framework with defense-in-depth security from the ground up.
+Argentum is the only AI agent framework with defense-in-depth security from the ground up.
 
 ---
 
@@ -37,7 +37,7 @@ Default-deny allowlists mean nothing runs unless you explicitly permit it. The p
 
 ## Comparison
 
-| | AG-Claw | OpenClaw | LangChain | CrewAI |
+| | Argentum | OpenClaw | LangChain | CrewAI |
 |--|---------|----------|-----------|--------|
 | Encrypted secrets | ✅ AES-256 | ❌ | ❌ | ❌ |
 | Audit logging | ✅ Full | ⚠️ Token only | ❌ | ❌ |
@@ -59,7 +59,7 @@ See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUI
 
 Found a vulnerability? Do not open a public issue. Instead:
 
-- **GitHub Security Advisories**: [Report privately](https://github.com/AG064/ag-claw/security/advisories/new)
+- **GitHub Security Advisories**: [Report privately](https://github.com/AG064/argentum/security/advisories/new)
 - **Telegram**: [REMOVED]
 
 Expected response: acknowledgment within 24–48 hours, fix timeline based on severity.

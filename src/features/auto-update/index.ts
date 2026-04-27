@@ -42,7 +42,7 @@ class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
     version: '0.0.2',
-    description: 'Automatic updates for AG-Claw components with backup and rollback',
+    description: 'Automatic updates for Argentum components with backup and rollback',
     dependencies: [],
   };
 

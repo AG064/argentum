@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Trajectory Export Page
+ * Argentum Dashboard - Trajectory Export Page
  */
 
 async function loadTrajectoryData() {

@@ -1,8 +1,8 @@
 "use strict";
 /**
- * AG-Claw Entry Point
+ * Argentum Entry Point
  *
- * Bootstraps the AG-Claw agent framework:
+ * Bootstraps the Argentum agent framework:
  * - Loads configuration
  * - Initializes logging
  * - Starts the plugin loader
@@ -44,9 +44,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AGClaw = exports.Agent = void 0;
+exports.Argentum = exports.Agent = void 0;
 exports.createBuiltinTools = createBuiltinTools;
-exports.getAGClaw = getAGClaw;
+exports.getArgentum = getArgentum;
 require("dotenv/config");
 const config_1 = require("./core/config");
 const llm_provider_1 = require("./core/llm-provider");
@@ -66,7 +66,7 @@ class Agent {
         this.logger = (0, logger_1.createLogger)().child({ feature: 'agent' });
         this.systemPrompt =
             systemPrompt ??
-                `You are AG-Claw, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
+                `You are Argentum, a helpful AI assistant. You have access to tools that you can use to help answer questions and complete tasks. When you need to use a tool, call it. When you have enough information, respond directly to the user.`;
     }
     registerTool(tool) {
         this.tools.set(tool.name, tool);
@@ -421,8 +421,8 @@ function createBuiltinTools(options = {}) {
     }
     return tools;
 }
-// ─── AG-Claw Main Application ────────────────────────────────────────────────
-class AGClaw {
+// ─── Argentum Main Application ────────────────────────────────────────────────
+class Argentum {
     config;
     logger;
     pluginLoader;
@@ -460,9 +460,9 @@ class AGClaw {
     getMemoryGraph() {
         return this.memoryGraph;
     }
-    /** Start the AG-Claw framework */
+    /** Start the Argentum framework */
     async start() {
-        this.logger.info('Starting AG-Claw Framework', {
+        this.logger.info('Starting Argentum Framework', {
             version: '0.0.2',
             nodeVersion: process.version,
             platform: process.platform,
@@ -537,7 +537,7 @@ class AGClaw {
         const features = this.pluginLoader.listFeatures();
         const activeCount = features.filter((f) => f.state === 'active').length;
         const totalCount = features.length;
-        this.logger.info(`AG CLAW started successfully`, {
+        this.logger.info(`ARGENTUM started successfully`, {
             features: `${activeCount}/${totalCount} active`,
             tools: this.agent.getToolNames().length,
             port: this.config.server.port,
@@ -710,14 +710,14 @@ class AGClaw {
             });
             // Handle /start command
             bot.command('start', async (ctx) => {
-                await ctx.reply('🤖 Welcome to AG-Claw!\n\n' +
+                await ctx.reply('🤖 Welcome to Argentum!\n\n' +
                     'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
                     `Available tools: ${this.agent.getToolNames().join(', ')}`);
             });
             // Handle /help command
             bot.command('help', async (ctx) => {
                 const tools = this.agent.getToolNames();
-                await ctx.reply(`🤖 *AG-Claw Help*\n\n` +
+                await ctx.reply(`🤖 *Argentum Help*\n\n` +
                     `Just send me any message and I will respond.\n\n` +
                     `*Available tools:*\n${tools.map((t) => `• /${t}`).join('\n')}\n\n*Commands:*\n` +
                     `/start - Welcome message\n` +
@@ -728,7 +728,7 @@ class AGClaw {
             bot.command('status', async (ctx) => {
                 const features = this.pluginLoader.listFeatures();
                 const activeCount = features.filter((f) => f.state === 'active').length;
-                await ctx.reply('📊 *AG-Claw Status*\n\n' +
+                await ctx.reply('📊 *Argentum Status*\n\n' +
                     `LLM: ${this.llmProvider.name}\n` +
                     `Tools: ${this.agent.getToolNames().length}\n` +
                     `Features: ${activeCount}/${features.length} active\n` +
@@ -873,24 +873,24 @@ class AGClaw {
         // Close OMEGA Memory
         this.semanticMemory.close();
         this.logger.info('OMEGA Memory closed');
-        this.logger.info('AG CLAW shutdown complete');
+        this.logger.info('ARGENTUM shutdown complete');
     }
 }
-exports.AGClaw = AGClaw;
+exports.Argentum = Argentum;
 // ─── CLI Entry Point ──────────────────────────────────────────────────────────
 // Singleton instance for import by other modules
 let appInstance = null;
-function getAGClaw() {
+function getArgentum() {
     if (!appInstance) {
-        appInstance = new AGClaw();
+        appInstance = new Argentum();
     }
     return appInstance;
 }
 // Start if run directly
 if (require.main === module) {
-    const app = new AGClaw();
+    const app = new Argentum();
     app.start().catch((err) => {
-        console.error('Failed to start AG CLAW:', err);
+        console.error('Failed to start ARGENTUM:', err);
         process.exit(1);
     });
 }

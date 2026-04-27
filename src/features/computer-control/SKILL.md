@@ -1,10 +1,10 @@
 # Computer Control Feature
 
-Enables AG-Claw to control desktop environments through vision-based agency.
+Enables Argentum to control desktop environments through vision-based agency.
 
 ## Overview
 
-The computer control feature allows AG-Claw to interact with a desktop environment by:
+The computer control feature allows Argentum to interact with a desktop environment by:
 1. Taking screenshots of the current screen
 2. Analyzing screenshots with an LLM to understand what's on screen
 3. Executing mouse movements, clicks, typing, and keyboard shortcuts
@@ -69,7 +69,7 @@ features:
 
 ## Usage
 
-AG-Claw can now:
+Argentum can now:
 - Play games (Minecraft, etc.)
 - Control browsers
 - Automate desktop tasks

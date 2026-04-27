@@ -1,7 +1,7 @@
 /**
- * AG-Claw Dashboard Server
+ * Argentum Dashboard Server
  *
- * A lightweight secure web server for the AG-Claw dashboard.
+ * A lightweight secure web server for the Argentum dashboard.
  * Features:
  * - HTTP Basic Auth
  * - Static file serving
@@ -72,44 +72,46 @@ const DEFAULT_CONFIG: ServerConfig = {
 };
 
 /**
- * Load configuration from agclaw.json
+ * Load configuration from argentum.json
  */
 function loadConfig(): ServerConfig {
   const config = { ...DEFAULT_CONFIG };
 
-  // Try to load from agclaw.json
-  const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
-  const configPath = path.join(workDir, 'agclaw.json');
+  // Try the new Argentum config first, then the legacy config file name.
+  const workDir = process.env.ARGENTUM_WORKDIR || process.env.AGCLAW_WORKDIR || process.cwd();
+  const preferredConfigPath = path.join(workDir, 'argentum.json');
+  const legacyConfigPath = path.join(workDir, 'agclaw.json');
+  const configPath = fs.existsSync(preferredConfigPath) ? preferredConfigPath : legacyConfigPath;
 
   if (fs.existsSync(configPath)) {
     try {
-      const agclawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const argentumConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-      if (agclawConfig.dashboard) {
-        config.port = agclawConfig.dashboard.port || config.port;
-        config.host = agclawConfig.dashboard.host || config.host;
+      if (argentumConfig.dashboard) {
+        config.port = argentumConfig.dashboard.port || config.port;
+        config.host = argentumConfig.dashboard.host || config.host;
 
-        if (agclawConfig.dashboard.auth) {
-          config.auth.username = agclawConfig.dashboard.auth.username || config.auth.username;
-          if (agclawConfig.dashboard.auth.password) {
-            config.auth.passwordHash = hashPassword(agclawConfig.dashboard.auth.password);
+        if (argentumConfig.dashboard.auth) {
+          config.auth.username = argentumConfig.dashboard.auth.username || config.auth.username;
+          if (argentumConfig.dashboard.auth.password) {
+            config.auth.passwordHash = hashPassword(argentumConfig.dashboard.auth.password);
           }
         }
 
-        if (agclawConfig.dashboard.rateLimit) {
+        if (argentumConfig.dashboard.rateLimit) {
           config.rateLimit.windowMs =
-            agclawConfig.dashboard.rateLimit.windowMs || config.rateLimit.windowMs;
+            argentumConfig.dashboard.rateLimit.windowMs || config.rateLimit.windowMs;
           config.rateLimit.maxRequests =
-            agclawConfig.dashboard.rateLimit.maxRequests || config.rateLimit.maxRequests;
+            argentumConfig.dashboard.rateLimit.maxRequests || config.rateLimit.maxRequests;
         }
 
-        if (agclawConfig.dashboard.cors) {
+        if (argentumConfig.dashboard.cors) {
           config.cors.allowedOrigins =
-            agclawConfig.dashboard.cors.allowedOrigins || config.cors.allowedOrigins;
+            argentumConfig.dashboard.cors.allowedOrigins || config.cors.allowedOrigins;
         }
       }
     } catch (err) {
-      console.warn('[Dashboard Server] Failed to parse agclaw.json:', (err as Error).message);
+      console.warn('[Dashboard Server] Failed to parse Argentum config:', (err as Error).message);
     }
   }
 
@@ -118,8 +120,10 @@ function loadConfig(): ServerConfig {
     const envPass = process.env.AGCLAW_DASHBOARD_PASS;
     if (!envPass) {
       // Try to load a previously persisted hash
-      const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
-      const hashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
+      const workDir = process.env.ARGENTUM_WORKDIR || process.env.AGCLAW_WORKDIR || process.cwd();
+      const preferredHashFile = path.join(workDir, '.argentum-dashboard-pass-hash');
+      const legacyHashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
+      const hashFile = fs.existsSync(preferredHashFile) ? preferredHashFile : legacyHashFile;
       let loaded = false;
 
       try {
@@ -372,7 +376,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     !verifyPassword(auth.password, config.auth.passwordHash)
   ) {
     res.writeHead(401, {
-      'WWW-Authenticate': 'Basic realm="AG-Claw Dashboard"',
+      'WWW-Authenticate': 'Basic realm="Argentum Dashboard"',
       'Content-Type': 'text/html',
     });
     res.end(`
@@ -678,7 +682,7 @@ function setupWebSocket(server: http.Server): void {
     });
 
     // Send welcome message
-    ws.send(JSON.stringify({ type: 'connected', message: 'AG-Claw Dashboard connected' }));
+    ws.send(JSON.stringify({ type: 'connected', message: 'Argentum Dashboard connected' }));
   });
 
   // Broadcast to all clients
@@ -733,7 +737,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
         console.error(`[Dashboard Server] Port ${config.port} is already in use.`);
         console.error(
-          '[Dashboard Server] Try a different port: agclaw dashboard start --port 3001',
+          '[Dashboard Server] Try a different port: argentum dashboard start --port 3001',
         );
       }
       reject(err);
@@ -743,7 +747,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
     server.listen(config.port, config.host, () => {
       console.log('');
       console.log('  ╔══════════════════════════════════════════════════════════╗');
-      console.log('  ║         AG-Claw Dashboard Server Started                  ║');
+      console.log('  ║         Argentum Dashboard Server Started                  ║');
       console.log('  ╠══════════════════════════════════════════════════════════╣');
       console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
@@ -799,11 +803,11 @@ if (require.main === module) {
         process.exit(1);
       });
   } else if (command === 'help') {
-    console.log('AG-Claw Dashboard Server');
+    console.log('Argentum Dashboard Server');
     console.log('');
     console.log('Usage:');
-    console.log('  agclaw-dashboard start [--port PORT]  Start the dashboard server');
-    console.log('  agclaw-dashboard help                 Show this help');
+    console.log('  argentum-dashboard start [--port PORT]  Start the dashboard server');
+    console.log('  argentum-dashboard help                 Show this help');
   } else {
     console.log('Unknown command. Use "start" or "help".');
   }

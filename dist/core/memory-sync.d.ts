@@ -1,5 +1,5 @@
 /**
- * Git-Based Memory Sync for AG-Claw
+ * Git-Based Memory Sync for Argentum
  *
  * Exports memories as compressed chunks, commits to git for cross-machine sync.
  * Uses checksums for deduplication.

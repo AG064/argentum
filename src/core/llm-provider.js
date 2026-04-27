@@ -1,6 +1,6 @@
 'use strict';
 /**
- * AG-Claw LLM Provider Interface & Implementations
+ * Argentum LLM Provider Interface & Implementations
  *
  * Defines the LLM provider contract and implements OpenRouter API integration.
  */
@@ -54,7 +54,7 @@ class OpenRouterProvider {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://github.com/AG064/ag-claw',
-        'X-Title': 'AG-Claw',
+        'X-Title': 'Argentum',
       },
       body: JSON.stringify(body),
     });

@@ -1,6 +1,6 @@
 # Skill Loader Feature
 
-Loads SKILL.md files from AG-Claw feature directories and injects them into agent context.
+Loads SKILL.md files from Argentum feature directories and injects them into agent context.
 
 This is the **OpenFang "Hand" pattern** - domain expertise bundled with features.
 

@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Security Page
+ * Argentum Dashboard - Security Page
  *
  * Enterprise security dashboard with:
  * - Policy status (active/blocked count)

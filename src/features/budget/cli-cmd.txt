@@ -85,7 +85,7 @@ async function cmdBudget(): Promise<void> {
       if (!budget) { warn('Budget feature not compiled. Run: npm run build'); return; }
       const amountStr = args[2];
       const limitType = (args[3] || 'monthly').toLowerCase();
-      if (!amountStr) { error('Usage: agclaw budget set-limit <amount> [monthly|daily|per-agent]'); return; }
+      if (!amountStr) { error('Usage: argentum budget set-limit <amount> [monthly|daily|per-agent]'); return; }
       const amount = parseFloat(amountStr);
       if (isNaN(amount) || amount < 0) { error('Amount must be a non-negative number'); return; }
 
@@ -171,15 +171,15 @@ async function cmdBudget(): Promise<void> {
       }
       print('');
       print('  \x1b[1mQuick commands:\x1b[0m');
-      print("    \x1b[36magclaw budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50");
-      print("    \x1b[36magclaw budget set-limit 5 daily\x1b[0m      Set daily limit to $5");
-      print("    \x1b[36magclaw budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20");
+      print("    \x1b[36margentum budget set-limit 50 monthly\x1b[0m   Set monthly limit to $50");
+      print("    \x1b[36margentum budget set-limit 5 daily\x1b[0m      Set daily limit to $5");
+      print("    \x1b[36margentum budget set-limit 20 per-agent\x1b[0m Set per-agent limit to $20");
       print('');
       break;
     }
 
     default:
       error('Unknown budget command: ' + subcommand);
-      print('  agclaw budget [status|set-limit|history|reset|config]');
+      print('  argentum budget [status|set-limit|history|reset|config]');
   }
 }

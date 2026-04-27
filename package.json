@@ -1,10 +1,11 @@
 {
-  "name": "ag-claw",
+  "name": "argentum",
   "version": "0.0.2",
   "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
+    "argentum": "bin/argentum.js",
     "agclaw": "bin/agclaw.js"
   },
   "scripts": {
@@ -120,7 +121,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/AG064/ag-claw.git"
+    "url": "https://github.com/AG064/argentum.git"
   },
   "overrides": {
     "minimatch": "9.0.9",

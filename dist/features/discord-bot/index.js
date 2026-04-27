@@ -197,7 +197,7 @@ class DiscordBotFeature {
             timestamp: now,
             author: {
                 id: 'bot',
-                username: 'AG-Claw',
+                username: 'Argentum',
                 bot: true,
             },
         };

@@ -1,14 +1,14 @@
 services:
-  ag-claw:
+  argentum:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: ag-claw
+    container_name: argentum
     ports:
       - "3000:3000"
     volumes:
-      - ag-claw-data:/app/data
-      - ag-claw-memory:/app/memory
+      - argentum-data:/app/data
+      - argentum-memory:/app/memory
       - ../config:/app/config:ro
     environment:
       - NODE_ENV=production
@@ -32,5 +32,5 @@ services:
         max-file: "3"
 
 volumes:
-  ag-claw-data:
-  ag-claw-memory:
+  argentum-data:
+  argentum-memory:

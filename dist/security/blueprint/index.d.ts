@@ -1,5 +1,5 @@
 /**
- * AG-Claw Blueprint System
+ * Argentum Blueprint System
  *
  * YAML/JSON-driven security configuration.
  * Loads and validates blueprints from:

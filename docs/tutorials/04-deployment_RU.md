@@ -2,7 +2,7 @@
 
 *Примерное время: 25 минут*
 
-Этот урок охватывает развёртывание AG-Claw в продакшене. Мы рассмотрим развёртывание с Docker, настройку VPS, конфигурацию обратного прокси и production-hardening.
+Этот урок охватывает развёртывание Argentum в продакшене. Мы рассмотрим развёртывание с Docker, настройку VPS, конфигурацию обратного прокси и production-hardening.
 
 ---
 
@@ -29,11 +29,11 @@
 ### Сборка образа
 
 ```bash
-cd ag-claw
+cd argentum
 npm run docker:build
 ```
 
-Это собирает образ AG-Claw со всеми зависимостями внутри.
+Это собирает образ Argentum со всеми зависимостями внутри.
 
 ### Настройка окружения
 
@@ -70,7 +70,7 @@ docker compose -f docker/docker-compose.yml logs -f
 Или для конкретного сервиса:
 
 ```bash
-docker compose -f docker/docker-compose.yml logs -f ag-claw
+docker compose -f docker/docker-compose.yml logs -f argentum
 ```
 
 ### Остановка контейнера
@@ -89,9 +89,9 @@ npm run docker:down
 version: '3.8'
 
 services:
-  ag-claw:
-    image: ag-claw:latest
-    container_name: ag-claw
+  argentum:
+    image: argentum:latest
+    container_name: argentum
     restart: unless-stopped
     ports:
       - "3000:3000"       # Шлюз
@@ -103,7 +103,7 @@ services:
       - AGCLAW_API_TOKEN=${AGCLAW_API_TOKEN}
     volumes:
       - ./data:/app/data
-      - ./agclaw.json:/app/agclaw.json:ro
+      - ./argentum.json:/app/argentum.json:ro
       - ./memory:/app/memory:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -112,10 +112,10 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - ag-claw-net
+      - argentum-net
 
 networks:
-  ag-claw-net:
+  argentum-net:
     driver: bridge
 ```
 
@@ -153,17 +153,17 @@ curl -fsSL get.docker.com | bash
 apt install docker-compose -y
 
 # Создайте не-root пользователя (рекомендуется)
-adduser agclaw
-usermod -aG docker agclaw
-su - agclaw
+adduser argentum
+usermod -aG docker argentum
+su - argentum
 ```
 
 ### Шаг 3 — Клонируйте и настройте
 
 ```bash
-# От имени agclaw пользователя
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+# От имени argentum пользователя
+git clone https://github.com/AG064/argentum.git
+cd argentum
 
 # Создайте .env
 cat > .env << 'EOF'
@@ -190,31 +190,31 @@ curl http://localhost:3000/health
 
 ```bash
 # Создайте файл сервиса
-sudo cat > /etc/systemd/system/agclaw.service << 'EOF'
+sudo cat > /etc/systemd/system/argentum.service << 'EOF'
 [Unit]
-Description=AG-Claw AI Agent
+Description=Argentum AI Agent
 After=network.target
 
 [Service]
 Type=simple
-User=agclaw
-WorkingDirectory=/home/agclaw/ag-claw
-ExecStart=/usr/bin/node /home/agclaw/ag-claw/dist/cli.js gateway start
+User=argentum
+WorkingDirectory=/home/argentum/argentum
+ExecStart=/usr/bin/node /home/argentum/argentum/dist/cli.js gateway start
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
-EnvironmentFile=/home/agclaw/ag-claw/.env
+EnvironmentFile=/home/argentum/argentum/.env
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # Включите и запустите
-sudo systemctl enable agclaw
-sudo systemctl start agclaw
+sudo systemctl enable argentum
+sudo systemctl start argentum
 
 # Проверьте статус
-sudo systemctl status agclaw
+sudo systemctl status argentum
 ```
 
 ---
@@ -235,10 +235,10 @@ apt install -y caddy
 Настройте `/etc/caddy/Caddyfile`:
 
 ```
-agclaw.example.com {
+argentum.example.com {
     reverse_proxy localhost:3000
     log {
-        output file /var/log/caddy/agclaw.log
+        output file /var/log/caddy/argentum.log
     }
 }
 ```
@@ -253,12 +253,12 @@ systemctl reload caddy
 apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Настройте `/etc/nginx/sites-available/agclaw`:
+Настройте `/etc/nginx/sites-available/argentum`:
 
 ```nginx
 server {
     listen 80;
-    server_name agclaw.example.com;
+    server_name argentum.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -276,9 +276,9 @@ server {
 Включите сайт и получите сертификат:
 
 ```bash
-ln -s /etc/nginx/sites-available/agclaw /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/argentum /etc/nginx/sites-enabled/
 nginx -t
-certbot --nginx -d agclaw.example.com
+certbot --nginx -d argentum.example.com
 systemctl reload nginx
 ```
 
@@ -345,7 +345,7 @@ AGCLAW_API_TOKEN=your-generated-token-here
 
 ```bash
 # Пример: Rsync резервные копии на другую машину
-0 2 * * * rsync -avz /home/agclaw/ag-claw/data/ backup@backup-server:/backups/ag-claw/
+0 2 * * * rsync -avz /home/argentum/argentum/data/ backup@backup-server:/backups/argentum/
 ```
 
 ### 5. Фаервол
@@ -365,15 +365,15 @@ ufw enable
 Настройте ротацию логов для логов шлюза:
 
 ```bash
-# /etc/logrotate.d/agclaw
-/home/agclaw/ag-claw/logs/*.log {
+# /etc/logrotate.d/argentum
+/home/argentum/argentum/logs/*.log {
     daily
     rotate 14
     compress
     delaycompress
     missingok
     notifempty
-    create 0644 agclaw agclaw
+    create 0644 argentum argentum
 }
 ```
 
@@ -387,22 +387,22 @@ ufw enable
 
 ```bash
 #!/bin/bash
-# /usr/local/bin/check-agclaw.sh
+# /usr/local/bin/check-argentum.sh
 
 response=$(curl -sf http://localhost:3000/health)
 if [ $? -ne 0 ]; then
-    echo "AG-Claw is down!"
+    echo "Argentum is down!"
     # Send alert (настройте свой метод оповещения)
     exit 1
 fi
 
-echo "AG-Claw is healthy: $response"
+echo "Argentum is healthy: $response"
 ```
 
 Добавьте в crontab:
 
 ```bash
-*/5 * * * * /usr/local/bin/check-agclaw.sh >> /var/log/agclaw-health.log 2>&1
+*/5 * * * * /usr/local/bin/check-argentum.sh >> /var/log/argentum-health.log 2>&1
 ```
 
 ### Prometheus Metrics
@@ -423,7 +423,7 @@ Prometheus scrape config:
 
 ```yaml
 scrape_configs:
-  - job_name: 'ag-claw'
+  - job_name: 'argentum'
     static_configs:
       - targets: ['localhost:3000']
     metrics_path: '/metrics'
@@ -431,12 +431,12 @@ scrape_configs:
 
 ---
 
-## Обновление AG-Claw
+## Обновление Argentum
 
 ### Docker Update
 
 ```bash
-cd ag-claw
+cd argentum
 git pull
 npm run docker:build
 docker compose -f docker/docker-compose.yml down
@@ -446,11 +446,11 @@ npm run docker:up
 ### VPS Update (systemd)
 
 ```bash
-cd ag-claw
+cd argentum
 git pull
 npm install
 npm run build
-sudo systemctl restart agclaw
+sudo systemctl restart argentum
 ```
 
 ---
@@ -459,7 +459,7 @@ sudo systemctl restart agclaw
 
 | Проблема | Решение |
 |---|---|
-| Контейнер не запускается | Проверьте логи: `docker compose logs ag-claw` |
+| Контейнер не запускается | Проверьте логи: `docker compose logs argentum` |
 | Health check failing | Убедитесь, что порт правильный; проверьте `curl http://localhost:3000/health` напрямую |
 | Не подключиться из интернета | Проверьте фаервол: `ufw status`; проверьте логи обратного прокси |
 | HTTPS не работает | Проверьте, что DNS домена указывает на VPS; проверьте логи Caddy/Nginx |
@@ -475,4 +475,4 @@ sudo systemctl restart agclaw
 
 ---
 
-*Вопросы? Создайте issue на [GitHub](https://github.com/AG064/ag-claw/issues).*
+*Вопросы? Создайте issue на [GitHub](https://github.com/AG064/argentum/issues).*

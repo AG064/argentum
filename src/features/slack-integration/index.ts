@@ -274,7 +274,7 @@ class SlackIntegrationFeature implements FeatureModule {
     const message: SlackMessage = {
       ts,
       channel,
-      username: 'AG-Claw',
+      username: 'Argentum',
       text,
       blocks,
     };

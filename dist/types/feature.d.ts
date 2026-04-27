@@ -35,7 +35,7 @@ export interface FeatureHooks {
         healthy: boolean;
         message?: string;
     }>;
-    /** Called when AG-Claw is shutting down */
+    /** Called when Argentum is shutting down */
     onShutdown?(ctx: FeatureContext): Promise<void>;
 }
 /** Context object passed to all feature hook calls */

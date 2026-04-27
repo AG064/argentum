@@ -1,5 +1,5 @@
 /**
- * AG-Claw Dashboard - Overview Page
+ * Argentum Dashboard - Overview Page
  */
 
 async function loadOverviewData() {

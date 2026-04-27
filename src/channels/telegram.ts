@@ -1,5 +1,5 @@
 /**
- * Telegram Channel for AG-Claw
+ * Telegram Channel for Argentum
  *
  * Full grammY-based Telegram bot with:
  * - Text and voice message handling
@@ -140,7 +140,7 @@ class TelegramChannel implements FeatureModule {
     // /start command
     this.bot.command('start', async (ctx) => {
       await ctx.reply(
-        '🤖 Welcome to AG-Claw!\n\n' +
+        '🤖 Welcome to Argentum!\n\n' +
           'I am an AI assistant. Just send me a message and I will do my best to help.\n\n' +
           '/help - Show available commands',
       );
@@ -149,7 +149,7 @@ class TelegramChannel implements FeatureModule {
     // /help command
     this.bot.command('help', async (ctx) => {
       await ctx.reply(
-        '🤖 AG-Claw Help\n\n' +
+        '🤖 Argentum Help\n\n' +
           'Commands:\n' +
           '/start - Welcome message\n' +
           '/help - This help message\n' +
@@ -164,7 +164,7 @@ class TelegramChannel implements FeatureModule {
       const uptime = Math.floor(process.uptime());
       const memUsage = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
       await ctx.reply(
-        `📊 AG-Claw Status\n\n` +
+        `📊 Argentum Status\n\n` +
           `Uptime: ${uptime}s\n` +
           `Memory: ${memUsage}MB\n` +
           `Running: ${this.running ? '✅' : '❌'}`,

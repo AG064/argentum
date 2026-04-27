@@ -177,7 +177,7 @@ class SlackIntegrationFeature {
         const message = {
             ts,
             channel,
-            username: 'AG-Claw',
+            username: 'Argentum',
             text,
             blocks,
         };

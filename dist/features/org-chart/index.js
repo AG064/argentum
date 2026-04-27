@@ -2,10 +2,10 @@
 /**
  * Org Chart Feature
  *
- * Manages organizational hierarchy where AG-Claw is CEO and subagents are team members.
+ * Manages organizational hierarchy where Argentum is CEO and subagents are team members.
  * Provides hire/fire/assign operations and system prompt injection.
  *
- * AG-Claw as CEO injects org context:
+ * Argentum as CEO injects org context:
  *   ## Your Team
  *   - CTO (coder agent): Handles all code tasks
  *   - Researcher (researcher agent): Handles research
@@ -25,7 +25,7 @@ class OrgChartFeature {
     meta = {
         name: 'org-chart',
         version: '0.0.2',
-        description: 'Organizational chart with AG-Claw as CEO and subagents as team members',
+        description: 'Organizational chart with Argentum as CEO and subagents as team members',
         dependencies: [],
     };
     config = {
@@ -472,13 +472,13 @@ class OrgChartFeature {
     ensureCEO() {
         const existing = this.getNode(this.config.ceoId);
         if (!existing) {
-            this.ctx.logger.info('Creating CEO node for AG-Claw');
+            this.ctx.logger.info('Creating CEO node for Argentum');
             this.db
                 .prepare(`
         INSERT OR IGNORE INTO org_nodes (id, name, role, agent_type, config, status, hired_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
-                .run(this.config.ceoId, 'AG-Claw', 'CEO', 'ag-claw', JSON.stringify({ description: 'AG-Claw CEO - top level orchestrator' }), 'active', Date.now());
+                .run(this.config.ceoId, 'Argentum', 'CEO', 'ag-claw', JSON.stringify({ description: 'Argentum CEO - top level orchestrator' }), 'active', Date.now());
         }
     }
 }

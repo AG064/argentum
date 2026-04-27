@@ -2,7 +2,7 @@
  * Org Chart Types
  *
  * Interfaces for organizational hierarchy management.
- * AG-Claw acts as CEO with subagents as team members.
+ * Argentum acts as CEO with subagents as team members.
  */
 
 export type AgentType = 'ag-claw' | 'coder' | 'researcher' | 'analyst' | 'foreman' | 'custom';

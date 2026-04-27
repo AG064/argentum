@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AG-Claw Security Types
+ * Argentum Security Types
  *
  * Shared types for the security subsystem:
  * - Policy engine

@@ -1,8 +1,8 @@
 "use strict";
 /**
- * AG-Claw MCP Server
+ * Argentum MCP Server
  *
- * Model Context Protocol (MCP) server implementation for AG-Claw.
+ * Model Context Protocol (MCP) server implementation for Argentum.
  * Provides tools and resources compatible with Claude Code.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -166,7 +166,7 @@ handler) {
     };
 }
 /**
- * Pre-built tools for AG-Claw
+ * Pre-built tools for Argentum
  */
 exports.builtInTools = {
     Read: createTool('Read', 'Read file contents', { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] }, async ({ file_path }) => {
