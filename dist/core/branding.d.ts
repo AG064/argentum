@@ -1,0 +1,3 @@
+export declare const ARGENTUM_BANNER = "\n    AAAAA    RRRRR     GGGGG   EEEEEEE  N     N  TTTTTTT  U     U  M     M\n   A     A   R    R   G        E        NN    N     T     U     U  MM   MM\n   AAAAAAA   RRRRR    G  GGG   EEEEE    N N   N     T     U     U  M M M M\n   A     A   R   R    G    G   E        N  N  N     T     U     U  M  M  M\n   A     A   R    R    GGGG    EEEEEEE  N    NN     T      UUUUU   M     M\n\n                                ARGENTUM";
+export declare function formatArgentumBanner(version: string): string;
+//# sourceMappingURL=branding.d.ts.map

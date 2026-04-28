@@ -20,8 +20,10 @@ import 'dotenv/config';
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
+import { formatArgentumBanner } from './core/branding';
 import { resolveCliLaunch } from './core/cli-launch';
 import { ConfigManager, ConfigSchema } from './core/config';
+import { importEsmModule } from './core/esm';
 import {
   createOnboardingProfile,
   generateWebchatAuthToken,
@@ -69,15 +71,7 @@ function warn(text: string): void {
 }
 
 function banner(): void {
-  console.log(`
-  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
- ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
- ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
- ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
- ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
-  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-
-     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
+  console.log(formatArgentumBanner(VERSION));
 }
 
 function getWorkDir(): string {
@@ -2246,17 +2240,9 @@ async function cmdOnboard(): Promise<void> {
   }
 
   const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
-    await import('@clack/prompts');
+    await importEsmModule<typeof import('@clack/prompts')>('@clack/prompts');
 
-  intro(`
-  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
- ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
- ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
- ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
- ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
-  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-
-     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
+  intro(formatArgentumBanner(VERSION));
   log.step('Welcome! This wizard will set up your Argentum instance.');
   log.info('Press Ctrl+C at any time to cancel.');
 

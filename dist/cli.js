@@ -51,8 +51,10 @@ const path = __importStar(require("path"));
  */
 require("dotenv/config");
 const yaml_1 = require("yaml");
+const branding_1 = require("./core/branding");
 const cli_launch_1 = require("./core/cli-launch");
 const config_1 = require("./core/config");
+const esm_1 = require("./core/esm");
 const onboarding_1 = require("./core/onboarding");
 const plugin_loader_1 = require("./core/plugin-loader");
 const modelDiscovery_js_1 = require("./utils/modelDiscovery.js");
@@ -87,15 +89,7 @@ function warn(text) {
     print(`\x1b[33m⚠\x1b[0m ${text}`);
 }
 function banner() {
-    console.log(`
-  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
- ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
- ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
- ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
- ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
-  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-
-     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
+    console.log((0, branding_1.formatArgentumBanner)(VERSION));
 }
 function getWorkDir() {
     const configuredWorkDir = process.env[WORKDIR_ENV] || process.env[LEGACY_WORKDIR_ENV];
@@ -2061,16 +2055,8 @@ async function cmdOnboard() {
         info('Next: argentum doctor');
         return;
     }
-    const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } = await Promise.resolve().then(() => __importStar(require('@clack/prompts')));
-    intro(`
-  ██████╗ ██╗██╗  ██╗███████╗██╗   ██╗███╗   ██╗██╗  ██╗███████╗
- ██╔════╝ ██║╚██╗██╔╝██╔════╝██║   ██║████╗  ██║██║ ██╔╝██╔════╝
- ██║  ███╗██║ ╚███╔╝ █████╗  ██║   ██║██╔██╗ ██║█████╔╝ ███████╗
- ██║   ██║██║ ██╔██╗██╔══╝  ██║   ██║██║╚██╗██║██╔═██╗ ╚════██║
- ╚██████╔╝██║██╔╝ ██╗███████╗╚██████╔╝██║ ╚████║██║  ██╗███████║
-  ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-
-     Argentum  |  Modular AI Agent Framework  |  v${VERSION}`);
+    const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } = await (0, esm_1.importEsmModule)('@clack/prompts');
+    intro((0, branding_1.formatArgentumBanner)(VERSION));
     log.step('Welcome! This wizard will set up your Argentum instance.');
     log.info('Press Ctrl+C at any time to cancel.');
     const config = (0, onboarding_1.createOnboardingProfile)().config;

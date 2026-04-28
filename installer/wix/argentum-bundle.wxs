@@ -1,0 +1,22 @@
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle
+    Name="Argentum"
+    Manufacturer="AG"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="6E6B4C61-E4AD-46D9-B327-38EBC89CDC68">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+        Theme="rtfLicense"
+        LicenseFile="$(var.LicenseRtf)" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage
+        SourceFile="$(var.SourceMsi)"
+        Compressed="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

@@ -106,9 +106,10 @@ docker run -it ag064/argentum
 ```
 
 **Windows installer or portable binary**:
-Download `argentum-v0.0.2-win-x64.msi` or `argentum-v0.0.2-win-x64.exe` from [github.com/AG064/argentum/releases/latest](https://github.com/AG064/argentum/releases/latest).
+Download `argentum-v0.0.2-win-x64.exe` for the graphical setup flow, or `argentum-v0.0.2-win-x64.msi` for Windows Installer directly, from [github.com/AG064/argentum/releases/latest](https://github.com/AG064/argentum/releases/latest).
 
 **Portable binary** (no dependencies):
+Use `argentum-v0.0.2-win-x64-portable.exe` on Windows when you want the console CLI without installing. For Linux and macOS, pick the matching portable binary.
 Download from [github.com/AG064/argentum/releases/latest](https://github.com/AG064/argentum/releases/latest) and pick the one for your OS:
 ```bash
 chmod +x argentum-*

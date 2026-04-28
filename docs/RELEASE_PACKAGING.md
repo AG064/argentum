@@ -1,13 +1,14 @@
 # Release Packaging
 
-Argentum releases publish portable binaries and a Windows MSI installer.
+Argentum releases publish portable binaries, a Windows MSI installer, and a graphical Windows setup executable.
 
 ## Release assets
 
 For version `0.0.2`, the release workflow produces:
 
-- `argentum-v0.0.2-win-x64.exe` - portable Windows CLI executable
+- `argentum-v0.0.2-win-x64.exe` - graphical Windows setup executable
 - `argentum-v0.0.2-win-x64.msi` - Windows installer
+- `argentum-v0.0.2-win-x64-portable.exe` - portable Windows CLI executable
 - `argentum-v0.0.2-linux-x64` - portable Linux CLI executable
 - `argentum-v0.0.2-macos-x64` - portable macOS CLI executable
 - `SHA256SUMS-portable.txt` and `SHA256SUMS.txt` - checksums
@@ -41,7 +42,7 @@ On Windows, run:
 npm run package:win
 ```
 
-This builds the CLI, creates the portable `.exe`, installs the WiX CLI if needed, builds the `.msi`, and writes checksums into `artifacts/release`.
+This builds the CLI, creates the portable `.exe`, installs the WiX CLI if needed, builds the `.msi`, wraps it in a graphical setup `.exe`, and writes checksums into `artifacts/release`.
 
 For a portable executable only:
 

@@ -36,7 +36,7 @@ Get-ChildItem -Path $outputDir -File -ErrorAction SilentlyContinue |
   Where-Object {
     $_.Name -like "argentum-v$version-*" -or
     $_.Name -like "agclaw-v$version-*" -or
-    $_.Name -like "argentum-test.*" -or
+    $_.Name -like "argentum-test*" -or
     $_.Name -eq "SHA256SUMS.txt"
   } |
   Remove-Item -Force
@@ -61,7 +61,8 @@ if (-not $SkipBuild) {
   Invoke-Checked "npm.cmd" @("run", "build")
 }
 
-$exePath = Join-Path $outputDir "argentum-v$version-win-x64.exe"
+$portableExePath = Join-Path $outputDir "argentum-v$version-win-x64-portable.exe"
+$installerExePath = Join-Path $outputDir "argentum-v$version-win-x64.exe"
 $pkgArgs = @(
   "--yes",
   "@yao-pkg/pkg@6.6.0",
@@ -71,7 +72,7 @@ $pkgArgs = @(
   "--targets",
   "node18-win-x64",
   "--output",
-  $exePath,
+  $portableExePath,
   "--compress",
   "GZip",
   "--no-bytecode",
@@ -81,7 +82,7 @@ $pkgArgs = @(
 )
 
 Invoke-Checked "npx.cmd" $pkgArgs
-Invoke-Checked $exePath @("--version")
+Invoke-Checked $portableExePath @("--version")
 
 $smokeWorkDir = Join-Path $outputDir "smoke-workdir"
 if (Test-Path $smokeWorkDir) {
@@ -97,7 +98,7 @@ try {
   $env:AGCLAW_WORKDIR = $null
   $env:ARGENTUM_SKIP_EXIT_PAUSE = "1"
   $env:AGCLAW_SKIP_EXIT_PAUSE = "1"
-  Invoke-Checked $exePath @(
+  Invoke-Checked $portableExePath @(
     "onboard",
     "--yes",
     "--provider",
@@ -109,7 +110,7 @@ try {
     "--with-webchat",
     "--force"
   )
-  Invoke-Checked $exePath @()
+  Invoke-Checked $portableExePath @()
 } finally {
   $env:ARGENTUM_WORKDIR = $previousArgentumWorkDir
   $env:AGCLAW_WORKDIR = $previousLegacyWorkDir
@@ -120,8 +121,10 @@ try {
 if (-not $SkipMsi) {
   Invoke-Checked "dotnet" @("tool", "restore", "--configfile", (Join-Path $root "NuGet.config"))
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.UI.wixext/6.0.2")
+  Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Bal.wixext/6.0.2")
 
   $msiPath = Join-Path $outputDir "argentum-v$version-win-x64.msi"
+  $licenseRtfPath = Join-Path $root "installer/wix/license.rtf"
   Invoke-Checked "dotnet" @(
     "tool",
     "run",
@@ -134,13 +137,38 @@ if (-not $SkipMsi) {
     "-d",
     "ProductVersion=$version",
     "-d",
-    "SourceExe=$exePath",
+    "SourceExe=$portableExePath",
     "-d",
-    "LicenseRtf=$(Join-Path $root 'installer/wix/license.rtf')",
+    "LicenseRtf=$licenseRtfPath",
     "-ext",
     "WixToolset.UI.wixext",
     "-out",
     $msiPath
+  )
+
+  $balExtension = Get-ChildItem -Path (Join-Path $root ".wix/extensions/WixToolset.Bal.wixext/6.0.2/wixext6") -Filter "*.dll" |
+    Select-Object -First 1
+  if (-not $balExtension) {
+    throw "Unable to locate WixToolset.Bal.wixext after extension restore"
+  }
+
+  Invoke-Checked "dotnet" @(
+    "tool",
+    "run",
+    "wix",
+    "--",
+    "build",
+    "installer/wix/argentum-bundle.wxs",
+    "-d",
+    "ProductVersion=$version",
+    "-d",
+    "SourceMsi=$msiPath",
+    "-d",
+    "LicenseRtf=$licenseRtfPath",
+    "-ext",
+    $balExtension.FullName,
+    "-out",
+    $installerExePath
   )
 }
 
