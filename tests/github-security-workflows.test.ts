@@ -12,8 +12,9 @@ describe('GitHub security workflow baseline', () => {
     expect(codeql).toContain('github/codeql-action/init@v4');
     expect(codeql).toContain('github/codeql-action/analyze@v4');
     expect(codeql).toContain('javascript-typescript');
-    expect(codeql).toContain('security-extended');
+    expect(codeql).toContain('queries: security-and-quality');
     expect(codeql).toContain('security-and-quality');
+    expect(codeql).not.toContain('queries: +');
     expect(codeql).toContain('security-events: write');
   });
 
