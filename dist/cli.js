@@ -59,14 +59,11 @@ const esm_1 = require("./core/esm");
 const onboarding_1 = require("./core/onboarding");
 const plugin_loader_1 = require("./core/plugin-loader");
 const modelDiscovery_js_1 = require("./utils/modelDiscovery.js");
-const VERSION = '0.0.2';
+const VERSION = '0.0.3';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
-const LEGACY_COMMAND = 'agclaw';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
-const LEGACY_WORKDIR_ENV = 'AGCLAW_WORKDIR';
 const SKIP_EXIT_PAUSE_ENV = 'ARGENTUM_SKIP_EXIT_PAUSE';
-const LEGACY_SKIP_EXIT_PAUSE_ENV = 'AGCLAW_SKIP_EXIT_PAUSE';
 const args = process.argv.slice(2);
 const launch = (0, cli_launch_1.resolveCliLaunch)(args, {
     execPath: process.execPath,
@@ -104,17 +101,12 @@ function banner() {
     console.log((0, branding_1.formatArgentumBanner)(VERSION));
 }
 function getWorkDir() {
-    const configuredWorkDir = process.env[WORKDIR_ENV] || process.env[LEGACY_WORKDIR_ENV];
+    const configuredWorkDir = process.env[WORKDIR_ENV];
     if (configuredWorkDir) {
         return configuredWorkDir;
     }
     if (launch.command === 'launch') {
-        const argentumHome = path.join(homeDir(), '.argentum');
-        const legacyHome = path.join(homeDir(), '.ag-claw');
-        if (!fs.existsSync(argentumHome) && fs.existsSync(legacyHome)) {
-            return legacyHome;
-        }
-        return argentumHome;
+        return path.join(homeDir(), '.argentum');
     }
     return process.cwd();
 }
@@ -128,19 +120,15 @@ function getArgValue(flag) {
 function getProjectConfigPath(workDir = getWorkDir()) {
     const yamlPath = path.join(workDir, 'config', 'default.yaml');
     const argentumPath = path.join(workDir, 'argentum.json');
-    const legacyPath = path.join(workDir, 'agclaw.json');
     if (fs.existsSync(yamlPath))
         return yamlPath;
     if (fs.existsSync(argentumPath))
         return argentumPath;
-    if (fs.existsSync(legacyPath))
-        return legacyPath;
     return yamlPath;
 }
 function projectConfigExists(workDir = getWorkDir()) {
     return (fs.existsSync(path.join(workDir, 'config', 'default.yaml')) ||
-        fs.existsSync(path.join(workDir, 'argentum.json')) ||
-        fs.existsSync(path.join(workDir, 'agclaw.json')));
+        fs.existsSync(path.join(workDir, 'argentum.json')));
 }
 function resolveFeaturesDir() {
     const candidates = [
@@ -508,7 +496,7 @@ function cmdInit() {
         const defaultConfig = {
             $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
             name: 'My ARGENTUM Instance',
-            version: '0.0.2',
+            version: '0.0.3',
             server: {
                 port: 3000,
                 host: '0.0.0.0',
@@ -541,9 +529,9 @@ function cmdInit() {
     if (!fs.existsSync(envPath)) {
         fs.writeFileSync(envPath, [
             '# Argentum Environment Variables',
-            'AGCLAW_WORKDIR=.',
-            'AGCLAW_PORT=3000',
-            'AGCLAW_MASTER_KEY=',
+            'ARGENTUM_WORKDIR=.',
+            'ARGENTUM_PORT=3000',
+            'ARGENTUM_MASTER_KEY=',
             'OPENAI_API_KEY=',
             'ANTHROPIC_API_KEY=',
             'OPENROUTER_API_KEY=',
@@ -581,8 +569,7 @@ async function cmdStart() {
     // First-run check: if no config exists, prompt to onboard
     const configPath = path.join(process.cwd(), 'config', 'default.yaml');
     const argentumConfigPath = path.join(process.cwd(), 'argentum.json');
-    const legacyConfigPath = path.join(process.cwd(), 'agclaw.json');
-    if (!fs.existsSync(configPath) && !fs.existsSync(argentumConfigPath) && !fs.existsSync(legacyConfigPath)) {
+    if (!fs.existsSync(configPath) && !fs.existsSync(argentumConfigPath)) {
         banner();
         print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.');
         print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
@@ -1470,7 +1457,6 @@ async function cmdBackup() {
             // Restore config
             const yamlConfigBackup = path.join(backupPath, 'config', 'default.yaml');
             const jsonConfigBackup = path.join(backupPath, 'argentum.json');
-            const legacyJsonConfigBackup = path.join(backupPath, 'agclaw.json');
             if (fs.existsSync(yamlConfigBackup)) {
                 const restorePath = path.join(workDir, 'config', 'default.yaml');
                 fs.mkdirSync(path.dirname(restorePath), { recursive: true });
@@ -1480,10 +1466,6 @@ async function cmdBackup() {
             else if (fs.existsSync(jsonConfigBackup)) {
                 fs.copyFileSync(jsonConfigBackup, path.join(workDir, 'argentum.json'));
                 print('  ✓ argentum.json');
-            }
-            else if (fs.existsSync(legacyJsonConfigBackup)) {
-                fs.copyFileSync(legacyJsonConfigBackup, path.join(workDir, 'agclaw.json'));
-                print('  ✓ agclaw.json');
             }
             // Restore .env
             const envBackup = path.join(backupPath, '.env');
@@ -2048,6 +2030,51 @@ function askBasic(rl, message, defaultValue = '') {
         });
     });
 }
+async function askSecretBasic(rl, message, defaultValue = '') {
+    const input = (rl.input ?? process.stdin);
+    const output = (rl.output ?? process.stdout);
+    if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== 'function') {
+        return askBasic(rl, message, defaultValue);
+    }
+    return new Promise((resolve) => {
+        let buffer = '';
+        const finish = (value) => {
+            input.off('data', onData);
+            input.setRawMode(false);
+            output.write('\n');
+            rl.resume();
+            resolve(value.trim() || defaultValue);
+        };
+        const onData = (chunk) => {
+            for (const char of chunk.toString('utf8')) {
+                if (char === '\u0003') {
+                    input.off('data', onData);
+                    input.setRawMode(false);
+                    output.write('\n');
+                    process.exit(130);
+                }
+                if (char === '\r' || char === '\n') {
+                    finish(buffer);
+                    return;
+                }
+                if (char === '\u007f' || char === '\b') {
+                    if (buffer.length > 0) {
+                        buffer = buffer.slice(0, -1);
+                        output.write('\b \b');
+                    }
+                    continue;
+                }
+                buffer += char;
+                output.write('*');
+            }
+        };
+        rl.pause();
+        output.write(`${message}${defaultValue ? ' [stored]' : ''}: `);
+        input.setRawMode(true);
+        input.resume();
+        input.on('data', onData);
+    });
+}
 async function confirmBasic(rl, message, defaultValue) {
     const suffix = defaultValue ? 'Y/n' : 'y/N';
     const answer = (await askBasic(rl, `${message} (${suffix})`)).trim().toLowerCase();
@@ -2121,12 +2148,12 @@ async function cmdOnboardBasic() {
             ? 'custom-model'
             : onboarding_1.PROVIDER_PRESETS[provider].defaultModel;
         const model = await askBasic(rl, 'Default model', defaultModel);
-        const apiKey = await askBasic(rl, 'API key (optional, input is visible in this basic setup)', '');
+        const apiKey = await askSecretBasic(rl, 'API key (optional)', '');
         const port = Number.parseInt(await askBasic(rl, 'Server port', '3000'), 10);
         const featureCategories = resolveBasicFeatureCategories(await askBasic(rl, 'Feature categories (comma-separated: core, comm, memory, productivity, automation, monitoring, skills)', 'comm'));
         let telegram;
         if (await confirmBasic(rl, 'Set up Telegram bot now?', false)) {
-            const token = await askBasic(rl, 'Telegram bot token', '');
+            const token = await askSecretBasic(rl, 'Telegram bot token', '');
             const allowAll = token ? await confirmBasic(rl, 'Allow all Telegram users?', false) : false;
             const allowedUsers = allowAll
                 ? []
@@ -2521,7 +2548,7 @@ async function cmdOnboard() {
                     allowedChats,
                     allowAll: allowAll === true,
                 };
-                envEntries.AGCLAW_TELEGRAM_TOKEN = botToken.trim();
+                envEntries.ARGENTUM_TELEGRAM_TOKEN = botToken.trim();
                 log.success('Telegram configured');
             }
             else {
@@ -2585,7 +2612,7 @@ async function cmdOnboard() {
                 allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
             };
             config.channels.webchat = { enabled: true };
-            envEntries.AGCLAW_WEBCHAT_AUTH_TOKEN = token;
+            envEntries.ARGENTUM_WEBCHAT_AUTH_TOKEN = token;
             continue;
         }
         config.features[f] = { enabled: true };
@@ -2631,7 +2658,7 @@ async function cmdSkill() {
     const { execFileSync } = require('child_process');
     // Default skills dir: OpenClaw workspace
     const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
-    const clawhubWorkDir = process.env.AGCLAW_WORKDIR || defaultWorkDir;
+    const clawhubWorkDir = process.env.ARGENTUM_WORKDIR || defaultWorkDir;
     const clawhubBin = process.platform === 'win32' ? 'clawhub.cmd' : 'clawhub';
     const runClawhub = (clawhubArgs) => {
         try {
@@ -3340,7 +3367,7 @@ async function cmdSecurity() {
         case 'blueprint': {
             banner();
             if (args[2] === 'init') {
-                const blueprintPath = path.join(homeDir(), '.ag-claw', 'blueprint.yaml');
+                const blueprintPath = path.join(homeDir(), '.argentum', 'blueprint.yaml');
                 if (fs.existsSync(blueprintPath)) {
                     warn(`Blueprint already exists at: ${blueprintPath}`);
                     return;
@@ -3360,7 +3387,7 @@ async function cmdSecurity() {
                 break;
             }
             if (args[2] === 'show') {
-                const blueprintPath = path.join(homeDir(), '.ag-claw', 'blueprint.yaml');
+                const blueprintPath = path.join(homeDir(), '.argentum', 'blueprint.yaml');
                 if (fs.existsSync(blueprintPath)) {
                     const content = fs.readFileSync(blueprintPath, 'utf-8');
                     print(content);
@@ -3389,7 +3416,7 @@ async function cmdSecurity() {
             print('  \x1b[1margentum security blueprint\x1b[0m [init|show]');
             print('');
             print('  \x1b[1mExamples:\x1b[0m');
-            print('    argentum security policies add --name "allow-read" --effect allow --resource "file://~/ag-claw/**" --action read');
+            print('    argentum security policies add --name "allow-read" --effect allow --resource "file://~/argentum-workspace/**" --action read');
             print('    argentum security approve abc-123         Approve request');
             print('    argentum security deny def-456          Deny request');
             print('');
@@ -3442,7 +3469,7 @@ async function cmdTelegram() {
                 return;
             }
             print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
-            print(`  Bot Token: ${process.env.AGCLAW_TELEGRAM_TOKEN ? 'set via env' : 'NOT SET'}`);
+            print(`  Bot Token: ${process.env.ARGENTUM_TELEGRAM_TOKEN ? 'set via env' : 'NOT SET'}`);
             print(`  Allow All: ${tg.allowAll ? 'yes' : 'no'}`);
             print(`  Allowed Users: ${(tg.allowedUsers || []).join(', ') || 'none'}`);
             print(`  Allowed Chats: ${(tg.allowedChats || []).join(', ') || 'none'}`);
@@ -3585,7 +3612,7 @@ async function cmdImprove() {
     }
 }
 async function runStandaloneImprove(phase, opts) {
-    const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
     const memoryDir = path.join(workDir, 'memory');
     const sessionsDb = path.join(workDir, 'data', 'sessions.db');
     info('Running in standalone mode (basic analysis only)');
@@ -3609,7 +3636,7 @@ async function runStandaloneImprove(phase, opts) {
     }
 }
 function getImproveConfig() {
-    const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
     const configPath = path.join(workDir, 'self-improving-config.json');
     if (fs.existsSync(configPath)) {
         try {
@@ -3646,7 +3673,7 @@ async function cmdLearnings() {
         lessons = feature.getLearnings();
     }
     else {
-        const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+        const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
         const lessonsPath = path.join(workDir, 'memory', 'self-improvement', 'lessons.md');
         lessons = parseLessonsFromFile(lessonsPath);
     }
@@ -3940,8 +3967,7 @@ async function main() {
 }
 async function pauseBeforeExitIfNeeded() {
     if (!launch.pauseOnExit ||
-        process.env[SKIP_EXIT_PAUSE_ENV] === '1' ||
-        process.env[LEGACY_SKIP_EXIT_PAUSE_ENV] === '1') {
+        process.env[SKIP_EXIT_PAUSE_ENV] === '1') {
         return;
     }
     if (!process.stdin.isTTY || !process.stdout.isTTY)

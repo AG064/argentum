@@ -22,4 +22,13 @@ describe('packaged first-run wizard', () => {
     expect(cliSource).toContain('setProgramTitle(PROGRAM_TITLE)');
     expect(cliSource).toContain('process.title = title');
   });
+
+  test('does not use visible basic prompts for secrets', () => {
+    const cliSource = readFileSync('src/cli.ts', 'utf8');
+
+    expect(cliSource).toContain('async function askSecretBasic');
+    expect(cliSource).toContain("await askSecretBasic(rl, 'API key");
+    expect(cliSource).toContain("await askSecretBasic(rl, 'Telegram bot token'");
+    expect(cliSource).not.toContain('API key (optional, input is visible in this basic setup)');
+  });
 });

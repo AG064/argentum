@@ -1,12 +1,11 @@
 {
   "name": "argentum",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "argentum": "bin/argentum.js",
-    "agclaw": "bin/agclaw.js"
+    "argentum": "bin/argentum.js"
   },
   "scripts": {
     "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",

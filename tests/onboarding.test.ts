@@ -26,6 +26,9 @@ describe('secure onboarding profile', () => {
     expect(parsed.channels.webchat.enabled).toBe(false);
     expect(parsed.features.webchat.enabled).toBe(false);
     expect(profile.env).not.toHaveProperty('AGCLAW_WEBCHAT_AUTH_TOKEN');
+    expect(profile.env).not.toHaveProperty('ARGENTUM_WEBCHAT_AUTH_TOKEN');
+    expect(parsed.security.capabilities.defaultProfile).toBe('restricted');
+    expect(parsed.security.capabilities.workspaceRoot).toBe('.');
   });
 
   test('webchat onboarding requires and stores a generated auth token', () => {
@@ -43,7 +46,8 @@ describe('secure onboarding profile', () => {
     expect(parsed.features.webchat.authToken).toBeUndefined();
     expect(parsed.channels.webchat.enabled).toBe(true);
     expect(parsed.channels.webchat.authToken).toBeUndefined();
-    expect(profile.env.AGCLAW_WEBCHAT_AUTH_TOKEN).toBe(token);
+    expect(profile.env.ARGENTUM_WEBCHAT_AUTH_TOKEN).toBe(token);
+    expect(profile.env).not.toHaveProperty('AGCLAW_WEBCHAT_AUTH_TOKEN');
   });
 
   test('telegram is not enabled unless it has an allowlist or explicit allow-all', () => {
@@ -55,13 +59,14 @@ describe('secure onboarding profile', () => {
     });
 
     expect(ConfigSchema.parse(blocked.config).channels.telegram.enabled).toBe(false);
-    expect(blocked.env).not.toHaveProperty('AGCLAW_TELEGRAM_TOKEN');
+    expect(blocked.env).not.toHaveProperty('ARGENTUM_TELEGRAM_TOKEN');
     expect(blocked.warnings.join('\n')).toMatch(/Telegram/i);
 
     const parsedAllowed = ConfigSchema.parse(allowed.config);
     expect(parsedAllowed.channels.telegram.enabled).toBe(true);
     expect(parsedAllowed.channels.telegram.allowedUsers).toEqual([42]);
-    expect(allowed.env.AGCLAW_TELEGRAM_TOKEN).toBe('123:abc');
+    expect(allowed.env.ARGENTUM_TELEGRAM_TOKEN).toBe('123:abc');
+    expect(allowed.env).not.toHaveProperty('AGCLAW_TELEGRAM_TOKEN');
   });
 
   test('writes parseable YAML config and dotenv files without secrets in YAML', () => {
@@ -83,7 +88,8 @@ describe('secure onboarding profile', () => {
       expect(yaml).not.toContain('nv-secret');
       expect(yaml).not.toContain('a'.repeat(64));
       expect(env).toContain('NVIDIA_API_KEY=nv-secret');
-      expect(env).toContain(`AGCLAW_WEBCHAT_AUTH_TOKEN=${'a'.repeat(64)}`);
+      expect(env).toContain(`ARGENTUM_WEBCHAT_AUTH_TOKEN=${'a'.repeat(64)}`);
+      expect(env).not.toContain('AGCLAW_');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

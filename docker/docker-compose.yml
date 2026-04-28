@@ -12,7 +12,7 @@ services:
       - ../config:/app/config:ro
     environment:
       - NODE_ENV=production
-      - AGCLAW_WORKDIR=/app/data
+      - ARGENTUM_WORKDIR=/app/data
       - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}  # Set via .env file
     restart: unless-stopped
     healthcheck:

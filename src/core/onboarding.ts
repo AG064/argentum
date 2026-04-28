@@ -178,7 +178,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
         maxMessagesPerWindow: 60,
         allowedFileTypes: ['image/*', 'text/*', 'application/pdf', 'application/json'],
       };
-      env.AGCLAW_WEBCHAT_AUTH_TOKEN = token;
+      env.ARGENTUM_WEBCHAT_AUTH_TOKEN = token;
     } else {
       features['webchat'] = { enabled: false };
       warnings.push('Webchat was selected but no auth token was provided, so it stayed disabled.');
@@ -187,7 +187,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
 
   const telegram = normalizeTelegram(options.telegram);
   if (telegram.enabled && telegram.token) {
-    env.AGCLAW_TELEGRAM_TOKEN = telegram.token;
+    env.ARGENTUM_TELEGRAM_TOKEN = telegram.token;
   } else if (options.telegram?.token?.trim()) {
     warnings.push(
       'Telegram token was provided without allowed users/chats or allowAll, so Telegram stayed disabled.',
@@ -197,7 +197,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
   const config: Record<string, unknown> = {
     $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
     name: options.name?.trim() || 'My Argentum Instance',
-    version: '0.0.2',
+    version: '0.0.3',
     server: {
       port,
       host: '127.0.0.1',
@@ -236,6 +236,11 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
       secrets: 'env',
       auditLog: true,
       allowlistMode: 'strict',
+      capabilities: {
+        defaultProfile: 'restricted',
+        workspaceRoot: '.',
+        auditPath: './data/audit/capabilities.log',
+      },
     },
     channels: {
       telegram: {
@@ -377,12 +382,12 @@ function createEnvExample(profile: OnboardingProfile): string {
 
   return [
     '# Argentum Environment Variables',
-    'AGCLAW_WORKDIR=.',
-    `AGCLAW_PORT=${config.server?.port ?? 3000}`,
-    'AGCLAW_MASTER_KEY=',
+    'ARGENTUM_WORKDIR=.',
+    `ARGENTUM_PORT=${config.server?.port ?? 3000}`,
+    'ARGENTUM_MASTER_KEY=',
     `${apiKeyEnv}=`,
-    'AGCLAW_WEBCHAT_AUTH_TOKEN=',
-    'AGCLAW_TELEGRAM_TOKEN=',
+    'ARGENTUM_WEBCHAT_AUTH_TOKEN=',
+    'ARGENTUM_TELEGRAM_TOKEN=',
     '',
   ].join('\n');
 }
