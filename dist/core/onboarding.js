@@ -50,7 +50,7 @@ exports.PROVIDER_PRESETS = {
         api: 'openai',
         defaultModel: 'google/gemma-3-27b-it',
         headers: {
-            'HTTP-Referer': 'https://github.com/AG064/ag-claw',
+            'HTTP-Referer': 'https://github.com/AG064/argentum',
             'X-Title': 'Argentum',
         },
     },
@@ -137,7 +137,7 @@ function createOnboardingProfile(options = {}) {
         warnings.push('Telegram token was provided without allowed users/chats or allowAll, so Telegram stayed disabled.');
     }
     const config = {
-        $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
+        $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
         name: options.name?.trim() || 'My Argentum Instance',
         version: '0.0.2',
         server: {

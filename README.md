@@ -6,10 +6,10 @@
 
 Argentum is a local-first AI agent framework for people who want a capable assistant they can own, inspect, and extend. It combines a TypeScript agent runtime, modular features, memory backends, communication channels, and security controls into one self-hosted system.
 
-[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.2-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
 
 ## Install First
@@ -18,7 +18,7 @@ Argentum is a local-first AI agent framework for people who want a capable assis
 
 Download the latest Windows setup executable:
 
-[argentum-v0.0.2-win-x64.exe](https://github.com/AG064/ag-claw/releases/latest)
+[argentum-v0.0.2-win-x64.exe](https://github.com/AG064/argentum/releases/latest)
 
 The setup wizard installs Argentum like a regular Windows program:
 
@@ -41,7 +41,7 @@ Onboarding is the first-run configuration wizard. It creates your workspace, pro
 
 Use this when you want no installer and no Start Menu integration:
 
-[argentum-v0.0.2-win-x64-portable.exe](https://github.com/AG064/ag-claw/releases/latest)
+[argentum-v0.0.2-win-x64-portable.exe](https://github.com/AG064/argentum/releases/latest)
 
 ```powershell
 .\argentum-v0.0.2-win-x64-portable.exe onboard
@@ -66,8 +66,8 @@ docker run -it ag064/argentum
 ### From Source
 
 ```bash
-git clone https://github.com/AG064/ag-claw.git
-cd ag-claw
+git clone https://github.com/AG064/argentum.git
+cd argentum
 npm install
 npm run onboard
 npm run dev

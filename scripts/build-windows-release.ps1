@@ -26,6 +26,38 @@ function Get-PackageVersion {
   return $raw.Trim()
 }
 
+function Get-PkgFetchedBaseBinary {
+  param(
+    [Parameter(Mandatory = $true)][string]$CachePath
+  )
+
+  return Get-ChildItem -Path $CachePath -Recurse -File -Filter "fetched-v*-win-x64" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+}
+
+function New-BrandedPkgBaseBinary {
+  param(
+    [Parameter(Mandatory = $true)][System.IO.FileInfo]$SourceBaseBinary,
+    [Parameter(Mandatory = $true)][string]$OutputPath,
+    [Parameter(Mandatory = $true)][string]$IconPath,
+    [Parameter(Mandatory = $true)][string]$ProductVersion
+  )
+
+  Copy-Item -LiteralPath $SourceBaseBinary.FullName -Destination $OutputPath -Force
+
+  Invoke-Checked "node" @(
+    "scripts/patch-windows-exe.js",
+    "--exe",
+    $OutputPath,
+    "--icon",
+    $IconPath,
+    "--version",
+    $ProductVersion
+  )
+  return $OutputPath
+}
+
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $root
 
@@ -63,6 +95,8 @@ if (-not $SkipBuild) {
 
 $portableExePath = Join-Path $outputDir "argentum-v$version-win-x64-portable.exe"
 $installerExePath = Join-Path $outputDir "argentum-v$version-win-x64.exe"
+$licenseRtfPath = Join-Path $root "installer/wix/license.rtf"
+$iconIcoPath = Join-Path $root "installer/wix/argentum.ico"
 $pkgArgs = @(
   "--yes",
   "@yao-pkg/pkg@6.6.0",
@@ -81,7 +115,28 @@ $pkgArgs = @(
   "--public"
 )
 
-Invoke-Checked "npx.cmd" $pkgArgs
+$pkgBaseBinary = Get-PkgFetchedBaseBinary -CachePath $env:PKG_CACHE_PATH
+if (-not $pkgBaseBinary) {
+  Invoke-Checked "npx.cmd" $pkgArgs
+  $pkgBaseBinary = Get-PkgFetchedBaseBinary -CachePath $env:PKG_CACHE_PATH
+  if (-not $pkgBaseBinary) {
+    throw "Unable to locate pkg Windows base binary in $env:PKG_CACHE_PATH"
+  }
+
+  Remove-Item -LiteralPath $portableExePath -Force
+}
+
+$brandedBasePath = Join-Path $env:PKG_CACHE_PATH "argentum-node-v$version-win-x64.exe"
+New-BrandedPkgBaseBinary -SourceBaseBinary $pkgBaseBinary -OutputPath $brandedBasePath -IconPath $iconIcoPath -ProductVersion $version | Out-Null
+Write-Host "Using branded pkg base binary: $brandedBasePath"
+
+$previousPkgNodePath = $env:PKG_NODE_PATH
+try {
+  $env:PKG_NODE_PATH = $brandedBasePath
+  Invoke-Checked "npx.cmd" $pkgArgs
+} finally {
+  $env:PKG_NODE_PATH = $previousPkgNodePath
+}
 Invoke-Checked $portableExePath @("--version")
 
 $smokeWorkDir = Join-Path $outputDir "smoke-workdir"
@@ -125,8 +180,6 @@ if (-not $SkipMsi) {
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Bal.wixext/6.0.2")
 
   $msiPath = Join-Path $outputDir "argentum-v$version-win-x64.msi"
-  $licenseRtfPath = Join-Path $root "installer/wix/license.rtf"
-  $iconIcoPath = Join-Path $root "installer/wix/argentum.ico"
   Invoke-Checked "dotnet" @(
     "tool",
     "run",

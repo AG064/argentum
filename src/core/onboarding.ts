@@ -100,7 +100,7 @@ export const PROVIDER_PRESETS: Record<Exclude<ProviderName, 'custom'>, ProviderP
     api: 'openai',
     defaultModel: 'google/gemma-3-27b-it',
     headers: {
-      'HTTP-Referer': 'https://github.com/AG064/ag-claw',
+      'HTTP-Referer': 'https://github.com/AG064/argentum',
       'X-Title': 'Argentum',
     },
   },
@@ -195,7 +195,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
   }
 
   const config: Record<string, unknown> = {
-    $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
+    $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
     name: options.name?.trim() || 'My Argentum Instance',
     version: '0.0.2',
     server: {

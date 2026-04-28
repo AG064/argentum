@@ -15,6 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 import type * as ClackPrompts from '@clack/prompts';
 
 import 'dotenv/config';
@@ -28,13 +29,17 @@ import { importEsmModule } from './core/esm';
 import {
   createOnboardingProfile,
   generateWebchatAuthToken,
+  PROVIDER_PRESETS,
   writeOnboardingProfile,
+  type OnboardingTelegramOptions,
   type ProviderName,
+  type ProviderPreset,
 } from './core/onboarding';
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
 const VERSION = '0.0.2';
+const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const LEGACY_COMMAND = 'agclaw';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -44,10 +49,11 @@ const LEGACY_SKIP_EXIT_PAUSE_ENV = 'AGCLAW_SKIP_EXIT_PAUSE';
 const args = process.argv.slice(2);
 const launch = resolveCliLaunch(args, {
   execPath: process.execPath,
-  isPackaged: Boolean((process as NodeJS.Process & { pkg?: unknown }).pkg),
+  isPackaged: isPackagedRuntime(),
   platform: process.platform,
 });
 const command = launch.command;
+setProgramTitle(PROGRAM_TITLE);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +75,17 @@ function info(text: string): void {
 
 function warn(text: string): void {
   print(`\x1b[33m⚠\x1b[0m ${text}`);
+}
+
+function setProgramTitle(title: string): void {
+  process.title = title;
+  if (process.platform === 'win32' && process.stdout.isTTY) {
+    process.stdout.write(`\u001b]0;${title}\u0007`);
+  }
+}
+
+function isPackagedRuntime(): boolean {
+  return Boolean((process as NodeJS.Process & { pkg?: unknown }).pkg);
 }
 
 function banner(): void {
@@ -517,7 +534,7 @@ function cmdInit(): void {
     warn('config/default.yaml already exists, skipping');
   } else {
     const defaultConfig = {
-      $schema: 'https://github.com/AG064/ag-claw/blob/main/config-schema.json',
+      $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
       name: 'My ARGENTUM Instance',
       version: '0.0.2',
       server: {
@@ -2208,6 +2225,162 @@ async function cmdBudget(): Promise<void> {
   }
 }
 
+function createBasicPrompt(): readline.Interface {
+  return readline.createInterface({ input: process.stdin, output: process.stdout });
+}
+
+function askBasic(rl: readline.Interface, message: string, defaultValue = ''): Promise<string> {
+  const suffix = defaultValue ? ` [${defaultValue}]` : '';
+  return new Promise((resolve) => {
+    rl.question(`${message}${suffix}: `, (answer) => {
+      const trimmed = answer.trim();
+      resolve(trimmed || defaultValue);
+    });
+  });
+}
+
+async function confirmBasic(
+  rl: readline.Interface,
+  message: string,
+  defaultValue: boolean,
+): Promise<boolean> {
+  const suffix = defaultValue ? 'Y/n' : 'y/N';
+  const answer = (await askBasic(rl, `${message} (${suffix})`)).trim().toLowerCase();
+  if (!answer) return defaultValue;
+  return ['1', 'true', 'y', 'yes'].includes(answer);
+}
+
+function resolveBasicProviderChoice(value: string): ProviderName {
+  const presetProviders = Object.keys(PROVIDER_PRESETS) as Array<Exclude<ProviderName, 'custom'>>;
+  const providers = [...presetProviders, 'custom' as const];
+  const normalized = value.trim().toLowerCase();
+  const numericChoice = Number.parseInt(normalized, 10);
+  if (Number.isInteger(numericChoice) && numericChoice >= 1 && numericChoice <= providers.length) {
+    return providers[numericChoice - 1]!;
+  }
+
+  const match = providers.find((provider) => provider === normalized);
+  return match ?? 'nvidia';
+}
+
+function resolveBasicFeatureCategories(value: string): string[] {
+  const allowed = new Set(['core', 'comm', 'memory', 'productivity', 'automation', 'monitoring', 'skills']);
+  return value
+    .split(',')
+    .map((category) => category.trim().toLowerCase())
+    .filter((category) => allowed.has(category));
+}
+
+function isClackLoadError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('@clack/prompts') || message.includes('ERR_MODULE_NOT_FOUND');
+}
+
+async function cmdOnboardBasic(): Promise<void> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    error('Interactive onboarding requires a terminal. Use --yes for non-interactive setup.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command !== 'launch') {
+    banner();
+  }
+  info('Welcome! This wizard will set up your Argentum instance.');
+  info(`Workspace: ${getWorkDir()}`);
+  print('');
+
+  const providerEntries = Object.entries(PROVIDER_PRESETS) as Array<
+    [Exclude<ProviderName, 'custom'>, ProviderPreset]
+  >;
+  print('Providers:');
+  providerEntries.forEach(([key, provider], index) => {
+    print(`  ${index + 1}. ${provider.label} (${key})`);
+  });
+  print(`  ${providerEntries.length + 1}. Custom (custom)`);
+  print('');
+
+  const rl = createBasicPrompt();
+  try {
+    const overwrite =
+      hasFlag('--force') ||
+      !projectConfigExists(getWorkDir()) ||
+      (await confirmBasic(rl, 'Configuration already exists. Overwrite it?', false));
+    if (!overwrite) {
+      info('Setup cancelled. Existing configuration was left unchanged.');
+      return;
+    }
+
+    const name = await askBasic(rl, 'Instance name', 'My Argentum');
+    const provider = resolveBasicProviderChoice(await askBasic(rl, 'Provider name or number', 'nvidia'));
+    let customProvider: Partial<ProviderPreset> | undefined;
+
+    if (provider === 'custom') {
+      customProvider = {
+        name: await askBasic(rl, 'Custom provider id', 'custom'),
+        label: await askBasic(rl, 'Custom provider label', 'Custom'),
+        base_url: await askBasic(rl, 'Custom provider base URL', 'https://example.invalid/v1'),
+        api_key_env: await askBasic(rl, 'Custom provider API key environment variable', 'MY_API_KEY'),
+        api: 'openai',
+      };
+    }
+
+    const defaultModel =
+      provider === 'custom'
+        ? 'custom-model'
+        : PROVIDER_PRESETS[provider].defaultModel;
+    const model = await askBasic(rl, 'Default model', defaultModel);
+    const apiKey = await askBasic(rl, 'API key (optional, input is visible in this basic setup)', '');
+    const port = Number.parseInt(await askBasic(rl, 'Server port', '3000'), 10);
+    const featureCategories = resolveBasicFeatureCategories(
+      await askBasic(
+        rl,
+        'Feature categories (comma-separated: core, comm, memory, productivity, automation, monitoring, skills)',
+        'comm',
+      ),
+    );
+
+    let telegram: OnboardingTelegramOptions | undefined;
+    if (await confirmBasic(rl, 'Set up Telegram bot now?', false)) {
+      const token = await askBasic(rl, 'Telegram bot token', '');
+      const allowAll = token ? await confirmBasic(rl, 'Allow all Telegram users?', false) : false;
+      const allowedUsers = allowAll
+        ? []
+        : parseNumberCsv(await askBasic(rl, 'Allowed Telegram user IDs (comma-separated)', ''));
+      const allowedChats = allowAll
+        ? []
+        : parseNumberCsv(await askBasic(rl, 'Allowed Telegram chat IDs (comma-separated)', ''));
+      telegram = { token, allowAll, allowedUsers, allowedChats };
+    }
+
+    const profile = createOnboardingProfile({
+      name,
+      provider,
+      customProvider,
+      model,
+      apiKey,
+      port,
+      featureCategories,
+      webchatAuthToken: featureCategories.includes('comm') ? generateWebchatAuthToken() : undefined,
+      telegram,
+    });
+
+    const written = writeOnboardingProfile(getWorkDir(), profile, { overwrite });
+    print('');
+    success('Setup complete');
+    info(`Config: ${written.configPath}`);
+    info(`Data: ${written.dataDir}`);
+    for (const warning of profile.warnings) warn(warning);
+    info('Next: argentum doctor');
+  } catch (err) {
+    error(err instanceof Error ? err.message : String(err));
+    info('Use --force to overwrite an existing config/default.yaml');
+    process.exitCode = 1;
+  } finally {
+    rl.close();
+  }
+}
+
 async function cmdOnboard(): Promise<void> {
   if (hasFlag('--yes', '--defaults', '--non-interactive')) {
     const port = Number(getArgValue('--port') ?? 3000);
@@ -2240,8 +2413,22 @@ async function cmdOnboard(): Promise<void> {
     return;
   }
 
-  const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
-    await importEsmModule<typeof ClackPrompts>('@clack/prompts');
+  if (isPackagedRuntime()) {
+    await cmdOnboardBasic();
+    return;
+  }
+
+  let prompts: typeof ClackPrompts;
+  try {
+    prompts = await importEsmModule<typeof ClackPrompts>('@clack/prompts');
+  } catch (err) {
+    if (!isClackLoadError(err)) throw err;
+    warn('Advanced prompts are unavailable in this runtime, using basic setup.');
+    await cmdOnboardBasic();
+    return;
+  }
+
+  const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } = prompts;
 
   intro(formatArgentumBanner(VERSION));
   log.step('Welcome! This wizard will set up your Argentum instance.');
@@ -2375,7 +2562,7 @@ async function cmdOnboard(): Promise<void> {
       base_url: 'https://openrouter.ai/api/v1',
       api_key_env: 'OPENROUTER_API_KEY',
       api: 'openai' as const,
-      headers: { 'HTTP-Referer': 'https://github.com/AG064/ag-claw', 'X-Title': 'Argentum' },
+      headers: { 'HTTP-Referer': 'https://github.com/AG064/argentum', 'X-Title': 'Argentum' },
     },
     {
       value: 'google',

@@ -27,6 +27,9 @@ jobs:
       
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Version sync check
+        run: npm run version:check
       
       - name: TypeScript check
         run: npm run typecheck
