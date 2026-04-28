@@ -1,21 +1,22 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 
 function workflow(name: string): string {
   return readFileSync(`.github/workflows/${name}`, 'utf8');
 }
 
-describe('GitHub security workflow baseline', () => {
-  test('runs CodeQL with extended JavaScript and TypeScript security queries', () => {
-    expect(existsSync('.github/workflows/codeql.yml')).toBe(true);
+function workflows(): string[] {
+  return readdirSync('.github/workflows').filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'));
+}
 
-    const codeql = workflow('codeql.yml');
-    expect(codeql).toContain('github/codeql-action/init@v4');
-    expect(codeql).toContain('github/codeql-action/analyze@v4');
-    expect(codeql).toContain('javascript-typescript');
-    expect(codeql).toContain('queries: security-and-quality');
-    expect(codeql).toContain('security-and-quality');
-    expect(codeql).not.toContain('queries: +');
-    expect(codeql).toContain('security-events: write');
+describe('GitHub security workflow baseline', () => {
+  test('does not define an advanced CodeQL workflow when repository default setup owns CodeQL', () => {
+    expect(existsSync('.github/workflows/codeql.yml')).toBe(false);
+
+    for (const name of workflows()) {
+      const contents = workflow(name);
+      expect(contents).not.toContain('github/codeql-action/init');
+      expect(contents).not.toContain('github/codeql-action/analyze');
+    }
   });
 
   test('security workflows install dependencies consistently with the lockfile policy', () => {
