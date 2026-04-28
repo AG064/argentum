@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-import * as fs from 'fs';
-import * as path from 'path';
-
 /**
  * Argentum CLI
  *
@@ -15,6 +12,10 @@ import * as path from 'path';
  *   argentum doctor                  Diagnose setup issues
  *   argentum help                    Show help
  */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import type * as ClackPrompts from '@clack/prompts';
 
 import 'dotenv/config';
 
@@ -2240,7 +2241,7 @@ async function cmdOnboard(): Promise<void> {
   }
 
   const { intro, outro, text, select, confirm, multiselect, log, password, isCancel } =
-    await importEsmModule<typeof import('@clack/prompts')>('@clack/prompts');
+    await importEsmModule<typeof ClackPrompts>('@clack/prompts');
 
   intro(formatArgentumBanner(VERSION));
   log.step('Welcome! This wizard will set up your Argentum instance.');

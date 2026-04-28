@@ -61,11 +61,10 @@ export function omit<T extends Record<string, unknown>, K extends keyof T>(
   obj: T,
   keys: readonly K[],
 ): Omit<T, K> {
-  const result = { ...obj };
-  for (const key of keys) {
-    delete result[key];
-  }
-  return result;
+  const omittedKeys = new Set<keyof T>(keys);
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]) => !omittedKeys.has(key)),
+  ) as Omit<T, K>;
 }
 
 /**

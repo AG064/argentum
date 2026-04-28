@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Argentum CLI
+ *
+ * Usage:
+ *   argentum init                    Initialize Argentum in current directory
+ *   argentum start [--port 3000]     Start Argentum server
+ *   argentum status                  Show system status
+ *   argentum features                List all features
+ *   argentum feature <name> <cmd>    Run feature command
+ *   argentum config [key] [value]    Show/set configuration
+ *   argentum doctor                  Diagnose setup issues
+ *   argentum help                    Show help
+ */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -36,19 +49,6 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-/**
- * Argentum CLI
- *
- * Usage:
- *   argentum init                    Initialize Argentum in current directory
- *   argentum start [--port 3000]     Start Argentum server
- *   argentum status                  Show system status
- *   argentum features                List all features
- *   argentum feature <name> <cmd>    Run feature command
- *   argentum config [key] [value]    Show/set configuration
- *   argentum doctor                  Diagnose setup issues
- *   argentum help                    Show help
- */
 require("dotenv/config");
 const yaml_1 = require("yaml");
 const branding_1 = require("./core/branding");

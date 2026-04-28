@@ -1,7 +1,7 @@
 {
   "name": "argentum",
   "version": "0.0.2",
-  "description": "59 modular features. 8 channels. Self-hosted AI agent framework — zero subscriptions, total control.",
+  "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

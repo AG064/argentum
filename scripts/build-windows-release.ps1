@@ -121,10 +121,12 @@ try {
 if (-not $SkipMsi) {
   Invoke-Checked "dotnet" @("tool", "restore", "--configfile", (Join-Path $root "NuGet.config"))
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.UI.wixext/6.0.2")
+  Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Util.wixext/6.0.2")
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Bal.wixext/6.0.2")
 
   $msiPath = Join-Path $outputDir "argentum-v$version-win-x64.msi"
   $licenseRtfPath = Join-Path $root "installer/wix/license.rtf"
+  $iconIcoPath = Join-Path $root "installer/wix/argentum.ico"
   Invoke-Checked "dotnet" @(
     "tool",
     "run",
@@ -140,8 +142,12 @@ if (-not $SkipMsi) {
     "SourceExe=$portableExePath",
     "-d",
     "LicenseRtf=$licenseRtfPath",
+    "-d",
+    "IconIco=$iconIcoPath",
     "-ext",
     "WixToolset.UI.wixext",
+    "-ext",
+    "WixToolset.Util.wixext",
     "-out",
     $msiPath
   )
@@ -165,6 +171,8 @@ if (-not $SkipMsi) {
     "SourceMsi=$msiPath",
     "-d",
     "LicenseRtf=$licenseRtfPath",
+    "-d",
+    "IconIco=$iconIcoPath",
     "-ext",
     $balExtension.FullName,
     "-out",

@@ -5,12 +5,11 @@
     Name="Argentum"
     Manufacturer="AG"
     Version="$(var.ProductVersion)"
+    IconSourceFile="$(var.IconIco)"
     UpgradeCode="6E6B4C61-E4AD-46D9-B327-38EBC89CDC68">
 
     <BootstrapperApplication>
-      <bal:WixStandardBootstrapperApplication
-        Theme="rtfLicense"
-        LicenseFile="$(var.LicenseRtf)" />
+      <bal:WixInternalUIBootstrapperApplication Theme="standard" />
     </BootstrapperApplication>
 
     <Chain>

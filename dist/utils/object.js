@@ -61,11 +61,8 @@ function deepMerge(target, source) {
  * Return a new object with the specified keys omitted.
  */
 function omit(obj, keys) {
-    const result = { ...obj };
-    for (const key of keys) {
-        delete result[key];
-    }
-    return result;
+    const omittedKeys = new Set(keys);
+    return Object.fromEntries(Object.entries(obj).filter(([key]) => !omittedKeys.has(key)));
 }
 /**
  * Return a new object containing only the specified keys.

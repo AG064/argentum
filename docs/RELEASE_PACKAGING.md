@@ -13,7 +13,9 @@ For version `0.0.2`, the release workflow produces:
 - `argentum-v0.0.2-macos-x64` - portable macOS CLI executable
 - `SHA256SUMS-portable.txt` and `SHA256SUMS.txt` - checksums
 
-The MSI installs `argentum.exe` under `Program Files\Argentum` and adds that folder to the system `PATH`.
+The MSI installs `argentum.exe` under `Program Files\Argentum`, adds that folder to the system `PATH`, creates a Start Menu shortcut, creates a desktop shortcut, and uses the Argentum product icon for Add/Remove Programs and shortcuts.
+
+The setup `.exe` is a WiX bundle that delegates the visible wizard to the MSI UI. Users see the normal installer flow: welcome, license agreement, install folder, ready to install, progress, and finish. The finish page offers to launch Argentum.
 
 ## Creating a GitHub release
 
@@ -42,7 +44,9 @@ On Windows, run:
 npm run package:win
 ```
 
-This builds the CLI, creates the portable `.exe`, installs the WiX CLI if needed, builds the `.msi`, wraps it in a graphical setup `.exe`, and writes checksums into `artifacts/release`.
+This builds the CLI, creates the portable `.exe`, installs the WiX CLI/extensions if needed, builds the `.msi`, wraps it in a graphical setup `.exe`, and writes checksums into `artifacts/release`.
+
+Product icon sources live at `assets/brand/argentum.png` and `installer/wix/argentum.ico`.
 
 For a portable executable only:
 
@@ -52,6 +56,6 @@ npm run package:win:exe
 
 Requirements for MSI builds:
 
-- Node.js 20 or newer
+- Node.js 18 or newer
 - .NET SDK 8 or newer
 - Network access the first time `@yao-pkg/pkg` or WiX must be downloaded
