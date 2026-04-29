@@ -331,7 +331,7 @@ class KnowledgeGraphFeature {
   constructor() {
     this.meta = {
       name: 'knowledge-graph',
-      version: '0.0.2',
+      version: '0.0.3',
       description: 'Knowledge graph with Markdown/JSON import, export, pathfinding',
       dependencies: [],
     };

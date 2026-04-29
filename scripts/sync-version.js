@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-const { existsSync, readFileSync, writeFileSync } = require('fs');
+const { existsSync, readdirSync, readFileSync, statSync, writeFileSync } = require('fs');
+const { extname, join } = require('path');
 
 const checkOnly = process.argv.includes('--check');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
@@ -46,9 +47,19 @@ rewrite('src/core/onboarding.ts', (source) =>
   source.replace(/version: '\d+\.\d+\.\d+'/g, `version: '${version}'`),
 );
 
-rewrite('README.md', (source) => source.replace(/v\d+\.\d+\.\d+/g, vVersion));
-rewrite('docs/RELEASE_PACKAGING.md', (source) => source.replace(/v\d+\.\d+\.\d+/g, vVersion));
-rewrite(`docs/releases/${vVersion}.md`, (source) => source.replace(/v\d+\.\d+\.\d+/g, vVersion));
+for (const file of [...listFiles('src', new Set(['.ts', '.js'])), ...listFiles('tests', new Set(['.ts', '.js']))]) {
+  rewrite(file, (source) => rewriteVersionLines(source));
+}
+
+for (const file of [
+  ...listFiles('docs', new Set(['.md', '.html'])),
+  ...listFiles('backups', new Set(['.json'])),
+  '.github/ISSUE_TEMPLATE/bug_report.md',
+  'install.sh',
+  'README.md',
+]) {
+  rewrite(file, (source) => rewriteDocumentationVersions(source));
+}
 
 if (changed.length > 0) {
   const message = checkOnly
@@ -58,4 +69,59 @@ if (changed.length > 0) {
   if (checkOnly) process.exitCode = 1;
 } else {
   console.log(`Version references are synchronized at ${vVersion}.`);
+}
+
+function listFiles(root, extensions) {
+  if (!existsSync(root)) return [];
+
+  const files = [];
+  for (const entry of readdirSync(root)) {
+    if (entry === 'node_modules') continue;
+
+    const fullPath = join(root, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      files.push(...listFiles(fullPath, extensions));
+      continue;
+    }
+
+    if (extensions.has(extname(entry))) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+function rewriteVersionLines(source) {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  return source
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)) {
+        return line;
+      }
+
+      return line
+        .replace(/(['"])v?0\.\d+\.\d+\1/g, (_match, quote) => `${quote}${version}${quote}`)
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?![\d.])/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?![\d.])/g, version);
+    })
+    .join(newline);
+}
+
+function rewriteDocumentationVersions(source) {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  return source
+    .split(/\r?\n/)
+    .map((line) => {
+      if (/Node\.js/i.test(line)) {
+        return line;
+      }
+
+      return line
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?![\d.])/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?![\d.])/g, version);
+    })
+    .join(newline);
 }

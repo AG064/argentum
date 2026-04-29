@@ -51,7 +51,7 @@ export interface AnalysisResult {
 class SelfEvolvingMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-evolving-memory',
-    version: '0.0.2',
+    version: '0.0.3',
     description: 'Automatic memory optimization: dedup, merge, decay, promote',
     dependencies: [],
   };

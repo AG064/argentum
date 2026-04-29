@@ -71,8 +71,8 @@ Argentum will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `argentum-v0.0.2-win-x64.msi` for a normal Windows install
-- `argentum-v0.0.2-win-x64.exe` for a portable executable
+- `argentum-v0.0.3-win-x64.msi` for a normal Windows install
+- `argentum-v0.0.3-win-x64.exe` for a portable executable
 
 The MSI installs `argentum.exe` into `Program Files\Argentum` and adds it to the system `PATH`, so a new terminal can run:
 

@@ -6,7 +6,7 @@ const path_1 = require("path");
 class AutoUpdateFeature {
     meta = {
         name: 'auto-update',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Automatic updates for Argentum components with backup and rollback',
         dependencies: [],
     };
@@ -32,7 +32,7 @@ class AutoUpdateFeature {
             const pkgPath = (0, path_1.resolve)(process.cwd(), 'package.json');
             if ((0, fs_1.existsSync)(pkgPath)) {
                 const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf8'));
-                this.currentVersion = pkg.version || '0.0.0';
+                this.currentVersion = pkg.version || '0.0.3';
             }
             else {
                 this.currentVersion = '0.0.0';

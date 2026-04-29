@@ -43,7 +43,7 @@ import { existsSync } from 'fs';
 
 const meta: FeatureMeta = {
   name: 'git-assistant',
-  version: '0.0.2',
+  version: '0.0.3',
   description: 'Git repository assistant — status, log, branches, and more',
   dependencies: [],
 };

@@ -285,7 +285,7 @@ const DOMAIN_KEYWORDS = {
 class LifeDomainsFeature {
     meta = {
         name: 'life-domains',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Memory structured by life domains with auto-classification',
         dependencies: [],
     };

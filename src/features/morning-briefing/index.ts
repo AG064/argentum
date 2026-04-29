@@ -67,7 +67,7 @@ export type BriefingHandler = (briefing: MorningBriefing) => Promise<void>;
 class MorningBriefingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'morning-briefing',
-    version: '0.0.2',
+    version: '0.0.3',
     description: 'Daily personalized morning briefing generator',
     dependencies: [],
   };

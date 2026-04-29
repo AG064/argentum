@@ -16,7 +16,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class TaskCheckoutFeature {
     meta = {
         name: 'task-checkout',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Atomic task checkout to prevent agent conflicts',
         dependencies: [],
     };

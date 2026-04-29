@@ -29,7 +29,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class WakeWordFeature extends events_1.EventEmitter {
     meta = {
         name: 'wake-word',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Pattern-based wake word detection with event notifications',
         dependencies: [],
     };

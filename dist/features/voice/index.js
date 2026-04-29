@@ -74,7 +74,7 @@ async function getVoice(voiceId) {
 class VoiceFeature {
     meta = {
         name: 'voice',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Text-to-Speech and Speech-to-Text via ElevenLabs and OpenAI',
         dependencies: [],
     };

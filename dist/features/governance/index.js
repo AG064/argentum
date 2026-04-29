@@ -17,7 +17,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class GovernanceFeature {
     meta = {
         name: 'governance',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Approval gates and governance for sensitive actions',
         dependencies: [],
     };

@@ -110,7 +110,7 @@ function transformToGraphData(entities, relationships) {
  */
 function generateMockGraphData() {
   const nodes = [
-    { id: 'ag-claw', name: 'Argentum', type: 'project', tags: ['ai', 'assistant'], properties: { version: '0.0.2' }, val: 10, color: TYPE_COLORS.project },
+    { id: 'ag-claw', name: 'Argentum', type: 'project', tags: ['ai', 'assistant'], properties: { version: '0.0.3' }, val: 10, color: TYPE_COLORS.project },
     { id: 'coder', name: 'Coder Agent', type: 'agent', tags: ['coding', 'development'], properties: { status: 'active' }, val: 5, color: TYPE_COLORS.agent },
     { id: 'researcher', name: 'Researcher Agent', type: 'agent', tags: ['research'], properties: { status: 'active' }, val: 4, color: TYPE_COLORS.agent },
     { id: 'foreman', name: 'Foreman Agent', type: 'agent', tags: ['orchestration'], properties: { status: 'active' }, val: 3, color: TYPE_COLORS.agent },

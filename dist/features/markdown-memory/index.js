@@ -16,7 +16,7 @@ const markdown_1 = require("../../memory/markdown");
 class MarkdownMemoryFeature {
     meta = {
         name: 'markdown-memory',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Markdown file-based memory store with frontmatter',
         dependencies: [],
     };

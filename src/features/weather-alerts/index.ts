@@ -76,7 +76,7 @@ export interface WeatherAlert {
 class WeatherAlertsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'weather-alerts',
-    version: '0.0.2',
+    version: '0.0.3',
     description: 'Weather data retrieval and alerting via wttr.in',
     dependencies: [],
   };

@@ -50,6 +50,7 @@ export interface BuiltinToolOptions {
     enableFilesystemTools?: boolean;
     enableShellTool?: boolean;
     enableImageTool?: boolean;
+    workspaceRoot?: string;
 }
 export declare function createBuiltinTools(options?: BuiltinToolOptions): Tool[];
 declare class Argentum {
