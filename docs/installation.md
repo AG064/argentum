@@ -14,33 +14,37 @@
 
 ## Prerequisites
 
-| Requirement | Minimum Version | Check |
-|---|---|---|
-| Node.js | >= 20.0 | `node -v` |
-| npm | >= 9.0 | `npm -v` |
-| Git | any | `git --version` |
-| Docker | >= 24.0 (optional) | `docker --version` |
-| Docker Compose | >= 2.0 (optional) | `docker compose version` |
+| Requirement    | Minimum Version    | Check                    |
+| -------------- | ------------------ | ------------------------ |
+| Node.js        | >= 20.0            | `node -v`                |
+| npm            | >= 9.0             | `npm -v`                 |
+| Git            | any                | `git --version`          |
+| Docker         | >= 24.0 (optional) | `docker --version`       |
+| Docker Compose | >= 2.0 (optional)  | `docker compose version` |
 
 ### Installing Node.js
 
 **Ubuntu / Debian:**
+
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
 **macOS:**
+
 ```bash
 brew install node
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 winget install OpenJS.NodeJS.LTS
 ```
 
 **Verify:**
+
 ```bash
 node -v   # Should print v20.x.x or higher
 npm -v    # Should print 9.x.x or higher
@@ -71,14 +75,15 @@ Argentum will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `argentum-v0.0.3-win-x64.msi` for a normal Windows install
-- `argentum-v0.0.3-win-x64.exe` for a portable executable
+- `Argentum_0.0.4_x64-setup.exe` for the normal GUI setup flow
+- `Argentum_0.0.4_x64_en-US.msi` for the direct Windows Installer package
+- `argentum-cli-v0.0.4-win-x64.exe` only if you want the terminal CLI
 
-The MSI installs `argentum.exe` into `Program Files\Argentum` and adds it to the system `PATH`, so a new terminal can run:
+The setup executable and MSI install the desktop application and create Start Menu and desktop shortcuts. The app opens the Argentum GUI; terminal commands remain available through the separate CLI binary:
 
 ```powershell
-argentum --version
-argentum onboard
+.\argentum-cli-v0.0.4-win-x64.exe --version
+.\argentum-cli-v0.0.4-win-x64.exe onboard
 ```
 
 See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.
@@ -165,11 +170,13 @@ npm run build
 ### 5. Start Argentum
 
 **Production mode:**
+
 ```bash
 npm start
 ```
 
 **Development mode (with hot-reload):**
+
 ```bash
 npm run dev
 ```
@@ -180,16 +187,16 @@ npm run dev
 
 ### Environment Variables (`.env`)
 
-| Variable | Description | Required |
-|---|---|---|
-| `AGCLAW_TELEGRAM_TOKEN` | Telegram bot token from @BotFather | For Telegram |
-| `OPENROUTER_API_KEY` | OpenRouter API key for model access | Yes |
-| `ELEVENLABS_API_KEY` | ElevenLabs key for voice features | For voice |
-| `AGCLAW_SUPABASE_URL` | Supabase project URL | For Supabase memory |
-| `AGCLAW_SUPABASE_KEY` | Supabase anon/service key | For Supabase memory |
-| `AGCLAW_FCM_KEY` | Firebase Cloud Messaging key | For mobile push |
-| `AGCLAW_LOG_LEVEL` | Logging level (debug/info/warn/error) | No |
-| `AGCLAW_PORT` | Override default port (18789) | No |
+| Variable                | Description                           | Required            |
+| ----------------------- | ------------------------------------- | ------------------- |
+| `AGCLAW_TELEGRAM_TOKEN` | Telegram bot token from @BotFather    | For Telegram        |
+| `OPENROUTER_API_KEY`    | OpenRouter API key for model access   | Yes                 |
+| `ELEVENLABS_API_KEY`    | ElevenLabs key for voice features     | For voice           |
+| `AGCLAW_SUPABASE_URL`   | Supabase project URL                  | For Supabase memory |
+| `AGCLAW_SUPABASE_KEY`   | Supabase anon/service key             | For Supabase memory |
+| `AGCLAW_FCM_KEY`        | Firebase Cloud Messaging key          | For mobile push     |
+| `AGCLAW_LOG_LEVEL`      | Logging level (debug/info/warn/error) | No                  |
+| `AGCLAW_PORT`           | Override default port (18789)         | No                  |
 
 ### YAML Configuration (`config/default.yaml`)
 
@@ -199,12 +206,12 @@ The main configuration file controls everything:
 # Server
 server:
   port: 18789
-  host: "0.0.0.0"
+  host: '0.0.0.0'
 
 # Model
 model:
   provider: openrouter
-  defaultModel: "anthropic/claude-sonnet-4-20250514"
+  defaultModel: 'anthropic/claude-sonnet-4-20250514'
 
 # Features (enable/disable)
 features:
@@ -215,12 +222,12 @@ features:
 
 # Memory backend
 memory:
-  primary: sqlite    # sqlite | supabase | markdown
+  primary: sqlite # sqlite | supabase | markdown
   selfEvolving: true
 
 # Security
 security:
-  allowlistMode: permissive   # permissive | strict
+  allowlistMode: permissive # permissive | strict
   auditLog: true
 ```
 
@@ -247,6 +254,7 @@ npm start
 ```
 
 **Docker:**
+
 ```bash
 docker compose -f docker/docker-compose.yml pull
 docker compose -f docker/docker-compose.yml up -d --build

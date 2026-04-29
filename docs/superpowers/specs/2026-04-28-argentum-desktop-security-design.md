@@ -1,4 +1,4 @@
-# Argentum v0.0.3 Desktop and Security Design
+# Argentum v0.0.4 Desktop and Security Design
 
 Date: 2026-04-28
 Status: Approved for implementation planning
@@ -6,13 +6,13 @@ Branch: development
 
 ## Summary
 
-Argentum v0.0.3 should become a complete installed local application while keeping the CLI as a first-class interface. The Windows experience should be the flagship GUI path: a normal installer, a real app window, guided onboarding, chat, settings, skills, knowledge graph, agent runner, logs, and security approvals in one product. macOS and Linux should receive matching binaries where practical, with CLI binaries preserved for terminal-first users and server environments.
+Argentum v0.0.4 should become a complete installed local application while keeping the CLI as a first-class interface. The Windows experience should be the flagship GUI path: a normal installer, a real app window, guided onboarding, chat, settings, skills, knowledge graph, agent runner, logs, and security approvals in one product. macOS and Linux should receive matching binaries where practical, with CLI binaries preserved for terminal-first users and server environments.
 
 The security baseline is capability-based. By default, Argentum can only read and write inside one selected Argentum workspace/install data folder. The agent cannot browse the rest of the filesystem, read process memory, inspect unrelated processes, automate the OS, run arbitrary shell commands, or access external network/integration surfaces unless the user explicitly permits a scoped action.
 
 ## Goals
 
-- Ship v0.0.3 with the product direction clearly represented in code, packaging, and release artifacts.
+- Ship v0.0.4 with the product direction clearly represented in code, packaging, and release artifacts.
 - Keep the current CLI style because it is already a good fit for terminal users.
 - Add a Windows GUI app path so the installed binary behaves like a normal program, not a transient terminal window.
 - Preserve complete CLI access for Linux users, macOS users, server users, and power users.
@@ -26,11 +26,11 @@ The security baseline is capability-based. By default, Argentum can only read an
 
 ## Non-Goals
 
-- v0.0.3 does not need cloud account sync.
-- v0.0.3 does not need mobile apps.
-- v0.0.3 does not need code signing or notarization if credentials are unavailable, but the packaging design should leave room for it.
-- v0.0.3 does not need a marketplace payment system.
-- v0.0.3 should not add broad trusted permissions by default.
+- v0.0.4 does not need cloud account sync.
+- v0.0.4 does not need mobile apps.
+- v0.0.4 does not need code signing or notarization if credentials are unavailable, but the packaging design should leave room for it.
+- v0.0.4 does not need a marketplace payment system.
+- v0.0.4 should not add broad trusted permissions by default.
 
 ## Product Shape
 
@@ -125,7 +125,7 @@ Requirements:
 
 ## Data and Configuration Layout
 
-For v0.0.3, all normal user data should live under the selected Argentum home folder. This resolves the conflict between "keep data with the installation" and Windows Program Files permissions by making the default install mode per-user and writable.
+For v0.0.4, all normal user data should live under the selected Argentum home folder. This resolves the conflict between "keep data with the installation" and Windows Program Files permissions by making the default install mode per-user and writable.
 
 Recommended Windows default:
 
@@ -276,7 +276,7 @@ The GUI process should not directly perform privileged agent actions. It should 
 
 ## Installer and Release
 
-v0.0.3 should bump all repository version references through the existing version sync path.
+v0.0.4 should bump all repository version references through the existing version sync path.
 
 Release artifacts should include, where practical:
 
@@ -305,7 +305,7 @@ The installer should:
 
 Required automated checks:
 
-- Version sync check for v0.0.3.
+- Version sync check for v0.0.4.
 - Onboarding unit tests for config generation.
 - Secret masking tests.
 - No-secrets-in-YAML tests.
@@ -317,7 +317,7 @@ Required automated checks:
 - Release artifact naming tests.
 - Installer metadata tests for product name, icon, and version.
 
-Manual verification for v0.0.3:
+Manual verification for v0.0.4:
 
 - Install on Windows.
 - Confirm Start Menu shortcut.
@@ -335,7 +335,7 @@ Manual verification for v0.0.3:
 
 ### Phase 1: Foundation
 
-- Bump to v0.0.3 through version sync.
+- Bump to v0.0.4 through version sync.
 - Extract shared onboarding state and validation where needed.
 - Add workspace path policy helpers.
 - Add secret masking helpers.
@@ -360,7 +360,7 @@ Manual verification for v0.0.3:
 
 - Update Windows installer to install GUI and CLI artifacts.
 - Add Start Menu and Desktop shortcut behavior.
-- Update release workflows for v0.0.3 artifacts.
+- Update release workflows for v0.0.4 artifacts.
 - Add macOS and Linux GUI packaging where practical.
 
 ### Phase 5: Verification and Release
@@ -368,7 +368,7 @@ Manual verification for v0.0.3:
 - Run local unit, typecheck, lint, build, and packaging smoke tests.
 - Build Windows artifacts.
 - Push development and main.
-- Tag v0.0.3.
+- Tag v0.0.4.
 - Publish release notes and checksums.
 
 ## Implementation Decisions
@@ -376,7 +376,7 @@ Manual verification for v0.0.3:
 - Use Tauri as the target GUI shell unless a build-blocking incompatibility appears during the implementation spike.
 - Default Windows installation should be per-user and writable so the app and default workspace can live together under the Argentum home folder.
 - Keep Trusted Mode in the design, but do not make it the default path. Restricted, Ask Every Time, and Session Grant must work first.
-- macOS and Linux should receive CLI binaries and GUI-capable artifacts for v0.0.3. If platform GUI packaging hits an external signing or CI limitation, document the limitation in release notes and still ship the CLI binary.
+- macOS and Linux should receive CLI binaries and GUI-capable artifacts for v0.0.4. If platform GUI packaging hits an external signing or CI limitation, document the limitation in release notes and still ship the CLI binary.
 
 ## Approval Check
 

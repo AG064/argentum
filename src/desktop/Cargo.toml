@@ -1,6 +1,6 @@
 [package]
 name = "argentum-desktop"
-version = "0.0.3"
+version = "0.0.4"
 description = "Argentum desktop shell"
 authors = ["AG064"]
 edition = "2021"

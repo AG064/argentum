@@ -7,6 +7,7 @@ const path_1 = require("path");
 const workspace_boundary_1 = require("./workspace-boundary");
 const FILE_ACTIONS = new Set(['file.read', 'file.write', 'file.delete']);
 const SENSITIVE_KEY_PATTERN = /((?:api[_-]?key|authorization|bearer|password|secret|token)\s*[:=]\s*)([^\s"'&]+)/gi;
+const MAX_AUDIT_ENTRIES = 10_000;
 function createCapabilityBroker(options) {
     return new DefaultCapabilityBroker(options);
 }
@@ -237,9 +238,17 @@ class DefaultCapabilityBroker {
     }
     pushAudit(entry) {
         this.auditEntries.push(entry);
+        if (this.auditEntries.length > MAX_AUDIT_ENTRIES) {
+            this.auditEntries.splice(0, this.auditEntries.length - MAX_AUDIT_ENTRIES);
+        }
         if (this.auditPath) {
-            (0, fs_1.mkdirSync)((0, path_1.dirname)(this.auditPath), { recursive: true });
-            (0, fs_1.appendFileSync)(this.auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
+            try {
+                (0, fs_1.mkdirSync)((0, path_1.dirname)(this.auditPath), { recursive: true });
+                (0, fs_1.appendFileSync)(this.auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
+            }
+            catch {
+                // Audit persistence failures must not interrupt capability enforcement.
+            }
         }
         this.auditSink?.(entry);
     }

@@ -20,7 +20,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class CalendarIntegrationFeature {
     meta = {
         name: 'calendar-integration',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Local calendar with events and reminders',
         dependencies: [],
     };

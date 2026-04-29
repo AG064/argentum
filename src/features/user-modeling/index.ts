@@ -85,7 +85,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 class UserModelingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'user-modeling',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Tracks user preferences and communication patterns (Honcho-style)',
     dependencies: [],
   };

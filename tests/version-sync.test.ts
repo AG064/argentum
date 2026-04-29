@@ -9,10 +9,19 @@ describe('version synchronization', () => {
     };
     const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 
-    expect(packageJson.version).toBe('0.0.3');
+    expect(packageJson.version).toBe('0.0.4');
     expect(packageJson.scripts?.['version:sync']).toBe('node scripts/sync-version.js');
     expect(packageJson.scripts?.['version:check']).toBe('node scripts/sync-version.js --check');
     expect(existsSync('scripts/sync-version.js')).toBe(true);
+    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
+      "rewriteJsonVersion('src/desktop/tauri.conf.json')",
+    );
+    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
+      "rewriteTomlVersion('src/desktop/Cargo.toml')",
+    );
+    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
+      "rewrite('src/ui/desktop/index.html'",
+    );
     expect(ciWorkflow).toContain('npm run version:check');
   });
 
@@ -21,14 +30,19 @@ describe('version synchronization', () => {
     const expectedVersion = packageJson.version;
     const mismatches: string[] = [];
 
-    for (const file of [...listFiles('src', new Set(['.ts', '.js'])), ...listFiles('tests', new Set(['.ts', '.js']))]) {
+    for (const file of [
+      ...listFiles('src', new Set(['.ts', '.js'])),
+      ...listFiles('tests', new Set(['.ts', '.js'])),
+    ]) {
       const source = readFileSync(file, 'utf8');
       for (const line of source.split(/\r?\n/)) {
-        if (!/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)) {
+        if (
+          !/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)
+        ) {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?![\d.])/g)) {
+        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?!(?:\.\d)|\d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -45,8 +59,11 @@ describe('version synchronization', () => {
     const expectedVersion = packageJson.version;
     const mismatches: string[] = [];
     const files = [
-      ...listFiles('docs', new Set(['.md', '.html'])),
+      ...listFiles('docs', new Set(['.md', '.html'])).filter(
+        (file) => !file.split(/[\\/]/).includes('releases'),
+      ),
       ...listFiles('backups', new Set(['.json'])),
+      'src/ui/desktop/index.html',
       '.github/ISSUE_TEMPLATE/bug_report.md',
       'install.sh',
       'README.md',
@@ -59,7 +76,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?![\d.])/g)) {
+        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?!(?:\.\d)|\d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -78,7 +95,14 @@ function listFiles(root: string, extensions: Set<string>): string[] {
   const files: string[] = [];
 
   for (const entry of readdirSync(root)) {
-    if (entry === '.git' || entry === '.npm-cache' || entry === 'dist' || entry === 'node_modules' || entry === 'target' || entry === 'build') {
+    if (
+      entry === '.git' ||
+      entry === '.npm-cache' ||
+      entry === 'dist' ||
+      entry === 'node_modules' ||
+      entry === 'target' ||
+      entry === 'build'
+    ) {
       continue;
     }
 

@@ -41,7 +41,7 @@ export interface AutoUpdateConfig {
 class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Automatic updates for Argentum components with backup and rollback',
     dependencies: [],
   };

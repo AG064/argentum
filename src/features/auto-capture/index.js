@@ -21,7 +21,7 @@ class AutoCaptureFeature {
   constructor() {
     this.meta = {
       name: 'auto-capture',
-      version: '0.0.3',
+      version: '0.0.4',
       description: 'Automatic capture of decisions, lessons, errors, and preferences',
       dependencies: [],
     };

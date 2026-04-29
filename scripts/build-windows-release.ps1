@@ -67,6 +67,7 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 Get-ChildItem -Path $outputDir -File -ErrorAction SilentlyContinue |
   Where-Object {
     $_.Name -like "argentum-v$version-*" -or
+    $_.Name -like "argentum-cli-v$version-*" -or
     $_.Name -like "agclaw-v$version-*" -or
     $_.Name -like "argentum-test*" -or
     $_.Name -eq "SHA256SUMS.txt"
@@ -93,8 +94,8 @@ if (-not $SkipBuild) {
   Invoke-Checked "npm.cmd" @("run", "build")
 }
 
-$portableExePath = Join-Path $outputDir "argentum-v$version-win-x64-portable.exe"
-$installerExePath = Join-Path $outputDir "argentum-v$version-win-x64.exe"
+$portableExePath = Join-Path $outputDir "argentum-cli-v$version-win-x64.exe"
+$installerExePath = Join-Path $outputDir "argentum-cli-v$version-win-x64-setup.exe"
 $licenseRtfPath = Join-Path $root "installer/wix/license.rtf"
 $iconIcoPath = Join-Path $root "installer/wix/argentum.ico"
 $pkgArgs = @(
@@ -179,7 +180,7 @@ if (-not $SkipMsi) {
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Util.wixext/6.0.2")
   Invoke-Checked "dotnet" @("tool", "run", "wix", "--", "extension", "add", "WixToolset.Bal.wixext/6.0.2")
 
-  $msiPath = Join-Path $outputDir "argentum-v$version-win-x64.msi"
+  $msiPath = Join-Path $outputDir "argentum-cli-v$version-win-x64.msi"
   Invoke-Checked "dotnet" @(
     "tool",
     "run",
@@ -235,7 +236,7 @@ if (-not $SkipMsi) {
 
 $hashes = Get-ChildItem -Path $outputDir -File |
   Where-Object {
-    $_.Extension -in @(".exe", ".msi") -and $_.BaseName -like "argentum-v$version-*"
+    $_.Extension -in @(".exe", ".msi") -and $_.BaseName -like "argentum-cli-v$version-*"
   } |
   Sort-Object Name |
   ForEach-Object {

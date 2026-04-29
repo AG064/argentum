@@ -17,7 +17,7 @@ describe('Argentum desktop shell scaffold', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.3');
+    expect(config.version).toBe('0.0.4');
     expect(config.identifier).toBe('com.argentum.app');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
@@ -124,6 +124,11 @@ describe('Argentum desktop shell scaffold', () => {
 
     expect(packageJson.scripts?.['desktop:dev']).toBe('cd src/desktop && tauri dev');
     expect(packageJson.scripts?.['desktop:build']).toBe('cd src/desktop && tauri build');
+    expect(packageJson.scripts?.['package:win']).toBe('npm run desktop:build');
+    expect(packageJson.scripts?.['package:win:gui']).toBe('npm run desktop:build');
+    expect(packageJson.scripts?.['package:win:cli']).toContain(
+      'build-windows-release.ps1 -SkipMsi',
+    );
     expect(packageJson.devDependencies).toHaveProperty('@tauri-apps/cli');
     expect(packageJson.pkg?.assets).toEqual(expect.arrayContaining(['src/ui/desktop/**/*']));
   });

@@ -21,7 +21,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SQLiteMemoryFeature {
     meta = {
         name: 'sqlite-memory',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'SQLite-backed namespace key-value memory store with full-text search',
         dependencies: [],
     };

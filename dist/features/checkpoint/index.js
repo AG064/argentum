@@ -16,7 +16,7 @@ const semantic_1 = require("../../memory/semantic");
 class CheckpointFeature {
     meta = {
         name: 'checkpoint',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Task checkpoint and resume across sessions',
         dependencies: [],
     };

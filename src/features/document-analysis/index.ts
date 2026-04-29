@@ -80,7 +80,7 @@ export interface DocumentAnalysisConfig {
 class DocumentAnalysisFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'document-analysis',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Document analysis for PDF, DOCX, TXT, MD with text extraction and insights',
     dependencies: [],
   };

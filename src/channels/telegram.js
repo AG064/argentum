@@ -20,7 +20,7 @@ class TelegramChannel {
   constructor() {
     this.meta = {
       name: 'telegram',
-      version: '0.0.3',
+      version: '0.0.4',
       description: 'Telegram channel integration via grammY',
       dependencies: [],
     };

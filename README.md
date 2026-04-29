@@ -6,7 +6,7 @@
 
 Argentum is a local-first AI agent framework for people who want a capable assistant they can own, inspect, and extend. It combines a TypeScript agent runtime, modular features, memory backends, communication channels, and security controls into one self-hosted system.
 
-[![Version](https://img.shields.io/badge/version-v0.0.3-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.4-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
@@ -16,36 +16,30 @@ Argentum is a local-first AI agent framework for people who want a capable assis
 
 ### Windows Setup
 
-Download the latest Windows setup executable:
+Download the latest Windows desktop setup executable from the release page:
 
-[argentum-v0.0.3-win-x64.exe](https://github.com/AG064/argentum/releases/latest)
+[Argentum_0.0.4_x64-setup.exe](https://github.com/AG064/argentum/releases/latest)
 
-The setup wizard installs Argentum like a regular Windows program:
+This is the normal GUI app. The setup wizard installs Argentum like a regular Windows program:
 
 - shows the license agreement
 - shows the default install location, usually `C:\Program Files\Argentum`
 - lets you change the install folder before installation
 - adds Argentum to the Windows Start Menu
 - adds a desktop shortcut
-- offers to launch Argentum when setup completes
+- offers to launch the Argentum desktop interface when setup completes
 
-After setup, launch Argentum from the Start Menu or run:
-
-```powershell
-argentum onboard
-```
-
-Onboarding is the first-run configuration wizard. It creates your workspace, provider settings, enabled features, and local config under your Argentum workspace, normally `%USERPROFILE%\.argentum`.
+After setup, launch Argentum from the Start Menu. The desktop app opens the onboarding flow first, then continues into the main interface.
 
 ### Windows Portable CLI
 
-Use this when you want no installer and no Start Menu integration:
+Use this only when you explicitly want the terminal CLI without the desktop app:
 
-[argentum-v0.0.3-win-x64-portable.exe](https://github.com/AG064/argentum/releases/latest)
+[argentum-cli-v0.0.4-win-x64.exe](https://github.com/AG064/argentum/releases/latest)
 
 ```powershell
-.\argentum-v0.0.3-win-x64-portable.exe onboard
-.\argentum-v0.0.3-win-x64-portable.exe doctor
+.\argentum-cli-v0.0.4-win-x64.exe onboard
+.\argentum-cli-v0.0.4-win-x64.exe doctor
 ```
 
 ### Linux and macOS Binaries
@@ -53,8 +47,8 @@ Use this when you want no installer and no Start Menu integration:
 Download the matching release asset, make it executable, then run onboarding:
 
 ```bash
-chmod +x argentum-v0.0.3-linux-x64
-./argentum-v0.0.3-linux-x64 onboard
+chmod +x argentum-v0.0.4-linux-x64
+./argentum-v0.0.4-linux-x64 onboard
 ```
 
 ### Docker
@@ -100,7 +94,7 @@ argentum memory search <query>   # Search memory
 argentum help                    # Show all commands
 ```
 
-Double-clicking the installed Windows shortcut starts the first-run setup if no Argentum configuration exists yet. If setup already exists, it opens diagnostics and shows the next useful commands.
+Double-clicking the installed Windows shortcut opens the Argentum desktop interface. The CLI binaries are terminal tools and are intentionally separate from the GUI installer.
 
 ## Architecture
 
@@ -120,15 +114,15 @@ Argentum
 
 ## Documentation
 
-| Guide | Use it for |
-| --- | --- |
-| [Quick Start](docs/QUICK_START.md) | Getting running quickly |
-| [User Guide](docs/USER_GUIDE.md) | Daily operation |
-| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Extending Argentum |
-| [API Reference](docs/API.md) | HTTP API and config details |
+| Guide                                          | Use it for                         |
+| ---------------------------------------------- | ---------------------------------- |
+| [Quick Start](docs/QUICK_START.md)             | Getting running quickly            |
+| [User Guide](docs/USER_GUIDE.md)               | Daily operation                    |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md)     | Extending Argentum                 |
+| [API Reference](docs/API.md)                   | HTTP API and config details        |
 | [Release Packaging](docs/RELEASE_PACKAGING.md) | Binary and installer build details |
-| [Security](SECURITY.md) | Security model and reporting |
-| [Features](docs/FEATURES.md) | Feature catalog |
+| [Security](SECURITY.md)                        | Security model and reporting       |
+| [Features](docs/FEATURES.md)                   | Feature catalog                    |
 
 ## Development
 
@@ -146,7 +140,7 @@ Build Windows release assets from Windows:
 npm run package:win
 ```
 
-This produces the setup executable, MSI, portable Windows CLI, and checksums in `artifacts/release`.
+This builds the Windows desktop app installers through Tauri. For the optional portable CLI, run `npm run package:win:cli`.
 
 ## License
 

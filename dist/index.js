@@ -265,7 +265,10 @@ function createBuiltinTools(options = {}) {
                     requester: 'builtin.read_file',
                 });
                 if (!decision.allowed) {
-                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                    if (decision.reason === 'outside-workspace') {
+                        return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                    }
+                    return `Error: Access denied (${decision.reason}): ${filePath}`;
                 }
                 const safePath = decision.resolvedPath;
                 if (!safePath) {
@@ -302,7 +305,10 @@ function createBuiltinTools(options = {}) {
                     requester: 'builtin.write_file',
                 });
                 if (!decision.allowed) {
-                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                    if (decision.reason === 'outside-workspace') {
+                        return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                    }
+                    return `Error: Access denied (${decision.reason}): ${filePath}`;
                 }
                 const safePath = decision.resolvedPath;
                 if (!safePath) {
@@ -504,7 +510,7 @@ class Argentum {
     /** Start the Argentum framework */
     async start() {
         this.logger.info('Starting Argentum Framework', {
-            version: '0.0.3',
+            version: '0.0.4',
             nodeVersion: process.version,
             platform: process.platform,
         });

@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class EveningRecapFeature {
     meta = {
         name: 'evening-recap',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'End-of-day summary with accomplishments and metrics',
         dependencies: [],
     };

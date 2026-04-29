@@ -29,7 +29,7 @@ const DEFAULT_CONFIG = {
 class ACPHarnessFeature {
     meta = {
         name: 'acp',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Agent Control Protocol harness for code execution',
         dependencies: [],
     };

@@ -115,8 +115,7 @@ jobs:
             const keepers = [
               /^argentum-v\d+\.\d+\.\d+-linux-x64$/,
               /^argentum-v\d+\.\d+\.\d+-macos-x64$/,
-              /^argentum-v\d+\.\d+\.\d+-win-x64(?:-setup)?\.exe$/,
-              /^argentum-v\d+\.\d+\.\d+-win-x64\.msi$/,
+              /^argentum-cli-v\d+\.\d+\.\d+-win-x64\.exe$/,
               /^SHA256SUMS(?:-portable)?\.txt$/,
               /^Argentum[_-]\d+\.\d+\.\d+.*\.(?:AppImage|deb|rpm|dmg|msi|exe)$/,
             ];

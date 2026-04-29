@@ -17,7 +17,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class GoalsFeature {
     meta = {
         name: 'goals',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Hierarchical goal management with task linking',
         dependencies: [],
     };

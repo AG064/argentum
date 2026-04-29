@@ -25,6 +25,21 @@ function rewrite(file, updater) {
   }
 }
 
+function rewriteJsonVersion(file) {
+  rewrite(file, (source) => {
+    const data = JSON.parse(source);
+    if (data.version === version) return source;
+    data.version = version;
+    return `${JSON.stringify(data, null, 2)}\n`;
+  });
+}
+
+function rewriteTomlVersion(file) {
+  rewrite(file, (source) =>
+    source.replace(/^version = "\d+\.\d+\.\d+"/m, `version = "${version}"`),
+  );
+}
+
 rewrite('package-lock.json', (source) => {
   const lock = JSON.parse(source);
   const rootVersion = lock.packages?.['']?.version;
@@ -34,7 +49,10 @@ rewrite('package-lock.json', (source) => {
 
   return source
     .replace(/("version":\s*")\d+\.\d+\.\d+(")/, `$1${version}$2`)
-    .replace(/("packages":\s*\{\s*"":\s*\{[\s\S]*?"version":\s*")\d+\.\d+\.\d+(")/, `$1${version}$2`);
+    .replace(
+      /("packages":\s*\{\s*"":\s*\{[\s\S]*?"version":\s*")\d+\.\d+\.\d+(")/,
+      `$1${version}$2`,
+    );
 });
 
 rewrite('src/cli.ts', (source) =>
@@ -47,12 +65,21 @@ rewrite('src/core/onboarding.ts', (source) =>
   source.replace(/version: '\d+\.\d+\.\d+'/g, `version: '${version}'`),
 );
 
-for (const file of [...listFiles('src', new Set(['.ts', '.js'])), ...listFiles('tests', new Set(['.ts', '.js']))]) {
+rewriteJsonVersion('src/desktop/tauri.conf.json');
+rewriteTomlVersion('src/desktop/Cargo.toml');
+rewrite('src/ui/desktop/index.html', (source) => rewriteDocumentationVersions(source));
+
+for (const file of [
+  ...listFiles('src', new Set(['.ts', '.js'])),
+  ...listFiles('tests', new Set(['.ts', '.js'])),
+]) {
   rewrite(file, (source) => rewriteVersionLines(source));
 }
 
 for (const file of [
-  ...listFiles('docs', new Set(['.md', '.html'])),
+  ...listFiles('docs', new Set(['.md', '.html'])).filter(
+    (file) => !file.split(/[\\/]/).includes('releases'),
+  ),
   ...listFiles('backups', new Set(['.json'])),
   '.github/ISSUE_TEMPLATE/bug_report.md',
   'install.sh',
@@ -76,7 +103,8 @@ function listFiles(root, extensions) {
 
   const files = [];
   for (const entry of readdirSync(root)) {
-    if (entry === 'node_modules' || entry === 'target' || entry === 'dist' || entry === 'build') continue;
+    if (entry === 'node_modules' || entry === 'target' || entry === 'dist' || entry === 'build')
+      continue;
 
     const fullPath = join(root, entry);
     const stat = statSync(fullPath);
@@ -98,14 +126,16 @@ function rewriteVersionLines(source) {
   return source
     .split(/\r?\n/)
     .map((line) => {
-      if (!/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)) {
+      if (
+        !/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)
+      ) {
         return line;
       }
 
       return line
         .replace(/(['"])v?0\.\d+\.\d+\1/g, (_match, quote) => `${quote}${version}${quote}`)
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?![\d.])/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?![\d.])/g, version);
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?!(?:\.\d)|\d)/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?!(?:\.\d)|\d)/g, version);
     })
     .join(newline);
 }
@@ -120,8 +150,8 @@ function rewriteDocumentationVersions(source) {
       }
 
       return line
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?![\d.])/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?![\d.])/g, version);
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?!(?:\.\d)|\d)/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?!(?:\.\d)|\d)/g, version);
     })
     .join(newline);
 }

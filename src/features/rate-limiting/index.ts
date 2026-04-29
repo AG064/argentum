@@ -26,7 +26,7 @@ export interface RateLimitConfig {
 class RateLimitingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'rate-limiting',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Sliding window rate limiting with configurable limits',
     dependencies: [],
   };

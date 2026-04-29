@@ -450,7 +450,7 @@ class MemoryGraphBackend implements GraphBackend {
 class KnowledgeGraphFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'knowledge-graph',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Knowledge graph with Markdown/JSON import, export, pathfinding',
     dependencies: [],
   };

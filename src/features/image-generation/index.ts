@@ -72,7 +72,7 @@ const DEFAULT_TIMEOUT_MS = 180_000;
 class ImageGenerationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'image-generation',
-    version: '0.0.3',
+    version: '0.0.4',
     description:
       'AI image generation via Gemini 3 Pro Image with SiliconFlow FLUX.1-dev fallback',
     dependencies: [],

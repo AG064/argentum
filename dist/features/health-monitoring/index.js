@@ -5,7 +5,7 @@ const os_1 = require("os");
 class HealthMonitoringFeature {
     meta = {
         name: 'health-monitoring',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'System health monitoring with metrics collection and alerts',
         dependencies: [],
     };

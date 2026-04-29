@@ -48,7 +48,7 @@ log_step()  { echo -e "${BOLD}${BLUE}==> $1${NC}"; }
 # ─── Banner ──────────────────────────────────
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║        Argentum Installer v0.0.3       ║${NC}"
+echo -e "${BLUE}║        Argentum Installer v0.0.4       ║${NC}"
 echo -e "${BLUE}║    Modular AI Agent Framework         ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════╝${NC}"
 echo ""

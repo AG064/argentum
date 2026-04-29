@@ -38,7 +38,7 @@ interface Message {
 class SessionsFeature {
   readonly meta = {
     name: 'sessions',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Session management for conversations and agent interactions',
     dependencies: ['sqlite-memory'],
   };

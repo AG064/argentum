@@ -49,7 +49,7 @@ const path_1 = require("path");
 class AirGappedFeature {
     meta = {
         name: 'air-gapped',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Fully offline operation mode with local models',
         dependencies: [],
     };

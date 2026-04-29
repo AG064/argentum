@@ -17,7 +17,7 @@ class WebhooksFeature {
   constructor() {
     this.meta = {
       name: 'webhooks',
-      version: '0.0.3',
+      version: '0.0.4',
       description: 'Webhook receiver and dispatcher with signature verification',
       dependencies: [],
     };

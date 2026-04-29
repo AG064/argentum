@@ -1,21 +1,27 @@
 # Release Packaging
 
-Argentum releases publish portable binaries, a Windows MSI installer, and a graphical Windows setup executable.
+Argentum releases publish GUI desktop installers from the Desktop Builds workflow and optional portable CLI binaries from the Release workflow.
 
 ## Release assets
 
-For version `0.0.3`, the release workflow produces:
+For version `0.0.4`, the desktop workflow produces the user-facing app installers:
 
-- `argentum-v0.0.3-win-x64.exe` - graphical Windows setup executable
-- `argentum-v0.0.3-win-x64.msi` - Windows installer
-- `argentum-v0.0.3-win-x64-portable.exe` - portable Windows CLI executable
-- `argentum-v0.0.3-linux-x64` - portable Linux CLI executable
-- `argentum-v0.0.3-macos-x64` - portable macOS CLI executable
-- `SHA256SUMS-portable.txt` and `SHA256SUMS.txt` - checksums
+- `Argentum_0.0.4_x64-setup.exe` - graphical Windows setup executable
+- `Argentum_0.0.4_x64_en-US.msi` - Windows Installer package
+- `Argentum_0.0.4_amd64.AppImage` - Linux desktop AppImage
+- `Argentum_0.0.4_amd64.deb` - Linux Debian package
+- `Argentum-0.0.4-1.x86_64.rpm` - Linux RPM package
+- `Argentum_0.0.4_x64.dmg` - macOS Intel desktop package
+- `Argentum_0.0.4_aarch64.dmg` - macOS Apple Silicon desktop package
 
-The MSI installs `argentum.exe` under `Program Files\Argentum`, adds that folder to the system `PATH`, creates a Start Menu shortcut, creates a desktop shortcut, and uses the Argentum product icon for Add/Remove Programs and shortcuts.
+The release workflow also produces optional terminal-first CLI binaries:
 
-The setup `.exe` is a WiX bundle that delegates the visible wizard to the MSI UI. Users see the normal installer flow: welcome, license agreement, install folder, ready to install, progress, and finish. The finish page offers to launch Argentum.
+- `argentum-cli-v0.0.4-win-x64.exe` - portable Windows CLI executable
+- `argentum-v0.0.4-linux-x64` - portable Linux CLI executable
+- `argentum-v0.0.4-macos-x64` - portable macOS CLI executable
+- `SHA256SUMS-portable.txt` - checksums for portable CLI binaries
+
+The Windows setup executable and MSI are GUI desktop installers. They create normal Windows app entries and should launch the Argentum interface, not the terminal CLI. CLI assets are deliberately named with `argentum-cli-`.
 
 ## Creating a GitHub release
 
@@ -30,8 +36,8 @@ npm test -- --runInBand
 3. Tag and push the release:
 
 ```bash
-git tag v0.0.3
-git push origin v0.0.3
+git tag v0.0.4
+git push origin v0.0.4
 ```
 
 The `Release` workflow builds the artifacts and attaches them to the GitHub release.
@@ -44,18 +50,18 @@ On Windows, run:
 npm run package:win
 ```
 
-This builds the CLI, creates the portable `.exe`, installs the WiX CLI/extensions if needed, builds the `.msi`, wraps it in a graphical setup `.exe`, and writes checksums into `artifacts/release`.
+This builds the GUI desktop app installers through Tauri.
 
 Product icon sources live at `assets/brand/argentum.png` and `installer/wix/argentum.ico`.
 
-For a portable executable only:
+For an optional portable CLI executable only:
 
 ```powershell
-npm run package:win:exe
+npm run package:win:cli
 ```
 
-Requirements for MSI builds:
+Requirements:
 
 - Node.js 18 or newer
-- .NET SDK 8 or newer
-- Network access the first time `@yao-pkg/pkg` or WiX must be downloaded
+- Rust stable and the Tauri build prerequisites for desktop installers
+- Network access the first time Tauri or `@yao-pkg/pkg` dependencies must be downloaded

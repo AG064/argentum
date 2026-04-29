@@ -38,7 +38,7 @@ import {
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.0.3';
+const VERSION = '0.0.4';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -525,7 +525,7 @@ function cmdInit(): void {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
       name: 'My ARGENTUM Instance',
-      version: '0.0.3',
+      version: '0.0.4',
       server: {
         port: 3000,
         host: '0.0.0.0',

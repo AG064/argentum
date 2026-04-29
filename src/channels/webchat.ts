@@ -42,7 +42,7 @@ export type WebchatMessageHandler = (sessionId: string, message: string) => Prom
 class WebchatChannel implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webchat-channel',
-    version: '0.0.3',
+    version: '0.0.4',
     description: 'Web-based chat with SSE streaming responses',
     dependencies: ['webchat'],
   };

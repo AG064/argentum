@@ -107,7 +107,7 @@ function buildSetupPayload() {
     llmProvider: state.llmProvider,
     channelMode: state.channelMode,
     securityProfile: state.securityProfile,
-    version: '0.0.3',
+    version: '0.0.4',
   };
 }
 

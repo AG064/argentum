@@ -315,7 +315,7 @@ connect();
 class WebchatFeature {
     meta = {
         name: 'webchat',
-        version: '0.0.3',
+        version: '0.0.4',
         description: 'Full-featured web chat UI with Markdown, file upload, themes',
         dependencies: [],
     };
