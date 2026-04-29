@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 describe('Argentum desktop shell scaffold', () => {
   test('defines a Tauri desktop application branded as Argentum', () => {
     expect(existsSync('src/desktop/tauri.conf.json')).toBe(true);
+    expect(existsSync('src/desktop/src/lib.rs')).toBe(true);
 
     const config = JSON.parse(readFileSync('src/desktop/tauri.conf.json', 'utf8')) as {
       productName?: string;
@@ -29,6 +30,14 @@ describe('Argentum desktop shell scaffold', () => {
       ]),
     );
     expect(config.app?.security?.csp).toContain("default-src 'self'");
+
+    const cargo = readFileSync('src/desktop/Cargo.toml', 'utf8');
+    const main = readFileSync('src/desktop/src/main.rs', 'utf8');
+    const lib = readFileSync('src/desktop/src/lib.rs', 'utf8');
+
+    expect(cargo).toContain('[lib]');
+    expect(main).toContain('argentum_desktop_lib::run()');
+    expect(lib).toContain('pub fn run()');
   });
 
   test('ships an onboarding-first desktop UI entry point', () => {
@@ -84,7 +93,7 @@ describe('Argentum desktop shell scaffold', () => {
 
   test('bridges desktop onboarding to a Tauri setup save command', () => {
     const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-    const rust = readFileSync('src/desktop/src/main.rs', 'utf8');
+    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
 
     expect(js).toContain('function buildSetupPayload()');
     expect(js).toContain('async function saveSetup()');

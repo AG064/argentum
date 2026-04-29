@@ -5,7 +5,9 @@ function workflow(name: string): string {
 }
 
 function workflows(): string[] {
-  return readdirSync('.github/workflows').filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'));
+  return readdirSync('.github/workflows').filter(
+    (name) => name.endsWith('.yml') || name.endsWith('.yaml'),
+  );
 }
 
 describe('GitHub security workflow baseline', () => {
@@ -35,9 +37,29 @@ describe('GitHub security workflow baseline', () => {
   });
 
   test('release workflows use the same dependency install policy as CI', () => {
-    for (const name of ['binary.yml', 'release.yml']) {
+    for (const name of ['binary.yml', 'desktop.yml', 'release.yml']) {
       expect(workflow(name)).toContain('npm ci --legacy-peer-deps');
     }
+  });
+
+  test('desktop workflow builds Tauri artifacts for each supported platform', () => {
+    const desktop = workflow('desktop.yml');
+
+    expect(desktop).toContain('ubuntu-22.04');
+    expect(desktop).toContain('windows-latest');
+    expect(desktop).toContain('macos-latest');
+    expect(desktop).toContain('macos-15-intel');
+    expect(desktop).toContain('aarch64-apple-darwin');
+    expect(desktop).toContain('x86_64-apple-darwin');
+    expect(desktop).toContain('dtolnay/rust-toolchain@stable');
+    expect(desktop).toContain('libwebkit2gtk-4.1-dev');
+    expect(desktop).toContain('libayatana-appindicator3-dev');
+    expect(desktop).toContain('libssl-dev');
+    expect(desktop).toContain('npm run desktop:build');
+    expect(desktop).toContain('actions/upload-artifact@v4');
+    expect(desktop).toContain('src/desktop/target/release/bundle/**/*');
+    expect(desktop).toContain('src/desktop/target/*/release/bundle/**/*');
+    expect(desktop).toContain('softprops/action-gh-release@v2');
   });
 
   test('OpenSSF Scorecard uploads SARIF results to GitHub code scanning', () => {
