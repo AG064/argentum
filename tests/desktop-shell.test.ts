@@ -52,6 +52,18 @@ describe('Argentum desktop shell scaffold', () => {
     expect(js).toContain('Skills Library');
   });
 
+  test('lets users revise setup and launch into the desktop interface', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+
+    expect(js).toContain('setupComplete: false');
+    expect(js).toContain('Launch Argentum');
+    expect(js).toContain("state.activeSection = 'chat'");
+    expect(js).toContain('state.setupComplete = true');
+    expect(js).toContain("querySelector('#workspace-input')");
+    expect(js).toContain("addEventListener('input'");
+    expect(js).toContain('disabled: state.onboardingStep === 1');
+  });
+
   test('exposes npm scripts for desktop development and packaging', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts?: Record<string, string>;

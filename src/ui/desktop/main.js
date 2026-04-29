@@ -29,6 +29,7 @@ const state = {
   activeSection: 'onboarding',
   onboardingStep: 1,
   workspacePath: '%LOCALAPPDATA%\\Programs\\Argentum\\workspace',
+  setupComplete: false,
 };
 
 const nav = document.querySelector('#section-nav');
@@ -36,6 +37,19 @@ const title = document.querySelector('#section-title');
 const eyebrow = document.querySelector('#eyebrow');
 const viewRoot = document.querySelector('#view-root');
 const workspacePath = document.querySelector('#workspace-path');
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => {
+    const entities = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[character];
+  });
+}
 
 function renderNavigation() {
   nav.innerHTML = sections
@@ -58,20 +72,24 @@ function renderNavigation() {
 }
 
 function renderOnboarding() {
-  title.textContent = onboardingSteps[state.onboardingStep - 1];
+  const backButton = { disabled: state.onboardingStep === 1 };
+  const isFinalStep = state.onboardingStep === onboardingSteps.length;
+  const currentStep = onboardingSteps[state.onboardingStep - 1];
+
+  title.textContent = currentStep;
   eyebrow.textContent = 'Onboarding';
   viewRoot.innerHTML = `
     <div class="onboarding-layout">
       <section class="panel">
         <div class="panel-header">
-          <h2>${onboardingSteps[state.onboardingStep - 1]}</h2>
+          <h2>${currentStep}</h2>
           <p>Argentum starts in a restricted workspace and expands only when you approve a capability.</p>
         </div>
         <div class="panel-body">
           ${renderOnboardingStep()}
           <div class="button-row">
-            <button class="button" id="back-button">Back</button>
-            <button class="button primary" id="next-button">Next</button>
+            <button class="button" id="back-button" ${backButton.disabled ? 'disabled' : ''}>Back</button>
+            <button class="button primary" id="next-button">${isFinalStep ? 'Launch Argentum' : 'Next'}</button>
           </div>
         </div>
       </section>
@@ -99,7 +117,23 @@ function renderOnboarding() {
     state.onboardingStep = Math.max(1, state.onboardingStep - 1);
     render();
   });
+
+  const input = document.querySelector('#workspace-input');
+  if (input) {
+    input.addEventListener('input', (event) => {
+      state.workspacePath = event.target.value;
+      workspacePath.textContent = state.workspacePath;
+    });
+  }
+
   document.querySelector('#next-button').addEventListener('click', () => {
+    if (state.onboardingStep === onboardingSteps.length) {
+      state.setupComplete = true;
+      state.activeSection = 'chat';
+      render();
+      return;
+    }
+
     state.onboardingStep = Math.min(onboardingSteps.length, state.onboardingStep + 1);
     render();
   });
@@ -108,11 +142,11 @@ function renderOnboarding() {
 function renderOnboardingStep() {
   if (state.onboardingStep === 2) {
     return `
-      <div class="form-grid">
-        <label>
-          Workspace
-          <input id="workspace-input" value="${state.workspacePath}" />
-        </label>
+          <div class="form-grid">
+            <label>
+              Workspace
+              <input id="workspace-input" value="${escapeHtml(state.workspacePath)}" />
+            </label>
         <label>
           Data mode
           <select>
@@ -161,7 +195,7 @@ function renderOnboardingStep() {
   if (state.onboardingStep === 8) {
     return `
       <div class="status-list">
-        <div class="status-row"><strong>Workspace</strong><span>${state.workspacePath}</span><span class="pill ok">Ready</span></div>
+        <div class="status-row"><strong>Workspace</strong><span>${escapeHtml(state.workspacePath)}</span><span class="pill ok">Ready</span></div>
         <div class="status-row"><strong>Security</strong><span>Restricted profile, capability broker active</span><span class="pill ok">Ready</span></div>
         <div class="status-row"><strong>Secrets</strong><span>Masked inputs, dotenv output</span><span class="pill warn">Review</span></div>
       </div>
@@ -180,7 +214,7 @@ function renderOnboardingStep() {
 function renderSection() {
   const section = sections.find((item) => item.id === state.activeSection) || sections[0];
   title.textContent = section.title;
-  eyebrow.textContent = 'Argentum';
+  eyebrow.textContent = state.setupComplete ? 'Ready' : 'Argentum';
   viewRoot.innerHTML = `
     <div class="dashboard-grid">
       <div class="metric"><span>Status</span><strong>Local</strong></div>
