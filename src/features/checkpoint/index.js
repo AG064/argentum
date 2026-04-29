@@ -17,7 +17,7 @@ class CheckpointFeature {
   constructor() {
     this.meta = {
       name: 'checkpoint',
-      version: '0.0.2',
+      version: '0.0.3',
       description: 'Task checkpoint and resume across sessions',
       dependencies: [],
     };

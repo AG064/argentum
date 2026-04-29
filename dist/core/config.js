@@ -107,12 +107,27 @@ const MemoryConfigSchema = zod_1.z.object({
     selfEvolving: zod_1.z.boolean().default(false),
     compressionThreshold: zod_1.z.number().int().default(10000),
 });
+/** Capability sandbox defaults */
+const CapabilitySecuritySchema = zod_1.z
+    .object({
+    defaultProfile: zod_1.z
+        .enum(['restricted', 'ask-every-time', 'session-grant', 'trusted'])
+        .default('restricted'),
+    workspaceRoot: zod_1.z.string().default('.'),
+    auditPath: zod_1.z.string().default('./data/audit/capabilities.log'),
+})
+    .default({
+    defaultProfile: 'restricted',
+    workspaceRoot: '.',
+    auditPath: './data/audit/capabilities.log',
+});
 /** Security config */
 const SecurityConfigSchema = zod_1.z.object({
     policy: zod_1.z.string().default('config/security-policy.yaml'),
     secrets: zod_1.z.enum(['encrypted', 'env', 'file']).default('encrypted'),
     auditLog: zod_1.z.boolean().default(true),
     allowlistMode: zod_1.z.enum(['strict', 'permissive']).default('strict'),
+    capabilities: CapabilitySecuritySchema,
 });
 /** Multi-Agent Coordination config */
 const MultiAgentCoordinationConfigSchema = FeatureToggleSchema.extend({
@@ -144,7 +159,7 @@ const HealthMonitoringConfigSchema = FeatureToggleSchema.extend({
 const AutoUpdateConfigSchema = FeatureToggleSchema.extend({
     dbPath: zod_1.z.string().default('./data/auto-update.db'),
     repoOwner: zod_1.z.string().default('AG064'),
-    repoName: zod_1.z.string().default('ag-claw'),
+    repoName: zod_1.z.string().default('argentum'),
     checkIntervalHours: zod_1.z.number().default(24),
     autoApply: zod_1.z.boolean().default(false),
     backupBeforeUpdate: zod_1.z.boolean().default(true),
@@ -355,7 +370,7 @@ exports.ConfigSchema = zod_1.z.object({
             enabled: false,
             dbPath: './data/auto-update.db',
             repoOwner: 'AG064',
-            repoName: 'ag-claw',
+            repoName: 'argentum',
             checkIntervalHours: 24,
             autoApply: false,
             backupBeforeUpdate: true,
@@ -460,7 +475,7 @@ exports.ConfigSchema = zod_1.z.object({
             enabled: false,
             dbPath: './data/auto-update.db',
             repoOwner: 'AG064',
-            repoName: 'ag-claw',
+            repoName: 'argentum',
             checkIntervalHours: 24,
             autoApply: false,
             backupBeforeUpdate: true,
@@ -483,6 +498,11 @@ exports.ConfigSchema = zod_1.z.object({
         secrets: 'encrypted',
         auditLog: true,
         allowlistMode: 'strict',
+        capabilities: {
+            defaultProfile: 'restricted',
+            workspaceRoot: '.',
+            auditPath: './data/audit/capabilities.log',
+        },
     }),
     channels: zod_1.z
         .object({
@@ -541,15 +561,8 @@ class ConfigManager {
         this.watcher = null;
         this.listeners = new Set();
         this.baseConfigPath = (0, path_1.resolve)(process.cwd(), 'config/default.yaml');
-        const envConfigPath = process.env.ARGENTUM_CONFIG_PATH ?? process.env.AGCLAW_CONFIG_PATH;
-        const preferredConfigPath = (0, path_1.resolve)(process.cwd(), 'argentum.json');
-        const legacyConfigPath = (0, path_1.resolve)(process.cwd(), 'agclaw.json');
-        this.configPath =
-            configPath ??
-                (0, path_1.resolve)(process.cwd(), envConfigPath ??
-                    ((0, fs_1.existsSync)(preferredConfigPath) || !(0, fs_1.existsSync)(legacyConfigPath)
-                        ? 'argentum.json'
-                        : 'agclaw.json'));
+        const envConfigPath = process.env.ARGENTUM_CONFIG_PATH;
+        this.configPath = configPath ?? (0, path_1.resolve)(process.cwd(), envConfigPath ?? 'argentum.json');
         this.config = this.loadConfig();
     }
     /** Load and validate configuration from YAML file */
@@ -581,57 +594,57 @@ class ConfigManager {
     /** Load configuration overrides from environment variables */
     loadEnvOverrides() {
         const overrides = {};
-        if (process.env.AGCLAW_PORT) {
-            overrides['server'] = { port: parseInt(process.env.AGCLAW_PORT, 10) };
+        if (process.env.ARGENTUM_PORT) {
+            overrides['server'] = { port: parseInt(process.env.ARGENTUM_PORT, 10) };
         }
-        if (process.env.AGCLAW_LOG_LEVEL) {
-            overrides['logging'] = { level: process.env.AGCLAW_LOG_LEVEL };
+        if (process.env.ARGENTUM_LOG_LEVEL) {
+            overrides['logging'] = { level: process.env.ARGENTUM_LOG_LEVEL };
         }
-        if (process.env.AGCLAW_TELEGRAM_TOKEN) {
-            overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
+        if (process.env.ARGENTUM_TELEGRAM_TOKEN) {
+            overrides['channels'] = { telegram: { token: process.env.ARGENTUM_TELEGRAM_TOKEN } };
         }
-        if (process.env.AGCLAW_TELEGRAM_ENABLED) {
+        if (process.env.ARGENTUM_TELEGRAM_ENABLED) {
             overrides['channels'] = {
                 ...(overrides['channels'] ?? {}),
                 telegram: {
                     ...((overrides['channels']?.['telegram']) ?? {}),
-                    enabled: process.env.AGCLAW_TELEGRAM_ENABLED === 'true',
+                    enabled: process.env.ARGENTUM_TELEGRAM_ENABLED === 'true',
                 },
             };
         }
-        if (process.env.AGCLAW_WEBCHAT_ENABLED) {
+        if (process.env.ARGENTUM_WEBCHAT_ENABLED) {
             overrides['channels'] = {
                 ...(overrides['channels'] ?? {}),
-                webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+                webchat: { enabled: process.env.ARGENTUM_WEBCHAT_ENABLED === 'true' },
             };
             overrides['features'] = {
                 ...(overrides['features'] ?? {}),
-                webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+                webchat: { enabled: process.env.ARGENTUM_WEBCHAT_ENABLED === 'true' },
             };
         }
-        if (process.env.AGCLAW_WEBCHAT_AUTH_TOKEN) {
+        if (process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN) {
             overrides['channels'] = {
                 ...(overrides['channels'] ?? {}),
                 webchat: {
                     ...((overrides['channels']?.['webchat']) ?? {}),
-                    authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+                    authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
                 },
             };
             overrides['features'] = {
                 ...(overrides['features'] ?? {}),
                 webchat: {
                     ...((overrides['features']?.['webchat']) ?? {}),
-                    authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+                    authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
                 },
             };
         }
-        if (process.env.AGCLAW_SUPABASE_URL) {
-            overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
+        if (process.env.ARGENTUM_SUPABASE_URL) {
+            overrides['memory'] = { supabaseUrl: process.env.ARGENTUM_SUPABASE_URL };
         }
-        if (process.env.AGCLAW_SUPABASE_KEY) {
+        if (process.env.ARGENTUM_SUPABASE_KEY) {
             overrides['memory'] = {
                 ...(overrides['memory'] ?? {}),
-                supabaseKey: process.env.AGCLAW_SUPABASE_KEY,
+                supabaseKey: process.env.ARGENTUM_SUPABASE_KEY,
             };
         }
         return overrides;

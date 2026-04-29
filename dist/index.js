@@ -54,6 +54,7 @@ const logger_1 = require("./core/logger");
 const plugin_loader_1 = require("./core/plugin-loader");
 const graph_1 = require("./memory/graph");
 const semantic_1 = require("./memory/semantic");
+const capability_broker_1 = require("./security/capability-broker");
 // ─── Agent Core ───────────────────────────────────────────────────────────────
 class Agent {
     tools = new Map();
@@ -181,7 +182,26 @@ class Agent {
     }
 }
 exports.Agent = Agent;
+function isEnvEnabled(name) {
+    const value = process.env[name]?.toLowerCase();
+    return value === 'true' || value === '1' || value === 'yes';
+}
+function resolveBuiltinToolWorkspaceRoot(options) {
+    return options.workspaceRoot ?? process.env.ARGENTUM_TOOL_ROOT ?? process.cwd();
+}
 function createBuiltinTools(options = {}) {
+    const workspaceRoot = resolveBuiltinToolWorkspaceRoot(options);
+    const capabilityBroker = options.capabilityBroker ??
+        (0, capability_broker_1.createCapabilityBroker)({ workspaceRoot, auditPath: options.capabilityAuditPath });
+    if (options.enableShellTool && !options.capabilityBroker) {
+        capabilityBroker.grant({
+            action: 'shell.execute',
+            resource: 'exec://*',
+            scope: 'current-session',
+            grantedBy: 'runtime',
+            reason: 'Shell tool was explicitly enabled for this Argentum runtime session.',
+        });
+    }
     const tools = [
         {
             name: 'web_search',
@@ -236,15 +256,20 @@ function createBuiltinTools(options = {}) {
             },
             execute: async (params) => {
                 const { readFileSync, existsSync } = await Promise.resolve().then(() => __importStar(require('fs')));
-                const { resolve, relative, isAbsolute } = await Promise.resolve().then(() => __importStar(require('path')));
                 const filePath = params['path'];
                 if (!filePath)
                     return 'Error: path parameter is required';
-                const root = resolve(process.env.AGCLAW_TOOL_ROOT ?? process.cwd());
-                const safePath = resolve(root, filePath);
-                const rel = relative(root, safePath);
-                if (rel.startsWith('..') || isAbsolute(rel)) {
-                    return `Error: Path is outside the configured tool root: ${root}`;
+                const decision = capabilityBroker.authorize({
+                    action: 'file.read',
+                    resource: filePath,
+                    requester: 'builtin.read_file',
+                });
+                if (!decision.allowed) {
+                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                }
+                const safePath = decision.resolvedPath;
+                if (!safePath) {
+                    return `Error: Path could not be resolved: ${filePath}`;
                 }
                 if (!existsSync(safePath)) {
                     return `Error: File not found: ${safePath}`;
@@ -266,16 +291,22 @@ function createBuiltinTools(options = {}) {
             },
             execute: async (params) => {
                 const { writeFileSync, mkdirSync } = await Promise.resolve().then(() => __importStar(require('fs')));
-                const { dirname, resolve, relative, isAbsolute } = await Promise.resolve().then(() => __importStar(require('path')));
+                const { dirname } = await Promise.resolve().then(() => __importStar(require('path')));
                 const filePath = params['path'];
                 const content = params['content'];
                 if (!filePath || content === undefined)
                     return 'Error: path and content parameters are required';
-                const root = resolve(process.env.AGCLAW_TOOL_ROOT ?? process.cwd());
-                const safePath = resolve(root, filePath);
-                const rel = relative(root, safePath);
-                if (rel.startsWith('..') || isAbsolute(rel)) {
-                    return `Error: Path is outside the configured tool root: ${root}`;
+                const decision = capabilityBroker.authorize({
+                    action: 'file.write',
+                    resource: filePath,
+                    requester: 'builtin.write_file',
+                });
+                if (!decision.allowed) {
+                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+                }
+                const safePath = decision.resolvedPath;
+                if (!safePath) {
+                    return `Error: Path could not be resolved: ${filePath}`;
                 }
                 try {
                     mkdirSync(dirname(safePath), { recursive: true });
@@ -305,8 +336,18 @@ function createBuiltinTools(options = {}) {
                 if (blocked.some((b) => cmd.includes(b))) {
                     return 'Error: This command is blocked for safety reasons.';
                 }
+                const decision = capabilityBroker.authorize({
+                    action: 'shell.execute',
+                    resource: cmd,
+                    requester: 'builtin.run_command',
+                    metadata: { command: cmd },
+                });
+                if (!decision.allowed) {
+                    return `Error: Command is not permitted by current capability policy: ${decision.reason}`;
+                }
                 try {
                     const output = execSync(cmd, {
+                        cwd: capabilityBroker.workspaceRoot,
                         timeout: 30000,
                         encoding: 'utf-8',
                         maxBuffer: 1024 * 1024,
@@ -463,7 +504,7 @@ class Argentum {
     /** Start the Argentum framework */
     async start() {
         this.logger.info('Starting Argentum Framework', {
-            version: '0.0.2',
+            version: '0.0.3',
             nodeVersion: process.version,
             platform: process.platform,
         });
@@ -496,16 +537,20 @@ class Argentum {
         }
         // Initialize Agent
         this.agent = new Agent(this.llmProvider);
-        const enableDangerousTools = process.env.AGCLAW_ENABLE_DANGEROUS_TOOLS === 'true' || process.env.AGCLAW_ENABLE_DANGEROUS_TOOLS === '1';
-        const enableImageTool = process.env.AGCLAW_ENABLE_IMAGE_TOOL === 'true' || process.env.AGCLAW_ENABLE_IMAGE_TOOL === '1';
-        if (enableDangerousTools) {
-            this.logger.warn('Dangerous built-in filesystem and shell tools are enabled by environment override');
+        const enableFilesystemTools = isEnvEnabled('ARGENTUM_ENABLE_FILESYSTEM_TOOLS');
+        const enableShellTool = isEnvEnabled('ARGENTUM_ENABLE_SHELL_TOOL');
+        const enableImageTool = isEnvEnabled('ARGENTUM_ENABLE_IMAGE_TOOL');
+        if (enableFilesystemTools || enableShellTool) {
+            this.logger.warn('Optional built-in filesystem or shell tools are enabled by environment override');
         }
         // Register built-in tools
         for (const tool of createBuiltinTools({
-            enableFilesystemTools: enableDangerousTools,
-            enableShellTool: enableDangerousTools,
+            enableFilesystemTools,
+            enableShellTool,
             enableImageTool,
+            workspaceRoot: process.env.ARGENTUM_TOOL_ROOT ??
+                this.config.security.capabilities.workspaceRoot,
+            capabilityAuditPath: this.config.security.capabilities.auditPath,
         })) {
             this.agent.registerTool(tool);
         }
@@ -551,7 +596,7 @@ class Argentum {
         // Start Telegram if configured
         if (channels?.['telegram']?.['enabled'] === true) {
             const token = channels?.['telegram']?.['token'] ??
-                process.env.AGCLAW_TELEGRAM_TOKEN ??
+                process.env.ARGENTUM_TELEGRAM_TOKEN ??
                 process.env.TELEGRAM_BOT_TOKEN;
             if (token) {
                 try {
@@ -564,7 +609,7 @@ class Argentum {
                 }
             }
             else {
-                this.logger.info('Telegram channel enabled but no token provided (set AGCLAW_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)');
+                this.logger.info('Telegram channel enabled but no token provided (set ARGENTUM_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)');
             }
         }
         // Webchat could be started here too

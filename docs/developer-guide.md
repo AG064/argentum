@@ -698,7 +698,7 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
     "createdAt": 1742301234567
   },
   "headers": {
-    "user-agent": "Argentum/0.0.2"
+    "user-agent": "Argentum/0.0.3"
   },
   "timestamp": 1742301234567,
   "signature": "sha256=abc123def456..."  // HMAC-SHA256 от тела JSON с secret подписчика
@@ -893,4 +893,4 @@ const results = await knowledgeGraph.query(`
 
 ---
 
-*Argentum v0.0.2 — Documentation last updated: 2026-03-17*
+*Argentum v0.0.3 — Documentation last updated: 2026-03-17*

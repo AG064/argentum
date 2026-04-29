@@ -311,6 +311,16 @@ export declare const ConfigSchema: z.ZodObject<{
             strict: "strict";
             permissive: "permissive";
         }>>;
+        capabilities: z.ZodDefault<z.ZodObject<{
+            defaultProfile: z.ZodDefault<z.ZodEnum<{
+                restricted: "restricted";
+                "ask-every-time": "ask-every-time";
+                "session-grant": "session-grant";
+                trusted: "trusted";
+            }>>;
+            workspaceRoot: z.ZodDefault<z.ZodString>;
+            auditPath: z.ZodDefault<z.ZodString>;
+        }, z.core.$strip>>;
     }, z.core.$strip>>;
     channels: z.ZodDefault<z.ZodObject<{
         telegram: z.ZodDefault<z.ZodObject<{

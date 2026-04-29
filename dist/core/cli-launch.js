@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveCliLaunch = resolveCliLaunch;
 function looksLikePackagedWindowsExe(execPath) {
-    return /(^|[\\/])(?:argentum|agclaw)(?:-v\d+\.\d+\.\d+-win-x64)?\.exe$/i.test(execPath);
+    return /(^|[\\/])argentum(?:-v\d+\.\d+\.\d+-win-x64)?\.exe$/i.test(execPath);
 }
 function resolveCliLaunch(args, env) {
     const explicitCommand = args[0];

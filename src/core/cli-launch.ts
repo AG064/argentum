@@ -10,7 +10,7 @@ export interface CliLaunch {
 }
 
 function looksLikePackagedWindowsExe(execPath: string): boolean {
-  return /(^|[\\/])(?:argentum|agclaw)(?:-v\d+\.\d+\.\d+-win-x64)?\.exe$/i.test(execPath);
+  return /(^|[\\/])argentum(?:-v\d+\.\d+\.\d+-win-x64)?\.exe$/i.test(execPath);
 }
 
 export function resolveCliLaunch(args: string[], env: CliLaunchEnvironment): CliLaunch {

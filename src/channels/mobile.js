@@ -71,7 +71,7 @@ class MobileChannel {
   constructor() {
     this.meta = {
       name: 'mobile',
-      version: '0.0.2',
+      version: '0.0.3',
       description: 'Push notification channel for mobile companion apps with HTTP endpoint',
       dependencies: [],
     };

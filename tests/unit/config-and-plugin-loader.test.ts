@@ -8,7 +8,7 @@ import { resolveFeatureEntryPath, toModuleImportSpecifier } from '../../src/core
 describe('ConfigManager', () => {
   it('merges default YAML config with argentum.json overrides', () => {
     const originalCwd = process.cwd();
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'ag-claw-config-'));
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'argentum-config-'));
 
     try {
       mkdirSync(path.join(tempDir, 'config'), { recursive: true });
@@ -45,7 +45,7 @@ describe('ConfigManager', () => {
     }
   });
 
-  it('keeps loading legacy agclaw.json overrides when argentum.json is absent', () => {
+  it('ignores legacy agclaw.json overrides when argentum.json is absent', () => {
     const originalCwd = process.cwd();
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'argentum-config-'));
 
@@ -76,8 +76,8 @@ describe('ConfigManager', () => {
       process.chdir(tempDir);
 
       const configManager = new ConfigManager();
-      expect(configManager.get().server.port).toBe(3333);
-      expect(configManager.isFeatureEnabled('webchat')).toBe(true);
+      expect(configManager.get().server.port).toBe(1111);
+      expect(configManager.isFeatureEnabled('webchat')).toBe(false);
     } finally {
       process.chdir(originalCwd);
       rmSync(tempDir, { recursive: true, force: true });

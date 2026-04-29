@@ -20,7 +20,7 @@ class ConsolidationFeature {
   constructor() {
     this.meta = {
       name: 'consolidation',
-      version: '0.0.2',
+      version: '0.0.3',
       description: 'Periodic memory consolidation: dedup, decay, merge, prune',
       dependencies: [],
     };

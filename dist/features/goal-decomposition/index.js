@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = {
 class GoalDecompositionFeature {
     meta = {
         name: 'goal-decomposition',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Decompose goals into tasks and track dependencies (SQLite)',
         dependencies: [],
     };

@@ -80,12 +80,28 @@ const MemoryConfigSchema = z.object({
   compressionThreshold: z.number().int().default(10000),
 });
 
+/** Capability sandbox defaults */
+const CapabilitySecuritySchema = z
+  .object({
+    defaultProfile: z
+      .enum(['restricted', 'ask-every-time', 'session-grant', 'trusted'])
+      .default('restricted'),
+    workspaceRoot: z.string().default('.'),
+    auditPath: z.string().default('./data/audit/capabilities.log'),
+  })
+  .default({
+    defaultProfile: 'restricted',
+    workspaceRoot: '.',
+    auditPath: './data/audit/capabilities.log',
+  });
+
 /** Security config */
 const SecurityConfigSchema = z.object({
   policy: z.string().default('config/security-policy.yaml'),
   secrets: z.enum(['encrypted', 'env', 'file']).default('encrypted'),
   auditLog: z.boolean().default(true),
   allowlistMode: z.enum(['strict', 'permissive']).default('strict'),
+  capabilities: CapabilitySecuritySchema,
 });
 
 /** Multi-Agent Coordination config */
@@ -122,7 +138,7 @@ const HealthMonitoringConfigSchema = FeatureToggleSchema.extend({
 const AutoUpdateConfigSchema = FeatureToggleSchema.extend({
   dbPath: z.string().default('./data/auto-update.db'),
   repoOwner: z.string().default('AG064'),
-  repoName: z.string().default('ag-claw'),
+  repoName: z.string().default('argentum'),
   checkIntervalHours: z.number().default(24),
   autoApply: z.boolean().default(false),
   backupBeforeUpdate: z.boolean().default(true),
@@ -339,7 +355,7 @@ export const ConfigSchema = z.object({
         enabled: false,
         dbPath: './data/auto-update.db',
         repoOwner: 'AG064',
-        repoName: 'ag-claw',
+        repoName: 'argentum',
         checkIntervalHours: 24,
         autoApply: false,
         backupBeforeUpdate: true,
@@ -444,7 +460,7 @@ export const ConfigSchema = z.object({
         enabled: false,
         dbPath: './data/auto-update.db',
         repoOwner: 'AG064',
-        repoName: 'ag-claw',
+        repoName: 'argentum',
         checkIntervalHours: 24,
         autoApply: false,
         backupBeforeUpdate: true,
@@ -467,6 +483,11 @@ export const ConfigSchema = z.object({
     secrets: 'encrypted',
     auditLog: true,
     allowlistMode: 'strict',
+    capabilities: {
+      defaultProfile: 'restricted',
+      workspaceRoot: '.',
+      auditPath: './data/audit/capabilities.log',
+    },
   }),
   channels: z
     .object({
@@ -532,18 +553,8 @@ export class ConfigManager {
 
   constructor(configPath?: string) {
     this.baseConfigPath = resolve(process.cwd(), 'config/default.yaml');
-    const envConfigPath = process.env.ARGENTUM_CONFIG_PATH ?? process.env.AGCLAW_CONFIG_PATH;
-    const preferredConfigPath = resolve(process.cwd(), 'argentum.json');
-    const legacyConfigPath = resolve(process.cwd(), 'agclaw.json');
-    this.configPath =
-      configPath ??
-      resolve(
-        process.cwd(),
-        envConfigPath ??
-          (existsSync(preferredConfigPath) || !existsSync(legacyConfigPath)
-            ? 'argentum.json'
-            : 'agclaw.json'),
-      );
+    const envConfigPath = process.env.ARGENTUM_CONFIG_PATH;
+    this.configPath = configPath ?? resolve(process.cwd(), envConfigPath ?? 'argentum.json');
     this.config = this.loadConfig();
   }
 
@@ -586,57 +597,57 @@ export class ConfigManager {
   private loadEnvOverrides(): Record<string, unknown> {
     const overrides: Record<string, unknown> = {};
 
-    if (process.env.AGCLAW_PORT) {
-      overrides['server'] = { port: parseInt(process.env.AGCLAW_PORT, 10) };
+    if (process.env.ARGENTUM_PORT) {
+      overrides['server'] = { port: parseInt(process.env.ARGENTUM_PORT, 10) };
     }
-    if (process.env.AGCLAW_LOG_LEVEL) {
-      overrides['logging'] = { level: process.env.AGCLAW_LOG_LEVEL };
+    if (process.env.ARGENTUM_LOG_LEVEL) {
+      overrides['logging'] = { level: process.env.ARGENTUM_LOG_LEVEL };
     }
-    if (process.env.AGCLAW_TELEGRAM_TOKEN) {
-      overrides['channels'] = { telegram: { token: process.env.AGCLAW_TELEGRAM_TOKEN } };
+    if (process.env.ARGENTUM_TELEGRAM_TOKEN) {
+      overrides['channels'] = { telegram: { token: process.env.ARGENTUM_TELEGRAM_TOKEN } };
     }
-    if (process.env.AGCLAW_TELEGRAM_ENABLED) {
+    if (process.env.ARGENTUM_TELEGRAM_ENABLED) {
       overrides['channels'] = {
         ...((overrides['channels'] as object) ?? {}),
         telegram: {
           ...(((overrides['channels'] as Record<string, object> | undefined)?.['telegram']) ?? {}),
-          enabled: process.env.AGCLAW_TELEGRAM_ENABLED === 'true',
+          enabled: process.env.ARGENTUM_TELEGRAM_ENABLED === 'true',
         },
       };
     }
-    if (process.env.AGCLAW_WEBCHAT_ENABLED) {
+    if (process.env.ARGENTUM_WEBCHAT_ENABLED) {
       overrides['channels'] = {
         ...((overrides['channels'] as object) ?? {}),
-        webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+        webchat: { enabled: process.env.ARGENTUM_WEBCHAT_ENABLED === 'true' },
       };
       overrides['features'] = {
         ...((overrides['features'] as object) ?? {}),
-        webchat: { enabled: process.env.AGCLAW_WEBCHAT_ENABLED === 'true' },
+        webchat: { enabled: process.env.ARGENTUM_WEBCHAT_ENABLED === 'true' },
       };
     }
-    if (process.env.AGCLAW_WEBCHAT_AUTH_TOKEN) {
+    if (process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN) {
       overrides['channels'] = {
         ...((overrides['channels'] as object) ?? {}),
         webchat: {
           ...(((overrides['channels'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
-          authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+          authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
         },
       };
       overrides['features'] = {
         ...((overrides['features'] as object) ?? {}),
         webchat: {
           ...(((overrides['features'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
-          authToken: process.env.AGCLAW_WEBCHAT_AUTH_TOKEN,
+          authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
         },
       };
     }
-    if (process.env.AGCLAW_SUPABASE_URL) {
-      overrides['memory'] = { supabaseUrl: process.env.AGCLAW_SUPABASE_URL };
+    if (process.env.ARGENTUM_SUPABASE_URL) {
+      overrides['memory'] = { supabaseUrl: process.env.ARGENTUM_SUPABASE_URL };
     }
-    if (process.env.AGCLAW_SUPABASE_KEY) {
+    if (process.env.ARGENTUM_SUPABASE_KEY) {
       overrides['memory'] = {
         ...((overrides['memory'] as object) ?? {}),
-        supabaseKey: process.env.AGCLAW_SUPABASE_KEY,
+        supabaseKey: process.env.ARGENTUM_SUPABASE_KEY,
       };
     }
 

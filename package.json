@@ -1,12 +1,11 @@
 {
   "name": "argentum",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "argentum": "bin/argentum.js",
-    "agclaw": "bin/agclaw.js"
+    "argentum": "bin/argentum.js"
   },
   "scripts": {
     "build": "tsc && tsc src/cli.ts --outDir dist --esModuleInterop --target ES2020 --module commonjs --skipLibCheck --resolveJsonModule",
@@ -39,6 +38,8 @@
     "docker:down": "docker compose -f docker/docker-compose.yml down",
     "package:win": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1",
     "package:win:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 -SkipMsi",
+    "desktop:dev": "cd src/desktop && tauri dev",
+    "desktop:build": "cd src/desktop && tauri build",
     "version:sync": "node scripts/sync-version.js",
     "version:check": "node scripts/sync-version.js --check",
     "prebuild": "npm run clean",
@@ -52,6 +53,7 @@
       "config/**/*.yaml",
       "config/**/*.json",
       "docs/dashboard.html",
+      "src/ui/desktop/**/*",
       "src/ui/dashboard/**/*",
       "dist/ui/**/*"
     ]
@@ -94,6 +96,7 @@
     "@eslint/compat": "^2.0.4",
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/better-sqlite3": "^7.6.8",
     "@types/express": "^4.17.21",
     "@types/glob": "^8.1.0",

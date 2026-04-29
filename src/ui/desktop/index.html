@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Argentum</title>
+    <link rel="icon" type="image/png" href="../../assets/brand/argentum.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="rail" aria-label="Argentum navigation">
+        <div class="brand">
+          <img src="../../assets/brand/argentum.png" alt="" />
+          <div>
+            <strong>Argentum</strong>
+            <span>v0.0.3</span>
+          </div>
+        </div>
+        <nav id="section-nav" class="section-nav"></nav>
+        <div class="workspace-card">
+          <span>Workspace</span>
+          <strong id="workspace-path">%LOCALAPPDATA%\Programs\Argentum\workspace</strong>
+        </div>
+      </aside>
+
+      <section class="content">
+        <header class="topbar">
+          <div>
+            <p id="eyebrow" class="eyebrow">Onboarding</p>
+            <h1 id="section-title">Welcome</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="audit-button" title="Open audit trail" aria-label="Open audit trail">
+              A
+            </button>
+            <button class="icon-button" id="settings-button" title="Open settings" aria-label="Open settings">
+              S
+            </button>
+          </div>
+        </header>
+
+        <div id="view-root" class="view-root"></div>
+      </section>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>

@@ -247,7 +247,7 @@ curl -X POST http://localhost:18789/memory/graph/entity \
     "name": "Argentum",
     "type": "проект",
     "properties": {
-      "version": "0.0.2",
+      "version": "0.0.3",
       "language": "TypeScript"
     }
   }'

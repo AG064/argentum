@@ -76,7 +76,7 @@ const CONFIG_FILE = 'self-improving-config.json';
 class SelfImprovingLoop {
     meta = {
         name: 'self-improving',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Reflection engine that analyzes behavior and continuously improves Argentum',
         dependencies: ['sqlite-memory', 'user-modeling'],
     };

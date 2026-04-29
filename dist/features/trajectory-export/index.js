@@ -51,7 +51,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class TrajectoryExportFeature {
     meta = {
         name: 'trajectory-export',
-        version: '0.0.2',
+        version: '0.0.3',
         description: 'Export conversation trajectories as JSONL for RL fine-tuning',
         dependencies: [],
     };

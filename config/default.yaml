@@ -18,7 +18,7 @@ server:
 logging:
   level: info
   format: pretty
-  # file: ./data/ag-claw.log
+  # file: ./data/argentum.log
 
 # ============================================
 # Model Configuration
@@ -44,7 +44,7 @@ features:
     port: 3001
     host: "127.0.0.1"
     requireAuth: true
-    # authToken: set via AGCLAW_WEBCHAT_AUTH_TOKEN; minimum 16 characters
+    # authToken: set via ARGENTUM_WEBCHAT_AUTH_TOKEN; minimum 16 characters
     maxConnections: 1000
     messageHistory: 100
     maxMessageLength: 10000
@@ -126,6 +126,10 @@ security:
   secrets: encrypted
   auditLog: true
   allowlistMode: strict
+  capabilities:
+    defaultProfile: restricted
+    workspaceRoot: "."
+    auditPath: ./data/audit/capabilities.log
 
 # ============================================
 # Channel Configuration
@@ -134,13 +138,13 @@ security:
 channels:
   telegram:
     enabled: false
-    # token: set via AGCLAW_TELEGRAM_TOKEN env var
+    # token: set via ARGENTUM_TELEGRAM_TOKEN env var
     # Set allowAll: true only for trusted private bots; otherwise set allowedUsers/allowedChats.
 
   webchat:
     enabled: false
-    # authToken: set via AGCLAW_WEBCHAT_AUTH_TOKEN; minimum 16 characters
+    # authToken: set via ARGENTUM_WEBCHAT_AUTH_TOKEN; minimum 16 characters
 
   mobile:
     enabled: false
-    # fcmKey: set via AGCLAW_FCM_KEY env var
+    # fcmKey: set via ARGENTUM_FCM_KEY env var

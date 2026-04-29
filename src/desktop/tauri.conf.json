@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Argentum",
+  "version": "0.0.3",
+  "identifier": "com.argentum.app",
+  "build": {
+    "frontendDist": "../ui/desktop"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Argentum",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Local-first AI agent workspace",
+    "longDescription": "Argentum is a local-first modular AI agent workspace with a secure permission model.",
+    "icon": [
+      "../../assets/brand/argentum.png",
+      "../../installer/macos/argentum.icns",
+      "../../installer/wix/argentum.ico"
+    ],
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    }
+  }
+}

@@ -34,14 +34,14 @@ describe('CLI launch resolution', () => {
     expect(launch.pauseOnExit).toBe(false);
   });
 
-  test('keeps the legacy agclaw executable name working during the rebrand', () => {
+  test('does not treat legacy agclaw executable names as Argentum launchers', () => {
     const launch = resolveCliLaunch([], {
       execPath: 'C:\\Program Files\\Argentum\\agclaw.exe',
       isPackaged: false,
       platform: 'win32',
     });
 
-    expect(launch.command).toBe('launch');
-    expect(launch.pauseOnExit).toBe(true);
+    expect(launch.command).toBe('help');
+    expect(launch.pauseOnExit).toBe(false);
   });
 });

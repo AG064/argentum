@@ -13,6 +13,8 @@ describe('secure defaults', () => {
     expect(config.channels.webchat.enabled).toBe(false);
     expect(config.features.webchat.enabled).toBe(false);
     expect(config.security.allowlistMode).toBe('strict');
+    expect(config.security.capabilities.defaultProfile).toBe('restricted');
+    expect(config.security.capabilities.workspaceRoot).toBe('.');
   });
 
   test('checked-in default config keeps public chat channels disabled', () => {
@@ -23,6 +25,7 @@ describe('secure defaults', () => {
     expect(config.channels.webchat.enabled).toBe(false);
     expect(config.features.webchat.enabled).toBe(false);
     expect(config.security.allowlistMode).toBe('strict');
+    expect(config.security.capabilities.defaultProfile).toBe('restricted');
   });
 
   test('dangerous file and shell tools are not registered by default', () => {
