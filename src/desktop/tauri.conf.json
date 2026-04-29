@@ -31,7 +31,11 @@
     "category": "Productivity",
     "shortDescription": "Local-first AI agent workspace",
     "longDescription": "Argentum is a local-first modular AI agent workspace with a secure permission model.",
-    "icon": ["../../assets/brand/argentum.png", "../../installer/wix/argentum.ico"],
+    "icon": [
+      "../../assets/brand/argentum.png",
+      "../../installer/macos/argentum.icns",
+      "../../installer/wix/argentum.ico"
+    ],
     "windows": {
       "wix": {
         "language": "en-US"

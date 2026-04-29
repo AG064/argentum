@@ -26,9 +26,11 @@ describe('Argentum desktop shell scaffold', () => {
     expect(config.bundle?.icon).toEqual(
       expect.arrayContaining([
         '../../assets/brand/argentum.png',
+        '../../installer/macos/argentum.icns',
         '../../installer/wix/argentum.ico',
       ]),
     );
+    expect(existsSync('installer/macos/argentum.icns')).toBe(true);
     expect(config.app?.security?.csp).toContain("default-src 'self'");
 
     const cargo = readFileSync('src/desktop/Cargo.toml', 'utf8');
