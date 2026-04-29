@@ -74,7 +74,7 @@ class AutoUpdateFeature implements FeatureModule {
       const pkgPath = resolve(process.cwd(), 'package.json');
       if (existsSync(pkgPath)) {
         const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf8'));
-        this.currentVersion = pkg.version || '0.0.3';
+        this.currentVersion = pkg['version'] || '0.0.0';
       } else {
         this.currentVersion = '0.0.0';
       }

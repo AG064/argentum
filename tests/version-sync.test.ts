@@ -78,7 +78,7 @@ function listFiles(root: string, extensions: Set<string>): string[] {
   const files: string[] = [];
 
   for (const entry of readdirSync(root)) {
-    if (entry === '.git' || entry === '.npm-cache' || entry === 'dist' || entry === 'node_modules') {
+    if (entry === '.git' || entry === '.npm-cache' || entry === 'dist' || entry === 'node_modules' || entry === 'target' || entry === 'build') {
       continue;
     }
 

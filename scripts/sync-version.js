@@ -76,7 +76,7 @@ function listFiles(root, extensions) {
 
   const files = [];
   for (const entry of readdirSync(root)) {
-    if (entry === 'node_modules') continue;
+    if (entry === 'node_modules' || entry === 'target' || entry === 'dist' || entry === 'build') continue;
 
     const fullPath = join(root, entry);
     const stat = statSync(fullPath);

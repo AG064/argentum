@@ -304,7 +304,10 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
           requester: 'builtin.read_file',
         });
         if (!decision.allowed) {
-          return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          if (decision.reason === 'outside-workspace') {
+            return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          }
+          return `Error: Access denied (${decision.reason}): ${filePath}`;
         }
         const safePath = decision.resolvedPath;
         if (!safePath) {
@@ -344,7 +347,10 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
           requester: 'builtin.write_file',
         });
         if (!decision.allowed) {
-          return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          if (decision.reason === 'outside-workspace') {
+            return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          }
+          return `Error: Access denied (${decision.reason}): ${filePath}`;
         }
         const safePath = decision.resolvedPath;
         if (!safePath) {

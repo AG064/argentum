@@ -121,6 +121,7 @@ interface NormalizedRequest {
 
 const FILE_ACTIONS = new Set<CapabilityAction>(['file.read', 'file.write', 'file.delete']);
 const SENSITIVE_KEY_PATTERN = /((?:api[_-]?key|authorization|bearer|password|secret|token)\s*[:=]\s*)([^\s"'&]+)/gi;
+const MAX_AUDIT_ENTRIES = 10_000;
 
 export function createCapabilityBroker(options: CapabilityBrokerOptions): CapabilityBroker {
   return new DefaultCapabilityBroker(options);
@@ -388,9 +389,16 @@ class DefaultCapabilityBroker implements CapabilityBroker {
 
   private pushAudit(entry: CapabilityAuditEntry): void {
     this.auditEntries.push(entry);
+    if (this.auditEntries.length > MAX_AUDIT_ENTRIES) {
+      this.auditEntries.splice(0, this.auditEntries.length - MAX_AUDIT_ENTRIES);
+    }
     if (this.auditPath) {
-      mkdirSync(dirname(this.auditPath), { recursive: true });
-      appendFileSync(this.auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
+      try {
+        mkdirSync(dirname(this.auditPath), { recursive: true });
+        appendFileSync(this.auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
+      } catch {
+        // Audit persistence failures must not interrupt capability enforcement.
+      }
     }
     this.auditSink?.(entry);
   }

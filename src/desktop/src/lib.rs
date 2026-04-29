@@ -51,14 +51,24 @@ fn write_text(path: &Path, contents: &str) -> Result<(), String> {
         .map_err(|error| format!("Failed to write {}: {error}", path.display()))
 }
 
+fn map_security_profile(profile: &str) -> &str {
+    match profile {
+        "ask" => "ask-every-time",
+        "session" => "session-grant",
+        other => other,
+    }
+}
+
 fn render_config(request: &SaveSetupRequest) -> String {
+    let profile = map_security_profile(&request.security_profile);
+    let webchat_enabled = request.channel_mode == "webchat";
     format!(
-        "version: \"{}\"\nruntime:\n  mode: {}\nllm:\n  provider: {}\nchannels:\n  mode: {}\nsecurity:\n  profile: {}\n  workspaceBoundary: true\n  capabilityBroker: true\n",
-        request.version,
-        request.runtime_mode,
-        request.llm_provider,
-        request.channel_mode,
-        request.security_profile
+        "version: \"{version}\"\nllm:\n  default: {llm}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: \"{workspace}\"\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n",
+        version = request.version,
+        llm = request.llm_provider,
+        profile = profile,
+        workspace = request.workspace_path,
+        webchat = webchat_enabled,
     )
 }
 
