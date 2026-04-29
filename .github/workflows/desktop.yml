@@ -78,8 +78,13 @@ jobs:
           name: ${{ matrix.artifact }}
           if-no-files-found: error
           path: |
-            src/desktop/target/release/bundle/**/*
-            src/desktop/target/*/release/bundle/**/*
+            src/desktop/target/release/bundle/**/*.AppImage
+            src/desktop/target/release/bundle/**/*.deb
+            src/desktop/target/release/bundle/**/*.rpm
+            src/desktop/target/release/bundle/**/*.dmg
+            src/desktop/target/release/bundle/**/*.msi
+            src/desktop/target/release/bundle/**/*-setup.exe
+            src/desktop/target/*/release/bundle/**/*.dmg
 
   desktop-release:
     name: Attach desktop installers to release
@@ -93,9 +98,49 @@ jobs:
         with:
           path: artifacts/desktop
 
+      - name: Remove non-installer release assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+            const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner,
+              repo,
+              release_id: release.data.id,
+              per_page: 100,
+            });
+            const keepers = [
+              /^argentum-v\d+\.\d+\.\d+-linux-x64$/,
+              /^argentum-v\d+\.\d+\.\d+-macos-x64$/,
+              /^argentum-v\d+\.\d+\.\d+-win-x64(?:-setup)?\.exe$/,
+              /^argentum-v\d+\.\d+\.\d+-win-x64\.msi$/,
+              /^SHA256SUMS(?:-portable)?\.txt$/,
+              /^Argentum[_-]\d+\.\d+\.\d+.*\.(?:AppImage|deb|rpm|dmg|msi|exe)$/,
+            ];
+            for (const asset of assets) {
+              if (keepers.some((pattern) => pattern.test(asset.name))) {
+                continue;
+              }
+              core.info(`Deleting non-installer release asset: ${asset.name}`);
+              await github.rest.repos.deleteReleaseAsset({
+                owner,
+                repo,
+                asset_id: asset.id,
+              });
+            }
+
       - uses: softprops/action-gh-release@v2
         with:
           overwrite_files: true
-          files: artifacts/desktop/**/*
+          files: |
+            artifacts/desktop/**/*.AppImage
+            artifacts/desktop/**/*.deb
+            artifacts/desktop/**/*.rpm
+            artifacts/desktop/**/*.dmg
+            artifacts/desktop/**/*.msi
+            artifacts/desktop/**/*-setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
