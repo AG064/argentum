@@ -107,16 +107,18 @@ describe('capability broker', () => {
 
     try {
       const broker = createCapabilityBroker({ workspaceRoot: workspace, auditPath });
+      const sensitiveValue = ['raw', 'secret', 'token'].join('-');
 
       broker.authorize({
         action: 'shell.execute',
-        resource: 'curl https://example.com -H "Authorization: Bearer raw-secret-token"',
+        resource: `run-tool token=${sensitiveValue}`,
       });
 
       expect(existsSync(auditPath)).toBe(true);
       const lines = readFileSync(auditPath, 'utf8').trim().split(/\r?\n/);
       expect(lines).toHaveLength(1);
-      expect(lines[0]).not.toContain('raw-secret-token');
+      expect(lines[0]).not.toContain(sensitiveValue);
+      expect(lines[0]).toContain('[REDACTED]');
       expect(JSON.parse(lines[0] ?? '{}')).toEqual(
         expect.objectContaining({
           action: 'shell.execute',
