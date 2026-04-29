@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 import { createBuiltinTools } from '../src/index';
+import { createCapabilityBroker } from '../src/security/capability-broker';
 
 describe('built-in tool security', () => {
   test('filesystem tools are scoped to the configured workspace root', async () => {
@@ -83,6 +84,34 @@ describe('built-in tool security', () => {
       });
 
       expect(resolve(output ?? '')).toBe(resolve(workspace));
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test('built-in tools route privileged actions through the capability broker', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'argentum-brokered-tools-'));
+
+    try {
+      const broker = createCapabilityBroker({ workspaceRoot: workspace });
+      const tools = createBuiltinTools({
+        enableFilesystemTools: true,
+        enableShellTool: true,
+        workspaceRoot: workspace,
+        capabilityBroker: broker,
+      });
+      const writeFile = tools.find((tool) => tool.name === 'write_file');
+      const runCommand = tools.find((tool) => tool.name === 'run_command');
+
+      expect(await writeFile?.execute({ path: 'allowed.txt', content: 'ok' })).toContain(
+        resolve(workspace, 'allowed.txt'),
+      );
+      expect(await runCommand?.execute({ command: 'node -v' })).toContain(
+        'not permitted by current capability policy',
+      );
+      expect(broker.getAuditEntries().map((entry) => entry.action)).toEqual(
+        expect.arrayContaining(['file.write', 'shell.execute']),
+      );
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }

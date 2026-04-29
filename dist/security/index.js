@@ -5,7 +5,7 @@
  * Re-exports all security components for easy access.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBlueprintLoader = exports.getApprovalUI = exports.resetSandboxExecutor = exports.getSandboxExecutor = exports.resetCredentialManager = exports.getCredentialManager = exports.resetPolicyEngine = exports.getPolicyEngine = void 0;
+exports.createCapabilityBroker = exports.getBlueprintLoader = exports.getApprovalUI = exports.resetSandboxExecutor = exports.getSandboxExecutor = exports.resetCredentialManager = exports.getCredentialManager = exports.resetPolicyEngine = exports.getPolicyEngine = void 0;
 var index_1 = require("./policy-engine/index");
 Object.defineProperty(exports, "getPolicyEngine", { enumerable: true, get: function () { return index_1.getPolicyEngine; } });
 Object.defineProperty(exports, "resetPolicyEngine", { enumerable: true, get: function () { return index_1.resetPolicyEngine; } });
@@ -19,4 +19,6 @@ var index_4 = require("./approval-ui/index");
 Object.defineProperty(exports, "getApprovalUI", { enumerable: true, get: function () { return index_4.getApprovalUI; } });
 var index_5 = require("./blueprint/index");
 Object.defineProperty(exports, "getBlueprintLoader", { enumerable: true, get: function () { return index_5.getBlueprintLoader; } });
+var capability_broker_1 = require("./capability-broker");
+Object.defineProperty(exports, "createCapabilityBroker", { enumerable: true, get: function () { return capability_broker_1.createCapabilityBroker; } });
 //# sourceMappingURL=index.js.map

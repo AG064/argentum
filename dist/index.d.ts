@@ -14,6 +14,7 @@ import { type ArgentumConfig } from './core/config';
 import { type LLMProvider, type Message } from './core/llm-provider';
 import { type MemoryGraph } from './memory/graph';
 import { type SemanticMemory } from './memory/semantic';
+import { type CapabilityBroker } from './security/capability-broker';
 export interface Tool {
     name: string;
     description: string;
@@ -51,6 +52,8 @@ export interface BuiltinToolOptions {
     enableShellTool?: boolean;
     enableImageTool?: boolean;
     workspaceRoot?: string;
+    capabilityAuditPath?: string;
+    capabilityBroker?: CapabilityBroker;
 }
 export declare function createBuiltinTools(options?: BuiltinToolOptions): Tool[];
 declare class Argentum {

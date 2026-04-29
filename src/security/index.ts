@@ -13,6 +13,17 @@ export {
 export { getSandboxExecutor, resetSandboxExecutor, type SandboxExecutor } from './sandbox/index';
 export { getApprovalUI, type ApprovalUI } from './approval-ui/index';
 export { getBlueprintLoader, type BlueprintLoader } from './blueprint/index';
+export {
+  createCapabilityBroker,
+  type CapabilityAction,
+  type CapabilityAuditEntry,
+  type CapabilityBroker,
+  type CapabilityDecision,
+  type CapabilityGrant,
+  type CapabilityGrantInput,
+  type CapabilityGrantScope,
+  type CapabilityRequest,
+} from './capability-broker';
 
 // Types
 export type {

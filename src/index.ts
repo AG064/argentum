@@ -24,7 +24,10 @@ import { createLogger, type Logger } from './core/logger';
 import { PluginLoader } from './core/plugin-loader';
 import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
-import { createWorkspaceBoundary } from './security/workspace-boundary';
+import {
+  createCapabilityBroker,
+  type CapabilityBroker,
+} from './security/capability-broker';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 
@@ -207,6 +210,8 @@ export interface BuiltinToolOptions {
   enableShellTool?: boolean;
   enableImageTool?: boolean;
   workspaceRoot?: string;
+  capabilityAuditPath?: string;
+  capabilityBroker?: CapabilityBroker;
 }
 
 function isEnvEnabled(name: string): boolean {
@@ -219,7 +224,19 @@ function resolveBuiltinToolWorkspaceRoot(options: BuiltinToolOptions): string {
 }
 
 export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
-  const workspaceBoundary = createWorkspaceBoundary(resolveBuiltinToolWorkspaceRoot(options));
+  const workspaceRoot = resolveBuiltinToolWorkspaceRoot(options);
+  const capabilityBroker =
+    options.capabilityBroker ??
+    createCapabilityBroker({ workspaceRoot, auditPath: options.capabilityAuditPath });
+  if (options.enableShellTool && !options.capabilityBroker) {
+    capabilityBroker.grant({
+      action: 'shell.execute',
+      resource: 'exec://*',
+      scope: 'current-session',
+      grantedBy: 'runtime',
+      reason: 'Shell tool was explicitly enabled for this Argentum runtime session.',
+    });
+  }
   const tools: Tool[] = [
     {
       name: 'web_search',
@@ -281,11 +298,18 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
 
         if (!filePath) return 'Error: path parameter is required';
 
-        const decision = workspaceBoundary.checkPath(filePath);
+        const decision = capabilityBroker.authorize({
+          action: 'file.read',
+          resource: filePath,
+          requester: 'builtin.read_file',
+        });
         if (!decision.allowed) {
-          return `Error: Path is outside the configured workspace: ${workspaceBoundary.workspaceRoot}`;
+          return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
         }
         const safePath = decision.resolvedPath;
+        if (!safePath) {
+          return `Error: Path could not be resolved: ${filePath}`;
+        }
         if (!existsSync(safePath)) {
           return `Error: File not found: ${safePath}`;
         }
@@ -314,11 +338,18 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         if (!filePath || content === undefined)
           return 'Error: path and content parameters are required';
 
-        const decision = workspaceBoundary.checkPath(filePath);
+        const decision = capabilityBroker.authorize({
+          action: 'file.write',
+          resource: filePath,
+          requester: 'builtin.write_file',
+        });
         if (!decision.allowed) {
-          return `Error: Path is outside the configured workspace: ${workspaceBoundary.workspaceRoot}`;
+          return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
         }
         const safePath = decision.resolvedPath;
+        if (!safePath) {
+          return `Error: Path could not be resolved: ${filePath}`;
+        }
 
         try {
           mkdirSync(dirname(safePath), { recursive: true });
@@ -351,9 +382,19 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
           return 'Error: This command is blocked for safety reasons.';
         }
 
+        const decision = capabilityBroker.authorize({
+          action: 'shell.execute',
+          resource: cmd,
+          requester: 'builtin.run_command',
+          metadata: { command: cmd },
+        });
+        if (!decision.allowed) {
+          return `Error: Command is not permitted by current capability policy: ${decision.reason}`;
+        }
+
         try {
           const output = execSync(cmd, {
-            cwd: workspaceBoundary.workspaceRoot,
+            cwd: capabilityBroker.workspaceRoot,
             timeout: 30000,
             encoding: 'utf-8',
             maxBuffer: 1024 * 1024,
@@ -594,6 +635,7 @@ class Argentum {
       workspaceRoot:
         process.env.ARGENTUM_TOOL_ROOT ??
         this.config.security.capabilities.workspaceRoot,
+      capabilityAuditPath: this.config.security.capabilities.auditPath,
     })) {
       this.agent.registerTool(tool);
     }

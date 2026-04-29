@@ -54,7 +54,7 @@ const logger_1 = require("./core/logger");
 const plugin_loader_1 = require("./core/plugin-loader");
 const graph_1 = require("./memory/graph");
 const semantic_1 = require("./memory/semantic");
-const workspace_boundary_1 = require("./security/workspace-boundary");
+const capability_broker_1 = require("./security/capability-broker");
 // ─── Agent Core ───────────────────────────────────────────────────────────────
 class Agent {
     tools = new Map();
@@ -190,7 +190,18 @@ function resolveBuiltinToolWorkspaceRoot(options) {
     return options.workspaceRoot ?? process.env.ARGENTUM_TOOL_ROOT ?? process.cwd();
 }
 function createBuiltinTools(options = {}) {
-    const workspaceBoundary = (0, workspace_boundary_1.createWorkspaceBoundary)(resolveBuiltinToolWorkspaceRoot(options));
+    const workspaceRoot = resolveBuiltinToolWorkspaceRoot(options);
+    const capabilityBroker = options.capabilityBroker ??
+        (0, capability_broker_1.createCapabilityBroker)({ workspaceRoot, auditPath: options.capabilityAuditPath });
+    if (options.enableShellTool && !options.capabilityBroker) {
+        capabilityBroker.grant({
+            action: 'shell.execute',
+            resource: 'exec://*',
+            scope: 'current-session',
+            grantedBy: 'runtime',
+            reason: 'Shell tool was explicitly enabled for this Argentum runtime session.',
+        });
+    }
     const tools = [
         {
             name: 'web_search',
@@ -248,11 +259,18 @@ function createBuiltinTools(options = {}) {
                 const filePath = params['path'];
                 if (!filePath)
                     return 'Error: path parameter is required';
-                const decision = workspaceBoundary.checkPath(filePath);
+                const decision = capabilityBroker.authorize({
+                    action: 'file.read',
+                    resource: filePath,
+                    requester: 'builtin.read_file',
+                });
                 if (!decision.allowed) {
-                    return `Error: Path is outside the configured workspace: ${workspaceBoundary.workspaceRoot}`;
+                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
                 }
                 const safePath = decision.resolvedPath;
+                if (!safePath) {
+                    return `Error: Path could not be resolved: ${filePath}`;
+                }
                 if (!existsSync(safePath)) {
                     return `Error: File not found: ${safePath}`;
                 }
@@ -278,11 +296,18 @@ function createBuiltinTools(options = {}) {
                 const content = params['content'];
                 if (!filePath || content === undefined)
                     return 'Error: path and content parameters are required';
-                const decision = workspaceBoundary.checkPath(filePath);
+                const decision = capabilityBroker.authorize({
+                    action: 'file.write',
+                    resource: filePath,
+                    requester: 'builtin.write_file',
+                });
                 if (!decision.allowed) {
-                    return `Error: Path is outside the configured workspace: ${workspaceBoundary.workspaceRoot}`;
+                    return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
                 }
                 const safePath = decision.resolvedPath;
+                if (!safePath) {
+                    return `Error: Path could not be resolved: ${filePath}`;
+                }
                 try {
                     mkdirSync(dirname(safePath), { recursive: true });
                     writeFileSync(safePath, content, 'utf-8');
@@ -311,9 +336,18 @@ function createBuiltinTools(options = {}) {
                 if (blocked.some((b) => cmd.includes(b))) {
                     return 'Error: This command is blocked for safety reasons.';
                 }
+                const decision = capabilityBroker.authorize({
+                    action: 'shell.execute',
+                    resource: cmd,
+                    requester: 'builtin.run_command',
+                    metadata: { command: cmd },
+                });
+                if (!decision.allowed) {
+                    return `Error: Command is not permitted by current capability policy: ${decision.reason}`;
+                }
                 try {
                     const output = execSync(cmd, {
-                        cwd: workspaceBoundary.workspaceRoot,
+                        cwd: capabilityBroker.workspaceRoot,
                         timeout: 30000,
                         encoding: 'utf-8',
                         maxBuffer: 1024 * 1024,
@@ -516,6 +550,7 @@ class Argentum {
             enableImageTool,
             workspaceRoot: process.env.ARGENTUM_TOOL_ROOT ??
                 this.config.security.capabilities.workspaceRoot,
+            capabilityAuditPath: this.config.security.capabilities.auditPath,
         })) {
             this.agent.registerTool(tool);
         }
