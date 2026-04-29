@@ -29,7 +29,36 @@ const state = {
   activeSection: 'onboarding',
   onboardingStep: 1,
   workspacePath: '%LOCALAPPDATA%\\Programs\\Argentum\\workspace',
+  runtimeMode: 'desktop',
+  llmProvider: 'openai',
+  channelMode: 'local-only',
+  securityProfile: 'restricted',
   setupComplete: false,
+};
+
+const setupLabels = {
+  runtimeMode: {
+    desktop: 'Desktop app with CLI tools',
+    cli: 'CLI focused install',
+    service: 'Local service with desktop control',
+  },
+  llmProvider: {
+    openai: 'OpenAI',
+    gemini: 'Google Gemini',
+    anthropic: 'Anthropic',
+    local: 'Local model endpoint',
+  },
+  channelMode: {
+    'local-only': 'Local app only',
+    'webchat': 'Local webchat',
+    'telegram': 'Telegram with allowlist',
+  },
+  securityProfile: {
+    restricted: 'Restricted: workspace-only',
+    ask: 'Ask every time',
+    session: 'Session grants',
+    trusted: 'Trusted mode',
+  },
 };
 
 const nav = document.querySelector('#section-nav');
@@ -49,6 +78,24 @@ function escapeHtml(value) {
     };
     return entities[character];
   });
+}
+
+function labelFor(group, value) {
+  return setupLabels[group][value] || value;
+}
+
+function selected(currentValue, optionValue) {
+  return currentValue === optionValue ? 'selected' : '';
+}
+
+function bindSelect(selector, update) {
+  const select = document.querySelector(selector);
+  if (select) {
+    select.addEventListener('change', (event) => {
+      update(event.target.value);
+      render();
+    });
+  }
 }
 
 function renderNavigation() {
@@ -126,6 +173,19 @@ function renderOnboarding() {
     });
   }
 
+  bindSelect('#runtime-mode', (value) => {
+    state.runtimeMode = value;
+  });
+  bindSelect('#llm-provider', (value) => {
+    state.llmProvider = value;
+  });
+  bindSelect('#channel-mode', (value) => {
+    state.channelMode = value;
+  });
+  bindSelect('#security-profile', (value) => {
+    state.securityProfile = value;
+  });
+
   document.querySelector('#next-button').addEventListener('click', () => {
     if (state.onboardingStep === onboardingSteps.length) {
       state.setupComplete = true;
@@ -161,6 +221,15 @@ function renderOnboardingStep() {
     return `
       <div class="form-grid">
         <label>
+          Provider
+          <select id="llm-provider">
+            <option value="openai" ${selected(state.llmProvider, 'openai')}>OpenAI</option>
+            <option value="gemini" ${selected(state.llmProvider, 'gemini')}>Google Gemini</option>
+            <option value="anthropic" ${selected(state.llmProvider, 'anthropic')}>Anthropic</option>
+            <option value="local" ${selected(state.llmProvider, 'local')}>Local model endpoint</option>
+          </select>
+        </label>
+        <label>
           Provider key
           <input type="password" placeholder="Stored in secrets.env, never YAML" />
         </label>
@@ -172,16 +241,57 @@ function renderOnboardingStep() {
     `;
   }
 
+  if (state.onboardingStep === 3) {
+    return `
+      <div class="form-grid">
+        <label>
+          Runtime mode
+          <select id="runtime-mode">
+            <option value="desktop" ${selected(state.runtimeMode, 'desktop')}>Desktop app with CLI tools</option>
+            <option value="cli" ${selected(state.runtimeMode, 'cli')}>CLI focused install</option>
+            <option value="service" ${selected(state.runtimeMode, 'service')}>Local service with desktop control</option>
+          </select>
+        </label>
+        <label>
+          Startup behavior
+          <select>
+            <option>Launch desktop interface after setup</option>
+            <option>Start minimized and keep local services off until requested</option>
+          </select>
+        </label>
+      </div>
+    `;
+  }
+
+  if (state.onboardingStep === 6) {
+    return `
+      <div class="form-grid">
+        <label>
+          Channels
+          <select id="channel-mode">
+            <option value="local-only" ${selected(state.channelMode, 'local-only')}>Local app only</option>
+            <option value="webchat" ${selected(state.channelMode, 'webchat')}>Local webchat</option>
+            <option value="telegram" ${selected(state.channelMode, 'telegram')}>Telegram with allowlist</option>
+          </select>
+        </label>
+        <label>
+          Webchat token
+          <input type="password" placeholder="Generated if local webchat is enabled" />
+        </label>
+      </div>
+    `;
+  }
+
   if (state.onboardingStep === 7) {
     return `
       <div class="form-grid">
         <label>
           Permission profile
-          <select>
-            <option>Restricted: workspace-only</option>
-            <option>Ask Every Time</option>
-            <option>Session Grant</option>
-            <option>Trusted Mode</option>
+          <select id="security-profile">
+            <option value="restricted" ${selected(state.securityProfile, 'restricted')}>Restricted: workspace-only</option>
+            <option value="ask" ${selected(state.securityProfile, 'ask')}>Ask every time</option>
+            <option value="session" ${selected(state.securityProfile, 'session')}>Session grants</option>
+            <option value="trusted" ${selected(state.securityProfile, 'trusted')}>Trusted mode</option>
           </select>
         </label>
         <label>
@@ -194,11 +304,7 @@ function renderOnboardingStep() {
 
   if (state.onboardingStep === 8) {
     return `
-      <div class="status-list">
-        <div class="status-row"><strong>Workspace</strong><span>${escapeHtml(state.workspacePath)}</span><span class="pill ok">Ready</span></div>
-        <div class="status-row"><strong>Security</strong><span>Restricted profile, capability broker active</span><span class="pill ok">Ready</span></div>
-        <div class="status-row"><strong>Secrets</strong><span>Masked inputs, dotenv output</span><span class="pill warn">Review</span></div>
-      </div>
+      ${renderReviewRows()}
     `;
   }
 
@@ -211,14 +317,27 @@ function renderOnboardingStep() {
   `;
 }
 
+function renderReviewRows() {
+  return `
+    <div class="status-list">
+      <div class="status-row"><strong>Workspace</strong><span>${escapeHtml(state.workspacePath)}</span><span class="pill ok">Ready</span></div>
+      <div class="status-row"><strong>Runtime</strong><span>${escapeHtml(labelFor('runtimeMode', state.runtimeMode))}</span><span class="pill ok">Ready</span></div>
+      <div class="status-row"><strong>Provider</strong><span>${escapeHtml(labelFor('llmProvider', state.llmProvider))}</span><span class="pill warn">Needs key</span></div>
+      <div class="status-row"><strong>Channels</strong><span>${escapeHtml(labelFor('channelMode', state.channelMode))}</span><span class="pill ok">Ready</span></div>
+      <div class="status-row"><strong>Security</strong><span>${escapeHtml(labelFor('securityProfile', state.securityProfile))}, capability broker active</span><span class="pill ok">Ready</span></div>
+    </div>
+  `;
+}
+
 function renderSection() {
   const section = sections.find((item) => item.id === state.activeSection) || sections[0];
   title.textContent = section.title;
   eyebrow.textContent = state.setupComplete ? 'Ready' : 'Argentum';
   viewRoot.innerHTML = `
     <div class="dashboard-grid">
-      <div class="metric"><span>Status</span><strong>Local</strong></div>
-      <div class="metric"><span>Permission profile</span><strong>Restricted</strong></div>
+      <div class="metric"><span>Status</span><strong>${state.setupComplete ? 'Ready' : 'Local'}</strong></div>
+      <div class="metric"><span>Provider</span><strong>${escapeHtml(labelFor('llmProvider', state.llmProvider))}</strong></div>
+      <div class="metric"><span>Permission profile</span><strong>${escapeHtml(labelFor('securityProfile', state.securityProfile))}</strong></div>
       <div class="metric"><span>Audit entries</span><strong>0</strong></div>
     </div>
     <div class="status-list">

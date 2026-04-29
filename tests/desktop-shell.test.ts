@@ -64,6 +64,24 @@ describe('Argentum desktop shell scaffold', () => {
     expect(js).toContain('disabled: state.onboardingStep === 1');
   });
 
+  test('captures first-run setup choices for runtime, provider, channels, and security', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+
+    expect(js).toContain("runtimeMode: 'desktop'");
+    expect(js).toContain("llmProvider: 'openai'");
+    expect(js).toContain("channelMode: 'local-only'");
+    expect(js).toContain("securityProfile: 'restricted'");
+    expect(js).toContain('id="runtime-mode"');
+    expect(js).toContain('id="llm-provider"');
+    expect(js).toContain('id="channel-mode"');
+    expect(js).toContain('id="security-profile"');
+    expect(js).toContain("bindSelect('#runtime-mode'");
+    expect(js).toContain("bindSelect('#llm-provider'");
+    expect(js).toContain("bindSelect('#channel-mode'");
+    expect(js).toContain("bindSelect('#security-profile'");
+    expect(js).toContain('renderReviewRows');
+  });
+
   test('exposes npm scripts for desktop development and packaging', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts?: Record<string, string>;
