@@ -82,6 +82,28 @@ describe('Argentum desktop shell scaffold', () => {
     expect(js).toContain('renderReviewRows');
   });
 
+  test('bridges desktop onboarding to a Tauri setup save command', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+    const rust = readFileSync('src/desktop/src/main.rs', 'utf8');
+
+    expect(js).toContain('function buildSetupPayload()');
+    expect(js).toContain('async function saveSetup()');
+    expect(js).toContain("invoke('save_setup'");
+    expect(js).toContain('await saveSetup()');
+    expect(js).toContain('setup_saved');
+    expect(js).toContain('setup-error');
+    expect(rust).toContain('struct SaveSetupRequest');
+    expect(rust).toContain('#[tauri::command]');
+    expect(rust).toContain('fn save_setup');
+    expect(rust).toContain('std::fs::create_dir_all');
+    expect(rust).toContain('fn ensure_allowed');
+    expect(rust).toContain('["desktop", "cli", "service"]');
+    expect(rust).toContain('["restricted", "ask", "session", "trusted"]');
+    expect(rust).toContain('config/default.yaml');
+    expect(rust).toContain('secrets.env');
+    expect(rust).toContain('.invoke_handler(tauri::generate_handler![save_setup])');
+  });
+
   test('exposes npm scripts for desktop development and packaging', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts?: Record<string, string>;
@@ -89,12 +111,8 @@ describe('Argentum desktop shell scaffold', () => {
       pkg?: { assets?: string[] };
     };
 
-    expect(packageJson.scripts?.['desktop:dev']).toBe(
-      'tauri dev --config src/desktop/tauri.conf.json',
-    );
-    expect(packageJson.scripts?.['desktop:build']).toBe(
-      'tauri build --config src/desktop/tauri.conf.json',
-    );
+    expect(packageJson.scripts?.['desktop:dev']).toBe('cd src/desktop && tauri dev');
+    expect(packageJson.scripts?.['desktop:build']).toBe('cd src/desktop && tauri build');
     expect(packageJson.devDependencies).toHaveProperty('@tauri-apps/cli');
     expect(packageJson.pkg?.assets).toEqual(expect.arrayContaining(['src/ui/desktop/**/*']));
   });

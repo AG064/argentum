@@ -34,6 +34,8 @@ const state = {
   channelMode: 'local-only',
   securityProfile: 'restricted',
   setupComplete: false,
+  setupStatus: 'setup_pending',
+  savedConfigPath: '',
 };
 
 const setupLabels = {
@@ -96,6 +98,31 @@ function bindSelect(selector, update) {
       render();
     });
   }
+}
+
+function buildSetupPayload() {
+  return {
+    workspacePath: state.workspacePath,
+    runtimeMode: state.runtimeMode,
+    llmProvider: state.llmProvider,
+    channelMode: state.channelMode,
+    securityProfile: state.securityProfile,
+    version: '0.0.3',
+  };
+}
+
+async function saveSetup() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  const request = buildSetupPayload();
+
+  if (!invoke) {
+    return {
+      status: 'setup_saved',
+      configPath: `${request.workspacePath}\\config\\default.yaml`,
+    };
+  }
+
+  return invoke('save_setup', { request });
 }
 
 function renderNavigation() {
@@ -186,10 +213,18 @@ function renderOnboarding() {
     state.securityProfile = value;
   });
 
-  document.querySelector('#next-button').addEventListener('click', () => {
+  document.querySelector('#next-button').addEventListener('click', async () => {
     if (state.onboardingStep === onboardingSteps.length) {
-      state.setupComplete = true;
-      state.activeSection = 'chat';
+      try {
+        const result = await saveSetup();
+        state.setupComplete = true;
+        state.setupStatus = 'setup_saved';
+        state.savedConfigPath = result.configPath || result.config_path || '';
+        state.activeSection = 'chat';
+      } catch (error) {
+        state.setupStatus = 'setup-error';
+        state.savedConfigPath = error instanceof Error ? error.message : String(error);
+      }
       render();
       return;
     }
@@ -325,6 +360,7 @@ function renderReviewRows() {
       <div class="status-row"><strong>Provider</strong><span>${escapeHtml(labelFor('llmProvider', state.llmProvider))}</span><span class="pill warn">Needs key</span></div>
       <div class="status-row"><strong>Channels</strong><span>${escapeHtml(labelFor('channelMode', state.channelMode))}</span><span class="pill ok">Ready</span></div>
       <div class="status-row"><strong>Security</strong><span>${escapeHtml(labelFor('securityProfile', state.securityProfile))}, capability broker active</span><span class="pill ok">Ready</span></div>
+      <div class="status-row"><strong>Config</strong><span>Will be saved under config/default.yaml and secrets.env.</span><span class="pill warn">Pending</span></div>
     </div>
   `;
 }
@@ -341,6 +377,7 @@ function renderSection() {
       <div class="metric"><span>Audit entries</span><strong>0</strong></div>
     </div>
     <div class="status-list">
+      <div class="status-row"><strong>Setup</strong><span>${escapeHtml(state.savedConfigPath || 'Workspace setup is ready to save.')}</span><span class="pill ${state.setupStatus === 'setup-error' ? 'warn' : 'ok'}">${state.setupStatus === 'setup-error' ? 'Error' : 'Saved'}</span></div>
       <div class="status-row"><strong>${section.title}</strong><span>Desktop shell route is ready for runtime wiring.</span><span class="pill ok">Ready</span></div>
       <div class="status-row"><strong>Broker</strong><span>Capability grants and denials will surface here.</span><span class="pill warn">Next</span></div>
     </div>
