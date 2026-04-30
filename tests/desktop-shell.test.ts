@@ -112,7 +112,104 @@ describe('Argentum desktop shell scaffold', () => {
     expect(rust).toContain('["restricted", "ask", "session", "trusted"]');
     expect(rust).toContain('config/default.yaml');
     expect(rust).toContain('secrets.env');
-    expect(rust).toContain('.invoke_handler(tauri::generate_handler![save_setup])');
+    expect(rust).toContain('save_setup,');
+    expect(rust).toContain('run_desktop_action,');
+    expect(rust).toContain('desktop_defaults');
+    expect(rust).toContain('desktop_state');
+  });
+
+  test('hydrates onboarding with a resolved desktop default workspace path', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+
+    expect(js).toContain('async function hydrateDesktopDefaults()');
+    expect(js).toContain("invoke('desktop_defaults'");
+    expect(js).toContain('defaultWorkspacePath');
+    expect(js).toContain('hydrateDesktopDefaults().then');
+    expect(rust).toContain('struct DesktopDefaultsResponse');
+    expect(rust).toContain('fn default_workspace_path');
+    expect(rust).toContain('fn desktop_defaults');
+    expect(rust).toContain('default_workspace_path');
+  });
+
+  test('maps primary CLI workflows into GUI actions', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+
+    expect(js).toContain('const commandCatalog');
+    expect(js).toContain('argentum gateway start');
+    expect(js).toContain('argentum gateway status');
+    expect(js).toContain('argentum doctor');
+    expect(js).toContain('argentum agents list');
+    expect(js).toContain('argentum memory search');
+    expect(js).toContain('argentum skill list');
+    expect(js).toContain('argentum security status');
+    expect(js).toContain('argentum image "prompt"');
+    expect(js).toContain('data-copy-command');
+    expect(js).toContain('data-run-action');
+    expect(js).toContain('renderActionCards');
+    expect(js).toContain("invoke('run_desktop_action'");
+    expect(js).toContain('request: { actionId');
+  });
+
+  test('renders specialized desktop surfaces instead of placeholders', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+    const css = readFileSync('src/ui/desktop/styles.css', 'utf8');
+
+    for (const renderer of [
+      'renderChatSection',
+      'renderAgentsSection',
+      'renderRunnerSection',
+      'renderSkillsSection',
+      'renderWebchatSection',
+      'renderGraphSection',
+      'renderMemorySection',
+      'renderLogsSection',
+      'renderSecuritySection',
+      'renderSettingsSection',
+      'renderDiagnosticsSection',
+    ]) {
+      expect(js).toContain(`function ${renderer}`);
+    }
+
+    expect(js).not.toContain('Desktop shell route is ready for runtime wiring.');
+    expect(css).toContain('.hero-strip');
+    expect(css).toContain('.command-card');
+    expect(css).toContain('.chat-shell');
+    expect(css).toContain('.graph-canvas');
+    expect(css).toContain('.approval-row');
+  });
+
+  test('exposes a safe allowlisted desktop action bridge', () => {
+    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+
+    expect(rust).toContain('struct RunDesktopActionRequest');
+    expect(rust).toContain('struct RunDesktopActionResponse');
+    expect(rust).toContain('fn run_desktop_action');
+    expect(rust).toContain('"doctor"');
+    expect(rust).toContain('"gateway-status"');
+    expect(rust).toContain('"security-status"');
+    expect(rust).toContain('Unknown desktop action');
+    expect(rust).toContain('run_desktop_action,');
+  });
+
+  test('loads read-only workspace state into desktop diagnostics', () => {
+    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+
+    expect(rust).toContain('struct DesktopStateRequest');
+    expect(rust).toContain('struct DesktopStateResponse');
+    expect(rust).toContain('fn desktop_state');
+    expect(rust).toContain('gateway_log_preview');
+    expect(rust).toContain('audit_log_preview');
+    expect(rust).toContain('redact_sensitive_line');
+    expect(rust).toContain('desktop_state,');
+    expect(js).toContain('desktopState:');
+    expect(js).toContain('async function refreshDesktopState');
+    expect(js).toContain("invoke('desktop_state'");
+    expect(js).toContain('data-refresh-state');
+    expect(js).toContain('formatWorkspaceHealth');
+    expect(js).toContain('gatewayLogPreview');
+    expect(js).toContain('auditLogPreview');
   });
 
   test('exposes npm scripts for desktop development and packaging', () => {
