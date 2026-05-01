@@ -76,6 +76,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
     "@clack/prompts": "^1.2.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",

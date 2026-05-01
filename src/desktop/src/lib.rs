@@ -5,9 +5,20 @@ use std::path::{Path, PathBuf};
 #[serde(rename_all = "camelCase")]
 struct SaveSetupRequest {
     workspace_path: String,
+    experience_level: String,
     runtime_mode: String,
     llm_provider: String,
-    channel_mode: String,
+    provider_api: String,
+    provider_base_url: String,
+    provider_model: String,
+    provider_api_key: String,
+    provider_api_key_env: String,
+    custom_provider_name: String,
+    selected_channels: Vec<String>,
+    webchat_token: String,
+    telegram_token: String,
+    telegram_allowlist: String,
+    whatsapp_phone_id: String,
     security_profile: String,
     version: String,
 }
@@ -59,6 +70,34 @@ struct DesktopStateResponse {
     gateway_pid: Option<String>,
     gateway_log_preview: String,
     audit_log_preview: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestProviderRequest {
+    provider: String,
+    api: String,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TestProviderResponse {
+    status: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProviderDefaults {
+    name: &'static str,
+    label: &'static str,
+    api: &'static str,
+    base_url: &'static str,
+    api_key_env: &'static str,
+    default_model: &'static str,
+    requires_key: bool,
 }
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
@@ -144,15 +183,241 @@ fn map_security_profile(profile: &str) -> &str {
 
 fn render_config(request: &SaveSetupRequest) -> String {
     let profile = map_security_profile(&request.security_profile);
-    let webchat_enabled = request.channel_mode == "webchat";
+    let provider_name = selected_provider_name(request);
+    let provider_label = selected_provider_defaults(request).label;
+    let api_key_env = provider_api_key_env(request);
+    let provider_api = provider_api(request);
+    let provider_base_url = provider_base_url(request);
+    let provider_model = provider_model(request);
+    let quoted_provider_label = yaml_quote(provider_label);
+    let quoted_provider_base_url = yaml_quote(&provider_base_url);
+    let quoted_provider_model = yaml_quote(&provider_model);
+    let quoted_workspace = yaml_quote(&request.workspace_path);
+    let webchat_enabled = channel_enabled(request, "webchat");
+    let telegram_enabled = channel_enabled(request, "telegram");
+    let whatsapp_selected = channel_enabled(request, "whatsapp");
+    let telegram_allowlist = request.telegram_allowlist.trim();
+    let whatsapp_phone_id = request.whatsapp_phone_id.trim();
+    let quoted_telegram_allowlist = yaml_quote(telegram_allowlist);
+    let quoted_whatsapp_phone_id = yaml_quote(whatsapp_phone_id);
     format!(
-        "version: \"{version}\"\nllm:\n  default: {llm}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: \"{workspace}\"\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n",
+        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
         version = request.version,
-        llm = request.llm_provider,
+        experience = request.experience_level,
+        runtime = request.runtime_mode,
+        provider_name = provider_name,
+        provider_label = quoted_provider_label,
+        provider_base_url = quoted_provider_base_url,
+        api_key_env = api_key_env,
+        provider_api = provider_api,
+        provider_model = quoted_provider_model,
         profile = profile,
-        workspace = request.workspace_path,
+        workspace = quoted_workspace,
         webchat = webchat_enabled,
+        telegram = telegram_enabled,
+        telegram_allowlist = quoted_telegram_allowlist,
+        whatsapp_selected = whatsapp_selected,
+        whatsapp_phone_id = quoted_whatsapp_phone_id,
     )
+}
+
+fn provider_defaults(provider: &str) -> Option<ProviderDefaults> {
+    match provider {
+        "openai" => Some(ProviderDefaults {
+            name: "openai",
+            label: "OpenAI",
+            api: "openai",
+            base_url: "https://api.openai.com/v1",
+            api_key_env: "OPENAI_API_KEY",
+            default_model: "gpt-4o-mini",
+            requires_key: true,
+        }),
+        "anthropic" => Some(ProviderDefaults {
+            name: "anthropic",
+            label: "Anthropic Claude",
+            api: "anthropic",
+            base_url: "https://api.anthropic.com",
+            api_key_env: "ANTHROPIC_API_KEY",
+            default_model: "claude-sonnet-4-20250514",
+            requires_key: true,
+        }),
+        "google" => Some(ProviderDefaults {
+            name: "google",
+            label: "Google Gemini",
+            api: "openai",
+            base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key_env: "GOOGLE_API_KEY",
+            default_model: "gemini-2.5-flash",
+            requires_key: true,
+        }),
+        "openrouter" => Some(ProviderDefaults {
+            name: "openrouter",
+            label: "OpenRouter",
+            api: "openai",
+            base_url: "https://openrouter.ai/api/v1",
+            api_key_env: "OPENROUTER_API_KEY",
+            default_model: "google/gemma-3-27b-it",
+            requires_key: true,
+        }),
+        "nvidia" => Some(ProviderDefaults {
+            name: "nvidia",
+            label: "NVIDIA",
+            api: "openai",
+            base_url: "https://integrate.api.nvidia.com/v1",
+            api_key_env: "NVIDIA_API_KEY",
+            default_model: "deepseek-ai/deepseek-v3.2",
+            requires_key: true,
+        }),
+        "groq" => Some(ProviderDefaults {
+            name: "groq",
+            label: "Groq",
+            api: "openai",
+            base_url: "https://api.groq.com/openai/v1",
+            api_key_env: "GROQ_API_KEY",
+            default_model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            requires_key: true,
+        }),
+        "minimax" => Some(ProviderDefaults {
+            name: "minimax",
+            label: "MiniMax",
+            api: "openai",
+            base_url: "https://api.minimax.io/v1",
+            api_key_env: "MINIMAX_API_KEY",
+            default_model: "MiniMax-M2.7",
+            requires_key: true,
+        }),
+        "ollama" => Some(ProviderDefaults {
+            name: "ollama",
+            label: "Ollama / local",
+            api: "openai",
+            base_url: "http://127.0.0.1:11434/v1",
+            api_key_env: "OLLAMA_API_KEY",
+            default_model: "llama3.1",
+            requires_key: false,
+        }),
+        "custom" => Some(ProviderDefaults {
+            name: "custom",
+            label: "Custom endpoint",
+            api: "openai",
+            base_url: "http://127.0.0.1:8000/v1",
+            api_key_env: "CUSTOM_API_KEY",
+            default_model: "custom-model",
+            requires_key: false,
+        }),
+        _ => None,
+    }
+}
+
+fn selected_provider_name(request: &SaveSetupRequest) -> String {
+    if request.llm_provider == "custom" {
+        let cleaned = request.custom_provider_name.trim();
+        if cleaned.is_empty() {
+            "custom".to_string()
+        } else {
+            cleaned
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                        character.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect()
+        }
+    } else {
+        selected_provider_defaults(request).name.to_string()
+    }
+}
+
+fn selected_provider_defaults(request: &SaveSetupRequest) -> ProviderDefaults {
+    provider_defaults(&request.llm_provider).unwrap_or_else(|| provider_defaults("openai").unwrap())
+}
+
+fn provider_api_key_env(request: &SaveSetupRequest) -> String {
+    if request.llm_provider == "custom" {
+        let value = request.provider_api_key_env.trim();
+        if value.is_empty() {
+            "CUSTOM_API_KEY".to_string()
+        } else {
+            value.to_ascii_uppercase()
+        }
+    } else {
+        selected_provider_defaults(request).api_key_env.to_string()
+    }
+}
+
+fn validate_env_name(value: &str) -> Result<(), String> {
+    let mut characters = value.chars();
+    let Some(first) = characters.next() else {
+        return Err("Provider secret variable name is required".to_string());
+    };
+
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return Err(
+            "Provider secret variable name must start with a letter or underscore".to_string(),
+        );
+    }
+
+    if characters.any(|character| !(character.is_ascii_alphanumeric() || character == '_')) {
+        return Err(
+            "Provider secret variable name can contain only letters, numbers, and underscores"
+                .to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn provider_base_url(request: &SaveSetupRequest) -> String {
+    let defaults = selected_provider_defaults(request);
+    let value = request.provider_base_url.trim();
+    if value.is_empty() {
+        defaults.base_url.to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn provider_model(request: &SaveSetupRequest) -> String {
+    let defaults = selected_provider_defaults(request);
+    let value = request.provider_model.trim();
+    if value.is_empty() {
+        defaults.default_model.to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn provider_api(request: &SaveSetupRequest) -> String {
+    let defaults = selected_provider_defaults(request);
+    let value = request.provider_api.trim();
+    if value.is_empty() {
+        defaults.api.to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn channel_enabled(request: &SaveSetupRequest, channel: &str) -> bool {
+    request
+        .selected_channels
+        .iter()
+        .any(|selected| selected == channel)
+}
+
+fn format_secret(value: &str) -> String {
+    if value.chars().any(|character| {
+        character.is_whitespace() || character == '"' || character == '\'' || character == '#'
+    }) {
+        format!("{:?}", value)
+    } else {
+        value.to_string()
+    }
+}
+
+fn yaml_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 fn desktop_action(action_id: &str) -> Option<(&'static str, &'static str)> {
@@ -291,6 +556,119 @@ fn read_gateway_pid(path: &Path) -> Option<String> {
     }
 }
 
+fn is_local_endpoint(base_url: &str) -> bool {
+    let normalized = base_url.to_ascii_lowercase();
+    normalized.contains("127.0.0.1")
+        || normalized.contains("localhost")
+        || normalized.contains("[::1]")
+}
+
+fn models_url(base_url: &str, api: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if api == "anthropic" {
+        if trimmed.ends_with("/v1") {
+            format!("{trimmed}/models")
+        } else {
+            format!("{trimmed}/v1/models")
+        }
+    } else {
+        format!("{trimmed}/models")
+    }
+}
+
+fn redact_provider_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        return "Provider test timed out before a response.".to_string();
+    }
+
+    if error.is_connect() {
+        return "Provider endpoint could not be reached.".to_string();
+    }
+
+    "Provider request failed before a usable response was returned.".to_string()
+}
+
+#[tauri::command]
+async fn test_provider(request: TestProviderRequest) -> Result<TestProviderResponse, String> {
+    ensure_allowed("provider API", &request.api, &["openai", "anthropic"])?;
+
+    let defaults = provider_defaults(&request.provider)
+        .unwrap_or_else(|| provider_defaults("custom").expect("custom provider defaults"));
+    let base_url = if request.base_url.trim().is_empty() {
+        defaults.base_url
+    } else {
+        request.base_url.trim()
+    };
+    let model = if request.model.trim().is_empty() {
+        defaults.default_model
+    } else {
+        request.model.trim()
+    };
+
+    if !(base_url.starts_with("http://") || base_url.starts_with("https://")) {
+        return Err("Provider endpoint must start with http:// or https://".to_string());
+    }
+
+    if defaults.requires_key && request.api_key.trim().is_empty() {
+        return Err(format!(
+            "{} needs an API key before it can be tested.",
+            defaults.label
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|_| "Provider test client could not be created.".to_string())?;
+
+    let url = models_url(base_url, &request.api);
+    let mut builder = client.get(url);
+    let api_key = request.api_key.trim();
+
+    if !api_key.is_empty() {
+        builder = if request.api == "anthropic" {
+            builder
+                .header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01")
+        } else {
+            builder.bearer_auth(api_key)
+        };
+    }
+
+    let response = builder.send().await.map_err(redact_provider_error)?;
+    let status = response.status();
+
+    if status.is_success() {
+        return Ok(TestProviderResponse {
+            status: "ok".to_string(),
+            message: format!(
+                "{} responded and model '{}' is ready to configure.",
+                defaults.label, model
+            ),
+        });
+    }
+
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!(
+            "{} responded, but the API key or account permission was rejected.",
+            defaults.label
+        ));
+    }
+
+    if status.as_u16() == 404 && is_local_endpoint(base_url) {
+        return Ok(TestProviderResponse {
+            status: "warning".to_string(),
+            message: "Local endpoint is reachable, but /models was not found. You can continue in offline guided mode or check your local server.".to_string(),
+        });
+    }
+
+    Err(format!(
+        "{} responded with HTTP {}. Check the endpoint and model, then test again.",
+        defaults.label,
+        status.as_u16()
+    ))
+}
+
 #[tauri::command]
 fn desktop_defaults() -> DesktopDefaultsResponse {
     DesktopDefaultsResponse {
@@ -330,17 +708,47 @@ fn desktop_state(request: DesktopStateRequest) -> Result<DesktopStateResponse, S
 #[tauri::command]
 fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
     let workspace = ensure_safe_workspace(&request.workspace_path)?;
-    ensure_allowed("runtime mode", &request.runtime_mode, &["desktop", "cli", "service"])?;
+    ensure_allowed(
+        "experience level",
+        &request.experience_level,
+        &["beginner", "comfortable", "expert"],
+    )?;
+    ensure_allowed(
+        "runtime mode",
+        &request.runtime_mode,
+        &["desktop", "cli", "service"],
+    )?;
     ensure_allowed(
         "LLM provider",
         &request.llm_provider,
-        &["openai", "gemini", "anthropic", "local"],
+        &[
+            "openai",
+            "anthropic",
+            "google",
+            "openrouter",
+            "nvidia",
+            "groq",
+            "minimax",
+            "ollama",
+            "custom",
+        ],
     )?;
     ensure_allowed(
-        "channel mode",
-        &request.channel_mode,
-        &["local-only", "webchat", "telegram"],
+        "provider API",
+        &request.provider_api,
+        &["openai", "anthropic"],
     )?;
+    validate_env_name(&provider_api_key_env(&request))?;
+    if request.provider_base_url.trim().is_empty() && request.llm_provider == "custom" {
+        return Err("Custom provider endpoint is required".to_string());
+    }
+    for channel in &request.selected_channels {
+        ensure_allowed(
+            "channel",
+            channel,
+            &["local", "webchat", "telegram", "whatsapp"],
+        )?;
+    }
     ensure_allowed(
         "security profile",
         &request.security_profile,
@@ -361,12 +769,35 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
 
     let config_path = workspace.join("config/default.yaml");
     let secrets_path = workspace.join("secrets.env");
+    let mut secrets = vec![
+        "# Argentum secrets are stored outside YAML.".to_string(),
+        "# Provider keys are added by the desktop credential flow.".to_string(),
+    ];
+
+    if !request.provider_api_key.trim().is_empty() {
+        secrets.push(format!(
+            "{}={}",
+            provider_api_key_env(&request),
+            format_secret(request.provider_api_key.trim())
+        ));
+    }
+
+    if !request.webchat_token.trim().is_empty() {
+        secrets.push(format!(
+            "ARGENTUM_WEBCHAT_AUTH_TOKEN={}",
+            format_secret(request.webchat_token.trim())
+        ));
+    }
+
+    if !request.telegram_token.trim().is_empty() {
+        secrets.push(format!(
+            "ARGENTUM_TELEGRAM_TOKEN={}",
+            format_secret(request.telegram_token.trim())
+        ));
+    }
 
     write_text(&config_path, &render_config(&request))?;
-    write_text(
-        &secrets_path,
-        "# Argentum secrets are stored outside YAML.\n# Provider keys are added by the credential manager.\n",
-    )?;
+    write_text(&secrets_path, &format!("{}\n", secrets.join("\n")))?;
 
     Ok(SaveSetupResponse {
         status: "setup_saved".to_string(),
@@ -376,7 +807,9 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
 }
 
 #[tauri::command]
-fn run_desktop_action(request: RunDesktopActionRequest) -> Result<RunDesktopActionResponse, String> {
+fn run_desktop_action(
+    request: RunDesktopActionRequest,
+) -> Result<RunDesktopActionResponse, String> {
     let _workspace = ensure_safe_workspace(&request.workspace_path)?;
     let Some((command, message)) = desktop_action(&request.action_id) else {
         return Err(format!("Unknown desktop action: {}", request.action_id));
@@ -391,8 +824,10 @@ fn run_desktop_action(request: RunDesktopActionRequest) -> Result<RunDesktopActi
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             save_setup,
+            test_provider,
             run_desktop_action,
             desktop_defaults,
             desktop_state,

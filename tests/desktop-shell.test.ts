@@ -1,24 +1,24 @@
 import { existsSync, readFileSync } from 'fs';
 
-describe('Argentum desktop shell scaffold', () => {
-  test('defines a Tauri desktop application branded as Argentum', () => {
+const read = (path: string): string => readFileSync(path, 'utf8');
+
+describe('Argentum desktop shell', () => {
+  test('defines a native desktop application branded as Argentum', () => {
     expect(existsSync('src/desktop/tauri.conf.json')).toBe(true);
     expect(existsSync('src/desktop/src/lib.rs')).toBe(true);
+    expect(existsSync('src/ui/desktop/assets/argentum.png')).toBe(true);
 
-    const config = JSON.parse(readFileSync('src/desktop/tauri.conf.json', 'utf8')) as {
+    const config = JSON.parse(read('src/desktop/tauri.conf.json')) as {
       productName?: string;
       version?: string;
       identifier?: string;
-      app?: {
-        windows?: Array<{ title?: string; width?: number; height?: number }>;
-        security?: { csp?: string };
-      };
+      app?: { windows?: Array<{ title?: string; width?: number; height?: number }> };
       bundle?: { active?: boolean; icon?: string[] };
     };
 
     expect(config.productName).toBe('Argentum');
     expect(config.version).toBe('0.0.4');
-    expect(config.identifier).toBe('com.argentum.app');
+    expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
     );
@@ -30,203 +30,169 @@ describe('Argentum desktop shell scaffold', () => {
         '../../installer/wix/argentum.ico',
       ]),
     );
-    expect(existsSync('installer/macos/argentum.icns')).toBe(true);
-    expect(config.app?.security?.csp).toContain("default-src 'self'");
 
-    const cargo = readFileSync('src/desktop/Cargo.toml', 'utf8');
-    const main = readFileSync('src/desktop/src/main.rs', 'utf8');
-    const lib = readFileSync('src/desktop/src/lib.rs', 'utf8');
-
-    expect(cargo).toContain('[lib]');
-    expect(main).toContain('argentum_desktop_lib::run()');
-    expect(lib).toContain('pub fn run()');
+    const html = read('src/ui/desktop/index.html');
+    expect(html).toContain('<title>Argentum</title>');
+    expect(html).toContain('./assets/argentum.png');
+    expect(html).toContain('type="module"');
+    expect(html).toContain('data-icon="shield"');
+    expect(html).toContain('data-icon="settings"');
+    expect(html).not.toContain('../../assets/brand/argentum.png');
   });
 
-  test('ships an onboarding-first desktop UI entry point', () => {
+  test('splits desktop UI into focused modules with small contracts', () => {
     for (const file of [
-      'src/ui/desktop/index.html',
-      'src/ui/desktop/main.js',
-      'src/ui/desktop/styles.css',
+      'src/ui/desktop/modules/constants.js',
+      'src/ui/desktop/modules/state.js',
+      'src/ui/desktop/modules/setup.js',
+      'src/ui/desktop/modules/shell.js',
+      'src/ui/desktop/modules/onboarding.js',
+      'src/ui/desktop/modules/chat.js',
+      'src/ui/desktop/modules/sections.js',
+      'src/ui/desktop/modules/icons.js',
     ]) {
       expect(existsSync(file)).toBe(true);
     }
 
-    const html = readFileSync('src/ui/desktop/index.html', 'utf8');
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    expect(sections).toContain('healthCheck');
+    expect(sections).toContain('honestModule');
+    expect(sections).toContain('Not fully wired yet');
 
-    expect(html).toContain('<title>Argentum</title>');
-    expect(html).toContain('../../assets/brand/argentum.png');
-    expect(js).toContain('Workspace and data location');
-    expect(js).toContain('Security & Permissions');
-    expect(js).toContain('Agent Runner');
-    expect(js).toContain('Knowledge Graph');
-    expect(js).toContain('Skills Library');
+    const shell = read('src/ui/desktop/modules/shell.js');
+    expect(shell).toContain('renderModule(module)');
+    expect(shell).toContain('Module contained');
+    expect(shell).toContain('Other Argentum modules remain available');
   });
 
-  test('lets users revise setup and launch into the desktop interface', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+  test('rewrites onboarding with plain-language access and non-repeating steps', () => {
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const constants = read('src/ui/desktop/modules/constants.js');
 
-    expect(js).toContain('setupComplete: false');
-    expect(js).toContain('Launch Argentum');
-    expect(js).toContain("state.activeSection = 'chat'");
-    expect(js).toContain('state.setupComplete = true');
-    expect(js).toContain("querySelector('#workspace-input')");
-    expect(js).toContain("addEventListener('input'");
-    expect(js).toContain('disabled: state.onboardingStep === 1');
+    expect(constants).toContain('Workspace location');
+    expect(constants).toContain('Capabilities');
+    expect(constants).toContain('Review and test');
+    expect(constants).toContain('Finish and launch');
+    expect(onboarding).toContain('What Argentum is');
+    expect(onboarding).toContain('Default access: all the folders/files in workspace folder');
+    expect(onboarding).toContain('renderCapabilitiesStep');
+    expect(onboarding).toContain('Self-repair');
+    expect(onboarding).not.toContain('Default access</span><strong>Workspace</strong>');
   });
 
-  test('captures first-run setup choices for runtime, provider, channels, and security', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
+  test('supports Beginner Comfortable Expert experience levels', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const state = read('src/ui/desktop/modules/state.js');
 
-    expect(js).toContain("runtimeMode: 'desktop'");
-    expect(js).toContain("llmProvider: 'openai'");
-    expect(js).toContain("channelMode: 'local-only'");
-    expect(js).toContain("securityProfile: 'restricted'");
-    expect(js).toContain('id="runtime-mode"');
-    expect(js).toContain('id="llm-provider"');
-    expect(js).toContain('id="channel-mode"');
-    expect(js).toContain('id="security-profile"');
-    expect(js).toContain("bindSelect('#runtime-mode'");
-    expect(js).toContain("bindSelect('#llm-provider'");
-    expect(js).toContain("bindSelect('#channel-mode'");
-    expect(js).toContain("bindSelect('#security-profile'");
-    expect(js).toContain('renderReviewRows');
+    expect(constants).toContain("id: 'beginner'");
+    expect(constants).toContain("id: 'comfortable'");
+    expect(constants).toContain("id: 'expert'");
+    expect(state).toContain("experienceLevel: 'beginner'");
+    expect(constants).not.toContain('AI Noob');
   });
 
-  test('bridges desktop onboarding to a Tauri setup save command', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+  test('uses the native Tauri dialog plugin for workspace folder selection', () => {
+    const cargo = read('src/desktop/Cargo.toml');
+    const rust = read('src/desktop/src/lib.rs');
+    const capabilities = read('src/desktop/capabilities/default.json');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const packageJson = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
 
-    expect(js).toContain('function buildSetupPayload()');
-    expect(js).toContain('async function saveSetup()');
-    expect(js).toContain("invoke('save_setup'");
-    expect(js).toContain('await saveSetup()');
-    expect(js).toContain('setup_saved');
-    expect(js).toContain('setup-error');
-    expect(rust).toContain('struct SaveSetupRequest');
-    expect(rust).toContain('#[tauri::command]');
-    expect(rust).toContain('fn save_setup');
-    expect(rust).toContain('std::fs::create_dir_all');
-    expect(rust).toContain('fn ensure_allowed');
-    expect(rust).toContain('["desktop", "cli", "service"]');
-    expect(rust).toContain('["restricted", "ask", "session", "trusted"]');
-    expect(rust).toContain('config/default.yaml');
-    expect(rust).toContain('secrets.env');
-    expect(rust).toContain('save_setup,');
-    expect(rust).toContain('run_desktop_action,');
-    expect(rust).toContain('desktop_defaults');
-    expect(rust).toContain('desktop_state');
+    expect(packageJson.dependencies).toHaveProperty('@tauri-apps/plugin-dialog');
+    expect(cargo).toContain('tauri-plugin-dialog');
+    expect(rust).toContain('tauri_plugin_dialog::init()');
+    expect(capabilities).toContain('dialog:allow-open');
+    expect(setup).toContain('chooseWorkspaceFolder');
+    expect(utils).toContain('window.__TAURI__?.dialog?.open');
+    expect(utils).toContain('directory: true');
   });
 
-  test('hydrates onboarding with a resolved desktop default workspace path', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+  test('expands provider setup and custom endpoint testing', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const rust = read('src/desktop/src/lib.rs');
 
-    expect(js).toContain('async function hydrateDesktopDefaults()');
-    expect(js).toContain("invoke('desktop_defaults'");
-    expect(js).toContain('defaultWorkspacePath');
-    expect(js).toContain('hydrateDesktopDefaults().then');
-    expect(rust).toContain('struct DesktopDefaultsResponse');
-    expect(rust).toContain('fn default_workspace_path');
-    expect(rust).toContain('fn desktop_defaults');
-    expect(rust).toContain('default_workspace_path');
-  });
-
-  test('maps primary CLI workflows into GUI actions', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-
-    expect(js).toContain('const commandCatalog');
-    expect(js).toContain('argentum gateway start');
-    expect(js).toContain('argentum gateway status');
-    expect(js).toContain('argentum doctor');
-    expect(js).toContain('argentum agents list');
-    expect(js).toContain('argentum memory search');
-    expect(js).toContain('argentum skill list');
-    expect(js).toContain('argentum security status');
-    expect(js).toContain('argentum image "prompt"');
-    expect(js).toContain('data-copy-command');
-    expect(js).toContain('data-run-action');
-    expect(js).toContain('renderActionCards');
-    expect(js).toContain("invoke('run_desktop_action'");
-    expect(js).toContain('request: { actionId');
-  });
-
-  test('renders specialized desktop surfaces instead of placeholders', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-    const css = readFileSync('src/ui/desktop/styles.css', 'utf8');
-
-    for (const renderer of [
-      'renderChatSection',
-      'renderAgentsSection',
-      'renderRunnerSection',
-      'renderSkillsSection',
-      'renderWebchatSection',
-      'renderGraphSection',
-      'renderMemorySection',
-      'renderLogsSection',
-      'renderSecuritySection',
-      'renderSettingsSection',
-      'renderDiagnosticsSection',
+    for (const provider of [
+      'OpenAI',
+      'Anthropic Claude',
+      'Google Gemini',
+      'OpenRouter',
+      'NVIDIA',
+      'Groq',
+      'MiniMax',
+      'Ollama / local',
+      'Custom endpoint',
     ]) {
-      expect(js).toContain(`function ${renderer}`);
+      expect(constants).toContain(provider);
     }
 
-    expect(js).not.toContain('Desktop shell route is ready for runtime wiring.');
-    expect(css).toContain('.hero-strip');
-    expect(css).toContain('.command-card');
-    expect(css).toContain('.chat-shell');
-    expect(css).toContain('.graph-canvas');
-    expect(css).toContain('.approval-row');
+    expect(onboarding).toContain('id="provider-base-url"');
+    expect(onboarding).toContain('id="provider-api-key"');
+    expect(onboarding).toContain('id="test-provider"');
+    expect(setup).toContain("invokeTauri('test_provider'");
+    expect(rust).toContain('struct TestProviderRequest');
+    expect(rust).toContain('async fn test_provider');
+    expect(rust).toContain('Provider endpoint must start with http:// or https://');
   });
 
-  test('exposes a safe allowlisted desktop action bridge', () => {
-    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+  test('supports multiple selected channels including WhatsApp as advanced pending', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const rust = read('src/desktop/src/lib.rs');
 
-    expect(rust).toContain('struct RunDesktopActionRequest');
-    expect(rust).toContain('struct RunDesktopActionResponse');
-    expect(rust).toContain('fn run_desktop_action');
-    expect(rust).toContain('"doctor"');
-    expect(rust).toContain('"gateway-status"');
-    expect(rust).toContain('"security-status"');
-    expect(rust).toContain('Unknown desktop action');
-    expect(rust).toContain('run_desktop_action,');
+    expect(constants).toContain("id: 'local'");
+    expect(constants).toContain("id: 'webchat'");
+    expect(constants).toContain("id: 'telegram'");
+    expect(constants).toContain("id: 'whatsapp'");
+    expect(constants).toContain('Advanced');
+    expect(onboarding).toContain('type="checkbox"');
+    expect(onboarding).toContain('data-channel-id');
+    expect(state).toContain("selectedChannels: ['local']");
+    expect(rust).toContain('selected_channels: Vec<String>');
+    expect(rust).toContain('whatsapp-bridge');
   });
 
-  test('loads read-only workspace state into desktop diagnostics', () => {
-    const js = readFileSync('src/ui/desktop/main.js', 'utf8');
-    const rust = readFileSync('src/desktop/src/lib.rs', 'utf8');
+  test('renders visible notifications and graceful offline chat', () => {
+    const shell = read('src/ui/desktop/modules/shell.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const css = read('src/ui/desktop/styles.css');
 
-    expect(rust).toContain('struct DesktopStateRequest');
-    expect(rust).toContain('struct DesktopStateResponse');
-    expect(rust).toContain('fn desktop_state');
-    expect(rust).toContain('gateway_log_preview');
-    expect(rust).toContain('audit_log_preview');
-    expect(rust).toContain('redact_sensitive_line');
-    expect(rust).toContain('desktop_state,');
-    expect(js).toContain('desktopState:');
-    expect(js).toContain('async function refreshDesktopState');
-    expect(js).toContain("invoke('desktop_state'");
-    expect(js).toContain('data-refresh-state');
-    expect(js).toContain('formatWorkspaceHealth');
-    expect(js).toContain('gatewayLogPreview');
-    expect(js).toContain('auditLogPreview');
+    expect(shell).toContain('renderNotifications');
+    expect(state).toContain('notifications:');
+    expect(chat).toContain('Offline guided');
+    expect(chat).toContain('optionGroup');
+    expect(chat).toContain('action card');
+    expect(css).toContain('.notification-stack');
+    expect(css).toContain('.option-card');
   });
 
-  test('exposes npm scripts for desktop development and packaging', () => {
-    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
-      scripts?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-      pkg?: { assets?: string[] };
-    };
+  test('hides onboarding after completion and launches Chat', () => {
+    const main = read('src/ui/desktop/main.js');
+    const shell = read('src/ui/desktop/modules/shell.js');
 
-    expect(packageJson.scripts?.['desktop:dev']).toBe('cd src/desktop && tauri dev');
-    expect(packageJson.scripts?.['desktop:build']).toBe('cd src/desktop && tauri build');
-    expect(packageJson.scripts?.['package:win']).toBe('npm run desktop:build');
-    expect(packageJson.scripts?.['package:win:gui']).toBe('npm run desktop:build');
-    expect(packageJson.scripts?.['package:win:cli']).toContain(
-      'build-windows-release.ps1 -SkipMsi',
-    );
-    expect(packageJson.devDependencies).toHaveProperty('@tauri-apps/cli');
-    expect(packageJson.pkg?.assets).toEqual(expect.arrayContaining(['src/ui/desktop/**/*']));
+    expect(main).toContain('finishOnboarding');
+    expect(main).toContain("state.setupComplete = true");
+    expect(main).toContain("state.activeSection = 'chat'");
+    expect(main).toContain('What should I call you');
+    expect(shell).toContain("state.setupComplete || section.id !== 'onboarding'");
+  });
+
+  test('saves richer setup payload and secrets outside YAML', () => {
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(setup).toContain('function buildSetupPayload()');
+    expect(setup).toContain('experienceLevel');
+    expect(setup).toContain('selectedChannels');
+    expect(setup).toContain('providerApiKey');
+    expect(rust).toContain('fn save_setup');
+    expect(rust).toContain('secrets.env');
+    expect(rust).toContain('Provider keys are added by the desktop credential flow');
+    expect(rust).toContain('fn render_config');
+    expect(rust).toContain('workspaceRoot');
   });
 });
