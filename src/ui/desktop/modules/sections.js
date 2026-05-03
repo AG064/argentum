@@ -266,6 +266,7 @@ const settingsModule = {
             </select>
           </label>
         </div>
+        ${renderSettingsOAuthPanel(state)}
         <div class="panel-footer button-row split">
           <button class="button" id="test-provider">Test Provider</button>
           <button class="button" data-restart-onboarding="true">Restart onboarding</button>
@@ -274,6 +275,40 @@ const settingsModule = {
     `;
   },
 };
+
+function renderSettingsOAuthPanel(state) {
+  const oauth = state.codexOAuth || {};
+  const verificationUrl = oauth.verificationUrl || 'https://auth.openai.com/codex/device';
+
+  return `
+    <div class="panel-body oauth-panel ${state.providerAuthMethod === 'browser-account' ? 'active' : ''}">
+      <div>
+        <span class="pill">OpenAI/Codex OAuth</span>
+        <h3>Browser Account Authorization</h3>
+        <p>Use this only for OpenAI. Start authorization, approve it in your browser, then complete it here. API key auth remains available above.</p>
+      </div>
+      <div class="oauth-actions">
+        <button class="button" id="start-codex-oauth">Start OpenAI/Codex authorization</button>
+        <button class="button primary" id="complete-codex-oauth">Complete authorization</button>
+      </div>
+      <div class="oauth-code-grid">
+        <div>
+          <span>Verification page</span>
+          <a href="${escapeAttribute(verificationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(verificationUrl)}</a>
+        </div>
+        <div>
+          <span>User code</span>
+          <strong>${escapeHtml(oauth.userCode || 'Not requested')}</strong>
+        </div>
+        <div>
+          <span>Credential folder</span>
+          <strong>${escapeHtml(oauth.codexHome || 'Inside workspace/data after authorization')}</strong>
+        </div>
+      </div>
+      <p>${escapeHtml(oauth.message || 'OpenAI/Codex authorization has not been started.')}</p>
+    </div>
+  `;
+}
 
 const diagnosticsModule = {
   id: 'diagnostics',

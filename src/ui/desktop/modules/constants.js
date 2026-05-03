@@ -244,9 +244,8 @@ export const providerAuthMethods = [
   {
     id: 'browser-account',
     label: 'Browser account authorization',
-    status: 'Blocked for now',
-    disabled: true,
-    detail: 'OpenAI does not expose a supported desktop model API through a logged-in ChatGPT browser session. Argentum will not scrape browser sessions or automate the ChatGPT web UI.',
+    status: 'OpenAI/Codex OAuth',
+    detail: 'Use the official Codex device authorization flow. Argentum stores the resulting credentials inside the selected workspace and never scrapes browser sessions.',
   },
 ];
 

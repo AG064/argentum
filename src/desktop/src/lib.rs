@@ -3,7 +3,7 @@ use serde_json::json;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 #[derive(Debug, Deserialize)]
@@ -118,8 +118,47 @@ struct SendChatMessageResponse {
     offline: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexOAuthStartRequest {
+    workspace_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexOAuthStartResponse {
+    status: String,
+    message: String,
+    verification_url: String,
+    user_code: String,
+    device_auth_id: String,
+    interval: u64,
+    codex_home: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexOAuthCompleteRequest {
+    workspace_path: String,
+    device_auth_id: String,
+    user_code: String,
+    interval: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexOAuthCompleteResponse {
+    status: String,
+    message: String,
+    provider: String,
+    model: String,
+    auth_method: String,
+    codex_home: String,
+}
+
 #[derive(Debug, Clone)]
 struct ProviderRuntimeConfig {
+    name: String,
     label: String,
     api: String,
     base_url: String,
@@ -138,6 +177,14 @@ struct ProviderDefaults {
     default_model: &'static str,
     requires_key: bool,
 }
+
+const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CODEX_AUTH_ISSUER: &str = "https://auth.openai.com";
+const CODEX_DEVICE_USERCODE_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
+const CODEX_DEVICE_TOKEN_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
+const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
+const CODEX_DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+const CODEX_API_KEY_TOKEN_REQUEST: &str = "openai-api-key";
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
     let workspace = PathBuf::from(path);
@@ -461,11 +508,7 @@ fn provider_auth_method(request: &SaveSetupRequest) -> String {
 
 fn ensure_provider_auth_method(method: &str) -> Result<(), String> {
     match method {
-        "api-key" => Ok(()),
-        "browser-account" => Err(
-            "Browser account authorization is not supported for direct model calls yet. Use API key authentication until the Codex OAuth provider is implemented."
-                .to_string(),
-        ),
+        "api-key" | "browser-account" => Ok(()),
         other => Err(format!("Invalid provider authorization method: {other}")),
     }
 }
@@ -539,7 +582,13 @@ fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
         if let Ok(current_dir) = std::env::current_dir() {
             candidates.push(current_dir.join("binaries").join(&file_name));
-            candidates.push(current_dir.join("src").join("desktop").join("binaries").join(&file_name));
+            candidates.push(
+                current_dir
+                    .join("src")
+                    .join("desktop")
+                    .join("binaries")
+                    .join(&file_name),
+            );
         }
     }
 
@@ -572,16 +621,13 @@ fn strip_ansi(input: &str) -> String {
         output.push(character);
     }
 
-    output.replace("âœ“", "OK")
+    output
+        .replace("âœ“", "OK")
         .replace("â„¹", "Info")
         .replace("âš ", "Warning")
 }
 
-fn run_sidecar(
-    app: &tauri::AppHandle,
-    workspace: &Path,
-    args: &[&str],
-) -> Result<String, String> {
+fn run_sidecar(app: &tauri::AppHandle, workspace: &Path, args: &[&str]) -> Result<String, String> {
     let sidecar = resolve_sidecar_path(app)?;
     let output = Command::new(sidecar)
         .args(args)
@@ -759,7 +805,11 @@ fn read_secret(workspace: &Path, key: &str) -> Option<String> {
         }
         let (name, value) = trimmed.split_once('=')?;
         if name.trim() == key {
-            let clean = value.trim().trim_matches('"').trim_matches('\'').to_string();
+            let clean = value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
             if clean.is_empty() {
                 return None;
             }
@@ -768,6 +818,102 @@ fn read_secret(workspace: &Path, key: &str) -> Option<String> {
     }
 
     None
+}
+
+fn codex_oauth_home(workspace: &Path) -> PathBuf {
+    workspace.join("data").join("codex-oauth")
+}
+
+fn codex_oauth_auth_path(workspace: &Path) -> PathBuf {
+    codex_oauth_home(workspace).join("auth.json")
+}
+
+fn codex_oauth_api_key(workspace: &Path) -> Option<String> {
+    let contents = std::fs::read_to_string(codex_oauth_auth_path(workspace)).ok()?;
+    let value = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+    value
+        .get("OPENAI_API_KEY")
+        .and_then(|key| key.as_str())
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty())
+}
+
+fn oauth_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|_| "OpenAI/Codex authorization client could not be created.".to_string())
+}
+
+fn json_string(value: &serde_json::Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(|item| item.as_str())
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+}
+
+fn json_u64(value: &serde_json::Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(|item| {
+        item.as_u64().or_else(|| {
+            item.as_str()
+                .and_then(|text| text.trim().parse::<u64>().ok())
+        })
+    })
+}
+
+fn percent_encode(value: &str) -> String {
+    let mut encoded = String::new();
+
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            b' ' => encoded.push_str("%20"),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+
+    encoded
+}
+
+fn form_body(fields: &[(&str, &str)]) -> String {
+    fields
+        .iter()
+        .map(|(key, value)| format!("{}={}", percent_encode(key), percent_encode(value)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+async fn post_oauth_form(
+    client: &reqwest::Client,
+    fields: &[(&str, &str)],
+    context: &str,
+) -> Result<serde_json::Value, String> {
+    let response = client
+        .post(CODEX_OAUTH_TOKEN_URL)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(form_body(fields))
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(provider_http_error(context, status.as_u16(), &body));
+    }
+
+    serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|_| format!("{context} returned a response Argentum could not read."))
+}
+
+fn now_epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
 }
 
 fn yaml_string_at<'a>(value: &'a serde_yaml::Value, path: &[&str]) -> Option<&'a str> {
@@ -783,8 +929,9 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
     let config_path = workspace.join("config").join("default.yaml");
     let contents = std::fs::read_to_string(&config_path)
         .map_err(|_| "Configuration file is missing. Finish onboarding first.".to_string())?;
-    let yaml = serde_yaml::from_str::<serde_yaml::Value>(&contents)
-        .map_err(|_| "Configuration file could not be read. Review config/default.yaml.".to_string())?;
+    let yaml = serde_yaml::from_str::<serde_yaml::Value>(&contents).map_err(|_| {
+        "Configuration file could not be read. Review config/default.yaml.".to_string()
+    })?;
 
     let provider_name = yaml_string_at(&yaml, &["llm", "default"])
         .filter(|value| !value.trim().is_empty())
@@ -794,7 +941,9 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
         .get("llm")
         .and_then(|llm| llm.get("providers"))
         .and_then(|providers| providers.get(&provider_name))
-        .ok_or_else(|| format!("Provider '{provider_name}' is missing from config/default.yaml."))?;
+        .ok_or_else(|| {
+            format!("Provider '{provider_name}' is missing from config/default.yaml.")
+        })?;
 
     let model = provider
         .get("models")
@@ -804,6 +953,7 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
         .ok_or_else(|| format!("Provider '{provider_name}' has no model configured."))?;
 
     Ok(ProviderRuntimeConfig {
+        name: provider_name,
         label: provider
             .get("label")
             .and_then(|value| value.as_str())
@@ -837,10 +987,17 @@ fn provider_api_key(
     workspace: Option<&Path>,
     request_key: &str,
     key_env: &str,
+    auth_method: &str,
 ) -> Option<String> {
     let trimmed = request_key.trim();
     if !trimmed.is_empty() {
         return Some(trimmed.to_string());
+    }
+
+    if auth_method == "browser-account" {
+        if let Some(key) = workspace.and_then(codex_oauth_api_key) {
+            return Some(key);
+        }
     }
 
     workspace
@@ -933,7 +1090,9 @@ fn provider_error_detail(body: &str) -> Option<String> {
         }
     }
 
-    Some(redact_sensitive_output(trimmed.lines().next().unwrap_or(trimmed)))
+    Some(redact_sensitive_output(
+        trimmed.lines().next().unwrap_or(trimmed),
+    ))
 }
 
 fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
@@ -958,12 +1117,199 @@ fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
 }
 
 #[tauri::command]
+async fn start_codex_oauth(
+    request: CodexOAuthStartRequest,
+) -> Result<CodexOAuthStartResponse, String> {
+    let workspace = ensure_safe_workspace(&request.workspace_path)?;
+    let codex_home = codex_oauth_home(&workspace);
+    std::fs::create_dir_all(&codex_home)
+        .map_err(|error| format!("Failed to create OpenAI/Codex credential folder: {error}"))?;
+
+    let client = oauth_client()?;
+    let response = client
+        .post(CODEX_DEVICE_USERCODE_URL)
+        .json(&json!({ "client_id": CODEX_CLIENT_ID }))
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(provider_http_error(
+            "OpenAI/Codex authorization",
+            status.as_u16(),
+            &body,
+        ));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&body).map_err(|_| {
+        "OpenAI/Codex authorization returned a response Argentum could not read.".to_string()
+    })?;
+    let device_auth_id = json_string(&value, "device_auth_id")
+        .ok_or_else(|| "OpenAI/Codex authorization did not return a device ID.".to_string())?;
+    let user_code = json_string(&value, "user_code")
+        .or_else(|| json_string(&value, "usercode"))
+        .ok_or_else(|| "OpenAI/Codex authorization did not return a user code.".to_string())?;
+    let interval = json_u64(&value, "interval").unwrap_or(5).max(1);
+    let verification_url = format!("{CODEX_AUTH_ISSUER}/codex/device");
+
+    Ok(CodexOAuthStartResponse {
+        status: "pending".to_string(),
+        message: format!(
+            "Open {verification_url}, enter code {user_code}, then return to Argentum and click Complete authorization."
+        ),
+        verification_url,
+        user_code,
+        device_auth_id,
+        interval,
+        codex_home: codex_home.display().to_string(),
+    })
+}
+
+#[tauri::command]
+async fn complete_codex_oauth(
+    request: CodexOAuthCompleteRequest,
+) -> Result<CodexOAuthCompleteResponse, String> {
+    let workspace = ensure_safe_workspace(&request.workspace_path)?;
+    let codex_home = codex_oauth_home(&workspace);
+    std::fs::create_dir_all(&codex_home)
+        .map_err(|error| format!("Failed to create OpenAI/Codex credential folder: {error}"))?;
+
+    let device_auth_id = request.device_auth_id.trim();
+    let user_code = request.user_code.trim();
+    if device_auth_id.is_empty() || user_code.is_empty() {
+        return Err("Start OpenAI/Codex authorization before completing it.".to_string());
+    }
+
+    let client = oauth_client()?;
+    let poll_response = client
+        .post(CODEX_DEVICE_TOKEN_URL)
+        .json(&json!({
+            "device_auth_id": device_auth_id,
+            "user_code": user_code,
+        }))
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let poll_status = poll_response.status();
+    let poll_body = poll_response.text().await.unwrap_or_default();
+
+    if poll_status.as_u16() == 404
+        || poll_body
+            .to_ascii_lowercase()
+            .contains("authorization_pending")
+    {
+        let interval = request.interval.unwrap_or(5).max(1);
+        return Ok(CodexOAuthCompleteResponse {
+            status: "pending".to_string(),
+            message: format!(
+                "OpenAI/Codex authorization is not complete yet. Finish the browser approval, wait about {interval} seconds, then click Complete authorization again."
+            ),
+            provider: "OpenAI".to_string(),
+            model: "gpt-5.5".to_string(),
+            auth_method: "browser-account".to_string(),
+            codex_home: codex_home.display().to_string(),
+        });
+    }
+
+    if !poll_status.is_success() {
+        return Err(provider_http_error(
+            "OpenAI/Codex authorization",
+            poll_status.as_u16(),
+            &poll_body,
+        ));
+    }
+
+    let code_value = serde_json::from_str::<serde_json::Value>(&poll_body).map_err(|_| {
+        "OpenAI/Codex authorization returned a response Argentum could not read.".to_string()
+    })?;
+    let authorization_code = json_string(&code_value, "authorization_code").ok_or_else(|| {
+        "OpenAI/Codex authorization did not return an authorization code.".to_string()
+    })?;
+    let code_verifier = json_string(&code_value, "code_verifier")
+        .ok_or_else(|| "OpenAI/Codex authorization did not return a verifier.".to_string())?;
+
+    let token_value = post_oauth_form(
+        &client,
+        &[
+            ("grant_type", "authorization_code"),
+            ("code", &authorization_code),
+            ("redirect_uri", CODEX_DEVICE_REDIRECT_URI),
+            ("client_id", CODEX_CLIENT_ID),
+            ("code_verifier", &code_verifier),
+        ],
+        "OpenAI/Codex token exchange",
+    )
+    .await?;
+    let id_token = json_string(&token_value, "id_token")
+        .ok_or_else(|| "OpenAI/Codex token exchange did not return an ID token.".to_string())?;
+    let access_token = json_string(&token_value, "access_token")
+        .ok_or_else(|| "OpenAI/Codex token exchange did not return an access token.".to_string())?;
+    let refresh_token = json_string(&token_value, "refresh_token")
+        .ok_or_else(|| "OpenAI/Codex token exchange did not return a refresh token.".to_string())?;
+
+    let api_key_value = post_oauth_form(
+        &client,
+        &[
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ),
+            ("client_id", CODEX_CLIENT_ID),
+            ("requested_token", CODEX_API_KEY_TOKEN_REQUEST),
+            ("subject_token", &id_token),
+            (
+                "subject_token_type",
+                "urn:ietf:params:oauth:token-type:id_token",
+            ),
+        ],
+        "OpenAI/Codex API key exchange",
+    )
+    .await?;
+    let api_key = json_string(&api_key_value, "access_token").ok_or_else(|| {
+        "OpenAI/Codex API key exchange did not return a usable credential.".to_string()
+    })?;
+
+    let auth_path = codex_oauth_auth_path(&workspace);
+    let payload = json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": api_key,
+        "tokens": {
+            "id_token": id_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token
+        },
+        "last_refresh": now_epoch_seconds()
+    });
+    let contents = serde_json::to_string_pretty(&payload)
+        .map_err(|_| "OpenAI/Codex credentials could not be serialized.".to_string())?;
+    write_text(&auth_path, &contents)?;
+
+    Ok(CodexOAuthCompleteResponse {
+        status: "ok".to_string(),
+        message: "OpenAI/Codex authorization saved inside the selected workspace. Live chat can now use browser-account auth for OpenAI.".to_string(),
+        provider: "OpenAI".to_string(),
+        model: "gpt-5.5".to_string(),
+        auth_method: "browser-account".to_string(),
+        codex_home: codex_home.display().to_string(),
+    })
+}
+
+#[tauri::command]
 async fn test_provider(request: TestProviderRequest) -> Result<TestProviderResponse, String> {
     ensure_allowed("provider API", &request.api, &["openai", "anthropic"])?;
-    ensure_provider_auth_method(request.auth_method.as_deref().unwrap_or("api-key"))?;
+    let auth_method = request.auth_method.as_deref().unwrap_or("api-key");
+    ensure_provider_auth_method(auth_method)?;
 
     let defaults = provider_defaults(&request.provider)
         .unwrap_or_else(|| provider_defaults("custom").expect("custom provider defaults"));
+    if auth_method == "browser-account" && defaults.name != "openai" {
+        return Err(
+            "Browser account authorization is only available for OpenAI/Codex right now. Use API key auth for this provider."
+                .to_string(),
+        );
+    }
     let workspace = match request.workspace_path.as_deref() {
         Some(path) if !path.trim().is_empty() => Some(ensure_existing_workspace(path)?),
         _ => None,
@@ -983,8 +1329,13 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         return Err("Provider endpoint must start with http:// or https://".to_string());
     }
 
-    let api_key = provider_api_key(workspace.as_deref(), &request.api_key, defaults.api_key_env)
-        .unwrap_or_default();
+    let api_key = provider_api_key(
+        workspace.as_deref(),
+        &request.api_key,
+        defaults.api_key_env,
+        auth_method,
+    )
+    .unwrap_or_default();
 
     if defaults.requires_key && api_key.trim().is_empty() {
         return Err(format!(
@@ -1027,7 +1378,11 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
     let error_body = response.text().await.unwrap_or_default();
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
-        return Err(provider_http_error(defaults.label, status.as_u16(), &error_body));
+        return Err(provider_http_error(
+            defaults.label,
+            status.as_u16(),
+            &error_body,
+        ));
     }
 
     if status.as_u16() == 404 && is_local_endpoint(base_url) {
@@ -1037,7 +1392,11 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         });
     }
 
-    Err(provider_http_error(defaults.label, status.as_u16(), &error_body))
+    Err(provider_http_error(
+        defaults.label,
+        status.as_u16(),
+        &error_body,
+    ))
 }
 
 #[tauri::command]
@@ -1064,9 +1423,26 @@ async fn send_chat_message(
         }
     };
     ensure_provider_auth_method(&config.auth_method)?;
+    if config.auth_method == "browser-account" && config.name != "openai" {
+        return Ok(SendChatMessageResponse {
+            status: "offline".to_string(),
+            message: offline_chat_message(
+                message,
+                "Browser account authorization is only available for OpenAI/Codex right now.",
+            ),
+            provider: config.label,
+            model: config.model,
+            offline: true,
+        });
+    }
 
-    let api_key =
-        provider_api_key(Some(&workspace), "", &config.api_key_env).unwrap_or_default();
+    let api_key = provider_api_key(
+        Some(&workspace),
+        "",
+        &config.api_key_env,
+        &config.auth_method,
+    )
+    .unwrap_or_default();
     let requires_key = !is_local_endpoint(&config.base_url);
 
     if requires_key && api_key.trim().is_empty() {
@@ -1131,12 +1507,20 @@ async fn send_chat_message(
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
         let error_body = response.text().await.unwrap_or_default();
-        return Err(provider_http_error(&config.label, status.as_u16(), &error_body));
+        return Err(provider_http_error(
+            &config.label,
+            status.as_u16(),
+            &error_body,
+        ));
     }
 
     if !status.is_success() {
         let error_body = response.text().await.unwrap_or_default();
-        return Err(provider_http_error(&config.label, status.as_u16(), &error_body));
+        return Err(provider_http_error(
+            &config.label,
+            status.as_u16(),
+            &error_body,
+        ));
     }
 
     let value = response
@@ -1227,7 +1611,16 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
         &request.provider_api,
         &["openai", "anthropic"],
     )?;
-    ensure_provider_auth_method(&provider_auth_method(&request))?;
+    let selected_auth_method = provider_auth_method(&request);
+    ensure_provider_auth_method(&selected_auth_method)?;
+    if selected_auth_method == "browser-account"
+        && selected_provider_defaults(&request).name != "openai"
+    {
+        return Err(
+            "Browser account authorization is only available for OpenAI/Codex right now. Use API key auth for this provider."
+                .to_string(),
+        );
+    }
     validate_env_name(&provider_api_key_env(&request))?;
     if request.provider_base_url.trim().is_empty() && request.llm_provider == "custom" {
         return Err("Custom provider endpoint is required".to_string());
@@ -1440,6 +1833,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_setup,
             test_provider,
+            start_codex_oauth,
+            complete_codex_oauth,
             send_chat_message,
             run_desktop_action,
             desktop_defaults,

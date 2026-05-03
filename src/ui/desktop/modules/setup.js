@@ -93,6 +93,127 @@ export async function testProvider() {
   }
 }
 
+export async function startCodexOAuth() {
+  state.codexOAuth = {
+    ...state.codexOAuth,
+    status: 'starting',
+    message: 'Requesting an OpenAI/Codex authorization code...',
+  };
+
+  const promise = invokeTauri('start_codex_oauth', {
+    request: {
+      workspacePath: state.workspacePath,
+    },
+  });
+
+  if (!promise) {
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: 'preview',
+      message: 'Preview mode: run the installed Argentum app to start OpenAI/Codex authorization.',
+      verificationUrl: 'https://auth.openai.com/codex/device',
+      userCode: 'PREVIEW',
+      deviceAuthId: '',
+      interval: 5,
+      codexHome: `${state.workspacePath}\\data\\codex-oauth`,
+    };
+    notify('warning', 'Authorization preview', state.codexOAuth.message);
+    return state.codexOAuth;
+  }
+
+  try {
+    const result = await promise;
+    state.codexOAuth = {
+      status: result.status || 'pending',
+      message: result.message || 'Open the verification URL and enter the code.',
+      verificationUrl: result.verificationUrl || '',
+      userCode: result.userCode || '',
+      deviceAuthId: result.deviceAuthId || '',
+      interval: result.interval || 5,
+      codexHome: result.codexHome || '',
+    };
+    notify('info', 'OpenAI/Codex authorization', state.codexOAuth.message);
+    return state.codexOAuth;
+  } catch (error) {
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: 'error',
+      message: normalizeError(error),
+    };
+    notify('error', 'Authorization failed', state.codexOAuth.message);
+    return state.codexOAuth;
+  }
+}
+
+export async function completeCodexOAuth() {
+  if (!state.codexOAuth.deviceAuthId || !state.codexOAuth.userCode) {
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: 'error',
+      message: 'Start OpenAI/Codex authorization first, then complete it after approving in the browser.',
+    };
+    notify('error', 'Authorization needs a code', state.codexOAuth.message);
+    return state.codexOAuth;
+  }
+
+  state.codexOAuth = {
+    ...state.codexOAuth,
+    status: 'completing',
+    message: 'Checking whether OpenAI/Codex authorization is complete...',
+  };
+
+  const promise = invokeTauri('complete_codex_oauth', {
+    request: {
+      workspacePath: state.workspacePath,
+      deviceAuthId: state.codexOAuth.deviceAuthId,
+      userCode: state.codexOAuth.userCode,
+      interval: state.codexOAuth.interval,
+    },
+  });
+
+  if (!promise) {
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: 'preview',
+      message: 'Preview mode: install or run the Tauri app to finish OpenAI/Codex authorization.',
+    };
+    notify('warning', 'Authorization preview', state.codexOAuth.message);
+    return state.codexOAuth;
+  }
+
+  try {
+    const result = await promise;
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: result.status || 'ok',
+      message: result.message || 'OpenAI/Codex authorization saved.',
+      codexHome: result.codexHome || state.codexOAuth.codexHome,
+    };
+
+    if (result.status === 'ok') {
+      state.providerAuthMethod = 'browser-account';
+      state.providerApiKey = '';
+      state.apiTest = {
+        status: 'ok',
+        message: 'OpenAI/Codex authorization is saved. Test Provider can now use the workspace credential.',
+      };
+      notify('success', 'Authorization saved', state.codexOAuth.message);
+    } else {
+      notify('warning', 'Authorization pending', state.codexOAuth.message);
+    }
+
+    return state.codexOAuth;
+  } catch (error) {
+    state.codexOAuth = {
+      ...state.codexOAuth,
+      status: 'error',
+      message: normalizeError(error),
+    };
+    notify('error', 'Authorization failed', state.codexOAuth.message);
+    return state.codexOAuth;
+  }
+}
+
 export async function sendChatMessage(message) {
   const promise = invokeTauri('send_chat_message', {
     request: {

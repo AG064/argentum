@@ -531,6 +531,61 @@ p {
   margin-bottom: 0;
 }
 
+.oauth-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(239, 61, 66, 0.08), transparent 38%),
+    var(--panel-soft);
+  padding: 14px;
+}
+
+.oauth-panel.active {
+  border-color: rgba(239, 61, 66, 0.55);
+  box-shadow: inset 3px 0 0 rgba(239, 61, 66, 0.9);
+}
+
+.oauth-panel h3,
+.oauth-panel p {
+  margin-bottom: 8px;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.oauth-code-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.oauth-code-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 10px;
+  min-width: 0;
+}
+
+.oauth-code-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 4px;
+}
+
+.oauth-code-grid strong,
+.oauth-code-grid a {
+  color: var(--text);
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .form-grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1343,6 +1398,7 @@ textarea {
   }
 
   .test-row,
+  .oauth-code-grid,
   .input-with-button {
     grid-template-columns: 1fr;
   }

@@ -308,6 +308,7 @@ function renderProviderStep() {
               )
               .join('')}
           </div>
+          ${renderCodexOAuthPanel()}
           ${
             state.llmProvider === 'custom'
               ? `
@@ -329,6 +330,41 @@ function renderProviderStep() {
           </div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderCodexOAuthPanel() {
+  const oauth = state.codexOAuth || {};
+  const isBrowserAuth = state.providerAuthMethod === 'browser-account';
+  const verificationUrl = oauth.verificationUrl || 'https://auth.openai.com/codex/device';
+
+  return `
+    <div class="oauth-panel ${isBrowserAuth ? 'active' : ''}">
+      <div>
+        <span class="pill">${isBrowserAuth ? 'Selected' : 'Optional'}</span>
+        <h3>OpenAI/Codex authorization</h3>
+        <p>Choose browser account authorization, start the flow, open the verification page, then enter the code shown here. Credentials stay inside the selected workspace folder.</p>
+      </div>
+      <div class="oauth-actions">
+        <button class="button" id="start-codex-oauth">Start OpenAI/Codex authorization</button>
+        <button class="button primary" id="complete-codex-oauth">Complete authorization</button>
+      </div>
+      <div class="oauth-code-grid">
+        <div>
+          <span>Verification page</span>
+          <a href="${escapeAttribute(verificationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(verificationUrl)}</a>
+        </div>
+        <div>
+          <span>User code</span>
+          <strong>${escapeHtml(oauth.userCode || 'Start authorization first')}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>${escapeHtml(oauth.status || 'idle')}</strong>
+        </div>
+      </div>
+      <p>${escapeHtml(oauth.message || 'OpenAI/Codex authorization has not been started.')}</p>
     </div>
   `;
 }

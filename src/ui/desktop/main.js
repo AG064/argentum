@@ -16,9 +16,11 @@ import {
 } from './modules/state.js';
 import {
   chooseWorkspaceFolder,
+  completeCodexOAuth,
   refreshDesktopState,
   saveSetup,
   sendChatMessage,
+  startCodexOAuth,
   testProvider,
   hydrateDesktopDefaults,
 } from './modules/setup.js';
@@ -374,24 +376,14 @@ function handleChange(event) {
   }
 
   if (target.id === 'provider-auth-method' || target.id === 'settings-provider-auth-method') {
-    if (target.value !== 'api-key') {
-      state.providerAuthMethod = 'api-key';
-      state.apiTest = {
-        status: 'warning',
-        message: 'Browser account authorization needs a real Codex OAuth provider before live calls can use it.',
-      };
-      notify(
-        'warning',
-        'Authorization unavailable',
-        'Argentum will not scrape ChatGPT browser sessions. Use API key auth until Codex OAuth is implemented.',
-      );
-    } else {
-      state.providerAuthMethod = target.value;
-      state.apiTest = {
-        status: 'idle',
-        message: 'Authorization method changed. Test the provider before using live chat.',
-      };
-    }
+    state.providerAuthMethod = target.value;
+    state.apiTest = {
+      status: target.value === 'browser-account' ? 'warning' : 'idle',
+      message:
+        target.value === 'browser-account'
+          ? 'OpenAI/Codex authorization selected. Start and complete authorization before testing live chat.'
+          : 'Authorization method changed. Test the provider before using live chat.',
+    };
     render();
     return;
   }
@@ -503,6 +495,20 @@ async function handleClick(event) {
 
   if (element.closest('#test-provider')) {
     await testProvider();
+    render();
+    return;
+  }
+
+  if (element.closest('#start-codex-oauth')) {
+    state.providerAuthMethod = 'browser-account';
+    await startCodexOAuth();
+    render();
+    return;
+  }
+
+  if (element.closest('#complete-codex-oauth')) {
+    state.providerAuthMethod = 'browser-account';
+    await completeCodexOAuth();
     render();
     return;
   }
