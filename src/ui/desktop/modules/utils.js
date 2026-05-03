@@ -57,6 +57,17 @@ export async function openFolder(defaultPath) {
   });
 }
 
+export async function openFile(defaultPath) {
+  const open = window.__TAURI__?.dialog?.open;
+  if (!open) return null;
+
+  return open({
+    directory: false,
+    multiple: false,
+    defaultPath,
+  });
+}
+
 export function isProbablyAbsolutePath(path) {
   const value = path.trim();
   return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\') || value.startsWith('/');

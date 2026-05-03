@@ -53,17 +53,21 @@ export function renderNotifications() {
                 <button class="button" data-clear-notifications="true">Clear</button>
               </div>
               <div class="notification-history">
-                ${state.notificationHistory
-                  .slice(0, 6)
-                  .map(
-                    (notification) => `
-                      <div>
-                        <strong>${escapeHtml(notification.title)}</strong>
-                        <p>${escapeHtml(notification.message)}</p>
-                      </div>
-                    `,
-                  )
-                  .join('')}
+                ${
+                  state.notificationHistory.length === 0
+                    ? '<div><strong>No notifications</strong><p>History is clear.</p></div>'
+                    : state.notificationHistory
+                        .slice(0, 6)
+                        .map(
+                          (notification) => `
+                            <div>
+                              <strong>${escapeHtml(notification.title)}</strong>
+                              <p>${escapeHtml(notification.message)}</p>
+                            </div>
+                          `,
+                        )
+                        .join('')
+                }
               </div>
             </section>
           `

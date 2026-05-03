@@ -56,6 +56,19 @@ struct RunDesktopActionResponse {
     log_path: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenExternalUrlRequest {
+    url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenExternalUrlResponse {
+    status: String,
+    message: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DesktopDefaultsResponse {
@@ -261,6 +274,29 @@ fn ensure_allowed(field: &str, value: &str, allowed: &[&str]) -> Result<(), Stri
     }
 
     Err(format!("Invalid {field}: {value}"))
+}
+
+fn allowed_external_url(url: &str) -> bool {
+    if url.contains('\0') || url.chars().any(|character| character.is_control()) {
+        return false;
+    }
+
+    const ALLOWED_PREFIXES: &[&str] = &[
+        "https://auth.openai.com/codex/device",
+        "https://platform.openai.com",
+        "https://console.anthropic.com",
+        "https://aistudio.google.com",
+        "https://openrouter.ai",
+        "https://build.nvidia.com",
+        "https://console.groq.com",
+        "https://platform.minimaxi.com",
+        "https://ollama.com",
+        "https://github.com/openai/openai-openapi",
+    ];
+
+    ALLOWED_PREFIXES
+        .iter()
+        .any(|prefix| url == *prefix || url.starts_with(&format!("{prefix}/")))
 }
 
 fn write_text(path: &Path, contents: &str) -> Result<(), String> {
@@ -736,6 +772,32 @@ fn redact_sensitive_line(line: &str) -> String {
     line.to_string()
 }
 
+fn redact_provider_message(message: &str) -> String {
+    message
+        .split_whitespace()
+        .map(|word| {
+            let clean = word.trim_matches(|character: char| {
+                character == '"' || character == '\'' || character == ',' || character == '.'
+            });
+            if looks_like_secret_value(clean) {
+                word.replace(clean, "<redacted>")
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn looks_like_secret_value(value: &str) -> bool {
+    let normalized = value.to_ascii_lowercase();
+    (normalized.starts_with("sk-") || normalized.starts_with("sk_"))
+        || (value.len() >= 32
+            && value
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || "-_.".contains(character)))
+}
+
 fn read_preview(path: &Path, max_lines: usize) -> String {
     let Ok(contents) = std::fs::read_to_string(path) else {
         return "No entries yet.".to_string();
@@ -1082,15 +1144,15 @@ fn provider_error_detail(body: &str) -> Option<String> {
             .and_then(|error| error.get("message"))
             .and_then(|message| message.as_str())
         {
-            return Some(redact_sensitive_output(message.trim()));
+            return Some(redact_provider_message(message.trim()));
         }
 
         if let Some(message) = value.get("message").and_then(|message| message.as_str()) {
-            return Some(redact_sensitive_output(message.trim()));
+            return Some(redact_provider_message(message.trim()));
         }
     }
 
-    Some(redact_sensitive_output(
+    Some(redact_provider_message(
         trimmed.lines().next().unwrap_or(trimmed),
     ))
 }
@@ -1543,6 +1605,37 @@ async fn send_chat_message(
 }
 
 #[tauri::command]
+fn open_external_url(request: OpenExternalUrlRequest) -> Result<OpenExternalUrlResponse, String> {
+    let url = request.url.trim();
+    if !allowed_external_url(url) {
+        return Err("External link is not on the Argentum provider allowlist.".to_string());
+    }
+
+    let mut command = if cfg!(target_os = "windows") {
+        let mut command = Command::new("rundll32");
+        command.args(["url.dll,FileProtocolHandler", url]);
+        command
+    } else if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(url);
+        command
+    } else {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+
+    command
+        .spawn()
+        .map_err(|error| format!("Could not open the default browser: {error}"))?;
+
+    Ok(OpenExternalUrlResponse {
+        status: "ok".to_string(),
+        message: "Opened in the default browser.".to_string(),
+    })
+}
+
+#[tauri::command]
 fn desktop_defaults() -> DesktopDefaultsResponse {
     DesktopDefaultsResponse {
         default_workspace_path: default_workspace_path().display().to_string(),
@@ -1836,6 +1929,7 @@ pub fn run() {
             start_codex_oauth,
             complete_codex_oauth,
             send_chat_message,
+            open_external_url,
             run_desktop_action,
             desktop_defaults,
             desktop_state,

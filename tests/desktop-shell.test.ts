@@ -160,6 +160,8 @@ describe('Argentum desktop shell', () => {
     const setup = read('src/ui/desktop/modules/setup.js');
     const state = read('src/ui/desktop/modules/state.js');
     const rust = read('src/desktop/src/lib.rs');
+    const main = read('src/ui/desktop/main.js');
+    const icons = read('src/ui/desktop/modules/icons.js');
 
     for (const provider of [
       'OpenAI',
@@ -175,6 +177,11 @@ describe('Argentum desktop shell', () => {
       expect(constants).toContain(provider);
     }
 
+    expect(constants).toContain('websiteUrl:');
+    expect(constants).toContain("authMethods: ['api-key', 'browser-account']");
+    expect(onboarding).toContain('provider-website-link');
+    expect(onboarding).toContain('data-open-external');
+    expect(icons).toContain('externalLink');
     expect(onboarding).toContain('id="provider-base-url"');
     expect(onboarding).toContain('<select id="provider-model"');
     expect(onboarding).not.toContain('<input id="provider-model"');
@@ -204,10 +211,17 @@ describe('Argentum desktop shell', () => {
     expect(setup).toContain('providerAuthMethod');
     expect(setup).toContain("invokeTauri('start_codex_oauth'");
     expect(setup).toContain("invokeTauri('complete_codex_oauth'");
+    expect(setup).toContain('openExternalUrl');
+    expect(setup).toContain("state.apiTest = {\n        status: 'idle'");
+    expect(setup).not.toContain('Test Provider can now use the workspace credential');
+    expect(main).toContain('data-open-external');
     expect(rust).toContain('provider_auth_method: String');
     expect(rust).toContain('struct CodexOAuthStartRequest');
     expect(rust).toContain('async fn start_codex_oauth');
     expect(rust).toContain('async fn complete_codex_oauth');
+    expect(rust).toContain('struct OpenExternalUrlRequest');
+    expect(rust).toContain('fn open_external_url');
+    expect(rust).toContain('allowed_external_url');
     expect(rust).toContain('codex_oauth_api_key');
     expect(rust).toContain('https://auth.openai.com/api/accounts/deviceauth/usercode');
     expect(rust).toContain('urn:ietf:params:oauth:grant-type:token-exchange');
@@ -249,11 +263,15 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('notificationHistory:');
     expect(state).toContain('notificationsMuted:');
     expect(state).toContain('notificationsMenuOpen:');
+    expect(state).toContain('state.notificationHistory = [];');
     expect(state).toContain('setTimeout');
     expect(state).toContain('argentum:state-change');
     expect(main).toContain('data-toggle-notification-mute');
     expect(css).toContain('.notification-layer');
     expect(css).toContain('.notification-toast');
+    expect(css).toContain('height: 100vh');
+    expect(css).toContain('.topbar');
+    expect(css).toContain('position: sticky');
   });
 
   test('shows onboarding as a blocking overlay and can restart after setup', () => {
@@ -296,29 +314,33 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('@keyframes demo-flow');
   });
 
-  test('chat uses explicit profile fields, useful local replies, and a terminal view', () => {
+  test('chat stays focused on conversation and composer controls', () => {
     const chat = read('src/ui/desktop/modules/chat.js');
     const main = read('src/ui/desktop/main.js');
     const state = read('src/ui/desktop/modules/state.js');
     const css = read('src/ui/desktop/styles.css');
 
-    expect(chat).toContain('id="profile-user-name"');
-    expect(chat).toContain('id="profile-agent-name"');
-    expect(chat).toContain('renderTerminalPanel');
-    expect(chat).toContain('terminal-panel');
+    expect(chat).not.toContain('chat-action-row');
+    expect(chat).not.toContain('Start Gateway');
+    expect(chat).not.toContain('Check Gateway');
+    expect(chat).toContain('recent-chat-list');
+    expect(chat).toContain('composer-tools');
+    expect(chat).toContain('id="attach-file"');
+    expect(chat).toContain('id="voice-input"');
+    expect(chat).toContain('id="thinking-level"');
     expect(main).toContain('buildLocalReply');
-    expect(main).toContain('saveProfileFromInputs');
+    expect(main).toContain('chooseChatAttachment');
+    expect(main).toContain('startVoiceInput');
     expect(main).toContain('addTerminalEntry');
     expect(main).toContain('sendChatMessage');
-    expect(main).toContain('runChatAction');
-    expect(chat).toContain('chat-action-row');
-    expect(chat).toContain('Start Gateway');
-    expect(chat).toContain('Check Gateway');
+    expect(state).toContain('recentChats:');
+    expect(state).toContain("thinkingLevel: 'balanced'");
+    expect(state).toContain('chatAttachments:');
     expect(state).toContain('terminalEntries:');
     expect(state).toContain('agentName:');
     expect(state).toContain('userName:');
-    expect(css).toContain('.profile-panel');
-    expect(css).toContain('.terminal-panel');
+    expect(css).toContain('.recent-chat-list');
+    expect(css).toContain('.composer-tools');
   });
 
   test('desktop actions execute through whitelisted Tauri commands with structured output', () => {

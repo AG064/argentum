@@ -52,7 +52,9 @@ button {
 .shell {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .rail {
@@ -62,6 +64,8 @@ button {
   border-right: 1px solid var(--line);
   background: var(--rail);
   padding: 18px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .brand {
@@ -160,14 +164,20 @@ button {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  max-height: 100vh;
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 140;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 86px;
   border-bottom: 1px solid var(--line);
+  background: rgba(11, 13, 16, 0.96);
   padding: 18px 26px;
 }
 
@@ -243,6 +253,7 @@ p {
 .view-root {
   overflow: auto;
   padding: 26px;
+  min-height: 0;
 }
 
 .onboarding-layout,
@@ -465,6 +476,39 @@ p {
   cursor: pointer;
 }
 
+.provider-select-button {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-website-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--steel);
+  font-size: 0.83rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.provider-website-link.inline {
+  margin-top: 8px;
+}
+
+.provider-website-link .svg-icon,
+.oauth-code-grid .svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
 .provider-card.active,
 .provider-card:hover,
 .check-card.active,
@@ -529,6 +573,27 @@ p {
 
 .test-row p {
   margin-bottom: 0;
+}
+
+.setup-guidance {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.13);
+  padding: 14px;
+}
+
+.setup-guidance h3 {
+  margin: 8px 0;
+}
+
+.setup-guidance ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.setup-guidance li + li {
+  margin-top: 6px;
 }
 
 .oauth-panel {
@@ -736,10 +801,17 @@ textarea {
   min-height: 150px;
 }
 
+.chat-workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - 138px);
+}
+
 .chat-shell {
   display: grid;
   grid-template-rows: auto minmax(280px, 1fr) auto;
-  min-height: 560px;
+  min-height: 0;
 }
 
 .chat-transcript {
@@ -832,6 +904,34 @@ textarea {
   gap: 10px;
   border-top: 1px solid var(--line);
   padding: 14px;
+}
+
+.composer-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+.composer-tools label {
+  min-width: 160px;
+}
+
+.attachment-tray {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--steel);
+  padding: 6px 10px;
+  font-size: 0.83rem;
 }
 
 .status-panel {
@@ -984,7 +1084,7 @@ textarea {
   position: fixed;
   top: 78px;
   right: 24px;
-  z-index: 90;
+  z-index: 220;
   display: grid;
   gap: 12px;
   width: min(420px, calc(100vw - 48px));
@@ -1038,6 +1138,8 @@ textarea {
   display: grid;
   gap: 12px;
   padding: 14px;
+  max-height: min(520px, calc(100vh - 112px));
+  overflow: auto;
 }
 
 .notification-history {
@@ -1261,15 +1363,30 @@ textarea {
   gap: 16px;
 }
 
-.profile-panel .panel-header p {
-  margin-bottom: 0;
+.recent-chat-list {
+  align-self: start;
 }
 
-.chat-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 0 18px 16px;
+.recent-chat-items {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.recent-chat-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+}
+
+.recent-chat-item span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .gateway-grid {
@@ -1369,6 +1486,7 @@ textarea {
   .shell,
   .onboarding-layout,
   .workspace-layout,
+  .chat-workspace,
   .hero-strip {
     grid-template-columns: 1fr;
   }

@@ -183,6 +183,9 @@ const settingsModule = {
   healthCheck: () => ({ status: 'ok', message: 'Settings are editable.' }),
   render: (state) => {
     const provider = currentProvider(providerPresets, state);
+    const availableAuthMethods = providerAuthMethods.filter((method) =>
+      (provider.authMethods || ['api-key']).includes(method.id),
+    );
     return `
       ${renderNotifications()}
       ${renderHero(
@@ -212,6 +215,10 @@ const settingsModule = {
                 )
                 .join('')}
             </select>
+            <a class="provider-website-link inline" href="${escapeAttribute(provider.websiteUrl)}" data-open-external="${escapeAttribute(provider.websiteUrl)}">
+              Open provider website
+              <span data-icon="externalLink"></span>
+            </a>
           </label>
           <label>
             Model
@@ -232,7 +239,7 @@ const settingsModule = {
           <label>
             Authorization method
             <select id="settings-provider-auth-method">
-              ${providerAuthMethods
+              ${availableAuthMethods
                 .map(
                   (method) => `
                     <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)} - ${escapeHtml(method.status)}</option>
@@ -265,9 +272,22 @@ const settingsModule = {
                 .join('')}
             </select>
           </label>
+          <label>
+            Your name
+            <input id="profile-user-name" value="${escapeAttribute(state.userName)}" placeholder="Example: AG" />
+          </label>
+          <label>
+            Agent name
+            <input id="profile-agent-name" value="${escapeAttribute(state.agentName)}" placeholder="Argentum" />
+          </label>
+          <label>
+            Main purpose
+            <textarea id="profile-purpose" placeholder="What should this workspace help with?">${escapeHtml(state.agentPurpose)}</textarea>
+          </label>
         </div>
         ${renderSettingsOAuthPanel(state)}
         <div class="panel-footer button-row split">
+          <button class="button" id="save-profile">Save Profile</button>
           <button class="button" id="test-provider">Test Provider</button>
           <button class="button" data-restart-onboarding="true">Restart onboarding</button>
         </div>
@@ -278,6 +298,9 @@ const settingsModule = {
 
 function renderSettingsOAuthPanel(state) {
   const oauth = state.codexOAuth || {};
+  const provider = currentProvider(providerPresets, state);
+  if (!(provider.authMethods || []).includes('browser-account')) return '';
+
   const verificationUrl = oauth.verificationUrl || 'https://auth.openai.com/codex/device';
 
   return `
@@ -294,7 +317,10 @@ function renderSettingsOAuthPanel(state) {
       <div class="oauth-code-grid">
         <div>
           <span>Verification page</span>
-          <a href="${escapeAttribute(verificationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(verificationUrl)}</a>
+          <a href="${escapeAttribute(verificationUrl)}" data-open-external="${escapeAttribute(verificationUrl)}">
+            ${escapeHtml(verificationUrl)}
+            <span data-icon="externalLink"></span>
+          </a>
         </div>
         <div>
           <span>User code</span>

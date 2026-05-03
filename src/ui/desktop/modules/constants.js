@@ -90,6 +90,8 @@ export const providerPresets = [
     label: 'OpenAI',
     api: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
+    websiteUrl: 'https://platform.openai.com',
+    authMethods: ['api-key', 'browser-account'],
     defaultBaseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-5.5',
     models: [
@@ -112,6 +114,8 @@ export const providerPresets = [
     label: 'Anthropic Claude',
     api: 'anthropic',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
+    websiteUrl: 'https://console.anthropic.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-20250514',
     models: [
@@ -127,6 +131,8 @@ export const providerPresets = [
     label: 'Google Gemini',
     api: 'openai',
     apiKeyEnv: 'GOOGLE_API_KEY',
+    websiteUrl: 'https://aistudio.google.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
     defaultModel: 'gemini-2.5-flash',
     models: [
@@ -142,6 +148,8 @@ export const providerPresets = [
     label: 'OpenRouter',
     api: 'openai',
     apiKeyEnv: 'OPENROUTER_API_KEY',
+    websiteUrl: 'https://openrouter.ai',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'google/gemma-3-27b-it',
     models: [
@@ -159,6 +167,8 @@ export const providerPresets = [
     label: 'NVIDIA',
     api: 'openai',
     apiKeyEnv: 'NVIDIA_API_KEY',
+    websiteUrl: 'https://build.nvidia.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://integrate.api.nvidia.com/v1',
     defaultModel: 'deepseek-ai/deepseek-v3.2',
     models: [
@@ -174,6 +184,8 @@ export const providerPresets = [
     label: 'Groq',
     api: 'openai',
     apiKeyEnv: 'GROQ_API_KEY',
+    websiteUrl: 'https://console.groq.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://api.groq.com/openai/v1',
     defaultModel: 'meta-llama/llama-4-scout-17b-16e-instruct',
     models: [
@@ -190,6 +202,8 @@ export const providerPresets = [
     label: 'MiniMax',
     api: 'openai',
     apiKeyEnv: 'MINIMAX_API_KEY',
+    websiteUrl: 'https://platform.minimaxi.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M2.7',
     models: [
@@ -204,6 +218,8 @@ export const providerPresets = [
     label: 'Ollama / local',
     api: 'openai',
     apiKeyEnv: 'OLLAMA_API_KEY',
+    websiteUrl: 'https://ollama.com',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'http://127.0.0.1:11434/v1',
     defaultModel: 'llama3.1',
     models: [
@@ -221,6 +237,8 @@ export const providerPresets = [
     label: 'Custom endpoint',
     api: 'openai',
     apiKeyEnv: 'CUSTOM_API_KEY',
+    websiteUrl: 'https://github.com/openai/openai-openapi',
+    authMethods: ['api-key'],
     defaultBaseUrl: 'http://127.0.0.1:8000/v1',
     defaultModel: 'custom-model',
     models: [

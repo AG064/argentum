@@ -65,6 +65,13 @@ export const state = {
   userName: '',
   agentName: 'Argentum',
   agentPurpose: '',
+  thinkingLevel: 'balanced',
+  chatAttachments: [],
+  voiceInputStatus: 'idle',
+  recentChats: [
+    { id: 'setup', title: 'Setup and security', subtitle: 'Workspace, provider, and permissions' },
+    { id: 'general', title: 'General chat', subtitle: 'Ask Argentum directly' },
+  ],
   desktopState: {
     workspaceReady: false,
     configExists: false,
@@ -80,16 +87,6 @@ export const state = {
       role: 'argentum',
       title: 'Argentum',
       body: 'I am ready. Finish onboarding when it appears, then we can tune your profile, provider, and workspace permissions from here.',
-    },
-    {
-      type: 'optionGroup',
-      title: 'Quick start',
-      body: 'Pick a setup area or type naturally. Local replies work even before a model provider is connected.',
-      options: [
-        { id: 'profile', label: 'Profile', detail: 'Set your name, the agent name, and the main purpose.' },
-        { id: 'security-policy', label: 'Security', detail: 'Review workspace access and approvals.' },
-        { id: 'provider', label: 'Provider', detail: 'Connect or retest live model access.' },
-      ],
     },
   ],
   draftMessage: '',
@@ -154,8 +151,20 @@ export function dismissNotification(id, options = {}) {
 
 export function clearNotifications() {
   state.notifications = [];
+  state.notificationHistory = [];
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function scheduleVisibleNotifications() {
+  if (typeof window === 'undefined') return;
+
+  for (const notification of state.notifications) {
+    window.setTimeout(() => {
+      dismissNotification(notification.id, { silent: true });
+      window.dispatchEvent(new Event('argentum:state-change'));
+    }, 5200);
   }
 }
 
@@ -191,6 +200,10 @@ export function setProvider(provider) {
   state.providerApi = provider.api;
   state.providerBaseUrl = provider.defaultBaseUrl;
   state.providerModel = provider.defaultModel;
+  const allowedAuthMethods = provider.authMethods || ['api-key'];
+  if (!allowedAuthMethods.includes(state.providerAuthMethod)) {
+    state.providerAuthMethod = allowedAuthMethods[0];
+  }
   state.customApiKeyEnv = provider.apiKeyEnv;
   state.apiTest = {
     status: 'idle',

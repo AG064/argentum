@@ -1,6 +1,5 @@
-import { providerPresets, securityProfiles } from './constants.js';
-import { renderHero, renderNotifications, renderStatusRail } from './shell.js';
-import { currentProvider, escapeAttribute, escapeHtml, labelFor } from './utils.js';
+import { renderNotifications } from './shell.js';
+import { escapeAttribute, escapeHtml, selected } from './utils.js';
 
 export const chatModule = {
   id: 'chat',
@@ -17,97 +16,72 @@ export const chatModule = {
 };
 
 function renderChatSection(state) {
-  const provider = currentProvider(providerPresets, state);
   return `
     ${renderNotifications()}
-    ${renderHero(
-      'Chat',
-      'Work locally first, connect live models when ready',
-      'The app can answer setup and status questions locally. Live model calls activate only after provider settings pass.',
-      [
-        { label: 'Provider', value: provider.label },
-        { label: 'Mode', value: state.apiTest.status === 'ok' ? 'Live-ready' : 'Offline guided' },
-        { label: 'Security', value: labelFor(securityProfiles, state.securityProfile) },
-      ],
-    )}
-    <div class="workspace-layout">
+    <div class="chat-workspace">
+      <aside class="panel recent-chat-list">
+        <div class="panel-header">
+          <h3>Recent Chats</h3>
+        </div>
+        <div class="recent-chat-items">
+          ${state.recentChats
+            .map(
+              (chat) => `
+                <button class="recent-chat-item" data-recent-chat="${escapeAttribute(chat.id)}">
+                  <strong>${escapeHtml(chat.title)}</strong>
+                  <span>${escapeHtml(chat.subtitle)}</span>
+                </button>
+              `,
+            )
+            .join('')}
+        </div>
+      </aside>
       <section class="panel chat-shell">
         <div class="panel-header split-header">
           <div>
             <h3>Conversation</h3>
-            <p>Live provider replies are used after provider testing passes. Otherwise Argentum stays in clear offline setup mode.</p>
+            <p>${escapeHtml(state.apiTest.status === 'ok' ? 'Live model replies are active.' : 'Offline guided mode is active until provider testing passes.')}</p>
           </div>
           <span class="pill ${state.apiTest.status === 'ok' ? 'ok' : 'warn'}">${state.apiTest.status === 'ok' ? 'Provider ready' : 'Offline mode'}</span>
-        </div>
-        <div class="chat-action-row">
-          <button class="button" data-chat-action="test-provider">Test Provider</button>
-          <button class="button" data-chat-action="gateway-start">Start Gateway</button>
-          <button class="button" data-chat-action="gateway-status">Check Gateway</button>
-          <button class="button" data-chat-action="settings">Open Settings</button>
         </div>
         <div class="chat-transcript">
           ${state.chatBlocks.map((block) => renderChatBlock(block)).join('')}
         </div>
         <div class="composer">
+          <div class="composer-tools">
+            <button class="icon-button" id="attach-file" title="Attach file" aria-label="Attach file"><span data-icon="paperclip"></span></button>
+            <button class="icon-button" id="voice-input" title="Use microphone" aria-label="Use microphone">${state.voiceInputStatus === 'listening' ? '...' : '<span data-icon="mic"></span>'}</button>
+            <label>
+              Thinking
+              <select id="thinking-level">
+                <option value="fast" ${selected(state.thinkingLevel, 'fast')}>Fast</option>
+                <option value="balanced" ${selected(state.thinkingLevel, 'balanced')}>Balanced</option>
+                <option value="deep" ${selected(state.thinkingLevel, 'deep')}>Deep</option>
+              </select>
+            </label>
+          </div>
+          ${renderAttachmentTray(state)}
           <textarea id="chat-draft" placeholder="Tell Argentum what to call you, or ask what to configure next.">${escapeHtml(state.draftMessage)}</textarea>
           <button class="button primary" id="send-chat">Send</button>
         </div>
       </section>
-      <aside class="side-stack">
-        ${renderProfilePanel(state)}
-        ${renderStatusRail()}
-        ${renderTerminalPanel(state)}
-      </aside>
     </div>
   `;
 }
 
-function renderProfilePanel(state) {
-  return `
-    <section class="panel profile-panel">
-      <div class="panel-header">
-        <h3>Profile</h3>
-        <p>Replace the old local setup loop with clear fields you can change anytime.</p>
-      </div>
-      <div class="panel-body form-grid">
-        <label>
-          Your name
-          <input id="profile-user-name" value="${escapeAttribute(state.userName)}" placeholder="Example: AG" />
-        </label>
-        <label>
-          Agent name
-          <input id="profile-agent-name" value="${escapeAttribute(state.agentName)}" placeholder="Argentum" />
-        </label>
-        <label>
-          Main purpose
-          <textarea id="profile-purpose" placeholder="What should this workspace help with?">${escapeHtml(state.agentPurpose)}</textarea>
-        </label>
-        <button class="button primary" id="save-profile">Save profile</button>
-      </div>
-    </section>
-  `;
-}
+function renderAttachmentTray(state) {
+  if (state.chatAttachments.length === 0) return '';
 
-function renderTerminalPanel(state) {
   return `
-    <section class="panel terminal-panel">
-      <div class="panel-header split-header">
-        <h3>Terminal</h3>
-        <span class="pill">Preview</span>
-      </div>
-      <div class="terminal-body">
-        ${state.terminalEntries
-          .map(
-            (entry) => `
-              <article class="terminal-entry ${escapeAttribute(entry.status)}">
-                <code>$ ${escapeHtml(entry.command)}</code>
-                <pre>${escapeHtml(entry.output)}</pre>
-              </article>
-            `,
-          )
-          .join('')}
-      </div>
-    </section>
+    <div class="attachment-tray">
+      ${state.chatAttachments
+        .map(
+          (file) => `
+            <span class="attachment-chip">${escapeHtml(file.name)}</span>
+          `,
+        )
+        .join('')}
+    </div>
   `;
 }
 

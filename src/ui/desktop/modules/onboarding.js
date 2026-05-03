@@ -239,17 +239,26 @@ function renderCapabilitiesStep() {
 
 function renderProviderStep() {
   const provider = currentProvider(providerPresets, state);
+  const availableAuthMethods = providerAuthMethods.filter((method) =>
+    (provider.authMethods || ['api-key']).includes(method.id),
+  );
   return `
     <div class="provider-layout">
       <div class="provider-list">
         ${providerPresets
           .map(
             (item) => `
-              <button class="provider-card ${state.llmProvider === item.id ? 'active' : ''}" data-provider-id="${item.id}">
-                <strong>${escapeHtml(item.label)}</strong>
-                <span>${item.requiresKey ? 'API key needed' : 'Local/custom friendly'}</span>
-                <p>${escapeHtml(item.detail)}</p>
-              </button>
+              <article class="provider-card ${state.llmProvider === item.id ? 'active' : ''}">
+                <button class="provider-select-button" data-provider-id="${item.id}">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span>${item.requiresKey ? 'API key needed' : 'Local/custom friendly'}</span>
+                  <p>${escapeHtml(item.detail)}</p>
+                </button>
+                <a class="provider-website-link" href="${escapeAttribute(item.websiteUrl)}" data-open-external="${escapeAttribute(item.websiteUrl)}">
+                  Provider website
+                  <span data-icon="externalLink"></span>
+                </a>
+              </article>
             `,
           )
           .join('')}
@@ -282,13 +291,13 @@ function renderProviderStep() {
           <label>
             Authorization method
             <select id="provider-auth-method">
-              ${providerAuthMethods
+              ${availableAuthMethods
                 .map(
                   (method) => `
                     <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)} - ${escapeHtml(method.status)}</option>
                   `,
                 )
-                .join('')}
+              .join('')}
             </select>
           </label>
           <label>
@@ -296,7 +305,7 @@ function renderProviderStep() {
             <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
           </label>
           <div class="auth-method-panel">
-            ${providerAuthMethods
+            ${availableAuthMethods
               .map(
                 (method) => `
                   <article class="${state.providerAuthMethod === method.id ? 'active' : ''}">
@@ -308,6 +317,7 @@ function renderProviderStep() {
               )
               .join('')}
           </div>
+          ${renderProviderAuthGuidance(provider)}
           ${renderCodexOAuthPanel()}
           ${
             state.llmProvider === 'custom'
@@ -334,10 +344,43 @@ function renderProviderStep() {
   `;
 }
 
+function renderProviderAuthGuidance(provider) {
+  if (state.providerAuthMethod === 'browser-account') {
+    return `
+      <div class="setup-guidance">
+        <span class="pill">Step-by-step</span>
+        <h3>Authorize with your OpenAI account</h3>
+        <ol>
+          <li>Start OpenAI/Codex authorization to create a one-time browser code.</li>
+          <li>Open the verification page with the external-link button.</li>
+          <li>Approve Argentum in your browser, then come back here.</li>
+          <li>Complete authorization and run Test API to verify model access.</li>
+        </ol>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="setup-guidance">
+      <span class="pill">Step-by-step</span>
+      <h3>Use a ${escapeHtml(provider.label)} API key</h3>
+      <ol>
+        <li>Open the provider website and create or copy an API key.</li>
+        <li>Paste the key in this setup screen. Password fields stay hidden.</li>
+        <li>Pick a model and endpoint, then run Test API.</li>
+        <li>Finish onboarding after the test passes or continue in offline mode.</li>
+      </ol>
+    </div>
+  `;
+}
+
 function renderCodexOAuthPanel() {
   const oauth = state.codexOAuth || {};
   const isBrowserAuth = state.providerAuthMethod === 'browser-account';
   const verificationUrl = oauth.verificationUrl || 'https://auth.openai.com/codex/device';
+  const canUseOAuth = (currentProvider(providerPresets, state).authMethods || []).includes('browser-account');
+
+  if (!canUseOAuth) return '';
 
   return `
     <div class="oauth-panel ${isBrowserAuth ? 'active' : ''}">
@@ -353,7 +396,10 @@ function renderCodexOAuthPanel() {
       <div class="oauth-code-grid">
         <div>
           <span>Verification page</span>
-          <a href="${escapeAttribute(verificationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(verificationUrl)}</a>
+          <a href="${escapeAttribute(verificationUrl)}" data-open-external="${escapeAttribute(verificationUrl)}">
+            ${escapeHtml(verificationUrl)}
+            <span data-icon="externalLink"></span>
+          </a>
         </div>
         <div>
           <span>User code</span>

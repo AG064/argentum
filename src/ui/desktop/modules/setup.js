@@ -194,9 +194,15 @@ export async function completeCodexOAuth() {
       state.providerAuthMethod = 'browser-account';
       state.providerApiKey = '';
       state.apiTest = {
-        status: 'ok',
-        message: 'OpenAI/Codex authorization is saved. Test Provider can now use the workspace credential.',
+        status: 'idle',
+        message: 'OpenAI/Codex authorization is saved. Run Test Provider to verify model access with this account.',
       };
+      try {
+        const saveResult = await saveSetup();
+        state.savedConfigPath = saveResult.configPath || saveResult.config_path || state.savedConfigPath;
+      } catch (error) {
+        notify('warning', 'Authorization saved, config not updated', normalizeError(error));
+      }
       notify('success', 'Authorization saved', state.codexOAuth.message);
     } else {
       notify('warning', 'Authorization pending', state.codexOAuth.message);
@@ -211,6 +217,30 @@ export async function completeCodexOAuth() {
     };
     notify('error', 'Authorization failed', state.codexOAuth.message);
     return state.codexOAuth;
+  }
+}
+
+export async function openExternalUrl(url) {
+  const target = String(url || '').trim();
+  if (!target) return false;
+
+  const promise = invokeTauri('open_external_url', {
+    request: {
+      url: target,
+    },
+  });
+
+  if (!promise) {
+    window.open(target, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+
+  try {
+    await promise;
+    return true;
+  } catch (error) {
+    notify('error', 'Could not open browser', normalizeError(error));
+    return false;
   }
 }
 

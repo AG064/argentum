@@ -8,6 +8,7 @@ import {
   clearNotifications,
   dismissNotification,
   notify,
+  scheduleVisibleNotifications,
   setChannel,
   setProvider,
   state,
@@ -17,6 +18,7 @@ import {
 import {
   chooseWorkspaceFolder,
   completeCodexOAuth,
+  openExternalUrl,
   refreshDesktopState,
   saveSetup,
   sendChatMessage,
@@ -24,7 +26,7 @@ import {
   testProvider,
   hydrateDesktopDefaults,
 } from './modules/setup.js';
-import { isProbablyAbsolutePath, normalizeError } from './modules/utils.js';
+import { isProbablyAbsolutePath, normalizeError, openFile } from './modules/utils.js';
 
 const nav = document.querySelector('#section-nav');
 const title = document.querySelector('#section-title');
@@ -96,18 +98,8 @@ function resetIntroChat() {
       role: 'argentum',
       title: state.agentName || 'Argentum',
       body: state.userName
-        ? `Welcome back, ${state.userName}. Ask what is next, prepare a gateway, or adjust the profile panel.`
-        : 'Setup is saved. Add your name and agent name in the profile panel, or ask what is next.',
-    },
-    {
-      type: 'optionGroup',
-      title: 'Useful next steps',
-      body: 'These are local app actions. They do not require live AI provider access.',
-      options: [
-        { id: 'provider', label: 'Test provider', detail: 'Check whether live model calls are ready.' },
-        { id: 'security-policy', label: 'Review security', detail: 'Inspect workspace scope and approvals.' },
-        { id: 'gateway', label: 'Start gateway', detail: 'Run the local service and see output below.' },
-      ],
+        ? `Welcome back, ${state.userName}. Ask what is next, prepare a gateway, or adjust the profile fields in Settings.`
+        : 'Setup is saved. Add your name and agent name in Settings, or ask what is next.',
     },
   ];
 }
@@ -228,6 +220,58 @@ function updateProviderFieldsFromPreset(providerId) {
   setProvider(provider);
 }
 
+async function chooseChatAttachment() {
+  const selected = await openFile(state.workspacePath);
+  if (!selected) {
+    notify('info', 'No file attached', 'No file was selected.');
+    return;
+  }
+
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  state.chatAttachments = [
+    ...state.chatAttachments,
+    {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      path,
+      name: String(path).split(/[\\/]/).pop() || String(path),
+    },
+  ].slice(-6);
+  notify('success', 'File attached', 'The selected file will be referenced in the next chat message.');
+}
+
+function startVoiceInput() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    state.voiceInputStatus = 'unsupported';
+    notify('error', 'Microphone unavailable', 'Voice dictation is not available in this desktop webview yet.');
+    return;
+  }
+
+  const recognition = new Recognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  state.voiceInputStatus = 'listening';
+  notify('info', 'Listening', 'Speak now. Argentum will add the transcript to the chat box.');
+
+  recognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript || '';
+    state.draftMessage = `${state.draftMessage}${state.draftMessage ? ' ' : ''}${transcript}`.trim();
+    state.voiceInputStatus = 'idle';
+    render();
+  };
+  recognition.onerror = () => {
+    state.voiceInputStatus = 'error';
+    notify('error', 'Voice input failed', 'Microphone input could not be captured.');
+    render();
+  };
+  recognition.onend = () => {
+    if (state.voiceInputStatus === 'listening') state.voiceInputStatus = 'idle';
+    render();
+  };
+  recognition.start();
+}
+
 function saveProfileFromInputs() {
   const userInput = document.querySelector('#profile-user-name');
   const agentInput = document.querySelector('#profile-agent-name');
@@ -283,10 +327,17 @@ function buildLocalReply(draft) {
 
 async function sendChatDraft() {
   const draft = state.draftMessage.trim();
-  if (!draft) return;
+  if (!draft && state.chatAttachments.length === 0) return;
 
-  appendChatMessage('user', draft);
+  const attachmentText =
+    state.chatAttachments.length > 0
+      ? `\n\nAttached files:\n${state.chatAttachments.map((file) => `- ${file.name}: ${file.path}`).join('\n')}`
+      : '';
+  const outgoingMessage = `${draft}${attachmentText}`.trim();
+
+  appendChatMessage('user', outgoingMessage);
   state.draftMessage = '';
+  state.chatAttachments = [];
   render();
 
   if (!state.setupComplete || !window.__TAURI__?.core?.invoke) {
@@ -299,7 +350,7 @@ async function sendChatDraft() {
   render();
 
   try {
-    const result = await sendChatMessage(draft);
+    const result = await sendChatMessage(outgoingMessage);
     if (result?.offline) {
       state.apiTest = {
         status: 'warning',
@@ -388,6 +439,13 @@ function handleChange(event) {
     return;
   }
 
+  if (target.id === 'thinking-level') {
+    state.thinkingLevel = target.value;
+    notify('info', 'Thinking level changed', `Chat thinking level set to ${target.value}.`);
+    render();
+    return;
+  }
+
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
     render();
@@ -410,6 +468,14 @@ async function handleClick(event) {
   const target = event.target;
   const element = target instanceof Element ? target : null;
   if (!element) return;
+
+  const externalLink = element.closest('[data-open-external]');
+  if (externalLink) {
+    event.preventDefault();
+    await openExternalUrl(externalLink.dataset.openExternal || externalLink.href);
+    render();
+    return;
+  }
 
   if (element.closest('#notifications-button')) {
     toggleNotificationsMenu();
@@ -495,6 +561,18 @@ async function handleClick(event) {
 
   if (element.closest('#test-provider')) {
     await testProvider();
+    render();
+    return;
+  }
+
+  if (element.closest('#attach-file')) {
+    await chooseChatAttachment();
+    render();
+    return;
+  }
+
+  if (element.closest('#voice-input')) {
+    startVoiceInput();
     render();
     return;
   }
@@ -616,6 +694,7 @@ document.addEventListener('change', handleChange);
 window.addEventListener('argentum:state-change', render);
 
 hydrateStaticIcons(document);
+scheduleVisibleNotifications();
 hydrateDesktopDefaults()
   .then(() => refreshDesktopState())
   .then(() => {
