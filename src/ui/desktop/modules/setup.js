@@ -12,6 +12,7 @@ export function buildSetupPayload() {
     providerApi: state.providerApi || provider.api,
     providerBaseUrl: state.providerBaseUrl || provider.defaultBaseUrl,
     providerModel: state.providerModel || provider.defaultModel,
+    providerAuthMethod: state.providerAuthMethod || 'api-key',
     providerApiKey: state.providerApiKey,
     providerApiKeyEnv: state.customApiKeyEnv || provider.apiKeyEnv,
     customProviderName: state.customProviderName,
@@ -53,6 +54,7 @@ export async function testProvider() {
     baseUrl: state.providerBaseUrl || provider.defaultBaseUrl,
     apiKey: state.providerApiKey,
     model: state.providerModel || provider.defaultModel,
+    authMethod: state.providerAuthMethod || 'api-key',
     workspacePath: state.workspacePath,
   };
 

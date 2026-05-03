@@ -373,6 +373,29 @@ function handleChange(event) {
     return;
   }
 
+  if (target.id === 'provider-auth-method' || target.id === 'settings-provider-auth-method') {
+    if (target.value !== 'api-key') {
+      state.providerAuthMethod = 'api-key';
+      state.apiTest = {
+        status: 'warning',
+        message: 'Browser account authorization needs a real Codex OAuth provider before live calls can use it.',
+      };
+      notify(
+        'warning',
+        'Authorization unavailable',
+        'Argentum will not scrape ChatGPT browser sessions. Use API key auth until Codex OAuth is implemented.',
+      );
+    } else {
+      state.providerAuthMethod = target.value;
+      state.apiTest = {
+        status: 'idle',
+        message: 'Authorization method changed. Test the provider before using live chat.',
+      };
+    }
+    render();
+    return;
+  }
+
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
     render();

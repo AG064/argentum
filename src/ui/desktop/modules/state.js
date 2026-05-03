@@ -17,6 +17,7 @@ export const state = {
   providerApi: defaultProvider.api,
   providerBaseUrl: defaultProvider.defaultBaseUrl,
   providerModel: defaultProvider.defaultModel,
+  providerAuthMethod: 'api-key',
   providerApiKey: '',
   customProviderName: 'custom',
   customApiKeyEnv: 'CUSTOM_API_KEY',

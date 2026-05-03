@@ -16,6 +16,7 @@ struct SaveSetupRequest {
     provider_api: String,
     provider_base_url: String,
     provider_model: String,
+    provider_auth_method: String,
     provider_api_key: String,
     provider_api_key_env: String,
     custom_provider_name: String,
@@ -89,6 +90,7 @@ struct TestProviderRequest {
     base_url: String,
     api_key: String,
     model: String,
+    auth_method: Option<String>,
     workspace_path: Option<String>,
 }
 
@@ -123,6 +125,7 @@ struct ProviderRuntimeConfig {
     base_url: String,
     model: String,
     api_key_env: String,
+    auth_method: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -234,9 +237,11 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let provider_api = provider_api(request);
     let provider_base_url = provider_base_url(request);
     let provider_model = provider_model(request);
+    let provider_auth_method = provider_auth_method(request);
     let quoted_provider_label = yaml_quote(provider_label);
     let quoted_provider_base_url = yaml_quote(&provider_base_url);
     let quoted_provider_model = yaml_quote(&provider_model);
+    let quoted_provider_auth_method = yaml_quote(&provider_auth_method);
     let quoted_workspace = yaml_quote(&request.workspace_path);
     let webchat_enabled = channel_enabled(request, "webchat");
     let telegram_enabled = channel_enabled(request, "telegram");
@@ -246,7 +251,7 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let quoted_telegram_allowlist = yaml_quote(telegram_allowlist);
     let quoted_whatsapp_phone_id = yaml_quote(whatsapp_phone_id);
     format!(
-        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nlogging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
+        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nlogging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      auth_method: {provider_auth_method}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
         version = request.version,
         experience = request.experience_level,
         runtime = request.runtime_mode,
@@ -255,6 +260,7 @@ fn render_config(request: &SaveSetupRequest) -> String {
         provider_base_url = quoted_provider_base_url,
         api_key_env = api_key_env,
         provider_api = provider_api,
+        provider_auth_method = quoted_provider_auth_method,
         provider_model = quoted_provider_model,
         profile = profile,
         workspace = quoted_workspace,
@@ -274,7 +280,7 @@ fn provider_defaults(provider: &str) -> Option<ProviderDefaults> {
             api: "openai",
             base_url: "https://api.openai.com/v1",
             api_key_env: "OPENAI_API_KEY",
-            default_model: "gpt-4o-mini",
+            default_model: "gpt-5.5",
             requires_key: true,
         }),
         "anthropic" => Some(ProviderDefaults {
@@ -441,6 +447,26 @@ fn provider_api(request: &SaveSetupRequest) -> String {
         defaults.api.to_string()
     } else {
         value.to_string()
+    }
+}
+
+fn provider_auth_method(request: &SaveSetupRequest) -> String {
+    let value = request.provider_auth_method.trim();
+    if value.is_empty() {
+        "api-key".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn ensure_provider_auth_method(method: &str) -> Result<(), String> {
+    match method {
+        "api-key" => Ok(()),
+        "browser-account" => Err(
+            "Browser account authorization is not supported for direct model calls yet. Use API key authentication until the Codex OAuth provider is implemented."
+                .to_string(),
+        ),
+        other => Err(format!("Invalid provider authorization method: {other}")),
     }
 }
 
@@ -799,6 +825,11 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
             .and_then(|value| value.as_str())
             .unwrap_or("OPENAI_API_KEY")
             .to_string(),
+        auth_method: provider
+            .get("auth_method")
+            .and_then(|value| value.as_str())
+            .unwrap_or("api-key")
+            .to_string(),
     })
 }
 
@@ -929,6 +960,7 @@ fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
 #[tauri::command]
 async fn test_provider(request: TestProviderRequest) -> Result<TestProviderResponse, String> {
     ensure_allowed("provider API", &request.api, &["openai", "anthropic"])?;
+    ensure_provider_auth_method(request.auth_method.as_deref().unwrap_or("api-key"))?;
 
     let defaults = provider_defaults(&request.provider)
         .unwrap_or_else(|| provider_defaults("custom").expect("custom provider defaults"));
@@ -1031,6 +1063,7 @@ async fn send_chat_message(
             });
         }
     };
+    ensure_provider_auth_method(&config.auth_method)?;
 
     let api_key =
         provider_api_key(Some(&workspace), "", &config.api_key_env).unwrap_or_default();
@@ -1194,6 +1227,7 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
         &request.provider_api,
         &["openai", "anthropic"],
     )?;
+    ensure_provider_auth_method(&provider_auth_method(&request))?;
     validate_env_name(&provider_api_key_env(&request))?;
     if request.provider_base_url.trim().is_empty() && request.llm_provider == "custom" {
         return Err("Custom provider endpoint is required".to_string());

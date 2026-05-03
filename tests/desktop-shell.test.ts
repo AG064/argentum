@@ -158,6 +158,7 @@ describe('Argentum desktop shell', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
     const setup = read('src/ui/desktop/modules/setup.js');
+    const state = read('src/ui/desktop/modules/state.js');
     const rust = read('src/desktop/src/lib.rs');
 
     for (const provider of [
@@ -178,6 +179,29 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('<select id="provider-model"');
     expect(onboarding).not.toContain('<input id="provider-model"');
     expect(constants).toContain('models:');
+    for (const model of [
+      'gpt-5.5',
+      'gpt-5.5-pro',
+      'gpt-5.4',
+      'gpt-5.4-pro',
+      'gpt-5.4-mini',
+      'gpt-5.4-nano',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'gpt5',
+      'gpt-4.1',
+    ]) {
+      expect(constants).toContain(`id: '${model}'`);
+    }
+    expect(constants).toContain('providerAuthMethods');
+    expect(constants).toContain('API key / Platform API');
+    expect(constants).toContain('Browser account authorization');
+    expect(onboarding).toContain('id="provider-auth-method"');
+    expect(onboarding).toContain('disabled');
+    expect(state).toContain("providerAuthMethod: 'api-key'");
+    expect(setup).toContain('providerAuthMethod');
+    expect(rust).toContain('provider_auth_method: String');
+    expect(rust).toContain('Browser account authorization is not supported for direct model calls');
     expect(onboarding).toContain('id="provider-api-key"');
     expect(onboarding).toContain('id="test-provider"');
     expect(setup).toContain("invokeTauri('test_provider'");

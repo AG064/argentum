@@ -91,13 +91,18 @@ export const providerPresets = [
     api: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
     defaultBaseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: 'gpt-5.5',
     models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
+      { id: 'gpt-5.5', label: 'GPT-5.5' },
+      { id: 'gpt-5.5-pro', label: 'GPT-5.5 pro' },
+      { id: 'gpt-5.4', label: 'GPT-5.4' },
+      { id: 'gpt-5.4-pro', label: 'GPT-5.4 pro' },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+      { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano' },
+      { id: 'gpt-5-mini', label: 'GPT-5 mini' },
+      { id: 'gpt-5-nano', label: 'GPT-5 nano' },
+      { id: 'gpt5', label: 'gpt5' },
       { id: 'gpt-4.1', label: 'GPT-4.1' },
-      { id: 'o4-mini', label: 'o4-mini' },
     ],
     requiresKey: true,
     detail: 'General hosted models with strong tool and chat support.',
@@ -226,6 +231,22 @@ export const providerPresets = [
     ],
     requiresKey: false,
     detail: 'Use your own OpenAI-compatible or Anthropic-compatible endpoint.',
+  },
+];
+
+export const providerAuthMethods = [
+  {
+    id: 'api-key',
+    label: 'API key / Platform API',
+    status: 'Available',
+    detail: 'Direct live model calls use the provider API with a key stored in the selected workspace secrets file.',
+  },
+  {
+    id: 'browser-account',
+    label: 'Browser account authorization',
+    status: 'Blocked for now',
+    disabled: true,
+    detail: 'OpenAI does not expose a supported desktop model API through a logged-in ChatGPT browser session. Argentum will not scrape browser sessions or automate the ChatGPT web UI.',
   },
 ];
 

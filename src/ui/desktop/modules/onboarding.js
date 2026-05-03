@@ -2,6 +2,7 @@ import {
   channelOptions,
   experienceLevels,
   onboardingSteps,
+  providerAuthMethods,
   providerPresets,
   runtimeModes,
   securityProfiles,
@@ -279,9 +280,34 @@ function renderProviderStep() {
             </select>
           </label>
           <label>
+            Authorization method
+            <select id="provider-auth-method">
+              ${providerAuthMethods
+                .map(
+                  (method) => `
+                    <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)} - ${escapeHtml(method.status)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
             API key
             <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
           </label>
+          <div class="auth-method-panel">
+            ${providerAuthMethods
+              .map(
+                (method) => `
+                  <article class="${state.providerAuthMethod === method.id ? 'active' : ''}">
+                    <strong>${escapeHtml(method.label)}</strong>
+                    <span>${escapeHtml(method.status)}</span>
+                    <p>${escapeHtml(method.detail)}</p>
+                  </article>
+                `,
+              )
+              .join('')}
+          </div>
           ${
             state.llmProvider === 'custom'
               ? `

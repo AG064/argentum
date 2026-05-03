@@ -1,4 +1,4 @@
-import { providerPresets, runtimeModes, securityProfiles } from './constants.js';
+import { providerAuthMethods, providerPresets, runtimeModes, securityProfiles } from './constants.js';
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
 import {
@@ -228,6 +228,18 @@ const settingsModule = {
           <label>
             Endpoint
             <input id="settings-provider-base-url" value="${escapeAttribute(state.providerBaseUrl)}" />
+          </label>
+          <label>
+            Authorization method
+            <select id="settings-provider-auth-method">
+              ${providerAuthMethods
+                .map(
+                  (method) => `
+                    <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)} - ${escapeHtml(method.status)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
           </label>
           <label>
             Permission profile
