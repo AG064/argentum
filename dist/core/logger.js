@@ -34,6 +34,10 @@ const DEFAULT_CONFIG = {
 class Logger {
     constructor(config = {}) {
         const merged = { ...DEFAULT_CONFIG, ...config };
+        if (process.env.ARGENTUM_LOG_FORMAT === 'json' ||
+            process.env.ARGENTUM_LOG_FORMAT === 'pretty') {
+            merged.format = process.env.ARGENTUM_LOG_FORMAT;
+        }
         this.context = merged.context ?? {};
         const options = {
             level: merged.level,

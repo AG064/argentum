@@ -110,25 +110,30 @@ class PluginLoader {
     }
     /** Load a single feature module */
     async loadFeature(name, modulePath) {
-        this.logger.debug(`Loading feature: ${name}`, { path: modulePath });
-        // Dynamic import of the feature module
-        const mod = await Promise.resolve(`${modulePath}`).then(s => __importStar(require(s)));
-        const featureModule = mod.default ??
-            mod[name] ??
-            Object.values(mod).find((v) => typeof v === 'object' && v !== null && 'meta' in v && 'init' in v);
-        if (!featureModule?.meta) {
-            throw new Error(`Invalid feature module: ${name} - missing meta export`);
-        }
         const featureConfig = this.getFeatureConfig(name);
         const enabled = featureConfig['enabled'] === true;
+        if (!enabled) {
+            this.features.set(name, {
+                state: 'disabled',
+                config: featureConfig,
+                modulePath,
+                version: 'disabled',
+            });
+            this.logger.debug(`Feature skipped while disabled: ${name}`);
+            return;
+        }
+        this.logger.debug(`Loading feature: ${name}`, { path: modulePath });
+        const featureModule = await this.importFeatureModule(name, modulePath);
         this.features.set(name, {
             module: featureModule,
-            state: enabled ? 'unloaded' : 'disabled',
+            modulePath,
+            state: 'unloaded',
             config: featureConfig,
+            version: featureModule.meta.version,
         });
         this.logger.info(`Feature registered: ${name} v${featureModule.meta.version}`, {
-            enabled,
-            state: enabled ? 'unloaded' : 'disabled',
+            enabled: true,
+            state: 'unloaded',
         });
     }
     /** Enable and initialize a feature */
@@ -139,6 +144,15 @@ class PluginLoader {
         }
         if (entry.state === 'active') {
             return;
+        }
+        if (!entry.module) {
+            if (!entry.modulePath) {
+                throw new Error(`Feature not loadable: ${name}`);
+            }
+            this.logger.info(`Loading feature module on demand: ${name}`, { path: entry.modulePath });
+            entry.module = await this.importFeatureModule(name, entry.modulePath);
+            entry.version = entry.module.meta.version;
+            entry.state = 'unloaded';
         }
         // Check dependencies
         for (const dep of entry.module.meta.dependencies) {
@@ -172,7 +186,7 @@ class PluginLoader {
     /** Disable a feature */
     async disableFeature(name) {
         const entry = this.features.get(name);
-        if (entry?.state !== 'active')
+        if (entry?.state !== 'active' || !entry.module)
             return;
         if (entry.module.stop) {
             await entry.module.stop();
@@ -199,7 +213,7 @@ class PluginLoader {
     async healthCheckAll() {
         const results = new Map();
         for (const [name, entry] of this.features) {
-            if (entry.state === 'active' && entry.module.healthCheck) {
+            if (entry.state === 'active' && entry.module?.healthCheck) {
                 try {
                     results.set(name, await entry.module.healthCheck());
                 }
@@ -222,7 +236,7 @@ class PluginLoader {
         return Array.from(this.features.entries()).map(([name, entry]) => ({
             name,
             state: entry.state,
-            version: entry.module.meta.version,
+            version: entry.module?.meta.version ?? entry.version,
         }));
     }
     /** Register a hook handler */
@@ -263,7 +277,7 @@ class PluginLoader {
                 return;
             temp.add(name);
             const entry = this.features.get(name);
-            if (entry) {
+            if (entry?.module) {
                 for (const dep of entry.module.meta.dependencies) {
                     if (this.features.has(dep)) {
                         visit(dep);
@@ -278,6 +292,17 @@ class PluginLoader {
             visit(name);
         }
         this.logger.debug('Dependency order resolved', { order });
+    }
+    async importFeatureModule(name, modulePath) {
+        // Dynamic import of the feature module. Use file: URLs for native Windows paths.
+        const mod = await Promise.resolve(`${toModuleImportSpecifier(modulePath)}`).then(s => __importStar(require(s)));
+        const featureModule = mod.default ??
+            mod[name] ??
+            Object.values(mod).find((v) => typeof v === 'object' && v !== null && 'meta' in v && 'init' in v);
+        if (!featureModule?.meta) {
+            throw new Error(`Invalid feature module: ${name} - missing meta export`);
+        }
+        return featureModule;
     }
 }
 exports.PluginLoader = PluginLoader;

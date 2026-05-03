@@ -603,6 +603,12 @@ export class ConfigManager {
     if (process.env.ARGENTUM_LOG_LEVEL) {
       overrides['logging'] = { level: process.env.ARGENTUM_LOG_LEVEL };
     }
+    if (process.env.ARGENTUM_LOG_FORMAT) {
+      overrides['logging'] = {
+        ...((overrides['logging'] as object) ?? {}),
+        format: process.env.ARGENTUM_LOG_FORMAT,
+      };
+    }
     if (process.env.ARGENTUM_TELEGRAM_TOKEN) {
       overrides['channels'] = { telegram: { token: process.env.ARGENTUM_TELEGRAM_TOKEN } };
     }

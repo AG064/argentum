@@ -1246,24 +1246,36 @@ async function cmdGateway() {
                 ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
                 : 3000;
             info(`Starting Argentum gateway on port ${port}...`);
+            const logFile = path.join(workDir, 'data', 'gateway.log');
             // Spawn gateway as background process
             const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
             const gatewayPath = path.join(__dirname, 'cli.js');
-            const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+            fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+            const childProcess = (0, cli_launch_1.resolveGatewayChildProcess)({
+                execPath: process.execPath,
+                argv0: process.argv[0],
+                entryPath: process.argv[1],
+                isPackaged: isPackagedRuntime(),
+                cliScriptPath: gatewayPath,
+                args: ['start', '--port', String(port)],
+            });
+            fs.appendFileSync(logFile, `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`);
+            const childEnv = (0, cli_launch_1.resolveGatewayChildEnvironment)(process.env, workDir);
+            const child = spawn(childProcess.command, childProcess.args, {
                 detached: true,
+                env: childEnv,
                 stdio: [
                     'ignore',
-                    fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
-                    fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+                    fs.openSync(logFile, 'a'),
+                    fs.openSync(logFile, 'a'),
                 ],
                 cwd: workDir,
             });
             child.unref();
             // Write PID
-            fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
             fs.writeFileSync(pidFile, String(child.pid));
             success(`Gateway started (PID: ${child.pid})`);
-            info(`Log: ${path.join(workDir, 'data', 'gateway.log')}`);
+            info(`Log: ${logFile}`);
             info(`Stop: argentum gateway stop`);
             break;
         }
@@ -1301,19 +1313,31 @@ async function cmdGateway() {
                 ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
                 : 3000;
             info(`Restarting Argentum gateway on port ${port}...`);
+            const logFile = path.join(workDir, 'data', 'gateway.log');
             const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
             const gatewayPath = path.join(__dirname, 'cli.js');
-            const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+            fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+            const childProcess = (0, cli_launch_1.resolveGatewayChildProcess)({
+                execPath: process.execPath,
+                argv0: process.argv[0],
+                entryPath: process.argv[1],
+                isPackaged: isPackagedRuntime(),
+                cliScriptPath: gatewayPath,
+                args: ['start', '--port', String(port)],
+            });
+            fs.appendFileSync(logFile, `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`);
+            const childEnv = (0, cli_launch_1.resolveGatewayChildEnvironment)(process.env, workDir);
+            const child = spawn(childProcess.command, childProcess.args, {
                 detached: true,
+                env: childEnv,
                 stdio: [
                     'ignore',
-                    fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
-                    fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+                    fs.openSync(logFile, 'a'),
+                    fs.openSync(logFile, 'a'),
                 ],
                 cwd: workDir,
             });
             child.unref();
-            fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
             fs.writeFileSync(pidFile, String(child.pid));
             success(`Gateway restarted (PID: ${child.pid})`);
             break;

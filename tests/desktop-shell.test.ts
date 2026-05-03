@@ -13,7 +13,7 @@ describe('Argentum desktop shell', () => {
       version?: string;
       identifier?: string;
       app?: { windows?: Array<{ title?: string; width?: number; height?: number }> };
-      bundle?: { active?: boolean; icon?: string[] };
+      bundle?: { active?: boolean; icon?: string[]; externalBin?: string[] };
     };
 
     expect(config.productName).toBe('Argentum');
@@ -30,6 +30,7 @@ describe('Argentum desktop shell', () => {
         '../../installer/wix/argentum.ico',
       ]),
     );
+    expect(config.bundle?.externalBin).toEqual(['binaries/argentum-cli']);
 
     const html = read('src/ui/desktop/index.html');
     expect(html).toContain('<title>Argentum</title>');
@@ -55,14 +56,56 @@ describe('Argentum desktop shell', () => {
     }
 
     const sections = read('src/ui/desktop/modules/sections.js');
+    const constants = read('src/ui/desktop/modules/constants.js');
     expect(sections).toContain('healthCheck');
-    expect(sections).toContain('honestModule');
-    expect(sections).toContain('Not fully wired yet');
+    expect(sections).toContain('gatewayModule');
+    expect(sections).not.toContain('honestModule');
+    expect(sections).not.toContain('Not fully wired yet');
+    for (const hiddenTitle of [
+      "title: 'Agents'",
+      "title: 'Agent Runner'",
+      "title: 'Skills Library'",
+      "title: 'Channels'",
+      "title: 'Knowledge Graph'",
+      "title: 'Memory'",
+    ]) {
+      expect(constants).not.toContain(hiddenTitle);
+    }
 
     const shell = read('src/ui/desktop/modules/shell.js');
     expect(shell).toContain('renderModule(module)');
     expect(shell).toContain('Module contained');
     expect(shell).toContain('Other Argentum modules remain available');
+  });
+
+  test('desktop MVP exposes only working product surfaces and gateway actions', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const shell = read('src/ui/desktop/modules/shell.js');
+
+    for (const title of [
+      "title: 'Chat'",
+      "title: 'Gateway'",
+      "title: 'Activity Logs'",
+      "title: 'Security & Permissions'",
+      "title: 'Settings'",
+      "title: 'Diagnostics'",
+    ]) {
+      expect(constants).toContain(title);
+    }
+
+    for (const actionId of [
+      "id: 'gateway-start'",
+      "id: 'gateway-status'",
+      "id: 'gateway-stop'",
+      "id: 'gateway-logs'",
+    ]) {
+      expect(constants).toContain(actionId);
+    }
+
+    expect(sections).toContain('function gatewayModule');
+    expect(shell).toContain('action.buttonLabel');
+    expect(shell).not.toContain('Prepared</button>');
   });
 
   test('rewrites onboarding with plain-language access and non-repeating steps', () => {
@@ -71,12 +114,15 @@ describe('Argentum desktop shell', () => {
 
     expect(constants).toContain('Workspace location');
     expect(constants).toContain('Capabilities');
-    expect(constants).toContain('Review and test');
-    expect(constants).toContain('Finish and launch');
+    expect(constants).toContain('Review > Test > Pass');
+    expect(constants).not.toContain('Finish and launch');
+    expect(onboarding).toContain('onboarding-backdrop');
+    expect(onboarding).toContain('onboarding-modal');
     expect(onboarding).toContain('What Argentum is');
-    expect(onboarding).toContain('Default access: all the folders/files in workspace folder');
+    expect(onboarding).toContain('Default access: all folders/files inside workspace folder');
     expect(onboarding).toContain('renderCapabilitiesStep');
     expect(onboarding).toContain('Self-repair');
+    expect(onboarding).not.toContain('renderFinishStep');
     expect(onboarding).not.toContain('Default access</span><strong>Workspace</strong>');
   });
 
@@ -155,30 +201,111 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('whatsapp-bridge');
   });
 
-  test('renders visible notifications and graceful offline chat', () => {
+  test('renders layered notifications with history, mute, and auto-dismiss', () => {
     const shell = read('src/ui/desktop/modules/shell.js');
     const state = read('src/ui/desktop/modules/state.js');
-    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
     const css = read('src/ui/desktop/styles.css');
 
     expect(shell).toContain('renderNotifications');
-    expect(state).toContain('notifications:');
-    expect(chat).toContain('Offline guided');
-    expect(chat).toContain('optionGroup');
-    expect(chat).toContain('action card');
-    expect(css).toContain('.notification-stack');
-    expect(css).toContain('.option-card');
+    expect(shell).toContain('notification-layer');
+    expect(shell).toContain('notification-menu');
+    expect(state).toContain('notificationHistory:');
+    expect(state).toContain('notificationsMuted:');
+    expect(state).toContain('notificationsMenuOpen:');
+    expect(state).toContain('setTimeout');
+    expect(state).toContain('argentum:state-change');
+    expect(main).toContain('data-toggle-notification-mute');
+    expect(css).toContain('.notification-layer');
+    expect(css).toContain('.notification-toast');
   });
 
-  test('hides onboarding after completion and launches Chat', () => {
+  test('shows onboarding as a blocking overlay and can restart after setup', () => {
     const main = read('src/ui/desktop/main.js');
     const shell = read('src/ui/desktop/modules/shell.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
 
-    expect(main).toContain('finishOnboarding');
+    expect(main).toContain('state.onboardingOpen ? renderModule(modules.onboarding) :');
+    expect(main).toContain('restartOnboarding');
+    expect(main).toContain('cancelOnboarding');
+    expect(onboarding).toContain('data-cancel-onboarding');
+    expect(onboarding).toContain('state.setupComplete');
+    expect(shell).toContain("section.id !== 'onboarding'");
+    expect(sections).toContain('data-restart-onboarding');
+  });
+
+  test('hides onboarding after completion and launches Chat without local setup loop', () => {
+    const main = read('src/ui/desktop/main.js');
+
     expect(main).toContain("state.setupComplete = true");
+    expect(main).toContain("state.onboardingOpen = false");
     expect(main).toContain("state.activeSection = 'chat'");
-    expect(main).toContain('What should I call you');
-    expect(shell).toContain("state.setupComplete || section.id !== 'onboarding'");
+    expect(main).toContain('resetIntroChat');
+    expect(main).not.toContain(
+      'Got it. I am keeping this local for now. Once provider testing passes, this same chat surface can switch to live model execution.',
+    );
+  });
+
+  test('runtime previews use real examples with animated abstract flow', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(constants).toContain('examples:');
+    expect(constants).toContain('demoSteps:');
+    expect(onboarding).toContain('renderRuntimeDemo');
+    expect(onboarding).toContain('runtime-demo');
+    expect(onboarding).toContain('data-demo-step');
+    expect(css).toContain('@keyframes demo-flow');
+  });
+
+  test('chat uses explicit profile fields, useful local replies, and a terminal view', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(chat).toContain('id="profile-user-name"');
+    expect(chat).toContain('id="profile-agent-name"');
+    expect(chat).toContain('renderTerminalPanel');
+    expect(chat).toContain('terminal-panel');
+    expect(main).toContain('buildLocalReply');
+    expect(main).toContain('saveProfileFromInputs');
+    expect(main).toContain('addTerminalEntry');
+    expect(main).toContain('sendChatMessage');
+    expect(main).toContain('runChatAction');
+    expect(chat).toContain('chat-action-row');
+    expect(chat).toContain('Start Gateway');
+    expect(chat).toContain('Check Gateway');
+    expect(state).toContain('terminalEntries:');
+    expect(state).toContain('agentName:');
+    expect(state).toContain('userName:');
+    expect(css).toContain('.profile-panel');
+    expect(css).toContain('.terminal-panel');
+  });
+
+  test('desktop actions execute through whitelisted Tauri commands with structured output', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const main = read('src/ui/desktop/main.js');
+    const packageJson = read('package.json');
+    const workflow = read('.github/workflows/desktop.yml');
+
+    expect(rust).toContain('struct RunDesktopActionResponse');
+    expect(rust).toContain('pid: Option<String>');
+    expect(rust).toContain('health_url: Option<String>');
+    expect(rust).toContain('log_path: Option<String>');
+    expect(rust).toContain('fn run_gateway_action');
+    expect(rust).toContain('fn resolve_sidecar_path');
+    expect(rust).toContain('"Gateway failed to start because port');
+    expect(rust).not.toContain('Gateway start is prepared');
+    expect(rust).toContain('send_chat_message');
+    expect(setup).toContain("invokeTauri('send_chat_message'");
+    expect(main).toContain("actionId: 'gateway-start'");
+    expect(packageJson).toContain('build:desktop-sidecar');
+    expect(packageJson).toContain('predesktop:build');
+    expect(workflow).toContain('Build desktop CLI sidecar');
   });
 
   test('saves richer setup payload and secrets outside YAML', () => {

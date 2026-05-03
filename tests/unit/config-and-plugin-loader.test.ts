@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { ConfigManager, ConfigSchema } from '../../src/core/config';
-import { resolveFeatureEntryPath, toModuleImportSpecifier } from '../../src/core/plugin-loader';
+import { PluginLoader, resolveFeatureEntryPath, toModuleImportSpecifier } from '../../src/core/plugin-loader';
 
 describe('ConfigManager', () => {
   it('merges default YAML config with argentum.json overrides', () => {
@@ -117,5 +117,38 @@ describe('PluginLoader', () => {
 
     expect(specifier).toContain('/ag064/AGX/ag-claw/features/webchat/index.js');
     expect(specifier.startsWith('file:')).toBe(true);
+  });
+
+  it('does not import disabled feature modules during discovery', async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'argentum-features-'));
+    const featuresRoot = path.join(tempDir, 'features');
+    const disabledDir = path.join(featuresRoot, 'native-heavy');
+
+    try {
+      mkdirSync(disabledDir, { recursive: true });
+      writeFileSync(
+        path.join(disabledDir, 'index.js'),
+        "throw new Error('native optional dependency should not load while disabled');",
+      );
+
+      const config = ConfigSchema.parse({
+        features: {
+          'native-heavy': {
+            enabled: false,
+          },
+        },
+      });
+      const loader = new PluginLoader(config, featuresRoot);
+
+      await expect(loader.loadAll()).resolves.toBeUndefined();
+      expect(loader.getFeatureState('native-heavy')).toBe('disabled');
+      expect(loader.listFeatures()).toContainEqual({
+        name: 'native-heavy',
+        state: 'disabled',
+        version: 'disabled',
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

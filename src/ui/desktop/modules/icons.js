@@ -1,9 +1,11 @@
 const paths = {
   agent: '<path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7l7-4z"/><path d="M9 12h6"/><path d="M10 16h4"/>',
+  bell: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
   blocks: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
   channel: '<path d="M5 12h4"/><path d="M15 12h4"/><circle cx="12" cy="12" r="3"/><circle cx="4" cy="12" r="2"/><circle cx="20" cy="12" r="2"/>',
   chat: '<path d="M5 5h14v10H8l-3 3V5z"/><path d="M8 9h8"/><path d="M8 12h5"/>',
   graph: '<circle cx="6" cy="7" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 8l3 8"/><path d="M16 8l-3 8"/><path d="M8 7h8"/>',
+  gateway: '<path d="M4 7h16v10H4z"/><path d="M8 11h8"/><path d="M8 14h4"/><path d="M7 17v3"/><path d="M17 17v3"/><path d="M12 4v3"/>',
   logs: '<path d="M6 4h12v16H6z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/>',
   memory: '<rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 3v3"/><path d="M12 3v3"/><path d="M16 3v3"/><path d="M8 18v3"/><path d="M12 18v3"/><path d="M16 18v3"/>',
   play: '<path d="M8 5v14l11-7z"/>',

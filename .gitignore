@@ -30,3 +30,5 @@ secrets/
 OpenSpace/
 .tsbuildinfo
 src/desktop/gen/
+src/desktop/target/
+src/desktop/binaries/argentum-cli-*

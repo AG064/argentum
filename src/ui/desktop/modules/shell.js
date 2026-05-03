@@ -5,7 +5,7 @@ import { currentProvider, escapeAttribute, escapeHtml, labelFor } from './utils.
 
 export function renderNavigation() {
   return sections
-    .filter((section) => state.setupComplete || section.id !== 'onboarding')
+    .filter((section) => section.id !== 'onboarding')
     .map(
       (section) => `
         <button class="nav-button ${section.id === state.activeSection ? 'active' : ''}" data-section="${section.id}">
@@ -18,23 +18,57 @@ export function renderNavigation() {
 }
 
 export function renderNotifications() {
-  if (state.notifications.length === 0) return '';
+  if (state.notifications.length === 0 && !state.notificationsMenuOpen) return '';
 
   return `
-    <div class="notification-stack" aria-live="polite">
-      ${state.notifications
-        .map(
-          (notification) => `
-            <article class="notification ${escapeAttribute(notification.type)}">
-              <div>
-                <strong>${escapeHtml(notification.title)}</strong>
-                <p>${escapeHtml(notification.message)}</p>
+    <div class="notification-layer" aria-live="polite">
+      <div class="notification-stack">
+        ${state.notifications
+          .map(
+            (notification) => `
+              <article class="notification-toast ${escapeAttribute(notification.type)}">
+                <div>
+                  <strong>${escapeHtml(notification.title)}</strong>
+                  <p>${escapeHtml(notification.message)}</p>
+                </div>
+                <button class="icon-button compact" data-dismiss-notification="${escapeAttribute(notification.id)}" aria-label="Dismiss notification">x</button>
+              </article>
+            `,
+          )
+          .join('')}
+      </div>
+      ${
+        state.notificationsMenuOpen
+          ? `
+            <section class="notification-menu">
+              <div class="split-header">
+                <div>
+                  <h3>Notifications</h3>
+                  <p>${state.notificationsMuted ? 'Muted. Important messages are kept in history.' : 'Toasts disappear automatically.'}</p>
+                </div>
+                <span class="pill ${state.notificationsMuted ? 'warn' : 'ok'}">${state.notificationsMuted ? 'Muted' : 'Live'}</span>
               </div>
-              <button class="icon-button compact" data-dismiss-notification="${escapeAttribute(notification.id)}" aria-label="Dismiss notification">x</button>
-            </article>
-          `,
-        )
-        .join('')}
+              <div class="button-row split">
+                <button class="button" data-toggle-notification-mute="true">${state.notificationsMuted ? 'Unmute' : 'Mute'}</button>
+                <button class="button" data-clear-notifications="true">Clear</button>
+              </div>
+              <div class="notification-history">
+                ${state.notificationHistory
+                  .slice(0, 6)
+                  .map(
+                    (notification) => `
+                      <div>
+                        <strong>${escapeHtml(notification.title)}</strong>
+                        <p>${escapeHtml(notification.message)}</p>
+                      </div>
+                    `,
+                  )
+                  .join('')}
+              </div>
+            </section>
+          `
+          : ''
+      }
     </div>
   `;
 }
@@ -68,15 +102,7 @@ export function renderActionCards(sectionId, options = {}) {
   const items = options.limit ? actions.slice(0, options.limit) : actions;
 
   if (items.length === 0) {
-    return `
-      <section class="panel honest-state">
-        <div class="panel-body">
-          <span class="pill warn">Not wired yet</span>
-          <h3>This surface is waiting for its runtime commands.</h3>
-          <p>Argentum will keep this module isolated so unfinished work here does not block Chat, Security, Settings, or Diagnostics.</p>
-        </div>
-      </section>
-    `;
+    return '';
   }
 
   return `
@@ -93,7 +119,9 @@ export function renderActionCards(sectionId, options = {}) {
               <code>${escapeHtml(action.command)}</code>
               <div class="button-row split">
                 <button class="button" data-copy-command="${escapeAttribute(action.command)}">Copy</button>
-                <button class="button primary" data-run-action="${escapeAttribute(action.id)}">Prepare</button>
+                <button class="button primary" data-run-action="${escapeAttribute(action.id)}" ${state.runningAction === action.id ? 'disabled' : ''}>
+                  ${state.runningAction === action.id ? 'Running...' : escapeHtml(action.buttonLabel || 'Run')}
+                </button>
               </div>
             </article>
           `,

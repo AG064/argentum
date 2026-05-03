@@ -1,4 +1,4 @@
-import { channelOptions, providerPresets, runtimeModes, securityProfiles } from './constants.js';
+import { providerPresets, runtimeModes, securityProfiles } from './constants.js';
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
 import {
@@ -10,100 +10,78 @@ import {
 } from './shell.js';
 import { currentProvider, escapeHtml, labelFor } from './utils.js';
 
-function honestModule(id, label, heading, detail) {
-  return {
-    id,
-    label,
-    validate: () => '',
-    healthCheck: (state) => ({
-      status: state.setupComplete ? 'pending' : 'blocked',
-      message: state.setupComplete ? `${label} is staged for runtime wiring.` : 'Finish onboarding first.',
-    }),
-    render: (state) => `
-      ${renderNotifications()}
-      ${renderHero(label, heading, detail, [
-        { label: 'Status', value: state.setupComplete ? 'Planned' : 'Setup first' },
-        { label: 'Isolation', value: 'Module-safe' },
-        { label: 'Repair', value: 'Approval-gated' },
-      ])}
-      <section class="panel honest-state">
-        <div class="panel-body">
-          <span class="pill warn">Not fully wired yet</span>
-          <h3>This module will not pretend to be ready.</h3>
-          <p>Its UI is isolated from Chat, Security, Settings, and Diagnostics. If this surface fails later, Argentum should keep the rest of the app usable and suggest repair actions only with your approval.</p>
-        </div>
-      </section>
-      ${renderActionCards(id)}
-    `,
-  };
+function terminalPreview(state, filter = '') {
+  const entries = filter
+    ? state.terminalEntries.filter((entry) => entry.command.includes(filter))
+    : state.terminalEntries;
+
+  return entries.length === 0
+    ? 'No action output yet.'
+    : entries
+        .slice(0, 5)
+        .map((entry) => `$ ${entry.command}\n${entry.output}`)
+        .join('\n\n');
 }
 
-const agentsModule = honestModule(
-  'agents',
-  'Agents',
-  'Create focused agents with scoped permissions',
-  'Profiles will separate research, coding, operations, and personal workflows without sharing unlimited capabilities.',
-);
+function gatewayModule() {
+  return {
+    id: 'gateway',
+    label: 'Gateway',
+    validate: () => '',
+    healthCheck: (state) => ({
+      status: state.desktopState?.gatewayPid ? 'ok' : 'stopped',
+      message: state.desktopState?.gatewayPid
+        ? `Gateway is running as PID ${state.desktopState.gatewayPid}.`
+        : 'Gateway is stopped.',
+    }),
+    render: (state) => {
+      const running = Boolean(state.desktopState?.gatewayPid);
+      const healthUrl = running ? 'http://127.0.0.1:3000/health' : 'Available after start';
 
-const runnerModule = honestModule(
-  'runner',
-  'Agent Runner',
-  'Run work through visible steps and approvals',
-  'Agent runs should show every privileged step before execution and keep repairs inside approved folders.',
-);
-
-const skillsModule = honestModule(
-  'skills',
-  'Skills Library',
-  'Install only the capabilities you mean to trust',
-  'Skills will be discoverable from the GUI while mapping back to terminal commands and permission grants.',
-);
-
-const graphModule = {
-  id: 'graph',
-  label: 'Knowledge Graph',
-  validate: () => '',
-  healthCheck: () => ({ status: 'pending', message: 'Graph visualization is local-only preview.' }),
-  render: (state) => `
-    ${renderNotifications()}
-    ${renderHero(
-      'Knowledge graph',
-      'A visual map for memory and decisions',
-      'This is a contained preview surface. It should become more human and less generic as the workspace canvas matures.',
-      [
-        { label: 'Nodes', value: 'Preview' },
-        { label: 'Boundary', value: 'Workspace' },
-        { label: 'Mode', value: 'Read-only' },
-      ],
-    )}
-    <section class="panel graph-canvas">
-      <div class="graph-node large" style="left: 42%; top: 36%;">Argentum</div>
-      <div class="graph-node" style="left: 12%; top: 22%;">Tasks</div>
-      <div class="graph-node" style="left: 16%; top: 66%;">Memory</div>
-      <div class="graph-node" style="left: 70%; top: 20%;">Skills</div>
-      <div class="graph-node" style="left: 72%; top: 68%;">Approvals</div>
-      <div class="graph-edge edge-a"></div>
-      <div class="graph-edge edge-b"></div>
-      <div class="graph-edge edge-c"></div>
-    </section>
-    ${renderActionCards('graph')}
-  `,
-};
-
-const memoryModule = honestModule(
-  'memory',
-  'Memory',
-  'Search and inspect local recall before using it',
-  'Memory stays under the selected workspace and should be inspectable before agents use it.',
-);
+      return `
+        ${renderNotifications()}
+        ${renderHero(
+          'Gateway',
+          running ? 'Local gateway is running' : 'Local gateway is stopped',
+          'Start, stop, inspect, and read logs for the workspace gateway. These buttons execute fixed Argentum commands through the native bridge.',
+          [
+            { label: 'State', value: running ? 'Running' : 'Stopped' },
+            { label: 'PID', value: state.desktopState?.gatewayPid || 'None' },
+            { label: 'Health', value: healthUrl },
+          ],
+        )}
+        <div class="gateway-grid">
+          <section class="panel">
+            <div class="panel-header">
+              <h3>Controls</h3>
+              <p>No arbitrary shell is exposed here. Each button maps to a whitelisted gateway action.</p>
+            </div>
+            ${renderActionCards('gateway')}
+          </section>
+          <section class="panel terminal-panel">
+            <div class="panel-header split-header">
+              <h3>Gateway Output</h3>
+              <button class="button" data-run-action="gateway-status">Refresh</button>
+            </div>
+            <div class="terminal-body">
+              <article class="terminal-entry info">
+                <pre>${escapeHtml(terminalPreview(state, 'gateway'))}</pre>
+              </article>
+            </div>
+          </section>
+        </div>
+      `;
+    },
+  };
+}
 
 const logsModule = {
   id: 'logs',
   label: 'Activity Logs',
   validate: () => '',
   healthCheck: (state) => ({
-    status: state.desktopState.logsExists ? 'ok' : 'pending',
-    message: state.desktopState.logsExists ? 'Logs directory exists.' : 'Logs appear after setup or runtime activity.',
+    status: state.desktopState?.logsExists ? 'ok' : 'pending',
+    message: state.desktopState?.logsExists ? 'Logs directory exists.' : 'Logs appear after setup or runtime activity.',
   }),
   render: (state) => `
     ${renderNotifications()}
@@ -120,7 +98,10 @@ const logsModule = {
     <section class="panel log-viewer">
       <div class="panel-header split-header">
         <h3>Gateway Log</h3>
-        <button class="button" data-refresh-state="true">Refresh</button>
+        <div class="button-row">
+          <button class="button" data-run-action="gateway-logs">Load gateway logs</button>
+          <button class="button" data-refresh-state="true">Refresh</button>
+        </div>
       </div>
       <pre>${escapeHtml(state.desktopState?.gatewayLogPreview || 'No entries yet.')}</pre>
     </section>
@@ -131,44 +112,6 @@ const logsModule = {
       </div>
       <pre>${escapeHtml(state.desktopState?.auditLogPreview || 'No entries yet.')}</pre>
     </section>
-    ${renderActionCards('logs')}
-  `,
-};
-
-const webchatModule = {
-  id: 'webchat',
-  label: 'Channels',
-  validate: () => '',
-  healthCheck: (state) => ({
-    status: state.selectedChannels.length > 0 ? 'ok' : 'degraded',
-    message: `Selected channels: ${state.selectedChannels.join(', ')}`,
-  }),
-  render: (state) => `
-    ${renderNotifications()}
-    ${renderHero(
-      'Channels',
-      'Expose Argentum only where you choose',
-      'Local app access is always on. Webchat, Telegram, and WhatsApp are opt-in and remain isolated if they are unhealthy.',
-      [
-        { label: 'Enabled', value: state.selectedChannels.map((id) => labelFor(channelOptions, id)).join(', ') },
-        { label: 'Local', value: 'Always on' },
-        { label: 'External', value: state.selectedChannels.length > 1 ? 'Opt-in' : 'Off' },
-      ],
-    )}
-    <div class="card-grid">
-      ${channelOptions
-        .map(
-          (channel) => `
-            <article class="feature-card">
-              <span class="pill ${state.selectedChannels.includes(channel.id) ? 'ok' : ''}">${state.selectedChannels.includes(channel.id) ? 'Selected' : 'Off'}</span>
-              <h3>${escapeHtml(channel.label)}</h3>
-              <p>${escapeHtml(channel.detail)}</p>
-            </article>
-          `,
-        )
-        .join('')}
-    </div>
-    ${renderActionCards('webchat')}
   `,
 };
 
@@ -191,7 +134,28 @@ const securityModule = {
     )}
     <section class="panel">
       <div class="panel-header">
+        <h3>Current Boundary</h3>
+        <p>Default access means all folders and files inside the workspace folder below. Anything outside it must be explicitly approved.</p>
+      </div>
+      <div class="panel-body status-stack">
+        <div>
+          <span>Workspace folder</span>
+          <strong>${escapeHtml(state.workspacePath)}</strong>
+        </div>
+        <div>
+          <span>Permission profile</span>
+          <strong>${escapeHtml(labelFor(securityProfiles, state.securityProfile))}</strong>
+        </div>
+        <div>
+          <span>Privileged actions</span>
+          <strong>Ask first</strong>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-header">
         <h3>Capability Queue</h3>
+        <p>These rows are visible policy states. Execution controls appear only when the broker has a concrete request to approve.</p>
       </div>
       <div class="panel-body approval-list">
         ${state.pendingApprovals
@@ -203,14 +167,12 @@ const securityModule = {
                   <p>${escapeHtml(approval.detail)}</p>
                 </div>
                 <span class="pill ${approval.status === 'Blocked' ? 'warn' : 'ok'}">${escapeHtml(approval.status)}</span>
-                <button class="button" data-approval="${approval.id}">Review</button>
               </div>
             `,
           )
           .join('')}
       </div>
     </section>
-    ${renderActionCards('security')}
   `,
 };
 
@@ -226,7 +188,7 @@ const settingsModule = {
       ${renderHero(
         'Settings',
         'One source of truth for app and CLI configuration',
-        'Desktop controls save to the same workspace config that the CLI reads.',
+        'Desktop controls save to the same workspace config that the CLI reads. Restart onboarding for full setup changes, or test the current provider here.',
         [
           { label: 'Runtime', value: labelFor(runtimeModes, state.runtimeMode) },
           { label: 'Provider', value: provider.label },
@@ -276,8 +238,11 @@ const settingsModule = {
             </select>
           </label>
         </div>
+        <div class="panel-footer button-row split">
+          <button class="button" id="test-provider">Test Provider</button>
+          <button class="button" data-restart-onboarding="true">Restart onboarding</button>
+        </div>
       </section>
-      ${renderActionCards('settings')}
     `;
   },
 };
@@ -287,8 +252,8 @@ const diagnosticsModule = {
   label: 'Diagnostics',
   validate: () => '',
   healthCheck: (state) => ({
-    status: state.desktopState.configExists ? 'ok' : 'pending',
-    message: state.desktopState.configExists ? 'Configuration exists.' : 'Configuration has not been saved yet.',
+    status: state.desktopState?.configExists ? 'ok' : 'pending',
+    message: state.desktopState?.configExists ? 'Configuration exists.' : 'Configuration has not been saved yet.',
   }),
   render: (state) => {
     const checks = [
@@ -308,11 +273,11 @@ const diagnosticsModule = {
       ${renderHero(
         'Diagnostics',
         'Health checks and repair suggestions',
-        'Checks are modular. A failed provider, channel, or log check should not stop Chat or Security from opening.',
+        'Checks are modular. A failed provider or gateway check does not stop Chat or Security from opening.',
         [
           { label: 'Config', value: state.setupComplete ? 'Saved' : 'Pending' },
-          { label: 'Repair', value: 'Approval-gated' },
-          { label: 'Modules', value: 'Isolated' },
+          { label: 'Gateway', value: state.desktopState?.gatewayPid ? 'Running' : 'Stopped' },
+          { label: 'Modules', value: 'Contained' },
         ],
       )}
       <section class="panel">
@@ -328,14 +293,12 @@ const diagnosticsModule = {
                   <span class="pill ${ok ? 'ok' : 'warn'}">${ok ? 'OK' : 'Check'}</span>
                   <strong>${escapeHtml(name)}</strong>
                   <p>${escapeHtml(detail)}</p>
-                  ${ok ? '' : '<button class="button" data-repair-action="review">Review</button>'}
                 </div>
               `,
             )
             .join('')}
         </div>
       </section>
-      ${renderActionCards('diagnostics')}
     `;
   },
 };
@@ -343,12 +306,7 @@ const diagnosticsModule = {
 export const modules = {
   onboarding: onboardingModule,
   chat: chatModule,
-  agents: agentsModule,
-  runner: runnerModule,
-  skills: skillsModule,
-  webchat: webchatModule,
-  graph: graphModule,
-  memory: memoryModule,
+  gateway: gatewayModule(),
   logs: logsModule,
   security: securityModule,
   settings: settingsModule,

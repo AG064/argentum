@@ -69,8 +69,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Build desktop CLI sidecar
+        run: npm run build:desktop-sidecar
+
       - name: Build desktop bundle
-        run: npm run desktop:build -- ${{ matrix.args }}
+        run: npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4

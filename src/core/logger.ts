@@ -52,6 +52,12 @@ export class Logger {
 
   constructor(config: Partial<LoggerConfig> = {}) {
     const merged = { ...DEFAULT_CONFIG, ...config };
+    if (
+      process.env.ARGENTUM_LOG_FORMAT === 'json' ||
+      process.env.ARGENTUM_LOG_FORMAT === 'pretty'
+    ) {
+      merged.format = process.env.ARGENTUM_LOG_FORMAT;
+    }
     this.context = merged.context ?? {};
 
     const options: LoggerOptions = {

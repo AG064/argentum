@@ -95,5 +95,6 @@ export declare class PluginLoader {
     private getFeatureConfig;
     /** Resolve feature dependencies (topological sort) */
     private resolveDependencies;
+    private importFeatureModule;
 }
 //# sourceMappingURL=plugin-loader.d.ts.map

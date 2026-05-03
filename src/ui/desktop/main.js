@@ -1,19 +1,24 @@
-import { providerPresets, sections } from './modules/constants.js';
+import { commandCatalog, onboardingSteps, providerPresets, sections } from './modules/constants.js';
 import { hydrateStaticIcons } from './modules/icons.js';
 import { modules } from './modules/sections.js';
 import { renderModule, renderNavigation } from './modules/shell.js';
 import {
+  addTerminalEntry,
   appendChatMessage,
+  clearNotifications,
   dismissNotification,
   notify,
   setChannel,
   setProvider,
   state,
+  toggleNotificationsMenu,
+  toggleNotificationsMuted,
 } from './modules/state.js';
 import {
   chooseWorkspaceFolder,
   refreshDesktopState,
   saveSetup,
+  sendChatMessage,
   testProvider,
   hydrateDesktopDefaults,
 } from './modules/setup.js';
@@ -25,8 +30,15 @@ const eyebrow = document.querySelector('#eyebrow');
 const viewRoot = document.querySelector('#view-root');
 const workspacePath = document.querySelector('#workspace-path');
 
+const chatActions = {
+  'test-provider': { label: 'Test Provider' },
+  'gateway-start': { actionId: 'gateway-start', label: 'Start Gateway' },
+  'gateway-status': { actionId: 'gateway-status', label: 'Check Gateway' },
+  settings: { section: 'settings', label: 'Open Settings' },
+};
+
 function activeSection() {
-  return sections.find((section) => section.id === state.activeSection) || sections[0];
+  return sections.find((section) => section.id === state.activeSection && section.id !== 'onboarding') || sections[1];
 }
 
 function render() {
@@ -37,7 +49,7 @@ function render() {
   title.textContent = section.title;
   eyebrow.textContent = section.eyebrow;
   nav.innerHTML = renderNavigation();
-  viewRoot.innerHTML = renderModule(module);
+  viewRoot.innerHTML = `${renderModule(module)}${state.onboardingOpen ? renderModule(modules.onboarding) : ''}`;
   hydrateStaticIcons(document);
 }
 
@@ -56,8 +68,46 @@ function advanceOnboarding() {
     return;
   }
 
-  state.onboardingStep = Math.min(9, state.onboardingStep + 1);
+  state.onboardingStep = Math.min(onboardingSteps.length, state.onboardingStep + 1);
   render();
+}
+
+function restartOnboarding() {
+  state.onboardingOpen = true;
+  state.onboardingStep = 1;
+  state.setupStatus = state.setupComplete ? 'setup_reviewing' : 'setup_pending';
+  notify('info', 'Onboarding opened', 'The setup dialog is back on top. Finish or cancel to return to the app.');
+  render();
+}
+
+function cancelOnboarding() {
+  if (!state.setupComplete) return;
+  state.onboardingOpen = false;
+  notify('info', 'Onboarding closed', 'Your saved setup is still active.');
+  render();
+}
+
+function resetIntroChat() {
+  state.chatBlocks = [
+    {
+      type: 'message',
+      role: 'argentum',
+      title: state.agentName || 'Argentum',
+      body: state.userName
+        ? `Welcome back, ${state.userName}. Ask what is next, prepare a gateway, or adjust the profile panel.`
+        : 'Setup is saved. Add your name and agent name in the profile panel, or ask what is next.',
+    },
+    {
+      type: 'optionGroup',
+      title: 'Useful next steps',
+      body: 'These are local app actions. They do not require live AI provider access.',
+      options: [
+        { id: 'provider', label: 'Test provider', detail: 'Check whether live model calls are ready.' },
+        { id: 'security-policy', label: 'Review security', detail: 'Inspect workspace scope and approvals.' },
+        { id: 'gateway', label: 'Start gateway', detail: 'Run the local service and see output below.' },
+      ],
+    },
+  ];
 }
 
 async function finishOnboarding() {
@@ -84,25 +134,10 @@ async function finishOnboarding() {
     state.webchatToken = '';
     state.telegramToken = '';
     state.activeSection = 'chat';
-    state.onboardingStep = 9;
-    state.chatBlocks = [
-      {
-        type: 'message',
-        role: 'argentum',
-        title: 'Argentum',
-        body: 'Setup is saved. What should I call you in this workspace?',
-      },
-      {
-        type: 'optionGroup',
-        title: 'Next setup choice',
-        body: 'After your name, I can help tune features and security policies.',
-        options: [
-          { id: 'name-agent', label: 'Name the agent', detail: 'Set how Argentum should introduce itself.' },
-          { id: 'security-policy', label: 'Security policy', detail: 'Choose how strict approvals should be.' },
-          { id: 'features', label: 'Feature set', detail: 'Pick skills, memory, and channels.' },
-        ],
-      },
-    ];
+    state.onboardingOpen = false;
+    state.onboardingStep = onboardingSteps.length;
+    resetIntroChat();
+    addTerminalEntry('argentum setup save', `Configuration saved${state.savedConfigPath ? ` to ${state.savedConfigPath}` : ' in the selected workspace'}.`, 'success');
     notify('success', 'Setup complete', 'Onboarding is hidden. Chat is ready for the introductory phase.');
     await refreshDesktopState();
   } catch (error) {
@@ -115,10 +150,19 @@ async function finishOnboarding() {
 }
 
 async function runAction(actionId) {
+  const action = commandCatalog.find((item) => item.id === actionId);
+  const command = action?.command || actionId;
+  state.runningAction = actionId;
+  state.actionStatus = `Running ${action?.title || actionId}...`;
+  addTerminalEntry(command, 'Running through the desktop bridge. Nothing leaves the workspace without the matching permission gate.', 'info');
+  render();
+
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) {
-    state.actionStatus = `Prepared action: ${actionId}`;
-    notify('info', 'Action prepared', 'Run the installed app to execute desktop actions through Tauri.');
+    state.actionStatus = `Preview mode: ${command} needs the installed desktop app.`;
+    addTerminalEntry(command, 'Preview mode: the installed Tauri app is required to execute gateway actions.', 'warning');
+    notify('warning', 'Desktop bridge unavailable', state.actionStatus);
+    state.runningAction = '';
     render();
     return;
   }
@@ -127,13 +171,42 @@ async function runAction(actionId) {
     const result = await invoke('run_desktop_action', {
       request: { actionId, workspacePath: state.workspacePath },
     });
-    state.actionStatus = result?.message || `${actionId} prepared.`;
-    notify('success', 'Action prepared', state.actionStatus);
+    const status = result?.status || 'ok';
+    const output = result?.output || result?.message || 'Action completed without output.';
+    const actualCommand = result?.command || command;
+    state.actionStatus = result?.message || `${action?.title || actionId} completed.`;
+    addTerminalEntry(actualCommand, output, status === 'error' ? 'error' : 'success');
+    notify(status === 'stopped' ? 'info' : 'success', action?.title || 'Desktop action', state.actionStatus);
     await refreshDesktopState();
   } catch (error) {
-    notify('error', 'Action failed', normalizeError(error));
+    const message = normalizeError(error);
+    addTerminalEntry(command, message, 'error');
+    notify('error', 'Action failed', message);
+  } finally {
+    state.runningAction = '';
   }
   render();
+}
+
+async function runChatAction(actionId) {
+  const action = chatActions[actionId];
+  if (!action) return;
+
+  if (action.section) {
+    setActiveSection(action.section);
+    return;
+  }
+
+  if (actionId === 'test-provider') {
+    const result = await testProvider();
+    appendChatMessage('argentum', result.message);
+    render();
+    return;
+  }
+
+  if (action.actionId) {
+    await runAction(action.actionId);
+  }
 }
 
 async function copyCommand(command) {
@@ -151,6 +224,101 @@ function updateProviderFieldsFromPreset(providerId) {
   const provider = providerPresets.find((item) => item.id === providerId);
   if (!provider) return;
   setProvider(provider);
+}
+
+function saveProfileFromInputs() {
+  const userInput = document.querySelector('#profile-user-name');
+  const agentInput = document.querySelector('#profile-agent-name');
+  const purposeInput = document.querySelector('#profile-purpose');
+
+  if (userInput instanceof HTMLInputElement) state.userName = userInput.value.trim();
+  if (agentInput instanceof HTMLInputElement) state.agentName = agentInput.value.trim() || 'Argentum';
+  if (purposeInput instanceof HTMLTextAreaElement) state.agentPurpose = purposeInput.value.trim();
+
+  appendChatMessage(
+    'argentum',
+    `Profile saved. I will use ${state.agentName || 'Argentum'} as the agent name${state.userName ? ` and call you ${state.userName}` : ''}.`,
+  );
+  notify('success', 'Profile saved', 'The chat profile was updated locally.');
+}
+
+function buildLocalReply(draft) {
+  const text = draft.trim();
+  const lower = text.toLowerCase();
+  const nameMatch = text.match(/\b(?:my name is|call me|i am|i'm)\s+([^.,!?]+)/i);
+
+  if (nameMatch?.[1]) {
+    state.userName = nameMatch[1].trim();
+    return `Nice to meet you, ${state.userName}. I saved that locally. You can also set the agent name and purpose in the profile panel.`;
+  }
+
+  if (lower.includes('what') && lower.includes('next')) {
+    return 'Next: save your profile fields, test the provider, then prepare the gateway if you want local web or API access. Security stays restricted to the workspace unless you approve more.';
+  }
+
+  if (lower.includes('provider') || lower.includes('api') || lower.includes('model')) {
+    return `Provider status: ${state.apiTest.message} Use Settings or onboarding restart to edit endpoint, model, and key, then run Test API.`;
+  }
+
+  if (lower.includes('security') || lower.includes('permission') || lower.includes('access')) {
+    return `Security status: ${state.securityProfile}. Default access is only the files and folders inside ${state.workspacePath}. External folders, shell, network, and repair actions require approval.`;
+  }
+
+  if (lower.includes('gateway') || lower.includes('terminal')) {
+    return 'Use Start Gateway or Check Gateway and watch the terminal panel. In the installed Tauri app, those buttons run fixed gateway commands through the desktop bridge.';
+  }
+
+  if (lower === 'hi' || lower === 'hey' || lower.startsWith('hello')) {
+    return `Hey${state.userName ? `, ${state.userName}` : ''}. I can help with setup, security, provider tests, or gateway prep while live AI is offline.`;
+  }
+
+  if (state.apiTest.status !== 'ok') {
+    return 'I am in local guided mode because the provider is not live-ready yet. I can still help with setup, profile, security, channels, diagnostics, and terminal actions.';
+  }
+
+  return 'Provider settings look ready. If this is the installed desktop app, the next message will be routed through the configured provider; otherwise this preview remains local.';
+}
+
+async function sendChatDraft() {
+  const draft = state.draftMessage.trim();
+  if (!draft) return;
+
+  appendChatMessage('user', draft);
+  state.draftMessage = '';
+  render();
+
+  if (!state.setupComplete || !window.__TAURI__?.core?.invoke) {
+    appendChatMessage('argentum', buildLocalReply(draft));
+    render();
+    return;
+  }
+
+  state.actionStatus = 'Sending chat message...';
+  render();
+
+  try {
+    const result = await sendChatMessage(draft);
+    if (result?.offline) {
+      state.apiTest = {
+        status: 'warning',
+        message: result.message,
+      };
+    } else {
+      state.apiTest = {
+        status: 'ok',
+        message: `${result.provider || 'Provider'} answered with ${result.model || 'the configured model'}.`,
+      };
+    }
+
+    appendChatMessage('argentum', result?.message || buildLocalReply(draft));
+  } catch (error) {
+    const message = normalizeError(error);
+    appendChatMessage('argentum', `Live chat failed: ${message}`);
+    notify('error', 'Chat failed', message);
+  } finally {
+    state.actionStatus = 'Chat is ready.';
+    render();
+  }
 }
 
 function handleInput(event) {
@@ -173,6 +341,9 @@ function handleInput(event) {
   if (target.id === 'telegram-allowlist') state.telegramAllowlist = target.value;
   if (target.id === 'whatsapp-phone-id') state.whatsappPhoneId = target.value;
   if (target.id === 'chat-draft') state.draftMessage = target.value;
+  if (target.id === 'profile-user-name') state.userName = target.value;
+  if (target.id === 'profile-agent-name') state.agentName = target.value || 'Argentum';
+  if (target.id === 'profile-purpose') state.agentPurpose = target.value;
 }
 
 function handleChange(event) {
@@ -214,6 +385,12 @@ async function handleClick(event) {
   const element = target instanceof Element ? target : null;
   if (!element) return;
 
+  if (element.closest('#notifications-button')) {
+    toggleNotificationsMenu();
+    render();
+    return;
+  }
+
   const navButton = element.closest('[data-section]');
   if (navButton) {
     setActiveSection(navButton.dataset.section);
@@ -227,10 +404,31 @@ async function handleClick(event) {
     return;
   }
 
+  if (element.closest('[data-toggle-notification-mute]')) {
+    toggleNotificationsMuted();
+    render();
+    return;
+  }
+
+  if (element.closest('[data-clear-notifications]')) {
+    clearNotifications();
+    render();
+    return;
+  }
+
+  if (element.closest('[data-restart-onboarding]')) {
+    restartOnboarding();
+    return;
+  }
+
+  if (element.closest('[data-cancel-onboarding]')) {
+    cancelOnboarding();
+    return;
+  }
+
   const stepButton = element.closest('[data-onboarding-step]');
   if (stepButton) {
     state.onboardingStep = Number(stepButton.dataset.onboardingStep);
-    state.activeSection = 'onboarding';
     render();
     return;
   }
@@ -282,7 +480,7 @@ async function handleClick(event) {
   }
 
   if (element.closest('#next-button')) {
-    if (state.onboardingStep === 9) await finishOnboarding();
+    if (state.onboardingStep === onboardingSteps.length) await finishOnboarding();
     else advanceOnboarding();
     return;
   }
@@ -296,6 +494,12 @@ async function handleClick(event) {
   const actionButton = element.closest('[data-run-action]');
   if (actionButton) {
     await runAction(actionButton.dataset.runAction);
+    return;
+  }
+
+  const chatActionButton = element.closest('[data-chat-action]');
+  if (chatActionButton) {
+    await runChatAction(chatActionButton.dataset.chatAction);
     return;
   }
 
@@ -325,26 +529,42 @@ async function handleClick(event) {
 
   const chatOption = element.closest('[data-chat-option]');
   if (chatOption) {
+    const optionId = chatOption.dataset.chatOption;
+    if (optionId === 'gateway') {
+      await runAction('gateway-start');
+      return;
+    }
+    if (optionId === 'provider') {
+      await runChatAction('test-provider');
+      return;
+    }
+    if (optionId === 'security-policy') {
+      setActiveSection('security');
+      return;
+    }
+    if (optionId === 'profile') {
+      notify('info', 'Profile panel', 'Use the profile fields on the right side of Chat to set your name and the agent name.');
+      render();
+      return;
+    }
+
     state.chatBlocks.push({
       type: 'summary',
       title: 'Selected',
-      body: `You chose ${chatOption.textContent.trim()}. Argentum will turn this into a guided setup card next.`,
+      body: `You chose ${chatOption.textContent.trim()}.`,
     });
     render();
     return;
   }
 
-  if (element.closest('#send-chat')) {
-    const draft = state.draftMessage.trim();
-    if (!draft) return;
-
-    appendChatMessage('user', draft);
-    appendChatMessage(
-      'argentum',
-      'Got it. I am keeping this local for now. Once provider testing passes, this same chat surface can switch to live model execution.',
-    );
-    state.draftMessage = '';
+  if (element.closest('#save-profile')) {
+    saveProfileFromInputs();
     render();
+    return;
+  }
+
+  if (element.closest('#send-chat')) {
+    await sendChatDraft();
   }
 }
 
@@ -353,8 +573,20 @@ document.querySelector('#settings-button').addEventListener('click', () => setAc
 document.addEventListener('click', handleClick);
 document.addEventListener('input', handleInput);
 document.addEventListener('change', handleChange);
+window.addEventListener('argentum:state-change', render);
 
 hydrateStaticIcons(document);
 hydrateDesktopDefaults()
   .then(() => refreshDesktopState())
+  .then(() => {
+    if (state.desktopState?.configExists) {
+      state.setupComplete = true;
+      state.onboardingOpen = false;
+      state.activeSection = 'chat';
+      state.notifications = [];
+      resetIntroChat();
+    } else {
+      state.onboardingOpen = true;
+    }
+  })
   .finally(() => render());

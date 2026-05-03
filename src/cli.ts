@@ -23,7 +23,11 @@ import 'dotenv/config';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 import { formatArgentumBanner } from './core/branding';
-import { resolveCliLaunch } from './core/cli-launch';
+import {
+  resolveCliLaunch,
+  resolveGatewayChildEnvironment,
+  resolveGatewayChildProcess,
+} from './core/cli-launch';
 import { ConfigManager, ConfigSchema } from './core/config';
 import { importEsmModule } from './core/esm';
 import {
@@ -1343,26 +1347,41 @@ async function cmdGateway(): Promise<void> {
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
       info(`Starting Argentum gateway on port ${port}...`);
+      const logFile = path.join(workDir, 'data', 'gateway.log');
 
       // Spawn gateway as background process
       const { spawn } = await import('child_process');
       const gatewayPath = path.join(__dirname, 'cli.js');
-      const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+      const childProcess = resolveGatewayChildProcess({
+        execPath: process.execPath,
+        argv0: process.argv[0],
+        entryPath: process.argv[1],
+        isPackaged: isPackagedRuntime(),
+        cliScriptPath: gatewayPath,
+        args: ['start', '--port', String(port)],
+      });
+      fs.appendFileSync(
+        logFile,
+        `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
+      );
+      const childEnv = resolveGatewayChildEnvironment(process.env, workDir);
+      const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
+        env: childEnv,
         stdio: [
           'ignore',
-          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
-          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+          fs.openSync(logFile, 'a'),
+          fs.openSync(logFile, 'a'),
         ],
         cwd: workDir,
       });
       child.unref();
 
       // Write PID
-      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
       fs.writeFileSync(pidFile, String(child.pid));
       success(`Gateway started (PID: ${child.pid})`);
-      info(`Log: ${path.join(workDir, 'data', 'gateway.log')}`);
+      info(`Log: ${logFile}`);
       info(`Stop: argentum gateway stop`);
       break;
     }
@@ -1400,21 +1419,36 @@ async function cmdGateway(): Promise<void> {
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
       info(`Restarting Argentum gateway on port ${port}...`);
+      const logFile = path.join(workDir, 'data', 'gateway.log');
 
       const { spawn } = await import('child_process');
       const gatewayPath = path.join(__dirname, 'cli.js');
-      const child = spawn('node', [gatewayPath, 'start', '--port', String(port)], {
+      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
+      const childProcess = resolveGatewayChildProcess({
+        execPath: process.execPath,
+        argv0: process.argv[0],
+        entryPath: process.argv[1],
+        isPackaged: isPackagedRuntime(),
+        cliScriptPath: gatewayPath,
+        args: ['start', '--port', String(port)],
+      });
+      fs.appendFileSync(
+        logFile,
+        `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
+      );
+      const childEnv = resolveGatewayChildEnvironment(process.env, workDir);
+      const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
+        env: childEnv,
         stdio: [
           'ignore',
-          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
-          fs.openSync(path.join(workDir, 'data', 'gateway.log'), 'a'),
+          fs.openSync(logFile, 'a'),
+          fs.openSync(logFile, 'a'),
         ],
         cwd: workDir,
       });
       child.unref();
 
-      fs.mkdirSync(path.join(workDir, 'data'), { recursive: true });
       fs.writeFileSync(pidFile, String(child.pid));
       success(`Gateway restarted (PID: ${child.pid})`);
       break;

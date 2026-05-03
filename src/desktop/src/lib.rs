@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Duration;
+use tauri::Manager;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +49,10 @@ struct RunDesktopActionResponse {
     status: String,
     message: String,
     command: String,
+    output: String,
+    pid: Option<String>,
+    health_url: Option<String>,
+    log_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +89,7 @@ struct TestProviderRequest {
     base_url: String,
     api_key: String,
     model: String,
+    workspace_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,6 +97,32 @@ struct TestProviderRequest {
 struct TestProviderResponse {
     status: String,
     message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SendChatMessageRequest {
+    workspace_path: String,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SendChatMessageResponse {
+    status: String,
+    message: String,
+    provider: String,
+    model: String,
+    offline: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ProviderRuntimeConfig {
+    label: String,
+    api: String,
+    base_url: String,
+    model: String,
+    api_key_env: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -113,6 +149,15 @@ fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
 
     if !workspace.is_absolute() {
         return Err("Workspace path must be absolute".to_string());
+    }
+
+    Ok(workspace)
+}
+
+fn ensure_existing_workspace(path: &str) -> Result<PathBuf, String> {
+    let workspace = ensure_safe_workspace(path)?;
+    if !workspace.exists() {
+        return Err("Workspace path does not exist.".to_string());
     }
 
     Ok(workspace)
@@ -201,7 +246,7 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let quoted_telegram_allowlist = yaml_quote(telegram_allowlist);
     let quoted_whatsapp_phone_id = yaml_quote(whatsapp_phone_id);
     format!(
-        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
+        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nlogging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
         version = request.version,
         experience = request.experience_level,
         runtime = request.runtime_mode,
@@ -420,90 +465,171 @@ fn yaml_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn desktop_action(action_id: &str) -> Option<(&'static str, &'static str)> {
-    match action_id {
-        "chat-start" => Some((
-            "argentum gateway start",
-            "Gateway start is prepared. Argentum will request network and service permissions before launching it.",
-        )),
-        "gateway-status" => Some((
-            "argentum gateway status",
-            "Gateway status check is ready for the selected workspace.",
-        )),
-        "agents-list" => Some((
-            "argentum agents list",
-            "Agent profile list is ready for the selected workspace.",
-        )),
-        "agents-create" => Some((
-            "argentum agents create --name \"researcher\"",
-            "Agent profile creation requires a profile name and config write approval.",
-        )),
-        "runner-acp" => Some((
-            "argentum acp run \"code\"",
-            "Sandbox run is prepared and requires explicit code plus approval before execution.",
-        )),
-        "cron-list" => Some((
-            "argentum cron list",
-            "Scheduled job list is ready for the selected workspace.",
-        )),
-        "skills-list" => Some((
-            "argentum skill list",
-            "Installed skill list is ready for the selected workspace.",
-        )),
-        "skills-search" => Some((
-            "argentum skill search \"browser\"",
-            "Skill search may use network access and will stay gated by approval.",
-        )),
-        "webchat-config" => Some((
-            "argentum config features.webchat",
-            "Webchat configuration review is ready.",
-        )),
-        "telegram-status" => Some((
-            "argentum telegram status",
-            "Telegram status check is ready without exposing bot secrets.",
-        )),
-        "graph-feature" => Some((
-            "argentum feature knowledge-graph",
-            "Knowledge graph feature inspection is ready.",
-        )),
-        "memory-search" => Some((
-            "argentum memory search \"project context\"",
-            "Memory search is prepared for workspace-scoped recall.",
-        )),
-        "memory-list" => Some((
-            "argentum memory list",
-            "Memory namespace list is ready.",
-        )),
-        "logs-gateway" => Some((
-            "argentum gateway logs --lines 100",
-            "Gateway log review is ready and remains workspace-scoped.",
-        )),
-        "security-status" => Some((
-            "argentum security status",
-            "Security overview is ready.",
-        )),
-        "security-approvals" => Some((
-            "argentum security approvals",
-            "Approval queue review is ready.",
-        )),
-        "security-audit" => Some((
-            "argentum security audit",
-            "Security audit log review is ready.",
-        )),
-        "settings-config" => Some((
-            "argentum config",
-            "Configuration review is ready.",
-        )),
-        "doctor" => Some((
-            "argentum doctor",
-            "Diagnostics are ready for the selected workspace.",
-        )),
-        "image-generate" => Some((
-            "argentum image \"prompt\"",
-            "Image generation requires a prompt and provider approval before execution.",
-        )),
-        _ => None,
+fn target_triple() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "x86_64-pc-windows-msvc"
+    } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
+        "aarch64-apple-darwin"
+    } else if cfg!(target_os = "macos") {
+        "x86_64-apple-darwin"
+    } else {
+        "x86_64-unknown-linux-gnu"
     }
+}
+
+fn sidecar_file_name() -> String {
+    let extension = if cfg!(target_os = "windows") {
+        ".exe"
+    } else {
+        ""
+    };
+    format!("argentum-cli-{}{}", target_triple(), extension)
+}
+
+fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let file_name = sidecar_file_name();
+    let mut candidates = Vec::new();
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join(&file_name));
+        candidates.push(resource_dir.join("binaries").join(&file_name));
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.join(&file_name));
+            candidates.push(exe_dir.join("binaries").join(&file_name));
+        }
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join("binaries").join(&file_name));
+        candidates.push(current_dir.join("src").join("desktop").join("binaries").join(&file_name));
+    }
+
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| {
+            "Argentum CLI sidecar is missing. Reinstall Argentum or rebuild the desktop bundle."
+                .to_string()
+        })
+}
+
+fn plain_command(args: &[&str]) -> String {
+    format!("argentum {}", args.join(" "))
+}
+
+fn strip_ansi(input: &str) -> String {
+    let mut output = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == '\u{1b}' {
+            while let Some(next) = chars.next() {
+                if next.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+            continue;
+        }
+        output.push(character);
+    }
+
+    output.replace("âœ“", "OK")
+        .replace("â„¹", "Info")
+        .replace("âš ", "Warning")
+}
+
+fn run_sidecar(
+    app: &tauri::AppHandle,
+    workspace: &Path,
+    args: &[&str],
+) -> Result<String, String> {
+    let sidecar = resolve_sidecar_path(app)?;
+    let output = Command::new(sidecar)
+        .args(args)
+        .env("ARGENTUM_WORKDIR", workspace)
+        .env("ARGENTUM_SKIP_EXIT_PAUSE", "1")
+        .env("AGCLAW_WORKDIR", "")
+        .env("AGCLAW_SKIP_EXIT_PAUSE", "1")
+        .current_dir(workspace)
+        .output()
+        .map_err(|error| format!("Failed to run Argentum sidecar: {error}"))?;
+
+    let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
+    let combined = [stdout.trim(), stderr.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if output.status.success() {
+        Ok(redact_sensitive_output(&combined))
+    } else if combined.is_empty() {
+        Err(format!(
+            "{} failed with exit code {}.",
+            plain_command(args),
+            output.status.code().unwrap_or(-1)
+        ))
+    } else {
+        Err(redact_sensitive_output(&combined))
+    }
+}
+
+fn gateway_port(workspace: &Path) -> u16 {
+    let config_path = workspace.join("config").join("default.yaml");
+    let Ok(contents) = std::fs::read_to_string(config_path) else {
+        return 3000;
+    };
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("port:") {
+            if let Ok(port) = value.trim().parse::<u16>() {
+                return port;
+            }
+        }
+    }
+
+    3000
+}
+
+fn parse_gateway_pid(output: &str) -> Option<String> {
+    let marker = "PID:";
+    let start = output.find(marker)? + marker.len();
+    let pid = output[start..]
+        .chars()
+        .skip_while(|character| character.is_whitespace())
+        .take_while(|character| character.is_ascii_digit())
+        .collect::<String>();
+
+    if pid.is_empty() {
+        None
+    } else {
+        Some(pid)
+    }
+}
+
+fn check_gateway_port(port: u16) -> Result<(), String> {
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(listener) => {
+            drop(listener);
+            Ok(())
+        }
+        Err(_) => Err(format!(
+            "Gateway failed to start because port {port} is already in use."
+        )),
+    }
+}
+
+fn redact_sensitive_output(output: &str) -> String {
+    output
+        .lines()
+        .map(redact_sensitive_line)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn redact_sensitive_line(line: &str) -> String {
@@ -588,12 +714,174 @@ fn redact_provider_error(error: reqwest::Error) -> String {
     "Provider request failed before a usable response was returned.".to_string()
 }
 
+fn read_secret(workspace: &Path, key: &str) -> Option<String> {
+    let contents = std::fs::read_to_string(workspace.join("secrets.env")).ok()?;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || !trimmed.contains('=') {
+            continue;
+        }
+        let (name, value) = trimmed.split_once('=')?;
+        if name.trim() == key {
+            let clean = value.trim().trim_matches('"').trim_matches('\'').to_string();
+            if clean.is_empty() {
+                return None;
+            }
+            return Some(clean);
+        }
+    }
+
+    None
+}
+
+fn yaml_string_at<'a>(value: &'a serde_yaml::Value, path: &[&str]) -> Option<&'a str> {
+    let mut current = value;
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+
+    current.as_str()
+}
+
+fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, String> {
+    let config_path = workspace.join("config").join("default.yaml");
+    let contents = std::fs::read_to_string(&config_path)
+        .map_err(|_| "Configuration file is missing. Finish onboarding first.".to_string())?;
+    let yaml = serde_yaml::from_str::<serde_yaml::Value>(&contents)
+        .map_err(|_| "Configuration file could not be read. Review config/default.yaml.".to_string())?;
+
+    let provider_name = yaml_string_at(&yaml, &["llm", "default"])
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "No default provider is configured.".to_string())?
+        .to_string();
+    let provider = yaml
+        .get("llm")
+        .and_then(|llm| llm.get("providers"))
+        .and_then(|providers| providers.get(&provider_name))
+        .ok_or_else(|| format!("Provider '{provider_name}' is missing from config/default.yaml."))?;
+
+    let model = provider
+        .get("models")
+        .and_then(|models| models.as_sequence())
+        .and_then(|models| models.first())
+        .and_then(|model| model.as_str())
+        .ok_or_else(|| format!("Provider '{provider_name}' has no model configured."))?;
+
+    Ok(ProviderRuntimeConfig {
+        label: provider
+            .get("label")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Configured provider")
+            .to_string(),
+        api: provider
+            .get("api")
+            .and_then(|value| value.as_str())
+            .unwrap_or("openai")
+            .to_string(),
+        base_url: provider
+            .get("base_url")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "Provider endpoint is missing from config/default.yaml.".to_string())?
+            .to_string(),
+        model: model.to_string(),
+        api_key_env: provider
+            .get("api_key_env")
+            .and_then(|value| value.as_str())
+            .unwrap_or("OPENAI_API_KEY")
+            .to_string(),
+    })
+}
+
+fn provider_api_key(
+    workspace: Option<&Path>,
+    request_key: &str,
+    key_env: &str,
+) -> Option<String> {
+    let trimmed = request_key.trim();
+    if !trimmed.is_empty() {
+        return Some(trimmed.to_string());
+    }
+
+    workspace
+        .and_then(|path| read_secret(path, key_env))
+        .or_else(|| std::env::var(key_env).ok())
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn chat_url(base_url: &str, api: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if api == "anthropic" {
+        if trimmed.ends_with("/v1") {
+            format!("{trimmed}/messages")
+        } else {
+            format!("{trimmed}/v1/messages")
+        }
+    } else {
+        format!("{trimmed}/chat/completions")
+    }
+}
+
+fn offline_chat_message(request: &str, reason: &str) -> String {
+    let lower = request.to_ascii_lowercase();
+
+    if lower.contains("gateway") {
+        return format!(
+            "Offline mode: {reason} Use the Gateway page or Start Gateway button to start, stop, or inspect the local gateway."
+        );
+    }
+
+    if lower.contains("security") || lower.contains("permission") || lower.contains("access") {
+        return format!(
+            "Offline mode: {reason} Security stays restricted to the selected workspace unless you approve a capability."
+        );
+    }
+
+    if lower.contains("provider") || lower.contains("api") || lower.contains("model") {
+        return format!(
+            "Offline mode: {reason} Open Settings, add or test the provider, then send the message again."
+        );
+    }
+
+    format!(
+        "Offline mode: {reason} I can still help with setup, security, provider testing, gateway actions, diagnostics, and logs."
+    )
+}
+
+fn parse_openai_chat_response(value: serde_json::Value) -> Result<String, String> {
+    value
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.as_str())
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .ok_or_else(|| "Provider returned an empty chat response.".to_string())
+}
+
+fn parse_anthropic_chat_response(value: serde_json::Value) -> Result<String, String> {
+    value
+        .get("content")
+        .and_then(|content| content.as_array())
+        .and_then(|content| content.first())
+        .and_then(|block| block.get("text"))
+        .and_then(|text| text.as_str())
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .ok_or_else(|| "Provider returned an empty chat response.".to_string())
+}
+
 #[tauri::command]
 async fn test_provider(request: TestProviderRequest) -> Result<TestProviderResponse, String> {
     ensure_allowed("provider API", &request.api, &["openai", "anthropic"])?;
 
     let defaults = provider_defaults(&request.provider)
         .unwrap_or_else(|| provider_defaults("custom").expect("custom provider defaults"));
+    let workspace = match request.workspace_path.as_deref() {
+        Some(path) if !path.trim().is_empty() => Some(ensure_existing_workspace(path)?),
+        _ => None,
+    };
     let base_url = if request.base_url.trim().is_empty() {
         defaults.base_url
     } else {
@@ -609,7 +897,10 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         return Err("Provider endpoint must start with http:// or https://".to_string());
     }
 
-    if defaults.requires_key && request.api_key.trim().is_empty() {
+    let api_key = provider_api_key(workspace.as_deref(), &request.api_key, defaults.api_key_env)
+        .unwrap_or_default();
+
+    if defaults.requires_key && api_key.trim().is_empty() {
         return Err(format!(
             "{} needs an API key before it can be tested.",
             defaults.label
@@ -623,15 +914,14 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
 
     let url = models_url(base_url, &request.api);
     let mut builder = client.get(url);
-    let api_key = request.api_key.trim();
 
     if !api_key.is_empty() {
         builder = if request.api == "anthropic" {
             builder
-                .header("x-api-key", api_key)
+                .header("x-api-key", api_key.as_str())
                 .header("anthropic-version", "2023-06-01")
         } else {
-            builder.bearer_auth(api_key)
+            builder.bearer_auth(api_key.as_str())
         };
     }
 
@@ -649,10 +939,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
     }
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
-        return Err(format!(
-            "{} responded, but the API key or account permission was rejected.",
-            defaults.label
-        ));
+        return Err(format!("{} rejected the API key.", defaults.label));
     }
 
     if status.as_u16() == 404 && is_local_endpoint(base_url) {
@@ -667,6 +954,125 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         defaults.label,
         status.as_u16()
     ))
+}
+
+#[tauri::command]
+async fn send_chat_message(
+    request: SendChatMessageRequest,
+) -> Result<SendChatMessageResponse, String> {
+    let workspace = ensure_existing_workspace(&request.workspace_path)?;
+    let message = request.message.trim();
+
+    if message.is_empty() {
+        return Err("Message is required.".to_string());
+    }
+
+    let config = match provider_runtime_config(&workspace) {
+        Ok(config) => config,
+        Err(error) => {
+            return Ok(SendChatMessageResponse {
+                status: "offline".to_string(),
+                message: offline_chat_message(message, &error),
+                provider: "Offline".to_string(),
+                model: "local-guided".to_string(),
+                offline: true,
+            });
+        }
+    };
+
+    let api_key =
+        provider_api_key(Some(&workspace), "", &config.api_key_env).unwrap_or_default();
+    let requires_key = !is_local_endpoint(&config.base_url);
+
+    if requires_key && api_key.trim().is_empty() {
+        return Ok(SendChatMessageResponse {
+            status: "offline".to_string(),
+            message: offline_chat_message(
+                message,
+                &format!("{} is missing an API key.", config.label),
+            ),
+            provider: config.label,
+            model: config.model,
+            offline: true,
+        });
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|_| "Chat client could not be created.".to_string())?;
+
+    let url = chat_url(&config.base_url, &config.api);
+    let mut builder = client.post(url);
+
+    if !api_key.is_empty() {
+        builder = if config.api == "anthropic" {
+            builder
+                .header("x-api-key", api_key.as_str())
+                .header("anthropic-version", "2023-06-01")
+        } else {
+            builder.bearer_auth(api_key.as_str())
+        };
+    }
+
+    let body = if config.api == "anthropic" {
+        json!({
+            "model": config.model,
+            "max_tokens": 900,
+            "messages": [
+                { "role": "user", "content": message }
+            ]
+        })
+    } else {
+        json!({
+            "model": config.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the user's configured workspace and permissions."
+                },
+                { "role": "user", "content": message }
+            ],
+            "temperature": 0.4
+        })
+    };
+
+    let response = builder
+        .json(&body)
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let status = response.status();
+
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!("{} rejected the API key.", config.label));
+    }
+
+    if !status.is_success() {
+        return Err(format!(
+            "{} responded with HTTP {}.",
+            config.label,
+            status.as_u16()
+        ));
+    }
+
+    let value = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|_| "Provider returned a response Argentum could not read.".to_string())?;
+    let answer = if config.api == "anthropic" {
+        parse_anthropic_chat_response(value)?
+    } else {
+        parse_openai_chat_response(value)?
+    };
+
+    Ok(SendChatMessageResponse {
+        status: "ok".to_string(),
+        message: answer,
+        provider: config.label,
+        model: config.model,
+        offline: false,
+    })
 }
 
 #[tauri::command]
@@ -806,20 +1212,142 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
     })
 }
 
+fn gateway_response(
+    status: &str,
+    message: String,
+    args: &[&str],
+    output: String,
+    pid: Option<String>,
+    health_url: Option<String>,
+    log_path: &Path,
+) -> RunDesktopActionResponse {
+    RunDesktopActionResponse {
+        status: status.to_string(),
+        message,
+        command: plain_command(args),
+        output,
+        pid,
+        health_url,
+        log_path: Some(log_path.display().to_string()),
+    }
+}
+
+fn run_gateway_action(
+    app: &tauri::AppHandle,
+    workspace: &Path,
+    action_id: &str,
+) -> Result<RunDesktopActionResponse, String> {
+    std::fs::create_dir_all(workspace.join("data"))
+        .map_err(|error| format!("Failed to create gateway data directory: {error}"))?;
+
+    let port = gateway_port(workspace);
+    let health_url = format!("http://127.0.0.1:{port}/health");
+    let log_path = workspace.join("data").join("gateway.log");
+
+    match action_id {
+        "gateway-status" => {
+            let args = ["gateway", "status"];
+            let output = run_sidecar(app, workspace, &args)?;
+            let pid = parse_gateway_pid(&output);
+            let message = match &pid {
+                Some(pid) => format!("Gateway running on {health_url} (PID: {pid})."),
+                None => "Gateway is stopped.".to_string(),
+            };
+            let status = if pid.is_some() { "running" } else { "stopped" };
+
+            Ok(gateway_response(
+                status,
+                message,
+                &args,
+                output,
+                pid,
+                Some(health_url),
+                &log_path,
+            ))
+        }
+        "gateway-start" => {
+            let status_args = ["gateway", "status"];
+            let status_output = run_sidecar(app, workspace, &status_args)?;
+            if let Some(pid) = parse_gateway_pid(&status_output) {
+                return Ok(gateway_response(
+                    "running",
+                    format!("Gateway is already running on {health_url} (PID: {pid})."),
+                    &status_args,
+                    status_output,
+                    Some(pid),
+                    Some(health_url),
+                    &log_path,
+                ));
+            }
+
+            check_gateway_port(port)?;
+
+            let port_text = port.to_string();
+            let start_args = ["gateway", "start", "--port", port_text.as_str()];
+            let start_output = run_sidecar(app, workspace, &start_args)?;
+            std::thread::sleep(Duration::from_millis(700));
+            let after_output = run_sidecar(app, workspace, &status_args).unwrap_or_default();
+            let pid = parse_gateway_pid(&after_output).or_else(|| parse_gateway_pid(&start_output));
+
+            let Some(pid) = pid else {
+                return Err(
+                    "Gateway failed to start. Check the gateway log for details.".to_string(),
+                );
+            };
+
+            let output = [start_output.trim(), after_output.trim()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            Ok(gateway_response(
+                "running",
+                format!("Gateway started on {health_url} (PID: {pid})."),
+                &start_args,
+                output,
+                Some(pid),
+                Some(health_url),
+                &log_path,
+            ))
+        }
+        "gateway-stop" => {
+            let args = ["gateway", "stop"];
+            let output = run_sidecar(app, workspace, &args)?;
+            Ok(gateway_response(
+                "stopped",
+                "Gateway stopped.".to_string(),
+                &args,
+                output,
+                None,
+                Some(health_url),
+                &log_path,
+            ))
+        }
+        "gateway-logs" => {
+            let args = ["gateway", "logs", "-n", "100"];
+            let output = run_sidecar(app, workspace, &args)?;
+            Ok(gateway_response(
+                "ok",
+                format!("Showing recent gateway logs from {}.", log_path.display()),
+                &args,
+                output,
+                None,
+                Some(health_url),
+                &log_path,
+            ))
+        }
+        _ => Err(format!("Unknown desktop action: {action_id}")),
+    }
+}
+
 #[tauri::command]
 fn run_desktop_action(
+    app: tauri::AppHandle,
     request: RunDesktopActionRequest,
 ) -> Result<RunDesktopActionResponse, String> {
-    let _workspace = ensure_safe_workspace(&request.workspace_path)?;
-    let Some((command, message)) = desktop_action(&request.action_id) else {
-        return Err(format!("Unknown desktop action: {}", request.action_id));
-    };
-
-    Ok(RunDesktopActionResponse {
-        status: "prepared".to_string(),
-        message: message.to_string(),
-        command: command.to_string(),
-    })
+    let workspace = ensure_existing_workspace(&request.workspace_path)?;
+    run_gateway_action(&app, &workspace, &request.action_id)
 }
 
 pub fn run() {
@@ -828,6 +1356,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_setup,
             test_provider,
+            send_chat_message,
             run_desktop_action,
             desktop_defaults,
             desktop_state,

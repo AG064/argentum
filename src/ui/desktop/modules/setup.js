@@ -53,6 +53,7 @@ export async function testProvider() {
     baseUrl: state.providerBaseUrl || provider.defaultBaseUrl,
     apiKey: state.providerApiKey,
     model: state.providerModel || provider.defaultModel,
+    workspacePath: state.workspacePath,
   };
 
   const promise = invokeTauri('test_provider', { request });
@@ -88,6 +89,28 @@ export async function testProvider() {
     );
     return state.apiTest;
   }
+}
+
+export async function sendChatMessage(message) {
+  const promise = invokeTauri('send_chat_message', {
+    request: {
+      workspacePath: state.workspacePath,
+      message,
+    },
+  });
+
+  if (!promise) {
+    return {
+      status: 'offline',
+      message:
+        'Desktop preview mode: install or run the Tauri app to send live provider messages. Local setup help remains available here.',
+      provider: 'Preview',
+      model: 'local-guided',
+      offline: true,
+    };
+  }
+
+  return promise;
 }
 
 export async function chooseWorkspaceFolder() {

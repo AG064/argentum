@@ -6,7 +6,6 @@ import {
   runtimeModes,
   securityProfiles,
 } from './constants.js';
-import { renderNotifications } from './shell.js';
 import { state } from './state.js';
 import {
   buttonDisabled,
@@ -45,42 +44,42 @@ export function validateCurrentStep() {
 function renderOnboarding() {
   const currentStep = onboardingSteps[state.onboardingStep - 1];
   const isFinalStep = state.onboardingStep === onboardingSteps.length;
+  const canCancel = state.setupComplete;
 
   return `
-    ${renderNotifications()}
-    <div class="onboarding-layout">
-      <section class="panel onboarding-panel">
-        <div class="panel-header">
-          <span class="pill">Step ${state.onboardingStep} of ${onboardingSteps.length}</span>
-          <h2>${escapeHtml(currentStep)}</h2>
-          <p>${escapeHtml(stepIntro())}</p>
-        </div>
-        <div class="panel-body">
-          ${renderOnboardingStep()}
-          <div class="button-row">
-            <button class="button" id="back-button" ${buttonDisabled(state.onboardingStep === 1)}>Back</button>
-            <button class="button primary" id="next-button">${isFinalStep ? 'Launch Argentum' : 'Next'}</button>
+    <div class="onboarding-backdrop" role="presentation">
+      <section class="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <div class="onboarding-modal-header">
+          <div>
+            <span class="pill">Step ${state.onboardingStep} of ${onboardingSteps.length}</span>
+            <h2 id="onboarding-title">${escapeHtml(currentStep)}</h2>
+            <p>${escapeHtml(stepIntro())}</p>
           </div>
+          ${canCancel ? '<button class="icon-button" data-cancel-onboarding="true" aria-label="Close onboarding">x</button>' : ''}
         </div>
-      </section>
-      <aside class="panel setup-progress">
-        <div class="panel-header">
-          <h3>Setup Flow</h3>
-          <p>Every choice stays editable until launch.</p>
-        </div>
-        <div class="panel-body step-list">
+        <div class="onboarding-progress" aria-label="Setup progress">
           ${onboardingSteps
             .map(
               (step, index) => `
-                <button class="step-card ${index + 1 === state.onboardingStep ? 'active' : ''}" data-onboarding-step="${index + 1}">
-                  <span>Step ${index + 1}</span>
+                <button class="step-chip ${index + 1 === state.onboardingStep ? 'active' : ''}" data-onboarding-step="${index + 1}">
+                  <span>${index + 1}</span>
                   <strong>${escapeHtml(step)}</strong>
                 </button>
               `,
             )
             .join('')}
         </div>
-      </aside>
+        <div class="onboarding-modal-body">
+          ${renderOnboardingStep()}
+        </div>
+        <div class="onboarding-modal-footer">
+          ${canCancel ? '<button class="button" data-cancel-onboarding="true">Cancel</button>' : '<span></span>'}
+          <div class="button-row">
+            <button class="button" id="back-button" ${buttonDisabled(state.onboardingStep === 1)}>Back</button>
+            <button class="button primary" id="next-button">${isFinalStep ? 'Save and open Argentum' : 'Next'}</button>
+          </div>
+        </div>
+      </section>
     </div>
   `;
 }
@@ -88,15 +87,14 @@ function renderOnboarding() {
 function stepIntro() {
   const workspace = explainPath(state.workspacePath);
   const intros = {
-    1: 'Argentum is a local-first agent workspace. It starts small, explains what it can reach, and asks before expanding access.',
-    2: `Pick the folder Argentum is allowed to use by default. Default access means all folders and files inside ${workspace}.`,
-    3: 'Choose how you want to run Argentum day to day. You can keep the CLI while making the desktop app the main interface.',
-    4: 'Capabilities are the boundaries. Argentum can suggest powerful actions, but approval decides what actually runs.',
-    5: 'Choose a model provider. Hosted providers need keys; local providers usually only need a reachable endpoint.',
-    6: 'Choose every channel you want. Local app stays on; everything else is optional.',
-    7: 'Pick how cautious Argentum should be when tools, files, shell, network, or integrations are requested.',
-    8: 'Review the setup and test the provider. If the test fails, Argentum can still open in offline guided mode.',
-    9: 'Setup will save config, hide onboarding, and open Chat for the introductory phase.',
+    1: 'Meet the project, then choose how much guidance you want.',
+    2: `Pick the one folder Argentum can use by default: ${workspace}.`,
+    3: 'Choose the main way you want to work and see a concrete example.',
+    4: 'Review what Argentum can request and what stays blocked until you approve it.',
+    5: 'Choose hosted, local, or custom model access. Failed tests do not block offline mode.',
+    6: 'Enable the surfaces you actually want. Local app stays on.',
+    7: 'Choose how strict approvals should be before tools, files, shell, or network run.',
+    8: 'Review the choices, test the provider, then open Chat.',
   };
   return intros[state.onboardingStep] || '';
 }
@@ -111,17 +109,16 @@ function renderOnboardingStep() {
     6: renderChannelsStep,
     7: renderSecurityStep,
     8: renderReviewStep,
-    9: renderFinishStep,
   };
   return renderers[state.onboardingStep]();
 }
 
 function renderWelcomeStep() {
   return `
-    <div class="copy-block">
+    <div class="copy-block compact-copy">
       <h3>What Argentum is</h3>
-      <p>Argentum is a modular AI workspace for chat, agents, skills, memory, integrations, and local automation. The first version is intentionally local-first: it should be useful before you connect outside services.</p>
-      <p><strong>What it can access by default:</strong> all the folders/files inside the workspace folder you choose. It should not wander into Downloads, Desktop, browser data, RAM, or other apps unless you explicitly grant a capability later.</p>
+      <p>Argentum is a local-first workspace for chat, agents, skills, memory, channels, and controlled automation.</p>
+      <p><strong>Default access: all folders/files inside workspace folder.</strong> It should not read Downloads, Desktop, browser data, RAM, or other apps unless you approve a capability later.</p>
     </div>
     <div class="interface-grid">
       ${experienceLevels
@@ -158,6 +155,7 @@ function renderWorkspaceStep() {
 }
 
 function renderRuntimeStep() {
+  const mode = runtimeModes.find((item) => item.id === state.runtimeMode) || runtimeModes[0];
   return `
     <div class="interface-grid">
       ${runtimeModes
@@ -172,10 +170,42 @@ function renderRuntimeStep() {
         )
         .join('')}
     </div>
-    <div class="demo-panel">
-      <span>Preview</span>
-      <strong>${escapeHtml(runtimeModes.find((mode) => mode.id === state.runtimeMode)?.headline || 'Runtime')}</strong>
-      <p>${escapeHtml(runtimeModes.find((mode) => mode.id === state.runtimeMode)?.preview || '')}</p>
+    ${renderRuntimeDemo(mode)}
+  `;
+}
+
+function renderRuntimeDemo(mode) {
+  return `
+    <div class="runtime-demo">
+      <div>
+        <span>Example flow</span>
+        <strong>${escapeHtml(mode.headline)}</strong>
+        <p>${escapeHtml(mode.preview)}</p>
+      </div>
+      <div class="demo-stage" aria-hidden="true">
+        ${mode.demoSteps
+          .map(
+            (step, index) => `
+              <div class="demo-node" data-demo-step="${index + 1}">
+                <span>${index + 1}</span>
+                <strong>${escapeHtml(step)}</strong>
+              </div>
+            `,
+          )
+          .join('')}
+      </div>
+      <div class="demo-examples">
+        ${mode.examples
+          .map(
+            (example) => `
+              <div>
+                <span></span>
+                <p>${escapeHtml(example)}</p>
+              </div>
+            `,
+          )
+          .join('')}
+      </div>
     </div>
   `;
 }
@@ -325,23 +355,15 @@ function renderSecurityStep() {
 
 function renderReviewStep() {
   return `
+    <div class="review-pipeline" aria-label="Review test pass">
+      <div><span>Review</span><strong>Choices</strong></div>
+      <div><span>Test</span><strong>${escapeHtml(providerTestLabel())}</strong></div>
+      <div><span>Pass</span><strong>Open Chat</strong></div>
+    </div>
     ${renderReviewRows()}
     <div class="button-row split">
       <button class="button" data-onboarding-step="5">Edit provider</button>
-      <button class="button primary" id="test-provider">Test API again</button>
-    </div>
-  `;
-}
-
-function renderFinishStep() {
-  return `
-    <div class="finish-panel">
-      <div class="launch-animation ${state.setupAnimation ? 'running' : ''}">
-        <span></span><span></span><span></span>
-      </div>
-      <h3>Ready to enter Chat</h3>
-      <p>Argentum will save config under the workspace, keep secrets outside YAML, hide onboarding, and begin the guided introductory chat.</p>
-      ${renderReviewRows()}
+      <button class="button primary" id="test-provider">Test API</button>
     </div>
   `;
 }

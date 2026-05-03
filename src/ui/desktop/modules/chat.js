@@ -1,5 +1,5 @@
 import { providerPresets, securityProfiles } from './constants.js';
-import { renderActionCards, renderHero, renderNotifications, renderStatusRail } from './shell.js';
+import { renderHero, renderNotifications, renderStatusRail } from './shell.js';
 import { currentProvider, escapeAttribute, escapeHtml, labelFor } from './utils.js';
 
 export const chatModule = {
@@ -21,9 +21,9 @@ function renderChatSection(state) {
   return `
     ${renderNotifications()}
     ${renderHero(
-      'Local guided chat',
-      'Start with Argentum, then connect live models',
-      'The first chat runs locally so setup can finish even when a provider is offline. Live model calls are enabled after the provider test passes.',
+      'Chat',
+      'Work locally first, connect live models when ready',
+      'The app can answer setup and status questions locally. Live model calls activate only after provider settings pass.',
       [
         { label: 'Provider', value: provider.label },
         { label: 'Mode', value: state.apiTest.status === 'ok' ? 'Live-ready' : 'Offline guided' },
@@ -35,9 +35,15 @@ function renderChatSection(state) {
         <div class="panel-header split-header">
           <div>
             <h3>Conversation</h3>
-            <p>Argentum can place choices, warnings, summaries, and action cards directly in chat.</p>
+            <p>Live provider replies are used after provider testing passes. Otherwise Argentum stays in clear offline setup mode.</p>
           </div>
           <span class="pill ${state.apiTest.status === 'ok' ? 'ok' : 'warn'}">${state.apiTest.status === 'ok' ? 'Provider ready' : 'Offline mode'}</span>
+        </div>
+        <div class="chat-action-row">
+          <button class="button" data-chat-action="test-provider">Test Provider</button>
+          <button class="button" data-chat-action="gateway-start">Start Gateway</button>
+          <button class="button" data-chat-action="gateway-status">Check Gateway</button>
+          <button class="button" data-chat-action="settings">Open Settings</button>
         </div>
         <div class="chat-transcript">
           ${state.chatBlocks.map((block) => renderChatBlock(block)).join('')}
@@ -47,9 +53,61 @@ function renderChatSection(state) {
           <button class="button primary" id="send-chat">Send</button>
         </div>
       </section>
-      ${renderStatusRail()}
+      <aside class="side-stack">
+        ${renderProfilePanel(state)}
+        ${renderStatusRail()}
+        ${renderTerminalPanel(state)}
+      </aside>
     </div>
-    ${renderActionCards('chat')}
+  `;
+}
+
+function renderProfilePanel(state) {
+  return `
+    <section class="panel profile-panel">
+      <div class="panel-header">
+        <h3>Profile</h3>
+        <p>Replace the old local setup loop with clear fields you can change anytime.</p>
+      </div>
+      <div class="panel-body form-grid">
+        <label>
+          Your name
+          <input id="profile-user-name" value="${escapeAttribute(state.userName)}" placeholder="Example: AG" />
+        </label>
+        <label>
+          Agent name
+          <input id="profile-agent-name" value="${escapeAttribute(state.agentName)}" placeholder="Argentum" />
+        </label>
+        <label>
+          Main purpose
+          <textarea id="profile-purpose" placeholder="What should this workspace help with?">${escapeHtml(state.agentPurpose)}</textarea>
+        </label>
+        <button class="button primary" id="save-profile">Save profile</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderTerminalPanel(state) {
+  return `
+    <section class="panel terminal-panel">
+      <div class="panel-header split-header">
+        <h3>Terminal</h3>
+        <span class="pill">Preview</span>
+      </div>
+      <div class="terminal-body">
+        ${state.terminalEntries
+          .map(
+            (entry) => `
+              <article class="terminal-entry ${escapeAttribute(entry.status)}">
+                <code>$ ${escapeHtml(entry.command)}</code>
+                <pre>${escapeHtml(entry.output)}</pre>
+              </article>
+            `,
+          )
+          .join('')}
+      </div>
+    </section>
   `;
 }
 
@@ -85,7 +143,7 @@ function renderChatBlock(block) {
   }
 
   return `
-    <article class="message ${block.role === 'user' ? 'system' : 'assistant'}">
+    <article class="message ${block.role === 'user' ? 'user' : 'assistant'}">
       <span>${escapeHtml(block.title || 'Argentum')}</span>
       <p>${escapeHtml(block.body)}</p>
     </article>

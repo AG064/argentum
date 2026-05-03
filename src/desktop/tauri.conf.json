@@ -36,6 +36,7 @@
       "../../installer/macos/argentum.icns",
       "../../installer/wix/argentum.ico"
     ],
+    "externalBin": ["binaries/argentum-cli"],
     "windows": {
       "wix": {
         "language": "en-US"

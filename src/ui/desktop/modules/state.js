@@ -3,8 +3,9 @@ import { APP_VERSION, providerPresets } from './constants.js';
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
 
 export const state = {
-  activeSection: 'onboarding',
+  activeSection: 'chat',
   onboardingStep: 1,
+  onboardingOpen: true,
   setupComplete: false,
   setupStatus: 'setup_pending',
   setupAnimation: false,
@@ -37,9 +38,23 @@ export const state = {
       message: 'Choose a workspace folder first. Argentum will keep default access inside that folder.',
     },
   ],
+  notificationHistory: [
+    {
+      id: 'welcome',
+      type: 'info',
+      title: 'Welcome',
+      message: 'Choose a workspace folder first. Argentum will keep default access inside that folder.',
+    },
+  ],
+  notificationsMuted: false,
+  notificationsMenuOpen: false,
   savedConfigPath: '',
   actionStatus: 'No GUI action has run in this session.',
+  runningAction: '',
   copiedCommand: '',
+  userName: '',
+  agentName: 'Argentum',
+  agentPurpose: '',
   desktopState: {
     workspaceReady: false,
     configExists: false,
@@ -54,20 +69,28 @@ export const state = {
       type: 'message',
       role: 'argentum',
       title: 'Argentum',
-      body: 'I am ready to help set up your local workspace. I will stay inside the folder you choose unless you approve more access.',
+      body: 'I am ready. Finish onboarding when it appears, then we can tune your profile, provider, and workspace permissions from here.',
     },
     {
       type: 'optionGroup',
-      title: 'First preference',
-      body: 'What should I help you configure first?',
+      title: 'Quick start',
+      body: 'Pick a setup area or type naturally. Local replies work even before a model provider is connected.',
       options: [
-        { id: 'name-agent', label: 'Name the agent', detail: 'Pick the name and tone for this Argentum workspace.' },
-        { id: 'security-policy', label: 'Security policy', detail: 'Choose when Argentum should ask before acting.' },
-        { id: 'features', label: 'Feature set', detail: 'Decide which tools and channels should be enabled.' },
+        { id: 'profile', label: 'Profile', detail: 'Set your name, the agent name, and the main purpose.' },
+        { id: 'security-policy', label: 'Security', detail: 'Review workspace access and approvals.' },
+        { id: 'provider', label: 'Provider', detail: 'Connect or retest live model access.' },
       ],
     },
   ],
   draftMessage: '',
+  terminalEntries: [
+    {
+      id: 'terminal-boot',
+      status: 'info',
+      command: 'argentum desktop',
+      output: 'Desktop shell loaded. Gateway, chat, diagnostics, and setup output will appear here when actions run.',
+    },
+  ],
   pendingApprovals: [
     {
       id: 'workspace-read',
@@ -92,12 +115,65 @@ export const state = {
 
 export function notify(type, title, message) {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  state.notifications = [{ id, type, title, message }, ...state.notifications].slice(0, 4);
+  const notification = { id, type, title, message };
+  state.notificationHistory = [notification, ...state.notificationHistory].slice(0, 40);
+
+  if (!state.notificationsMuted) {
+    state.notifications = [notification, ...state.notifications].slice(0, 4);
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        dismissNotification(id, { silent: true });
+        window.dispatchEvent(new Event('argentum:state-change'));
+      }, 5200);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+
   return id;
 }
 
-export function dismissNotification(id) {
+export function dismissNotification(id, options = {}) {
   state.notifications = state.notifications.filter((notification) => notification.id !== id);
+  if (!options.silent && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function clearNotifications() {
+  state.notifications = [];
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function toggleNotificationsMuted() {
+  state.notificationsMuted = !state.notificationsMuted;
+  if (state.notificationsMuted) state.notifications = [];
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function toggleNotificationsMenu() {
+  state.notificationsMenuOpen = !state.notificationsMenuOpen;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function addTerminalEntry(command, output, status = 'info') {
+  state.terminalEntries = [
+    {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      status,
+      command,
+      output,
+    },
+    ...state.terminalEntries,
+  ].slice(0, 24);
 }
 
 export function setProvider(provider) {
@@ -127,7 +203,7 @@ export function appendChatMessage(role, body) {
   state.chatBlocks.push({
     type: 'message',
     role,
-    title: role === 'user' ? 'You' : 'Argentum',
+    title: role === 'user' ? 'You' : state.agentName || 'Argentum',
     body,
   });
 }
