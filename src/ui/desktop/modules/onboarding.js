@@ -15,6 +15,7 @@ import {
   escapeHtml,
   explainPath,
   labelFor,
+  modelOptionsFor,
   selected,
 } from './utils.js';
 
@@ -260,7 +261,15 @@ function renderProviderStep() {
           </label>
           <label>
             Model
-            <input id="provider-model" value="${escapeAttribute(state.providerModel)}" placeholder="${escapeAttribute(provider.defaultModel)}" />
+            <select id="provider-model">
+              ${modelOptionsFor(provider, state.providerModel)
+                .map(
+                  (model) => `
+                    <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || model.id)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
           </label>
           <label>
             API style

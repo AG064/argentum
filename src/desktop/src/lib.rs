@@ -486,25 +486,35 @@ fn sidecar_file_name() -> String {
     format!("argentum-cli-{}{}", target_triple(), extension)
 }
 
+fn sidecar_file_names() -> Vec<String> {
+    let installed_name = if cfg!(target_os = "windows") {
+        "argentum-cli.exe".to_string()
+    } else {
+        "argentum-cli".to_string()
+    };
+    vec![installed_name, sidecar_file_name()]
+}
+
 fn resolve_sidecar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let file_name = sidecar_file_name();
     let mut candidates = Vec::new();
 
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join(&file_name));
-        candidates.push(resource_dir.join("binaries").join(&file_name));
-    }
-
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            candidates.push(exe_dir.join(&file_name));
-            candidates.push(exe_dir.join("binaries").join(&file_name));
+    for file_name in sidecar_file_names() {
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            candidates.push(resource_dir.join(&file_name));
+            candidates.push(resource_dir.join("binaries").join(&file_name));
         }
-    }
 
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(current_dir.join("binaries").join(&file_name));
-        candidates.push(current_dir.join("src").join("desktop").join("binaries").join(&file_name));
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                candidates.push(exe_dir.join(&file_name));
+                candidates.push(exe_dir.join("binaries").join(&file_name));
+            }
+        }
+
+        if let Ok(current_dir) = std::env::current_dir() {
+            candidates.push(current_dir.join("binaries").join(&file_name));
+            candidates.push(current_dir.join("src").join("desktop").join("binaries").join(&file_name));
+        }
     }
 
     candidates
@@ -872,6 +882,50 @@ fn parse_anthropic_chat_response(value: serde_json::Value) -> Result<String, Str
         .ok_or_else(|| "Provider returned an empty chat response.".to_string())
 }
 
+fn provider_error_detail(body: &str) -> Option<String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(message) = value
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(|message| message.as_str())
+        {
+            return Some(redact_sensitive_output(message.trim()));
+        }
+
+        if let Some(message) = value.get("message").and_then(|message| message.as_str()) {
+            return Some(redact_sensitive_output(message.trim()));
+        }
+    }
+
+    Some(redact_sensitive_output(trimmed.lines().next().unwrap_or(trimmed)))
+}
+
+fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
+    let detail = provider_error_detail(body);
+    let suffix = detail
+        .filter(|message| !message.is_empty())
+        .map(|message| format!(" Provider said: {message}"))
+        .unwrap_or_default();
+
+    match status {
+        401 | 403 => format!("{provider} rejected the API key.{suffix}"),
+        429 => format!(
+            "{provider} hit a rate or quota limit (HTTP 429). Wait a minute and retry, choose a smaller model, or check billing/usage limits for the selected key.{suffix}"
+        ),
+        404 => format!(
+            "{provider} returned HTTP 404. Check that the endpoint URL and selected model are available.{suffix}"
+        ),
+        _ => format!(
+            "{provider} responded with HTTP {status}. Check the endpoint and selected model, then test again.{suffix}"
+        ),
+    }
+}
+
 #[tauri::command]
 async fn test_provider(request: TestProviderRequest) -> Result<TestProviderResponse, String> {
     ensure_allowed("provider API", &request.api, &["openai", "anthropic"])?;
@@ -938,8 +992,10 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         });
     }
 
+    let error_body = response.text().await.unwrap_or_default();
+
     if status.as_u16() == 401 || status.as_u16() == 403 {
-        return Err(format!("{} rejected the API key.", defaults.label));
+        return Err(provider_http_error(defaults.label, status.as_u16(), &error_body));
     }
 
     if status.as_u16() == 404 && is_local_endpoint(base_url) {
@@ -949,11 +1005,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         });
     }
 
-    Err(format!(
-        "{} responded with HTTP {}. Check the endpoint and model, then test again.",
-        defaults.label,
-        status.as_u16()
-    ))
+    Err(provider_http_error(defaults.label, status.as_u16(), &error_body))
 }
 
 #[tauri::command]
@@ -1045,15 +1097,13 @@ async fn send_chat_message(
     let status = response.status();
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
-        return Err(format!("{} rejected the API key.", config.label));
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(provider_http_error(&config.label, status.as_u16(), &error_body));
     }
 
     if !status.is_success() {
-        return Err(format!(
-            "{} responded with HTTP {}.",
-            config.label,
-            status.as_u16()
-        ));
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(provider_http_error(&config.label, status.as_u16(), &error_body));
     }
 
     let value = response

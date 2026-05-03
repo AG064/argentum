@@ -31,6 +31,15 @@ export function currentProvider(providers, state) {
   return providers.find((provider) => provider.id === state.llmProvider) || providers[0];
 }
 
+export function modelOptionsFor(provider, currentModel = '') {
+  const options = [...(provider.models || [{ id: provider.defaultModel, label: provider.defaultModel }])];
+  const current = String(currentModel || '').trim();
+  if (current && !options.some((option) => option.id === current)) {
+    options.push({ id: current, label: `Current saved: ${current}` });
+  }
+  return options;
+}
+
 export function invokeTauri(command, payload) {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) return null;

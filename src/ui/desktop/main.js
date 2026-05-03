@@ -331,8 +331,9 @@ function handleInput(event) {
     return;
   }
 
-  if (target.id === 'provider-base-url') state.providerBaseUrl = target.value;
-  if (target.id === 'provider-model') state.providerModel = target.value;
+  if (target.id === 'provider-base-url' || target.id === 'settings-provider-base-url') {
+    state.providerBaseUrl = target.value;
+  }
   if (target.id === 'provider-api-key') state.providerApiKey = target.value;
   if (target.id === 'custom-provider-name') state.customProviderName = target.value;
   if (target.id === 'custom-api-key-env') state.customApiKeyEnv = target.value;
@@ -358,6 +359,16 @@ function handleChange(event) {
 
   if (target.id === 'provider-api') {
     state.providerApi = target.value;
+    render();
+    return;
+  }
+
+  if (target.id === 'provider-model' || target.id === 'settings-provider-model') {
+    state.providerModel = target.value;
+    state.apiTest = {
+      status: 'idle',
+      message: 'Model changed. Test the provider before using live chat.',
+    };
     render();
     return;
   }

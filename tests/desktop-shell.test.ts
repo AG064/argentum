@@ -175,6 +175,9 @@ describe('Argentum desktop shell', () => {
     }
 
     expect(onboarding).toContain('id="provider-base-url"');
+    expect(onboarding).toContain('<select id="provider-model"');
+    expect(onboarding).not.toContain('<input id="provider-model"');
+    expect(constants).toContain('models:');
     expect(onboarding).toContain('id="provider-api-key"');
     expect(onboarding).toContain('id="test-provider"');
     expect(setup).toContain("invokeTauri('test_provider'");
@@ -298,9 +301,13 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('log_path: Option<String>');
     expect(rust).toContain('fn run_gateway_action');
     expect(rust).toContain('fn resolve_sidecar_path');
+    expect(rust).toContain('fn sidecar_file_names');
+    expect(rust).toContain('argentum-cli.exe');
     expect(rust).toContain('"Gateway failed to start because port');
     expect(rust).not.toContain('Gateway start is prepared');
     expect(rust).toContain('send_chat_message');
+    expect(rust).toContain('fn provider_http_error');
+    expect(rust).toContain('rate or quota limit');
     expect(setup).toContain("invokeTauri('send_chat_message'");
     expect(main).toContain("actionId: 'gateway-start'");
     expect(packageJson).toContain('build:desktop-sidecar');

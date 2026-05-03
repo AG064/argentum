@@ -8,7 +8,7 @@ import {
   renderHero,
   renderNotifications,
 } from './shell.js';
-import { currentProvider, escapeHtml, labelFor } from './utils.js';
+import { currentProvider, escapeAttribute, escapeHtml, labelFor, modelOptionsFor, selected } from './utils.js';
 
 function terminalPreview(state, filter = '') {
   const entries = filter
@@ -212,6 +212,22 @@ const settingsModule = {
                 )
                 .join('')}
             </select>
+          </label>
+          <label>
+            Model
+            <select id="settings-provider-model">
+              ${modelOptionsFor(provider, state.providerModel)
+                .map(
+                  (model) => `
+                    <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || model.id)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
+            Endpoint
+            <input id="settings-provider-base-url" value="${escapeAttribute(state.providerBaseUrl)}" />
           </label>
           <label>
             Permission profile
