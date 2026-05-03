@@ -308,7 +308,7 @@ function renderSettingsOAuthPanel(state) {
       <div>
         <span class="pill">OpenAI/Codex OAuth</span>
         <h3>Browser Account Authorization</h3>
-        <p>Use this only for OpenAI. Start authorization, approve it in your browser, then complete it here. API key auth remains available above.</p>
+        <p>Use this only for OpenAI/Codex mode. Start authorization, approve it in your browser, then complete it here. API key auth remains available above for live Platform API chat.</p>
       </div>
       <div class="oauth-actions">
         <button class="button" id="start-codex-oauth">Start OpenAI/Codex authorization</button>

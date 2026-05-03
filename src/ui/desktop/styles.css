@@ -449,6 +449,30 @@ p {
   gap: 16px;
 }
 
+.provider-stage {
+  display: grid;
+  gap: 16px;
+}
+
+.provider-stage-header {
+  display: grid;
+  gap: 6px;
+}
+
+.provider-stage-header h3 {
+  margin-bottom: 0;
+}
+
+.provider-choice-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.auth-method-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .provider-list,
 .channel-grid,
 .capability-grid,
@@ -1380,6 +1404,13 @@ textarea {
   color: var(--text);
   padding: 12px;
   text-align: left;
+  cursor: pointer;
+}
+
+.recent-chat-item.active,
+.recent-chat-item:hover {
+  border-color: rgba(226, 59, 59, 0.55);
+  background: var(--accent-soft);
 }
 
 .recent-chat-item span {
@@ -1503,6 +1534,8 @@ textarea {
   .form-grid.two,
   .interface-grid,
   .provider-layout,
+  .provider-choice-list,
+  .auth-method-grid,
   .capability-grid,
   .gateway-grid,
   .channel-grid,

@@ -197,7 +197,6 @@ const CODEX_DEVICE_USERCODE_URL: &str = "https://auth.openai.com/api/accounts/de
 const CODEX_DEVICE_TOKEN_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
 const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
-const CODEX_API_KEY_TOKEN_REQUEST: &str = "openai-api-key";
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
     let workspace = PathBuf::from(path);
@@ -890,14 +889,28 @@ fn codex_oauth_auth_path(workspace: &Path) -> PathBuf {
     codex_oauth_home(workspace).join("auth.json")
 }
 
-fn codex_oauth_api_key(workspace: &Path) -> Option<String> {
-    let contents = std::fs::read_to_string(codex_oauth_auth_path(workspace)).ok()?;
-    let value = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
-    value
-        .get("OPENAI_API_KEY")
-        .and_then(|key| key.as_str())
-        .map(|key| key.trim().to_string())
-        .filter(|key| !key.is_empty())
+fn codex_oauth_tokens_saved(workspace: &Path) -> bool {
+    let Some(contents) = std::fs::read_to_string(codex_oauth_auth_path(workspace)).ok() else {
+        return false;
+    };
+    let Some(value) = serde_json::from_str::<serde_json::Value>(&contents).ok() else {
+        return false;
+    };
+    let Some(tokens) = value.get("tokens") else {
+        return false;
+    };
+    let access_token = tokens
+        .get("access_token")
+        .and_then(|token| token.as_str())
+        .map(str::trim)
+        .unwrap_or_default();
+    let refresh_token = tokens
+        .get("refresh_token")
+        .and_then(|token| token.as_str())
+        .map(str::trim)
+        .unwrap_or_default();
+
+    !access_token.is_empty() && !refresh_token.is_empty()
 }
 
 fn oauth_client() -> Result<reqwest::Client, String> {
@@ -1049,17 +1062,10 @@ fn provider_api_key(
     workspace: Option<&Path>,
     request_key: &str,
     key_env: &str,
-    auth_method: &str,
 ) -> Option<String> {
     let trimmed = request_key.trim();
     if !trimmed.is_empty() {
         return Some(trimmed.to_string());
-    }
-
-    if auth_method == "browser-account" {
-        if let Some(key) = workspace.and_then(codex_oauth_api_key) {
-            return Some(key);
-        }
     }
 
     workspace
@@ -1311,32 +1317,10 @@ async fn complete_codex_oauth(
     let refresh_token = json_string(&token_value, "refresh_token")
         .ok_or_else(|| "OpenAI/Codex token exchange did not return a refresh token.".to_string())?;
 
-    let api_key_value = post_oauth_form(
-        &client,
-        &[
-            (
-                "grant_type",
-                "urn:ietf:params:oauth:grant-type:token-exchange",
-            ),
-            ("client_id", CODEX_CLIENT_ID),
-            ("requested_token", CODEX_API_KEY_TOKEN_REQUEST),
-            ("subject_token", &id_token),
-            (
-                "subject_token_type",
-                "urn:ietf:params:oauth:token-type:id_token",
-            ),
-        ],
-        "OpenAI/Codex API key exchange",
-    )
-    .await?;
-    let api_key = json_string(&api_key_value, "access_token").ok_or_else(|| {
-        "OpenAI/Codex API key exchange did not return a usable credential.".to_string()
-    })?;
-
     let auth_path = codex_oauth_auth_path(&workspace);
     let payload = json!({
         "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": api_key,
+        "OPENAI_API_KEY": serde_json::Value::Null,
         "tokens": {
             "id_token": id_token,
             "access_token": access_token,
@@ -1350,7 +1334,7 @@ async fn complete_codex_oauth(
 
     Ok(CodexOAuthCompleteResponse {
         status: "ok".to_string(),
-        message: "OpenAI/Codex authorization saved inside the selected workspace. Live chat can now use browser-account auth for OpenAI.".to_string(),
+        message: "OpenAI/Codex authorization saved inside the selected workspace. Argentum will use browser-account auth for Codex mode; Platform API chat still needs API key auth until the live Codex runtime is wired.".to_string(),
         provider: "OpenAI".to_string(),
         model: "gpt-5.5".to_string(),
         auth_method: "browser-account".to_string(),
@@ -1391,11 +1375,31 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         return Err("Provider endpoint must start with http:// or https://".to_string());
     }
 
+    if auth_method == "browser-account" {
+        let Some(workspace) = workspace.as_deref() else {
+            return Err(
+                "Workspace path is required to test OpenAI/Codex browser account authorization."
+                    .to_string(),
+            );
+        };
+
+        if !codex_oauth_tokens_saved(workspace) {
+            return Err(
+                "Complete OpenAI/Codex authorization before testing browser account auth."
+                    .to_string(),
+            );
+        }
+
+        return Ok(TestProviderResponse {
+            status: "warning".to_string(),
+            message: "OpenAI/Codex browser account authorization is saved. Use API key auth for live Platform API chat until the Codex runtime is wired into Argentum.".to_string(),
+        });
+    }
+
     let api_key = provider_api_key(
         workspace.as_deref(),
         &request.api_key,
         defaults.api_key_env,
-        auth_method,
     )
     .unwrap_or_default();
 
@@ -1498,11 +1502,26 @@ async fn send_chat_message(
         });
     }
 
+    if config.auth_method == "browser-account" {
+        let reason = if codex_oauth_tokens_saved(&workspace) {
+            "OpenAI/Codex browser account authorization is saved, but live Codex runtime routing is not wired into this desktop MVP yet. Switch to API key auth for live Platform API replies."
+        } else {
+            "OpenAI/Codex browser account authorization is not complete. Restart onboarding or open Settings to finish authorization."
+        };
+
+        return Ok(SendChatMessageResponse {
+            status: "offline".to_string(),
+            message: offline_chat_message(message, reason),
+            provider: config.label,
+            model: config.model,
+            offline: true,
+        });
+    }
+
     let api_key = provider_api_key(
         Some(&workspace),
         "",
         &config.api_key_env,
-        &config.auth_method,
     )
     .unwrap_or_default();
     let requires_key = !is_local_endpoint(&config.base_url);

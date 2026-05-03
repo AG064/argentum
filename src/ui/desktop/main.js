@@ -6,12 +6,16 @@ import {
   addTerminalEntry,
   appendChatMessage,
   clearNotifications,
+  createChatSession,
   dismissNotification,
+  hydrateChatHistory,
   notify,
   scheduleVisibleNotifications,
   setChannel,
+  setActiveChatSession,
   setProvider,
   state,
+  syncActiveChatSession,
   toggleNotificationsMenu,
   toggleNotificationsMuted,
 } from './modules/state.js';
@@ -102,6 +106,7 @@ function resetIntroChat() {
         : 'Setup is saved. Add your name and agent name in Settings, or ask what is next.',
     },
   ];
+  syncActiveChatSession();
 }
 
 async function finishOnboarding() {
@@ -218,6 +223,8 @@ function updateProviderFieldsFromPreset(providerId) {
   const provider = providerPresets.find((item) => item.id === providerId);
   if (!provider) return;
   setProvider(provider);
+  state.providerSelectionConfirmed = true;
+  state.providerSetupStage = 'auth';
 }
 
 async function chooseChatAttachment() {
@@ -428,6 +435,7 @@ function handleChange(event) {
 
   if (target.id === 'provider-auth-method' || target.id === 'settings-provider-auth-method') {
     state.providerAuthMethod = target.value;
+    if (target.id === 'provider-auth-method') state.providerSetupStage = 'credentials';
     state.apiTest = {
       status: target.value === 'browser-account' ? 'warning' : 'idle',
       message:
@@ -546,6 +554,43 @@ async function handleClick(event) {
     return;
   }
 
+  const providerAuthButton = element.closest('[data-provider-auth-method]');
+  if (providerAuthButton) {
+    state.providerAuthMethod = providerAuthButton.dataset.providerAuthMethod;
+    state.providerSetupStage = 'credentials';
+    state.apiTest = {
+      status: state.providerAuthMethod === 'browser-account' ? 'warning' : 'idle',
+      message:
+        state.providerAuthMethod === 'browser-account'
+          ? 'OpenAI/Codex authorization selected. Start and complete authorization before testing provider access.'
+          : 'API key authorization selected. Add the key, then choose a model.',
+    };
+    render();
+    return;
+  }
+
+  const providerStageButton = element.closest('[data-provider-setup-stage]');
+  if (providerStageButton) {
+    const nextStage = providerStageButton.dataset.providerSetupStage;
+    if (nextStage === 'model') {
+      const provider = providerPresets.find((item) => item.id === state.llmProvider) || providerPresets[0];
+      if (state.providerAuthMethod === 'api-key' && provider.requiresKey && !state.providerApiKey.trim()) {
+        notify('error', 'API key needed', 'Add the API key first, or go back and choose browser account authorization.');
+        render();
+        return;
+      }
+      if (state.providerAuthMethod === 'browser-account' && state.codexOAuth.status !== 'ok') {
+        notify('error', 'Authorization incomplete', 'Complete OpenAI/Codex authorization before choosing a model.');
+        render();
+        return;
+      }
+    }
+    state.providerSetupStage = nextStage || 'provider';
+    if (state.providerSetupStage === 'provider') state.providerSelectionConfirmed = false;
+    render();
+    return;
+  }
+
   const securityButton = element.closest('[data-security-profile]');
   if (securityButton) {
     state.securityProfile = securityButton.dataset.securityProfile;
@@ -561,6 +606,18 @@ async function handleClick(event) {
 
   if (element.closest('#test-provider')) {
     await testProvider();
+    render();
+    return;
+  }
+
+  if (element.closest('#continue-provider-model')) {
+    const provider = providerPresets.find((item) => item.id === state.llmProvider) || providerPresets[0];
+    if (provider.requiresKey && !state.providerApiKey.trim()) {
+      notify('error', 'API key needed', 'Paste the provider API key before choosing the model.');
+      render();
+      return;
+    }
+    state.providerSetupStage = 'model';
     render();
     return;
   }
@@ -587,6 +644,19 @@ async function handleClick(event) {
   if (element.closest('#complete-codex-oauth')) {
     state.providerAuthMethod = 'browser-account';
     await completeCodexOAuth();
+    render();
+    return;
+  }
+
+  const recentChatButton = element.closest('[data-recent-chat]');
+  if (recentChatButton) {
+    setActiveChatSession(recentChatButton.dataset.recentChat);
+    render();
+    return;
+  }
+
+  if (element.closest('#new-chat')) {
+    createChatSession();
     render();
     return;
   }
@@ -694,6 +764,7 @@ document.addEventListener('change', handleChange);
 window.addEventListener('argentum:state-change', render);
 
 hydrateStaticIcons(document);
+const chatHistoryRestored = hydrateChatHistory();
 scheduleVisibleNotifications();
 hydrateDesktopDefaults()
   .then(() => refreshDesktopState())
@@ -703,7 +774,7 @@ hydrateDesktopDefaults()
       state.onboardingOpen = false;
       state.activeSection = 'chat';
       state.notifications = [];
-      resetIntroChat();
+      if (!chatHistoryRestored) resetIntroChat();
     } else {
       state.onboardingOpen = true;
     }

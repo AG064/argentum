@@ -1,6 +1,54 @@
 import { APP_VERSION, providerPresets } from './constants.js';
 
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
+const CHAT_HISTORY_STORAGE_KEY = 'argentum.chatHistory.v1';
+
+const openingChatBlocks = [
+  {
+    type: 'message',
+    role: 'argentum',
+    title: 'Argentum',
+    body: 'I am ready. Finish onboarding when it appears, then we can tune your profile, provider, and workspace permissions from here.',
+  },
+];
+
+function cloneBlocks(blocks) {
+  return JSON.parse(JSON.stringify(blocks));
+}
+
+function summarizeChat(blocks) {
+  const lastMessage = [...blocks]
+    .reverse()
+    .find((block) => block.type === 'message' && block.body);
+  if (!lastMessage) return 'No messages yet';
+
+  const text = String(lastMessage.body).replace(/\s+/g, ' ').trim();
+  return text.length > 68 ? `${text.slice(0, 65)}...` : text;
+}
+
+function titleFromChat(blocks, fallback) {
+  const firstUserMessage = blocks.find((block) => block.type === 'message' && block.role === 'user');
+  if (!firstUserMessage?.body) return fallback;
+
+  const text = String(firstUserMessage.body).replace(/\s+/g, ' ').trim();
+  return text.length > 34 ? `${text.slice(0, 31)}...` : text;
+}
+
+function persistChatHistory() {
+  try {
+    const storage = typeof window === 'undefined' ? null : window.localStorage;
+    if (!storage) return;
+    storage.setItem(
+      CHAT_HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        activeChatId: state.activeChatId,
+        chatSessions: state.chatSessions,
+      }),
+    );
+  } catch (_error) {
+    // Chat history persistence should never prevent the app from opening.
+  }
+}
 
 export const state = {
   activeSection: 'chat',
@@ -18,6 +66,8 @@ export const state = {
   providerBaseUrl: defaultProvider.defaultBaseUrl,
   providerModel: defaultProvider.defaultModel,
   providerAuthMethod: 'api-key',
+  providerSetupStage: 'provider',
+  providerSelectionConfirmed: false,
   providerApiKey: '',
   codexOAuth: {
     status: 'idle',
@@ -68,9 +118,29 @@ export const state = {
   thinkingLevel: 'balanced',
   chatAttachments: [],
   voiceInputStatus: 'idle',
-  recentChats: [
-    { id: 'setup', title: 'Setup and security', subtitle: 'Workspace, provider, and permissions' },
-    { id: 'general', title: 'General chat', subtitle: 'Ask Argentum directly' },
+  activeChatId: 'setup',
+  chatSessions: [
+    {
+      id: 'setup',
+      title: 'Setup and security',
+      subtitle: 'Workspace, provider, and permissions',
+      blocks: cloneBlocks(openingChatBlocks),
+      updatedAt: Date.now(),
+    },
+    {
+      id: 'general',
+      title: 'General chat',
+      subtitle: 'Ask Argentum directly',
+      blocks: [
+        {
+          type: 'message',
+          role: 'argentum',
+          title: 'Argentum',
+          body: 'Start a fresh conversation here. I will keep this thread separate from setup history.',
+        },
+      ],
+      updatedAt: Date.now() - 1,
+    },
   ],
   desktopState: {
     workspaceReady: false,
@@ -81,14 +151,7 @@ export const state = {
     gatewayLogPreview: 'No entries yet.',
     auditLogPreview: 'No entries yet.',
   },
-  chatBlocks: [
-    {
-      type: 'message',
-      role: 'argentum',
-      title: 'Argentum',
-      body: 'I am ready. Finish onboarding when it appears, then we can tune your profile, provider, and workspace permissions from here.',
-    },
-  ],
+  chatBlocks: cloneBlocks(openingChatBlocks),
   draftMessage: '',
   terminalEntries: [
     {
@@ -195,6 +258,90 @@ export function addTerminalEntry(command, output, status = 'info') {
   ].slice(0, 24);
 }
 
+export function syncActiveChatSession() {
+  const index = state.chatSessions.findIndex((chat) => chat.id === state.activeChatId);
+  if (index === -1) return;
+
+  const current = state.chatSessions[index];
+  const fallbackTitle = current.title || 'New chat';
+  state.chatSessions[index] = {
+    ...current,
+    title: titleFromChat(state.chatBlocks, fallbackTitle === 'New chat' ? 'New chat' : fallbackTitle),
+    subtitle: summarizeChat(state.chatBlocks),
+    blocks: cloneBlocks(state.chatBlocks),
+    updatedAt: Date.now(),
+  };
+  state.chatSessions = [...state.chatSessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 24);
+  persistChatHistory();
+}
+
+export function setActiveChatSession(chatId) {
+  syncActiveChatSession();
+  const session = state.chatSessions.find((chat) => chat.id === chatId) || state.chatSessions[0];
+  if (!session) return;
+
+  state.activeChatId = session.id;
+  state.chatBlocks = cloneBlocks(session.blocks?.length ? session.blocks : openingChatBlocks);
+  state.draftMessage = '';
+  state.chatAttachments = [];
+  persistChatHistory();
+}
+
+export function createChatSession() {
+  syncActiveChatSession();
+  const id = `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const session = {
+    id,
+    title: 'New chat',
+    subtitle: 'No messages yet',
+    blocks: [
+      {
+        type: 'message',
+        role: 'argentum',
+        title: state.agentName || 'Argentum',
+        body: 'New chat started. Ask a question, attach a workspace file, or describe what you want Argentum to do.',
+      },
+    ],
+    updatedAt: Date.now(),
+  };
+
+  state.chatSessions = [session, ...state.chatSessions].slice(0, 24);
+  state.activeChatId = id;
+  state.chatBlocks = cloneBlocks(session.blocks);
+  state.draftMessage = '';
+  state.chatAttachments = [];
+  persistChatHistory();
+  return session;
+}
+
+export function hydrateChatHistory() {
+  try {
+    const storage = typeof window === 'undefined' ? null : window.localStorage;
+    if (!storage) return false;
+    const saved = JSON.parse(storage.getItem(CHAT_HISTORY_STORAGE_KEY) || 'null');
+    if (!saved || !Array.isArray(saved.chatSessions) || saved.chatSessions.length === 0) return false;
+
+    state.chatSessions = saved.chatSessions
+      .filter((session) => session?.id && Array.isArray(session.blocks))
+      .slice(0, 24);
+    if (state.chatSessions.length === 0) return false;
+
+    state.activeChatId = state.chatSessions.some((session) => session.id === saved.activeChatId)
+      ? saved.activeChatId
+      : state.chatSessions[0].id;
+    const active = state.chatSessions.find((session) => session.id === state.activeChatId);
+    state.chatBlocks = cloneBlocks(active?.blocks?.length ? active.blocks : openingChatBlocks);
+    return true;
+  } catch (_error) {
+    try {
+      window.localStorage.removeItem(CHAT_HISTORY_STORAGE_KEY);
+    } catch (_innerError) {
+      // Ignore storage cleanup failures.
+    }
+    return false;
+  }
+}
+
 export function setProvider(provider) {
   state.llmProvider = provider.id;
   state.providerApi = provider.api;
@@ -229,4 +376,5 @@ export function appendChatMessage(role, body) {
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',
     body,
   });
+  syncActiveChatSession();
 }

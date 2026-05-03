@@ -193,9 +193,11 @@ export async function completeCodexOAuth() {
     if (result.status === 'ok') {
       state.providerAuthMethod = 'browser-account';
       state.providerApiKey = '';
+      state.providerSetupStage = 'model';
+      state.providerSelectionConfirmed = true;
       state.apiTest = {
         status: 'idle',
-        message: 'OpenAI/Codex authorization is saved. Run Test Provider to verify model access with this account.',
+        message: 'OpenAI/Codex authorization is saved. Run Test Provider to verify the saved browser-account credentials.',
       };
       try {
         const saveResult = await saveSetup();

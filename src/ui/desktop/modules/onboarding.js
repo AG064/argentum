@@ -40,6 +40,25 @@ export function validateCurrentStep() {
     return 'Add the provider endpoint before continuing.';
   }
 
+  if (state.onboardingStep === 5) {
+    const provider = currentProvider(providerPresets, state);
+    if (!state.providerSelectionConfirmed) {
+      return 'Choose an AI provider before continuing.';
+    }
+
+    if (state.providerSetupStage !== 'model') {
+      return 'Finish the provider setup steps before continuing.';
+    }
+
+    if (state.providerAuthMethod === 'api-key' && provider.requiresKey && !state.providerApiKey.trim()) {
+      return 'Add an API key or choose browser account authorization before continuing.';
+    }
+
+    if (state.providerAuthMethod === 'browser-account' && state.codexOAuth.status !== 'ok') {
+      return 'Complete OpenAI/Codex authorization before continuing with browser account auth.';
+    }
+  }
+
   return '';
 }
 
@@ -242,9 +261,30 @@ function renderProviderStep() {
   const availableAuthMethods = providerAuthMethods.filter((method) =>
     (provider.authMethods || ['api-key']).includes(method.id),
   );
+
+  if (!state.providerSelectionConfirmed || state.providerSetupStage === 'provider') {
+    return renderProviderChoiceStep();
+  }
+
+  if (state.providerSetupStage === 'auth') {
+    return renderProviderAuthStep(provider, availableAuthMethods);
+  }
+
+  if (state.providerSetupStage === 'credentials') {
+    return renderProviderCredentialStep(provider);
+  }
+
+  return renderProviderModelStep(provider, availableAuthMethods);
+}
+
+function renderProviderChoiceStep() {
   return `
-    <div class="provider-layout">
-      <div class="provider-list">
+    <div class="provider-stage">
+      <div class="provider-stage-header">
+        <span class="pill">Provider</span>
+        <h3>Choose who runs the model</h3>
+      </div>
+      <div class="provider-list provider-choice-list">
         ${providerPresets
           .map(
             (item) => `
@@ -263,12 +303,104 @@ function renderProviderStep() {
           )
           .join('')}
       </div>
+    </div>
+  `;
+}
+
+function renderProviderAuthStep(provider, availableAuthMethods) {
+  return `
+    <div class="provider-stage">
+      <div class="provider-stage-header split-header">
+        <div>
+          <span class="pill">Authorization</span>
+          <h3>${escapeHtml(provider.label)}</h3>
+        </div>
+        <button class="button" data-provider-setup-stage="provider">Change provider</button>
+      </div>
+      <label>
+        Authorization method
+        <select id="provider-auth-method">
+          ${availableAuthMethods
+            .map(
+              (method) => `
+                <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)}</option>
+              `,
+            )
+            .join('')}
+        </select>
+      </label>
+      <div class="auth-method-grid">
+        ${availableAuthMethods
+          .map(
+            (method) => `
+              <button class="interface-card ${state.providerAuthMethod === method.id ? 'active' : ''}" data-provider-auth-method="${escapeAttribute(method.id)}" data-provider-setup-stage="credentials">
+                <span>${escapeHtml(method.status)}</span>
+                <strong>${escapeHtml(method.label)}</strong>
+                <p>${escapeHtml(method.detail)}</p>
+              </button>
+            `,
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderProviderCredentialStep(provider) {
+  if (state.providerAuthMethod === 'browser-account') {
+    return `
+      <div class="provider-stage">
+        <div class="provider-stage-header split-header">
+          <div>
+            <span class="pill">Authorize</span>
+            <h3>${escapeHtml(provider.label)} browser account</h3>
+          </div>
+          <button class="button" data-provider-setup-stage="auth">Back</button>
+        </div>
+        ${renderProviderAuthGuidance(provider)}
+        ${renderCodexOAuthPanel()}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="provider-stage">
+      <div class="provider-stage-header split-header">
+        <div>
+          <span class="pill">API key</span>
+          <h3>${escapeHtml(provider.label)}</h3>
+        </div>
+        <button class="button" data-provider-setup-stage="auth">Back</button>
+      </div>
       <div class="panel provider-settings">
         <div class="panel-body form-grid">
           <label>
-            Endpoint
-            <input id="provider-base-url" value="${escapeAttribute(state.providerBaseUrl)}" placeholder="${escapeAttribute(provider.defaultBaseUrl)}" />
+            API key
+            <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
           </label>
+          ${renderProviderAuthGuidance(provider)}
+          <div class="button-row split">
+            <span class="pill ${provider.requiresKey ? 'warn' : 'ok'}">${provider.requiresKey ? 'Key required' : 'Key optional'}</span>
+            <button class="button primary" id="continue-provider-model" data-provider-setup-stage="model">Continue to model</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProviderModelStep(provider) {
+  return `
+    <div class="provider-stage">
+      <div class="provider-stage-header split-header">
+        <div>
+          <span class="pill">Model</span>
+          <h3>${escapeHtml(provider.label)}</h3>
+        </div>
+        <button class="button" data-provider-setup-stage="auth">Change authorization</button>
+      </div>
+      <div class="panel provider-settings">
+        <div class="panel-body form-grid">
           <label>
             Model
             <select id="provider-model">
@@ -282,43 +414,16 @@ function renderProviderStep() {
             </select>
           </label>
           <label>
+            Endpoint
+            <input id="provider-base-url" value="${escapeAttribute(state.providerBaseUrl)}" placeholder="${escapeAttribute(provider.defaultBaseUrl)}" />
+          </label>
+          <label>
             API style
             <select id="provider-api">
               <option value="openai" ${selected(state.providerApi, 'openai')}>OpenAI-compatible</option>
               <option value="anthropic" ${selected(state.providerApi, 'anthropic')}>Anthropic-compatible</option>
             </select>
           </label>
-          <label>
-            Authorization method
-            <select id="provider-auth-method">
-              ${availableAuthMethods
-                .map(
-                  (method) => `
-                    <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)} - ${escapeHtml(method.status)}</option>
-                  `,
-                )
-              .join('')}
-            </select>
-          </label>
-          <label>
-            API key
-            <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
-          </label>
-          <div class="auth-method-panel">
-            ${availableAuthMethods
-              .map(
-                (method) => `
-                  <article class="${state.providerAuthMethod === method.id ? 'active' : ''}">
-                    <strong>${escapeHtml(method.label)}</strong>
-                    <span>${escapeHtml(method.status)}</span>
-                    <p>${escapeHtml(method.detail)}</p>
-                  </article>
-                `,
-              )
-              .join('')}
-          </div>
-          ${renderProviderAuthGuidance(provider)}
-          ${renderCodexOAuthPanel()}
           ${
             state.llmProvider === 'custom'
               ? `
@@ -334,7 +439,7 @@ function renderProviderStep() {
               : ''
           }
           <div class="test-row">
-            <button class="button" id="test-provider">Test API</button>
+            <button class="button" id="test-provider">Test Provider</button>
             <span class="pill ${providerTestClass()}">${escapeHtml(providerTestLabel())}</span>
             <p>${escapeHtml(state.apiTest.message)}</p>
           </div>
@@ -354,7 +459,7 @@ function renderProviderAuthGuidance(provider) {
           <li>Start OpenAI/Codex authorization to create a one-time browser code.</li>
           <li>Open the verification page with the external-link button.</li>
           <li>Approve Argentum in your browser, then come back here.</li>
-          <li>Complete authorization and run Test API to verify model access.</li>
+          <li>Complete authorization, then choose a model and run Test Provider.</li>
         </ol>
       </div>
     `;
@@ -367,7 +472,7 @@ function renderProviderAuthGuidance(provider) {
       <ol>
         <li>Open the provider website and create or copy an API key.</li>
         <li>Paste the key in this setup screen. Password fields stay hidden.</li>
-        <li>Pick a model and endpoint, then run Test API.</li>
+        <li>Pick a model and endpoint, then run Test Provider.</li>
         <li>Finish onboarding after the test passes or continue in offline mode.</li>
       </ol>
     </div>

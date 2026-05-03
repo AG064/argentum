@@ -20,14 +20,15 @@ function renderChatSection(state) {
     ${renderNotifications()}
     <div class="chat-workspace">
       <aside class="panel recent-chat-list">
-        <div class="panel-header">
+        <div class="panel-header split-header">
           <h3>Recent Chats</h3>
+          <button class="icon-button" id="new-chat" title="New chat" aria-label="New chat">+</button>
         </div>
         <div class="recent-chat-items">
-          ${state.recentChats
+          ${state.chatSessions
             .map(
               (chat) => `
-                <button class="recent-chat-item" data-recent-chat="${escapeAttribute(chat.id)}">
+                <button class="recent-chat-item ${state.activeChatId === chat.id ? 'active' : ''}" data-recent-chat="${escapeAttribute(chat.id)}">
                   <strong>${escapeHtml(chat.title)}</strong>
                   <span>${escapeHtml(chat.subtitle)}</span>
                 </button>
