@@ -223,7 +223,7 @@ const settingsModule = {
           <label>
             Model
             <select id="settings-provider-model">
-              ${modelOptionsFor(provider, state.providerModel)
+              ${modelOptionsFor(provider, state.providerModel, state.providerAuthMethod)
                 .map(
                   (model) => `
                     <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || model.id)}</option>

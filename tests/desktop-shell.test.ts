@@ -195,7 +195,11 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('id="provider-base-url"');
     expect(onboarding).toContain('<select id="provider-model"');
     expect(onboarding).not.toContain('<input id="provider-model"');
+    expect(onboarding).toContain('renderProgressiveProviderFrame');
+    expect(onboarding).toContain('provider-focus-panel');
+    expect(onboarding).toContain('data-model-auth-methods');
     expect(constants).toContain('models:');
+    expect(constants).toContain('codexModels:');
     for (const model of [
       'gpt-5.5',
       'gpt-5.5-pro',
@@ -240,9 +244,18 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('id="provider-api-key"');
     expect(onboarding).toContain('id="test-provider"');
     expect(setup).toContain("invokeTauri('test_provider'");
+    expect(setup).toContain('persistRuntimeSettings');
+    expect(setup).toContain("await persistRuntimeSettings('chat')");
+    expect(setup).toContain("await persistRuntimeSettings('provider-test')");
     expect(rust).toContain('struct TestProviderRequest');
     expect(rust).toContain('async fn test_provider');
     expect(rust).toContain('Provider endpoint must start with http:// or https://');
+    expect(rust).toContain('const CODEX_COMPAT_CLIENT_VERSION');
+    expect(rust).toContain('fn codex_models_url');
+    expect(rust).toContain('async fn test_codex_browser_provider');
+    expect(rust).toContain('originator');
+    expect(rust).toContain('USER_AGENT');
+    expect(rust).not.toContain('.header("version", env!("CARGO_PKG_VERSION"))');
   });
 
   test('supports multiple selected channels including WhatsApp as advanced pending', () => {
@@ -284,6 +297,9 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('height: 100vh');
     expect(css).toContain('.topbar');
     expect(css).toContain('position: sticky');
+    expect(css).toContain('--z-notification: 220');
+    expect(css).toContain('--z-onboarding: 900');
+    expect(css).toContain('z-index: var(--z-onboarding)');
   });
 
   test('shows onboarding as a blocking overlay and can restart after setup', () => {
@@ -408,6 +424,9 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('async fn send_codex_chat_message');
     expect(rust).toContain('fn parse_codex_sse_response');
     expect(rust).toContain('"stream": true');
+    expect(rust).toContain('codex_browser_headers');
+    expect(rust).toContain('Codex model catalog');
+    expect(rust).toContain('requires a newer Codex client');
     expect(rust).toContain('OpenAI/Codex browser account auth is ready for live Codex chat.');
     expect(rust).not.toContain('live Codex runtime routing is not wired');
     expect(rust).not.toContain('Use API key auth for live Platform API chat until');
@@ -423,6 +442,7 @@ describe('Argentum desktop shell', () => {
     expect(setup).toContain('providerApiKey');
     expect(rust).toContain('fn save_setup');
     expect(rust).toContain('secrets.env');
+    expect(rust).toContain('fn merge_existing_secrets');
     expect(rust).toContain('Provider keys are added by the desktop credential flow');
     expect(rust).toContain('fn render_config');
     expect(rust).toContain('workspaceRoot');

@@ -1,4 +1,5 @@
 import { APP_VERSION, providerPresets } from './constants.js';
+import { defaultModelForAuth, modelAllowedForAuth } from './utils.js';
 
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
 const CHAT_HISTORY_STORAGE_KEY = 'argentum.chatHistory.v1';
@@ -346,16 +347,23 @@ export function setProvider(provider) {
   state.llmProvider = provider.id;
   state.providerApi = provider.api;
   state.providerBaseUrl = provider.defaultBaseUrl;
-  state.providerModel = provider.defaultModel;
   const allowedAuthMethods = provider.authMethods || ['api-key'];
   if (!allowedAuthMethods.includes(state.providerAuthMethod)) {
     state.providerAuthMethod = allowedAuthMethods[0];
   }
+  state.providerModel = defaultModelForAuth(provider, state.providerAuthMethod);
   state.customApiKeyEnv = provider.apiKeyEnv;
   state.apiTest = {
     status: 'idle',
     message: 'Provider changed. Test it before finishing setup.',
   };
+}
+
+export function ensureProviderModelAllowed() {
+  const provider = providerPresets.find((item) => item.id === state.llmProvider) || providerPresets[0];
+  if (!modelAllowedForAuth(provider, state.providerModel, state.providerAuthMethod)) {
+    state.providerModel = defaultModelForAuth(provider, state.providerAuthMethod);
+  }
 }
 
 export function setChannel(channelId, enabled) {

@@ -93,7 +93,15 @@ export const providerPresets = [
     websiteUrl: 'https://platform.openai.com',
     authMethods: ['api-key', 'browser-account'],
     defaultBaseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-5.5',
+    defaultModel: 'gpt-5.4-mini',
+    codexDefaultModel: 'gpt-5.4-mini',
+    codexModels: [
+      { id: 'gpt-5.5', label: 'GPT-5.5' },
+      { id: 'gpt-5.4', label: 'GPT-5.4' },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+      { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+      { id: 'gpt-5.2', label: 'GPT-5.2' },
+    ],
     models: [
       { id: 'gpt-5.5', label: 'GPT-5.5' },
       { id: 'gpt-5.5-pro', label: 'GPT-5.5 pro' },

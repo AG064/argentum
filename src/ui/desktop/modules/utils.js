@@ -31,13 +31,29 @@ export function currentProvider(providers, state) {
   return providers.find((provider) => provider.id === state.llmProvider) || providers[0];
 }
 
-export function modelOptionsFor(provider, currentModel = '') {
-  const options = [...(provider.models || [{ id: provider.defaultModel, label: provider.defaultModel }])];
+export function modelOptionsFor(provider, currentModel = '', authMethod = 'api-key') {
+  const source =
+    authMethod === 'browser-account' && provider.codexModels?.length
+      ? provider.codexModels
+      : provider.models || [{ id: provider.defaultModel, label: provider.defaultModel }];
+  const options = [...source];
   const current = String(currentModel || '').trim();
   if (current && !options.some((option) => option.id === current)) {
     options.push({ id: current, label: `Current saved: ${current}` });
   }
   return options;
+}
+
+export function defaultModelForAuth(provider, authMethod = 'api-key') {
+  if (authMethod === 'browser-account') {
+    return provider.codexDefaultModel || provider.codexModels?.[0]?.id || provider.defaultModel;
+  }
+
+  return provider.defaultModel;
+}
+
+export function modelAllowedForAuth(provider, model, authMethod = 'api-key') {
+  return modelOptionsFor(provider, '', authMethod).some((option) => option.id === model);
 }
 
 export function invokeTauri(command, payload) {

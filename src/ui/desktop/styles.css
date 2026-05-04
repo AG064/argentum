@@ -15,6 +15,9 @@
   --ok: #45c486;
   --warn: #d8a93b;
   --danger: #f05252;
+  --z-topbar: 140;
+  --z-notification: 220;
+  --z-onboarding: 900;
 }
 
 * {
@@ -171,7 +174,7 @@ button {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 140;
+  z-index: var(--z-topbar);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -451,12 +454,13 @@ p {
 
 .provider-stage {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
 
 .provider-stage-header {
   display: grid;
   gap: 6px;
+  max-width: 760px;
 }
 
 .provider-stage-header h3 {
@@ -465,6 +469,44 @@ p {
 
 .provider-choice-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.provider-focus-panel {
+  display: grid;
+  gap: 20px;
+  max-width: 880px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), transparent 42%),
+    var(--panel-soft);
+  padding: 22px;
+}
+
+.provider-focus-panel.wide {
+  max-width: 100%;
+}
+
+.provider-focus-panel h3,
+.provider-focus-panel p {
+  margin-bottom: 0;
+}
+
+.provider-focus-panel .form-grid {
+  margin-top: 0;
+}
+
+.compact-selector {
+  max-width: 460px;
+}
+
+.muted-line {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.button-row.no-margin {
+  margin-top: 0;
 }
 
 .auth-method-grid {
@@ -624,14 +666,14 @@ p {
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(239, 61, 66, 0.08), transparent 38%),
+    linear-gradient(135deg, rgba(239, 61, 66, 0.05), transparent 42%),
     var(--panel-soft);
   padding: 14px;
 }
 
 .oauth-panel.active {
-  border-color: rgba(239, 61, 66, 0.55);
-  box-shadow: inset 3px 0 0 rgba(239, 61, 66, 0.9);
+  border-color: rgba(239, 61, 66, 0.42);
+  box-shadow: inset 3px 0 0 rgba(239, 61, 66, 0.68);
 }
 
 .oauth-panel h3,
@@ -1108,7 +1150,7 @@ textarea {
   position: fixed;
   top: 78px;
   right: 24px;
-  z-index: 220;
+  z-index: var(--z-notification);
   display: grid;
   gap: 12px;
   width: min(420px, calc(100vw - 48px));
@@ -1183,20 +1225,25 @@ textarea {
 .onboarding-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: var(--z-onboarding);
   display: grid;
   place-items: start center;
   overflow: auto;
-  background: rgba(3, 5, 8, 0.72);
-  padding: 42px 24px;
+  background: rgba(3, 5, 8, 0.84);
+  backdrop-filter: blur(7px);
+  padding: 34px 24px;
 }
 
 .onboarding-modal {
-  width: min(1040px, 100%);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(1120px, calc(100vw - 56px));
+  max-height: min(860px, calc(100vh - 64px));
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #11151b;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
 }
 
 .onboarding-modal-header,
@@ -1227,7 +1274,9 @@ textarea {
 }
 
 .onboarding-modal-body {
-  padding: 18px;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
 }
 
 .onboarding-progress {

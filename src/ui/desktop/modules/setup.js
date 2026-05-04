@@ -1,5 +1,5 @@
 import { APP_VERSION, providerPresets } from './constants.js';
-import { notify, state } from './state.js';
+import { ensureProviderModelAllowed, notify, state } from './state.js';
 import { currentProvider, invokeTauri, normalizeError, openFolder } from './utils.js';
 
 export function buildSetupPayload() {
@@ -41,12 +41,40 @@ export async function saveSetup() {
   return promise;
 }
 
+export async function persistRuntimeSettings(reason = 'settings', options = {}) {
+  if (!state.setupComplete) return null;
+
+  ensureProviderModelAllowed();
+  const result = await saveSetup();
+  state.savedConfigPath = result?.configPath || result?.config_path || state.savedConfigPath;
+
+  if (options.notify) {
+    notify('success', 'Settings saved', `Runtime settings were saved for ${reason}.`);
+  }
+
+  return result;
+}
+
 export async function testProvider() {
   const provider = currentProvider(providerPresets, state);
+  ensureProviderModelAllowed();
   state.apiTest = {
     status: 'testing',
     message: `Testing ${provider.label}...`,
   };
+
+  if (state.setupComplete) {
+    try {
+      await persistRuntimeSettings('provider-test');
+    } catch (error) {
+      state.apiTest = {
+        status: 'error',
+        message: normalizeError(error),
+      };
+      notify('error', 'Settings could not be saved', state.apiTest.message);
+      return state.apiTest;
+    }
+  }
 
   const request = {
     provider: state.llmProvider,
@@ -193,6 +221,7 @@ export async function completeCodexOAuth() {
     if (result.status === 'ok') {
       state.providerAuthMethod = 'browser-account';
       state.providerApiKey = '';
+      ensureProviderModelAllowed();
       state.providerSetupStage = 'model';
       state.providerSelectionConfirmed = true;
       state.apiTest = {
@@ -247,6 +276,7 @@ export async function openExternalUrl(url) {
 }
 
 export async function sendChatMessage(message) {
+  await persistRuntimeSettings('chat');
   const promise = invokeTauri('send_chat_message', {
     request: {
       workspacePath: state.workspacePath,

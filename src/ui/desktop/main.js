@@ -8,6 +8,7 @@ import {
   clearNotifications,
   createChatSession,
   dismissNotification,
+  ensureProviderModelAllowed,
   hydrateChatHistory,
   notify,
   scheduleVisibleNotifications,
@@ -435,6 +436,7 @@ function handleChange(event) {
 
   if (target.id === 'provider-auth-method' || target.id === 'settings-provider-auth-method') {
     state.providerAuthMethod = target.value;
+    ensureProviderModelAllowed();
     if (target.id === 'provider-auth-method') state.providerSetupStage = 'credentials';
     state.apiTest = {
       status: target.value === 'browser-account' ? 'warning' : 'idle',
@@ -557,6 +559,7 @@ async function handleClick(event) {
   const providerAuthButton = element.closest('[data-provider-auth-method]');
   if (providerAuthButton) {
     state.providerAuthMethod = providerAuthButton.dataset.providerAuthMethod;
+    ensureProviderModelAllowed();
     state.providerSetupStage = 'credentials';
     state.apiTest = {
       status: state.providerAuthMethod === 'browser-account' ? 'warning' : 'idle',
@@ -587,6 +590,7 @@ async function handleClick(event) {
     }
     state.providerSetupStage = nextStage || 'provider';
     if (state.providerSetupStage === 'provider') state.providerSelectionConfirmed = false;
+    if (state.providerSetupStage === 'model') ensureProviderModelAllowed();
     render();
     return;
   }
@@ -636,6 +640,7 @@ async function handleClick(event) {
 
   if (element.closest('#start-codex-oauth')) {
     state.providerAuthMethod = 'browser-account';
+    ensureProviderModelAllowed();
     await startCodexOAuth();
     render();
     return;
@@ -643,6 +648,7 @@ async function handleClick(event) {
 
   if (element.closest('#complete-codex-oauth')) {
     state.providerAuthMethod = 'browser-account';
+    ensureProviderModelAllowed();
     await completeCodexOAuth();
     render();
     return;

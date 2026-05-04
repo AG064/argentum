@@ -279,11 +279,12 @@ function renderProviderStep() {
 
 function renderProviderChoiceStep() {
   return `
+    ${renderProgressiveProviderFrame(
+      'Provider',
+      'Choose who runs the model',
+      '<p class="muted-line">Pick one provider first. Authorization, model choice, endpoint, and tests appear after this choice so this screen stays readable.</p>',
+    )}
     <div class="provider-stage">
-      <div class="provider-stage-header">
-        <span class="pill">Provider</span>
-        <h3>Choose who runs the model</h3>
-      </div>
       <div class="provider-list provider-choice-list">
         ${providerPresets
           .map(
@@ -291,8 +292,7 @@ function renderProviderChoiceStep() {
               <article class="provider-card ${state.llmProvider === item.id ? 'active' : ''}">
                 <button class="provider-select-button" data-provider-id="${item.id}">
                   <strong>${escapeHtml(item.label)}</strong>
-                  <span>${item.requiresKey ? 'API key needed' : 'Local/custom friendly'}</span>
-                  <p>${escapeHtml(item.detail)}</p>
+                  <span>${item.requiresKey ? 'Hosted provider' : 'Local/custom friendly'}</span>
                 </button>
                 <a class="provider-website-link" href="${escapeAttribute(item.websiteUrl)}" data-open-external="${escapeAttribute(item.websiteUrl)}">
                   Provider website
@@ -317,30 +317,32 @@ function renderProviderAuthStep(provider, availableAuthMethods) {
         </div>
         <button class="button" data-provider-setup-stage="provider">Change provider</button>
       </div>
-      <label>
-        Authorization method
-        <select id="provider-auth-method">
+      <div class="provider-focus-panel">
+        <label class="compact-selector">
+          Authorization method
+          <select id="provider-auth-method">
+            ${availableAuthMethods
+              .map(
+                (method) => `
+                  <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)}</option>
+                `,
+              )
+              .join('')}
+          </select>
+        </label>
+        <div class="auth-method-grid">
           ${availableAuthMethods
             .map(
               (method) => `
-                <option value="${escapeAttribute(method.id)}" ${selected(state.providerAuthMethod, method.id)} ${method.disabled ? 'disabled' : ''}>${escapeHtml(method.label)}</option>
+                <button class="interface-card ${state.providerAuthMethod === method.id ? 'active' : ''}" data-provider-auth-method="${escapeAttribute(method.id)}" data-provider-setup-stage="credentials">
+                  <span>${escapeHtml(method.status)}</span>
+                  <strong>${escapeHtml(method.label)}</strong>
+                  <p>${escapeHtml(method.detail)}</p>
+                </button>
               `,
             )
             .join('')}
-        </select>
-      </label>
-      <div class="auth-method-grid">
-        ${availableAuthMethods
-          .map(
-            (method) => `
-              <button class="interface-card ${state.providerAuthMethod === method.id ? 'active' : ''}" data-provider-auth-method="${escapeAttribute(method.id)}" data-provider-setup-stage="credentials">
-                <span>${escapeHtml(method.status)}</span>
-                <strong>${escapeHtml(method.label)}</strong>
-                <p>${escapeHtml(method.detail)}</p>
-              </button>
-            `,
-          )
-          .join('')}
+        </div>
       </div>
     </div>
   `;
@@ -357,8 +359,10 @@ function renderProviderCredentialStep(provider) {
           </div>
           <button class="button" data-provider-setup-stage="auth">Back</button>
         </div>
-        ${renderProviderAuthGuidance(provider)}
-        ${renderCodexOAuthPanel()}
+        <div class="provider-focus-panel wide">
+          ${renderProviderAuthGuidance(provider)}
+          ${renderCodexOAuthPanel()}
+        </div>
       </div>
     `;
   }
@@ -372,8 +376,8 @@ function renderProviderCredentialStep(provider) {
         </div>
         <button class="button" data-provider-setup-stage="auth">Back</button>
       </div>
-      <div class="panel provider-settings">
-        <div class="panel-body form-grid">
+      <div class="provider-focus-panel">
+        <div class="form-grid">
           <label>
             API key
             <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
@@ -399,15 +403,15 @@ function renderProviderModelStep(provider) {
         </div>
         <button class="button" data-provider-setup-stage="auth">Change authorization</button>
       </div>
-      <div class="panel provider-settings">
-        <div class="panel-body form-grid">
+      <div class="provider-focus-panel wide">
+        <div class="form-grid two">
           <label>
             Model
             <select id="provider-model">
-              ${modelOptionsFor(provider, state.providerModel)
+              ${modelOptionsFor(provider, state.providerModel, state.providerAuthMethod)
                 .map(
                   (model) => `
-                    <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || model.id)}</option>
+                    <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)} data-model-auth-methods="${escapeAttribute(state.providerAuthMethod)}">${escapeHtml(model.label || model.id)}</option>
                   `,
                 )
                 .join('')}
@@ -445,6 +449,16 @@ function renderProviderModelStep(provider) {
           </div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderProgressiveProviderFrame(stage, title, body) {
+  return `
+    <div class="provider-stage-header">
+      <span class="pill">${escapeHtml(stage)}</span>
+      <h3>${escapeHtml(title)}</h3>
+      ${body}
     </div>
   `;
 }

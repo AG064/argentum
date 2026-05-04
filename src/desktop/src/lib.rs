@@ -1,7 +1,9 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -209,6 +211,8 @@ const CODEX_DEVICE_TOKEN_URL: &str = "https://auth.openai.com/api/accounts/devic
 const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
 const CODEX_RESPONSES_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
+const CODEX_COMPAT_CLIENT_VERSION: &str = "0.128.0";
+const CODEX_ORIGINATOR: &str = "codex_cli_rs";
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
     let workspace = PathBuf::from(path);
@@ -374,7 +378,7 @@ fn provider_defaults(provider: &str) -> Option<ProviderDefaults> {
             api: "openai",
             base_url: "https://api.openai.com/v1",
             api_key_env: "OPENAI_API_KEY",
-            default_model: "gpt-5.5",
+            default_model: "gpt-5.4-mini",
             requires_key: true,
         }),
         "anthropic" => Some(ProviderDefaults {
@@ -575,6 +579,49 @@ fn format_secret(value: &str) -> String {
     } else {
         value.to_string()
     }
+}
+
+fn read_secret_pairs(path: &Path) -> BTreeMap<String, String> {
+    let mut pairs = BTreeMap::new();
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return pairs;
+    };
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((name, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        if validate_env_name(name).is_ok() {
+            pairs.insert(name.to_string(), value.trim().to_string());
+        }
+    }
+
+    pairs
+}
+
+fn merge_existing_secrets(path: &Path, updates: Vec<(String, String)>) -> String {
+    let mut pairs = read_secret_pairs(path);
+    for (name, value) in updates {
+        if !name.trim().is_empty() && !value.trim().is_empty() {
+            pairs.insert(name, value);
+        }
+    }
+
+    let mut lines = vec![
+        "# Argentum secrets are stored outside YAML.".to_string(),
+        "# Provider keys are added by the desktop credential flow.".to_string(),
+    ];
+    lines.extend(
+        pairs
+            .into_iter()
+            .map(|(name, value)| format!("{name}={value}")),
+    );
+    format!("{}\n", lines.join("\n"))
 }
 
 fn yaml_quote(value: &str) -> String {
@@ -1258,11 +1305,19 @@ fn provider_error_detail(body: &str) -> Option<String> {
     }
 
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(message) = value.get("detail").and_then(|message| message.as_str()) {
+            return Some(redact_provider_message(message.trim()));
+        }
+
         if let Some(message) = value
             .get("error")
             .and_then(|error| error.get("message"))
             .and_then(|message| message.as_str())
         {
+            return Some(redact_provider_message(message.trim()));
+        }
+
+        if let Some(message) = value.get("error").and_then(|message| message.as_str()) {
             return Some(redact_provider_message(message.trim()));
         }
 
@@ -1299,6 +1354,13 @@ fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
 
 fn codex_http_error(status: u16, body: &str) -> String {
     let detail = provider_error_detail(body);
+    if let Some(message) = detail.as_deref() {
+        if message.contains("requires a newer version of Codex") {
+            return format!(
+                "OpenAI/Codex says the selected model requires a newer Codex client. Argentum is sending Codex client compatibility {CODEX_COMPAT_CLIENT_VERSION}; choose another model or update Argentum if the model still fails. Provider said: {message}"
+            );
+        }
+    }
     let suffix = detail
         .filter(|message| !message.is_empty())
         .map(|message| format!(" Provider said: {message}"))
@@ -1327,6 +1389,145 @@ fn codex_responses_url(configured_base_url: &str) -> String {
     }
 
     format!("{CODEX_RESPONSES_BASE_URL}/responses")
+}
+
+fn codex_models_url(configured_base_url: &str) -> String {
+    let trimmed = configured_base_url.trim().trim_end_matches('/');
+    let base = if trimmed.contains("chatgpt.com/backend-api/codex") {
+        trimmed
+    } else {
+        CODEX_RESPONSES_BASE_URL
+    };
+
+    format!("{base}/models?client_version={CODEX_COMPAT_CLIENT_VERSION}")
+}
+
+fn codex_user_agent() -> String {
+    format!("codex_cli_rs/{CODEX_COMPAT_CLIENT_VERSION} (Argentum Desktop)")
+}
+
+fn codex_browser_headers(auth: &CodexBrowserAuth) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert("originator", HeaderValue::from_static(CODEX_ORIGINATOR));
+    if let Ok(value) = HeaderValue::from_str(&codex_user_agent()) {
+        headers.insert(USER_AGENT, value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&auth.account_id) {
+        headers.insert("ChatGPT-Account-ID", value);
+    }
+    if auth.is_fedramp_account {
+        headers.insert("X-OpenAI-Fedramp", HeaderValue::from_static("true"));
+    }
+
+    headers
+}
+
+fn codex_model_slugs(value: &serde_json::Value) -> Vec<String> {
+    let mut slugs = Vec::new();
+
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                slugs.extend(codex_model_slugs(item));
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for key in ["slug", "id", "model"] {
+                if let Some(slug) = map
+                    .get(key)
+                    .and_then(|item| item.as_str())
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                {
+                    slugs.push(slug.to_string());
+                }
+            }
+
+            for key in ["models", "data", "items"] {
+                if let Some(child) = map.get(key) {
+                    slugs.extend(codex_model_slugs(child));
+                }
+            }
+        }
+        _ => {}
+    }
+
+    slugs.sort();
+    slugs.dedup();
+    slugs
+}
+
+async fn get_codex_model_catalog(
+    client: &reqwest::Client,
+    auth: &CodexBrowserAuth,
+    config: &ProviderRuntimeConfig,
+) -> Result<reqwest::Response, String> {
+    client
+        .get(codex_models_url(&config.base_url))
+        .headers(codex_browser_headers(auth))
+        .bearer_auth(auth.access_token.as_str())
+        .send()
+        .await
+        .map_err(redact_provider_error)
+}
+
+async fn test_codex_browser_provider(
+    workspace: &Path,
+    config: &ProviderRuntimeConfig,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "OpenAI/Codex model catalog client could not be created.".to_string())?;
+    let mut auth = codex_oauth_auth(workspace)?;
+    let response = get_codex_model_catalog(&client, &auth, config).await?;
+    let status = response.status();
+
+    let response = if status.as_u16() == 401 || status.as_u16() == 403 {
+        auth = refresh_codex_oauth(workspace, &auth).await?;
+        get_codex_model_catalog(&client, &auth, config).await?
+    } else {
+        response
+    };
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(codex_http_error(status.as_u16(), &body));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|_| "Codex model catalog returned unreadable data.".to_string())?;
+    let models = codex_model_slugs(&value);
+    if models.is_empty() {
+        return Err(
+            "Codex model catalog returned no models. Reauthorize from Settings, then test again."
+                .to_string(),
+        );
+    }
+
+    if !models.iter().any(|model| model == &config.model) {
+        let preview = models
+            .iter()
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "Codex model catalog does not include '{}'. Choose an available model{}.",
+            config.model,
+            if preview.is_empty() {
+                String::new()
+            } else {
+                format!(" such as {preview}")
+            }
+        ));
+    }
+
+    Ok(format!(
+        "OpenAI/Codex browser account auth is ready for live Codex chat. Workspace {} is selected. Model '{}' is available.",
+        auth.account_id, config.model
+    ))
 }
 
 fn codex_chat_body(config: &ProviderRuntimeConfig, message: &str) -> serde_json::Value {
@@ -1362,17 +1563,12 @@ async fn post_codex_responses(
     config: &ProviderRuntimeConfig,
     message: &str,
 ) -> Result<reqwest::Response, String> {
-    let mut request = client
+    let request = client
         .post(codex_responses_url(&config.base_url))
+        .headers(codex_browser_headers(auth))
         .bearer_auth(auth.access_token.as_str())
         .header("Accept", "text/event-stream")
-        .header("version", env!("CARGO_PKG_VERSION"))
-        .header("ChatGPT-Account-ID", auth.account_id.as_str())
         .json(&codex_chat_body(config, message));
-
-    if auth.is_fedramp_account {
-        request = request.header("X-OpenAI-Fedramp", "true");
-    }
 
     request.send().await.map_err(redact_provider_error)
 }
@@ -1657,7 +1853,7 @@ async fn complete_codex_oauth(
                 "OpenAI/Codex authorization is not complete yet. Finish the browser approval, wait about {interval} seconds, then click Complete authorization again."
             ),
             provider: "OpenAI".to_string(),
-            model: "gpt-5.5".to_string(),
+            model: "gpt-5.4-mini".to_string(),
             auth_method: "browser-account".to_string(),
             codex_home: codex_home.display().to_string(),
         });
@@ -1717,7 +1913,7 @@ async fn complete_codex_oauth(
         status: "ok".to_string(),
         message: "OpenAI/Codex authorization saved inside the selected workspace. Browser-account auth is ready for live Codex chat.".to_string(),
         provider: "OpenAI".to_string(),
-        model: "gpt-5.5".to_string(),
+        model: "gpt-5.4-mini".to_string(),
         auth_method: "browser-account".to_string(),
         codex_home: codex_home.display().to_string(),
     })
@@ -1770,14 +1966,20 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
                     .to_string(),
             );
         }
-        let auth = codex_oauth_auth(workspace)?;
+        let config = ProviderRuntimeConfig {
+            name: defaults.name.to_string(),
+            label: defaults.label.to_string(),
+            api: defaults.api.to_string(),
+            base_url: base_url.to_string(),
+            model: model.to_string(),
+            api_key_env: defaults.api_key_env.to_string(),
+            auth_method: auth_method.to_string(),
+        };
+        let message = test_codex_browser_provider(workspace, &config).await?;
 
         return Ok(TestProviderResponse {
             status: "ok".to_string(),
-            message: format!(
-                "OpenAI/Codex browser account auth is ready for live Codex chat. Workspace {} is selected.",
-                auth.account_id
-            ),
+            message,
         });
     }
 
@@ -2148,35 +2350,34 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
 
     let config_path = workspace.join("config/default.yaml");
     let secrets_path = workspace.join("secrets.env");
-    let mut secrets = vec![
-        "# Argentum secrets are stored outside YAML.".to_string(),
-        "# Provider keys are added by the desktop credential flow.".to_string(),
-    ];
+    let mut secret_updates = Vec::new();
 
     if !request.provider_api_key.trim().is_empty() {
-        secrets.push(format!(
-            "{}={}",
+        secret_updates.push((
             provider_api_key_env(&request),
-            format_secret(request.provider_api_key.trim())
+            format_secret(request.provider_api_key.trim()),
         ));
     }
 
     if !request.webchat_token.trim().is_empty() {
-        secrets.push(format!(
-            "ARGENTUM_WEBCHAT_AUTH_TOKEN={}",
-            format_secret(request.webchat_token.trim())
+        secret_updates.push((
+            "ARGENTUM_WEBCHAT_AUTH_TOKEN".to_string(),
+            format_secret(request.webchat_token.trim()),
         ));
     }
 
     if !request.telegram_token.trim().is_empty() {
-        secrets.push(format!(
-            "ARGENTUM_TELEGRAM_TOKEN={}",
-            format_secret(request.telegram_token.trim())
+        secret_updates.push((
+            "ARGENTUM_TELEGRAM_TOKEN".to_string(),
+            format_secret(request.telegram_token.trim()),
         ));
     }
 
     write_text(&config_path, &render_config(&request))?;
-    write_text(&secrets_path, &format!("{}\n", secrets.join("\n")))?;
+    write_text(
+        &secrets_path,
+        &merge_existing_secrets(&secrets_path, secret_updates),
+    )?;
 
     Ok(SaveSetupResponse {
         status: "setup_saved".to_string(),
@@ -2412,5 +2613,89 @@ mod tests {
             codex_responses_url("https://chatgpt.com/backend-api/codex"),
             "https://chatgpt.com/backend-api/codex/responses"
         );
+    }
+
+    #[test]
+    fn parses_codex_detail_errors_without_raw_json() {
+        let body = r#"{"detail":"The 'gpt-5.5' model requires a newer version of Codex. Please upgrade."}"#;
+
+        assert_eq!(
+            provider_error_detail(body).as_deref(),
+            Some("The 'gpt-5.5' model requires a newer version of Codex. Please upgrade.")
+        );
+        let error = codex_http_error(400, body);
+        assert!(error.contains("requires a newer Codex client"));
+        assert!(!error.contains("{\"detail\""));
+    }
+
+    #[test]
+    fn codex_browser_requests_use_current_compat_headers() {
+        let auth = CodexBrowserAuth {
+            id_token: "id".to_string(),
+            access_token: "access".to_string(),
+            refresh_token: "refresh".to_string(),
+            account_id: "account-123".to_string(),
+            is_fedramp_account: true,
+        };
+        let headers = codex_browser_headers(&auth);
+
+        assert_eq!(
+            headers
+                .get("originator")
+                .and_then(|value| value.to_str().ok()),
+            Some(CODEX_ORIGINATOR)
+        );
+        assert!(headers
+            .get(USER_AGENT)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .contains(CODEX_COMPAT_CLIENT_VERSION));
+        assert_eq!(
+            headers
+                .get("ChatGPT-Account-ID")
+                .and_then(|value| value.to_str().ok()),
+            Some("account-123")
+        );
+        assert_eq!(
+            headers
+                .get("X-OpenAI-Fedramp")
+                .and_then(|value| value.to_str().ok()),
+            Some("true")
+        );
+        assert_eq!(
+            codex_models_url("https://api.openai.com/v1"),
+            "https://chatgpt.com/backend-api/codex/models?client_version=0.128.0"
+        );
+    }
+
+    #[test]
+    fn merge_existing_secrets_preserves_blank_updates() {
+        let path = std::env::temp_dir().join(format!(
+            "argentum-secrets-{}-{}.env",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should work")
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            "# old\nOPENAI_API_KEY=existing\nARGENTUM_TELEGRAM_TOKEN=old\n",
+        )
+        .expect("seed secrets");
+
+        let merged = merge_existing_secrets(
+            &path,
+            vec![(
+                "ARGENTUM_WEBCHAT_AUTH_TOKEN".to_string(),
+                "fresh".to_string(),
+            )],
+        );
+
+        assert!(merged.contains("OPENAI_API_KEY=existing"));
+        assert!(merged.contains("ARGENTUM_TELEGRAM_TOKEN=old"));
+        assert!(merged.contains("ARGENTUM_WEBCHAT_AUTH_TOKEN=fresh"));
+
+        let _ = std::fs::remove_file(path);
     }
 }
