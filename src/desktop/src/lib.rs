@@ -1,3 +1,5 @@
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::net::TcpListener;
@@ -180,6 +182,15 @@ struct ProviderRuntimeConfig {
     auth_method: String,
 }
 
+#[derive(Debug, Clone)]
+struct CodexBrowserAuth {
+    id_token: String,
+    access_token: String,
+    refresh_token: String,
+    account_id: String,
+    is_fedramp_account: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ProviderDefaults {
     name: &'static str,
@@ -197,6 +208,7 @@ const CODEX_DEVICE_USERCODE_URL: &str = "https://auth.openai.com/api/accounts/de
 const CODEX_DEVICE_TOKEN_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
 const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+const CODEX_RESPONSES_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
     let workspace = PathBuf::from(path);
@@ -913,6 +925,111 @@ fn codex_oauth_tokens_saved(workspace: &Path) -> bool {
     !access_token.is_empty() && !refresh_token.is_empty()
 }
 
+fn jwt_payload_value(jwt: &str) -> Option<serde_json::Value> {
+    let payload = jwt.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+}
+
+fn json_value_at<'a>(value: &'a serde_json::Value, path: &[&str]) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+
+    Some(current)
+}
+
+fn json_string_at(value: &serde_json::Value, path: &[&str]) -> Option<String> {
+    json_value_at(value, path)
+        .and_then(|item| item.as_str())
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+}
+
+fn json_bool_at(value: &serde_json::Value, path: &[&str]) -> bool {
+    json_value_at(value, path)
+        .and_then(|item| item.as_bool())
+        .unwrap_or(false)
+}
+
+fn codex_account_id_from_payload(payload: &serde_json::Value) -> Option<String> {
+    json_string_at(
+        payload,
+        &["https://api.openai.com/auth", "chatgpt_account_id"],
+    )
+    .or_else(|| json_string_at(payload, &["chatgpt_account_id"]))
+    .or_else(|| json_string_at(payload, &["organization_id"]))
+    .or_else(|| json_string_at(payload, &["org_id"]))
+    .or_else(|| json_string_at(payload, &["account_id"]))
+}
+
+fn codex_is_fedramp_from_payload(payload: &serde_json::Value) -> bool {
+    json_bool_at(
+        payload,
+        &["https://api.openai.com/auth", "chatgpt_account_is_fedramp"],
+    ) || json_bool_at(payload, &["chatgpt_account_is_fedramp"])
+}
+
+fn codex_oauth_auth(workspace: &Path) -> Result<CodexBrowserAuth, String> {
+    let auth_path = codex_oauth_auth_path(workspace);
+    let contents = std::fs::read_to_string(&auth_path).map_err(|_| {
+        "OpenAI/Codex browser account authorization is not complete. Restart provider authorization from Settings.".to_string()
+    })?;
+    let value = serde_json::from_str::<serde_json::Value>(&contents).map_err(|_| {
+        "OpenAI/Codex authorization file could not be read. Reauthorize from Settings.".to_string()
+    })?;
+    let tokens = value.get("tokens").ok_or_else(|| {
+        "OpenAI/Codex authorization file has no token data. Reauthorize from Settings.".to_string()
+    })?;
+    let id_token = json_string(tokens, "id_token").ok_or_else(|| {
+        "OpenAI/Codex authorization is missing an ID token. Reauthorize from Settings.".to_string()
+    })?;
+    let access_token = json_string(tokens, "access_token").ok_or_else(|| {
+        "OpenAI/Codex authorization is missing an access token. Reauthorize from Settings."
+            .to_string()
+    })?;
+    let refresh_token = json_string(tokens, "refresh_token").ok_or_else(|| {
+        "OpenAI/Codex authorization is missing a refresh token. Reauthorize from Settings."
+            .to_string()
+    })?;
+    let payload = jwt_payload_value(&id_token).ok_or_else(|| {
+        "OpenAI/Codex authorization token could not be decoded. Reauthorize from Settings."
+            .to_string()
+    })?;
+    let account_id = json_string(tokens, "account_id")
+        .or_else(|| codex_account_id_from_payload(&payload))
+        .ok_or_else(|| {
+            "OpenAI/Codex authorization is missing the selected ChatGPT workspace. Reauthorize from Settings and choose a workspace.".to_string()
+        })?;
+
+    Ok(CodexBrowserAuth {
+        id_token,
+        access_token,
+        refresh_token,
+        account_id,
+        is_fedramp_account: codex_is_fedramp_from_payload(&payload),
+    })
+}
+
+fn write_codex_oauth_auth(workspace: &Path, auth: &CodexBrowserAuth) -> Result<(), String> {
+    let auth_path = codex_oauth_auth_path(workspace);
+    let payload = json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": serde_json::Value::Null,
+        "tokens": {
+            "id_token": auth.id_token,
+            "access_token": auth.access_token,
+            "refresh_token": auth.refresh_token,
+            "account_id": auth.account_id
+        },
+        "last_refresh": now_epoch_seconds()
+    });
+    let contents = serde_json::to_string_pretty(&payload)
+        .map_err(|_| "OpenAI/Codex credentials could not be serialized.".to_string())?;
+    write_text(&auth_path, &contents)
+}
+
 fn oauth_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
@@ -1058,11 +1175,7 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
     })
 }
 
-fn provider_api_key(
-    workspace: Option<&Path>,
-    request_key: &str,
-    key_env: &str,
-) -> Option<String> {
+fn provider_api_key(workspace: Option<&Path>, request_key: &str, key_env: &str) -> Option<String> {
     let trimmed = request_key.trim();
     if !trimmed.is_empty() {
         return Some(trimmed.to_string());
@@ -1182,6 +1295,275 @@ fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
             "{provider} responded with HTTP {status}. Check the endpoint and selected model, then test again.{suffix}"
         ),
     }
+}
+
+fn codex_http_error(status: u16, body: &str) -> String {
+    let detail = provider_error_detail(body);
+    let suffix = detail
+        .filter(|message| !message.is_empty())
+        .map(|message| format!(" Provider said: {message}"))
+        .unwrap_or_default();
+
+    match status {
+        401 | 403 => format!(
+            "OpenAI/Codex rejected browser-account authorization. Reauthorize from Settings, then test the provider again.{suffix}"
+        ),
+        429 => format!(
+            "OpenAI/Codex hit a rate or usage limit (HTTP 429). Wait a minute, choose a smaller model, or check your ChatGPT plan limits.{suffix}"
+        ),
+        404 => format!(
+            "OpenAI/Codex runtime endpoint was not found. Check for an Argentum update or switch to API key auth temporarily.{suffix}"
+        ),
+        _ => format!(
+            "OpenAI/Codex responded with HTTP {status}. Check authorization and selected model, then retry.{suffix}"
+        ),
+    }
+}
+
+fn codex_responses_url(configured_base_url: &str) -> String {
+    let trimmed = configured_base_url.trim().trim_end_matches('/');
+    if trimmed.contains("chatgpt.com/backend-api/codex") {
+        return format!("{trimmed}/responses");
+    }
+
+    format!("{CODEX_RESPONSES_BASE_URL}/responses")
+}
+
+fn codex_chat_body(config: &ProviderRuntimeConfig, message: &str) -> serde_json::Value {
+    json!({
+        "model": config.model,
+        "instructions": "You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the user's configured workspace and permissions.",
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": message
+                    }
+                ]
+            }
+        ],
+        "tools": [],
+        "tool_choice": "auto",
+        "parallel_tool_calls": false,
+        "store": false,
+        "stream": true,
+        "include": [],
+        "client_metadata": {
+            "x-codex-installation-id": "argentum-desktop"
+        }
+    })
+}
+
+async fn post_codex_responses(
+    client: &reqwest::Client,
+    auth: &CodexBrowserAuth,
+    config: &ProviderRuntimeConfig,
+    message: &str,
+) -> Result<reqwest::Response, String> {
+    let mut request = client
+        .post(codex_responses_url(&config.base_url))
+        .bearer_auth(auth.access_token.as_str())
+        .header("Accept", "text/event-stream")
+        .header("version", env!("CARGO_PKG_VERSION"))
+        .header("ChatGPT-Account-ID", auth.account_id.as_str())
+        .json(&codex_chat_body(config, message));
+
+    if auth.is_fedramp_account {
+        request = request.header("X-OpenAI-Fedramp", "true");
+    }
+
+    request.send().await.map_err(redact_provider_error)
+}
+
+async fn refresh_codex_oauth(
+    workspace: &Path,
+    auth: &CodexBrowserAuth,
+) -> Result<CodexBrowserAuth, String> {
+    let client = oauth_client()?;
+    let response = client
+        .post(CODEX_OAUTH_TOKEN_URL)
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "client_id": CODEX_CLIENT_ID,
+            "grant_type": "refresh_token",
+            "refresh_token": auth.refresh_token
+        }))
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(codex_http_error(status.as_u16(), &body));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|_| "OpenAI/Codex token refresh returned unreadable data.".to_string())?;
+    let id_token = json_string(&value, "id_token").unwrap_or_else(|| auth.id_token.clone());
+    let access_token =
+        json_string(&value, "access_token").unwrap_or_else(|| auth.access_token.clone());
+    let refresh_token =
+        json_string(&value, "refresh_token").unwrap_or_else(|| auth.refresh_token.clone());
+    let payload = jwt_payload_value(&id_token).ok_or_else(|| {
+        "OpenAI/Codex refreshed token could not be decoded. Reauthorize from Settings.".to_string()
+    })?;
+    let account_id =
+        codex_account_id_from_payload(&payload).unwrap_or_else(|| auth.account_id.clone());
+    let refreshed = CodexBrowserAuth {
+        id_token,
+        access_token,
+        refresh_token,
+        account_id,
+        is_fedramp_account: codex_is_fedramp_from_payload(&payload),
+    };
+    write_codex_oauth_auth(workspace, &refreshed)?;
+
+    Ok(refreshed)
+}
+
+fn parse_codex_response_value(value: &serde_json::Value) -> Option<String> {
+    if let Some(text) = value
+        .get("output_text")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
+        return Some(text.to_string());
+    }
+
+    if let Some(response) = value.get("response") {
+        if let Some(text) = parse_codex_response_value(response) {
+            return Some(text);
+        }
+    }
+
+    if let Some(output) = value.get("output").and_then(|item| item.as_array()) {
+        let mut parts = Vec::new();
+        for item in output {
+            let Some(content) = item.get("content").and_then(|content| content.as_array()) else {
+                continue;
+            };
+            for block in content {
+                let block_type = block.get("type").and_then(|kind| kind.as_str());
+                if block_type == Some("output_text") {
+                    if let Some(text) = block.get("text").and_then(|text| text.as_str()) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            parts.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        if !parts.is_empty() {
+            return Some(parts.join("\n"));
+        }
+    }
+
+    parse_openai_chat_response(value.clone()).ok()
+}
+
+fn parse_codex_sse_response(body: &str) -> Result<String, String> {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(text) = parse_codex_response_value(&value) {
+            return Ok(text);
+        }
+    }
+
+    let mut fragments = Vec::new();
+    let mut completed = None;
+    for line in body.lines() {
+        let trimmed = line.trim();
+        let Some(data) = trimmed.strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data.is_empty() || data == "[DONE]" {
+            continue;
+        }
+        let value = serde_json::from_str::<serde_json::Value>(data)
+            .map_err(|_| "OpenAI/Codex returned a streaming response Argentum could not read.")?;
+        let event_type = value.get("type").and_then(|kind| kind.as_str());
+
+        match event_type {
+            Some("response.output_text.delta") => {
+                if let Some(delta) = value
+                    .get("delta")
+                    .or_else(|| value.get("text"))
+                    .and_then(|delta| delta.as_str())
+                {
+                    fragments.push(delta.to_string());
+                }
+            }
+            Some("response.output_text.done") => {
+                if fragments.is_empty() {
+                    if let Some(text) = value
+                        .get("text")
+                        .or_else(|| value.get("output_text"))
+                        .and_then(|text| text.as_str())
+                    {
+                        fragments.push(text.to_string());
+                    }
+                }
+            }
+            Some("response.completed") => {
+                completed = parse_codex_response_value(&value);
+            }
+            Some("error") => {
+                return Err(provider_error_detail(data).unwrap_or_else(|| {
+                    "OpenAI/Codex returned an error without details.".to_string()
+                }));
+            }
+            _ => {
+                if completed.is_none() {
+                    completed = parse_codex_response_value(&value);
+                }
+            }
+        }
+    }
+
+    let streamed = fragments.join("").trim().to_string();
+    if !streamed.is_empty() {
+        return Ok(streamed);
+    }
+
+    completed
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| "OpenAI/Codex returned an empty chat response.".to_string())
+}
+
+async fn send_codex_chat_message(
+    workspace: &Path,
+    config: &ProviderRuntimeConfig,
+    message: &str,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|_| "OpenAI/Codex chat client could not be created.".to_string())?;
+    let auth = codex_oauth_auth(workspace)?;
+    let response = post_codex_responses(&client, &auth, config, message).await?;
+    let status = response.status();
+
+    let response = if status.as_u16() == 401 || status.as_u16() == 403 {
+        let refreshed = refresh_codex_oauth(workspace, &auth).await?;
+        post_codex_responses(&client, &refreshed, config, message).await?
+    } else {
+        response
+    };
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(codex_http_error(status.as_u16(), &body));
+    }
+
+    parse_codex_sse_response(&body)
 }
 
 #[tauri::command]
@@ -1316,25 +1698,24 @@ async fn complete_codex_oauth(
         .ok_or_else(|| "OpenAI/Codex token exchange did not return an access token.".to_string())?;
     let refresh_token = json_string(&token_value, "refresh_token")
         .ok_or_else(|| "OpenAI/Codex token exchange did not return a refresh token.".to_string())?;
-
-    let auth_path = codex_oauth_auth_path(&workspace);
-    let payload = json!({
-        "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": serde_json::Value::Null,
-        "tokens": {
-            "id_token": id_token,
-            "access_token": access_token,
-            "refresh_token": refresh_token
-        },
-        "last_refresh": now_epoch_seconds()
-    });
-    let contents = serde_json::to_string_pretty(&payload)
-        .map_err(|_| "OpenAI/Codex credentials could not be serialized.".to_string())?;
-    write_text(&auth_path, &contents)?;
+    let payload = jwt_payload_value(&id_token).ok_or_else(|| {
+        "OpenAI/Codex token exchange returned an ID token Argentum could not decode.".to_string()
+    })?;
+    let account_id = codex_account_id_from_payload(&payload).ok_or_else(|| {
+        "OpenAI/Codex authorization did not include a ChatGPT workspace. Reauthorize and choose a workspace.".to_string()
+    })?;
+    let auth = CodexBrowserAuth {
+        id_token,
+        access_token,
+        refresh_token,
+        account_id,
+        is_fedramp_account: codex_is_fedramp_from_payload(&payload),
+    };
+    write_codex_oauth_auth(&workspace, &auth)?;
 
     Ok(CodexOAuthCompleteResponse {
         status: "ok".to_string(),
-        message: "OpenAI/Codex authorization saved inside the selected workspace. Argentum will use browser-account auth for Codex mode; Platform API chat still needs API key auth until the live Codex runtime is wired.".to_string(),
+        message: "OpenAI/Codex authorization saved inside the selected workspace. Browser-account auth is ready for live Codex chat.".to_string(),
         provider: "OpenAI".to_string(),
         model: "gpt-5.5".to_string(),
         auth_method: "browser-account".to_string(),
@@ -1389,19 +1770,19 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
                     .to_string(),
             );
         }
+        let auth = codex_oauth_auth(workspace)?;
 
         return Ok(TestProviderResponse {
-            status: "warning".to_string(),
-            message: "OpenAI/Codex browser account authorization is saved. Use API key auth for live Platform API chat until the Codex runtime is wired into Argentum.".to_string(),
+            status: "ok".to_string(),
+            message: format!(
+                "OpenAI/Codex browser account auth is ready for live Codex chat. Workspace {} is selected.",
+                auth.account_id
+            ),
         });
     }
 
-    let api_key = provider_api_key(
-        workspace.as_deref(),
-        &request.api_key,
-        defaults.api_key_env,
-    )
-    .unwrap_or_default();
+    let api_key = provider_api_key(workspace.as_deref(), &request.api_key, defaults.api_key_env)
+        .unwrap_or_default();
 
     if defaults.requires_key && api_key.trim().is_empty() {
         return Err(format!(
@@ -1503,27 +1884,30 @@ async fn send_chat_message(
     }
 
     if config.auth_method == "browser-account" {
-        let reason = if codex_oauth_tokens_saved(&workspace) {
-            "OpenAI/Codex browser account authorization is saved, but live Codex runtime routing is not wired into this desktop MVP yet. Switch to API key auth for live Platform API replies."
-        } else {
-            "OpenAI/Codex browser account authorization is not complete. Restart onboarding or open Settings to finish authorization."
-        };
+        if !codex_oauth_tokens_saved(&workspace) {
+            return Ok(SendChatMessageResponse {
+                status: "offline".to_string(),
+                message: offline_chat_message(
+                    message,
+                    "OpenAI/Codex browser account authorization is not complete. Restart onboarding or open Settings to finish authorization.",
+                ),
+                provider: config.label,
+                model: config.model,
+                offline: true,
+            });
+        }
+        let answer = send_codex_chat_message(&workspace, &config, message).await?;
 
         return Ok(SendChatMessageResponse {
-            status: "offline".to_string(),
-            message: offline_chat_message(message, reason),
+            status: "ok".to_string(),
+            message: answer,
             provider: config.label,
             model: config.model,
-            offline: true,
+            offline: false,
         });
     }
 
-    let api_key = provider_api_key(
-        Some(&workspace),
-        "",
-        &config.api_key_env,
-    )
-    .unwrap_or_default();
+    let api_key = provider_api_key(Some(&workspace), "", &config.api_key_env).unwrap_or_default();
     let requires_key = !is_local_endpoint(&config.base_url);
 
     if requires_key && api_key.trim().is_empty() {
@@ -1955,4 +2339,78 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Argentum");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn jwt_with_payload(payload: serde_json::Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(payload.to_string());
+        format!("{header}.{payload}.signature")
+    }
+
+    #[test]
+    fn extracts_chatgpt_workspace_from_codex_id_token() {
+        let token = jwt_with_payload(json!({
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": "workspace-123",
+                "chatgpt_account_is_fedramp": true
+            }
+        }));
+        let payload = jwt_payload_value(&token).expect("payload should decode");
+
+        assert_eq!(
+            codex_account_id_from_payload(&payload).as_deref(),
+            Some("workspace-123")
+        );
+        assert!(codex_is_fedramp_from_payload(&payload));
+    }
+
+    #[test]
+    fn parses_codex_streamed_output_text() {
+        let body = concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}\n\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        assert_eq!(
+            parse_codex_sse_response(body).expect("stream should parse"),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn parses_codex_json_output_text() {
+        let body = r#"{
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        { "type": "output_text", "text": "hello json" }
+                    ]
+                }
+            ]
+        }"#;
+
+        assert_eq!(
+            parse_codex_sse_response(body).expect("json should parse"),
+            "hello json"
+        );
+    }
+
+    #[test]
+    fn browser_account_runtime_uses_codex_backend_even_when_configured_as_platform_api() {
+        assert_eq!(
+            codex_responses_url("https://api.openai.com/v1"),
+            "https://chatgpt.com/backend-api/codex/responses"
+        );
+        assert_eq!(
+            codex_responses_url("https://chatgpt.com/backend-api/codex"),
+            "https://chatgpt.com/backend-api/codex/responses"
+        );
+    }
 }

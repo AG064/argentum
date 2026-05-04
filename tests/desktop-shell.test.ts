@@ -394,6 +394,25 @@ describe('Argentum desktop shell', () => {
     expect(workflow).toContain('Build desktop CLI sidecar');
   });
 
+  test('routes OpenAI browser-account OAuth through live Codex chat runtime', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const cargo = read('src/desktop/Cargo.toml');
+
+    expect(cargo).toContain('base64');
+    expect(rust).toContain('struct CodexBrowserAuth');
+    expect(rust).toContain('fn codex_oauth_auth');
+    expect(rust).toContain('fn codex_responses_url');
+    expect(rust).toContain('https://chatgpt.com/backend-api/codex');
+    expect(rust).toContain('ChatGPT-Account-ID');
+    expect(rust).toContain('X-OpenAI-Fedramp');
+    expect(rust).toContain('async fn send_codex_chat_message');
+    expect(rust).toContain('fn parse_codex_sse_response');
+    expect(rust).toContain('"stream": true');
+    expect(rust).toContain('OpenAI/Codex browser account auth is ready for live Codex chat.');
+    expect(rust).not.toContain('live Codex runtime routing is not wired');
+    expect(rust).not.toContain('Use API key auth for live Platform API chat until');
+  });
+
   test('saves richer setup payload and secrets outside YAML', () => {
     const setup = read('src/ui/desktop/modules/setup.js');
     const rust = read('src/desktop/src/lib.rs');
