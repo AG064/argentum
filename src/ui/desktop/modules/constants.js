@@ -21,6 +21,141 @@ export const onboardingSteps = [
   'Review > Test > Pass',
 ];
 
+export const thinkingLevels = [
+  {
+    id: 'fast',
+    label: 'Fast',
+    effort: 'low',
+    detail: 'Shorter replies, lower latency, lighter reasoning.',
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    effort: 'medium',
+    detail: 'Good default for everyday planning, chat, and implementation.',
+  },
+  {
+    id: 'deep',
+    label: 'Deep',
+    effort: 'high',
+    detail: 'More careful reasoning for ambiguous, risky, or multi-step work.',
+  },
+];
+
+export const contextAccessOptions = [
+  {
+    id: 'workspace-summary',
+    label: 'Workspace summary',
+    status: 'Recommended',
+    detail: 'Argentum may see the selected workspace path, config health, gateway state, and high-level project status.',
+  },
+  {
+    id: 'profile',
+    label: 'Profile details',
+    status: 'Personal',
+    detail: 'Argentum may use your name, the agent name, and the system prompt you write during setup.',
+  },
+  {
+    id: 'logs',
+    label: 'Logs and diagnostics',
+    status: 'Review first',
+    detail: 'Argentum may summarize redacted gateway logs, diagnostics, and audit status. Secrets stay hidden.',
+  },
+  {
+    id: 'tool-state',
+    label: 'Tool and permission state',
+    status: 'Security',
+    detail: 'Argentum may see which local capabilities are allowed, blocked, or waiting for approval.',
+  },
+];
+
+export const modelMetadata = {
+  'gpt-5.5': {
+    contextWindow: '272k tokens',
+    maxContextWindow: '272k tokens',
+    currentContextLabel: 'Codex catalog: large workspace context',
+    capabilities: ['frontier reasoning', 'coding', 'research', 'tools', 'vision'],
+    detail: 'Frontier Codex model for complex coding, research, and real-world work.',
+  },
+  'gpt-5.5-pro': {
+    contextWindow: 'Plan/account dependent',
+    maxContextWindow: 'Plan/account dependent',
+    currentContextLabel: 'Confirm availability with provider test',
+    capabilities: ['frontier reasoning', 'long tasks', 'tools'],
+    detail: 'High-end OpenAI option. Availability and limits depend on the selected authorization method.',
+  },
+  'gpt-5.4': {
+    contextWindow: '272k tokens',
+    maxContextWindow: '1M tokens when available',
+    currentContextLabel: 'Codex catalog: expandable large context',
+    capabilities: ['coding', 'reasoning', 'tools', 'vision'],
+    detail: 'Strong model for everyday coding and agent work.',
+  },
+  'gpt-5.4-pro': {
+    contextWindow: 'Plan/account dependent',
+    maxContextWindow: 'Plan/account dependent',
+    currentContextLabel: 'Confirm availability with provider test',
+    capabilities: ['reasoning', 'coding', 'analysis'],
+    detail: 'Higher-capability GPT-5.4 profile when exposed by the selected provider.',
+  },
+  'gpt-5.4-mini': {
+    contextWindow: '272k tokens',
+    maxContextWindow: '272k tokens',
+    currentContextLabel: 'Codex catalog: fast large context',
+    capabilities: ['fast coding', 'tools', 'vision'],
+    detail: 'Small, fast, cost-efficient model for simpler coding and setup tasks.',
+  },
+  'gpt-5.4-nano': {
+    contextWindow: 'Provider dependent',
+    maxContextWindow: 'Provider dependent',
+    currentContextLabel: 'Best for short tasks',
+    capabilities: ['fast chat', 'low cost'],
+    detail: 'Lightweight option for quick replies when exposed by the provider.',
+  },
+  'gpt-5-mini': {
+    contextWindow: 'Provider dependent',
+    maxContextWindow: 'Provider dependent',
+    currentContextLabel: 'Best for short tasks',
+    capabilities: ['fast chat', 'low cost'],
+    detail: 'Compact GPT-5 profile for simple chat and routing.',
+  },
+  'gpt-5-nano': {
+    contextWindow: 'Provider dependent',
+    maxContextWindow: 'Provider dependent',
+    currentContextLabel: 'Best for tiny tasks',
+    capabilities: ['very fast chat', 'classification'],
+    detail: 'Smallest GPT-5-style profile when exposed by the provider.',
+  },
+  gpt5: {
+    contextWindow: 'Provider alias',
+    maxContextWindow: 'Provider alias',
+    currentContextLabel: 'Alias depends on endpoint',
+    capabilities: ['general chat'],
+    detail: 'Provider alias. Argentum tests the endpoint to confirm what it maps to.',
+  },
+  'gpt-4.1': {
+    contextWindow: 'Provider dependent',
+    maxContextWindow: 'Provider dependent',
+    currentContextLabel: 'Stable general-purpose context',
+    capabilities: ['general chat', 'coding', 'analysis'],
+    detail: 'Stable general-purpose model option for API-key based chat.',
+  },
+  'gpt-5.3-codex': {
+    contextWindow: '272k tokens',
+    maxContextWindow: '272k tokens',
+    currentContextLabel: 'Codex catalog: coding optimized',
+    capabilities: ['coding', 'tools', 'vision'],
+    detail: 'Coding-optimized Codex model.',
+  },
+  'gpt-5.2': {
+    contextWindow: '272k tokens',
+    maxContextWindow: '272k tokens',
+    currentContextLabel: 'Codex catalog: long-running agents',
+    capabilities: ['long tasks', 'coding', 'tools', 'vision'],
+    detail: 'Optimized for professional work and long-running agents.',
+  },
+};
+
 export const experienceLevels = [
   {
     id: 'beginner',

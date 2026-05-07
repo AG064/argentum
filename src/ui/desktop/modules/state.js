@@ -115,10 +115,14 @@ export const state = {
   copiedCommand: '',
   userName: '',
   agentName: 'Argentum',
+  systemPrompt:
+    'You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities.',
   agentPurpose: '',
   thinkingLevel: 'balanced',
+  chatStreaming: false,
   chatAttachments: [],
   voiceInputStatus: 'idle',
+  selectedContextAccess: ['workspace-summary', 'profile', 'tool-state'],
   activeChatId: 'setup',
   chatSessions: [
     {

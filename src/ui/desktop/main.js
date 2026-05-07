@@ -287,11 +287,11 @@ function saveProfileFromInputs() {
 
   if (userInput instanceof HTMLInputElement) state.userName = userInput.value.trim();
   if (agentInput instanceof HTMLInputElement) state.agentName = agentInput.value.trim() || 'Argentum';
-  if (purposeInput instanceof HTMLTextAreaElement) state.agentPurpose = purposeInput.value.trim();
+  if (purposeInput instanceof HTMLTextAreaElement) state.systemPrompt = purposeInput.value.trim();
 
   appendChatMessage(
     'argentum',
-    `Profile saved. I will use ${state.agentName || 'Argentum'} as the agent name${state.userName ? ` and call you ${state.userName}` : ''}.`,
+    `Profile saved. I will use **${state.agentName || 'Argentum'}** as the agent name${state.userName ? ` and call you **${state.userName}**` : ''}.`,
   );
   notify('success', 'Profile saved', 'The chat profile was updated locally.');
 }
@@ -355,6 +355,7 @@ async function sendChatDraft() {
   }
 
   state.actionStatus = 'Sending chat message...';
+  state.chatStreaming = true;
   render();
 
   try {
@@ -378,6 +379,7 @@ async function sendChatDraft() {
     notify('error', 'Chat failed', message);
   } finally {
     state.actionStatus = 'Chat is ready.';
+    state.chatStreaming = false;
     render();
   }
 }
@@ -404,8 +406,11 @@ function handleInput(event) {
   if (target.id === 'whatsapp-phone-id') state.whatsappPhoneId = target.value;
   if (target.id === 'chat-draft') state.draftMessage = target.value;
   if (target.id === 'profile-user-name') state.userName = target.value;
+  if (target.id === 'onboarding-user-name') state.userName = target.value;
   if (target.id === 'profile-agent-name') state.agentName = target.value || 'Argentum';
-  if (target.id === 'profile-purpose') state.agentPurpose = target.value;
+  if (target.id === 'onboarding-agent-name') state.agentName = target.value || 'Argentum';
+  if (target.id === 'profile-purpose') state.systemPrompt = target.value;
+  if (target.id === 'onboarding-system-prompt') state.systemPrompt = target.value;
 }
 
 function handleChange(event) {
@@ -414,6 +419,15 @@ function handleChange(event) {
 
   if (target.dataset.channelId) {
     setChannel(target.dataset.channelId, target.checked);
+    render();
+    return;
+  }
+
+  if (target.dataset.contextAccess) {
+    const access = new Set(state.selectedContextAccess);
+    if (target.checked) access.add(target.dataset.contextAccess);
+    else access.delete(target.dataset.contextAccess);
+    state.selectedContextAccess = [...access];
     render();
     return;
   }

@@ -681,6 +681,37 @@ p {
   margin-bottom: 8px;
 }
 
+.model-detail-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.model-detail-panel div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 12px;
+}
+
+.model-detail-panel span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.model-detail-panel p,
+.profile-setup-grid small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .oauth-actions {
   display: flex;
   flex-wrap: wrap;
@@ -876,8 +907,52 @@ textarea {
 
 .chat-shell {
   display: grid;
-  grid-template-rows: auto minmax(280px, 1fr) auto;
+  grid-template-rows: auto auto minmax(280px, 1fr) auto;
   min-height: 0;
+}
+
+.model-context-summary {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.model-context-summary strong {
+  font-size: 0.92rem;
+}
+
+.model-context-summary small {
+  color: var(--muted);
+}
+
+.context-meter,
+.settings-command-surface,
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 18px;
+}
+
+.context-meter div,
+.settings-command-surface div,
+.usage-grid div {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.14);
+  padding: 10px;
+}
+
+.context-meter span,
+.settings-command-surface span,
+.usage-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
 }
 
 .chat-transcript {
@@ -902,10 +977,6 @@ textarea {
   color: var(--steel);
   font-size: 12px;
   font-weight: 700;
-}
-
-.chat-block p {
-  margin-bottom: 12px;
 }
 
 .option-grid {
@@ -959,9 +1030,83 @@ textarea {
   font-weight: 700;
 }
 
-.message p {
-  margin-bottom: 0;
+.markdown-body {
   color: var(--text);
+  line-height: 1.58;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body pre {
+  margin: 0 0 10px;
+}
+
+.markdown-body p:last-child,
+.markdown-body ul:last-child,
+.markdown-body ol:last-child,
+.markdown-body pre:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 22px;
+}
+
+.markdown-body code {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #080b0f;
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #080b0f;
+  padding: 12px;
+}
+
+.markdown-body pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-body a {
+  color: var(--steel);
+  font-weight: 700;
+}
+
+.typing-indicator p {
+  margin: 0;
+}
+
+.typing-indicator p span {
+  animation: typing-pulse 1s infinite ease-in-out;
+}
+
+.typing-indicator p span:nth-of-type(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-indicator p span:nth-of-type(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
 .composer {
@@ -1014,6 +1159,20 @@ textarea {
 .status-stack strong {
   margin-top: 5px;
   overflow-wrap: anywhere;
+}
+
+.security-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-setup-grid {
+  margin: 16px 0;
+}
+
+.full-span {
+  grid-column: 1 / -1;
 }
 
 .timeline div {
@@ -1589,8 +1748,9 @@ textarea {
   .gateway-grid,
   .channel-grid,
   .security-choice-grid,
-  .option-grid,
-  .onboarding-progress,
+    .option-grid,
+    .model-detail-panel,
+    .onboarding-progress,
   .demo-stage,
   .demo-examples,
   .review-pipeline {

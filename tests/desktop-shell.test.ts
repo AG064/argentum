@@ -347,10 +347,25 @@ describe('Argentum desktop shell', () => {
     const main = read('src/ui/desktop/main.js');
     const state = read('src/ui/desktop/modules/state.js');
     const css = read('src/ui/desktop/styles.css');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
 
     expect(chat).not.toContain('chat-action-row');
     expect(chat).not.toContain('Start Gateway');
     expect(chat).not.toContain('Check Gateway');
+    expect(chat).toContain('renderMarkdown');
+    expect(chat).toContain('markdown-body');
+    expect(chat).toContain('renderTypingIndicator');
+    expect(chat).toContain('context-meter');
+    expect(chat).toContain('model-context-summary');
+    expect(utils).toContain('function renderMarkdown');
+    expect(utils).toContain('estimateContextTokens');
+    expect(utils).toContain('modelMetadataFor');
+    expect(constants).toContain('thinkingLevels');
+    expect(constants).toContain('modelMetadata');
+    expect(onboarding).toContain('model-detail-panel');
+    expect(onboarding).toContain('modelMetadataFor');
     expect(chat).toContain('recent-chat-list');
     expect(chat).toContain('new-chat');
     expect(chat).toContain('activeChatId');
@@ -363,6 +378,8 @@ describe('Argentum desktop shell', () => {
     expect(main).toContain('startVoiceInput');
     expect(main).toContain('addTerminalEntry');
     expect(main).toContain('sendChatMessage');
+    expect(main).toContain("state.chatStreaming = true");
+    expect(main).toContain("state.chatStreaming = false");
     expect(main).toContain('setActiveChatSession');
     expect(main).toContain('createChatSession');
     expect(main).toContain('hydrateChatHistory');
@@ -375,12 +392,19 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('argentum.chatHistory.v1');
     expect(state).toContain('storage.setItem');
     expect(state).toContain("thinkingLevel: 'balanced'");
+    expect(state).toContain('chatStreaming:');
+    expect(state).toContain('systemPrompt:');
+    expect(state).toContain('selectedContextAccess:');
     expect(state).toContain('chatAttachments:');
     expect(state).toContain('terminalEntries:');
     expect(state).toContain('agentName:');
     expect(state).toContain('userName:');
     expect(css).toContain('.recent-chat-list');
     expect(css).toContain('.composer-tools');
+    expect(css).toContain('.markdown-body');
+    expect(css).toContain('.typing-indicator');
+    expect(css).toContain('.context-meter');
+    expect(css).toContain('.model-detail-panel');
   });
 
   test('desktop actions execute through whitelisted Tauri commands with structured output', () => {
@@ -435,14 +459,42 @@ describe('Argentum desktop shell', () => {
   test('saves richer setup payload and secrets outside YAML', () => {
     const setup = read('src/ui/desktop/modules/setup.js');
     const rust = read('src/desktop/src/lib.rs');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const constants = read('src/ui/desktop/modules/constants.js');
 
     expect(setup).toContain('function buildSetupPayload()');
     expect(setup).toContain('experienceLevel');
     expect(setup).toContain('selectedChannels');
     expect(setup).toContain('providerApiKey');
+    expect(setup).toContain('agentName');
+    expect(setup).toContain('userName');
+    expect(setup).toContain('systemPrompt');
+    expect(setup).toContain('selectedContextAccess');
+    expect(setup).toContain('thinkingLevel');
+    expect(setup).toContain('securityProfile');
+    expect(setup).toContain('selectedChannels');
+    expect(onboarding).toContain('id="onboarding-user-name"');
+    expect(onboarding).toContain('id="onboarding-agent-name"');
+    expect(onboarding).toContain('id="onboarding-system-prompt"');
+    expect(sections).toContain('security-settings-grid');
+    expect(sections).toContain('data-context-access');
+    expect(constants).toContain('contextAccessOptions');
     expect(rust).toContain('fn save_setup');
     expect(rust).toContain('secrets.env');
     expect(rust).toContain('fn merge_existing_secrets');
+    expect(rust).toContain('agent_name: String');
+    expect(rust).toContain('system_prompt: String');
+    expect(rust).toContain('selected_context_access: Vec<String>');
+    expect(rust).toContain('thinking_level: String');
+    expect(rust).toContain('security_profile: String');
+    expect(rust).toContain('selected_channels: Vec<String>');
+    expect(rust).toContain('fn build_system_prompt');
+    expect(rust).toContain('fn build_runtime_context');
+    expect(rust).toContain('fn argentum_tool_definitions');
+    expect(rust).toContain('fn execute_argentum_tool');
+    expect(rust).toContain('tool_calls');
+    expect(rust).toContain('reasoning_effort');
     expect(rust).toContain('Provider keys are added by the desktop credential flow');
     expect(rust).toContain('fn render_config');
     expect(rust).toContain('workspaceRoot');

@@ -1,4 +1,12 @@
-import { providerAuthMethods, providerPresets, runtimeModes, securityProfiles } from './constants.js';
+import {
+  contextAccessOptions,
+  modelMetadata,
+  providerAuthMethods,
+  providerPresets,
+  runtimeModes,
+  securityProfiles,
+  thinkingLevels,
+} from './constants.js';
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
 import {
@@ -8,7 +16,17 @@ import {
   renderHero,
   renderNotifications,
 } from './shell.js';
-import { currentProvider, escapeAttribute, escapeHtml, labelFor, modelOptionsFor, selected } from './utils.js';
+import {
+  checked,
+  currentProvider,
+  escapeAttribute,
+  escapeHtml,
+  estimateContextTokens,
+  labelFor,
+  modelMetadataFor,
+  modelOptionsFor,
+  selected,
+} from './utils.js';
 
 function terminalPreview(state, filter = '') {
   const entries = filter
@@ -53,8 +71,8 @@ function gatewayModule() {
         <div class="gateway-grid">
           <section class="panel">
             <div class="panel-header">
-              <h3>Controls</h3>
-              <p>No arbitrary shell is exposed here. Each button maps to a whitelisted gateway action.</p>
+              <h3>What the gateway does</h3>
+              <p>The gateway is Argentum's local service entrance. It can expose approved workspace APIs, webchat, and integrations on localhost after you start it. It is off by default and each GUI button maps to a fixed, whitelisted action.</p>
             </div>
             ${renderActionCards('gateway')}
           </section>
@@ -134,6 +152,27 @@ const securityModule = {
     )}
     <section class="panel">
       <div class="panel-header">
+        <h3>Security Settings</h3>
+        <p>Change the permission profile and decide which app facts Argentum can include in model context. These toggles do not grant arbitrary local access.</p>
+      </div>
+      <div class="panel-body security-settings-grid">
+        <label>
+          Permission profile
+          <select id="settings-security">
+            ${securityProfiles
+              .map(
+                (item) => `
+                  <option value="${item.id}" ${item.id === state.securityProfile ? 'selected' : ''}>${escapeHtml(item.label)}</option>
+                `,
+              )
+              .join('')}
+          </select>
+        </label>
+        ${renderContextAccessCards(state)}
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-header">
         <h3>Current Boundary</h3>
         <p>Default access means all folders and files inside the workspace folder below. Anything outside it must be explicitly approved.</p>
       </div>
@@ -183,6 +222,7 @@ const settingsModule = {
   healthCheck: () => ({ status: 'ok', message: 'Settings are editable.' }),
   render: (state) => {
     const provider = currentProvider(providerPresets, state);
+    const metadata = modelMetadataFor(state.providerModel, modelMetadata);
     const availableAuthMethods = providerAuthMethods.filter((method) =>
       (provider.authMethods || ['api-key']).includes(method.id),
     );
@@ -197,8 +237,25 @@ const settingsModule = {
           { label: 'Provider', value: provider.label },
           { label: 'Config', value: state.desktopState?.configExists ? 'Saved' : 'Pending' },
         ],
-      )}
+        )}
       <section class="panel">
+        <div class="settings-command-surface">
+          <div>
+            <span>Selected model</span>
+            <strong>${escapeHtml(state.providerModel)}</strong>
+            <p>${escapeHtml(metadata.detail)}</p>
+          </div>
+          <div>
+            <span>Context</span>
+            <strong>${escapeHtml(metadata.contextWindow)}</strong>
+            <p>${escapeHtml(metadata.currentContextLabel)}</p>
+          </div>
+          <div>
+            <span>Capabilities</span>
+            <strong>${escapeHtml(metadata.capabilities.join(', '))}</strong>
+            <p>${escapeHtml(thinkingLevels.find((level) => level.id === state.thinkingLevel)?.detail || '')}</p>
+          </div>
+        </div>
         <div class="panel-body form-grid two">
           <label>
             Workspace
@@ -249,6 +306,18 @@ const settingsModule = {
             </select>
           </label>
           <label>
+            Thinking level
+            <select id="thinking-level">
+              ${thinkingLevels
+                .map(
+                  (item) => `
+                    <option value="${escapeAttribute(item.id)}" ${selected(state.thinkingLevel, item.id)}>${escapeHtml(item.label)} - ${escapeHtml(item.effort)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
             Permission profile
             <select id="settings-security">
               ${securityProfiles
@@ -281,9 +350,12 @@ const settingsModule = {
             <input id="profile-agent-name" value="${escapeAttribute(state.agentName)}" placeholder="Argentum" />
           </label>
           <label>
-            Main purpose
-            <textarea id="profile-purpose" placeholder="What should this workspace help with?">${escapeHtml(state.agentPurpose)}</textarea>
+            System prompt
+            <textarea id="profile-purpose" placeholder="How should Argentum behave in this workspace?">${escapeHtml(state.systemPrompt)}</textarea>
           </label>
+        </div>
+        <div class="panel-body security-settings-grid">
+          ${renderContextAccessCards(state)}
         </div>
         ${renderSettingsOAuthPanel(state)}
         <div class="panel-footer button-row split">
@@ -356,6 +428,7 @@ const diagnosticsModule = {
       ['Capability broker', labelFor(securityProfiles, state.securityProfile), true],
       ['Secrets', 'Stored outside YAML', true],
     ];
+    const estimatedTokens = estimateContextTokens(state.chatBlocks, state.draftMessage);
 
     return `
       ${renderNotifications()}
@@ -369,6 +442,18 @@ const diagnosticsModule = {
           { label: 'Modules', value: 'Contained' },
         ],
       )}
+      <section class="panel">
+        <div class="panel-header">
+          <h3>Usage Snapshot</h3>
+          <p>Live counters are local to the desktop app and update as chat, gateway, diagnostics, and logs are used.</p>
+        </div>
+        <div class="panel-body usage-grid">
+          <div><span>Estimated chat context</span><strong>${estimatedTokens.toLocaleString()} tokens</strong></div>
+          <div><span>Terminal entries</span><strong>${state.terminalEntries.length}</strong></div>
+          <div><span>Notifications stored</span><strong>${state.notificationHistory.length}</strong></div>
+          <div><span>Gateway</span><strong>${state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped'}</strong></div>
+        </div>
+      </section>
       <section class="panel">
         <div class="panel-header split-header">
           <h3>Health Checks</h3>
@@ -391,6 +476,21 @@ const diagnosticsModule = {
     `;
   },
 };
+
+function renderContextAccessCards(state) {
+  return contextAccessOptions
+    .map(
+      (option) => `
+        <label class="check-card ${state.selectedContextAccess.includes(option.id) ? 'active' : ''}">
+          <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
+          <span>${escapeHtml(option.status)}</span>
+          <strong>${escapeHtml(option.label)}</strong>
+          <p>${escapeHtml(option.detail)}</p>
+        </label>
+      `,
+    )
+    .join('');
+}
 
 export const modules = {
   onboarding: onboardingModule,

@@ -1,6 +1,8 @@
 import {
   channelOptions,
+  contextAccessOptions,
   experienceLevels,
+  modelMetadata,
   onboardingSteps,
   providerAuthMethods,
   providerPresets,
@@ -16,6 +18,7 @@ import {
   escapeHtml,
   explainPath,
   labelFor,
+  modelMetadataFor,
   modelOptionsFor,
   selected,
 } from './utils.js';
@@ -141,6 +144,23 @@ function renderWelcomeStep() {
       <p>Argentum is a local-first workspace for chat, agents, skills, memory, channels, and controlled automation.</p>
       <p><strong>Default access: all folders/files inside workspace folder.</strong> It should not read Downloads, Desktop, browser data, RAM, or other apps unless you approve a capability later.</p>
     </div>
+    <div class="form-grid two profile-setup-grid">
+      <label>
+        Your name
+        <input id="onboarding-user-name" value="${escapeAttribute(state.userName)}" placeholder="What Argentum should call you" />
+        <small>Shown only in your local profile and sent to the provider only when Profile details are enabled.</small>
+      </label>
+      <label>
+        Agent name
+        <input id="onboarding-agent-name" value="${escapeAttribute(state.agentName)}" placeholder="Argentum" />
+        <small>The name used in chat headers and setup prompts.</small>
+      </label>
+      <label class="full-span">
+        System prompt
+        <textarea id="onboarding-system-prompt" placeholder="Describe how Argentum should behave in this workspace.">${escapeHtml(state.systemPrompt)}</textarea>
+        <small>This is the instruction layer Argentum sends with live chats. Keep secrets out of it.</small>
+      </label>
+    </div>
     <div class="interface-grid">
       ${experienceLevels
         .map(
@@ -233,6 +253,24 @@ function renderRuntimeDemo(mode) {
 
 function renderCapabilitiesStep() {
   return `
+    <div class="copy-block compact-copy">
+      <h3>What Argentum may know</h3>
+      <p>These switches decide which setup and runtime facts can be included in the model context. They do not grant arbitrary filesystem, shell, browser, or OS access.</p>
+    </div>
+    <div class="channel-grid">
+      ${contextAccessOptions
+        .map(
+          (option) => `
+            <label class="check-card ${state.selectedContextAccess.includes(option.id) ? 'active' : ''}">
+              <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
+              <span>${escapeHtml(option.status)}</span>
+              <strong>${escapeHtml(option.label)}</strong>
+              <p>${escapeHtml(option.detail)}</p>
+            </label>
+          `,
+        )
+        .join('')}
+    </div>
     <div class="capability-grid">
       ${[
         ['Workspace files', `Allowed by default only inside ${state.workspacePath}.`],
@@ -394,6 +432,8 @@ function renderProviderCredentialStep(provider) {
 }
 
 function renderProviderModelStep(provider) {
+  const metadata = modelMetadataFor(state.providerModel, modelMetadata);
+
   return `
     <div class="provider-stage">
       <div class="provider-stage-header split-header">
@@ -446,6 +486,18 @@ function renderProviderModelStep(provider) {
             <button class="button" id="test-provider">Test Provider</button>
             <span class="pill ${providerTestClass()}">${escapeHtml(providerTestLabel())}</span>
             <p>${escapeHtml(state.apiTest.message)}</p>
+          </div>
+        </div>
+        <div class="model-detail-panel">
+          <div>
+            <span>Context window</span>
+            <strong>${escapeHtml(metadata.contextWindow)}</strong>
+            <p>${escapeHtml(metadata.currentContextLabel)}</p>
+          </div>
+          <div>
+            <span>Capability overview</span>
+            <strong>${escapeHtml(metadata.capabilities.join(', '))}</strong>
+            <p>${escapeHtml(metadata.detail)}</p>
           </div>
         </div>
       </div>

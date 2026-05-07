@@ -1,5 +1,14 @@
+import { modelMetadata, providerPresets, thinkingLevels } from './constants.js';
 import { renderNotifications } from './shell.js';
-import { escapeAttribute, escapeHtml, selected } from './utils.js';
+import {
+  currentProvider,
+  escapeAttribute,
+  escapeHtml,
+  estimateContextTokens,
+  modelMetadataFor,
+  renderMarkdown,
+  selected,
+} from './utils.js';
 
 export const chatModule = {
   id: 'chat',
@@ -16,6 +25,11 @@ export const chatModule = {
 };
 
 function renderChatSection(state) {
+  const provider = currentProvider(providerPresets, state);
+  const metadata = modelMetadataFor(state.providerModel, modelMetadata);
+  const estimatedTokens = estimateContextTokens(state.chatBlocks, state.draftMessage);
+  const contextLabel = `${estimatedTokens.toLocaleString()} used / ${metadata.contextWindow}`;
+
   return `
     ${renderNotifications()}
     <div class="chat-workspace">
@@ -43,10 +57,29 @@ function renderChatSection(state) {
             <h3>Conversation</h3>
             <p>${escapeHtml(state.apiTest.status === 'ok' ? 'Live model replies are active.' : 'Offline guided mode is active until provider testing passes.')}</p>
           </div>
-          <span class="pill ${state.apiTest.status === 'ok' ? 'ok' : 'warn'}">${state.apiTest.status === 'ok' ? 'Provider ready' : 'Offline mode'}</span>
+          <div class="model-context-summary">
+            <span class="pill ${state.apiTest.status === 'ok' ? 'ok' : 'warn'}">${state.apiTest.status === 'ok' ? 'Provider ready' : 'Offline mode'}</span>
+            <strong>${escapeHtml(provider.label)} / ${escapeHtml(state.providerModel)}</strong>
+            <small>${escapeHtml(metadata.currentContextLabel)}</small>
+          </div>
+        </div>
+        <div class="context-meter" aria-label="Conversation context">
+          <div>
+            <span>Context</span>
+            <strong>${escapeHtml(contextLabel)}</strong>
+          </div>
+          <div>
+            <span>Thinking</span>
+            <strong>${escapeHtml(thinkingLevels.find((level) => level.id === state.thinkingLevel)?.label || state.thinkingLevel)}</strong>
+          </div>
+          <div>
+            <span>Capabilities</span>
+            <strong>${escapeHtml(metadata.capabilities.join(', '))}</strong>
+          </div>
         </div>
         <div class="chat-transcript">
           ${state.chatBlocks.map((block) => renderChatBlock(block)).join('')}
+          ${renderTypingIndicator(state)}
         </div>
         <div class="composer">
           <div class="composer-tools">
@@ -55,9 +88,13 @@ function renderChatSection(state) {
             <label>
               Thinking
               <select id="thinking-level">
-                <option value="fast" ${selected(state.thinkingLevel, 'fast')}>Fast</option>
-                <option value="balanced" ${selected(state.thinkingLevel, 'balanced')}>Balanced</option>
-                <option value="deep" ${selected(state.thinkingLevel, 'deep')}>Deep</option>
+                ${thinkingLevels
+                  .map(
+                    (level) => `
+                      <option value="${escapeAttribute(level.id)}" ${selected(state.thinkingLevel, level.id)}>${escapeHtml(level.label)}</option>
+                    `,
+                  )
+                  .join('')}
               </select>
             </label>
           </div>
@@ -67,6 +104,17 @@ function renderChatSection(state) {
         </div>
       </section>
     </div>
+  `;
+}
+
+function renderTypingIndicator(state) {
+  if (!state.chatStreaming) return '';
+
+  return `
+    <article class="message assistant typing-indicator" aria-live="polite">
+      <span>${escapeHtml(state.agentName || 'Argentum')}</span>
+      <p><strong>${escapeHtml(state.agentName || 'Argentum')}</strong> is typing<span>.</span><span>.</span><span>.</span></p>
+    </article>
   `;
 }
 
@@ -91,7 +139,7 @@ function renderChatBlock(block) {
     return `
       <article class="chat-block option-group">
         <span>${escapeHtml(block.title)}</span>
-        <p>${escapeHtml(block.body)}</p>
+        <div class="markdown-body">${renderMarkdown(block.body)}</div>
         <div class="option-grid">
           ${block.options
             .map(
@@ -112,7 +160,7 @@ function renderChatBlock(block) {
     return `
       <article class="chat-block ${escapeAttribute(block.type)}">
         <span>${escapeHtml(block.title)}</span>
-        <p>${escapeHtml(block.body)}</p>
+        <div class="markdown-body">${renderMarkdown(block.body)}</div>
       </article>
     `;
   }
@@ -120,7 +168,7 @@ function renderChatBlock(block) {
   return `
     <article class="message ${block.role === 'user' ? 'user' : 'assistant'}">
       <span>${escapeHtml(block.title || 'Argentum')}</span>
-      <p>${escapeHtml(block.body)}</p>
+      <div class="markdown-body">${renderMarkdown(block.body)}</div>
     </article>
   `;
 }

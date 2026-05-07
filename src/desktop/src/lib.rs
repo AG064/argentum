@@ -24,6 +24,11 @@ struct SaveSetupRequest {
     provider_api_key: String,
     provider_api_key_env: String,
     custom_provider_name: String,
+    agent_name: String,
+    user_name: String,
+    system_prompt: String,
+    selected_context_access: Vec<String>,
+    thinking_level: String,
     selected_channels: Vec<String>,
     webchat_token: String,
     telegram_token: String,
@@ -123,6 +128,13 @@ struct TestProviderResponse {
 struct SendChatMessageRequest {
     workspace_path: String,
     message: String,
+    agent_name: String,
+    user_name: String,
+    system_prompt: String,
+    selected_context_access: Vec<String>,
+    thinking_level: String,
+    security_profile: String,
+    selected_channels: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -182,6 +194,13 @@ struct ProviderRuntimeConfig {
     model: String,
     api_key_env: String,
     auth_method: String,
+    agent_name: String,
+    user_name: String,
+    system_prompt: String,
+    selected_context_access: Vec<String>,
+    thinking_level: String,
+    security_profile: String,
+    selected_channels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -336,10 +355,31 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let provider_base_url = provider_base_url(request);
     let provider_model = provider_model(request);
     let provider_auth_method = provider_auth_method(request);
+    let agent_name = request.agent_name.trim();
+    let user_name = request.user_name.trim();
+    let system_prompt = request.system_prompt.trim();
+    let thinking_level = request.thinking_level.trim();
+    let context_access = yaml_list(&request.selected_context_access);
     let quoted_provider_label = yaml_quote(provider_label);
     let quoted_provider_base_url = yaml_quote(&provider_base_url);
     let quoted_provider_model = yaml_quote(&provider_model);
     let quoted_provider_auth_method = yaml_quote(&provider_auth_method);
+    let quoted_agent_name = yaml_quote(if agent_name.is_empty() {
+        "Argentum"
+    } else {
+        agent_name
+    });
+    let quoted_user_name = yaml_quote(user_name);
+    let quoted_system_prompt = yaml_quote(if system_prompt.is_empty() {
+        "You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities."
+    } else {
+        system_prompt
+    });
+    let quoted_thinking_level = yaml_quote(if thinking_level.is_empty() {
+        "balanced"
+    } else {
+        thinking_level
+    });
     let quoted_workspace = yaml_quote(&request.workspace_path);
     let webchat_enabled = channel_enabled(request, "webchat");
     let telegram_enabled = channel_enabled(request, "telegram");
@@ -349,7 +389,7 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let quoted_telegram_allowlist = yaml_quote(telegram_allowlist);
     let quoted_whatsapp_phone_id = yaml_quote(whatsapp_phone_id);
     format!(
-        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nlogging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      auth_method: {provider_auth_method}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
+        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nprofile:\n  agentName: {agent_name}\n  userName: {user_name}\n  systemPrompt: {system_prompt}\n  thinkingLevel: {thinking_level}\n  contextAccess:\n{context_access}logging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      auth_method: {provider_auth_method}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
         version = request.version,
         experience = request.experience_level,
         runtime = request.runtime_mode,
@@ -360,6 +400,11 @@ fn render_config(request: &SaveSetupRequest) -> String {
         provider_api = provider_api,
         provider_auth_method = quoted_provider_auth_method,
         provider_model = quoted_provider_model,
+        agent_name = quoted_agent_name,
+        user_name = quoted_user_name,
+        system_prompt = quoted_system_prompt,
+        thinking_level = quoted_thinking_level,
+        context_access = context_access,
         profile = profile,
         workspace = quoted_workspace,
         webchat = webchat_enabled,
@@ -626,6 +671,17 @@ fn merge_existing_secrets(path: &Path, updates: Vec<(String, String)>) -> String
 
 fn yaml_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
+}
+
+fn yaml_list(values: &[String]) -> String {
+    if values.is_empty() {
+        return "    - workspace-summary\n".to_string();
+    }
+
+    values
+        .iter()
+        .map(|value| format!("    - {}\n", yaml_quote(value.trim())))
+        .collect::<String>()
 }
 
 fn target_triple() -> &'static str {
@@ -1164,6 +1220,52 @@ fn yaml_string_at<'a>(value: &'a serde_yaml::Value, path: &[&str]) -> Option<&'a
     current.as_str()
 }
 
+fn yaml_string_list_at(value: &serde_yaml::Value, path: &[&str]) -> Vec<String> {
+    let mut current = value;
+    for segment in path {
+        let Some(next) = current.get(*segment) else {
+            return Vec::new();
+        };
+        current = next;
+    }
+
+    current
+        .as_sequence()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn yaml_bool_at(value: &serde_yaml::Value, path: &[&str]) -> bool {
+    let mut current = value;
+    for segment in path {
+        let Some(next) = current.get(*segment) else {
+            return false;
+        };
+        current = next;
+    }
+
+    current.as_bool().unwrap_or(false)
+}
+
+fn selected_channels_from_yaml(value: &serde_yaml::Value) -> Vec<String> {
+    let mut channels = vec!["local".to_string()];
+    for channel in ["webchat", "telegram", "whatsapp"] {
+        if yaml_bool_at(value, &["channels", channel, "enabled"])
+            || yaml_bool_at(value, &["channels", channel, "selected"])
+        {
+            channels.push(channel.to_string());
+        }
+    }
+    channels
+}
+
 fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, String> {
     let config_path = workspace.join("config").join("default.yaml");
     let contents = std::fs::read_to_string(&config_path)
@@ -1219,6 +1321,23 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
             .and_then(|value| value.as_str())
             .unwrap_or("api-key")
             .to_string(),
+        agent_name: yaml_string_at(&yaml, &["profile", "agentName"])
+            .unwrap_or("Argentum")
+            .to_string(),
+        user_name: yaml_string_at(&yaml, &["profile", "userName"])
+            .unwrap_or("")
+            .to_string(),
+        system_prompt: yaml_string_at(&yaml, &["profile", "systemPrompt"])
+            .unwrap_or("You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities.")
+            .to_string(),
+        selected_context_access: yaml_string_list_at(&yaml, &["profile", "contextAccess"]),
+        thinking_level: yaml_string_at(&yaml, &["profile", "thinkingLevel"])
+            .unwrap_or("balanced")
+            .to_string(),
+        security_profile: yaml_string_at(&yaml, &["security", "capabilities", "defaultProfile"])
+            .unwrap_or("restricted")
+            .to_string(),
+        selected_channels: selected_channels_from_yaml(&yaml),
     })
 }
 
@@ -1284,6 +1403,76 @@ fn parse_openai_chat_response(value: serde_json::Value) -> Result<String, String
         .map(|content| content.trim().to_string())
         .filter(|content| !content.is_empty())
         .ok_or_else(|| "Provider returned an empty chat response.".to_string())
+}
+
+fn openai_chat_messages(system_prompt: &str, message: &str) -> Vec<serde_json::Value> {
+    vec![
+        json!({
+            "role": "system",
+            "content": system_prompt
+        }),
+        json!({
+            "role": "user",
+            "content": message
+        }),
+    ]
+}
+
+fn openai_chat_body(
+    config: &ProviderRuntimeConfig,
+    messages: Vec<serde_json::Value>,
+    thinking_level: &str,
+    include_tools: bool,
+) -> serde_json::Value {
+    let mut body = json!({
+        "model": config.model,
+        "messages": messages,
+        "temperature": 0.4
+    });
+
+    if config.name == "openai" && config.model.starts_with("gpt-5") {
+        body["reasoning_effort"] = json!(reasoning_effort(thinking_level));
+    }
+
+    if include_tools {
+        body["tools"] = argentum_tool_definitions();
+        body["tool_choice"] = json!("auto");
+    }
+
+    body
+}
+
+fn openai_assistant_message(value: &serde_json::Value) -> Option<serde_json::Value> {
+    value
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .cloned()
+}
+
+fn openai_tool_calls(value: &serde_json::Value) -> Vec<(String, String)> {
+    value
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("tool_calls"))
+        .and_then(|tool_calls| tool_calls.as_array())
+        .map(|tool_calls| {
+            tool_calls
+                .iter()
+                .filter_map(|tool_call| {
+                    let id = tool_call.get("id").and_then(|item| item.as_str())?;
+                    let name = tool_call
+                        .get("function")
+                        .and_then(|function| function.get("name"))
+                        .and_then(|item| item.as_str())?;
+                    Some((id.to_string(), name.to_string()))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
 }
 
 fn parse_anthropic_chat_response(value: serde_json::Value) -> Result<String, String> {
@@ -1530,10 +1719,265 @@ async fn test_codex_browser_provider(
     ))
 }
 
-fn codex_chat_body(config: &ProviderRuntimeConfig, message: &str) -> serde_json::Value {
+fn reasoning_effort(thinking_level: &str) -> &'static str {
+    match thinking_level {
+        "fast" => "low",
+        "deep" => "high",
+        _ => "medium",
+    }
+}
+
+fn build_system_prompt(
+    workspace: &Path,
+    config: &ProviderRuntimeConfig,
+    request: &SendChatMessageRequest,
+) -> String {
+    let agent_name = if request.agent_name.trim().is_empty() {
+        config.agent_name.as_str()
+    } else {
+        request.agent_name.trim()
+    };
+    let user_name = if request.user_name.trim().is_empty() {
+        config.user_name.as_str()
+    } else {
+        request.user_name.trim()
+    };
+    let system_prompt = if request.system_prompt.trim().is_empty() {
+        config.system_prompt.as_str()
+    } else {
+        request.system_prompt.trim()
+    };
+    let context_access = if request.selected_context_access.is_empty() {
+        config.selected_context_access.clone()
+    } else {
+        request.selected_context_access.clone()
+    };
+    let context_access = if context_access.is_empty() {
+        "workspace-summary, tool-state".to_string()
+    } else {
+        context_access.join(", ")
+    };
+    let thinking_level = if request.thinking_level.trim().is_empty() {
+        config.thinking_level.as_str()
+    } else {
+        request.thinking_level.trim()
+    };
+
+    format!(
+        "{system_prompt}\n\nArgentum runtime context:\n- Agent name: {agent_name}\n- User name: {user_name}\n- Workspace folder: {}\n- Provider/model: {} / {}\n- Thinking level: {thinking_level} ({})\n- Approved context categories: {context_access}\n- Available MVP actions: chat, provider test, gateway start/status/stop/logs, diagnostics, security overview, and settings.\n- Tool boundary: do not claim arbitrary filesystem, browser, shell, RAM, or OS access. Only describe or use information provided by the app context and approved workspace capabilities.",
+        workspace.display(),
+        config.label,
+        config.model,
+        reasoning_effort(thinking_level)
+    )
+}
+
+fn effective_context_access(
+    config: &ProviderRuntimeConfig,
+    request: &SendChatMessageRequest,
+) -> Vec<String> {
+    if request.selected_context_access.is_empty() {
+        config.selected_context_access.clone()
+    } else {
+        request.selected_context_access.clone()
+    }
+}
+
+fn effective_channels(
+    config: &ProviderRuntimeConfig,
+    request: &SendChatMessageRequest,
+) -> Vec<String> {
+    if request.selected_channels.is_empty() {
+        config.selected_channels.clone()
+    } else {
+        request.selected_channels.clone()
+    }
+}
+
+fn effective_security_profile<'a>(
+    config: &'a ProviderRuntimeConfig,
+    request: &'a SendChatMessageRequest,
+) -> &'a str {
+    if request.security_profile.trim().is_empty() {
+        config.security_profile.as_str()
+    } else {
+        request.security_profile.trim()
+    }
+}
+
+fn build_runtime_context(
+    workspace: &Path,
+    config: &ProviderRuntimeConfig,
+    request: &SendChatMessageRequest,
+) -> String {
+    let context_access = effective_context_access(config, request);
+    let channels = effective_channels(config, request);
+    let security_profile = effective_security_profile(config, request);
+    let data_dir = workspace.join("data");
+    let logs_dir = workspace.join("logs");
+    let config_path = workspace.join("config").join("default.yaml");
+    let gateway_pid_path = data_dir.join(".gateway.pid");
+    let gateway_pid = read_gateway_pid(&gateway_pid_path);
+    let gateway_status = gateway_pid
+        .as_deref()
+        .map(|pid| format!("running, PID {pid}"))
+        .unwrap_or_else(|| "stopped".to_string());
+    let port = gateway_port(workspace);
+    let mut lines = vec![
+        "Argentum app context and local skills:".to_string(),
+        format!("- Workspace folder: {}", workspace.display()),
+        format!("- Config path: {}", config_path.display()),
+        format!("- Data directory exists: {}", data_dir.exists()),
+        format!("- Logs directory exists: {}", logs_dir.exists()),
+        format!("- Gateway status: {gateway_status}"),
+        format!("- Gateway health URL when running: http://127.0.0.1:{port}/health"),
+        format!("- Security profile: {security_profile}"),
+        format!("- Enabled channels: {}", channels.join(", ")),
+        format!(
+            "- Approved context categories: {}",
+            if context_access.is_empty() {
+                "none".to_string()
+            } else {
+                context_access.join(", ")
+            }
+        ),
+    ];
+
+    if context_access.iter().any(|item| item == "profile") {
+        lines.push(format!("- Agent name: {}", config.agent_name));
+        if !config.user_name.trim().is_empty() {
+            lines.push(format!("- User name: {}", config.user_name));
+        }
+    }
+
+    if context_access.iter().any(|item| item == "tool-state") {
+        lines.push(
+            "- Available local skills: argentum_workspace_status, argentum_gateway_status, argentum_security_overview. These are read-only context skills; runtime actions still require fixed GUI controls and permission gates.".to_string(),
+        );
+        lines.push(
+            "- Not available by default: arbitrary shell execution, unrestricted filesystem reads, browser session scraping, RAM inspection, OS control, or external folders.".to_string(),
+        );
+    }
+
+    if context_access.iter().any(|item| item == "logs") {
+        let gateway_log = read_preview(&data_dir.join("gateway.log"), 8);
+        let audit_log = read_preview(&data_dir.join("audit").join("capabilities.log"), 8);
+        lines.push(format!("- Redacted gateway log preview:\n{}", gateway_log));
+        lines.push(format!("- Redacted audit log preview:\n{}", audit_log));
+    }
+
+    lines.push(
+        "- If the user asks what you can access, inspect, or use, answer from this app context instead of generic model limitations.".to_string(),
+    );
+
+    lines.join("\n")
+}
+
+fn argentum_tool_definitions() -> serde_json::Value {
+    json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "argentum_workspace_status",
+                "description": "Read the current Argentum workspace, model, security, channel, gateway, and approved context status. This does not read arbitrary user files.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "argentum_gateway_status",
+                "description": "Read whether the local Argentum gateway appears stopped or running for the selected workspace.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "argentum_security_overview",
+                "description": "Read the active Argentum security profile and approved context categories.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                }
+            }
+        }
+    ])
+}
+
+fn execute_argentum_tool(
+    name: &str,
+    workspace: &Path,
+    config: &ProviderRuntimeConfig,
+    request: &SendChatMessageRequest,
+) -> serde_json::Value {
+    let context_access = effective_context_access(config, request);
+    let channels = effective_channels(config, request);
+    let security_profile = effective_security_profile(config, request);
+    let gateway_pid_path = workspace.join("data").join(".gateway.pid");
+    let gateway_pid = read_gateway_pid(&gateway_pid_path);
+    let port = gateway_port(workspace);
+
+    match name {
+        "argentum_workspace_status" => json!({
+            "workspacePath": workspace.display().to_string(),
+            "provider": config.label,
+            "model": config.model,
+            "authMethod": config.auth_method,
+            "securityProfile": security_profile,
+            "selectedChannels": channels,
+            "selectedContextAccess": context_access,
+            "gatewayPid": gateway_pid,
+            "gatewayHealthUrl": format!("http://127.0.0.1:{port}/health"),
+            "availableSkills": [
+                "argentum_workspace_status",
+                "argentum_gateway_status",
+                "argentum_security_overview"
+            ],
+            "restrictedByDefault": true
+        }),
+        "argentum_gateway_status" => json!({
+            "status": if gateway_pid.is_some() { "running" } else { "stopped" },
+            "pid": gateway_pid,
+            "healthUrl": format!("http://127.0.0.1:{port}/health"),
+            "logPath": workspace.join("data").join("gateway.log").display().to_string()
+        }),
+        "argentum_security_overview" => json!({
+            "securityProfile": security_profile,
+            "workspaceDefault": "All folders and files inside the selected workspace folder only.",
+            "selectedContextAccess": context_access,
+            "blockedByDefault": [
+                "external folders",
+                "arbitrary shell",
+                "browser session scraping",
+                "RAM inspection",
+                "OS control"
+            ]
+        }),
+        _ => json!({
+            "error": format!("Unknown Argentum tool: {name}")
+        }),
+    }
+}
+
+fn codex_chat_body(
+    config: &ProviderRuntimeConfig,
+    message: &str,
+    system_prompt: &str,
+    thinking_level: &str,
+) -> serde_json::Value {
     json!({
         "model": config.model,
-        "instructions": "You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the user's configured workspace and permissions.",
+        "instructions": system_prompt,
         "input": [
             {
                 "role": "user",
@@ -1550,6 +1994,9 @@ fn codex_chat_body(config: &ProviderRuntimeConfig, message: &str) -> serde_json:
         "parallel_tool_calls": false,
         "store": false,
         "stream": true,
+        "reasoning": {
+            "effort": reasoning_effort(thinking_level)
+        },
         "include": [],
         "client_metadata": {
             "x-codex-installation-id": "argentum-desktop"
@@ -1562,13 +2009,20 @@ async fn post_codex_responses(
     auth: &CodexBrowserAuth,
     config: &ProviderRuntimeConfig,
     message: &str,
+    system_prompt: &str,
+    thinking_level: &str,
 ) -> Result<reqwest::Response, String> {
     let request = client
         .post(codex_responses_url(&config.base_url))
         .headers(codex_browser_headers(auth))
         .bearer_auth(auth.access_token.as_str())
         .header("Accept", "text/event-stream")
-        .json(&codex_chat_body(config, message));
+        .json(&codex_chat_body(
+            config,
+            message,
+            system_prompt,
+            thinking_level,
+        ));
 
     request.send().await.map_err(redact_provider_error)
 }
@@ -1737,18 +2191,36 @@ async fn send_codex_chat_message(
     workspace: &Path,
     config: &ProviderRuntimeConfig,
     message: &str,
+    system_prompt: &str,
+    thinking_level: &str,
 ) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
         .build()
         .map_err(|_| "OpenAI/Codex chat client could not be created.".to_string())?;
     let auth = codex_oauth_auth(workspace)?;
-    let response = post_codex_responses(&client, &auth, config, message).await?;
+    let response = post_codex_responses(
+        &client,
+        &auth,
+        config,
+        message,
+        system_prompt,
+        thinking_level,
+    )
+    .await?;
     let status = response.status();
 
     let response = if status.as_u16() == 401 || status.as_u16() == 403 {
         let refreshed = refresh_codex_oauth(workspace, &auth).await?;
-        post_codex_responses(&client, &refreshed, config, message).await?
+        post_codex_responses(
+            &client,
+            &refreshed,
+            config,
+            message,
+            system_prompt,
+            thinking_level,
+        )
+        .await?
     } else {
         response
     };
@@ -1974,6 +2446,16 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
             model: model.to_string(),
             api_key_env: defaults.api_key_env.to_string(),
             auth_method: auth_method.to_string(),
+            agent_name: "Argentum".to_string(),
+            user_name: String::new(),
+            system_prompt: "You are Argentum, a secure desktop AI agent.".to_string(),
+            selected_context_access: vec![
+                "workspace-summary".to_string(),
+                "tool-state".to_string(),
+            ],
+            thinking_level: "balanced".to_string(),
+            security_profile: "restricted".to_string(),
+            selected_channels: vec!["local".to_string()],
         };
         let message = test_codex_browser_provider(workspace, &config).await?;
 
@@ -2072,6 +2554,48 @@ async fn send_chat_message(
         }
     };
     ensure_provider_auth_method(&config.auth_method)?;
+    ensure_allowed(
+        "thinking level",
+        &request.thinking_level,
+        &["fast", "balanced", "deep", ""],
+    )?;
+    for access in &request.selected_context_access {
+        ensure_allowed(
+            "context access",
+            access,
+            &["workspace-summary", "profile", "logs", "tool-state"],
+        )?;
+    }
+    if !request.security_profile.trim().is_empty() {
+        ensure_allowed(
+            "security profile",
+            &request.security_profile,
+            &[
+                "restricted",
+                "ask",
+                "session",
+                "trusted",
+                "ask-every-time",
+                "session-grant",
+            ],
+        )?;
+    }
+    for channel in &request.selected_channels {
+        ensure_allowed(
+            "channel",
+            channel,
+            &["local", "webchat", "telegram", "whatsapp"],
+        )?;
+    }
+    let base_system_prompt = build_system_prompt(&workspace, &config, &request);
+    let runtime_context = build_runtime_context(&workspace, &config, &request);
+    let system_prompt = format!("{base_system_prompt}\n\n{runtime_context}");
+    let thinking_level = if request.thinking_level.trim().is_empty() {
+        config.thinking_level.as_str()
+    } else {
+        request.thinking_level.trim()
+    };
+
     if config.auth_method == "browser-account" && config.name != "openai" {
         return Ok(SendChatMessageResponse {
             status: "offline".to_string(),
@@ -2098,7 +2622,9 @@ async fn send_chat_message(
                 offline: true,
             });
         }
-        let answer = send_codex_chat_message(&workspace, &config, message).await?;
+        let answer =
+            send_codex_chat_message(&workspace, &config, message, &system_prompt, thinking_level)
+                .await?;
 
         return Ok(SendChatMessageResponse {
             status: "ok".to_string(),
@@ -2131,7 +2657,7 @@ async fn send_chat_message(
         .map_err(|_| "Chat client could not be created.".to_string())?;
 
     let url = chat_url(&config.base_url, &config.api);
-    let mut builder = client.post(url);
+    let mut builder = client.post(url.clone());
 
     if !api_key.is_empty() {
         builder = if config.api == "anthropic" {
@@ -2147,22 +2673,18 @@ async fn send_chat_message(
         json!({
             "model": config.model,
             "max_tokens": 900,
+            "system": system_prompt,
             "messages": [
                 { "role": "user", "content": message }
             ]
         })
     } else {
-        json!({
-            "model": config.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the user's configured workspace and permissions."
-                },
-                { "role": "user", "content": message }
-            ],
-            "temperature": 0.4
-        })
+        openai_chat_body(
+            &config,
+            openai_chat_messages(&system_prompt, message),
+            thinking_level,
+            config.name == "openai",
+        )
     };
 
     let response = builder
@@ -2196,6 +2718,50 @@ async fn send_chat_message(
         .map_err(|_| "Provider returned a response Argentum could not read.".to_string())?;
     let answer = if config.api == "anthropic" {
         parse_anthropic_chat_response(value)?
+    } else if config.name == "openai" {
+        let tool_calls = openai_tool_calls(&value);
+        if tool_calls.is_empty() {
+            parse_openai_chat_response(value)?
+        } else {
+            let mut messages = openai_chat_messages(&system_prompt, message);
+            if let Some(assistant_message) = openai_assistant_message(&value) {
+                messages.push(assistant_message);
+            }
+            for (tool_call_id, tool_name) in tool_calls {
+                let tool_result = execute_argentum_tool(&tool_name, &workspace, &config, &request);
+                messages.push(json!({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": tool_name,
+                    "content": tool_result.to_string()
+                }));
+            }
+
+            let followup_body = openai_chat_body(&config, messages, thinking_level, true);
+            let followup_response = client
+                .post(url)
+                .bearer_auth(api_key.as_str())
+                .json(&followup_body)
+                .send()
+                .await
+                .map_err(redact_provider_error)?;
+            let followup_status = followup_response.status();
+            if !followup_status.is_success() {
+                let error_body = followup_response.text().await.unwrap_or_default();
+                return Err(provider_http_error(
+                    &config.label,
+                    followup_status.as_u16(),
+                    &error_body,
+                ));
+            }
+            let followup_value = followup_response
+                .json::<serde_json::Value>()
+                .await
+                .map_err(|_| {
+                    "Provider returned a tool response Argentum could not read.".to_string()
+                })?;
+            parse_openai_chat_response(followup_value)?
+        }
     } else {
         parse_openai_chat_response(value)?
     };
@@ -2335,6 +2901,18 @@ fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
         &request.security_profile,
         &["restricted", "ask", "session", "trusted"],
     )?;
+    ensure_allowed(
+        "thinking level",
+        &request.thinking_level,
+        &["fast", "balanced", "deep"],
+    )?;
+    for access in &request.selected_context_access {
+        ensure_allowed(
+            "context access",
+            access,
+            &["workspace-summary", "profile", "logs", "tool-state"],
+        )?;
+    }
 
     let config_dir = workspace.join("config");
     let data_dir = workspace.join("data");

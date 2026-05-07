@@ -56,6 +56,75 @@ export function modelAllowedForAuth(provider, model, authMethod = 'api-key') {
   return modelOptionsFor(provider, '', authMethod).some((option) => option.id === model);
 }
 
+export function modelMetadataFor(modelId, metadata = {}) {
+  return (
+    metadata[modelId] || {
+      contextWindow: 'Unknown',
+      maxContextWindow: 'Unknown',
+      currentContextLabel: 'Test provider to confirm limits',
+      capabilities: ['chat'],
+      detail: 'No baked-in metadata yet. Argentum will still test the endpoint before live use.',
+    }
+  );
+}
+
+export function estimateContextTokens(blocks = [], draft = '') {
+  const text = [
+    ...blocks.map((block) => `${block.title || ''} ${block.body || ''}`),
+    draft,
+  ].join('\n');
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+export function renderMarkdown(value) {
+  const escaped = escapeHtml(value || '').replace(/\r\n/g, '\n');
+  const segments = escaped.split(/(```[\s\S]*?```)/g);
+
+  return segments
+    .map((segment) => {
+      if (segment.startsWith('```') && segment.endsWith('```')) {
+        const code = segment.slice(3, -3).replace(/^\w+\n/, '');
+        return `<pre><code>${code}</code></pre>`;
+      }
+
+      return segment
+        .split(/\n{2,}/)
+        .map((paragraph) => renderMarkdownBlock(paragraph))
+        .join('');
+    })
+    .join('');
+}
+
+function renderInlineMarkdown(value) {
+  return value
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      '<a href="$2" data-open-external="$2">$1</a>',
+    );
+}
+
+function renderMarkdownBlock(block) {
+  const lines = block.split('\n').filter((line) => line.trim().length > 0);
+  if (lines.length === 0) return '';
+
+  if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
+    return `<ul>${lines
+      .map((line) => `<li>${renderInlineMarkdown(line.trim().replace(/^[-*]\s+/, ''))}</li>`)
+      .join('')}</ul>`;
+  }
+
+  if (lines.every((line) => /^\d+\.\s+/.test(line.trim()))) {
+    return `<ol>${lines
+      .map((line) => `<li>${renderInlineMarkdown(line.trim().replace(/^\d+\.\s+/, ''))}</li>`)
+      .join('')}</ol>`;
+  }
+
+  return `<p>${renderInlineMarkdown(lines.join('<br />'))}</p>`;
+}
+
 export function invokeTauri(command, payload) {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) return null;

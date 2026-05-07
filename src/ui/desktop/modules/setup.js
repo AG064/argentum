@@ -16,6 +16,11 @@ export function buildSetupPayload() {
     providerApiKey: state.providerApiKey,
     providerApiKeyEnv: state.customApiKeyEnv || provider.apiKeyEnv,
     customProviderName: state.customProviderName,
+    agentName: state.agentName,
+    userName: state.userName,
+    systemPrompt: state.systemPrompt,
+    selectedContextAccess: state.selectedContextAccess,
+    thinkingLevel: state.thinkingLevel,
     selectedChannels: state.selectedChannels,
     webchatToken: state.webchatToken,
     telegramToken: state.telegramToken,
@@ -281,6 +286,13 @@ export async function sendChatMessage(message) {
     request: {
       workspacePath: state.workspacePath,
       message,
+      agentName: state.agentName,
+      userName: state.userName,
+      systemPrompt: state.systemPrompt,
+      selectedContextAccess: state.selectedContextAccess,
+      thinkingLevel: state.thinkingLevel,
+      securityProfile: state.securityProfile,
+      selectedChannels: state.selectedChannels,
     },
   });
 
