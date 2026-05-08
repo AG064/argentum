@@ -3,6 +3,7 @@ import {
   fontOptions,
   modelMetadata,
   providerAuthMethods,
+  providerCatalogTabs,
   providerPresets,
   runtimeModes,
   securityProfiles,
@@ -10,6 +11,7 @@ import {
 } from './constants.js';
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
+import { terminalEntriesForDisplay } from './state.js';
 import {
   formatFound,
   formatWorkspaceHealth,
@@ -30,15 +32,12 @@ import {
 } from './utils.js';
 
 function terminalPreview(state, filter = '') {
-  const entries = filter
-    ? state.terminalEntries.filter((entry) => entry.command.includes(filter))
-    : state.terminalEntries;
+  const entries = terminalEntriesForDisplay(filter);
 
   const actionOutput =
     entries.length === 0
       ? ''
       : entries
-          .slice(0, 8)
           .map((entry) => `$ ${entry.command}\n${entry.output}`)
           .join('\n\n');
   const logOutput = filter === 'gateway' ? state.desktopState?.gatewayLogPreview || '' : '';
@@ -280,10 +279,19 @@ const settingsModule = {
           <label>
             Provider
             <select id="settings-provider">
-              ${providerPresets
+              ${providerCatalogTabs
                 .map(
-                  (item) => `
-                    <option value="${item.id}" ${item.id === state.llmProvider ? 'selected' : ''}>${escapeHtml(item.label)}</option>
+                  (tab) => `
+                    <optgroup label="${escapeAttribute(tab.id === 'beta' ? 'BETA access' : tab.label)}">
+                      ${providerPresets
+                        .filter((item) => (item.access || 'beta') === tab.id)
+                        .map(
+                          (item) => `
+                            <option value="${item.id}" data-provider-access="${escapeAttribute(tab.id)}" ${item.id === state.llmProvider ? 'selected' : ''}>${escapeHtml(item.label)}</option>
+                          `,
+                        )
+                        .join('')}
+                    </optgroup>
                   `,
                 )
                 .join('')}
@@ -320,6 +328,11 @@ const settingsModule = {
                 )
                 .join('')}
             </select>
+          </label>
+          <label>
+            API key
+            <input id="settings-provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="Paste a new key to replace the saved one. Leave blank to keep the current saved key." autocomplete="new-password" />
+            <small>Saved into the selected workspace secrets file, never into YAML.</small>
           </label>
           <label>
             Thinking level
@@ -394,12 +407,31 @@ const settingsModule = {
             <textarea id="profile-purpose" placeholder="How should Argentum behave in this workspace?">${escapeHtml(state.systemPrompt)}</textarea>
           </label>
         </div>
+        <div class="panel-body runtime-behavior-panel">
+          <div>
+            <span class="pill">Runtime behavior</span>
+            <h3>${escapeHtml(labelFor(runtimeModes, state.runtimeMode))}</h3>
+            <p>${escapeHtml(runtimeModes.find((mode) => mode.id === state.runtimeMode)?.detail || 'Runtime mode is saved with the workspace config.')}</p>
+          </div>
+          <div class="runtime-mode-tabs" aria-label="Runtime behavior">
+            ${runtimeModes
+              .map(
+                (mode) => `
+                  <button class="runtime-mode-pill ${state.runtimeMode === mode.id ? 'active' : ''}" data-runtime-mode="${escapeAttribute(mode.id)}">
+                    <strong>${escapeHtml(mode.label)}</strong>
+                    <span>${escapeHtml(mode.headline)}</span>
+                  </button>
+                `,
+              )
+              .join('')}
+          </div>
+        </div>
         <div class="panel-body security-settings-grid">
           ${renderContextAccessCards(state)}
         </div>
         ${renderSettingsOAuthPanel(state)}
         <div class="panel-footer button-row split">
-          <button class="button" id="save-profile">Save Profile</button>
+          <button class="button" id="save-settings">Save Settings</button>
           <button class="button" id="test-provider">Test Provider</button>
           <button class="button" data-restart-onboarding="true">Restart onboarding</button>
         </div>
@@ -470,7 +502,9 @@ const diagnosticsModule = {
     ];
     const estimatedTokens = estimateContextTokens(state.chatBlocks, state.draftMessage);
     const usage = state.usageSnapshot;
-    const providerUsage = usage
+    const providerUsage = usage?.summary
+      ? usage.summary
+      : usage
       ? `${usage.requestRemaining || '?'} requests / ${usage.tokenRemaining || '?'} tokens left`
       : 'Not reported yet';
 

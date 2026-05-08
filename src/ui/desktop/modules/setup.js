@@ -110,6 +110,7 @@ export async function testProvider() {
       status: result.status === 'ok' ? 'ok' : 'warning',
       message: result.message || 'Provider test completed.',
     };
+    if (result.usage) state.usageSnapshot = result.usage;
     notify(state.apiTest.status === 'ok' ? 'success' : 'warning', 'Provider test', state.apiTest.message);
     return state.apiTest;
   } catch (error) {

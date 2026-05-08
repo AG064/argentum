@@ -5,7 +5,9 @@ import { renderModule, renderNavigation } from './modules/shell.js';
 import {
   addTerminalEntry,
   appendChatMessage,
+  cancelDeleteChatSession,
   clearNotifications,
+  confirmDeleteChatSession,
   createChatSession,
   dismissNotification,
   ensureProviderModelAllowed,
@@ -16,9 +18,11 @@ import {
   setChannel,
   setActiveChatSession,
   setProvider,
+  setProviderCatalogTab,
   setUiPreference,
   state,
   syncActiveChatSession,
+  requestDeleteChatSession,
   toggleNotificationsMenu,
   toggleNotificationsMuted,
 } from './modules/state.js';
@@ -26,6 +30,7 @@ import {
   chooseWorkspaceFolder,
   completeCodexOAuth,
   openExternalUrl,
+  persistRuntimeSettings,
   refreshDesktopState,
   saveSetup,
   sendChatMessage,
@@ -68,6 +73,7 @@ function render() {
   nav.innerHTML = renderNavigation();
   viewRoot.innerHTML = `${renderModule(module)}${state.onboardingOpen ? renderModule(modules.onboarding) : ''}`;
   hydrateStaticIcons(document);
+  scrollTerminalPanels();
 }
 
 function setActiveSection(sectionId) {
@@ -232,8 +238,36 @@ function updateProviderFieldsFromPreset(providerId) {
   const provider = providerPresets.find((item) => item.id === providerId);
   if (!provider) return;
   setProvider(provider);
+  setProviderCatalogTab(provider.access || 'beta');
   state.providerSelectionConfirmed = true;
   state.providerSetupStage = 'auth';
+}
+
+function scrollTerminalPanels() {
+  const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+  schedule(() => {
+    document.querySelectorAll('.terminal-body').forEach((panel) => {
+      panel.scrollTop = panel.scrollHeight;
+    });
+  });
+}
+
+function applyRuntimeMode(reason = 'runtime-mode') {
+  const runtimeLabel =
+    state.runtimeMode === 'cli'
+      ? 'CLI tools selected. Desktop settings still save to the workspace config used by argentum commands.'
+      : state.runtimeMode === 'service'
+        ? 'Local service mode selected. Gateway and integration controls stay permission-gated.'
+        : 'Desktop app mode selected. Chat, settings, diagnostics, and gateway controls remain in the GUI.';
+
+  state.actionStatus = runtimeLabel;
+  addTerminalEntry(`argentum runtime ${state.runtimeMode}`, runtimeLabel, 'info');
+  notify('info', 'Runtime mode changed', runtimeLabel);
+
+  if (!state.setupComplete) return Promise.resolve(null);
+  return persistRuntimeSettings(reason, { notify: false }).catch((error) => {
+    notify('error', 'Runtime mode was not saved', normalizeError(error));
+  });
 }
 
 async function chooseChatAttachment() {
@@ -288,20 +322,27 @@ function startVoiceInput() {
   recognition.start();
 }
 
-function saveProfileFromInputs() {
+async function saveSettingsFromInputs() {
   const userInput = document.querySelector('#profile-user-name');
   const agentInput = document.querySelector('#profile-agent-name');
   const purposeInput = document.querySelector('#profile-purpose');
+  const keyInput = document.querySelector('#settings-provider-api-key');
 
   if (userInput instanceof HTMLInputElement) state.userName = userInput.value.trim();
   if (agentInput instanceof HTMLInputElement) state.agentName = agentInput.value.trim() || 'Argentum';
   if (purposeInput instanceof HTMLTextAreaElement) state.systemPrompt = purposeInput.value.trim();
+  if (keyInput instanceof HTMLInputElement) state.providerApiKey = keyInput.value.trim();
 
-  appendChatMessage(
-    'argentum',
-    `Profile saved. I will use **${state.agentName || 'Argentum'}** as the agent name${state.userName ? ` and call you **${state.userName}**` : ''}.`,
-  );
-  notify('success', 'Profile saved', 'The chat profile was updated locally.');
+  try {
+    await persistRuntimeSettings('settings', { notify: true });
+    state.providerApiKey = '';
+    appendChatMessage(
+      'argentum',
+      `Settings saved. I will use **${state.agentName || 'Argentum'}** as the agent name${state.userName ? ` and call you **${state.userName}**` : ''}.`,
+    );
+  } catch (error) {
+    notify('error', 'Settings could not be saved', normalizeError(error));
+  }
 }
 
 function buildLocalReply(draft) {
@@ -406,7 +447,9 @@ function handleInput(event) {
   if (target.id === 'provider-base-url' || target.id === 'settings-provider-base-url') {
     state.providerBaseUrl = target.value;
   }
-  if (target.id === 'provider-api-key') state.providerApiKey = target.value;
+  if (target.id === 'provider-api-key' || target.id === 'settings-provider-api-key') {
+    state.providerApiKey = target.value;
+  }
   if (target.id === 'custom-provider-name') state.customProviderName = target.value;
   if (target.id === 'custom-api-key-env') state.customApiKeyEnv = target.value;
   if (target.id === 'webchat-token') state.webchatToken = target.value;
@@ -422,7 +465,7 @@ function handleInput(event) {
   if (target.id === 'onboarding-system-prompt') state.systemPrompt = target.value;
 }
 
-function handleChange(event) {
+async function handleChange(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
 
@@ -475,6 +518,7 @@ function handleChange(event) {
   if (target.id === 'thinking-level') {
     state.thinkingLevel = target.value;
     notify('info', 'Thinking level changed', `Chat thinking level set to ${target.value}.`);
+    if (state.setupComplete) await persistRuntimeSettings('thinking-level', { notify: false });
     render();
     return;
   }
@@ -505,6 +549,7 @@ function handleChange(event) {
 
   if (target.id === 'settings-runtime') {
     state.runtimeMode = target.value;
+    await applyRuntimeMode('runtime-mode');
     render();
   }
 }
@@ -580,6 +625,16 @@ async function handleClick(event) {
   const runtimeButton = element.closest('[data-runtime-mode]');
   if (runtimeButton) {
     state.runtimeMode = runtimeButton.dataset.runtimeMode;
+    if (runtimeButton.closest('.runtime-mode-tabs')) {
+      await applyRuntimeMode('runtime-mode');
+    }
+    render();
+    return;
+  }
+
+  const providerCatalogButton = element.closest('[data-provider-catalog-tab]');
+  if (providerCatalogButton) {
+    setProviderCatalogTab(providerCatalogButton.dataset.providerCatalogTab);
     render();
     return;
   }
@@ -696,6 +751,27 @@ async function handleClick(event) {
     return;
   }
 
+  const deleteChatButton = element.closest('[data-delete-chat]');
+  if (deleteChatButton) {
+    requestDeleteChatSession(deleteChatButton.dataset.deleteChat);
+    render();
+    return;
+  }
+
+  const confirmDeleteChatButton = element.closest('[data-confirm-delete-chat]');
+  if (confirmDeleteChatButton) {
+    confirmDeleteChatSession(confirmDeleteChatButton.dataset.confirmDeleteChat);
+    notify('info', 'Chat deleted', 'The selected chat was removed from local history.');
+    render();
+    return;
+  }
+
+  if (element.closest('[data-cancel-delete-chat]')) {
+    cancelDeleteChatSession();
+    render();
+    return;
+  }
+
   if (element.closest('#new-chat')) {
     createChatSession();
     render();
@@ -786,8 +862,8 @@ async function handleClick(event) {
     return;
   }
 
-  if (element.closest('#save-profile')) {
-    saveProfileFromInputs();
+  if (element.closest('#save-settings')) {
+    await saveSettingsFromInputs();
     render();
     return;
   }

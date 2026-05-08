@@ -44,10 +44,24 @@ function renderChatSection(state) {
           ${state.chatSessions
             .map(
               (chat) => `
-                <button class="recent-chat-item ${state.activeChatId === chat.id ? 'active' : ''}" data-recent-chat="${escapeAttribute(chat.id)}">
-                  <strong>${escapeHtml(chat.title)}</strong>
-                  <span>${escapeHtml(chat.subtitle)}</span>
-                </button>
+                <article class="recent-chat-item ${state.activeChatId === chat.id ? 'active' : ''}">
+                  <button class="recent-chat-main" data-recent-chat="${escapeAttribute(chat.id)}">
+                    <strong>${escapeHtml(chat.title)}</strong>
+                    <span>${escapeHtml(chat.subtitle)}</span>
+                  </button>
+                  <button class="icon-button compact recent-chat-delete" data-delete-chat="${escapeAttribute(chat.id)}" title="Delete chat" aria-label="Delete chat">x</button>
+                  ${
+                    state.pendingDeleteChatId === chat.id
+                      ? `
+                        <div class="chat-delete-confirm">
+                          <span>Delete this chat?</span>
+                          <button class="button danger" data-confirm-delete-chat="${escapeAttribute(chat.id)}">Delete</button>
+                          <button class="button" data-cancel-delete-chat="true">Cancel</button>
+                        </div>
+                      `
+                      : ''
+                  }
+                </article>
               `,
             )
             .join('')}
@@ -115,9 +129,7 @@ function renderChatSection(state) {
 function renderContextRing(estimatedTokens, metadata, contextPercent, usageSnapshot) {
   const limit = contextTokenLimit(metadata);
   const status = contextPercent >= 85 ? 'hot' : contextPercent >= 65 ? 'warm' : 'calm';
-  const usageLine = usageSnapshot
-    ? `Provider rate: ${usageSnapshot.requestRemaining || 'unknown'} requests and ${usageSnapshot.tokenRemaining || 'unknown'} tokens remaining. Reset: ${usageSnapshot.requestReset || usageSnapshot.tokenReset || 'not reported'}.`
-    : 'Provider rate-limit headers are not reported yet.';
+  const usageLine = formatUsageLine(usageSnapshot);
 
   return `
     <div class="context-usage-ring ${status}" style="--context-percent:${contextPercent};" aria-label="Context ${contextPercent}% used" tabindex="0">
@@ -130,6 +142,13 @@ function renderContextRing(estimatedTokens, metadata, contextPercent, usageSnaps
       </div>
     </div>
   `;
+}
+
+function formatUsageLine(usageSnapshot) {
+  if (!usageSnapshot) return 'Provider rate-limit headers are not reported yet.';
+  if (usageSnapshot.summary) return usageSnapshot.summary;
+
+  return `Provider rate: ${usageSnapshot.requestRemaining || 'unknown'} requests and ${usageSnapshot.tokenRemaining || 'unknown'} tokens remaining. Reset: ${usageSnapshot.requestReset || usageSnapshot.tokenReset || 'not reported'}.`;
 }
 
 function renderTypingIndicator(state) {

@@ -213,6 +213,31 @@ export const modelMetadata = {
     capabilities: ['long tasks', 'coding', 'tools', 'vision'],
     detail: 'Optimized for professional work and long-running agents.',
   },
+  'MiniMax-M2.7': {
+    maxContextTokens: 200000,
+    contextWindow: '200k practical target',
+    maxContextWindow: 'Provider controlled',
+    currentContextLabel: 'MiniMax Token Plan: M2.7 requests reset on a rolling 5-hour window.',
+    capabilities: ['agentic coding', 'tool use', 'long task state tracking', 'multimodal token plan'],
+    detail:
+      'MiniMax M2.7 works best with clear intent, concrete examples, phased long tasks, and state tracking.',
+  },
+  'MiniMax-M2.7-highspeed': {
+    maxContextTokens: 200000,
+    contextWindow: '200k practical target',
+    maxContextWindow: 'Plan dependent',
+    currentContextLabel: 'MiniMax Token Plan high-speed tier, when available for the selected key.',
+    capabilities: ['faster M2.7 routing', 'agentic coding', 'tool use'],
+    detail: 'High-speed MiniMax M2.7 profile. Argentum verifies availability with Test Provider.',
+  },
+  'MiniMax-Text-01': {
+    maxContextTokens: 128000,
+    contextWindow: 'Provider dependent',
+    maxContextWindow: 'Provider dependent',
+    currentContextLabel: 'Legacy MiniMax text endpoint. Prefer M2.7 when Token Plan is active.',
+    capabilities: ['chat', 'text generation'],
+    detail: 'MiniMax text model kept under Beta access until the provider test confirms support.',
+  },
 };
 
 export const experienceLevels = [
@@ -278,9 +303,23 @@ export const runtimeModes = [
   },
 ];
 
+export const providerCatalogTabs = [
+  {
+    id: 'stable',
+    label: 'Stable',
+    detail: 'OpenAI GPT routes that are currently wired for live chat and browser-account authorization.',
+  },
+  {
+    id: 'beta',
+    label: 'BETA access',
+    detail: 'MiniMax and other providers remain selectable, but each must pass Test Provider before live use.',
+  },
+];
+
 export const providerPresets = [
   {
     id: 'openai',
+    access: 'stable',
     label: 'OpenAI',
     api: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
@@ -313,6 +352,7 @@ export const providerPresets = [
   },
   {
     id: 'anthropic',
+    access: 'beta',
     label: 'Anthropic Claude',
     api: 'anthropic',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
@@ -330,6 +370,7 @@ export const providerPresets = [
   },
   {
     id: 'google',
+    access: 'beta',
     label: 'Google Gemini',
     api: 'openai',
     apiKeyEnv: 'GOOGLE_API_KEY',
@@ -347,6 +388,7 @@ export const providerPresets = [
   },
   {
     id: 'openrouter',
+    access: 'beta',
     label: 'OpenRouter',
     api: 'openai',
     apiKeyEnv: 'OPENROUTER_API_KEY',
@@ -366,6 +408,7 @@ export const providerPresets = [
   },
   {
     id: 'nvidia',
+    access: 'beta',
     label: 'NVIDIA',
     api: 'openai',
     apiKeyEnv: 'NVIDIA_API_KEY',
@@ -383,6 +426,7 @@ export const providerPresets = [
   },
   {
     id: 'groq',
+    access: 'beta',
     label: 'Groq',
     api: 'openai',
     apiKeyEnv: 'GROQ_API_KEY',
@@ -401,22 +445,25 @@ export const providerPresets = [
   },
   {
     id: 'minimax',
+    access: 'beta',
     label: 'MiniMax',
     api: 'openai',
     apiKeyEnv: 'MINIMAX_API_KEY',
-    websiteUrl: 'https://platform.minimaxi.com',
+    websiteUrl: 'https://platform.minimax.io',
     authMethods: ['api-key'],
     defaultBaseUrl: 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M2.7',
     models: [
       { id: 'MiniMax-M2.7', label: 'MiniMax M2.7' },
+      { id: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 highspeed' },
       { id: 'MiniMax-Text-01', label: 'MiniMax Text 01' },
     ],
     requiresKey: true,
-    detail: 'MiniMax hosted models through an OpenAI-style API.',
+    detail: 'MiniMax hosted models through an OpenAI-style API, with Token Plan usage checks in Argentum.',
   },
   {
     id: 'ollama',
+    access: 'beta',
     label: 'Ollama / local',
     api: 'openai',
     apiKeyEnv: 'OLLAMA_API_KEY',
@@ -436,6 +483,7 @@ export const providerPresets = [
   },
   {
     id: 'custom',
+    access: 'beta',
     label: 'Custom endpoint',
     api: 'openai',
     apiKeyEnv: 'CUSTOM_API_KEY',

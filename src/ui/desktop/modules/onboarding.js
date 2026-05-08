@@ -5,6 +5,7 @@ import {
   modelMetadata,
   onboardingSteps,
   providerAuthMethods,
+  providerCatalogTabs,
   providerPresets,
   runtimeModes,
   securityProfiles,
@@ -320,6 +321,10 @@ function renderProviderStep() {
 }
 
 function renderProviderChoiceStep() {
+  const visibleProviders = providerPresets.filter(
+    (item) => (item.access || 'beta') === state.providerCatalogTab,
+  );
+
   return `
     ${renderProgressiveProviderFrame(
       'Provider',
@@ -327,14 +332,26 @@ function renderProviderChoiceStep() {
       '<p class="muted-line">Pick one provider first. Authorization, model choice, endpoint, and tests appear after this choice so this screen stays readable.</p>',
     )}
     <div class="provider-stage">
+      <div class="provider-access-tabs" aria-label="Provider access">
+        ${providerCatalogTabs
+          .map(
+            (tab) => `
+              <button class="runtime-mode-pill ${state.providerCatalogTab === tab.id ? 'active' : ''}" data-provider-catalog-tab="${escapeAttribute(tab.id)}">
+                <strong>${escapeHtml(tab.label)}</strong>
+                <span>${escapeHtml(tab.detail)}</span>
+              </button>
+            `,
+          )
+          .join('')}
+      </div>
       <div class="provider-list provider-choice-list">
-        ${providerPresets
+        ${visibleProviders
           .map(
             (item) => `
               <article class="provider-card ${state.llmProvider === item.id ? 'active' : ''}">
                 <button class="provider-select-button" data-provider-id="${item.id}">
                   <strong>${escapeHtml(item.label)}</strong>
-                  <span>${item.requiresKey ? 'Hosted provider' : 'Local/custom friendly'}</span>
+                  <span>${item.access === 'stable' ? 'Stable GPT route' : 'BETA access'}</span>
                 </button>
                 <a class="provider-website-link" href="${escapeAttribute(item.websiteUrl)}" data-open-external="${escapeAttribute(item.websiteUrl)}">
                   Provider website

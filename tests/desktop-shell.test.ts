@@ -492,6 +492,101 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('var(--font-mono)');
   });
 
+  test('lets Settings replace provider API keys and persists runtime/font/thinking changes', () => {
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const main = read('src/ui/desktop/main.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const state = read('src/ui/desktop/modules/state.js');
+
+    expect(setup).toContain('persistRuntimeSettings');
+    expect(sections).toContain('id="settings-provider-api-key"');
+    expect(sections).toContain('Paste a new key to replace the saved one');
+    expect(sections).toContain('id="save-settings"');
+    expect(sections).toContain('Runtime behavior');
+    expect(main).toContain('async function saveSettingsFromInputs');
+    expect(main).toContain("target.id === 'settings-provider-api-key'");
+    expect(main).toContain("await persistRuntimeSettings('settings'");
+    expect(main).toContain("state.providerApiKey = ''");
+    expect(main).toContain('applyRuntimeMode');
+    expect(main).toContain("await persistRuntimeSettings('thinking-level'");
+    expect(main).toContain('persistRuntimeSettings(reason');
+    expect(state).toContain('providerCatalogTab:');
+  });
+
+  test('checks MiniMax Token Plan usage and surfaces usage snapshots', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(constants).toContain('MiniMax-M2.7');
+    expect(constants).toContain('M2.7 requests reset on a rolling 5-hour window');
+    expect(constants).toContain('providerCatalogTabs');
+    expect(constants).toContain("id: 'beta'");
+    expect(setup).toContain('result.usage');
+    expect(chat).toContain('formatUsageLine');
+    expect(chat).toContain('usageSnapshot.summary');
+    expect(sections).toContain('usage?.summary');
+    expect(rust).toContain('MINIMAX_TOKEN_PLAN_REMAINS_URL');
+    expect(rust).toContain('https://www.minimax.io/v1/token_plan/remains');
+    expect(rust).toContain('async fn minimax_token_plan_usage');
+    expect(rust).toContain('fn minimax_usage_snapshot');
+    expect(rust).toContain('MiniMax Token Plan');
+    expect(rust).toContain('M2.7 best practice');
+    expect(rust).toContain('usage: Option<UsageLimitSnapshot>');
+    expect(rust).toContain('usage = snapshot.or(usage)');
+  });
+
+  test('keeps gateway terminal chronological and scrolls terminal panels to the latest output', () => {
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const main = read('src/ui/desktop/main.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(sections).toContain('terminalEntriesForDisplay');
+    expect(state).toContain('.reverse()');
+    expect(main).toContain('function scrollTerminalPanels');
+    expect(main).toContain('scrollTop = panel.scrollHeight');
+    expect(css).toContain('align-content: start');
+    expect(css).toContain('.terminal-body pre');
+  });
+
+  test('supports deleting chats with confirmation', () => {
+    const state = read('src/ui/desktop/modules/state.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(state).toContain('pendingDeleteChatId');
+    expect(state).toContain('requestDeleteChatSession');
+    expect(state).toContain('confirmDeleteChatSession');
+    expect(state).toContain('cancelDeleteChatSession');
+    expect(chat).toContain('data-delete-chat');
+    expect(chat).toContain('data-confirm-delete-chat');
+    expect(chat).toContain('data-cancel-delete-chat');
+    expect(main).toContain('requestDeleteChatSession');
+    expect(main).toContain('confirmDeleteChatSession');
+    expect(css).toContain('.chat-delete-confirm');
+  });
+
+  test('hides non-GPT providers behind a beta access tab', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const main = read('src/ui/desktop/main.js');
+
+    expect(constants).toContain('providerCatalogTabs');
+    expect(constants).toContain("access: 'stable'");
+    expect(constants).toContain("access: 'beta'");
+    expect(onboarding).toContain('provider-access-tabs');
+    expect(onboarding).toContain('data-provider-catalog-tab');
+    expect(onboarding).toContain('visibleProviders');
+    expect(sections).toContain('data-provider-access');
+    expect(sections).toContain('BETA access');
+    expect(main).toContain('setProviderCatalogTab');
+  });
+
   test('uses cleaner inline selection cards and keeps active recent chat first', () => {
     const sections = read('src/ui/desktop/modules/sections.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');

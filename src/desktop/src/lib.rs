@@ -121,6 +121,7 @@ struct TestProviderRequest {
 struct TestProviderResponse {
     status: String,
     message: String,
+    usage: Option<UsageLimitSnapshot>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -152,6 +153,8 @@ struct SendChatMessageResponse {
 #[serde(rename_all = "camelCase")]
 struct UsageLimitSnapshot {
     source: String,
+    summary: Option<String>,
+    plan: Option<String>,
     request_limit: Option<String>,
     request_remaining: Option<String>,
     request_reset: Option<String>,
@@ -207,6 +210,7 @@ struct ProviderRuntimeConfig {
     model: String,
     api_key_env: String,
     auth_method: String,
+    runtime_mode: String,
     agent_name: String,
     user_name: String,
     system_prompt: String,
@@ -245,6 +249,7 @@ const CODEX_DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/call
 const CODEX_RESPONSES_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const CODEX_COMPAT_CLIENT_VERSION: &str = "0.128.0";
 const CODEX_ORIGINATOR: &str = "codex_cli_rs";
+const MINIMAX_TOKEN_PLAN_REMAINS_URL: &str = "https://www.minimax.io/v1/token_plan/remains";
 
 fn ensure_safe_workspace(path: &str) -> Result<PathBuf, String> {
     let workspace = PathBuf::from(path);
@@ -336,7 +341,7 @@ fn allowed_external_url(url: &str) -> bool {
         "https://openrouter.ai",
         "https://build.nvidia.com",
         "https://console.groq.com",
-        "https://platform.minimaxi.com",
+        "https://platform.minimax.io",
         "https://ollama.com",
         "https://github.com/openai/openai-openapi",
     ];
@@ -1434,6 +1439,9 @@ fn provider_runtime_config(workspace: &Path) -> Result<ProviderRuntimeConfig, St
             .and_then(|value| value.as_str())
             .unwrap_or("api-key")
             .to_string(),
+        runtime_mode: yaml_string_at(&yaml, &["runtimeMode"])
+            .unwrap_or("desktop")
+            .to_string(),
         agent_name: yaml_string_at(&yaml, &["profile", "agentName"])
             .unwrap_or("Argentum")
             .to_string(),
@@ -1666,6 +1674,8 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
 fn usage_limits_from_headers(headers: &HeaderMap, source: &str) -> Option<UsageLimitSnapshot> {
     let snapshot = UsageLimitSnapshot {
         source: source.to_string(),
+        summary: None,
+        plan: None,
         request_limit: header_text(headers, "x-ratelimit-limit-requests"),
         request_remaining: header_text(headers, "x-ratelimit-remaining-requests"),
         request_reset: header_text(headers, "x-ratelimit-reset-requests"),
@@ -1685,6 +1695,201 @@ fn usage_limits_from_headers(headers: &HeaderMap, source: &str) -> Option<UsageL
     } else {
         None
     }
+}
+
+fn normalized_json_key(key: &str) -> String {
+    key.chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn json_scalar_to_string(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(text) => Some(text.trim().to_string()),
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        serde_json::Value::Bool(flag) => Some(flag.to_string()),
+        _ => None,
+    }
+    .filter(|value| !value.is_empty())
+}
+
+fn find_json_value_by_keys(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    let wanted = keys
+        .iter()
+        .map(|key| normalized_json_key(key))
+        .collect::<Vec<_>>();
+
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                if wanted.iter().any(|item| item == &normalized_json_key(key)) {
+                    if let Some(found) = json_scalar_to_string(child) {
+                        return Some(found);
+                    }
+                }
+            }
+
+            map.values()
+                .find_map(|child| find_json_value_by_keys(child, keys))
+        }
+        serde_json::Value::Array(items) => items
+            .iter()
+            .find_map(|child| find_json_value_by_keys(child, keys)),
+        _ => None,
+    }
+}
+
+fn minimax_base_error(value: &serde_json::Value) -> Option<String> {
+    let base = value.get("base_resp")?;
+    let status_code = base
+        .get("status_code")
+        .and_then(|status| status.as_i64())
+        .unwrap_or(0);
+
+    if status_code == 0 {
+        return None;
+    }
+
+    let status_msg = base
+        .get("status_msg")
+        .and_then(|message| message.as_str())
+        .unwrap_or("MiniMax returned an error status.");
+    Some(format!("{status_msg} (status {status_code})"))
+}
+
+fn minimax_usage_snapshot(value: &serde_json::Value) -> UsageLimitSnapshot {
+    let plan = find_json_value_by_keys(
+        value,
+        &["plan", "plan_name", "token_plan", "package_name", "subscription_name"],
+    );
+    let request_limit = find_json_value_by_keys(
+        value,
+        &[
+            "request_limit",
+            "requests_limit",
+            "total_requests",
+            "total_request",
+            "quota",
+            "limit",
+            "total",
+        ],
+    );
+    let request_remaining = find_json_value_by_keys(
+        value,
+        &[
+            "request_remaining",
+            "requests_remaining",
+            "remaining_requests",
+            "remain_requests",
+            "remain_request",
+            "remaining",
+            "remain",
+            "left",
+        ],
+    );
+    let request_reset = find_json_value_by_keys(
+        value,
+        &[
+            "request_reset",
+            "requests_reset",
+            "reset_time",
+            "reset_at",
+            "reset",
+            "expire_time",
+            "refresh_time",
+        ],
+    );
+    let token_limit = find_json_value_by_keys(
+        value,
+        &["token_limit", "tokens_limit", "total_tokens", "total_token"],
+    );
+    let token_remaining = find_json_value_by_keys(
+        value,
+        &[
+            "token_remaining",
+            "tokens_remaining",
+            "remaining_tokens",
+            "remain_tokens",
+        ],
+    );
+    let token_reset = find_json_value_by_keys(
+        value,
+        &["token_reset", "tokens_reset", "token_reset_time"],
+    );
+
+    let mut summary_parts = vec!["MiniMax Token Plan usage checked.".to_string()];
+    if let Some(plan_name) = plan.as_deref() {
+        summary_parts.push(format!("Plan: {plan_name}."));
+    }
+    if let Some(remaining) = request_remaining.as_deref() {
+        summary_parts.push(format!(
+            "M2.7 requests remaining: {}{}.",
+            remaining,
+            request_limit
+                .as_deref()
+                .map(|limit| format!(" of {limit}"))
+                .unwrap_or_default()
+        ));
+    }
+    if let Some(reset) = request_reset.as_deref() {
+        summary_parts.push(format!("Reset: {reset}."));
+    }
+    summary_parts.push(
+        "M2.7 request quota uses a rolling 5-hour window; other MiniMax modalities use daily quotas."
+            .to_string(),
+    );
+
+    UsageLimitSnapshot {
+        source: "MiniMax Token Plan".to_string(),
+        summary: Some(summary_parts.join(" ")),
+        plan,
+        request_limit,
+        request_remaining,
+        request_reset,
+        token_limit,
+        token_remaining,
+        token_reset,
+    }
+}
+
+async fn minimax_token_plan_usage(
+    client: &reqwest::Client,
+    api_key: &str,
+) -> Result<Option<UsageLimitSnapshot>, String> {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Ok(None);
+    }
+
+    let response = client
+        .get(MINIMAX_TOKEN_PLAN_REMAINS_URL)
+        .bearer_auth(api_key)
+        .header("Content-Type", "application/json")
+        .send()
+        .await
+        .map_err(redact_provider_error)?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(provider_http_error(
+            "MiniMax Token Plan",
+            status.as_u16(),
+            &body,
+        ));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|_| "MiniMax Token Plan usage response could not be read.".to_string())?;
+    if let Some(error) = minimax_base_error(&value) {
+        return Err(format!(
+            "MiniMax Token Plan usage check failed. Provider said: {}",
+            redact_provider_message(&error)
+        ));
+    }
+
+    Ok(Some(minimax_usage_snapshot(&value)))
 }
 
 fn codex_http_error(status: u16, body: &str) -> String {
@@ -1977,6 +2182,7 @@ fn build_runtime_context(
         format!("- Logs directory exists: {}", logs_dir.exists()),
         format!("- Gateway status: {gateway_status}"),
         format!("- Gateway health URL when running: http://127.0.0.1:{port}/health"),
+        format!("- Runtime mode: {}", config.runtime_mode),
         format!("- Security profile: {security_profile}"),
         format!("- Enabled channels: {}", channels.join(", ")),
         format!(
@@ -2010,6 +2216,12 @@ fn build_runtime_context(
         let audit_log = read_preview(&data_dir.join("audit").join("capabilities.log"), 8);
         lines.push(format!("- Redacted gateway log preview:\n{}", gateway_log));
         lines.push(format!("- Redacted audit log preview:\n{}", audit_log));
+    }
+
+    if config.name == "minimax" {
+        lines.push(
+            "- MiniMax M2.7 best practice: use clear instructions, explain the intent, include examples when useful, split long work into phases, and track state before the context window gets crowded.".to_string(),
+        );
     }
 
     lines.push(
@@ -2593,6 +2805,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
             model: model.to_string(),
             api_key_env: defaults.api_key_env.to_string(),
             auth_method: auth_method.to_string(),
+            runtime_mode: "desktop".to_string(),
             agent_name: "Argentum".to_string(),
             user_name: String::new(),
             system_prompt: "You are Argentum, a secure desktop AI agent.".to_string(),
@@ -2609,6 +2822,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         return Ok(TestProviderResponse {
             status: "ok".to_string(),
             message,
+            usage: None,
         });
     }
 
@@ -2644,12 +2858,32 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
     let status = response.status();
 
     if status.is_success() {
+        let mut usage = usage_limits_from_headers(
+            response.headers(),
+            &format!("{} model catalog", defaults.label),
+        );
+        if defaults.name == "minimax" {
+            match minimax_token_plan_usage(&client, &api_key).await {
+                Ok(snapshot) => usage = snapshot.or(usage),
+                Err(error) => {
+                    return Ok(TestProviderResponse {
+                        status: "warning".to_string(),
+                        message: format!(
+                            "{} responded, but Token Plan usage could not be checked: {}",
+                            defaults.label, error
+                        ),
+                        usage,
+                    });
+                }
+            }
+        }
         return Ok(TestProviderResponse {
             status: "ok".to_string(),
             message: format!(
                 "{} responded and model '{}' is ready to configure.",
                 defaults.label, model
             ),
+            usage,
         });
     }
 
@@ -2667,6 +2901,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         return Ok(TestProviderResponse {
             status: "warning".to_string(),
             message: "Local endpoint is reachable, but /models was not found. You can continue in offline guided mode or check your local server.".to_string(),
+            usage: None,
         });
     }
 
@@ -2923,6 +3158,12 @@ async fn send_chat_message(
     } else {
         parse_openai_chat_response(value)?
     };
+
+    if config.name == "minimax" {
+        if let Ok(snapshot) = minimax_token_plan_usage(&client, &api_key).await {
+            usage = snapshot.or(usage);
+        }
+    }
 
     Ok(SendChatMessageResponse {
         status: "ok".to_string(),

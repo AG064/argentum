@@ -68,6 +68,7 @@ export const state = {
   providerBaseUrl: defaultProvider.defaultBaseUrl,
   providerModel: defaultProvider.defaultModel,
   providerAuthMethod: 'api-key',
+  providerCatalogTab: 'stable',
   providerSetupStage: 'provider',
   providerSelectionConfirmed: false,
   providerApiKey: '',
@@ -128,6 +129,7 @@ export const state = {
   voiceInputStatus: 'idle',
   selectedContextAccess: ['workspace-summary', 'profile', 'tool-state'],
   activeChatId: 'setup',
+  pendingDeleteChatId: '',
   chatSessions: [
     {
       id: 'setup',
@@ -267,6 +269,14 @@ export function addTerminalEntry(command, output, status = 'info') {
   ].slice(0, 24);
 }
 
+export function terminalEntriesForDisplay(filter = '') {
+  const entries = filter
+    ? state.terminalEntries.filter((entry) => entry.command.includes(filter))
+    : state.terminalEntries;
+
+  return entries.slice(0, 8).reverse();
+}
+
 function sortChatSessions(sessions) {
   return [...sessions]
     .sort((a, b) => {
@@ -343,6 +353,45 @@ export function createChatSession() {
   state.chatAttachments = [];
   persistChatHistory();
   return session;
+}
+
+export function requestDeleteChatSession(chatId) {
+  state.pendingDeleteChatId = chatId;
+}
+
+export function cancelDeleteChatSession() {
+  state.pendingDeleteChatId = '';
+}
+
+export function confirmDeleteChatSession(chatId) {
+  syncActiveChatSession();
+  const remaining = state.chatSessions.filter((chat) => chat.id !== chatId);
+
+  if (remaining.length === 0) {
+    const replacement = {
+      id: 'general',
+      title: 'General chat',
+      subtitle: 'No messages yet',
+      blocks: cloneBlocks(openingChatBlocks),
+      updatedAt: Date.now(),
+    };
+    state.chatSessions = [replacement];
+  } else {
+    state.chatSessions = remaining;
+  }
+
+  state.pendingDeleteChatId = '';
+  if (!state.chatSessions.some((chat) => chat.id === state.activeChatId)) {
+    state.activeChatId = state.chatSessions[0].id;
+    state.chatBlocks = cloneBlocks(state.chatSessions[0].blocks?.length ? state.chatSessions[0].blocks : openingChatBlocks);
+  }
+
+  state.chatSessions = sortChatSessions(state.chatSessions);
+  persistChatHistory();
+}
+
+export function setProviderCatalogTab(tabId) {
+  state.providerCatalogTab = tabId === 'beta' ? 'beta' : 'stable';
 }
 
 export function hydrateChatHistory() {

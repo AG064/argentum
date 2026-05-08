@@ -1696,13 +1696,15 @@ textarea {
 }
 
 .recent-chat-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
   color: var(--text);
-  padding: 12px;
-  text-align: left;
-  cursor: pointer;
+  padding: 8px;
 }
 
 .recent-chat-item.active,
@@ -1716,6 +1718,41 @@ textarea {
   margin-top: 5px;
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.recent-chat-main {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 4px;
+  text-align: left;
+}
+
+.recent-chat-delete {
+  align-self: start;
+}
+
+.chat-delete-confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.chat-delete-confirm span {
+  margin: 0 auto 0 0;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.button.danger {
+  border-color: rgba(240, 82, 82, 0.6);
+  background: rgba(240, 82, 82, 0.16);
+  color: var(--text);
 }
 
 .gateway-overview {
@@ -1744,6 +1781,11 @@ textarea {
   gap: 12px;
 }
 
+.gateway-status-grid .metric strong {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  overflow-wrap: anywhere;
+}
+
 .gateway-action-row {
   display: flex;
   flex-wrap: wrap;
@@ -1766,6 +1808,48 @@ textarea {
   min-height: 150px;
 }
 
+.provider-access-tabs,
+.runtime-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.runtime-mode-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+.runtime-mode-pill {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+}
+
+.runtime-mode-pill.active,
+.runtime-mode-pill:hover {
+  border-color: rgba(226, 59, 59, 0.58);
+  background: var(--accent-soft);
+}
+
+.runtime-mode-pill span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.runtime-behavior-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
 .panel-footer {
   border-top: 1px solid var(--line);
   padding: 16px 18px;
@@ -1778,11 +1862,16 @@ textarea {
 
 .terminal-body {
   display: grid;
+  align-content: start;
   gap: 10px;
   max-height: min(58vh, 620px);
   overflow: auto;
   padding: 12px;
   background: #080a0d;
+}
+
+.terminal-body pre {
+  max-width: 100%;
 }
 
 .terminal-entry {
