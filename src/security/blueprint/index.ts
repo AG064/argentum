@@ -425,8 +425,6 @@ rateLimits:
 let instance: BlueprintLoader | null = null;
 
 export function getBlueprintLoader(): BlueprintLoader {
-  if (!instance) {
-    instance = new BlueprintLoader();
-  }
+  instance ??= new BlueprintLoader();
   return instance;
 }

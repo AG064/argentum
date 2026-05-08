@@ -38,9 +38,7 @@ class TelegramChannel {
             ...config,
         };
         // Get token from config or env
-        if (!this.config.token) {
-            this.config.token = process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
-        }
+        this.config.token ??= process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
     }
     async start() {
         if (!this.config.token) {

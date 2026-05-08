@@ -201,7 +201,7 @@ class ContentFilteringFeature {
         const now = Date.now();
         try {
             // Validate regex
-            new RegExp(pattern);
+            const _validatedPattern = new RegExp(pattern);
         }
         catch (err) {
             throw new Error(`Invalid regex pattern: ${err.message}`);

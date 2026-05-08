@@ -1,5 +1,7 @@
-import { mkdirSync, existsSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, resolve, join } from 'path';
+
+import Database from 'better-sqlite3';
 
 import {
   type FeatureModule,
@@ -34,6 +36,17 @@ export interface AutoUpdateConfig {
   autoApply: boolean;
   backupBeforeUpdate: boolean;
   backupPath: string;
+}
+
+interface PackageMetadata {
+  version?: unknown;
+}
+
+interface UpdateHistoryRow {
+  version: string;
+  timestamp: number;
+  success: number;
+  message: string;
 }
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
@@ -73,13 +86,13 @@ class AutoUpdateFeature implements FeatureModule {
     try {
       const pkgPath = resolve(process.cwd(), 'package.json');
       if (existsSync(pkgPath)) {
-        const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf8'));
-        this.currentVersion = pkg['version'] || '0.0.0';
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageMetadata;
+        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.4';
       } else {
-        this.currentVersion = '0.0.0';
+        this.currentVersion = '0.0.4';
       }
     } catch {
-      this.currentVersion = '0.0.0';
+      this.currentVersion = '0.0.4';
     }
   }
 
@@ -128,7 +141,7 @@ class AutoUpdateFeature implements FeatureModule {
       healthy: true,
       details: {
         currentVersion: this.currentVersion,
-        latestVersion: this.latestRelease?.version || 'unknown',
+        latestVersion: this.latestRelease?.version ?? 'unknown',
         lastCheckAge: `${Math.floor(lastCheckAge / 1000)}s`,
         updateAvailable: hasLatest,
         historyCount: this.updateHistory.length,
@@ -177,7 +190,7 @@ class AutoUpdateFeature implements FeatureModule {
       const release = await this.checkUpdates();
       if (!release) return null;
     }
-    return this.latestRelease?.releaseNotes || null;
+    return this.latestRelease?.releaseNotes ?? null;
   }
 
   /** Apply update */
@@ -218,7 +231,7 @@ class AutoUpdateFeature implements FeatureModule {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await this.recordUpdate(this.latestRelease?.version || 'unknown', false, message);
+      await this.recordUpdate(this.latestRelease?.version ?? 'unknown', false, message);
       this.ctx.logger.error('Update failed', { error: err });
       return {
         success: false,
@@ -304,7 +317,7 @@ class AutoUpdateFeature implements FeatureModule {
       return {
         version: data.tag_name.replace(/^v/, ''),
         url: data.html_url,
-        releaseNotes: data.body || 'No release notes',
+        releaseNotes: data.body ?? 'No release notes',
         publishedAt: data.published_at,
         isBeta: data.prerelease,
       };
@@ -320,8 +333,8 @@ class AutoUpdateFeature implements FeatureModule {
     const c = normalize(current);
     const len = Math.max(l.length, c.length);
     for (let i = 0; i < len; i++) {
-      const li = l[i] || 0;
-      const ci = c[i] || 0;
+      const li = l[i] ?? 0;
+      const ci = c[i] ?? 0;
       if (li > ci) return true;
       if (li < ci) return false;
     }
@@ -345,7 +358,7 @@ class AutoUpdateFeature implements FeatureModule {
     // Placeholder: backup critical files
     // In a real implementation, this would tar up the project directory
     // For now, we just create a marker file
-    require('fs').writeFileSync(backupPath, `Backup created at ${new Date().toISOString()}\n`);
+    writeFileSync(backupPath, `Backup created at ${new Date().toISOString()}\n`);
   }
 
   private async restoreBackup(): Promise<void> {
@@ -376,11 +389,11 @@ class AutoUpdateFeature implements FeatureModule {
       mkdirSync(dirname(fullPath), { recursive: true });
     }
 
-    this.db = new (require('better-sqlite3'))(fullPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('synchronous = NORMAL');
+    this.db = new Database(fullPath);
+    this.database.pragma('journal_mode = WAL');
+    this.database.pragma('synchronous = NORMAL');
 
-    this.db.exec(`
+    this.database.exec(`
       CREATE TABLE IF NOT EXISTS update_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT NOT NULL,
@@ -392,10 +405,10 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   private loadUpdateHistory(): void {
-    const rows = this.db
-      .prepare('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
+    const rows = this.database
+      .prepare<[], UpdateHistoryRow>('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
       .all();
-    this.updateHistory = rows.map((row: any) => ({
+    this.updateHistory = rows.map((row) => ({
       version: row.version,
       timestamp: row.timestamp,
       success: Boolean(row.success),
@@ -405,7 +418,7 @@ class AutoUpdateFeature implements FeatureModule {
 
   private async recordUpdate(version: string, success: boolean, message: string): Promise<void> {
     const timestamp = Date.now();
-    this.db
+    this.database
       .prepare(
         'INSERT INTO update_history (version, timestamp, success, message) VALUES (?, ?, ?, ?)',
       )
@@ -419,7 +432,14 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   // Helper for DB - will be set after init
-  private db: any = null;
+  private db: Database.Database | null = null;
+
+  private get database(): Database.Database {
+    if (!this.db) {
+      throw new Error('Auto-update database is not initialized');
+    }
+    return this.db;
+  }
 }
 
 export default new AutoUpdateFeature();

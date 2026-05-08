@@ -422,9 +422,7 @@ exports.ModelRouter = ModelRouter;
 // ─── Factory ────────────────────────────────────────────────────────────────
 let routerInstance = null;
 function getModelRouter(config) {
-    if (!routerInstance) {
-        routerInstance = new ModelRouter(config);
-    }
+    routerInstance ??= new ModelRouter(config);
     return routerInstance;
 }
 function resetModelRouter() {

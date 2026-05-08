@@ -3,13 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveGatewayChildEnvironment = resolveGatewayChildEnvironment;
 exports.resolveCliLaunch = resolveCliLaunch;
 exports.resolveGatewayChildProcess = resolveGatewayChildProcess;
+function firstNonEmpty(...values) {
+    return values.find((value) => value !== undefined && value.length > 0) ?? '';
+}
 function resolveGatewayChildEnvironment(env, workDir) {
-    const childEnv = { ...env };
-    for (const key of Object.keys(childEnv)) {
-        if (key.toUpperCase().startsWith('PKG_')) {
-            delete childEnv[key];
-        }
-    }
+    const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.toUpperCase().startsWith('PKG_')));
     childEnv.PKG_EXECPATH = '';
     childEnv.ARGENTUM_WORKDIR = workDir;
     childEnv.ARGENTUM_SKIP_EXIT_PAUSE = '1';
@@ -25,12 +23,12 @@ function resolveCliLaunch(args, env) {
 }
 function resolveGatewayChildProcess(options) {
     if (options.isPackaged) {
-        const entryPath = options.entryPath || '';
+        const entryPath = options.entryPath ?? '';
         const packagedEntrypoint = entryPath && !entryPath.includes('\\snapshot\\') && !entryPath.includes('/snapshot/')
             ? entryPath
             : '';
         return {
-            command: packagedEntrypoint || options.argv0 || options.execPath,
+            command: firstNonEmpty(packagedEntrypoint, options.argv0, options.execPath),
             args: [...options.args],
         };
     }

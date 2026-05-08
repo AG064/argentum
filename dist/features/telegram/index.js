@@ -42,10 +42,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const crypto = __importStar(require("crypto"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const grammy_1 = require("grammy");
 // ─── Feature ─────────────────────────────────────────────────────────────────
 class TelegramFeature {
@@ -68,19 +72,19 @@ class TelegramFeature {
         markdown: { tables: 'code' },
     };
     bot = null;
-    ctx = null;
-    db = null;
+    ctx;
+    db;
     messageHandlers = [];
     async init(config, context) {
         this.ctx = context;
         this.config = { ...this.config, ...config };
         // Initialize database
-        const dbPath = config['dbPath'] || './data/telegram.db';
+        const configuredDbPath = config['dbPath'];
+        const dbPath = typeof configuredDbPath === 'string' ? configuredDbPath : './data/telegram.db';
         const dir = path.dirname(dbPath);
         if (!fs.existsSync(dir))
             fs.mkdirSync(dir, { recursive: true });
-        const Database = require('better-sqlite3');
-        this.db = new Database(dbPath);
+        this.db = new better_sqlite3_1.default(dbPath);
         this.db.pragma('journal_mode = WAL');
         // Create tables
         this.db.exec(`
@@ -260,7 +264,10 @@ class TelegramFeature {
                 chatId: reaction.chat.id,
                 userId: reaction.user?.id,
                 emoji: reaction.new_reaction
-                    .map((r) => r.emoji || r.custom_emoji_id || 'unknown')
+                    .map((reactionItem) => {
+                    const item = reactionItem;
+                    return item.emoji ?? item.custom_emoji_id ?? 'unknown';
+                })
                     .join(', '),
             });
         });
@@ -325,7 +332,7 @@ class TelegramFeature {
         if (!this.bot)
             throw new Error('Bot not initialized');
         await this.bot.api.sendMessage(chatId, text, {
-            parse_mode: options?.parseMode || 'Markdown',
+            parse_mode: options?.parseMode ?? 'Markdown',
             reply_to_message_id: options?.replyTo,
         });
     }
@@ -353,7 +360,9 @@ class TelegramFeature {
         return code;
     }
     listAllowedUsers() {
-        const rows = this.db.prepare('SELECT user_id FROM allowed_users').all();
+        const rows = this.db
+            .prepare('SELECT user_id FROM allowed_users')
+            .all();
         return rows.map((r) => r.user_id);
     }
     addUser(userId) {

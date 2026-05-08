@@ -44,7 +44,7 @@ class ACPHarnessFeature {
     async start() {
         if (!this.config.enabled)
             return;
-        this.server = (0, http_1.createServer)(async (req, res) => {
+        this.server = (0, http_1.createServer)((req, res) => {
             this.handleHTTP(req, res);
         });
         this.server.listen(this.config.port, this.config.host, () => {
@@ -59,7 +59,11 @@ class ACPHarnessFeature {
             ws.on('message', (data) => {
                 try {
                     const req = JSON.parse(data.toString());
-                    this.executeWithStream(ws, req);
+                    void this.executeWithStream(ws, req).catch((err) => {
+                        ws.send(JSON.stringify({
+                            error: err instanceof Error ? err.message : 'Stream execution failed',
+                        }));
+                    });
                 }
                 catch (err) {
                     ws.send(JSON.stringify({ error: 'Invalid request' }));
@@ -77,7 +81,7 @@ class ACPHarnessFeature {
             details: { port: this.config.port },
         };
     }
-    async handleHTTP(req, res) {
+    handleHTTP(req, res) {
         // Simple router
         if (req.method !== 'POST' || req.url !== '/acp/execute') {
             res.statusCode = 404;
@@ -86,7 +90,7 @@ class ACPHarnessFeature {
         }
         // Auth check
         if (this.config.authToken) {
-            const auth = req.headers.authorization || '';
+            const auth = req.headers.authorization ?? '';
             if (!auth.startsWith('Bearer ') || auth.slice(7) !== this.config.authToken) {
                 res.statusCode = 401;
                 res.end('Unauthorized');
@@ -96,36 +100,43 @@ class ACPHarnessFeature {
         // Parse body
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', async () => {
-            try {
-                const reqBody = JSON.parse(body);
-                const result = await this.execute(reqBody);
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify(result));
-            }
-            catch (err) {
-                res.statusCode = 500;
-                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-                // Escape HTML in error message to prevent XSS if displayed in HTML context
-                const escapedError = errorMsg
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-                res.end(JSON.stringify({
-                    success: false,
-                    error: escapedError,
-                    stdout: '',
-                    stderr: '',
-                    exitCode: -1,
-                    durationMs: 0,
-                }));
-            }
+        req.on('end', () => {
+            void this.handleExecuteBody(body, res).catch((err) => {
+                this.writeExecutionError(res, err);
+            });
         });
+    }
+    async handleExecuteBody(body, res) {
+        try {
+            const reqBody = JSON.parse(body);
+            const result = await this.execute(reqBody);
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+        }
+        catch (err) {
+            this.writeExecutionError(res, err);
+        }
+    }
+    writeExecutionError(res, err) {
+        res.statusCode = 500;
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        const escapedError = errorMsg
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        res.end(JSON.stringify({
+            success: false,
+            error: escapedError,
+            stdout: '',
+            stderr: '',
+            exitCode: -1,
+            durationMs: 0,
+        }));
     }
     async execute(req) {
         const start = Date.now();
-        const timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
+        const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
         // Simple execution via child_process (non-isolated)
         return new Promise((resolve) => {
             const cmd = this.getCommand(req.language);
@@ -157,7 +168,7 @@ class ACPHarnessFeature {
     }
     async executeWithStream(ws, req) {
         const _start = Date.now();
-        const _timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
+        const _timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
         // For streaming, we'll just execute and send incremental updates
         // A proper implementation would stream stdout/stderr in real-time
         const result = await this.execute(req);

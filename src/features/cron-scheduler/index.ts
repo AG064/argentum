@@ -2,7 +2,7 @@ import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 
 import {
   type FeatureModule,
@@ -37,9 +37,41 @@ export interface CronSchedulerConfig {
   dbPath: string;
   timezone?: string;
   maxJobs: number;
+  maxConcurrentRuns: number;
 }
 
 export type CronHandler = (jobId: string) => Promise<void> | void;
+
+interface CountRow {
+  c: number;
+}
+
+interface JobRow {
+  id: string;
+  name: string;
+  cron_expr: string;
+  handler_id: string;
+  enabled: number;
+  last_run: number | null;
+  last_error: string | null;
+  created_at: number;
+}
+
+interface JobRunRow {
+  job_id: string;
+  started_at: number;
+  completed_at: number | null;
+  success: number;
+  error: string | null;
+}
+
+interface RunningTaskStateRow {
+  session_state: string | null;
+}
+
+interface BudgetService {
+  checkJobBudget(jobId: string): Promise<boolean> | boolean;
+}
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
@@ -55,14 +87,13 @@ class CronSchedulerFeature implements FeatureModule {
     enabled: false,
     dbPath: './data/cron-scheduler.db',
     maxJobs: 500,
-    // maximum concurrent handler executions across all jobs
     maxConcurrentRuns: 5,
-  } as any;
+  };
   private ctx!: FeatureContext;
   private db!: Database.Database;
   private jobs: Map<string, CronJob> = new Map();
   private handlers: Map<string, CronHandler> = new Map();
-  private cronJobs: Map<string, any> = new Map(); // jobId -> cron job instance
+  private cronJobs: Map<string, ScheduledTask> = new Map();
   private schedulerStartTime: number = 0;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
@@ -85,14 +116,14 @@ class CronSchedulerFeature implements FeatureModule {
     this.ctx.logger.info('Cron scheduler active', {
       scheduledJobs: this.jobs.size,
       enabledJobs: Array.from(this.jobs.values()).filter((j) => j.enabled).length,
-      timezone: this.config.timezone || 'local',
+      timezone: this.config.timezone ?? 'local',
     });
   }
 
   async stop(): Promise<void> {
     // Stop all cron jobs
-    for (const [_jobId, cron] of this.cronJobs.entries()) {
-      cron.stop();
+    for (const scheduledTask of this.cronJobs.values()) {
+      await Promise.resolve(scheduledTask.stop());
     }
     this.cronJobs.clear();
     this.db?.close();
@@ -200,7 +231,7 @@ class CronSchedulerFeature implements FeatureModule {
     // Stop cron if running
     const cron = this.cronJobs.get(jobId);
     if (cron) {
-      cron.stop();
+      await Promise.resolve(cron.stop());
       this.cronJobs.delete(jobId);
     }
 
@@ -246,7 +277,7 @@ class CronSchedulerFeature implements FeatureModule {
     // Stop cron if running
     const cron = this.cronJobs.get(jobId);
     if (cron) {
-      cron.stop();
+      await Promise.resolve(cron.stop());
       this.cronJobs.delete(jobId);
     }
 
@@ -289,7 +320,15 @@ class CronSchedulerFeature implements FeatureModule {
 
   private scheduleJob(job: CronJob): void {
     if (this.cronJobs.has(job.id)) {
-      this.cronJobs.get(job.id)!.stop();
+      const previousTask = this.cronJobs.get(job.id);
+      if (previousTask) {
+        void Promise.resolve(previousTask.stop()).catch((err: unknown) => {
+          this.ctx.logger.warn('Failed to stop previous cron task before rescheduling', {
+            jobId: job.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
     }
 
     const cronJob = cron.schedule(
@@ -332,8 +371,8 @@ class CronSchedulerFeature implements FeatureModule {
 
     // --- Concurrency check: ensure we don't exceed maxConcurrentRuns
     const runningCount =
-      (this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get() as any).c || 0;
-    if (runningCount > (this.config as any).maxConcurrentRuns) {
+      this.db.prepare<[], CountRow>('SELECT COUNT(*) as c FROM running_tasks').get()?.c ?? 0;
+    if (runningCount > this.config.maxConcurrentRuns) {
       this.ctx.logger.warn('Concurrency limit reached, skipping job', {
         jobId: job.id,
         runningCount,
@@ -345,8 +384,8 @@ class CronSchedulerFeature implements FeatureModule {
 
     // --- Budget enforcement hook (optional)
     try {
-      const budgetService: any = (this.ctx as any).services?.budget;
-      if (budgetService && typeof budgetService.checkJobBudget === 'function') {
+      const budgetService = this.getBudgetService();
+      if (budgetService) {
         const ok = await budgetService.checkJobBudget(job.id);
         if (!ok) {
           this.ctx.logger.warn('Job skipped due to budget enforcement', { jobId: job.id });
@@ -371,7 +410,7 @@ class CronSchedulerFeature implements FeatureModule {
       // Update job last run
       job.lastRun = endTime;
       if (!success) {
-        job.lastError = error || 'Unknown error';
+        job.lastError = error ?? 'Unknown error';
       }
       this.db
         .prepare('UPDATE jobs SET last_run = ?, last_error = ? WHERE id = ?')
@@ -388,8 +427,10 @@ class CronSchedulerFeature implements FeatureModule {
       // persist any session state optionally provided by handler via running_tasks.session_state
       try {
         const row = this.db
-          .prepare('SELECT session_state FROM running_tasks WHERE job_id = ?')
-          .get(job.id) as any;
+          .prepare<[string], RunningTaskStateRow>(
+            'SELECT session_state FROM running_tasks WHERE job_id = ?',
+          )
+          .get(job.id);
         if (row?.session_state) {
           // store as last_error field for visibility (placeholder) or a dedicated sessions table
           this.db
@@ -397,7 +438,10 @@ class CronSchedulerFeature implements FeatureModule {
             .run(`session:${row.session_state}`, job.id);
         }
       } catch (e) {
-        // ignore
+        this.ctx.logger.warn('Unable to persist cron session state', {
+          jobId: job.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
 
       // release claim
@@ -419,10 +463,12 @@ class CronSchedulerFeature implements FeatureModule {
 
   async getJobRuns(jobId: string, limit: number = 50): Promise<JobRun[]> {
     const rows = this.db
-      .prepare('SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?')
+      .prepare<[string, number], JobRunRow>(
+        'SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?',
+      )
       .all(jobId, limit);
 
-    return rows.map((row: any) => ({
+    return rows.map((row) => ({
       jobId: row.job_id,
       startedAt: row.started_at,
       completedAt: row.completed_at,
@@ -483,7 +529,7 @@ class CronSchedulerFeature implements FeatureModule {
   }
 
   private loadJobsFromDb(): void {
-    const rows = this.db.prepare('SELECT * FROM jobs').all() as any[];
+    const rows = this.db.prepare<[], JobRow>('SELECT * FROM jobs').all();
     for (const row of rows) {
       const job: CronJob = {
         id: row.id,
@@ -497,6 +543,22 @@ class CronSchedulerFeature implements FeatureModule {
       };
       this.jobs.set(job.id, job);
     }
+  }
+
+  private getBudgetService(): BudgetService | undefined {
+    const contextWithServices = this.ctx as FeatureContext & {
+      services?: { budget?: unknown };
+    };
+    const candidate = contextWithServices.services?.budget;
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      'checkJobBudget' in candidate &&
+      typeof candidate.checkJobBudget === 'function'
+    ) {
+      return candidate as BudgetService;
+    }
+    return undefined;
   }
 }
 

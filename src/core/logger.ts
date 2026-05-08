@@ -148,9 +148,7 @@ let globalLogger: Logger | null = null;
 
 /** Create or get the global logger */
 export function createLogger(config?: Partial<LoggerConfig>): Logger {
-  if (!globalLogger) {
-    globalLogger = new Logger(config);
-  }
+  globalLogger ??= new Logger(config);
   return globalLogger;
 }
 

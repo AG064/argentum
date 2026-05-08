@@ -38,6 +38,29 @@ export interface KnowledgeBaseConfig {
   maxVersionsPerArticle: number;
 }
 
+interface ArticleRow {
+  id: string;
+  title: string;
+  content: string;
+  tags: string;
+  version: number;
+  created_at: number;
+  updated_at: number;
+  created_by: string;
+  current: number;
+}
+
+interface ArticleVersionRow {
+  version: number;
+  content: string;
+  updated_at: number;
+  updated_by: string;
+}
+
+interface ArticleRowId {
+  rowid: number;
+}
+
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
 class SharedKnowledgeBaseFeature implements FeatureModule {
@@ -135,8 +158,8 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   /** Get article by ID */
   async getArticle(id: string): Promise<Article | null> {
     const row = this.db
-      .prepare('SELECT * FROM articles WHERE id = ? AND current = 1')
-      .get(id) as any;
+      .prepare<[string], ArticleRow>('SELECT * FROM articles WHERE id = ? AND current = 1')
+      .get(id);
 
     if (!row) return null;
     return this.mapArticleRow(row);
@@ -145,8 +168,10 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   /** Get article versions */
   async getArticleVersions(id: string): Promise<ArticleVersion[]> {
     const rows = this.db
-      .prepare('SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC')
-      .all(id) as any[];
+      .prepare<[string], ArticleVersionRow>(
+        'SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC',
+      )
+      .all(id);
 
     return rows.map((row) => ({
       version: row.version,
@@ -165,8 +190,8 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     tags?: string[],
   ): Promise<Article | null> {
     const existing = this.db
-      .prepare('SELECT * FROM articles WHERE id = ? AND current = 1')
-      .get(id) as any;
+      .prepare<[string], ArticleRow>('SELECT * FROM articles WHERE id = ? AND current = 1')
+      .get(id);
     if (!existing) {
       throw new Error(`Article not found: ${id}`);
     }
@@ -251,7 +276,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     `;
 
     try {
-      const rows = this.db.prepare(searchSql).all(query, limit, offset) as any[];
+      const rows = this.db.prepare(searchSql).all(query, limit, offset) as ArticleRow[];
       return rows.map((row) => this.mapArticleRow(row));
     } catch (err) {
       // If FTS fails, fallback to simple LIKE search
@@ -261,7 +286,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
         .prepare(
           `SELECT * FROM articles WHERE current = 1 AND (title LIKE ? OR content LIKE ?) LIMIT ? OFFSET ?`,
         )
-        .all(likePattern, likePattern, limit, offset) as any[];
+        .all(likePattern, likePattern, limit, offset) as ArticleRow[];
 
       return rows.map((row) => this.mapArticleRow(row));
     }
@@ -275,7 +300,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   ): Promise<Article[]> {
     if (tags.length === 0) return [];
 
-    const rows: any[] = [];
+    const rows: ArticleRow[] = [];
     if (matchAll) {
       // Articles must have all tags
       const _placeholders = tags.map(() => '1').join(' AND ');
@@ -286,14 +311,14 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
       `;
       // SQLite JSON functions for tags array
       const simpleQuery = `SELECT * FROM articles WHERE current = 1 LIMIT ?`;
-      rows.push(...this.db.prepare(simpleQuery).all(limit));
+      rows.push(...this.db.prepare<[number], ArticleRow>(simpleQuery).all(limit));
     } else {
       // Articles can have any of the tags
       const likePatterns = tags.map((t) => `%"${t}"%`);
       const placeholders = likePatterns.map(() => '?').join(' OR ');
       const query = `SELECT * FROM articles WHERE current = 1 AND (${placeholders}) LIMIT ?`;
       const stmt = this.db.prepare(query);
-      const newRows = stmt.all(...likePatterns, limit) as any[];
+      const newRows = stmt.all(...likePatterns, limit) as ArticleRow[];
       rows.push(...newRows);
     }
 
@@ -371,7 +396,9 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
 
   private updateFts(id: string, title: string, content: string, tags: string[]): void {
     // FTS is auto-updated via triggers, but we need to ensure the rowid matches
-    const row = this.db.prepare('SELECT rowid FROM articles WHERE id = ?').get(id) as any;
+    const row = this.db
+      .prepare<[string], ArticleRowId>('SELECT rowid FROM articles WHERE id = ?')
+      .get(id);
     if (row) {
       this.db
         .prepare(
@@ -381,7 +408,7 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
     }
   }
 
-  private mapArticleRow(row: any): Article {
+  private mapArticleRow(row: ArticleRow): Article {
     return {
       id: row.id,
       title: row.title,

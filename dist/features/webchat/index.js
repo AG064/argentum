@@ -533,10 +533,18 @@ class WebchatFeature {
                 this.addMessageToHistory(client.roomId, chatMsg);
                 this.broadcastToRoom(client.roomId, { type: 'message', message: chatMsg });
                 // Emit hook for agent processing
-                this.ctx.emit('webchat:message', {
+                void this.ctx
+                    .emit('webchat:message', {
                     roomId: client.roomId,
                     userId: client.userId,
                     content: msg.content,
+                })
+                    .catch((error) => {
+                    this.ctx.logger.error('Webchat message hook failed', {
+                        roomId: client.roomId,
+                        userId: client.userId,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
                 });
                 break;
             }

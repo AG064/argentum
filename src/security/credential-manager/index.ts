@@ -531,11 +531,7 @@ export class CredentialManager {
 let instance: CredentialManager | null = null;
 
 export function getCredentialManager(dbPath?: string): CredentialManager {
-  if (!instance && dbPath) {
-    instance = new CredentialManager(dbPath);
-  } else if (!instance) {
-    instance = new CredentialManager();
-  }
+  instance ??= dbPath ? new CredentialManager(dbPath) : new CredentialManager();
   return instance;
 }
 

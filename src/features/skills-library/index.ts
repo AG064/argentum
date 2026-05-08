@@ -36,6 +36,18 @@ export interface SkillsLibraryConfig {
   storageDir: string;
 }
 
+interface SkillRow {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  code: string;
+  tags: string | null;
+  author: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
 const DEFAULT_CONFIG: SkillsLibraryConfig = {
   enabled: false,
   dbPath: './data/skills-library.db',
@@ -120,13 +132,17 @@ class SkillsLibraryFeature implements FeatureModule {
   }
 
   getSkill(id: string): SkillRecord | null {
-    const row = this.db.prepare('SELECT * FROM skills WHERE id = ?').get(id) as any | undefined;
+    const row = this.db
+      .prepare<[string], SkillRow>('SELECT * FROM skills WHERE id = ?')
+      .get(id);
     if (!row) return null;
     return this.rowToSkill(row);
   }
 
   listSkills(): SkillRecord[] {
-    const rows = this.db.prepare('SELECT * FROM skills ORDER BY updated_at DESC').all() as any[];
+    const rows = this.db
+      .prepare<[], SkillRow>('SELECT * FROM skills ORDER BY updated_at DESC')
+      .all();
     return rows.map((r) => this.rowToSkill(r));
   }
 
@@ -136,7 +152,7 @@ class SkillsLibraryFeature implements FeatureModule {
       .prepare(
         `SELECT * FROM skills WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(tags) LIKE ? ORDER BY updated_at DESC LIMIT 100`,
       )
-      .all(q, q, q) as any[];
+      .all(q, q, q) as SkillRow[];
     return rows.map((r) => this.rowToSkill(r));
   }
 
@@ -200,15 +216,15 @@ class SkillsLibraryFeature implements FeatureModule {
     `);
   }
 
-  private rowToSkill(row: any): SkillRecord {
+  private rowToSkill(row: SkillRow): SkillRecord {
     return {
       id: row.id,
       name: row.name,
       version: row.version,
       description: row.description,
       code: row.code,
-      tags: this.safeParse(row.tags),
-      author: row.author || undefined,
+      tags: this.safeParse(row.tags ?? '[]'),
+      author: row.author ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

@@ -11,6 +11,7 @@
  *
  * Compatible with agentskills.io open standard.
  */
+import { type FeatureContext } from '../../core/plugin-loader';
 /** YAML frontmatter extracted from SKILL.md */
 export interface SkillFrontmatter {
     name: string;
@@ -81,7 +82,7 @@ declare class SkillsLoaderFeature {
     private ctx;
     private skillsDir;
     private skillsCache;
-    init(config: Record<string, unknown>, context: any): Promise<void>;
+    init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     private scanSkillsCount;
     start(): Promise<void>;
     stop(): Promise<void>;

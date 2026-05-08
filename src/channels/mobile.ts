@@ -191,45 +191,49 @@ class MobileChannel implements FeatureModule {
     });
 
     // Send notification
-    this.router.post('/send', authMiddleware, async (req: Request, res: Response) => {
-      try {
-        const notification = req.body as PushNotification;
-        if (!notification.userId || !notification.title || !notification.body) {
-          res.status(400).json({ error: 'Missing required fields: userId, title, body' });
-          return;
+    this.router.post('/send', authMiddleware, (req: Request, res: Response) => {
+      void (async () => {
+        try {
+          const notification = req.body as PushNotification;
+          if (!notification.userId || !notification.title || !notification.body) {
+            res.status(400).json({ error: 'Missing required fields: userId, title, body' });
+            return;
+          }
+
+          const result = await this.sendNotification({
+            ...notification,
+            priority: notification.priority ?? 'normal',
+          });
+
+          res.json(result);
+        } catch (err) {
+          res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
         }
-
-        const result = await this.sendNotification({
-          ...notification,
-          priority: notification.priority ?? 'normal',
-        });
-
-        res.json(result);
-      } catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-      }
+      })();
     });
 
     // Broadcast to user (all devices)
-    this.router.post('/broadcast', authMiddleware, async (req: Request, res: Response) => {
-      try {
-        const { userId, title, body, data, priority } = req.body as Record<string, unknown>;
-        if (!userId || !title || !body) {
-          res.status(400).json({ error: 'Missing required fields: userId, title, body' });
-          return;
+    this.router.post('/broadcast', authMiddleware, (req: Request, res: Response) => {
+      void (async () => {
+        try {
+          const { userId, title, body, data, priority } = req.body as Record<string, unknown>;
+          if (!userId || !title || !body) {
+            res.status(400).json({ error: 'Missing required fields: userId, title, body' });
+            return;
+          }
+
+          const results = await this.broadcastToUser(userId as string, {
+            title: title as string,
+            body: body as string,
+            data: data as Record<string, string> | undefined,
+            priority: (priority as 'normal' | 'high') ?? 'normal',
+          });
+
+          res.json({ results });
+        } catch (err) {
+          res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
         }
-
-        const results = await this.broadcastToUser(userId as string, {
-          title: title as string,
-          body: body as string,
-          data: data as Record<string, string> | undefined,
-          priority: (priority as 'normal' | 'high') ?? 'normal',
-        });
-
-        res.json({ results });
-      } catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-      }
+      })();
     });
 
     // Subscribe to topic

@@ -296,7 +296,11 @@ class SmartRecommendationsFeature implements FeatureModule {
             results.push(rec);
           }
         }
-      } catch {}
+      } catch (ruleError) {
+        this.ctx.logger.warn('Suggestion rule failed', {
+          error: ruleError instanceof Error ? ruleError.message : String(ruleError),
+        });
+      }
     }
 
     // Profile-based recommendations
@@ -334,9 +338,14 @@ class SmartRecommendationsFeature implements FeatureModule {
       if (this.onSuggestionCallback) {
         try {
           this.onSuggestionCallback(suggestion);
-        } catch {}
+        } catch (callbackError) {
+          this.ctx.logger.warn('Suggestion callback failed', {
+            suggestionId: suggestion.id,
+            error: callbackError instanceof Error ? callbackError.message : String(callbackError),
+          });
+        }
       }
-      this.ctx.emit('suggestion:proactive', suggestion);
+      await this.ctx.emit('suggestion:proactive', suggestion);
     }
   }
 

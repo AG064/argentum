@@ -11,7 +11,7 @@ class AuditLogFeature {
     constructor() {
         const dataDir = path_1.default.join(process.cwd(), 'data');
         (0, fs_1.mkdirSync)(dataDir, { recursive: true });
-        const dbPath = process.env.AGCLAW_DB_PATH || path_1.default.join(dataDir, 'agclaw.db');
+        const dbPath = process.env.AGCLAW_DB_PATH ?? path_1.default.join(dataDir, 'agclaw.db');
         this.db = new better_sqlite3_1.default(dbPath);
         this.init();
     }
@@ -71,14 +71,14 @@ class AuditLogFeature {
     log(action, details, actor, ip) {
         const t = Date.now();
         const stmt = this.db.prepare('INSERT INTO audit_log (timestamp, action, actor, details, ip, immutable) VALUES (?, ?, ?, ?, ?, 1)');
-        stmt.run(t, action, actor || null, typeof details === 'string' ? details : JSON.stringify(details), ip || null);
+        stmt.run(t, action, actor ?? null, typeof details === 'string' ? details : JSON.stringify(details), ip ?? null);
         return { timestamp: t };
     }
     logToolCall(tool, input, output, actor, success = true, meta) {
         const t = Date.now();
         this.db
             .prepare('INSERT INTO tool_calls (timestamp, actor, tool, input, output, success, meta) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(t, actor || null, tool, JSON.stringify(input || null), JSON.stringify(output || null), success ? 1 : 0, meta ? JSON.stringify(meta) : null);
+            .run(t, actor ?? null, tool, JSON.stringify(input ?? null), JSON.stringify(output ?? null), success ? 1 : 0, meta ? JSON.stringify(meta) : null);
         // Also add a summary into audit_log for quick searches
         this.log('tool_call', { tool, success, meta }, actor);
         return { timestamp: t };
@@ -87,7 +87,7 @@ class AuditLogFeature {
         const t = Date.now();
         this.db
             .prepare('INSERT INTO decisions (timestamp, actor, decision, reason, meta) VALUES (?, ?, ?, ?, ?)')
-            .run(t, actor || null, decision, reason, meta ? JSON.stringify(meta) : null);
+            .run(t, actor ?? null, decision, reason, meta ? JSON.stringify(meta) : null);
         this.log('decision', { decision, reason, meta }, actor);
         return { timestamp: t };
     }
@@ -116,7 +116,7 @@ class AuditLogFeature {
     export(start, end) {
         const rows = this.db
             .prepare('SELECT * FROM audit_log WHERE timestamp >= COALESCE(?, 0) AND timestamp <= COALESCE(?, 9223372036854775807) ORDER BY timestamp ASC')
-            .all(start || 0, end || Number.MAX_SAFE_INTEGER);
+            .all(start ?? 0, end ?? Number.MAX_SAFE_INTEGER);
         return JSON.stringify(rows, null, 2);
     }
 }

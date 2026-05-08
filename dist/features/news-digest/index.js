@@ -9,8 +9,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
+function isUniqueConstraintError(error) {
+    return error instanceof Error && error.message.includes('UNIQUE constraint');
+}
 /**
  * News Digest feature — RSS/Atom feed aggregation.
  *
@@ -67,13 +71,9 @@ class NewsDigestFeature {
     }
     initDb() {
         const dbDir = path_1.default.dirname(this.config.dbPath);
-        try {
-            const { mkdirSync, existsSync } = require('fs');
-            if (!existsSync(dbDir)) {
-                mkdirSync(dbDir, { recursive: true });
-            }
+        if (!(0, fs_1.existsSync)(dbDir)) {
+            (0, fs_1.mkdirSync)(dbDir, { recursive: true });
         }
-        catch { }
         this.db = new better_sqlite3_1.default(this.config.dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.exec(`
@@ -118,7 +118,7 @@ class NewsDigestFeature {
             this.ctx.logger.info('News source added', { id, url, name });
         }
         catch (err) {
-            if (err.message?.includes('UNIQUE constraint')) {
+            if (isUniqueConstraintError(err)) {
                 throw new Error(`Source with URL already exists: ${url}`);
             }
             throw err;
@@ -138,9 +138,9 @@ class NewsDigestFeature {
         return rows.map((row) => ({
             id: row.id,
             url: row.url,
-            name: row.name,
+            name: row.name ?? undefined,
             addedAt: row.added_at,
-            lastFetched: row.last_fetched,
+            lastFetched: row.last_fetched ?? undefined,
             lastArticleCount: row.last_article_count,
         }));
     }
@@ -165,11 +165,11 @@ class NewsDigestFeature {
         return rows.map((row) => ({
             id: row.id,
             sourceId: row.source_id,
-            sourceName: row.source_name,
+            sourceName: row.source_name ?? undefined,
             title: row.title,
             link: row.link,
-            description: row.description,
-            content: row.content,
+            description: row.description ?? undefined,
+            content: row.content ?? undefined,
             publishedAt: row.published_at,
             fetchedAt: row.fetched_at,
         }));
@@ -255,7 +255,7 @@ class NewsDigestFeature {
             const link = (linkMatch?.[1] ?? null)?.trim() ?? null;
             const title = getTag('title');
             const description = getTag('description') ?? undefined;
-            const content = (getTag('content:encoded') || getTag('content')) ?? undefined;
+            const content = (getTag('content:encoded') ?? getTag('content')) ?? undefined;
             // Parse pubDate
             const pubDateStr = getTag('pubDate');
             const publishedAt = pubDateStr ? new Date(pubDateStr).getTime() : Date.now();
@@ -290,7 +290,7 @@ class NewsDigestFeature {
             const summary = getTag('summary') ?? undefined;
             const content = getTag('content') ?? undefined;
             // Parse updated or published
-            const updatedStr = getTag('updated') || getTag('published');
+            const updatedStr = getTag('updated') ?? getTag('published');
             const publishedAt = updatedStr ? new Date(updatedStr).getTime() : Date.now();
             if (title && link) {
                 entries.push({
@@ -318,15 +318,17 @@ class NewsDigestFeature {
     }
     /** Get source by ID */
     getSource(id) {
-        const row = this.db.prepare('SELECT * FROM news_sources WHERE id = ?').get(id);
+        const row = this.db
+            .prepare('SELECT * FROM news_sources WHERE id = ?')
+            .get(id);
         if (!row)
             return null;
         return {
             id: row.id,
             url: row.url,
-            name: row.name,
+            name: row.name ?? undefined,
             addedAt: row.added_at,
-            lastFetched: row.last_fetched,
+            lastFetched: row.last_fetched ?? undefined,
             lastArticleCount: row.last_article_count,
         };
     }

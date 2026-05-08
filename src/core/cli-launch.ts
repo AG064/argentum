@@ -23,16 +23,17 @@ export interface GatewayChildProcess {
   args: string[];
 }
 
+function firstNonEmpty(...values: Array<string | undefined>): string {
+  return values.find((value) => value !== undefined && value.length > 0) ?? '';
+}
+
 export function resolveGatewayChildEnvironment(
   env: NodeJS.ProcessEnv,
   workDir: string,
 ): NodeJS.ProcessEnv {
-  const childEnv = { ...env };
-  for (const key of Object.keys(childEnv)) {
-    if (key.toUpperCase().startsWith('PKG_')) {
-      delete childEnv[key];
-    }
-  }
+  const childEnv = Object.fromEntries(
+    Object.entries(env).filter(([key]) => !key.toUpperCase().startsWith('PKG_')),
+  ) as NodeJS.ProcessEnv;
   childEnv.PKG_EXECPATH = '';
   childEnv.ARGENTUM_WORKDIR = workDir;
   childEnv.ARGENTUM_SKIP_EXIT_PAUSE = '1';
@@ -53,14 +54,14 @@ export function resolveGatewayChildProcess(
   options: GatewayChildProcessOptions,
 ): GatewayChildProcess {
   if (options.isPackaged) {
-    const entryPath = options.entryPath || '';
+    const entryPath = options.entryPath ?? '';
     const packagedEntrypoint =
       entryPath && !entryPath.includes('\\snapshot\\') && !entryPath.includes('/snapshot/')
         ? entryPath
         : '';
 
     return {
-      command: packagedEntrypoint || options.argv0 || options.execPath,
+      command: firstNonEmpty(packagedEntrypoint, options.argv0, options.execPath),
       args: [...options.args],
     };
   }

@@ -102,7 +102,7 @@ class GoalDecompositionFeature {
             if (t.parent_id && map[t.parent_id] && map[t.id])
                 map[t.parent_id].children.push(map[t.id]);
         }
-        return map[goalId] || null;
+        return map[goalId] ?? null;
     }
     getReadyTasks() {
         // Tasks that are not done and have no unfinished dependencies

@@ -22,6 +22,8 @@ import * as fs from 'fs';
 import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 
+import Database from 'better-sqlite3';
+
 import type {
   SelfImprovingConfig,
   SelfImprovingResult,
@@ -59,6 +61,15 @@ const DEFAULT_CONFIG: SelfImprovingConfig = {
 const LAST_RUN_FILE = 'last-improve-run.txt';
 const CONFIG_FILE = 'self-improving-config.json';
 
+interface MessageContentRow {
+  content: string | null;
+}
+
+interface MessageRoleRow {
+  content: string | null;
+  role: string;
+}
+
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
 class SelfImprovingLoop implements FeatureModule {
@@ -88,10 +99,12 @@ class SelfImprovingLoop implements FeatureModule {
     this.ctx = context;
 
     // Determine paths
+    const configuredWorkDir = config['workDir'];
     this.workDir =
-      (config['workDir'] as string) ||
-      process.env.AGCLAW_WORKDIR ||
-      path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+      typeof configuredWorkDir === 'string'
+        ? configuredWorkDir
+        : process.env.AGCLAW_WORKDIR ??
+          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
 
     this.memoryDir = path.join(this.workDir, 'memory');
     this.skillsDir = path.join(this.workDir, 'skills');
@@ -258,7 +271,7 @@ class SelfImprovingLoop implements FeatureModule {
 
       for (const section of sections) {
         const lines = section.trim().split('\n');
-        const timestamp = lines[0]?.trim() || '';
+        const timestamp = lines[0]?.trim() ?? '';
         let category: LessonEntry['category'] = 'insight';
         const lessons: string[] = [];
         const tags: string[] = [];
@@ -615,7 +628,6 @@ class SelfImprovingLoop implements FeatureModule {
       }
 
       try {
-        const Database = require('better-sqlite3');
         const db = new Database(this.sessionsDbPath, { readonly: true });
 
         const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
@@ -623,7 +635,7 @@ class SelfImprovingLoop implements FeatureModule {
           .prepare(
             `SELECT content FROM messages WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 200`,
           )
-          .all(cutoff) as any[];
+          .all(cutoff) as MessageContentRow[];
 
         for (const m of messages) {
           if (m.content) content.push(m.content);
@@ -727,7 +739,6 @@ class SelfImprovingLoop implements FeatureModule {
     if (!existsSync(this.sessionsDbPath)) return patterns;
 
     try {
-      const Database = require('better-sqlite3');
       const db = new Database(this.sessionsDbPath, { readonly: true });
 
       const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -735,13 +746,13 @@ class SelfImprovingLoop implements FeatureModule {
         .prepare(
           `SELECT content, role FROM messages WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 100`,
         )
-        .all(cutoff) as any[];
+        .all(cutoff) as MessageRoleRow[];
 
       // Analyze message length patterns
-      const userMessages = messages.filter((m: any) => m.role === 'user' && m.content);
+      const userMessages = messages.filter((m) => m.role === 'user' && m.content);
       if (userMessages.length > 0) {
         const avgLength =
-          userMessages.reduce((sum: number, m: any) => sum + (m.content?.length ?? 0), 0) /
+          userMessages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) /
           userMessages.length;
 
         if (avgLength < 50) {
@@ -752,7 +763,7 @@ class SelfImprovingLoop implements FeatureModule {
       }
 
       // Check for questions
-      const questionCount = userMessages.filter((m: any) => (m.content ?? '').includes('?')).length;
+      const questionCount = userMessages.filter((m) => (m.content ?? '').includes('?')).length;
       if (questionCount > userMessages.length * 0.5) {
         patterns.push('User frequently asks questions (>50% of messages)');
       }

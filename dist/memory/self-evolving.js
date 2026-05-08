@@ -38,7 +38,11 @@ class SelfEvolvingMemoryFeature {
     }
     async start() {
         this.timer = setInterval(() => {
-            this.runConsolidation();
+            void this.runConsolidation().catch((error) => {
+                this.ctx.logger.error('Memory consolidation failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
         }, this.config.consolidationIntervalMs);
         this.ctx.logger.info('Self-Evolving Memory active', {
             consolidationInterval: `${this.config.consolidationIntervalMs / 1000}s`,

@@ -27,8 +27,9 @@ class SkillLoaderFeature {
     async init(config, context) {
         this.ctx = context;
         this.featuresPath =
-            config['featuresPath'] ||
-                (0, path_1.resolve)(__dirname, '../../features');
+            typeof config['featuresPath'] === 'string'
+                ? config['featuresPath']
+                : (0, path_1.resolve)(__dirname, '../../features');
         await this.scanForSkills();
     }
     async start() { }
@@ -74,7 +75,7 @@ class SkillLoaderFeature {
         if (!(0, fs_1.existsSync)(skillPath))
             return null;
         const content = (0, fs_1.readFileSync)(skillPath, 'utf-8');
-        const featureName = (0, path_1.dirname)(featureDir).split('/').pop() || 'unknown';
+        const featureName = (0, path_1.dirname)(featureDir).split('/').pop() ?? 'unknown';
         return {
             skillName: featureName,
             content,

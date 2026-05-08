@@ -172,9 +172,17 @@ class EveningRecapFeature implements FeatureModule {
     }
 
     const delay = target.getTime() - now.getTime();
-    this.timer = setTimeout(async () => {
-      await this.generateRecap();
-      this.scheduleNextRecap();
+    this.timer = setTimeout(() => {
+      void this.generateRecap()
+        .then(() => {
+          this.scheduleNextRecap();
+        })
+        .catch((error: unknown) => {
+          this.ctx.logger.error('Evening recap failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this.scheduleNextRecap();
+        });
     }, delay);
   }
 

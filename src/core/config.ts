@@ -8,9 +8,10 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-import type { FSWatcher } from 'chokidar';
 import { parse } from 'yaml';
 import { z } from 'zod';
+
+import type { FSWatcher } from 'chokidar';
 
 /** Server configuration schema */
 const ServerConfigSchema = z.object({
@@ -709,7 +710,7 @@ export class ConfigManager {
         ignoreInitial: true,
       });
       this.watcher.on('change', () => {
-        console.log(`[Config] Reloading ${this.configPath}`);
+        console.info(`[Config] Reloading ${this.configPath}`);
         this.config = this.loadConfig();
         for (const listener of this.listeners) {
           listener(this.config);
@@ -728,7 +729,12 @@ export class ConfigManager {
 
   /** Stop watching for changes */
   dispose(): void {
-    this.watcher?.close();
+    void this.watcher?.close().catch((error: unknown) => {
+      console.warn(
+        'Failed to close config watcher',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
     this.watcher = null;
   }
 }
@@ -738,8 +744,6 @@ let instance: ConfigManager | null = null;
 
 /** Get or create the global config manager */
 export function getConfig(configPath?: string): ConfigManager {
-  if (!instance) {
-    instance = new ConfigManager(configPath);
-  }
+  instance ??= new ConfigManager(configPath);
   return instance;
 }

@@ -3,13 +3,16 @@ import path from 'path';
 
 import Database from 'better-sqlite3';
 
+type BindValue = string | number | bigint | Buffer | null;
+type JsonRecord = Record<string, unknown>;
+
 class AuditLogFeature {
   db: Database.Database;
 
   constructor() {
     const dataDir = path.join(process.cwd(), 'data');
     mkdirSync(dataDir, { recursive: true });
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(dataDir, 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(dataDir, 'agclaw.db');
     this.db = new Database(dbPath);
     this.init();
   }
@@ -78,7 +81,7 @@ class AuditLogFeature {
     return { ok: true };
   }
 
-  log(action: string, details: Record<string, any> | string, actor?: string, ip?: string) {
+  log(action: string, details: JsonRecord | string, actor?: string, ip?: string) {
     const t = Date.now();
     const stmt = this.db.prepare(
       'INSERT INTO audit_log (timestamp, action, actor, details, ip, immutable) VALUES (?, ?, ?, ?, ?, 1)',
@@ -86,20 +89,20 @@ class AuditLogFeature {
     stmt.run(
       t,
       action,
-      actor || null,
+      actor ?? null,
       typeof details === 'string' ? details : JSON.stringify(details),
-      ip || null,
+      ip ?? null,
     );
     return { timestamp: t };
   }
 
   logToolCall(
     tool: string,
-    input: any,
-    output: any,
+    input: unknown,
+    output: unknown,
     actor?: string,
     success: boolean = true,
-    meta?: any,
+    meta?: JsonRecord,
   ) {
     const t = Date.now();
     this.db
@@ -108,10 +111,10 @@ class AuditLogFeature {
       )
       .run(
         t,
-        actor || null,
+        actor ?? null,
         tool,
-        JSON.stringify(input || null),
-        JSON.stringify(output || null),
+        JSON.stringify(input ?? null),
+        JSON.stringify(output ?? null),
         success ? 1 : 0,
         meta ? JSON.stringify(meta) : null,
       );
@@ -120,20 +123,20 @@ class AuditLogFeature {
     return { timestamp: t };
   }
 
-  logDecision(decision: string, reason: string, actor?: string, meta?: any) {
+  logDecision(decision: string, reason: string, actor?: string, meta?: JsonRecord) {
     const t = Date.now();
     this.db
       .prepare(
         'INSERT INTO decisions (timestamp, actor, decision, reason, meta) VALUES (?, ?, ?, ?, ?)',
       )
-      .run(t, actor || null, decision, reason, meta ? JSON.stringify(meta) : null);
+      .run(t, actor ?? null, decision, reason, meta ? JSON.stringify(meta) : null);
     this.log('decision', { decision, reason, meta }, actor);
     return { timestamp: t };
   }
 
   query(filters: { action?: string; actor?: string; since?: number; until?: number } = {}) {
     let sql = 'SELECT * FROM audit_log WHERE 1=1';
-    const params: any[] = [];
+    const params: BindValue[] = [];
     if (filters.action) {
       sql += ' AND action = ?';
       params.push(filters.action);
@@ -159,7 +162,7 @@ class AuditLogFeature {
       .prepare(
         'SELECT * FROM audit_log WHERE timestamp >= COALESCE(?, 0) AND timestamp <= COALESCE(?, 9223372036854775807) ORDER BY timestamp ASC',
       )
-      .all(start || 0, end || Number.MAX_SAFE_INTEGER);
+      .all(start ?? 0, end ?? Number.MAX_SAFE_INTEGER);
     return JSON.stringify(rows, null, 2);
   }
 }

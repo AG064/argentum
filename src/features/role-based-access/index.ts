@@ -32,6 +32,29 @@ export interface RoleBasedAccessConfig {
   defaultRole: string; // Role assigned to new users automatically
 }
 
+interface ReportRow {
+  user_id: string;
+}
+
+export interface DelegationRow {
+  id: string;
+  from_user: string;
+  to_user: string;
+  task_id: string | null;
+  created_at: number;
+}
+
+interface RoleRow {
+  id: string;
+  name: string;
+  permissions: string;
+}
+
+interface UserRoleRow {
+  user_id: string;
+  role_id: string;
+}
+
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
 class RoleBasedAccessFeature implements FeatureModule {
@@ -269,8 +292,8 @@ class RoleBasedAccessFeature implements FeatureModule {
   /** Get direct reports for a manager */
   async getReports(managerId: string): Promise<string[]> {
     const rows = this.db
-      .prepare('SELECT user_id FROM org_hierarchy WHERE parent_id = ?')
-      .all(managerId) as any[];
+      .prepare<[string], ReportRow>('SELECT user_id FROM org_hierarchy WHERE parent_id = ?')
+      .all(managerId);
     return rows.map((r) => r.user_id);
   }
 
@@ -287,12 +310,12 @@ class RoleBasedAccessFeature implements FeatureModule {
   }
 
   /** Get delegations for a user */
-  async getDelegations(userId: string): Promise<any[]> {
+  async getDelegations(userId: string): Promise<DelegationRow[]> {
     const rows = this.db
-      .prepare(
+      .prepare<[string, string], DelegationRow>(
         'SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC',
       )
-      .all(userId, userId) as any[];
+      .all(userId, userId);
     return rows;
   }
 
@@ -344,19 +367,19 @@ class RoleBasedAccessFeature implements FeatureModule {
   }
 
   private loadRolesFromDb(): void {
-    const rows = this.db.prepare('SELECT * FROM roles').all();
-    for (const row of rows as any[]) {
+    const rows = this.db.prepare<[], RoleRow>('SELECT * FROM roles').all();
+    for (const row of rows) {
       const role: Role = {
         id: row.id,
         name: row.name,
-        permissions: JSON.parse(row.permissions),
+        permissions: JSON.parse(row.permissions) as Permission[],
       };
       this.rolesCache.set(role.id, role);
     }
 
     // Load user-role assignments
-    const userRoleRows = this.db.prepare('SELECT * FROM user_roles').all();
-    for (const row of userRoleRows as any[]) {
+    const userRoleRows = this.db.prepare<[], UserRoleRow>('SELECT * FROM user_roles').all();
+    for (const row of userRoleRows) {
       let userRoles = this.userRolesCache.get(row.user_id);
       if (!userRoles) {
         userRoles = new Set();

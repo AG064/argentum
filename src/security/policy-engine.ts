@@ -414,9 +414,7 @@ let instance: PolicyEngine | null = null;
  * Get or create the global policy engine.
  */
 export function getPolicyEngine(): PolicyEngine {
-  if (!instance) {
-    instance = new PolicyEngine();
-  }
+  instance ??= new PolicyEngine();
   return instance;
 }
 

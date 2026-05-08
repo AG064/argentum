@@ -68,8 +68,8 @@ class MarkdownMemoryFeature {
             filename,
             title: filename,
             content,
-            metadata: metadata || {},
-            tags: tags || [],
+            metadata: metadata ?? {},
+            tags: tags ?? [],
         });
         this.ctx.logger.debug('Markdown written', { filename });
         return entry;

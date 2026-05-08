@@ -21,6 +21,7 @@ export interface CronSchedulerConfig {
     dbPath: string;
     timezone?: string;
     maxJobs: number;
+    maxConcurrentRuns: number;
 }
 export type CronHandler = (jobId: string) => Promise<void> | void;
 declare class CronSchedulerFeature implements FeatureModule {
@@ -62,6 +63,7 @@ declare class CronSchedulerFeature implements FeatureModule {
     getJobRuns(jobId: string, limit?: number): Promise<JobRun[]>;
     private initDatabase;
     private loadJobsFromDb;
+    private getBudgetService;
 }
 declare const _default: CronSchedulerFeature;
 export default _default;

@@ -5,6 +5,7 @@
  * Uses wttr.in for free weather API (no key required).
  */
 
+import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 
 import Database from 'better-sqlite3';
@@ -65,6 +66,25 @@ export interface WeatherAlert {
   createdAt: number;
   lastChecked?: number;
   lastTriggered?: number;
+}
+
+interface WttrForecastDay {
+  date: string;
+  mintempC: string;
+  mintempF: string;
+  maxtempC: string;
+  maxtempF: string;
+  weatherDesc: Array<{ value: string }>;
+  chanceofrain: string;
+}
+
+interface WeatherAlertRow {
+  id: string;
+  location: string;
+  condition_json: string;
+  created_at: number;
+  last_checked: number | null;
+  last_triggered: number | null;
 }
 
 /**
@@ -131,12 +151,9 @@ class WeatherAlertsFeature implements FeatureModule {
   /** Initialize database */
   private initDb(): void {
     const dbDir = path.dirname(this.config.dbPath);
-    try {
-      const { mkdirSync, existsSync } = require('fs');
-      if (!existsSync(dbDir)) {
-        mkdirSync(dbDir, { recursive: true });
-      }
-    } catch {}
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true });
+    }
 
     this.db = new Database(this.config.dbPath);
     this.db.pragma('journal_mode = WAL');
@@ -208,17 +225,17 @@ class WeatherAlertsFeature implements FeatureModule {
       humidity: parseInt(current.humidity),
       windSpeed: parseInt(current.windspeedKmph),
       windDirection: current.winddir16Point,
-      description: current.weatherDesc?.[0]?.value || 'Unknown',
+      description: current.weatherDesc?.[0]?.value ?? 'Unknown',
       retrievedAt: Date.now(),
     };
 
     // Parse forecast
     if (data.weather && data.weather.length > 0) {
-      weather.forecast = data.weather.map((day: any) => ({
+      weather.forecast = (data.weather as WttrForecastDay[]).map((day) => ({
         date: day.date,
         tempMin: parseInt(day.mintempC) || parseInt(day.mintempF),
         tempMax: parseInt(day.maxtempC) || parseInt(day.maxtempF),
-        description: day.weatherDesc[0].value,
+        description: day.weatherDesc[0]?.value ?? 'Unknown',
         precipitationChance: parseInt(day.chanceofrain),
       }));
     }
@@ -246,14 +263,14 @@ class WeatherAlertsFeature implements FeatureModule {
 
   /** Get all stored alerts */
   getAlerts(): WeatherAlert[] {
-    const rows = this.db.prepare('SELECT * FROM weather_alerts').all() as any[];
+    const rows = this.db.prepare<[], WeatherAlertRow>('SELECT * FROM weather_alerts').all();
     return rows.map((row) => ({
       id: row.id,
       location: row.location,
       conditionJSON: row.condition_json,
       createdAt: row.created_at,
-      lastChecked: row.last_checked,
-      lastTriggered: row.last_triggered,
+      lastChecked: row.last_checked ?? undefined,
+      lastTriggered: row.last_triggered ?? undefined,
     }));
   }
 

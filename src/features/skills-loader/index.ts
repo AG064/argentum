@@ -17,6 +17,8 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { type FeatureContext } from '../../core/plugin-loader';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /** YAML frontmatter extracted from SKILL.md */
@@ -156,16 +158,19 @@ class SkillsLoaderFeature {
     dependencies: [],
   };
 
-  private ctx: any = null;
+  private ctx: FeatureContext | null = null;
   private skillsDir: string = '';
   // Cache for full skill data (lazy loaded at Level 1)
   private skillsCache: Map<string, SkillMeta> = new Map();
 
-  async init(config: Record<string, unknown>, context: any): Promise<void> {
+  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
+    const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '~';
+    const configuredSkillsDir = config['skillsDir'];
     this.skillsDir =
-      (config['skillsDir'] as string) ||
-      path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
+      typeof configuredSkillsDir === 'string'
+        ? configuredSkillsDir
+        : path.join(homeDir, '.openclaw', 'workspace', 'skills');
 
     // Initial scan - just count skills (Level 0 is lightweight)
     await this.scanSkillsCount();
@@ -236,7 +241,7 @@ class SkillsLoaderFeature {
         const body = extractBody(content);
 
         // Extract description from frontmatter or first paragraph
-        let description = frontmatter?.description || '';
+        let description = frontmatter?.description ?? '';
         if (!description) {
           // Fallback to first non-header, non-empty line
           const lines = body.split('\n');
@@ -260,16 +265,19 @@ class SkillsLoaderFeature {
         }
 
         summaries.push({
-          name: frontmatter?.name || entry.name,
+          name: frontmatter?.name ?? entry.name,
           description: description.slice(0, 200),
           category,
-          version: frontmatter?.version || '1.0.0',
-          platforms: frontmatter?.platforms || [],
+          version: frontmatter?.version ?? '1.0.0',
+          platforms: frontmatter?.platforms ?? [],
           hasReferences: fs.existsSync(referencesDir),
           hasScripts: fs.existsSync(scriptsDir),
         });
-      } catch {
-        // Skip malformed skills
+      } catch (err) {
+        this.ctx?.logger?.warn?.('Skipping malformed skill metadata', {
+          skill: entry.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -292,7 +300,7 @@ class SkillsLoaderFeature {
 
     try {
       const content = fs.readFileSync(skillMdPath, 'utf8');
-      const frontmatter = parseFrontmatter(content) || {
+      const frontmatter = parseFrontmatter(content) ?? {
         name,
         description: '',
         version: '0.0.4',
@@ -300,7 +308,7 @@ class SkillsLoaderFeature {
       const body = extractBody(content);
 
       // Extract description
-      let description = frontmatter.description || '';
+      let description = frontmatter.description ?? '';
       if (!description) {
         const lines = body.split('\n');
         for (const line of lines) {
@@ -355,11 +363,11 @@ class SkillsLoaderFeature {
       }
 
       const meta: SkillMeta = {
-        name: frontmatter.name || name,
+        name: frontmatter.name ?? name,
         description: description.slice(0, 200),
         category,
-        version: frontmatter.version || '1.0.0',
-        platforms: frontmatter.platforms || [],
+        version: frontmatter.version ?? '1.0.0',
+        platforms: frontmatter.platforms ?? [],
         hasReferences: references.length > 0,
         hasScripts: scripts.length > 0,
         path: skillPath,
@@ -455,8 +463,9 @@ class SkillsLoaderFeature {
         timeout: 30000,
         encoding: 'utf8',
       });
-    } catch (err: any) {
-      throw new Error(`Script failed: ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Script failed: ${message}`);
     }
   }
 

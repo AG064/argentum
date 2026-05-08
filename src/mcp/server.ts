@@ -38,6 +38,42 @@ export interface MCPServerOptions {
   resourceTemplates?: ResourceTemplate[];
 }
 
+type ToolInput = Record<string, unknown>;
+type ToolHandler = (input: ToolInput) => Promise<unknown>;
+type ExecutableMCPTool = MCPTool & { handler: ToolHandler };
+
+interface ExecFailure {
+  stdout?: string;
+  stderr?: string;
+  message?: string;
+  code?: number;
+}
+
+function isExecutableTool(tool: MCPTool): tool is ExecutableMCPTool {
+  const candidate = tool as MCPTool & { handler?: unknown };
+  return typeof candidate.handler === 'function';
+}
+
+function getRequiredString(input: ToolInput, key: string): string {
+  const value = input[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Missing required string input: ${key}`);
+  }
+  return value;
+}
+
+function getOptionalNumber(input: ToolInput, key: string, fallback: number): number {
+  const value = input[key];
+  return typeof value === 'number' ? value : fallback;
+}
+
+function toExecFailure(error: unknown): ExecFailure {
+  if (error && typeof error === 'object') {
+    return error as ExecFailure;
+  }
+  return { message: String(error) };
+}
+
 /**
  * MCP Server implementation
  */
@@ -51,7 +87,7 @@ export class MCPServer extends EventEmitter {
   constructor(config: MCPServerConfig, options: MCPServerOptions = {}, logger?: Logger) {
     super();
     this.config = config;
-    this.logger = logger || new Logger({ level: 'info', format: 'pretty' });
+    this.logger = logger ?? new Logger({ level: 'info', format: 'pretty' });
 
     if (options.tools) {
       for (const tool of options.tools) {
@@ -107,10 +143,14 @@ export class MCPServer extends EventEmitter {
     }
 
     try {
-      const input = call.arguments || {};
+      const input = call.arguments ?? {};
       this.logger.debug(`Executing tool: ${call.name}`, { input });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (tool as any).handler(input);
+
+      if (!isExecutableTool(tool)) {
+        throw new Error(`Tool is registered without an executable handler: ${call.name}`);
+      }
+
+      const result = await tool.handler(input);
 
       this.emit('tool-call', { tool: call.name, input, result });
 
@@ -168,18 +208,15 @@ export class MCPServer extends EventEmitter {
 export function createTool(
   name: string,
   description: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  inputSchema: Record<string, any>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: (input: Record<string, any>) => Promise<any>,
-): MCPTool {
+  inputSchema: MCPTool['inputSchema'],
+  handler: ToolHandler,
+): ExecutableMCPTool {
   return {
     name,
     description,
     inputSchema,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler: handler as any,
-  } as unknown as MCPTool;
+    handler,
+  };
 }
 
 /**
@@ -190,9 +227,10 @@ export const builtInTools = {
     'Read',
     'Read file contents',
     { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] },
-    async ({ file_path }: any) => {
+    async (input) => {
       const fs = await import('fs/promises');
-      const content = await fs.readFile(file_path as string, 'utf-8');
+      const filePath = getRequiredString(input, 'file_path');
+      const content = await fs.readFile(filePath, 'utf-8');
       return { content, size: content.length };
     },
   ),
@@ -205,10 +243,12 @@ export const builtInTools = {
       properties: { file_path: { type: 'string' }, content: { type: 'string' } },
       required: ['file_path', 'content'],
     },
-    async ({ file_path, content }: any) => {
+    async (input) => {
       const fs = await import('fs/promises');
-      await fs.writeFile(file_path as string, content as string, 'utf-8');
-      return { success: true, path: file_path };
+      const filePath = getRequiredString(input, 'file_path');
+      const content = getRequiredString(input, 'content');
+      await fs.writeFile(filePath, content, 'utf-8');
+      return { success: true, path: filePath };
     },
   ),
 
@@ -224,14 +264,17 @@ export const builtInTools = {
       },
       required: ['file_path', 'old_string', 'new_string'],
     },
-    async ({ file_path, old_string, new_string }: any) => {
+    async (input) => {
       const fs = await import('fs/promises');
-      let content = await fs.readFile(file_path as string, 'utf-8');
-      if (!content.includes(old_string as string)) {
+      const filePath = getRequiredString(input, 'file_path');
+      const oldString = getRequiredString(input, 'old_string');
+      const newString = getRequiredString(input, 'new_string');
+      let content = await fs.readFile(filePath, 'utf-8');
+      if (!content.includes(oldString)) {
         throw new Error('old_string not found in file');
       }
-      content = content.replace(old_string as string, new_string as string);
-      await fs.writeFile(file_path as string, content, 'utf-8');
+      content = content.replace(oldString, newString);
+      await fs.writeFile(filePath, content, 'utf-8');
       return { success: true, replacements: 1 };
     },
   ),
@@ -244,21 +287,24 @@ export const builtInTools = {
       properties: { command: { type: 'string' }, timeout: { type: 'number' } },
       required: ['command'],
     },
-    async ({ command, timeout = 60000 }: any) => {
+    async (input) => {
       const { exec } = await import('child_process');
       const { promisify } = await import('util');
       const execAsync = promisify(exec);
+      const command = getRequiredString(input, 'command');
+      const timeout = getOptionalNumber(input, 'timeout', 60000);
 
       try {
-        const { stdout, stderr } = await execAsync(command as string, {
-          timeout: timeout as number,
+        const { stdout, stderr } = await execAsync(command, {
+          timeout,
         });
         return { stdout, stderr, exitCode: 0 };
-      } catch (error: any) {
+      } catch (error) {
+        const failure = toExecFailure(error);
         return {
-          stdout: error.stdout || '',
-          stderr: error.stderr || error.message,
-          exitCode: error.code || 1,
+          stdout: failure.stdout ?? '',
+          stderr: failure.stderr ?? failure.message ?? 'Command failed',
+          exitCode: failure.code ?? 1,
         };
       }
     },
@@ -272,14 +318,14 @@ export const builtInTools = {
       properties: { pattern: { type: 'string' }, path: { type: 'string' } },
       required: ['pattern', 'path'],
     },
-    async ({ pattern, path }: any) => {
+    async (input) => {
       const { exec } = await import('child_process');
       const { promisify } = await import('util');
       const execAsync = promisify(exec);
+      const pattern = getRequiredString(input, 'pattern');
+      const searchPath = getRequiredString(input, 'path');
 
-      const { stdout } = await execAsync(
-        `grep -r "${pattern as string}" ${path as string} 2>/dev/null || true`,
-      );
+      const { stdout } = await execAsync(`grep -r "${pattern}" ${searchPath} 2>/dev/null || true`);
       const matches = stdout.trim().split('\n').filter(Boolean);
       return { matches, count: matches.length };
     },

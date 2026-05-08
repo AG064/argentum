@@ -693,7 +693,7 @@ class ConfigManager {
                 ignoreInitial: true,
             });
             this.watcher.on('change', () => {
-                console.log(`[Config] Reloading ${this.configPath}`);
+                console.info(`[Config] Reloading ${this.configPath}`);
                 this.config = this.loadConfig();
                 for (const listener of this.listeners) {
                     listener(this.config);
@@ -711,7 +711,9 @@ class ConfigManager {
     }
     /** Stop watching for changes */
     dispose() {
-        this.watcher?.close();
+        void this.watcher?.close().catch((error) => {
+            console.warn('Failed to close config watcher', error instanceof Error ? error.message : String(error));
+        });
         this.watcher = null;
     }
 }
@@ -720,8 +722,6 @@ exports.ConfigManager = ConfigManager;
 let instance = null;
 /** Get or create the global config manager */
 function getConfig(configPath) {
-    if (!instance) {
-        instance = new ConfigManager(configPath);
-    }
+    instance ?? (instance = new ConfigManager(configPath));
     return instance;
 }

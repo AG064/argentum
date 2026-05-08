@@ -313,9 +313,7 @@ let instance = null;
  * Get or create the global policy engine.
  */
 function getPolicyEngine() {
-    if (!instance) {
-        instance = new PolicyEngine();
-    }
+    instance ??= new PolicyEngine();
     return instance;
 }
 /**

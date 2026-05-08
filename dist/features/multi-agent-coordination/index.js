@@ -192,7 +192,9 @@ class MultiAgentCoordinationFeature {
     }
     /** Complete a task */
     async completeTask(taskId, result = {}) {
-        const task = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId);
+        const task = this.db
+            .prepare('SELECT * FROM tasks WHERE task_id = ?')
+            .get(taskId);
         if (!task)
             return false;
         const now = Date.now();
@@ -200,7 +202,7 @@ class MultiAgentCoordinationFeature {
             .prepare("UPDATE tasks SET status = 'completed', completed_at = ?, result = ? WHERE task_id = ?")
             .run(now, JSON.stringify(result), taskId);
         // Free up the agent
-        const agent = this.agents.get(task.assigned_agent_id);
+        const agent = task.assigned_agent_id ? this.agents.get(task.assigned_agent_id) : undefined;
         if (agent) {
             agent.status = 'idle';
             agent.currentTaskId = null;
@@ -211,7 +213,9 @@ class MultiAgentCoordinationFeature {
     }
     /** Fail a task */
     async failTask(taskId) {
-        const task = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId);
+        const task = this.db
+            .prepare('SELECT * FROM tasks WHERE task_id = ?')
+            .get(taskId);
         if (!task)
             return false;
         const now = Date.now();
@@ -219,7 +223,7 @@ class MultiAgentCoordinationFeature {
             .prepare("UPDATE tasks SET status = 'failed', completed_at = ? WHERE task_id = ?")
             .run(now, taskId);
         // Free up the agent
-        const agent = this.agents.get(task.assigned_agent_id);
+        const agent = task.assigned_agent_id ? this.agents.get(task.assigned_agent_id) : undefined;
         if (agent) {
             agent.status = 'idle';
             agent.currentTaskId = null;
@@ -230,7 +234,9 @@ class MultiAgentCoordinationFeature {
     }
     /** Get task by ID */
     async getTask(taskId) {
-        const row = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId);
+        const row = this.db
+            .prepare('SELECT * FROM tasks WHERE task_id = ?')
+            .get(taskId);
         if (!row)
             return null;
         return this.mapTaskRow(row);
@@ -241,7 +247,7 @@ class MultiAgentCoordinationFeature {
         if (status) {
             stmt = this.db.prepare('SELECT * FROM tasks WHERE status = ?');
         }
-        const rows = status ? stmt.all(status) : stmt.all();
+        const rows = (status ? stmt.all(status) : stmt.all());
         return rows.map(this.mapTaskRow);
     }
     mapTaskRow(row) {
@@ -252,7 +258,7 @@ class MultiAgentCoordinationFeature {
             createdAt: row.created_at,
             assignedAt: row.assigned_at,
             completedAt: row.completed_at,
-            payload: JSON.parse(row.payload || '{}'),
+            payload: JSON.parse(row.payload ?? '{}'),
             result: row.result ? JSON.parse(row.result) : null,
         };
     }
@@ -265,7 +271,7 @@ class MultiAgentCoordinationFeature {
         this.ctx.logger.info('Broadcasting message', {
             message: message.substring(0, 100),
             targetCount: sent,
-            capability: capability || 'all',
+            capability: capability ?? 'all',
             excludeAgent: excludeAgentId,
         });
         // Emit hook for each target agent (can be picked up by communication layer)

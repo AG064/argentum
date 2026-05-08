@@ -1,4 +1,11 @@
 import Database from 'better-sqlite3';
+interface AllowlistRuleRow {
+    id: number;
+    pattern: string;
+    type: 'url' | 'command' | 'user';
+    action: 'allow' | 'deny';
+    createdAt: number;
+}
 declare class AllowlistsFeature {
     db: Database.Database;
     constructor();
@@ -16,8 +23,8 @@ declare class AllowlistsFeature {
         type: 'url' | 'command' | 'user';
     }): {
         matched: boolean;
-        action: any;
-        rule: any;
+        action: "allow" | "deny";
+        rule: AllowlistRuleRow;
     } | {
         matched: boolean;
         action: string;

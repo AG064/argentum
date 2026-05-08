@@ -285,7 +285,7 @@ class ContentFilteringFeature implements FeatureModule {
 
     try {
       // Validate regex
-      new RegExp(pattern);
+      const _validatedPattern = new RegExp(pattern);
     } catch (err) {
       throw new Error(`Invalid regex pattern: ${(err as Error).message}`);
     }

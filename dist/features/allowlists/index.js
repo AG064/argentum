@@ -11,7 +11,7 @@ class AllowlistsFeature {
     constructor() {
         const dataDir = path_1.default.join(process.cwd(), 'data');
         (0, fs_1.mkdirSync)(dataDir, { recursive: true });
-        const dbPath = process.env.AGCLAW_DB_PATH || path_1.default.join(dataDir, 'agclaw.db');
+        const dbPath = process.env.AGCLAW_DB_PATH ?? path_1.default.join(dataDir, 'agclaw.db');
         this.db = new better_sqlite3_1.default(dbPath);
         this.init();
     }
@@ -43,7 +43,9 @@ class AllowlistsFeature {
         return { id: info.lastInsertRowid };
     }
     check(item) {
-        const rows = this.db.prepare('SELECT * FROM rules WHERE type = ?').all(item.type);
+        const rows = this.db
+            .prepare('SELECT * FROM rules WHERE type = ?')
+            .all(item.type);
         for (const r of rows) {
             const pattern = r.pattern;
             // Basic input validation: reject overly long patterns
@@ -75,8 +77,11 @@ class AllowlistsFeature {
                                 return { matched: true, action: r.action, rule: r };
                             }
                         }
-                        catch {
-                            // give up on this rule
+                        catch (err) {
+                            console.warn('Allowlist wildcard pattern failed to compile', {
+                                ruleId: r.id,
+                                error: err instanceof Error ? err.message : String(err),
+                            });
                         }
                     }
                     else if (pattern === item.value) {

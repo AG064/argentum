@@ -417,12 +417,7 @@ exports.CredentialManager = CredentialManager;
 // ─── Singleton ────────────────────────────────────────────────────────────────
 let instance = null;
 function getCredentialManager(dbPath) {
-    if (!instance && dbPath) {
-        instance = new CredentialManager(dbPath);
-    }
-    else if (!instance) {
-        instance = new CredentialManager();
-    }
+    instance ??= dbPath ? new CredentialManager(dbPath) : new CredentialManager();
     return instance;
 }
 function resetCredentialManager() {

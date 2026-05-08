@@ -282,7 +282,7 @@ class PolicyEngine {
                 conditions: row.conditions ? JSON.parse(row.conditions) : undefined,
                 requiresApproval: Boolean(row.requires_approval),
                 approvalRisk: row.approval_risk || undefined,
-                auditLevel: row.audit_level || 'info',
+                auditLevel: row.audit_level ?? 'info',
                 createdAt: row.created_at,
                 updatedAt: row.updated_at,
             };
@@ -486,7 +486,7 @@ class PolicyEngine {
      */
     approve(requestId, userId, notes) {
         const request = this.approvalStore.requests.get(requestId);
-        if (!request || request.status !== 'pending')
+        if (request?.status !== 'pending')
             return false;
         if (Date.now() > request.expiresAt) {
             request.status = 'expired';
@@ -514,7 +514,7 @@ class PolicyEngine {
      */
     deny(requestId, userId, notes) {
         const request = this.approvalStore.requests.get(requestId);
-        if (!request || request.status !== 'pending')
+        if (request?.status !== 'pending')
             return false;
         request.status = 'denied';
         request.respondedAt = Date.now();
@@ -726,9 +726,7 @@ exports.PolicyEngine = PolicyEngine;
 // ─── Singleton ────────────────────────────────────────────────────────────────
 let instance = null;
 function getPolicyEngine(dbPath) {
-    if (!instance) {
-        instance = new PolicyEngine(dbPath);
-    }
+    instance ??= new PolicyEngine(dbPath);
     return instance;
 }
 function resetPolicyEngine() {

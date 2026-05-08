@@ -500,11 +500,11 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Rate limiting middleware */
-  private async rateLimitMiddleware(
+  private rateLimitMiddleware(
     req: Request,
     res: Response,
     next: express.NextFunction,
-  ): Promise<void> {
+  ): void {
     // Skip rate limiting for health check
     if (req.path.endsWith('/health')) {
       next();

@@ -43,6 +43,27 @@ exports.builtInTools = exports.MCPServer = void 0;
 exports.createTool = createTool;
 const events_1 = require("events");
 const logger_1 = require("../core/logger");
+function isExecutableTool(tool) {
+    const candidate = tool;
+    return typeof candidate.handler === 'function';
+}
+function getRequiredString(input, key) {
+    const value = input[key];
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`Missing required string input: ${key}`);
+    }
+    return value;
+}
+function getOptionalNumber(input, key, fallback) {
+    const value = input[key];
+    return typeof value === 'number' ? value : fallback;
+}
+function toExecFailure(error) {
+    if (error && typeof error === 'object') {
+        return error;
+    }
+    return { message: String(error) };
+}
 /**
  * MCP Server implementation
  */
@@ -55,7 +76,7 @@ class MCPServer extends events_1.EventEmitter {
     constructor(config, options = {}, logger) {
         super();
         this.config = config;
-        this.logger = logger || new logger_1.Logger({ level: 'info', format: 'pretty' });
+        this.logger = logger ?? new logger_1.Logger({ level: 'info', format: 'pretty' });
         if (options.tools) {
             for (const tool of options.tools) {
                 this.registerTool(tool);
@@ -101,9 +122,11 @@ class MCPServer extends events_1.EventEmitter {
             };
         }
         try {
-            const input = call.arguments || {};
+            const input = call.arguments ?? {};
             this.logger.debug(`Executing tool: ${call.name}`, { input });
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (!isExecutableTool(tool)) {
+                throw new Error(`Tool is registered without an executable handler: ${call.name}`);
+            }
             const result = await tool.handler(input);
             this.emit('tool-call', { tool: call.name, input, result });
             return {
@@ -152,36 +175,34 @@ exports.MCPServer = MCPServer;
 /**
  * Create a tool definition helper
  */
-function createTool(name, description, 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-inputSchema, 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-handler) {
+function createTool(name, description, inputSchema, handler) {
     return {
         name,
         description,
         inputSchema,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        handler: handler,
+        handler,
     };
 }
 /**
  * Pre-built tools for Argentum
  */
 exports.builtInTools = {
-    Read: createTool('Read', 'Read file contents', { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] }, async ({ file_path }) => {
+    Read: createTool('Read', 'Read file contents', { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] }, async (input) => {
         const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
-        const content = await fs.readFile(file_path, 'utf-8');
+        const filePath = getRequiredString(input, 'file_path');
+        const content = await fs.readFile(filePath, 'utf-8');
         return { content, size: content.length };
     }),
     Write: createTool('Write', 'Write file contents', {
         type: 'object',
         properties: { file_path: { type: 'string' }, content: { type: 'string' } },
         required: ['file_path', 'content'],
-    }, async ({ file_path, content }) => {
+    }, async (input) => {
         const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
-        await fs.writeFile(file_path, content, 'utf-8');
-        return { success: true, path: file_path };
+        const filePath = getRequiredString(input, 'file_path');
+        const content = getRequiredString(input, 'content');
+        await fs.writeFile(filePath, content, 'utf-8');
+        return { success: true, path: filePath };
     }),
     Edit: createTool('Edit', 'Edit file contents', {
         type: 'object',
@@ -191,35 +212,41 @@ exports.builtInTools = {
             new_string: { type: 'string' },
         },
         required: ['file_path', 'old_string', 'new_string'],
-    }, async ({ file_path, old_string, new_string }) => {
+    }, async (input) => {
         const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
-        let content = await fs.readFile(file_path, 'utf-8');
-        if (!content.includes(old_string)) {
+        const filePath = getRequiredString(input, 'file_path');
+        const oldString = getRequiredString(input, 'old_string');
+        const newString = getRequiredString(input, 'new_string');
+        let content = await fs.readFile(filePath, 'utf-8');
+        if (!content.includes(oldString)) {
             throw new Error('old_string not found in file');
         }
-        content = content.replace(old_string, new_string);
-        await fs.writeFile(file_path, content, 'utf-8');
+        content = content.replace(oldString, newString);
+        await fs.writeFile(filePath, content, 'utf-8');
         return { success: true, replacements: 1 };
     }),
     Bash: createTool('Bash', 'Execute bash command', {
         type: 'object',
         properties: { command: { type: 'string' }, timeout: { type: 'number' } },
         required: ['command'],
-    }, async ({ command, timeout = 60000 }) => {
+    }, async (input) => {
         const { exec } = await Promise.resolve().then(() => __importStar(require('child_process')));
         const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
         const execAsync = promisify(exec);
+        const command = getRequiredString(input, 'command');
+        const timeout = getOptionalNumber(input, 'timeout', 60000);
         try {
             const { stdout, stderr } = await execAsync(command, {
-                timeout: timeout,
+                timeout,
             });
             return { stdout, stderr, exitCode: 0 };
         }
         catch (error) {
+            const failure = toExecFailure(error);
             return {
-                stdout: error.stdout || '',
-                stderr: error.stderr || error.message,
-                exitCode: error.code || 1,
+                stdout: failure.stdout ?? '',
+                stderr: failure.stderr ?? failure.message ?? 'Command failed',
+                exitCode: failure.code ?? 1,
             };
         }
     }),
@@ -227,11 +254,13 @@ exports.builtInTools = {
         type: 'object',
         properties: { pattern: { type: 'string' }, path: { type: 'string' } },
         required: ['pattern', 'path'],
-    }, async ({ pattern, path }) => {
+    }, async (input) => {
         const { exec } = await Promise.resolve().then(() => __importStar(require('child_process')));
         const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
         const execAsync = promisify(exec);
-        const { stdout } = await execAsync(`grep -r "${pattern}" ${path} 2>/dev/null || true`);
+        const pattern = getRequiredString(input, 'pattern');
+        const searchPath = getRequiredString(input, 'path');
+        const { stdout } = await execAsync(`grep -r "${pattern}" ${searchPath} 2>/dev/null || true`);
         const matches = stdout.trim().split('\n').filter(Boolean);
         return { matches, count: matches.length };
     }),

@@ -157,42 +157,46 @@ class MobileChannel {
             res.json({ success: removed, message: removed ? 'Device unregistered' : 'Device not found' });
         });
         // Send notification
-        this.router.post('/send', authMiddleware, async (req, res) => {
-            try {
-                const notification = req.body;
-                if (!notification.userId || !notification.title || !notification.body) {
-                    res.status(400).json({ error: 'Missing required fields: userId, title, body' });
-                    return;
+        this.router.post('/send', authMiddleware, (req, res) => {
+            void (async () => {
+                try {
+                    const notification = req.body;
+                    if (!notification.userId || !notification.title || !notification.body) {
+                        res.status(400).json({ error: 'Missing required fields: userId, title, body' });
+                        return;
+                    }
+                    const result = await this.sendNotification({
+                        ...notification,
+                        priority: notification.priority ?? 'normal',
+                    });
+                    res.json(result);
                 }
-                const result = await this.sendNotification({
-                    ...notification,
-                    priority: notification.priority ?? 'normal',
-                });
-                res.json(result);
-            }
-            catch (err) {
-                res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-            }
+                catch (err) {
+                    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+                }
+            })();
         });
         // Broadcast to user (all devices)
-        this.router.post('/broadcast', authMiddleware, async (req, res) => {
-            try {
-                const { userId, title, body, data, priority } = req.body;
-                if (!userId || !title || !body) {
-                    res.status(400).json({ error: 'Missing required fields: userId, title, body' });
-                    return;
+        this.router.post('/broadcast', authMiddleware, (req, res) => {
+            void (async () => {
+                try {
+                    const { userId, title, body, data, priority } = req.body;
+                    if (!userId || !title || !body) {
+                        res.status(400).json({ error: 'Missing required fields: userId, title, body' });
+                        return;
+                    }
+                    const results = await this.broadcastToUser(userId, {
+                        title: title,
+                        body: body,
+                        data: data,
+                        priority: priority ?? 'normal',
+                    });
+                    res.json({ results });
                 }
-                const results = await this.broadcastToUser(userId, {
-                    title: title,
-                    body: body,
-                    data: data,
-                    priority: priority ?? 'normal',
-                });
-                res.json({ results });
-            }
-            catch (err) {
-                res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-            }
+                catch (err) {
+                    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+                }
+            })();
         });
         // Subscribe to topic
         this.router.post('/subscribe', authMiddleware, (req, res) => {

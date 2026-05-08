@@ -9,7 +9,17 @@ import * as fs from 'fs';
 import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 
+import Database from 'better-sqlite3';
+
 import type { ErrorAnalysis, UserCorrection } from './types';
+
+interface SessionMessageRow {
+  session_id: string;
+  session_title: string;
+  role: string;
+  content: string | null;
+  timestamp: number;
+}
 
 export class ErrorAnalyzer {
   private sessionsDbPath: string;
@@ -80,8 +90,6 @@ export class ErrorAnalyzer {
     }
 
     try {
-      // Dynamic require to avoid issues when better-sqlite3 isn't available
-      const Database = require('better-sqlite3');
       const db = new Database(this.sessionsDbPath, { readonly: true });
 
       // Get recent messages where user may have corrected the assistant
@@ -96,7 +104,7 @@ export class ErrorAnalyzer {
          ORDER BY m.timestamp DESC
          LIMIT 500`,
         )
-        .all(cutoff) as any[];
+        .all(cutoff) as SessionMessageRow[];
 
       for (let i = 0; i < messages.length - 1; i++) {
         const msg = messages[i]!;
@@ -127,7 +135,7 @@ export class ErrorAnalyzer {
           _corrections.push({
             sessionId: msg.session_id,
             timestamp: msg.timestamp,
-            originalResponse: nextMsg.content,
+            originalResponse: nextMsg.content ?? '',
             correctedResponse: content,
             context: this.extractContext(messages, i),
             category: this.categorizeCorrectionText(content),
@@ -245,7 +253,7 @@ export class ErrorAnalyzer {
   /**
    * Extract context around a message
    */
-  private extractContext(messages: any[], index: number): string {
+  private extractContext(messages: SessionMessageRow[], index: number): string {
     const before = messages.slice(Math.max(0, index - 2), index);
     const after = messages.slice(index + 1, Math.min(messages.length, index + 3));
 

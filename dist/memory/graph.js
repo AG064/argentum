@@ -227,7 +227,7 @@ class MemoryGraph {
                 });
             }
             const entry = visited.get(currentId);
-            currentId = entry?.parent || undefined;
+            currentId = entry?.parent ?? undefined;
             depth++;
             // Safety: don't loop forever
             if (depth > 100)
@@ -264,9 +264,7 @@ exports.MemoryGraph = MemoryGraph;
 // Singleton
 let instance = null;
 function getMemoryGraph(dbPath) {
-    if (!instance) {
-        instance = new MemoryGraph(dbPath);
-    }
+    instance ??= new MemoryGraph(dbPath);
     return instance;
 }
 //# sourceMappingURL=graph.js.map

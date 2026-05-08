@@ -91,11 +91,15 @@ const FEATURE_CATEGORIES = {
 function generateWebchatAuthToken() {
     return (0, crypto_1.randomBytes)(32).toString('hex');
 }
+function nonEmptyTrimmed(value, fallback) {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : fallback;
+}
 function createOnboardingProfile(options = {}) {
     const warnings = [];
     const env = {};
     const provider = resolveProvider(options);
-    const model = options.model?.trim() || provider.defaultModel;
+    const model = nonEmptyTrimmed(options.model, provider.defaultModel);
     const port = normalizePort(options.port ?? 3000);
     if (options.apiKey?.trim()) {
         env[provider.api_key_env] = options.apiKey.trim();
@@ -138,7 +142,7 @@ function createOnboardingProfile(options = {}) {
     }
     const config = {
         $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
-        name: options.name?.trim() || 'My Argentum Instance',
+        name: nonEmptyTrimmed(options.name, 'My Argentum Instance'),
         version: '0.0.4',
         server: {
             port,
@@ -230,12 +234,12 @@ function writeOnboardingProfile(workDir, profile, options = {}) {
 function resolveProvider(options) {
     if (options.provider === 'custom') {
         return {
-            name: options.customProvider?.name?.trim() || 'custom',
-            label: options.customProvider?.label?.trim() || 'Custom',
-            base_url: options.customProvider?.base_url?.trim() || 'https://example.invalid/v1',
-            api_key_env: options.customProvider?.api_key_env?.trim() || 'MY_API_KEY',
+            name: nonEmptyTrimmed(options.customProvider?.name, 'custom'),
+            label: nonEmptyTrimmed(options.customProvider?.label, 'Custom'),
+            base_url: nonEmptyTrimmed(options.customProvider?.base_url, 'https://example.invalid/v1'),
+            api_key_env: nonEmptyTrimmed(options.customProvider?.api_key_env, 'MY_API_KEY'),
             api: options.customProvider?.api ?? 'openai',
-            defaultModel: options.customProvider?.defaultModel?.trim() || options.model?.trim() || 'custom-model',
+            defaultModel: nonEmptyTrimmed(options.customProvider?.defaultModel, nonEmptyTrimmed(options.model, 'custom-model')),
             ...(options.customProvider?.headers ? { headers: options.customProvider.headers } : {}),
         };
     }

@@ -123,9 +123,12 @@ class SkillsLoaderFeature {
     skillsCache = new Map();
     async init(config, context) {
         this.ctx = context;
+        const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '~';
+        const configuredSkillsDir = config['skillsDir'];
         this.skillsDir =
-            config['skillsDir'] ||
-                path.join(process.env.HOME || '~', '.openclaw', 'workspace', 'skills');
+            typeof configuredSkillsDir === 'string'
+                ? configuredSkillsDir
+                : path.join(homeDir, '.openclaw', 'workspace', 'skills');
         // Initial scan - just count skills (Level 0 is lightweight)
         await this.scanSkillsCount();
     }
@@ -184,7 +187,7 @@ class SkillsLoaderFeature {
                 const frontmatter = parseFrontmatter(content);
                 const body = extractBody(content);
                 // Extract description from frontmatter or first paragraph
-                let description = frontmatter?.description || '';
+                let description = frontmatter?.description ?? '';
                 if (!description) {
                     // Fallback to first non-header, non-empty line
                     const lines = body.split('\n');
@@ -208,17 +211,20 @@ class SkillsLoaderFeature {
                     category = frontmatter.category;
                 }
                 summaries.push({
-                    name: frontmatter?.name || entry.name,
+                    name: frontmatter?.name ?? entry.name,
                     description: description.slice(0, 200),
                     category,
-                    version: frontmatter?.version || '1.0.0',
-                    platforms: frontmatter?.platforms || [],
+                    version: frontmatter?.version ?? '1.0.0',
+                    platforms: frontmatter?.platforms ?? [],
                     hasReferences: fs.existsSync(referencesDir),
                     hasScripts: fs.existsSync(scriptsDir),
                 });
             }
-            catch {
-                // Skip malformed skills
+            catch (err) {
+                this.ctx?.logger?.warn?.('Skipping malformed skill metadata', {
+                    skill: entry.name,
+                    error: err instanceof Error ? err.message : String(err),
+                });
             }
         }
         return summaries.sort((a, b) => a.name.localeCompare(b.name));
@@ -237,14 +243,14 @@ class SkillsLoaderFeature {
             return null;
         try {
             const content = fs.readFileSync(skillMdPath, 'utf8');
-            const frontmatter = parseFrontmatter(content) || {
+            const frontmatter = parseFrontmatter(content) ?? {
                 name,
                 description: '',
                 version: '0.0.4',
             };
             const body = extractBody(content);
             // Extract description
-            let description = frontmatter.description || '';
+            let description = frontmatter.description ?? '';
             if (!description) {
                 const lines = body.split('\n');
                 for (const line of lines) {
@@ -289,11 +295,11 @@ class SkillsLoaderFeature {
                 templates.push(...fs.readdirSync(templatesDir));
             }
             const meta = {
-                name: frontmatter.name || name,
+                name: frontmatter.name ?? name,
                 description: description.slice(0, 200),
                 category,
-                version: frontmatter.version || '1.0.0',
-                platforms: frontmatter.platforms || [],
+                version: frontmatter.version ?? '1.0.0',
+                platforms: frontmatter.platforms ?? [],
                 hasReferences: references.length > 0,
                 hasScripts: scripts.length > 0,
                 path: skillPath,
@@ -386,7 +392,8 @@ class SkillsLoaderFeature {
             });
         }
         catch (err) {
-            throw new Error(`Script failed: ${err.message}`);
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(`Script failed: ${message}`);
         }
     }
     searchSkills(query) {

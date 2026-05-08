@@ -603,8 +603,6 @@ export class SimpleRateLimiter {
 let auditor: SecurityAuditor | null = null;
 
 export function getAuditor(): SecurityAuditor {
-  if (!auditor) {
-    auditor = new SecurityAuditor();
-  }
+  auditor ??= new SecurityAuditor();
   return auditor;
 }

@@ -21,7 +21,7 @@ import {
   createLLMProvider,
 } from './core/llm-provider';
 import { createLogger, type Logger } from './core/logger';
-import { PluginLoader } from './core/plugin-loader';
+import { PluginLoader, type FeatureModule } from './core/plugin-loader';
 import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
 import {
@@ -36,6 +36,10 @@ export interface Tool {
   description: string;
   parameters: Record<string, unknown>;
   execute: (params: Record<string, unknown>) => Promise<string>;
+}
+
+interface WebchatFeature extends FeatureModule {
+  sendAssistantMessage(roomId: string, content: string): void;
 }
 
 // ─── Agent Core ───────────────────────────────────────────────────────────────
@@ -448,7 +452,7 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         const { existsSync } = await import('fs');
         const { join, basename: pathBasename } = await import('path');
 
-        const homeDir = process.env.HOME || '/home/ag064';
+        const homeDir = process.env.HOME ?? '/home/ag064';
         const scriptPath = join(
           homeDir,
           '.openclaw',
@@ -597,9 +601,8 @@ class Argentum {
 
     // Initialize LLM provider
     try {
-      const llmConfig = (this.config as Record<string, unknown>)['llm'] as any;
       this.llmProvider = createLLMProvider({
-        llm: llmConfig,
+        llm: this.config.llm,
       });
       this.logger.info(
         `LLM provider initialized: ${this.llmProvider.name} (${this.llmProvider.model})`,
@@ -659,10 +662,8 @@ class Argentum {
       this.logger.debug('Webchat message received', { userId, roomId });
       try {
         const response = await this.agent.handleMessage(content ?? '');
-        const webchatFeature = this.pluginLoader.listFeatures().find((f) => f.name === 'webchat');
-        if (webchatFeature && (webchatFeature as any).sendAssistantMessage) {
-          (webchatFeature as any).sendAssistantMessage(roomId, response);
-        }
+        const webchatFeature = this.pluginLoader.getFeature<WebchatFeature>('webchat');
+        webchatFeature?.sendAssistantMessage(roomId, response);
       } catch (err) {
         this.logger.error('Webchat agent error', { error: err instanceof Error ? err.message : String(err) });
       }
@@ -913,11 +914,17 @@ class Argentum {
       });
 
       // Start bot
-      bot.start({
-        onStart: (info) => {
-          this.logger.info('Telegram bot started', { username: info.username });
-        },
-      });
+      void bot
+        .start({
+          onStart: (info) => {
+            this.logger.info('Telegram bot started', { username: info.username });
+          },
+        })
+        .catch((error: unknown) => {
+          this.logger.error('Telegram bot stopped with an error', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
 
       this.logger.info('Telegram channel started', { username: 'starting...' });
     } catch (err) {
@@ -930,15 +937,21 @@ class Argentum {
 
   /** Periodic health checks for active features */
   private startHealthChecks(): void {
-    setInterval(async () => {
-      if (this.shuttingDown) return;
+    setInterval(() => {
+      void (async () => {
+        if (this.shuttingDown) return;
 
-      const results = await this.pluginLoader.healthCheckAll();
-      for (const [name, status] of results) {
-        if (!status.healthy) {
-          this.logger.warn(`Feature unhealthy: ${name}`, { message: status.message });
+        const results = await this.pluginLoader.healthCheckAll();
+        for (const [name, status] of results) {
+          if (!status.healthy) {
+            this.logger.warn(`Feature unhealthy: ${name}`, { message: status.message });
+          }
         }
-      }
+      })().catch((error: unknown) => {
+        this.logger.error('Health check failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }, 60_000); // Every minute
   }
 
@@ -1023,13 +1036,20 @@ class Argentum {
     const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGUSR2'];
 
     for (const signal of signals) {
-      process.on(signal, async () => {
+      process.on(signal, () => {
         if (this.shuttingDown) return;
         this.shuttingDown = true;
 
-        this.logger.info(`Received ${signal}, shutting down gracefully...`);
-        await this.shutdown();
-        process.exit(0);
+        void (async () => {
+          this.logger.info(`Received ${signal}, shutting down gracefully...`);
+          await this.shutdown();
+          process.exit(0);
+        })().catch((error: unknown) => {
+          this.logger.error('Shutdown failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          process.exit(1);
+        });
       });
     }
 
@@ -1075,9 +1095,7 @@ class Argentum {
 let appInstance: Argentum | null = null;
 
 export function getArgentum(): Argentum {
-  if (!appInstance) {
-    appInstance = new Argentum();
-  }
+  appInstance ??= new Argentum();
   return appInstance;
 }
 

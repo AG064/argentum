@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+type JsonRecord = Record<string, unknown>;
 declare class AuditLogFeature {
     db: Database.Database;
     constructor();
@@ -8,13 +9,13 @@ declare class AuditLogFeature {
     healthCheck(): {
         ok: boolean;
     };
-    log(action: string, details: Record<string, any> | string, actor?: string, ip?: string): {
+    log(action: string, details: JsonRecord | string, actor?: string, ip?: string): {
         timestamp: number;
     };
-    logToolCall(tool: string, input: any, output: any, actor?: string, success?: boolean, meta?: any): {
+    logToolCall(tool: string, input: unknown, output: unknown, actor?: string, success?: boolean, meta?: JsonRecord): {
         timestamp: number;
     };
-    logDecision(decision: string, reason: string, actor?: string, meta?: any): {
+    logDecision(decision: string, reason: string, actor?: string, meta?: JsonRecord): {
         timestamp: number;
     };
     query(filters?: {

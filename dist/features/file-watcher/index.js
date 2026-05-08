@@ -50,7 +50,7 @@ class FileWatcherFeature {
     async stop() {
         // Stop all active watchers
         for (const [, entry] of this.watches) {
-            entry.watcher.close();
+            await this.closeWatcher(entry);
         }
         this.watches.clear();
         this.active = false;
@@ -107,7 +107,7 @@ class FileWatcherFeature {
         if (!entry) {
             return false;
         }
-        entry.watcher.close();
+        this.closeWatcherInBackground(entry);
         this.watches.delete(id);
         this.ctx.logger.debug('Watch removed', { id });
         return true;
@@ -117,7 +117,7 @@ class FileWatcherFeature {
         let count = 0;
         for (const [id, entry] of this.watches) {
             if (entry.path === targetPath) {
-                entry.watcher.close();
+                this.closeWatcherInBackground(entry);
                 this.watches.delete(id);
                 count++;
             }
@@ -138,6 +138,21 @@ class FileWatcherFeature {
     /** Get watch count */
     getWatchCount() {
         return this.watches.size;
+    }
+    async closeWatcher(entry) {
+        try {
+            await entry.watcher.close();
+        }
+        catch (error) {
+            this.ctx.logger.warn('Failed to close file watcher', {
+                id: entry.id,
+                path: entry.path,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    closeWatcherInBackground(entry) {
+        void this.closeWatcher(entry);
     }
 }
 exports.default = new FileWatcherFeature();

@@ -231,6 +231,10 @@ class PluginLoader {
     getFeatureState(name) {
         return this.features.get(name)?.state;
     }
+    /** Get a loaded feature module by name. */
+    getFeature(name) {
+        return this.features.get(name)?.module;
+    }
     /** List all features and their states */
     listFeatures() {
         return Array.from(this.features.entries()).map(([name, entry]) => ({

@@ -1,4 +1,5 @@
 import { type FeatureModule, type FeatureContext, type FeatureMeta, type HealthStatus } from '../../core/plugin-loader';
+type BindValue = string | number | bigint | Buffer | null;
 export interface TenantIsolationConfig {
     enabled: boolean;
     dbPath: string;
@@ -15,7 +16,7 @@ declare class TenantIsolationFeature implements FeatureModule {
     healthCheck(): Promise<HealthStatus>;
     ensureTenant(tenantId: string, displayName?: string): void;
     checkAndConsumeQuota(tenantId: string, amount?: number, allowConsume?: boolean): boolean;
-    scopeQuery(table: string, tenantId: string, whereClause?: string, params?: any[]): unknown[];
+    scopeQuery(table: string, tenantId: string, whereClause?: string, params?: BindValue[]): unknown[];
     setTenantQuota(tenantId: string, quota: number): void;
     getTenantInfo(tenantId: string): unknown;
     private initDatabase;

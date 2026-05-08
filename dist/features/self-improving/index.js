@@ -51,10 +51,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const fs_1 = require("fs");
 const path = __importStar(require("path"));
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const analyzer_1 = require("./analyzer");
 const skill_creator_1 = require("./skill-creator");
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -95,10 +99,12 @@ class SelfImprovingLoop {
     async init(config, context) {
         this.ctx = context;
         // Determine paths
+        const configuredWorkDir = config['workDir'];
         this.workDir =
-            config['workDir'] ||
-                process.env.AGCLAW_WORKDIR ||
-                path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+            typeof configuredWorkDir === 'string'
+                ? configuredWorkDir
+                : process.env.AGCLAW_WORKDIR ??
+                    path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
         this.memoryDir = path.join(this.workDir, 'memory');
         this.skillsDir = path.join(this.workDir, 'skills');
         this.sessionsDbPath = path.join(this.workDir, 'data', 'sessions.db');
@@ -241,7 +247,7 @@ class SelfImprovingLoop {
             const sections = content.split(/^## /m).filter(Boolean);
             for (const section of sections) {
                 const lines = section.trim().split('\n');
-                const timestamp = lines[0]?.trim() || '';
+                const timestamp = lines[0]?.trim() ?? '';
                 let category = 'insight';
                 const lessons = [];
                 const tags = [];
@@ -558,8 +564,7 @@ class SelfImprovingLoop {
                 return;
             }
             try {
-                const Database = require('better-sqlite3');
-                const db = new Database(this.sessionsDbPath, { readonly: true });
+                const db = new better_sqlite3_1.default(this.sessionsDbPath, { readonly: true });
                 const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
                 const messages = db
                     .prepare(`SELECT content FROM messages WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 200`)
@@ -653,8 +658,7 @@ class SelfImprovingLoop {
         if (!(0, fs_1.existsSync)(this.sessionsDbPath))
             return patterns;
         try {
-            const Database = require('better-sqlite3');
-            const db = new Database(this.sessionsDbPath, { readonly: true });
+            const db = new better_sqlite3_1.default(this.sessionsDbPath, { readonly: true });
             const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
             const messages = db
                 .prepare(`SELECT content, role FROM messages WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 100`)

@@ -282,6 +282,11 @@ export class PluginLoader {
     return this.features.get(name)?.state;
   }
 
+  /** Get a loaded feature module by name. */
+  getFeature<TFeature extends FeatureModule = FeatureModule>(name: string): TFeature | undefined {
+    return this.features.get(name)?.module as TFeature | undefined;
+  }
+
   /** List all features and their states */
   listFeatures(): Array<{ name: string; state: FeatureState; version: string }> {
     return Array.from(this.features.entries()).map(([name, entry]) => ({

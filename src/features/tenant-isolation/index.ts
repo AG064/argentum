@@ -10,6 +10,16 @@ import {
   type HealthStatus,
 } from '../../core/plugin-loader';
 
+interface CountRow {
+  c: number;
+}
+
+interface TenantQuotaRow {
+  quota: number;
+}
+
+type BindValue = string | number | bigint | Buffer | null;
+
 export interface TenantIsolationConfig {
   enabled: boolean;
   dbPath: string;
@@ -49,7 +59,8 @@ class TenantIsolationFeature implements FeatureModule {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const tenants = (this.db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c as number;
+    const tenants =
+      this.db.prepare<[], CountRow>('SELECT COUNT(*) as c FROM tenants').get()?.c ?? 0;
     return { healthy: true, details: { tenantCount: tenants } };
   }
 
@@ -59,7 +70,7 @@ class TenantIsolationFeature implements FeatureModule {
     if (!exists) {
       this.db
         .prepare('INSERT INTO tenants (id, name, quota) VALUES (?, ?, ?)')
-        .run(tenantId, displayName || tenantId, this.config.defaultQuotaPerTenant);
+        .run(tenantId, displayName ?? tenantId, this.config.defaultQuotaPerTenant);
       this.ctx.logger.info('Tenant created', { tenantId });
     }
   }
@@ -70,9 +81,11 @@ class TenantIsolationFeature implements FeatureModule {
     amount: number = 1,
     allowConsume: boolean = true,
   ): boolean {
-    const row = this.db.prepare('SELECT quota FROM tenants WHERE id = ?').get(tenantId) as any;
+    const row = this.db
+      .prepare<[string], TenantQuotaRow>('SELECT quota FROM tenants WHERE id = ?')
+      .get(tenantId);
     if (!row) return false;
-    const quota = row.quota as number;
+    const quota = row.quota;
     if (quota < amount) return false;
     if (allowConsume) {
       this.db.prepare('UPDATE tenants SET quota = quota - ? WHERE id = ?').run(amount, tenantId);
@@ -81,7 +94,12 @@ class TenantIsolationFeature implements FeatureModule {
   }
 
   // Scoped query helper: enforce tenant_id column in where clauses
-  scopeQuery(table: string, tenantId: string, whereClause: string = '1=1', params: any[] = []) {
+  scopeQuery(
+    table: string,
+    tenantId: string,
+    whereClause: string = '1=1',
+    params: BindValue[] = [],
+  ): unknown[] {
     // Note: callers must ensure table has tenant_id column
     const sql = `SELECT * FROM ${table} WHERE tenant_id = ? AND (${whereClause})`;
     return this.db.prepare(sql).all(tenantId, ...params);

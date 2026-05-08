@@ -83,9 +83,11 @@ class UserModelingFeature {
     async init(config, context) {
         this.ctx = context;
         // Determine paths
-        const workDir = config['workDir'] ||
-            process.env.AGCLAW_WORKDIR ||
-            path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+        const configuredWorkDir = config['workDir'];
+        const workDir = typeof configuredWorkDir === 'string'
+            ? configuredWorkDir
+            : process.env.AGCLAW_WORKDIR ??
+                path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
         const memoryDir = path.join(workDir, 'memory');
         if (!(0, fs_1.existsSync)(memoryDir)) {
             (0, fs_1.mkdirSync)(memoryDir, { recursive: true });
@@ -192,7 +194,7 @@ class UserModelingFeature {
         const hourCounts = new Map();
         for (const sample of this.samples) {
             const hour = new Date(sample.timestamp).getHours();
-            hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+            hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
         }
         // Return hours with >1 sample
         return [...hourCounts.entries()]
@@ -295,7 +297,9 @@ class UserModelingFeature {
                     this.preferences.totalInteractions = totalInteractions;
                 }
             }
-            catch { }
+            catch (err) {
+                this.ctx.logger?.warn('Failed to parse user model frontmatter', { error: String(err) });
+            }
             body = content.slice(frontmatterMatch[0].length);
         }
         // Parse topic suggestions from body

@@ -24,6 +24,11 @@ export interface MCPServerOptions {
     resources?: Resource[];
     resourceTemplates?: ResourceTemplate[];
 }
+type ToolInput = Record<string, unknown>;
+type ToolHandler = (input: ToolInput) => Promise<unknown>;
+type ExecutableMCPTool = MCPTool & {
+    handler: ToolHandler;
+};
 /**
  * MCP Server implementation
  */
@@ -53,61 +58,16 @@ export declare class MCPServer extends EventEmitter {
 /**
  * Create a tool definition helper
  */
-export declare function createTool(name: string, description: string, inputSchema: Record<string, any>, handler: (input: Record<string, any>) => Promise<any>): MCPTool;
+export declare function createTool(name: string, description: string, inputSchema: MCPTool['inputSchema'], handler: ToolHandler): ExecutableMCPTool;
 /**
  * Pre-built tools for Argentum
  */
 export declare const builtInTools: {
-    Read: {
-        name: string;
-        inputSchema: {
-            type: "object";
-            properties: Record<string, unknown>;
-            required?: string[] | undefined;
-        };
-        description?: string | undefined;
-        title?: string | undefined;
-    };
-    Write: {
-        name: string;
-        inputSchema: {
-            type: "object";
-            properties: Record<string, unknown>;
-            required?: string[] | undefined;
-        };
-        description?: string | undefined;
-        title?: string | undefined;
-    };
-    Edit: {
-        name: string;
-        inputSchema: {
-            type: "object";
-            properties: Record<string, unknown>;
-            required?: string[] | undefined;
-        };
-        description?: string | undefined;
-        title?: string | undefined;
-    };
-    Bash: {
-        name: string;
-        inputSchema: {
-            type: "object";
-            properties: Record<string, unknown>;
-            required?: string[] | undefined;
-        };
-        description?: string | undefined;
-        title?: string | undefined;
-    };
-    Grep: {
-        name: string;
-        inputSchema: {
-            type: "object";
-            properties: Record<string, unknown>;
-            required?: string[] | undefined;
-        };
-        description?: string | undefined;
-        title?: string | undefined;
-    };
+    Read: ExecutableMCPTool;
+    Write: ExecutableMCPTool;
+    Edit: ExecutableMCPTool;
+    Bash: ExecutableMCPTool;
+    Grep: ExecutableMCPTool;
 };
 export default MCPServer;
 //# sourceMappingURL=server.d.ts.map

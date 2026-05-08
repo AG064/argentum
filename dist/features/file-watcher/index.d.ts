@@ -49,6 +49,8 @@ declare class FileWatcherFeature implements FeatureModule {
     listWatches(): WatchInfo[];
     /** Get watch count */
     getWatchCount(): number;
+    private closeWatcher;
+    private closeWatcherInBackground;
 }
 declare const _default: FileWatcherFeature;
 export default _default;

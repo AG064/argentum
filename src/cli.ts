@@ -16,10 +16,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+
 import type * as ClackPrompts from '@clack/prompts';
 
 import 'dotenv/config';
-
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 import { formatArgentumBanner } from './core/branding';
@@ -56,6 +56,190 @@ const launch = resolveCliLaunch(args, {
 const command = launch.command;
 setProgramTitle(PROGRAM_TITLE);
 
+type JsonObject = Record<string, unknown>;
+type SqliteBindValue = string | number | bigint | Buffer | null;
+
+interface FeatureListItem {
+  name: string;
+  version?: string;
+  state: string;
+}
+
+interface SessionRow {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  model?: string | null;
+  status: string;
+  tags?: string | null;
+  metadata?: string | null;
+}
+
+interface SessionMessageRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  timestamp: number;
+  tool_calls?: string | null;
+  metadata?: string | null;
+}
+
+interface SessionSearchRow extends SessionMessageRow {
+  title: string;
+  rank?: number;
+}
+
+interface CountRow {
+  c: number;
+}
+
+interface MemoryRow {
+  key: string;
+  value: string;
+  namespace: string;
+  updated_at?: number | null;
+}
+
+interface MemoryNamespaceRow {
+  namespace: string;
+}
+
+type CronSchedule =
+  | { kind: 'every'; everyMs: number }
+  | { kind: 'cron'; expr: string };
+
+interface CronJob {
+  id: string;
+  name: string;
+  schedule: CronSchedule;
+  payload: { kind: string; text: string };
+  sessionTarget: string;
+  enabled: boolean;
+}
+
+interface TelegramConfig {
+  enabled?: boolean;
+  allowAll?: boolean;
+  allowedUsers?: number[];
+  allowedChats?: number[];
+}
+
+interface OnboardingRuntimeProvider {
+  base_url: string;
+  api_key_env: string;
+  api: ProviderPreset['api'];
+  models: string[];
+  headers?: Record<string, string>;
+}
+
+interface OnboardingRuntimeConfig extends JsonObject {
+  name?: string;
+  server: {
+    port: number;
+    cors?: {
+      enabled: boolean;
+      origins: string[];
+    };
+  };
+  llm: {
+    providers: Record<string, OnboardingRuntimeProvider>;
+    default?: string;
+  };
+  channels: {
+    telegram?: TelegramConfig;
+    webchat?: { enabled: boolean };
+  };
+}
+
+interface SelfImprovingLesson {
+  id: string;
+  timestamp: number;
+  category: string;
+  title: string;
+  description: string;
+  tags: string[];
+}
+
+interface SelfImprovingFeature {
+  run?: (
+    phase: 'all' | 'error' | 'skill' | 'memory' | 'model' | 'correction',
+    opts: { dryRun: boolean; force: boolean; verbose: boolean },
+  ) => Promise<{
+    phases: Array<{
+      phase: string;
+      success: boolean;
+      itemsChanged: number;
+      itemsProcessed: number;
+      details: string[];
+    }>;
+    dryRun: boolean;
+    totalDuration: number;
+    skillsCreated: number;
+    lessonsLearned: number;
+    correctionsApplied: number;
+  }>;
+  getConfig?: () => Record<string, unknown>;
+  getLearnings?: () => SelfImprovingLesson[];
+  lastRunTime?: number;
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getNestedValue(source: JsonObject, dottedKey: string): unknown {
+  let current: unknown = source;
+  for (const keyPart of dottedKey.split('.')) {
+    if (!isJsonObject(current)) {
+      return undefined;
+    }
+    current = current[keyPart];
+  }
+  return current;
+}
+
+function setNestedValue(source: JsonObject, dottedKey: string, value: unknown): void {
+  const keyParts = dottedKey.split('.').filter(Boolean);
+  if (keyParts.length === 0) {
+    throw new Error('Config key cannot be empty');
+  }
+
+  let current = source;
+  for (const keyPart of keyParts.slice(0, -1)) {
+    const next = current[keyPart];
+    if (!isJsonObject(next)) {
+      current[keyPart] = {};
+    }
+    current = current[keyPart] as JsonObject;
+  }
+
+  current[keyParts[keyParts.length - 1]!] = value;
+}
+
+function loadCronJobs(dbPath: string): CronJob[] {
+  if (!fs.existsSync(dbPath)) {
+    return [];
+  }
+  const parsed = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as unknown;
+  return Array.isArray(parsed) ? (parsed as CronJob[]) : [];
+}
+
+function loadSelfImprovingFeature(): SelfImprovingFeature | null {
+  try {
+    const featurePath = path.join(__dirname, 'src', 'features', 'self-improving', 'index.js');
+    if (!fs.existsSync(featurePath)) {
+      return null;
+    }
+    const loaded = require(featurePath) as { default?: SelfImprovingFeature };
+    return loaded.default ?? null;
+  } catch (err) {
+    warn(`Could not load self-improving feature: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function print(text: string): void {
@@ -90,7 +274,7 @@ function isPackagedRuntime(): boolean {
 }
 
 function banner(): void {
-  console.log(formatArgentumBanner(VERSION));
+  console.info(formatArgentumBanner(VERSION));
 }
 
 function getWorkDir(): string {
@@ -286,14 +470,14 @@ function cmdACP(): void {
 
     let stdout = '',
       stderr = '';
-    proc.stdout?.on('data', (d: any) => {
+    proc.stdout?.on('data', (d: Buffer) => {
       stdout += d;
     });
-    proc.stderr?.on('data', (d: any) => {
+    proc.stderr?.on('data', (d: Buffer) => {
       stderr += d;
     });
 
-    proc.on('close', (code: any) => {
+    proc.on('close', (code: number | null) => {
       const duration = Date.now() - start;
       print('');
       if (code === 0) {
@@ -305,10 +489,10 @@ function cmdACP(): void {
       if (stderr) print(`[stderr]\n${stderr}`);
     });
 
-    proc.on('error', (err: any) => {
+    proc.on('error', (err: Error) => {
       error(`Failed to start process: ${err.message}`);
     });
-  } catch (err: any) {
+  } catch (err) {
     error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
@@ -389,7 +573,7 @@ function cmdImage(): void {
 
   const { spawn } = require('child_process');
   const { existsSync: fsExistsSync } = require('fs');
-  const homeDir = process.env.HOME || '/home/ag064';
+  const homeDir = process.env.HOME ?? '/home/ag064';
   const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
 
   if (!fsExistsSync(scriptPath)) {
@@ -435,13 +619,13 @@ function cmdImage(): void {
     }
   }, IMAGE_TIMEOUT_MS);
 
-  proc.stdout?.on('data', (d: any) => {
+  proc.stdout?.on('data', (d: Buffer) => {
     const line = d.toString();
     stdout += line;
     process.stdout.write(`  ${line}`);
   });
 
-  proc.stderr?.on('data', (d: any) => {
+  proc.stderr?.on('data', (d: Buffer) => {
     const line = d.toString();
     stderr += line;
     // Only show non-quiet lines
@@ -450,7 +634,7 @@ function cmdImage(): void {
     }
   });
 
-  proc.on('close', (code: any) => {
+  proc.on('close', (code: number | null) => {
     if (settled) return;
     settled = true;
     clearTimeout(timer);
@@ -468,7 +652,7 @@ function cmdImage(): void {
     }
   });
 
-  proc.on('error', (err: any) => {
+  proc.on('error', (err: Error) => {
     if (settled) return;
     settled = true;
     clearTimeout(timer);
@@ -641,12 +825,14 @@ async function cmdStart(): Promise<void> {
 
     // Simple HTTP server for API
     const http = await import('http');
-    const server = http.createServer(async (req, res) => {
-      const url = new URL(req.url || '/', `http://localhost:${port}`);
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
       // Health check
       if (url.pathname === '/health') {
-        const features = pluginLoader.listFeatures().filter((f: any) => f.state === 'active');
+        const features = pluginLoader
+          .listFeatures()
+          .filter((feature: FeatureListItem) => feature.state === 'active');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -665,10 +851,10 @@ async function cmdStart(): Promise<void> {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify(
-            features.map((f: any) => ({
-              name: f.name,
-              version: f.version,
-              state: f.state,
+            features.map((feature: FeatureListItem) => ({
+              name: feature.name,
+              version: feature.version,
+              state: feature.state,
             })),
           ),
         );
@@ -707,14 +893,20 @@ async function cmdStart(): Promise<void> {
     });
 
     // Graceful shutdown
-    const shutdown = async () => {
+    const shutdown = (): void => {
       info('Shutting down...');
       const features = pluginLoader.listFeatures();
-      for (const f of features) {
-        if (f.state === 'active') await pluginLoader.disableFeature(f.name);
-      }
-      server.close();
-      return;
+      void Promise.all(
+        features
+          .filter((feature: FeatureListItem) => feature.state === 'active')
+          .map((feature: FeatureListItem) => pluginLoader.disableFeature(feature.name)),
+      )
+        .catch((err: unknown) => {
+          warn(`Shutdown cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+        })
+        .finally(() => {
+          server.close();
+        });
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
@@ -788,7 +980,7 @@ function cmdFeature(): void {
     print(`  Name: ${feature.meta.name}`);
     print(`  Version: ${feature.meta.version}`);
     print(`  Description: ${feature.meta.description}`);
-    print(`  Dependencies: ${feature.meta.dependencies?.join(', ') || 'none'}`);
+    print(`  Dependencies: ${feature.meta.dependencies?.join(', ') ?? 'none'}`);
     print('');
   } catch (err) {
     warn(`Could not load feature metadata: ${(err as Error).message}`);
@@ -822,11 +1014,7 @@ function cmdConfig(): void {
 
   if (!value) {
     // Show specific key
-    const keys = key.split('.');
-    let val: any = config;
-    for (const k of keys) {
-      val = val?.[k];
-    }
+    const val = getNestedValue(config, key);
     if (val !== undefined) {
       print(`${key} = ${JSON.stringify(val)}`);
     } else {
@@ -836,16 +1024,10 @@ function cmdConfig(): void {
   }
 
   // Set value
-  const keys = key.split('.');
-  let obj: any = config;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!obj[keys[i] ?? '']) obj[keys[i] ?? ''] = {};
-    obj = obj[keys[i] ?? ''];
-  }
   try {
-    obj[keys[keys.length - 1] ?? ''] = JSON.parse(value);
+    setNestedValue(config, key, JSON.parse(value) as unknown);
   } catch {
-    obj[keys[keys.length - 1] ?? ''] = value;
+    setNestedValue(config, key, value);
   }
   writeProjectConfig(configPath, config);
   success(`Set ${key} = ${value}`);
@@ -978,7 +1160,7 @@ async function cmdTools(): Promise<void> {
 }
 
 async function cmdSessions(): Promise<void> {
-  const subcommand = args[1] || 'list';
+  const subcommand = args[1] ?? 'list';
   const dbPath = path.join(getWorkDir(), 'data', 'sessions.db');
 
   // Lazy load database
@@ -1044,7 +1226,7 @@ async function cmdSessions(): Promise<void> {
         .prepare(
           "SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT 20",
         )
-        .all() as any[];
+        .all() as SessionRow[];
       if (sessions.length === 0) {
         info('No sessions yet. Create one with: argentum session create');
         db.close();
@@ -1055,11 +1237,11 @@ async function cmdSessions(): Promise<void> {
       for (const s of sessions) {
         const msgs = db
           .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
-          .get(s.id).c;
+          .get(s.id) as CountRow;
         const ago = formatAgo(s.updated_at);
         const status = s.status === 'active' ? '\x1b[32m●\x1b[0m' : '\x1b[33m○\x1b[0m';
         print(`  ${status} \x1b[1m${s.title}\x1b[0m`);
-        print(`    ID: ${s.id.slice(0, 8)}... | Messages: ${msgs} | Updated: ${ago}`);
+        print(`    ID: ${s.id.slice(0, 8)}... | Messages: ${msgs.c} | Updated: ${ago}`);
       }
       print('');
       db.close();
@@ -1094,7 +1276,7 @@ async function cmdSessions(): Promise<void> {
       // Find by prefix
       const session = db
         .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
-        .get(`%${id}%`, id);
+        .get(`%${id}%`, id) as SessionRow | undefined;
       if (!session) {
         error(`Session '${id}' not found`);
         db.close();
@@ -1109,7 +1291,7 @@ async function cmdSessions(): Promise<void> {
 
       const messages = db
         .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC')
-        .all(session.id) as any[];
+        .all(session.id) as SessionMessageRow[];
       print(`  Messages: ${messages.length}`);
       print('');
 
@@ -1137,7 +1319,7 @@ async function cmdSessions(): Promise<void> {
       const db = getDb();
       const session = db
         .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
-        .get(`%${id}%`, id);
+        .get(`%${id}%`, id) as SessionRow | undefined;
       if (!session) {
         error(`Session '${id}' not found`);
         db.close();
@@ -1158,7 +1340,7 @@ async function cmdSessions(): Promise<void> {
       const db = getDb();
       const session = db
         .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
-        .get(`%${id}%`, id);
+        .get(`%${id}%`, id) as SessionRow | undefined;
       if (!session) {
         error(`Session '${id}' not found`);
         db.close();
@@ -1180,7 +1362,7 @@ async function cmdSessions(): Promise<void> {
       const db = getDb();
 
       // Use FTS5 for fast full-text search (Hermes-style)
-      let results: any[] = [];
+      let results: SessionSearchRow[] = [];
       try {
         results = db
           .prepare(
@@ -1192,7 +1374,7 @@ async function cmdSessions(): Promise<void> {
              ORDER BY rank, m.timestamp DESC
              LIMIT 10`,
           )
-          .all(query) as any[];
+          .all(query) as SessionSearchRow[];
       } catch {
         // Fallback to LIKE if FTS fails (e.g., invalid FTS syntax)
         const sanitized = query.replace(/[^\w\s]/g, ' ');
@@ -1205,7 +1387,7 @@ async function cmdSessions(): Promise<void> {
              ORDER BY m.timestamp DESC
              LIMIT 10`,
           )
-          .all(`%${sanitized}%`) as any[];
+          .all(`%${sanitized}%`) as SessionSearchRow[];
       }
 
       if (results.length === 0) {
@@ -1236,7 +1418,7 @@ async function cmdSessions(): Promise<void> {
       const db = getDb();
       const session = db
         .prepare('SELECT * FROM sessions WHERE id LIKE ? OR id = ?')
-        .get(`%${id}%`, id);
+        .get(`%${id}%`, id) as SessionRow | undefined;
       if (!session) {
         error(`Session '${id}' not found`);
         db.close();
@@ -1244,7 +1426,7 @@ async function cmdSessions(): Promise<void> {
       }
       const messages = db
         .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC')
-        .all(session.id) as any[];
+        .all(session.id) as SessionMessageRow[];
       const exportData = { session, messages };
       const exportPath = path.join(getWorkDir(), 'data', `session-${session.id.slice(0, 8)}.json`);
       fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
@@ -1303,7 +1485,7 @@ async function cmdWatch(): Promise<void> {
 }
 
 async function cmdGateway(): Promise<void> {
-  const subcommand = args[1] || 'status';
+  const subcommand = args[1] ?? 'status';
   const workDir = getWorkDir();
   const pidFile = path.join(workDir, 'data', '.gateway.pid');
 
@@ -1320,7 +1502,9 @@ async function cmdGateway(): Promise<void> {
           return null;
         }
       }
-    } catch {}
+    } catch (err) {
+      warn(`Could not read gateway PID file: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return null;
   };
 
@@ -1411,7 +1595,9 @@ async function cmdGateway(): Promise<void> {
         info(`Stopping gateway (PID: ${pid})...`);
         try {
           process.kill(pid, 'SIGTERM');
-        } catch {}
+        } catch (err) {
+          warn(`Gateway process was already stopped: ${err instanceof Error ? err.message : String(err)}`);
+        }
         // Wait a moment
         await new Promise((r) => setTimeout(r, 1000));
       }
@@ -1505,7 +1691,7 @@ async function cmdPlugins(): Promise<void> {
 }
 
 async function cmdBackup(): Promise<void> {
-  const subcommand = args[1] || 'create';
+  const subcommand = args[1] ?? 'create';
   const workDir = getWorkDir();
   const backupDir = path.join(workDir, 'backups');
 
@@ -1656,7 +1842,7 @@ async function cmdBackup(): Promise<void> {
 }
 
 async function cmdMemory(): Promise<void> {
-  const subcommand = args[1] || 'search';
+  const subcommand = args[1] ?? 'search';
   const dbPath = path.join(getWorkDir(), 'data', 'sqlite-memory.db');
 
   if (!fs.existsSync(dbPath)) {
@@ -1680,19 +1866,19 @@ async function cmdMemory(): Promise<void> {
       print('');
 
       // Try FTS5 first, fallback to LIKE
-      let results: any[] = [];
+      let results: MemoryRow[] = [];
       try {
         results = db
           .prepare(
             'SELECT key, value, namespace, updated_at FROM kv_fts WHERE kv_fts MATCH ? LIMIT 10',
           )
-          .all(query);
+          .all(query) as MemoryRow[];
       } catch {
         results = db
           .prepare(
             'SELECT key, value, namespace, updated_at FROM kv_store WHERE value LIKE ? OR key LIKE ? ORDER BY updated_at DESC LIMIT 10',
           )
-          .all(`%${query}%`, `%${query}%`);
+          .all(`%${query}%`, `%${query}%`) as MemoryRow[];
       }
 
       if (results.length === 0) {
@@ -1701,7 +1887,7 @@ async function cmdMemory(): Promise<void> {
         return;
       }
       for (const r of results) {
-        const value = (r.value || '').slice(0, 100).replace(/\n/g, ' ');
+        const value = (r.value ?? '').slice(0, 100).replace(/\n/g, ' ');
         print(`  \x1b[1m[${r.namespace}]\x1b[0m ${r.key}`);
         print(`    ${value}`);
       }
@@ -1714,7 +1900,7 @@ async function cmdMemory(): Promise<void> {
       // List all namespaces
       const namespaces = db
         .prepare('SELECT DISTINCT namespace FROM kv_store ORDER BY namespace')
-        .all() as any[];
+        .all() as MemoryNamespaceRow[];
       if (namespaces.length === 0) {
         info('Memory is empty');
         db.close();
@@ -1724,8 +1910,8 @@ async function cmdMemory(): Promise<void> {
       for (const ns of namespaces) {
         const count = db
           .prepare('SELECT COUNT(*) as c FROM kv_store WHERE namespace = ?')
-          .get(ns.namespace).c;
-        print(`  • ${ns.namespace}: ${count} entries`);
+          .get(ns.namespace) as CountRow;
+        print(`  • ${ns.namespace}: ${count.c} entries`);
       }
       db.close();
       break;
@@ -1735,15 +1921,15 @@ async function cmdMemory(): Promise<void> {
       const ns = args[2];
       banner();
       let query = 'SELECT * FROM kv_store';
-      const params: any[] = [];
+      const params: SqliteBindValue[] = [];
       if (ns) {
         query += ' WHERE namespace = ?';
         params.push(ns);
       }
       query += ' ORDER BY updated_at DESC LIMIT 100';
-      const rows = db.prepare(query).all(...params) as any[];
+      const rows = db.prepare(query).all(...params) as MemoryRow[];
 
-      const exportPath = path.join(getWorkDir(), 'data', `memory-export-${ns || 'all'}.json`);
+      const exportPath = path.join(getWorkDir(), 'data', `memory-export-${ns ?? 'all'}.json`);
       fs.writeFileSync(exportPath, JSON.stringify(rows, null, 2));
       success(`Exported ${rows.length} entries to: ${exportPath}`);
       db.close();
@@ -1758,7 +1944,7 @@ async function cmdMemory(): Promise<void> {
 }
 
 async function cmdCron(): Promise<void> {
-  const subcommand = args[1] || 'list';
+  const subcommand = args[1] ?? 'list';
   const dbPath = path.join(getWorkDir(), 'data', 'cron-jobs.json');
 
   switch (subcommand) {
@@ -1769,17 +1955,17 @@ async function cmdCron(): Promise<void> {
         info('No cron jobs defined');
         return;
       }
-      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const jobs = loadCronJobs(dbPath);
       if (jobs.length === 0) {
         info('No cron jobs defined');
         return;
       }
       info(`Cron jobs (${jobs.length}):`);
       print('');
-      for (let i = 0; i < jobs.length; i++) {
-        const j = jobs[i];
+      for (const j of jobs) {
         const status = j.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[31m○\x1b[0m';
-        print(`  ${status} \x1b[1m${j.name || j.id}\x1b[0m`);
+        const displayName = j.name.trim().length > 0 ? j.name : j.id;
+        print(`  ${status} \x1b[1m${displayName}\x1b[0m`);
         print(`    ID: ${j.id}`);
         print(`    Schedule: ${j.schedule.kind} (${JSON.stringify(j.schedule)})`);
         print(`    Target: ${j.sessionTarget} (${j.payload.kind})`);
@@ -1798,13 +1984,12 @@ async function cmdCron(): Promise<void> {
       info('Creating new cron job');
 
       // Read existing jobs
-      let jobs: any[] = [];
-      if (fs.existsSync(dbPath)) jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const jobs = loadCronJobs(dbPath);
 
       const id = crypto.randomUUID();
       const name = (await ask('  Name (optional): ')) || `Job-${id.slice(0, 8)}`;
       const scheduleKind = (await ask('  Schedule [every|cron] (default: every): ')) || 'every';
-      let schedule: any;
+      let schedule: CronSchedule;
 
       if (scheduleKind === 'every') {
         const minutes = parseInt((await ask('  Interval in minutes (default: 60): ')) || '60');
@@ -1818,7 +2003,7 @@ async function cmdCron(): Promise<void> {
       const parts = payload.split('.');
       const message = parts.slice(1).join('.') || 'Check for tasks';
 
-      const newJob: any = {
+      const newJob: CronJob = {
         id,
         name,
         schedule,
@@ -1845,8 +2030,8 @@ async function cmdCron(): Promise<void> {
         error('No cron jobs defined');
         return;
       }
-      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-      const job = jobs.find((j: any) => j.id === id);
+      const jobs = loadCronJobs(dbPath);
+      const job = jobs.find((j) => j.id === id);
       if (!job) {
         error(`Job '${id}' not found`);
         return;
@@ -1873,8 +2058,8 @@ async function cmdCron(): Promise<void> {
         error('No cron jobs defined');
         return;
       }
-      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-      const job = jobs.find((j: any) => j.id === id);
+      const jobs = loadCronJobs(dbPath);
+      const job = jobs.find((j) => j.id === id);
       if (!job) {
         error(`Job '${id}' not found`);
         return;
@@ -1893,8 +2078,8 @@ async function cmdCron(): Promise<void> {
         error('Usage: argentum cron remove <id>');
         return;
       }
-      const jobs = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-      const filtered = jobs.filter((j: any) => j.id !== id);
+      const jobs = loadCronJobs(dbPath);
+      const filtered = jobs.filter((j) => j.id !== id);
       if (filtered.length === jobs.length) {
         error(`Job '${id}' not found`);
         return;
@@ -1931,7 +2116,9 @@ async function cmdStatus(): Promise<void> {
       try {
         const size = fs.statSync(path.join(dataDir, db)).size;
         print(`    • ${db} (${(size / 1024).toFixed(1)} KB)`);
-      } catch {}
+      } catch (err) {
+        warn(`Could not read database size for ${db}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   } else {
     print('  \x1b[1mDatabases:\x1b[0m 0 (data dir not created)');
@@ -1964,7 +2151,7 @@ async function cmdStatus(): Promise<void> {
 // ─── Budget Command ────────────────────────────────────────────────────────────
 
 async function cmdBudget(): Promise<void> {
-  const subcommand = args[1] || 'status';
+  const subcommand = args[1] ?? 'status';
 
   // Lazy-load the budget feature (works both in-plugin and from CLI)
   const getBudgetFeature = () => {
@@ -2065,7 +2252,7 @@ async function cmdBudget(): Promise<void> {
         return;
       }
       const amountStr = args[2];
-      const limitType = (args[3] || 'monthly').toLowerCase();
+      const limitType = (args[3] ?? 'monthly').toLowerCase();
       if (!amountStr) {
         error('Usage: argentum budget set-limit <amount> [monthly|daily|per-agent]');
         return;
@@ -2115,7 +2302,7 @@ async function cmdBudget(): Promise<void> {
         warn('Budget feature not compiled. Run: npm run build');
         return;
       }
-      const days = parseInt(args[2] || '30', 10);
+      const days = parseInt(args[2] ?? '30', 10);
       const history = budget.getHistory(days);
       if (history.length === 0) {
         info(`No spending history in the last ${days} days.`);
@@ -2504,7 +2691,7 @@ async function cmdOnboard(): Promise<void> {
   log.step('Welcome! This wizard will set up your Argentum instance.');
   log.info('Press Ctrl+C at any time to cancel.');
 
-  const config: any = createOnboardingProfile().config;
+  const config = createOnboardingProfile().config as OnboardingRuntimeConfig;
   const envEntries: Record<string, string> = {};
 
     // Step 1: Instance name
@@ -2667,7 +2854,14 @@ async function cmdOnboard(): Promise<void> {
     initialValue: 'nvidia',
   });
 
-  let selectedPreset: { name: string; base_url: string; api_key_env: string; api: string; model: string; headers?: Record<string, string> };
+  let selectedPreset: {
+    name: string;
+    base_url: string;
+    api_key_env: string;
+    api: ProviderPreset['api'];
+    model: string;
+    headers?: Record<string, string>;
+  };
   let usedKey = ''; // API key collected during discovery, used to skip the later prompt
   if (providerChoice === 'custom') {
     const custName = (await text({ message: 'Provider name:', initialValue: 'custom' })) as string;
@@ -2767,7 +2961,7 @@ async function cmdOnboard(): Promise<void> {
   config.llm.providers[selectedPreset.name] = {
     base_url: selectedPreset.base_url,
     api_key_env: selectedPreset.api_key_env,
-    api: selectedPreset.api as any,
+    api: selectedPreset.api,
     models: [selectedPreset.model],
     ...(selectedPreset.headers ? { headers: selectedPreset.headers } : {}),
   };
@@ -2794,8 +2988,12 @@ async function cmdOnboard(): Promise<void> {
     initialValue: '',
   });
   if (typeof addModels === 'string' && addModels.trim()) {
-    (config.llm.providers[selectedPreset.name].models as string[]).push(
-      ...addModels.split(',').map((m: string) => m.trim()),
+    const providerConfig = config.llm.providers[selectedPreset.name];
+    if (!providerConfig) {
+      throw new Error(`Selected provider '${selectedPreset.name}' was not initialized`);
+    }
+    providerConfig.models.push(
+      ...addModels.split(',').map((modelName: string) => modelName.trim()),
     );
   }
 
@@ -2945,12 +3143,12 @@ async function cmdOnboard(): Promise<void> {
 }
 
 async function cmdSkill(): Promise<void> {
-  const subcommand = args[1] || 'list';
+  const subcommand = args[1] ?? 'list';
   const { execFileSync } = require('child_process');
 
   // Default skills dir: OpenClaw workspace
-  const defaultWorkDir = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
-  const clawhubWorkDir = process.env.ARGENTUM_WORKDIR || defaultWorkDir;
+  const defaultWorkDir = path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
+  const clawhubWorkDir = process.env.ARGENTUM_WORKDIR ?? defaultWorkDir;
   const clawhubBin = process.platform === 'win32' ? 'clawhub.cmd' : 'clawhub';
 
   const runClawhub = (clawhubArgs: string[]): string => {
@@ -2960,8 +3158,14 @@ async function cmdSkill(): Promise<void> {
         timeout: 30000,
         env: { ...process.env, CLAWHUB_WORKDIR: clawhubWorkDir },
       });
-    } catch (err: any) {
-      return err.stdout || err.stderr || err.message;
+    } catch (err) {
+      if (isJsonObject(err)) {
+        const stdout = typeof err['stdout'] === 'string' ? err['stdout'] : undefined;
+        const stderr = typeof err['stderr'] === 'string' ? err['stderr'] : undefined;
+        const message = typeof err['message'] === 'string' ? err['message'] : undefined;
+        return stdout ?? stderr ?? message ?? String(err);
+      }
+      return err instanceof Error ? err.message : String(err);
     }
   };
 
@@ -3062,7 +3266,7 @@ async function cmdSkill(): Promise<void> {
     }
 
     case 'publish': {
-      const skillPath = args[2] || '.';
+      const skillPath = args[2] ?? '.';
       banner();
       info(`Publishing: ${skillPath}`);
       const result = runClawhub(['publish', skillPath]);
@@ -3314,8 +3518,8 @@ async function cmdSkill(): Promise<void> {
           encoding: 'utf8',
         });
         print(result);
-      } catch (err: any) {
-        error(err.message);
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -3324,7 +3528,7 @@ async function cmdSkill(): Promise<void> {
 // ─── Security Commands ─────────────────────────────────────────────────────────
 
 async function cmdSecurity(): Promise<void> {
-  const subcommand = args[1] || 'status';
+  const subcommand = args[1] ?? 'status';
   const workDir = getWorkDir();
   const dataDir = path.join(workDir, 'data');
   const securityDbPath = path.join(dataDir, 'security.db');
@@ -3407,7 +3611,7 @@ async function cmdSecurity(): Promise<void> {
 
     case 'policies':
     case 'policy': {
-      const policySubcommand = args[2] || 'list';
+      const policySubcommand = args[2] ?? 'list';
       banner();
 
       if (!modules) {
@@ -3450,8 +3654,8 @@ async function cmdSecurity(): Promise<void> {
         const name = getArg('name');
         const effect = getArg('effect') as 'allow' | 'deny' | 'approve';
         const resource = getArg('resource');
-        const action = getArg('action') || '*';
-        const priority = parseInt(getArg('priority') || '0', 10);
+        const action = getArg('action') ?? '*';
+        const priority = parseInt(getArg('priority') ?? '0', 10);
         const requiresApproval = args.includes('--requires-approval');
 
         if (!name || !effect || !resource) {
@@ -3526,7 +3730,7 @@ async function cmdSecurity(): Promise<void> {
 
     case 'approvals':
     case 'approval': {
-      const approvalSubcommand = args[2] || 'list';
+      const approvalSubcommand = args[2] ?? 'list';
       banner();
 
       if (!modules) {
@@ -3638,7 +3842,7 @@ async function cmdSecurity(): Promise<void> {
                 : '\x1b[90m';
           const decisionStr = entry.decision ? entry.decision.padEnd(8) : '         ';
           print(
-            `    ${time} ${sevColor}${entry.severity.padEnd(8)}\x1b[0m ${entry.action.padEnd(25)} ${(entry.actor || '-').padEnd(12)} ${decisionStr}`,
+            `    ${time} ${sevColor}${entry.severity.padEnd(8)}\x1b[0m ${entry.action.padEnd(25)} ${(entry.actor ?? '-').padEnd(12)} ${decisionStr}`,
           );
         }
       }
@@ -3813,11 +4017,11 @@ function formatExpiry(timestamp: number): string {
 }
 
 function homeDir(): string {
-  return process.env.HOME || process.env.USERPROFILE || '/home/ag064';
+  return process.env.HOME ?? process.env.USERPROFILE ?? '/home/ag064';
 }
 
 async function cmdTelegram(): Promise<void> {
-  const subcommand = args[1] || 'status';
+  const subcommand = args[1] ?? 'status';
   banner();
 
   switch (subcommand) {
@@ -3830,7 +4034,8 @@ async function cmdTelegram(): Promise<void> {
         return;
       }
       const config = readProjectConfig(configPath);
-      const tg = (config.channels as any)?.telegram;
+      const channels = isJsonObject(config.channels) ? config.channels : {};
+      const tg = isJsonObject(channels.telegram) ? (channels.telegram as TelegramConfig) : undefined;
       if (!tg) {
         warn('Telegram not configured');
         info('Run: argentum onboard');
@@ -3839,8 +4044,10 @@ async function cmdTelegram(): Promise<void> {
       print(`  Enabled: ${tg.enabled ? '✓' : '✗'}`);
       print(`  Bot Token: ${process.env.ARGENTUM_TELEGRAM_TOKEN ? 'set via env' : 'NOT SET'}`);
       print(`  Allow All: ${tg.allowAll ? 'yes' : 'no'}`);
-      print(`  Allowed Users: ${(tg.allowedUsers || []).join(', ') || 'none'}`);
-      print(`  Allowed Chats: ${(tg.allowedChats || []).join(', ') || 'none'}`);
+      const allowedUsers = tg.allowedUsers ?? [];
+      const allowedChats = tg.allowedChats ?? [];
+      print(`  Allowed Users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : 'none'}`);
+      print(`  Allowed Chats: ${allowedChats.length > 0 ? allowedChats.join(', ') : 'none'}`);
       break;
     }
 
@@ -3926,13 +4133,7 @@ async function cmdImprove(): Promise<void> {
     print('');
   }
 
-  let feature: any = null;
-  try {
-    const featurePath = path.join(__dirname, 'src', 'features', 'self-improving', 'index.js');
-    if (fs.existsSync(featurePath)) {
-      feature = require(featurePath).default;
-    }
-  } catch {}
+  const feature = loadSelfImprovingFeature();
 
   if (!feature?.run) {
     warn('Self-improving feature not available, using standalone mode');
@@ -4003,7 +4204,7 @@ async function runStandaloneImprove(
   phase: 'all' | 'error' | 'skill' | 'memory' | 'model' | 'correction',
   opts: { dryRun: boolean; forceRun: boolean; verbose: boolean },
 ): Promise<void> {
-  const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
+  const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
   const memoryDir = path.join(workDir, 'memory');
   const sessionsDb = path.join(workDir, 'data', 'sessions.db');
 
@@ -4033,13 +4234,15 @@ async function runStandaloneImprove(
 }
 
 function getImproveConfig(): Record<string, unknown> {
-  const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
+  const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
   const configPath = path.join(workDir, 'self-improving-config.json');
 
   if (fs.existsSync(configPath)) {
     try {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch {}
+      return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    } catch (err) {
+      warn(`Could not read self-improving config: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return {
@@ -4063,26 +4266,20 @@ async function cmdLearnings(): Promise<void> {
   const categoryFilter =
     categoryArg !== -1 && args[categoryArg + 1] ? args[categoryArg + 1]!.toLowerCase() : null;
 
-  let feature: any = null;
-  try {
-    const featurePath = path.join(__dirname, 'src', 'features', 'self-improving', 'index.js');
-    if (fs.existsSync(featurePath)) {
-      feature = require(featurePath).default;
-    }
-  } catch {}
+  const feature = loadSelfImprovingFeature();
 
-  let lessons: any[] = [];
+  let lessons: SelfImprovingLesson[] = [];
 
   if (feature?.getLearnings) {
     lessons = feature.getLearnings();
   } else {
-    const workDir = process.env.ARGENTUM_WORKDIR || process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
     const lessonsPath = path.join(workDir, 'memory', 'self-improvement', 'lessons.md');
     lessons = parseLessonsFromFile(lessonsPath);
   }
 
   if (categoryFilter) {
-    lessons = lessons.filter((l: any) => l.category === categoryFilter);
+    lessons = lessons.filter((lesson) => lesson.category === categoryFilter);
   }
 
   lessons = lessons.slice(0, limit);
@@ -4099,11 +4296,9 @@ async function cmdLearnings(): Promise<void> {
     return;
   }
 
-  const byCategory: Record<string, any[]> = {};
+  const byCategory: Record<string, SelfImprovingLesson[]> = {};
   for (const lesson of lessons) {
-    if (!byCategory[lesson.category]) {
-      byCategory[lesson.category] = [];
-    }
+    byCategory[lesson.category] ??= [];
     byCategory[lesson.category]!.push(lesson);
   }
 
@@ -4121,7 +4316,7 @@ async function cmdLearnings(): Promise<void> {
   };
 
   for (const [cat, items] of Object.entries(byCategory)) {
-    const icon = categoryIcons[cat] || '\x1b[37m•\x1b[0m';
+    const icon = categoryIcons[cat] ?? '\x1b[37m•\x1b[0m';
     const catName = cat.replace('_', ' ');
     print(
       `  ${icon} \x1b[1m${catName}\x1b[0m  \x1b[90m(${items.length} lesson${items.length !== 1 ? 's' : ''})\x1b[0m`,
@@ -4134,7 +4329,7 @@ async function cmdLearnings(): Promise<void> {
 
   for (let i = 0; i < lessons.length; i++) {
     const lesson = lessons[i]!;
-    const icon = categoryIcons[lesson.category] || '\x1b[37m•\x1b[0m';
+    const icon = categoryIcons[lesson.category] ?? '\x1b[37m•\x1b[0m';
     const age = formatAge(lesson.timestamp);
 
     print(`  \x1b[90m${i + 1}.\x1b[0m ${icon} \x1b[1m${lesson.title}\x1b[0m`);
@@ -4165,7 +4360,7 @@ async function cmdTrajectory(): Promise<void> {
     const featurePath = path.join(__dirname, 'src', 'features', 'trajectory-export', 'index.js');
     if (fs.existsSync(featurePath)) {
       const mod = require(featurePath);
-      const exporter = mod.default || mod;
+      const exporter = mod.default ?? mod;
       if (exporter?.exportTrajectory) {
         const result = await exporter.exportTrajectory();
         print(`  Exported ${result?.count ?? 0} trajectory entries.`);
@@ -4191,7 +4386,7 @@ async function cmdOrg(): Promise<void> {
     const featurePath = path.join(__dirname, 'src', 'features', 'org-chart', 'index.js');
     if (fs.existsSync(featurePath)) {
       const mod = require(featurePath);
-      const orgChart = mod.default || mod;
+      const orgChart = mod.default ?? mod;
       if (orgChart?.getOrgChart) {
         const chart = await orgChart.getOrgChart();
         print(`  Org chart loaded: ${chart?.agents?.length ?? 0} agents.`);
@@ -4206,8 +4401,8 @@ async function cmdOrg(): Promise<void> {
   }
 }
 
-function parseLessonsFromFile(lessonsPath: string): any[] {
-  const lessons: any[] = [];
+function parseLessonsFromFile(lessonsPath: string): SelfImprovingLesson[] {
+  const lessons: SelfImprovingLesson[] = [];
 
   if (!fs.existsSync(lessonsPath)) {
     return lessons;
@@ -4219,7 +4414,7 @@ function parseLessonsFromFile(lessonsPath: string): any[] {
 
     for (const section of sections) {
       const lines = section.trim().split('\n');
-      const timestamp = lines[0]?.trim() || '';
+      const timestamp = lines[0]?.trim() ?? '';
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -4228,7 +4423,9 @@ function parseLessonsFromFile(lessonsPath: string): any[] {
           if (lessonText && lessonText.length > 5) {
             lessons.push({
               id: `lesson:${lessons.length}`,
-              timestamp: new Date(timestamp).getTime() || Date.now(),
+              timestamp: Number.isFinite(new Date(timestamp).getTime())
+                ? new Date(timestamp).getTime()
+                : Date.now(),
               category: 'insight',
               title: lessonText.slice(0, 60),
               description: lessonText,
@@ -4238,7 +4435,9 @@ function parseLessonsFromFile(lessonsPath: string): any[] {
         }
       }
     }
-  } catch {}
+  } catch (err) {
+    warn(`Could not parse lessons file: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   return lessons.sort((a, b) => b.timestamp - a.timestamp);
 }
@@ -4280,7 +4479,7 @@ async function main(): Promise<void> {
       await cmdStart();
       break;
     case 'status':
-      cmdStatus();
+      await cmdStatus();
       break;
     case 'features':
     case 'list':

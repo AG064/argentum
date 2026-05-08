@@ -8,7 +8,7 @@ class EncryptedSecretsFeature {
   masterKey: Buffer;
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
     const mk = process.env.AGCLAW_MASTER_KEY;
     if (!mk) {

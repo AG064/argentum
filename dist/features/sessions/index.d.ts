@@ -4,6 +4,7 @@
  * Session management for conversations and agent interactions.
  * Stores messages, tracks context, manages history.
  */
+import { type FeatureContext } from '../../core/plugin-loader';
 interface Session {
     id: string;
     title: string;
@@ -37,7 +38,7 @@ declare class SessionsFeature {
     };
     private _ctx;
     private db;
-    init(config: Record<string, unknown>, context: any): Promise<void>;
+    init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     start(): Promise<void>;
     stop(): Promise<void>;
     healthCheck(): Promise<{
@@ -54,11 +55,11 @@ declare class SessionsFeature {
     update(id: string, updates: Partial<Pick<Session, 'title' | 'status' | 'tags'>>): boolean;
     archive(id: string): boolean;
     delete(id: string): boolean;
-    addMessage(sessionId: string, role: string, content: string, toolCalls?: any[]): Message;
+    addMessage(sessionId: string, role: Message['role'], content: string, toolCalls?: Message['toolCalls']): Message;
     getMessages(sessionId: string, options?: {
         limit?: number;
         offset?: number;
-        role?: string;
+        role?: Message['role'];
     }): Message[];
     search(query: string, limit?: number): Array<{
         sessionId: string;
@@ -81,6 +82,8 @@ declare class SessionsFeature {
         totalMessages: number;
         avgMessagesPerSession: number;
     };
+    private get database();
+    private mapSessionRow;
 }
 declare const _default: SessionsFeature;
 export default _default;

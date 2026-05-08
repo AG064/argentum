@@ -31,6 +31,8 @@ export interface TaskRow {
   updated_at: number;
 }
 
+type TaskTreeRow = TaskRow & { children: TaskTreeRow[] };
+
 export interface GoalDecompositionConfig {
   enabled: boolean;
   dbPath: string;
@@ -142,14 +144,14 @@ class GoalDecompositionFeature implements FeatureModule {
     const all = this.db
       .prepare('SELECT * FROM tasks WHERE goal_id = ? ORDER BY priority DESC, created_at ASC')
       .all(goalId) as TaskRow[];
-    const map: Record<string, TaskRow & { children?: TaskRow[] }> = {};
-    for (const t of all) map[t.id] = { ...t, children: [] } as any;
+    const map: Record<string, TaskTreeRow> = {};
+    for (const t of all) map[t.id] = { ...t, children: [] };
     for (const t of all) {
       if (t.parent_id && map[t.parent_id] && map[t.id])
-        map[t.parent_id]!.children!.push(map[t.id] as TaskRow & { children?: TaskRow[] });
+        map[t.parent_id]!.children.push(map[t.id]!);
     }
 
-    return map[goalId] || null;
+    return map[goalId] ?? null;
   }
 
   getReadyTasks(): TaskRow[] {

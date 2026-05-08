@@ -263,7 +263,9 @@ class SharedKnowledgeBaseFeature {
     }
     updateFts(id, title, content, tags) {
         // FTS is auto-updated via triggers, but we need to ensure the rowid matches
-        const row = this.db.prepare('SELECT rowid FROM articles WHERE id = ?').get(id);
+        const row = this.db
+            .prepare('SELECT rowid FROM articles WHERE id = ?')
+            .get(id);
         if (row) {
             this.db
                 .prepare('INSERT OR REPLACE INTO knowledge_fts (rowid, title, content, tags) VALUES (?, ?, ?, ?)')

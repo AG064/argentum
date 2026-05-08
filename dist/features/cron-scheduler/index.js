@@ -19,14 +19,13 @@ class CronSchedulerFeature {
         enabled: false,
         dbPath: './data/cron-scheduler.db',
         maxJobs: 500,
-        // maximum concurrent handler executions across all jobs
         maxConcurrentRuns: 5,
     };
     ctx;
     db;
     jobs = new Map();
     handlers = new Map();
-    cronJobs = new Map(); // jobId -> cron job instance
+    cronJobs = new Map();
     schedulerStartTime = 0;
     async init(config, context) {
         this.ctx = context;
@@ -45,13 +44,13 @@ class CronSchedulerFeature {
         this.ctx.logger.info('Cron scheduler active', {
             scheduledJobs: this.jobs.size,
             enabledJobs: Array.from(this.jobs.values()).filter((j) => j.enabled).length,
-            timezone: this.config.timezone || 'local',
+            timezone: this.config.timezone ?? 'local',
         });
     }
     async stop() {
         // Stop all cron jobs
-        for (const [_jobId, cron] of this.cronJobs.entries()) {
-            cron.stop();
+        for (const scheduledTask of this.cronJobs.values()) {
+            await Promise.resolve(scheduledTask.stop());
         }
         this.cronJobs.clear();
         this.db?.close();
@@ -136,7 +135,7 @@ class CronSchedulerFeature {
         // Stop cron if running
         const cron = this.cronJobs.get(jobId);
         if (cron) {
-            cron.stop();
+            await Promise.resolve(cron.stop());
             this.cronJobs.delete(jobId);
         }
         // Remove from DB
@@ -174,7 +173,7 @@ class CronSchedulerFeature {
         // Stop cron if running
         const cron = this.cronJobs.get(jobId);
         if (cron) {
-            cron.stop();
+            await Promise.resolve(cron.stop());
             this.cronJobs.delete(jobId);
         }
         this.ctx.logger.debug('Job disabled', { jobId });
@@ -210,7 +209,15 @@ class CronSchedulerFeature {
     // ─── Scheduling ───────────────────────────────────────────────────────────
     scheduleJob(job) {
         if (this.cronJobs.has(job.id)) {
-            this.cronJobs.get(job.id).stop();
+            const previousTask = this.cronJobs.get(job.id);
+            if (previousTask) {
+                void Promise.resolve(previousTask.stop()).catch((err) => {
+                    this.ctx.logger.warn('Failed to stop previous cron task before rescheduling', {
+                        jobId: job.id,
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                });
+            }
         }
         const cronJob = node_cron_1.default.schedule(job.cronExpr, async () => {
             const handler = this.handlers.get(job.handlerId);
@@ -242,7 +249,7 @@ class CronSchedulerFeature {
             return;
         }
         // --- Concurrency check: ensure we don't exceed maxConcurrentRuns
-        const runningCount = this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get().c || 0;
+        const runningCount = this.db.prepare('SELECT COUNT(*) as c FROM running_tasks').get()?.c ?? 0;
         if (runningCount > this.config.maxConcurrentRuns) {
             this.ctx.logger.warn('Concurrency limit reached, skipping job', {
                 jobId: job.id,
@@ -254,8 +261,8 @@ class CronSchedulerFeature {
         }
         // --- Budget enforcement hook (optional)
         try {
-            const budgetService = this.ctx.services?.budget;
-            if (budgetService && typeof budgetService.checkJobBudget === 'function') {
+            const budgetService = this.getBudgetService();
+            if (budgetService) {
                 const ok = await budgetService.checkJobBudget(job.id);
                 if (!ok) {
                     this.ctx.logger.warn('Job skipped due to budget enforcement', { jobId: job.id });
@@ -281,7 +288,7 @@ class CronSchedulerFeature {
             // Update job last run
             job.lastRun = endTime;
             if (!success) {
-                job.lastError = error || 'Unknown error';
+                job.lastError = error ?? 'Unknown error';
             }
             this.db
                 .prepare('UPDATE jobs SET last_run = ?, last_error = ? WHERE id = ?')
@@ -304,7 +311,10 @@ class CronSchedulerFeature {
                 }
             }
             catch (e) {
-                // ignore
+                this.ctx.logger.warn('Unable to persist cron session state', {
+                    jobId: job.id,
+                    error: e instanceof Error ? e.message : String(e),
+                });
             }
             // release claim
             this.db.prepare('DELETE FROM running_tasks WHERE job_id = ?').run(job.id);
@@ -392,6 +402,17 @@ class CronSchedulerFeature {
             };
             this.jobs.set(job.id, job);
         }
+    }
+    getBudgetService() {
+        const contextWithServices = this.ctx;
+        const candidate = contextWithServices.services?.budget;
+        if (candidate &&
+            typeof candidate === 'object' &&
+            'checkJobBudget' in candidate &&
+            typeof candidate.checkJobBudget === 'function') {
+            return candidate;
+        }
+        return undefined;
     }
 }
 exports.default = new CronSchedulerFeature();

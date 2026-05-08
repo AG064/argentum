@@ -293,9 +293,7 @@ let instance = null;
  * Get or create the global allowlist manager.
  */
 function getAllowlist(mode) {
-    if (!instance) {
-        instance = new AllowlistManager(mode);
-    }
+    instance ??= new AllowlistManager(mode);
     return instance;
 }
 /**

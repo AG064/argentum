@@ -8,6 +8,7 @@
  * - Markdown formatting
  * - Reaction support
  */
+import { type FeatureContext } from '../../core/plugin-loader';
 export interface TelegramConfig {
     enabled: boolean;
     botToken: string;
@@ -44,7 +45,7 @@ declare class TelegramFeature {
     private ctx;
     private db;
     private messageHandlers;
-    init(config: Record<string, unknown>, context: any): Promise<void>;
+    init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     private setupHandlers;
     private isAllowed;
     start(): Promise<void>;
@@ -55,7 +56,7 @@ declare class TelegramFeature {
     }>;
     onMessage(handler: (msg: TelegramMessage) => Promise<void>): void;
     sendMessage(chatId: number | string, text: string, options?: {
-        parseMode?: string;
+        parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
         replyTo?: number;
     }): Promise<void>;
     sendPhoto(chatId: number | string, photo: string | Buffer, caption?: string): Promise<void>;

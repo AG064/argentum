@@ -67,13 +67,17 @@ class SkillsLibraryFeature {
         return rec;
     }
     getSkill(id) {
-        const row = this.db.prepare('SELECT * FROM skills WHERE id = ?').get(id);
+        const row = this.db
+            .prepare('SELECT * FROM skills WHERE id = ?')
+            .get(id);
         if (!row)
             return null;
         return this.rowToSkill(row);
     }
     listSkills() {
-        const rows = this.db.prepare('SELECT * FROM skills ORDER BY updated_at DESC').all();
+        const rows = this.db
+            .prepare('SELECT * FROM skills ORDER BY updated_at DESC')
+            .all();
         return rows.map((r) => this.rowToSkill(r));
     }
     searchSkills(query) {
@@ -130,8 +134,8 @@ class SkillsLibraryFeature {
             version: row.version,
             description: row.description,
             code: row.code,
-            tags: this.safeParse(row.tags),
-            author: row.author || undefined,
+            tags: this.safeParse(row.tags ?? '[]'),
+            author: row.author ?? undefined,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };

@@ -324,7 +324,7 @@ export class PolicyEngine {
         conditions: row.conditions ? JSON.parse(row.conditions as string) : undefined,
         requiresApproval: Boolean(row.requires_approval),
         approvalRisk: (row.approval_risk as ApprovalRisk) || undefined,
-        auditLevel: (row.audit_level as Policy['auditLevel']) || 'info',
+        auditLevel: (row.audit_level as Policy['auditLevel']) ?? 'info',
         createdAt: row.created_at as number,
         updatedAt: row.updated_at as number,
       };
@@ -591,7 +591,7 @@ export class PolicyEngine {
    */
   approve(requestId: string, userId: string, notes?: string): boolean {
     const request = this.approvalStore.requests.get(requestId);
-    if (!request || request.status !== 'pending') return false;
+    if (request?.status !== 'pending') return false;
 
     if (Date.now() > request.expiresAt) {
       request.status = 'expired';
@@ -623,7 +623,7 @@ export class PolicyEngine {
    */
   deny(requestId: string, userId: string, notes?: string): boolean {
     const request = this.approvalStore.requests.get(requestId);
-    if (!request || request.status !== 'pending') return false;
+    if (request?.status !== 'pending') return false;
 
     request.status = 'denied';
     request.respondedAt = Date.now();
@@ -900,9 +900,7 @@ export class PolicyEngine {
 let instance: PolicyEngine | null = null;
 
 export function getPolicyEngine(dbPath?: string): PolicyEngine {
-  if (!instance) {
-    instance = new PolicyEngine(dbPath);
-  }
+  instance ??= new PolicyEngine(dbPath);
   return instance;
 }
 

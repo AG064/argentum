@@ -156,7 +156,7 @@ class CalendarIntegrationFeature {
             for (const rem of data.reminders) {
                 const remId = rem.id ?? `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                 // Determine reminder time
-                const remTime = rem.time || startTime - this.config.defaultReminderMinutes * 60 * 1000;
+                const remTime = rem.time ?? startTime - this.config.defaultReminderMinutes * 60 * 1000;
                 remStmt.run(remId, id, remTime, rem.triggered ? 1 : 0, rem.method ?? 'notification');
             }
         }
@@ -164,7 +164,9 @@ class CalendarIntegrationFeature {
     }
     /** Get an event by ID */
     getEvent(id) {
-        const row = this.db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+        const row = this.db
+            .prepare('SELECT * FROM events WHERE id = ?')
+            .get(id);
         if (!row)
             return null;
         const event = this.rowToEvent(row);
@@ -252,17 +254,17 @@ class CalendarIntegrationFeature {
         return {
             id: row.id,
             title: row.title,
-            description: row.description,
+            description: row.description ?? undefined,
             startTime: row.start_time,
             endTime: row.end_time,
             allDay: Boolean(row.all_day),
-            location: row.location,
+            location: row.location ?? undefined,
             recurrence: row.recurrence_rule
                 ? {
                     frequency: row.recurrence_rule,
                     interval: row.recurrence_interval,
-                    until: row.recurrence_until,
-                    count: row.recurrence_count,
+                    until: row.recurrence_until ?? undefined,
+                    count: row.recurrence_count ?? undefined,
                 }
                 : undefined,
             createdAt: row.created_at,
@@ -276,7 +278,7 @@ class CalendarIntegrationFeature {
         if (!event)
             return null;
         const id = `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const time = reminder.time || event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
+        const time = reminder.time ?? event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
         const stmt = this.db.prepare('INSERT INTO reminders (id, event_id, time, triggered, method) VALUES (?, ?, ?, ?, ?)');
         stmt.run(id, eventId, time, reminder.triggered ? 1 : 0, reminder.method ?? 'notification');
         // Return the created reminder

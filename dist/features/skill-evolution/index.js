@@ -52,6 +52,9 @@ const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const os_1 = require("os");
 const path_1 = require("path");
+function firstNonEmpty(...values) {
+    return values.find((value) => value !== undefined && value.length > 0) ?? '';
+}
 class SkillEvolution {
     openSpacePath;
     config;
@@ -89,7 +92,7 @@ class SkillEvolution {
      * AUTO-FIX: Repair a broken skill
      */
     async fixSkill(skillPath) {
-        console.log(`[SkillEvolution] AUTO-FIX: repairing ${skillPath}`);
+        console.info(`[SkillEvolution] AUTO-FIX: repairing ${skillPath}`);
         const result = await this.runOpenSpace(['skill-fix', skillPath]);
         if (result.includes('ERROR')) {
             return { success: false, changes: [], error: result };
@@ -103,7 +106,7 @@ class SkillEvolution {
      * AUTO-IMPROVE: Evolve a skill based on usage patterns
      */
     async evolveSkill(skillName, metrics) {
-        console.log(`[SkillEvolution] AUTO-IMPROVE: evolving ${skillName}`);
+        console.info(`[SkillEvolution] AUTO-IMPROVE: evolving ${skillName}`);
         let result;
         if (metrics) {
             const metricsFile = `/tmp/skill-metrics-${Date.now()}.json`;
@@ -131,7 +134,7 @@ class SkillEvolution {
      * AUTO-LEARN: Capture a new skill from successful execution
      */
     async learnFromWorkflow(executionLog, options) {
-        console.log(`[SkillEvolution] AUTO-LEARN: capturing from workflow`);
+        console.info(`[SkillEvolution] AUTO-LEARN: capturing from workflow`);
         const logFile = `/tmp/workflow-${Date.now()}.log`;
         const fs = await Promise.resolve().then(() => __importStar(require('fs')));
         fs.writeFileSync(logFile, executionLog);
@@ -219,15 +222,15 @@ async function createSkillEvolution() {
     if ((0, fs_1.existsSync)(credsPath)) {
         try {
             const creds = JSON.parse((0, fs_1.readFileSync)(credsPath, 'utf-8'));
-            minimaxKey = creds.minimax ?? '';
+            minimaxKey = typeof creds.minimax === 'string' ? creds.minimax : '';
         }
-        catch {
-            // Use env vars
+        catch (err) {
+            console.warn(`[SkillEvolution] Failed to read credentials from ${credsPath}: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
     return new SkillEvolution({
         llmProvider: 'minimax',
-        apiKey: minimaxKey || process.env.MINIMAX_API_KEY || '',
+        apiKey: firstNonEmpty(minimaxKey, process.env.MINIMAX_API_KEY),
     });
 }
 //# sourceMappingURL=index.js.map

@@ -61,14 +61,26 @@ const ws_1 = require("ws");
 const rateLimits = new Map();
 // Connected WebSocket clients
 const wsClients = new Set();
+function envOrDefault(name, fallback) {
+    const value = process.env[name];
+    return value?.trim() ? value : fallback;
+}
+function firstEnvOrDefault(names, fallback) {
+    for (const name of names) {
+        const value = process.env[name];
+        if (value?.trim())
+            return value;
+    }
+    return fallback;
+}
 // Default configuration
 const DEFAULT_CONFIG = {
-    port: parseInt(process.env.AGCLAW_DASHBOARD_PORT || '3000', 10),
-    host: process.env.AGCLAW_DASHBOARD_HOST || '127.0.0.1',
+    port: parseInt(envOrDefault('AGCLAW_DASHBOARD_PORT', '3000'), 10),
+    host: envOrDefault('AGCLAW_DASHBOARD_HOST', '127.0.0.1'),
     staticDir: path.join(__dirname, '..', 'dashboard'),
     auth: {
-        username: process.env.AGCLAW_DASHBOARD_USER || 'admin',
-        passwordHash: process.env.AGCLAW_DASHBOARD_PASS_HASH || '', // Will be generated if empty
+        username: envOrDefault('AGCLAW_DASHBOARD_USER', 'admin'),
+        passwordHash: process.env.AGCLAW_DASHBOARD_PASS_HASH ?? '', // Will be generated if empty
     },
     rateLimit: {
         windowMs: 60 * 1000, // 1 minute
@@ -85,7 +97,7 @@ const DEFAULT_CONFIG = {
 function loadConfig() {
     const config = { ...DEFAULT_CONFIG };
     // Try the new Argentum config first, then the legacy config file name.
-    const workDir = process.env.ARGENTUM_WORKDIR || process.env.AGCLAW_WORKDIR || process.cwd();
+    const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
     const preferredConfigPath = path.join(workDir, 'argentum.json');
     const legacyConfigPath = path.join(workDir, 'agclaw.json');
     const configPath = fs.existsSync(preferredConfigPath) ? preferredConfigPath : legacyConfigPath;
@@ -93,23 +105,23 @@ function loadConfig() {
         try {
             const argentumConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             if (argentumConfig.dashboard) {
-                config.port = argentumConfig.dashboard.port || config.port;
-                config.host = argentumConfig.dashboard.host || config.host;
+                config.port = argentumConfig.dashboard.port ?? config.port;
+                config.host = argentumConfig.dashboard.host ?? config.host;
                 if (argentumConfig.dashboard.auth) {
-                    config.auth.username = argentumConfig.dashboard.auth.username || config.auth.username;
+                    config.auth.username = argentumConfig.dashboard.auth.username ?? config.auth.username;
                     if (argentumConfig.dashboard.auth.password) {
                         config.auth.passwordHash = hashPassword(argentumConfig.dashboard.auth.password);
                     }
                 }
                 if (argentumConfig.dashboard.rateLimit) {
                     config.rateLimit.windowMs =
-                        argentumConfig.dashboard.rateLimit.windowMs || config.rateLimit.windowMs;
+                        argentumConfig.dashboard.rateLimit.windowMs ?? config.rateLimit.windowMs;
                     config.rateLimit.maxRequests =
-                        argentumConfig.dashboard.rateLimit.maxRequests || config.rateLimit.maxRequests;
+                        argentumConfig.dashboard.rateLimit.maxRequests ?? config.rateLimit.maxRequests;
                 }
                 if (argentumConfig.dashboard.cors) {
                     config.cors.allowedOrigins =
-                        argentumConfig.dashboard.cors.allowedOrigins || config.cors.allowedOrigins;
+                        argentumConfig.dashboard.cors.allowedOrigins ?? config.cors.allowedOrigins;
                 }
             }
         }
@@ -122,7 +134,7 @@ function loadConfig() {
         const envPass = process.env.AGCLAW_DASHBOARD_PASS;
         if (!envPass) {
             // Try to load a previously persisted hash
-            const workDir = process.env.ARGENTUM_WORKDIR || process.env.AGCLAW_WORKDIR || process.cwd();
+            const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
             const preferredHashFile = path.join(workDir, '.argentum-dashboard-pass-hash');
             const legacyHashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
             const hashFile = fs.existsSync(preferredHashFile) ? preferredHashFile : legacyHashFile;
@@ -179,7 +191,7 @@ function verifyPassword(password, hash) {
  * Parse Basic Auth header
  */
 function parseBasicAuth(authHeader) {
-    if (!authHeader || !authHeader.startsWith('Basic ')) {
+    if (!authHeader?.startsWith('Basic ')) {
         return null;
     }
     try {
@@ -235,7 +247,7 @@ function serveStatic(filePath, res, mimeType) {
             return;
         }
         const ext = path.extname(filePath).toLowerCase();
-        const contentType = mimeType || getMimeType(ext);
+        const contentType = mimeType ?? getMimeType(ext);
         sendResponse(res, 200, contentType, data);
     });
 }
@@ -259,7 +271,7 @@ function getMimeType(ext) {
         '.eot': 'application/vnd.ms-fontobject',
         '.txt': 'text/plain',
     };
-    return mimeTypes[ext] || 'application/octet-stream';
+    return mimeTypes[ext] ?? 'application/octet-stream';
 }
 /**
  * Send HTTP response
@@ -291,9 +303,9 @@ function sendJSON(res, statusCode, data) {
  * Handle incoming HTTP request
  */
 function handleRequest(req, res) {
-    const parsedUrl = url.parse(req.url || '/', true);
-    const pathname = parsedUrl.pathname || '/';
-    const ip = req.socket.remoteAddress || 'unknown';
+    const parsedUrl = url.parse(req.url ?? '/', true);
+    const pathname = parsedUrl.pathname ?? '/';
+    const ip = req.socket.remoteAddress ?? 'unknown';
     // Check rate limit
     if (!checkRateLimit(ip)) {
         res.writeHead(429, {
@@ -345,9 +357,8 @@ function handleRequest(req, res) {
     }
     // Auth check for all other requests
     const authHeader = req.headers.authorization;
-    const auth = parseBasicAuth(authHeader || '');
-    if (!auth ||
-        auth.username !== config.auth.username ||
+    const auth = parseBasicAuth(authHeader ?? '');
+    if (auth?.username !== config.auth.username ||
         !verifyPassword(auth.password, config.auth.passwordHash)) {
         res.writeHead(401, {
             'WWW-Authenticate': 'Basic realm="Argentum Dashboard"',
@@ -389,9 +400,8 @@ function handleRequest(req, res) {
 function handleAPIRequest(req, res, pathname, parsedUrl) {
     // Auth check for API
     const authHeader = req.headers.authorization;
-    const auth = parseBasicAuth(authHeader || '');
-    if (!auth ||
-        auth.username !== config.auth.username ||
+    const auth = parseBasicAuth(authHeader ?? '');
+    if (auth?.username !== config.auth.username ||
         !verifyPassword(auth.password, config.auth.passwordHash)) {
         sendJSON(res, 401, { error: 'Unauthorized' });
         return;
@@ -606,18 +616,17 @@ function setupWebSocket(server) {
     wss.on('connection', (ws, req) => {
         // Auth check for WebSocket
         const authHeader = req.headers.authorization;
-        const auth = parseBasicAuth(authHeader || '');
-        if (!auth ||
-            auth.username !== config.auth.username ||
+        const auth = parseBasicAuth(authHeader ?? '');
+        if (auth?.username !== config.auth.username ||
             !verifyPassword(auth.password, config.auth.passwordHash)) {
             ws.close(4001, 'Unauthorized');
             return;
         }
         wsClients.add(ws);
-        console.log(`[Dashboard WS] Client connected (${wsClients.size} total)`);
+        console.info(`[Dashboard WS] Client connected (${wsClients.size} total)`);
         ws.on('close', () => {
             wsClients.delete(ws);
-            console.log(`[Dashboard WS] Client disconnected (${wsClients.size} total)`);
+            console.info(`[Dashboard WS] Client disconnected (${wsClients.size} total)`);
         });
         ws.on('error', (err) => {
             console.error('[Dashboard WS] Error:', err.message);
@@ -674,21 +683,21 @@ async function startDashboardServer(options) {
         });
         // Start listening
         server.listen(config.port, config.host, () => {
-            console.log('');
-            console.log('  ╔══════════════════════════════════════════════════════════╗');
-            console.log('  ║         Argentum Dashboard Server Started                  ║');
-            console.log('  ╠══════════════════════════════════════════════════════════╣');
-            console.log(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
-            console.log(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
+            console.info('');
+            console.info('  ╔══════════════════════════════════════════════════════════╗');
+            console.info('  ║         Argentum Dashboard Server Started                  ║');
+            console.info('  ╠══════════════════════════════════════════════════════════╣');
+            console.info(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
+            console.info(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
             /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
-            console.log(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
-            console.log('  ╠══════════════════════════════════════════════════════════╣');
-            console.log('  ║  Remote Access:                                        ║');
-            console.log(`  ║    SSH:  ssh -L 3000:localhost:${config.port} user@host        ║`);
-            console.log('  ║    Then open: http://localhost:3000                    ║');
-            console.log('  ╚══════════════════════════════════════════════════════════╝');
-            console.log('');
-            console.log('[Dashboard Server] Press Ctrl+C to stop');
+            console.info(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
+            console.info('  ╠══════════════════════════════════════════════════════════╣');
+            console.info('  ║  Remote Access:                                        ║');
+            console.info(`  ║    SSH:  ssh -L 3000:localhost:${config.port} user@host        ║`);
+            console.info('  ║    Then open: http://localhost:3000                    ║');
+            console.info('  ╚══════════════════════════════════════════════════════════╝');
+            console.info('');
+            console.info('[Dashboard Server] Press Ctrl+C to stop');
             resolve(server);
         });
     });
@@ -697,13 +706,13 @@ async function startDashboardServer(options) {
  * Stop the dashboard server
  */
 function stopDashboardServer(server) {
-    console.log('[Dashboard Server] Shutting down...');
+    console.info('[Dashboard Server] Shutting down...');
     // Close all WebSocket connections
     wsClients.forEach((ws) => ws.close());
     wsClients.clear();
     // Close HTTP server
     server.close(() => {
-        console.log('[Dashboard Server] Stopped');
+        console.info('[Dashboard Server] Stopped');
     });
 }
 // CLI entry point
@@ -712,7 +721,7 @@ if (require.main === module) {
     const command = args[0];
     if (command === 'start') {
         const portIdx = args.indexOf('--port');
-        const port = portIdx !== -1 ? parseInt(args[portIdx + 1] || '3000', 10) : undefined;
+        const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '3000', 10) : undefined;
         startDashboardServer(port ? { port } : undefined)
             .then((server) => {
             process.on('SIGINT', () => {
@@ -726,14 +735,14 @@ if (require.main === module) {
         });
     }
     else if (command === 'help') {
-        console.log('Argentum Dashboard Server');
-        console.log('');
-        console.log('Usage:');
-        console.log('  argentum-dashboard start [--port PORT]  Start the dashboard server');
-        console.log('  argentum-dashboard help                 Show this help');
+        console.info('Argentum Dashboard Server');
+        console.info('');
+        console.info('Usage:');
+        console.info('  argentum-dashboard start [--port PORT]  Start the dashboard server');
+        console.info('  argentum-dashboard help                 Show this help');
     }
     else {
-        console.log('Unknown command. Use "start" or "help".');
+        console.info('Unknown command. Use "start" or "help".');
     }
 }
 //# sourceMappingURL=index.js.map

@@ -162,8 +162,7 @@ export class RouterAgent extends EventEmitter {
     // Find matching rule
     for (const rule of this.config.rules) {
       if (this.matches(rule, ctx)) {
-        const targetWorkspace = rule.targetWorkspace
-          || this.agentWorkspaces.get(rule.targetAgent);
+        const targetWorkspace = rule.targetWorkspace ?? this.agentWorkspaces.get(rule.targetAgent);
 
         // Get or create session for target agent
         const sessionKey = await this.getOrCreateSession(
@@ -193,6 +192,9 @@ export class RouterAgent extends EventEmitter {
     const route = await this.route(ctx);
 
     if (route.sessionKey) {
+      this.emit('message:forwarded', { ctx, response, route });
+    } else {
+      this.emit('message:routed', { ctx, response, route });
     }
   }
 
@@ -236,7 +238,7 @@ export class RouterAgent extends EventEmitter {
     agentId: string,
     workspace?: string
   ): Promise<string | undefined> {
-    const cacheKey = `${agentId}:${workspace || 'default'}`;
+    const cacheKey = `${agentId}:${workspace ?? 'default'}`;
 
     if (this.activeSessions.has(cacheKey)) {
       return this.activeSessions.get(cacheKey);
@@ -256,7 +258,7 @@ export class RouterAgent extends EventEmitter {
  */
 export function loadRouterConfig(configPath?: string): RouterConfig {
   const defaultConfigPath = path.resolve(process.cwd(), 'config/router.json');
-  const finalPath = configPath || defaultConfigPath;
+  const finalPath = configPath ?? defaultConfigPath;
 
   try {
     if (fs.existsSync(finalPath)) {
@@ -273,7 +275,7 @@ export function loadRouterConfig(configPath?: string): RouterConfig {
         return getEmptyConfig();
       }
 
-      console.log(`[Router] Loaded config from ${finalPath}`);
+      console.info(`[Router] Loaded config from ${finalPath}`);
       return config;
     } else {
       console.warn(`[Router] Config not found at ${finalPath}, using empty config`);

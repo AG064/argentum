@@ -525,9 +525,7 @@ exports.SimpleRateLimiter = SimpleRateLimiter;
 // Singleton auditor
 let auditor = null;
 function getAuditor() {
-    if (!auditor) {
-        auditor = new SecurityAuditor();
-    }
+    auditor ??= new SecurityAuditor();
     return auditor;
 }
 //# sourceMappingURL=security.js.map

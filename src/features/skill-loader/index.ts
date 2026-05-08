@@ -49,8 +49,9 @@ class SkillLoaderFeature implements FeatureModule {
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.featuresPath =
-      (config['featuresPath'] as string) ||
-      resolve(__dirname, '../../features');
+      typeof config['featuresPath'] === 'string'
+        ? config['featuresPath']
+        : resolve(__dirname, '../../features');
 
     await this.scanForSkills();
   }
@@ -104,7 +105,7 @@ class SkillLoaderFeature implements FeatureModule {
     if (!existsSync(skillPath)) return null;
 
     const content = readFileSync(skillPath, 'utf-8');
-    const featureName = dirname(featureDir).split('/').pop() || 'unknown';
+    const featureName = dirname(featureDir).split('/').pop() ?? 'unknown';
 
     return {
       skillName: featureName,

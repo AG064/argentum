@@ -3,13 +3,21 @@ import path from 'path';
 
 import Database from 'better-sqlite3';
 
+interface AllowlistRuleRow {
+  id: number;
+  pattern: string;
+  type: 'url' | 'command' | 'user';
+  action: 'allow' | 'deny';
+  createdAt: number;
+}
+
 class AllowlistsFeature {
   db: Database.Database;
 
   constructor() {
     const dataDir = path.join(process.cwd(), 'data');
     mkdirSync(dataDir, { recursive: true });
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(dataDir, 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(dataDir, 'agclaw.db');
     this.db = new Database(dbPath);
     this.init();
   }
@@ -51,9 +59,11 @@ class AllowlistsFeature {
   }
 
   check(item: { value: string; type: 'url' | 'command' | 'user' }) {
-    const rows = this.db.prepare('SELECT * FROM rules WHERE type = ?').all(item.type);
-    for (const r of rows as any[]) {
-      const pattern: string = r.pattern;
+    const rows = this.db
+      .prepare<[string], AllowlistRuleRow>('SELECT * FROM rules WHERE type = ?')
+      .all(item.type);
+    for (const r of rows) {
+      const pattern = r.pattern;
 
       // Basic input validation: reject overly long patterns
       if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 200) {
@@ -84,8 +94,11 @@ class AllowlistsFeature {
               if (re2.test(item.value)) {
                 return { matched: true, action: r.action, rule: r };
               }
-            } catch {
-              // give up on this rule
+            } catch (err) {
+              console.warn('Allowlist wildcard pattern failed to compile', {
+                ruleId: r.id,
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
           } else if (pattern === item.value) {
             return { matched: true, action: r.action, rule: r };

@@ -126,8 +126,8 @@ class SecureProfileFeature {
         const all = this.loadAll();
         if (!(id in all))
             return false;
-        delete all[id];
-        this.saveAll(all);
+        const { [id]: _removed, ...remaining } = all;
+        this.saveAll(remaining);
         return true;
     }
 }

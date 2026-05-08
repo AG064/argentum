@@ -9,6 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 /**
@@ -68,13 +69,9 @@ class WeatherAlertsFeature {
     /** Initialize database */
     initDb() {
         const dbDir = path_1.default.dirname(this.config.dbPath);
-        try {
-            const { mkdirSync, existsSync } = require('fs');
-            if (!existsSync(dbDir)) {
-                mkdirSync(dbDir, { recursive: true });
-            }
+        if (!(0, fs_1.existsSync)(dbDir)) {
+            (0, fs_1.mkdirSync)(dbDir, { recursive: true });
         }
-        catch { }
         this.db = new better_sqlite3_1.default(this.config.dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.exec(`
@@ -117,7 +114,7 @@ class WeatherAlertsFeature {
             humidity: parseInt(current.humidity),
             windSpeed: parseInt(current.windspeedKmph),
             windDirection: current.winddir16Point,
-            description: current.weatherDesc?.[0]?.value || 'Unknown',
+            description: current.weatherDesc?.[0]?.value ?? 'Unknown',
             retrievedAt: Date.now(),
         };
         // Parse forecast
@@ -126,7 +123,7 @@ class WeatherAlertsFeature {
                 date: day.date,
                 tempMin: parseInt(day.mintempC) || parseInt(day.mintempF),
                 tempMax: parseInt(day.maxtempC) || parseInt(day.maxtempF),
-                description: day.weatherDesc[0].value,
+                description: day.weatherDesc[0]?.value ?? 'Unknown',
                 precipitationChance: parseInt(day.chanceofrain),
             }));
         }
@@ -154,8 +151,8 @@ class WeatherAlertsFeature {
             location: row.location,
             conditionJSON: row.condition_json,
             createdAt: row.created_at,
-            lastChecked: row.last_checked,
-            lastTriggered: row.last_triggered,
+            lastChecked: row.last_checked ?? undefined,
+            lastTriggered: row.last_triggered ?? undefined,
         }));
     }
     /** Remove an alert */

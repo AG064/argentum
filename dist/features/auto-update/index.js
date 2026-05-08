@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = require("fs");
 const path_1 = require("path");
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 // ─── Feature ─────────────────────────────────────────────────────────────────
 class AutoUpdateFeature {
     meta = {
@@ -31,15 +35,15 @@ class AutoUpdateFeature {
         try {
             const pkgPath = (0, path_1.resolve)(process.cwd(), 'package.json');
             if ((0, fs_1.existsSync)(pkgPath)) {
-                const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf8'));
-                this.currentVersion = pkg['version'] || '0.0.0';
+                const pkg = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf8'));
+                this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.4';
             }
             else {
-                this.currentVersion = '0.0.0';
+                this.currentVersion = '0.0.4';
             }
         }
         catch {
-            this.currentVersion = '0.0.0';
+            this.currentVersion = '0.0.4';
         }
     }
     async init(config, context) {
@@ -77,7 +81,7 @@ class AutoUpdateFeature {
             healthy: true,
             details: {
                 currentVersion: this.currentVersion,
-                latestVersion: this.latestRelease?.version || 'unknown',
+                latestVersion: this.latestRelease?.version ?? 'unknown',
                 lastCheckAge: `${Math.floor(lastCheckAge / 1000)}s`,
                 updateAvailable: hasLatest,
                 historyCount: this.updateHistory.length,
@@ -123,7 +127,7 @@ class AutoUpdateFeature {
             if (!release)
                 return null;
         }
-        return this.latestRelease?.releaseNotes || null;
+        return this.latestRelease?.releaseNotes ?? null;
     }
     /** Apply update */
     async applyUpdate(_component = 'ag-claw') {
@@ -159,7 +163,7 @@ class AutoUpdateFeature {
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            await this.recordUpdate(this.latestRelease?.version || 'unknown', false, message);
+            await this.recordUpdate(this.latestRelease?.version ?? 'unknown', false, message);
             this.ctx.logger.error('Update failed', { error: err });
             return {
                 success: false,
@@ -227,7 +231,7 @@ class AutoUpdateFeature {
             return {
                 version: data.tag_name.replace(/^v/, ''),
                 url: data.html_url,
-                releaseNotes: data.body || 'No release notes',
+                releaseNotes: data.body ?? 'No release notes',
                 publishedAt: data.published_at,
                 isBeta: data.prerelease,
             };
@@ -243,8 +247,8 @@ class AutoUpdateFeature {
         const c = normalize(current);
         const len = Math.max(l.length, c.length);
         for (let i = 0; i < len; i++) {
-            const li = l[i] || 0;
-            const ci = c[i] || 0;
+            const li = l[i] ?? 0;
+            const ci = c[i] ?? 0;
             if (li > ci)
                 return true;
             if (li < ci)
@@ -265,7 +269,7 @@ class AutoUpdateFeature {
         // Placeholder: backup critical files
         // In a real implementation, this would tar up the project directory
         // For now, we just create a marker file
-        require('fs').writeFileSync(backupPath, `Backup created at ${new Date().toISOString()}\n`);
+        (0, fs_1.writeFileSync)(backupPath, `Backup created at ${new Date().toISOString()}\n`);
     }
     async restoreBackup() {
         const backupDir = (0, path_1.resolve)(this.config.backupPath);
@@ -289,10 +293,10 @@ class AutoUpdateFeature {
         if (!(0, fs_1.existsSync)((0, path_1.dirname)(fullPath))) {
             (0, fs_1.mkdirSync)((0, path_1.dirname)(fullPath), { recursive: true });
         }
-        this.db = new (require('better-sqlite3'))(fullPath);
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('synchronous = NORMAL');
-        this.db.exec(`
+        this.db = new better_sqlite3_1.default(fullPath);
+        this.database.pragma('journal_mode = WAL');
+        this.database.pragma('synchronous = NORMAL');
+        this.database.exec(`
       CREATE TABLE IF NOT EXISTS update_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT NOT NULL,
@@ -303,7 +307,7 @@ class AutoUpdateFeature {
     `);
     }
     loadUpdateHistory() {
-        const rows = this.db
+        const rows = this.database
             .prepare('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
             .all();
         this.updateHistory = rows.map((row) => ({
@@ -315,7 +319,7 @@ class AutoUpdateFeature {
     }
     async recordUpdate(version, success, message) {
         const timestamp = Date.now();
-        this.db
+        this.database
             .prepare('INSERT INTO update_history (version, timestamp, success, message) VALUES (?, ?, ?, ?)')
             .run(version, timestamp, success ? 1 : 0, message);
         this.updateHistory.push({ version, timestamp, success, message });
@@ -326,6 +330,12 @@ class AutoUpdateFeature {
     }
     // Helper for DB - will be set after init
     db = null;
+    get database() {
+        if (!this.db) {
+            throw new Error('Auto-update database is not initialized');
+        }
+        return this.db;
+    }
 }
 exports.default = new AutoUpdateFeature();
 //# sourceMappingURL=index.js.map

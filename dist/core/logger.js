@@ -111,9 +111,7 @@ exports.Logger = Logger;
 let globalLogger = null;
 /** Create or get the global logger */
 function createLogger(config) {
-    if (!globalLogger) {
-        globalLogger = new Logger(config);
-    }
+    globalLogger ?? (globalLogger = new Logger(config));
     return globalLogger;
 }
 /** Create a feature-scoped logger */

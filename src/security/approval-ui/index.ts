@@ -80,35 +80,35 @@ export class ApprovalUI {
     const riskColor = RISK_COLORS[request.risk];
     const riskIcon = RISK_ICONS[request.risk];
 
-    console.log('\n');
-    console.log(`  ${'═'.repeat(70)}`);
-    console.log(
+    console.info('\n');
+    console.info(`  ${'═'.repeat(70)}`);
+    console.info(
       `  ${riskIcon} ${riskColor}${RISK_LABELS[request.risk]}\x1b[0m Security Approval Required`,
     );
-    console.log(`  ${'═'.repeat(70)}`);
-    console.log('');
-    console.log(
+    console.info(`  ${'═'.repeat(70)}`);
+    console.info('');
+    console.info(
       `  \x1b[1mAgent:\x1b[0m ${request.agentId}${request.agentName ? ` (${request.agentName})` : ''}`,
     );
-    console.log(`  \x1b[1mRequest ID:\x1b[0m ${request.id}`);
-    console.log(`  \x1b[1mTime:\x1b[0m ${new Date(request.requestedAt).toLocaleString()}`);
-    console.log(`  \x1b[1mExpires:\x1b[0m ${new Date(request.expiresAt).toLocaleString()}`);
-    console.log('');
-    console.log(`  ${'─'.repeat(70)}`);
-    console.log(`  \x1b[1mWhat:\x1b[0m ${request.details.what}`);
-    console.log(`  ${'─'.repeat(70)}`);
-    console.log(`  \x1b[1mWhy:\x1b[0m ${request.details.why}`);
-    console.log(`  ${'─'.repeat(70)}`);
-    console.log(`  \x1b[1mConsequences:\x1b[0m ${request.details.consequences}`);
+    console.info(`  \x1b[1mRequest ID:\x1b[0m ${request.id}`);
+    console.info(`  \x1b[1mTime:\x1b[0m ${new Date(request.requestedAt).toLocaleString()}`);
+    console.info(`  \x1b[1mExpires:\x1b[0m ${new Date(request.expiresAt).toLocaleString()}`);
+    console.info('');
+    console.info(`  ${'─'.repeat(70)}`);
+    console.info(`  \x1b[1mWhat:\x1b[0m ${request.details.what}`);
+    console.info(`  ${'─'.repeat(70)}`);
+    console.info(`  \x1b[1mWhy:\x1b[0m ${request.details.why}`);
+    console.info(`  ${'─'.repeat(70)}`);
+    console.info(`  \x1b[1mConsequences:\x1b[0m ${request.details.consequences}`);
     if (request.details.alternatives?.length) {
-      console.log(`  ${'─'.repeat(70)}`);
-      console.log(`  \x1b[1mAlternatives:\x1b[0m`);
+      console.info(`  ${'─'.repeat(70)}`);
+      console.info(`  \x1b[1mAlternatives:\x1b[0m`);
       for (const alt of request.details.alternatives) {
-        console.log(`    • ${alt}`);
+        console.info(`    • ${alt}`);
       }
     }
-    console.log(`  ${'─'.repeat(70)}`);
-    console.log('');
+    console.info(`  ${'─'.repeat(70)}`);
+    console.info('');
 
     // Read user input
     const readline = await import('readline');
@@ -148,10 +148,10 @@ export class ApprovalUI {
     rl.close();
 
     if (response === 'cancel') {
-      console.log('  \x1b[90mCancelled.\x1b[0m');
+      console.info('  \x1b[90mCancelled.\x1b[0m');
     }
 
-    console.log('');
+    console.info('');
     return response;
   }
 
@@ -163,13 +163,13 @@ export class ApprovalUI {
     const riskColor = RISK_COLORS[request.risk];
     const riskIcon = RISK_ICONS[request.risk];
 
-    console.log('\n');
-    console.log(
+    console.info('\n');
+    console.info(
       `  \x1b[1m${riskIcon} ${riskColor}[SECURITY APPROVAL REQUIRED]\x1b[0m ${request.agentId}`,
     );
-    console.log(`  \x1b[90mRequest ID: ${request.id} | Risk: ${RISK_LABELS[request.risk]}\x1b[0m`);
-    console.log(`  \x1b[90m${request.details.what}\x1b[0m`);
-    console.log('');
+    console.info(`  \x1b[90mRequest ID: ${request.id} | Risk: ${RISK_LABELS[request.risk]}\x1b[0m`);
+    console.info(`  \x1b[90m${request.details.what}\x1b[0m`);
+    console.info('');
 
     // External notification callback (e.g., Telegram)
     if (this.notifyCallback) {
@@ -348,7 +348,7 @@ function formatExpiry(timestamp: number): string {
 // ─── CLI Helpers ─────────────────────────────────────────────────────────────
 
 export function printApprovalHelp(): void {
-  console.log(`
+  console.info(`
   \x1b[1margentum security approve <request-id> [options]\x1b[0m
     Approve a pending security request.
 
@@ -381,8 +381,6 @@ export function printApprovalHelp(): void {
 let instance: ApprovalUI | null = null;
 
 export function getApprovalUI(): ApprovalUI {
-  if (!instance) {
-    instance = new ApprovalUI();
-  }
+  instance ??= new ApprovalUI();
   return instance;
 }

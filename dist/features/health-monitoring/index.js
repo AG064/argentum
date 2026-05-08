@@ -166,9 +166,9 @@ class HealthMonitoringFeature {
     async getCPUInfo() {
         try {
             // Try to get CPU model
-            const cpuModel = (0, os_1.cpus)()[0]?.model || 'Unknown';
+            const cpuModel = (0, os_1.cpus)()[0]?.model ?? 'Unknown';
             // Get load average
-            const loadAvg = require('os').loadavg();
+            const loadAvg = (0, os_1.loadavg)();
             // Estimate CPU usage (this is simplified)
             // In production, use a proper library like 'os-cpu'
             const usage = this.estimateCPUUsage();
@@ -191,7 +191,7 @@ class HealthMonitoringFeature {
     }
     estimateCPUUsage() {
         // Simple heuristic based on load average vs core count
-        const loadAvg = require('os').loadavg()[0] || 0;
+        const loadAvg = (0, os_1.loadavg)()[0] ?? 0;
         const cores = (0, os_1.cpus)().length;
         return Math.min(100, Math.round((loadAvg / cores) * 100));
     }
@@ -233,7 +233,8 @@ class HealthMonitoringFeature {
             source: 'health-monitoring',
         };
         this.alerts.push(alert);
-        this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info']('Alert raised', alert);
+        const alertContext = { ...alert };
+        this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info']('Alert raised', alertContext);
     }
 }
 exports.default = new HealthMonitoringFeature();

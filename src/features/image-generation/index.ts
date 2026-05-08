@@ -56,7 +56,7 @@ export interface GenerateImageResult {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GENERATE_SCRIPT_PATH = join(
-  process.env.HOME || '/home/ag064',
+  process.env.HOME ?? '/home/ag064',
   '.openclaw',
   'workspace',
   'skills',
@@ -66,6 +66,10 @@ const GENERATE_SCRIPT_PATH = join(
 );
 
 const DEFAULT_TIMEOUT_MS = 180_000;
+
+function firstNonEmptySecret(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value !== undefined && value.length > 0);
+}
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
@@ -179,11 +183,17 @@ class ImageGenerationFeature implements FeatureModule {
       let stderr = '';
       let settled = false;
 
+      const geminiApiKey = firstNonEmptySecret(apiKey, process.env.GEMINI_API_KEY);
+      const siliconFlowApiKey = firstNonEmptySecret(
+        fallbackApiKey,
+        process.env.SILICONFLOW_API_KEY,
+      );
+
       const proc = spawn('uv', args, {
         env: {
           ...process.env,
-          ...(apiKey || process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: apiKey || process.env.GEMINI_API_KEY } : {}),
-          SILICONFLOW_API_KEY: fallbackApiKey || process.env.SILICONFLOW_API_KEY,
+          ...(geminiApiKey ? { GEMINI_API_KEY: geminiApiKey } : {}),
+          ...(siliconFlowApiKey ? { SILICONFLOW_API_KEY: siliconFlowApiKey } : {}),
         },
       });
 

@@ -325,7 +325,7 @@ export class MemoryGraph {
       }
 
       const entry = visited.get(currentId);
-      currentId = entry?.parent || undefined;
+      currentId = entry?.parent ?? undefined;
       depth++;
 
       // Safety: don't loop forever
@@ -369,8 +369,6 @@ export class MemoryGraph {
 let instance: MemoryGraph | null = null;
 
 export function getMemoryGraph(dbPath?: string): MemoryGraph {
-  if (!instance) {
-    instance = new MemoryGraph(dbPath);
-  }
+  instance ??= new MemoryGraph(dbPath);
   return instance;
 }

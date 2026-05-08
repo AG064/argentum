@@ -5,7 +5,7 @@ export interface SecureProfileRecord {
     email?: string;
     phone?: string;
     address?: string;
-    [k: string]: any;
+    [k: string]: unknown;
 }
 export interface SecureProfileConfig {
     storagePath?: string;

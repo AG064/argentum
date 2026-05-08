@@ -34,7 +34,7 @@ class TenantIsolationFeature {
         this.db?.close();
     }
     async healthCheck() {
-        const tenants = this.db.prepare('SELECT COUNT(*) as c FROM tenants').get().c;
+        const tenants = this.db.prepare('SELECT COUNT(*) as c FROM tenants').get()?.c ?? 0;
         return { healthy: true, details: { tenantCount: tenants } };
     }
     // Create or fetch tenant record
@@ -43,13 +43,15 @@ class TenantIsolationFeature {
         if (!exists) {
             this.db
                 .prepare('INSERT INTO tenants (id, name, quota) VALUES (?, ?, ?)')
-                .run(tenantId, displayName || tenantId, this.config.defaultQuotaPerTenant);
+                .run(tenantId, displayName ?? tenantId, this.config.defaultQuotaPerTenant);
             this.ctx.logger.info('Tenant created', { tenantId });
         }
     }
     // Check quota for tenant, consume if allowConsume true
     checkAndConsumeQuota(tenantId, amount = 1, allowConsume = true) {
-        const row = this.db.prepare('SELECT quota FROM tenants WHERE id = ?').get(tenantId);
+        const row = this.db
+            .prepare('SELECT quota FROM tenants WHERE id = ?')
+            .get(tenantId);
         if (!row)
             return false;
         const quota = row.quota;

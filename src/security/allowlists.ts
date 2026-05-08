@@ -359,9 +359,7 @@ let instance: AllowlistManager | null = null;
  * Get or create the global allowlist manager.
  */
 export function getAllowlist(mode?: 'strict' | 'permissive'): AllowlistManager {
-  if (!instance) {
-    instance = new AllowlistManager(mode);
-  }
+  instance ??= new AllowlistManager(mode);
   return instance;
 }
 

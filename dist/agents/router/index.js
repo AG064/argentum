@@ -121,8 +121,7 @@ class RouterAgent extends events_1.EventEmitter {
         // Find matching rule
         for (const rule of this.config.rules) {
             if (this.matches(rule, ctx)) {
-                const targetWorkspace = rule.targetWorkspace
-                    || this.agentWorkspaces.get(rule.targetAgent);
+                const targetWorkspace = rule.targetWorkspace ?? this.agentWorkspaces.get(rule.targetAgent);
                 // Get or create session for target agent
                 const sessionKey = await this.getOrCreateSession(rule.targetAgent, targetWorkspace);
                 return {
@@ -144,6 +143,10 @@ class RouterAgent extends events_1.EventEmitter {
     async forwardMessage(ctx, response) {
         const route = await this.route(ctx);
         if (route.sessionKey) {
+            this.emit('message:forwarded', { ctx, response, route });
+        }
+        else {
+            this.emit('message:routed', { ctx, response, route });
         }
     }
     /**
@@ -175,7 +178,7 @@ class RouterAgent extends events_1.EventEmitter {
      * Get existing session for agent or create new one
      */
     async getOrCreateSession(agentId, workspace) {
-        const cacheKey = `${agentId}:${workspace || 'default'}`;
+        const cacheKey = `${agentId}:${workspace ?? 'default'}`;
         if (this.activeSessions.has(cacheKey)) {
             return this.activeSessions.get(cacheKey);
         }
@@ -192,7 +195,7 @@ exports.RouterAgent = RouterAgent;
  */
 function loadRouterConfig(configPath) {
     const defaultConfigPath = path.resolve(process.cwd(), 'config/router.json');
-    const finalPath = configPath || defaultConfigPath;
+    const finalPath = configPath ?? defaultConfigPath;
     try {
         if (fs.existsSync(finalPath)) {
             const content = fs.readFileSync(finalPath, 'utf-8');
@@ -206,7 +209,7 @@ function loadRouterConfig(configPath) {
                 console.error(`[Router] Invalid config at ${finalPath}: missing "defaultAgent"`);
                 return getEmptyConfig();
             }
-            console.log(`[Router] Loaded config from ${finalPath}`);
+            console.info(`[Router] Loaded config from ${finalPath}`);
             return config;
         }
         else {

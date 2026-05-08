@@ -546,9 +546,7 @@ export class ModelRouter {
 let routerInstance: ModelRouter | null = null;
 
 export function getModelRouter(config?: Partial<ModelRouterConfig>): ModelRouter {
-  if (!routerInstance) {
-    routerInstance = new ModelRouter(config);
-  }
+  routerInstance ??= new ModelRouter(config);
   return routerInstance;
 }
 

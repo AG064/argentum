@@ -43,6 +43,27 @@ export interface MultiAgentCoordinationConfig {
   maxAgents: number;
 }
 
+interface TaskRow {
+  task_id: string;
+  assigned_agent_id: string | null;
+  status: Task['status'];
+  created_at: number;
+  assigned_at: number | null;
+  completed_at: number | null;
+  payload: string | null;
+  result: string | null;
+}
+
+interface AgentRow {
+  id: string;
+  name: string;
+  capabilities: string;
+  status: AgentStatus;
+  current_task_id: string | null;
+  last_seen: number;
+  metadata: string | null;
+}
+
 // ─── Feature ─────────────────────────────────────────────────────────────────
 
 class MultiAgentCoordinationFeature implements FeatureModule {
@@ -262,7 +283,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   /** Complete a task */
   async completeTask(taskId: string, result: Record<string, unknown> = {}): Promise<boolean> {
-    const task = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any;
+    const task = this.db
+      .prepare<[string], TaskRow>('SELECT * FROM tasks WHERE task_id = ?')
+      .get(taskId);
     if (!task) return false;
 
     const now = Date.now();
@@ -273,7 +296,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
       .run(now, JSON.stringify(result), taskId);
 
     // Free up the agent
-    const agent = this.agents.get(task.assigned_agent_id);
+    const agent = task.assigned_agent_id ? this.agents.get(task.assigned_agent_id) : undefined;
     if (agent) {
       agent.status = 'idle';
       agent.currentTaskId = null;
@@ -286,7 +309,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   /** Fail a task */
   async failTask(taskId: string): Promise<boolean> {
-    const task = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any;
+    const task = this.db
+      .prepare<[string], TaskRow>('SELECT * FROM tasks WHERE task_id = ?')
+      .get(taskId);
     if (!task) return false;
 
     const now = Date.now();
@@ -295,7 +320,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
       .run(now, taskId);
 
     // Free up the agent
-    const agent = this.agents.get(task.assigned_agent_id);
+    const agent = task.assigned_agent_id ? this.agents.get(task.assigned_agent_id) : undefined;
     if (agent) {
       agent.status = 'idle';
       agent.currentTaskId = null;
@@ -308,7 +333,9 @@ class MultiAgentCoordinationFeature implements FeatureModule {
 
   /** Get task by ID */
   async getTask(taskId: string): Promise<Task | null> {
-    const row = this.db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any;
+    const row = this.db
+      .prepare<[string], TaskRow>('SELECT * FROM tasks WHERE task_id = ?')
+      .get(taskId);
     if (!row) return null;
     return this.mapTaskRow(row);
   }
@@ -319,11 +346,11 @@ class MultiAgentCoordinationFeature implements FeatureModule {
     if (status) {
       stmt = this.db.prepare('SELECT * FROM tasks WHERE status = ?');
     }
-    const rows = status ? stmt.all(status) : stmt.all();
+    const rows = (status ? stmt.all(status) : stmt.all()) as TaskRow[];
     return rows.map(this.mapTaskRow);
   }
 
-  private mapTaskRow(row: any): Task {
+  private mapTaskRow(row: TaskRow): Task {
     return {
       taskId: row.task_id,
       assignedAgentId: row.assigned_agent_id,
@@ -331,7 +358,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
       createdAt: row.created_at,
       assignedAt: row.assigned_at,
       completedAt: row.completed_at,
-      payload: JSON.parse(row.payload || '{}'),
+      payload: JSON.parse(row.payload ?? '{}') as Record<string, unknown>,
       result: row.result ? JSON.parse(row.result) : null,
     };
   }
@@ -348,7 +375,7 @@ class MultiAgentCoordinationFeature implements FeatureModule {
     this.ctx.logger.info('Broadcasting message', {
       message: message.substring(0, 100),
       targetCount: sent,
-      capability: capability || 'all',
+      capability: capability ?? 'all',
       excludeAgent: excludeAgentId,
     });
 
@@ -433,16 +460,16 @@ class MultiAgentCoordinationFeature implements FeatureModule {
   }
 
   private loadAgentsFromDb(): void {
-    const rows = this.db.prepare('SELECT * FROM agents').all();
-    for (const row of rows as any[]) {
+    const rows = this.db.prepare<[], AgentRow>('SELECT * FROM agents').all();
+    for (const row of rows) {
       const agent: AgentInfo = {
         id: row.id,
         name: row.name,
-        capabilities: JSON.parse(row.capabilities),
-        status: row.status as AgentStatus,
+        capabilities: JSON.parse(row.capabilities) as string[],
+        status: row.status,
         currentTaskId: row.current_task_id,
         lastSeen: row.last_seen,
-        metadata: row.metadata ? JSON.parse(row.metadata) : {},
+        metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {},
       };
       this.agents.set(agent.id, agent);
     }

@@ -41,7 +41,7 @@ class RateLimitingFeature implements FeatureModule {
   constructor() {
     const dataDir = path.join(process.cwd(), 'data');
     mkdirSync(dataDir, { recursive: true });
-    const dbPath = process.env.AGCLAW_DB_PATH || path.join(dataDir, 'agclaw.db');
+    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(dataDir, 'agclaw.db');
     this.db = new Database(dbPath);
   }
 

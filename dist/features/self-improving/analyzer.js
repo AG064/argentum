@@ -38,11 +38,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ErrorAnalyzer = void 0;
 const fs = __importStar(require("fs"));
 const fs_1 = require("fs");
 const path = __importStar(require("path"));
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class ErrorAnalyzer {
     sessionsDbPath;
     memoryDir;
@@ -102,9 +106,7 @@ class ErrorAnalyzer {
             return _corrections;
         }
         try {
-            // Dynamic require to avoid issues when better-sqlite3 isn't available
-            const Database = require('better-sqlite3');
-            const db = new Database(this.sessionsDbPath, { readonly: true });
+            const db = new better_sqlite3_1.default(this.sessionsDbPath, { readonly: true });
             // Get recent messages where user may have corrected the assistant
             const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // last 7 days
             const messages = db
@@ -140,7 +142,7 @@ class ErrorAnalyzer {
                     _corrections.push({
                         sessionId: msg.session_id,
                         timestamp: msg.timestamp,
-                        originalResponse: nextMsg.content,
+                        originalResponse: nextMsg.content ?? '',
                         correctedResponse: content,
                         context: this.extractContext(messages, i),
                         category: this.categorizeCorrectionText(content),

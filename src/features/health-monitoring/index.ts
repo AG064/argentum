@@ -1,4 +1,4 @@
-import { cpus, totalmem, freemem, arch, platform } from 'os';
+import { arch, cpus, freemem, loadavg, platform, totalmem } from 'os';
 
 import {
   type FeatureModule,
@@ -258,10 +258,10 @@ class HealthMonitoringFeature implements FeatureModule {
   private async getCPUInfo(): Promise<CPUInfo> {
     try {
       // Try to get CPU model
-      const cpuModel = cpus()[0]?.model || 'Unknown';
+      const cpuModel = cpus()[0]?.model ?? 'Unknown';
 
       // Get load average
-      const loadAvg = require('os').loadavg() as number[];
+      const loadAvg = loadavg();
 
       // Estimate CPU usage (this is simplified)
       // In production, use a proper library like 'os-cpu'
@@ -286,7 +286,7 @@ class HealthMonitoringFeature implements FeatureModule {
 
   private estimateCPUUsage(): number {
     // Simple heuristic based on load average vs core count
-    const loadAvg = require('os').loadavg()[0] || 0;
+    const loadAvg = loadavg()[0] ?? 0;
     const cores = cpus().length;
     return Math.min(100, Math.round((loadAvg / cores) * 100));
   }
@@ -338,9 +338,10 @@ class HealthMonitoringFeature implements FeatureModule {
     };
 
     this.alerts.push(alert);
+    const alertContext: Record<string, unknown> = { ...alert };
     this.ctx.logger[level === 'critical' || level === 'warning' ? 'warn' : 'info'](
       'Alert raised',
-      alert as any,
+      alertContext,
     );
   }
 }

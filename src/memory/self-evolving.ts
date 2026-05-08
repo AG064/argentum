@@ -75,7 +75,11 @@ class SelfEvolvingMemoryFeature implements FeatureModule {
 
   async start(): Promise<void> {
     this.timer = setInterval(() => {
-      this.runConsolidation();
+      void this.runConsolidation().catch((error: unknown) => {
+        this.ctx.logger.error('Memory consolidation failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }, this.config.consolidationIntervalMs);
 
     this.ctx.logger.info('Self-Evolving Memory active', {

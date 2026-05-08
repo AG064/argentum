@@ -13,7 +13,10 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import Database from 'better-sqlite3';
 import { Bot, InputFile } from 'grammy';
+
+import { type FeatureContext } from '../../core/plugin-loader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +40,24 @@ interface TelegramMessage {
   text: string;
   timestamp: number;
   replyTo?: number;
+}
+
+interface ReactionLike {
+  emoji?: string;
+  custom_emoji_id?: string;
+}
+
+interface AllowedUserRow {
+  user_id: string;
+}
+
+interface AllowedGroupRow {
+  group_id: string;
+  require_mention: number;
+}
+
+interface CountRow {
+  c: number;
 }
 
 // ─── Feature ─────────────────────────────────────────────────────────────────
@@ -63,20 +84,20 @@ class TelegramFeature {
   };
 
   private bot: Bot | null = null;
-  private ctx: any = null;
-  private db: any = null;
+  private ctx!: FeatureContext;
+  private db!: Database.Database;
   private messageHandlers: Array<(msg: TelegramMessage) => Promise<void>> = [];
 
-  async init(config: Record<string, unknown>, context: any): Promise<void> {
+  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
     this.config = { ...this.config, ...config } as TelegramConfig;
 
     // Initialize database
-    const dbPath = (config['dbPath'] as string) || './data/telegram.db';
+    const configuredDbPath = config['dbPath'];
+    const dbPath = typeof configuredDbPath === 'string' ? configuredDbPath : './data/telegram.db';
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const Database = require('better-sqlite3');
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
 
@@ -229,7 +250,7 @@ class TelegramFeature {
           const groupId = String(chatId);
           const groupRow = this.db
             .prepare('SELECT * FROM allowed_groups WHERE group_id = ?')
-            .get(groupId);
+            .get(groupId) as AllowedGroupRow | undefined;
           if (!groupRow) return;
           if (groupRow.require_mention && !ctx.message.text.includes(`@${ctx.me.username}`)) return;
         }
@@ -277,7 +298,10 @@ class TelegramFeature {
         chatId: reaction.chat.id,
         userId: reaction.user?.id,
         emoji: reaction.new_reaction
-          .map((r: any) => r.emoji || r.custom_emoji_id || 'unknown')
+          .map((reactionItem) => {
+            const item = reactionItem as ReactionLike;
+            return item.emoji ?? item.custom_emoji_id ?? 'unknown';
+          })
           .join(', '),
       });
     });
@@ -323,7 +347,7 @@ class TelegramFeature {
     try {
       if (!this.bot) return { healthy: false, details: { error: 'Bot not initialized' } };
       const me = await this.bot.api.getMe();
-      const msgCount = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
+      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as CountRow).c;
       return {
         healthy: true,
         details: {
@@ -346,11 +370,11 @@ class TelegramFeature {
   async sendMessage(
     chatId: number | string,
     text: string,
-    options?: { parseMode?: string; replyTo?: number },
+    options?: { parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML'; replyTo?: number },
   ): Promise<void> {
     if (!this.bot) throw new Error('Bot not initialized');
     await this.bot.api.sendMessage(chatId, text, {
-      parse_mode: (options?.parseMode as any) || 'Markdown',
+      parse_mode: options?.parseMode ?? 'Markdown',
       reply_to_message_id: options?.replyTo,
     });
   }
@@ -383,7 +407,9 @@ class TelegramFeature {
   }
 
   listAllowedUsers(): string[] {
-    const rows = this.db.prepare('SELECT user_id FROM allowed_users').all() as any[];
+    const rows = this.db
+      .prepare<[], AllowedUserRow>('SELECT user_id FROM allowed_users')
+      .all();
     return rows.map((r) => r.user_id);
   }
 

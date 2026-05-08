@@ -66,7 +66,7 @@ class TrajectoryExportFeature {
     dbPath;
     constructor() {
         // Auto-init for CLI usage (singleton bypasses plugin loader)
-        const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+        const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
         this.dbPath = (0, path_1.resolve)((0, path_1.join)(workDir, 'data', 'trajectory.db'));
         this.config.dbPath = this.dbPath;
         this.initDatabase();
@@ -186,17 +186,13 @@ class TrajectoryExportFeature {
         };
         for (const entry of entries) {
             const agentId = entry.metadata.agentId ?? 'unknown';
-            if (!stats.byAgent[agentId]) {
-                stats.byAgent[agentId] = { sessions: 0, messages: 0, tokens: 0, cost: 0 };
-            }
+            stats.byAgent[agentId] ??= { sessions: 0, messages: 0, tokens: 0, cost: 0 };
             stats.byAgent[agentId].sessions++;
             stats.byAgent[agentId].messages += entry.messages.length;
             stats.byAgent[agentId].tokens += entry.metadata.tokens;
             stats.byAgent[agentId].cost += entry.metadata.cost;
             for (const tag of entry.metadata.tags) {
-                if (!stats.byTag[tag]) {
-                    stats.byTag[tag] = { sessions: 0, messages: 0 };
-                }
+                stats.byTag[tag] ??= { sessions: 0, messages: 0 };
                 stats.byTag[tag].sessions++;
                 stats.byTag[tag].messages += entry.messages.length;
             }

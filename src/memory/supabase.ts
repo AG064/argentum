@@ -65,7 +65,7 @@ export class SupabaseMemory {
 
     // Dynamic import would be used here in real implementation
     // For now, this is a type-safe interface
-    console.log(`[SupabaseMemory] Initialized with URL: ${supabaseUrl}`);
+    console.info(`[SupabaseMemory] Initialized with URL: ${supabaseUrl}`);
   }
 
   /** Store a memory entry */

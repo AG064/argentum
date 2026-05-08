@@ -5,6 +5,7 @@
  * and generating a digest of recent articles.
  */
 
+import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 
 import Database from 'better-sqlite3';
@@ -46,6 +47,39 @@ export interface NewsSource {
   addedAt: number;
   lastFetched?: number;
   lastArticleCount: number;
+}
+
+interface NewsSourceRow {
+  id: string;
+  url: string;
+  name: string | null;
+  added_at: number;
+  last_fetched: number | null;
+  last_article_count: number;
+}
+
+interface ArticleRow {
+  id: string;
+  source_id: string;
+  source_name?: string | null;
+  title: string;
+  link: string;
+  content: string | null;
+  description: string | null;
+  published_at: number;
+  fetched_at: number;
+}
+
+interface SourceFetchRow {
+  last_fetched: number | null;
+}
+
+interface SourceUrlRow {
+  url: string;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('UNIQUE constraint');
 }
 
 /**
@@ -113,12 +147,9 @@ class NewsDigestFeature implements FeatureModule {
 
   private initDb(): void {
     const dbDir = path.dirname(this.config.dbPath);
-    try {
-      const { mkdirSync, existsSync } = require('fs');
-      if (!existsSync(dbDir)) {
-        mkdirSync(dbDir, { recursive: true });
-      }
-    } catch {}
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true });
+    }
 
     this.db = new Database(this.config.dbPath);
     this.db.pragma('journal_mode = WAL');
@@ -169,8 +200,8 @@ class NewsDigestFeature implements FeatureModule {
         )
         .run(id, url, name ?? null, now);
       this.ctx.logger.info('News source added', { id, url, name });
-    } catch (err: any) {
-      if (err.message?.includes('UNIQUE constraint')) {
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
         throw new Error(`Source with URL already exists: ${url}`);
       }
       throw err;
@@ -188,14 +219,14 @@ class NewsDigestFeature implements FeatureModule {
   /** Get all sources */
   getSources(): NewsSource[] {
     const rows = this.db
-      .prepare('SELECT * FROM news_sources ORDER BY added_at DESC')
-      .all() as any[];
+      .prepare<[], NewsSourceRow>('SELECT * FROM news_sources ORDER BY added_at DESC')
+      .all();
     return rows.map((row) => ({
       id: row.id,
       url: row.url,
-      name: row.name,
+      name: row.name ?? undefined,
       addedAt: row.added_at,
-      lastFetched: row.last_fetched,
+      lastFetched: row.last_fetched ?? undefined,
       lastArticleCount: row.last_article_count,
     }));
   }
@@ -220,15 +251,15 @@ class NewsDigestFeature implements FeatureModule {
       LIMIT ?
     `);
 
-    const rows = stmt.all(...sourceIds, limit) as any[];
+    const rows = stmt.all(...sourceIds, limit) as ArticleRow[];
     return rows.map((row) => ({
       id: row.id,
       sourceId: row.source_id,
-      sourceName: row.source_name,
+      sourceName: row.source_name ?? undefined,
       title: row.title,
       link: row.link,
-      description: row.description,
-      content: row.content,
+      description: row.description ?? undefined,
+      content: row.content ?? undefined,
       publishedAt: row.published_at,
       fetchedAt: row.fetched_at,
     }));
@@ -237,8 +268,8 @@ class NewsDigestFeature implements FeatureModule {
   /** Check if a source needs fetching */
   private needsFetch(sourceId: string): boolean {
     const source = this.db
-      .prepare('SELECT last_fetched FROM news_sources WHERE id = ?')
-      .get(sourceId) as any;
+      .prepare<[string], SourceFetchRow>('SELECT last_fetched FROM news_sources WHERE id = ?')
+      .get(sourceId);
     if (!source?.last_fetched) return true;
     const age = Date.now() - source.last_fetched;
     return age > this.config.cacheMinutes * 60 * 1000;
@@ -255,8 +286,8 @@ class NewsDigestFeature implements FeatureModule {
     for (const sourceId of toFetch) {
       try {
         const source = this.db
-          .prepare('SELECT url FROM news_sources WHERE id = ?')
-          .get(sourceId) as any;
+          .prepare<[string], SourceUrlRow>('SELECT url FROM news_sources WHERE id = ?')
+          .get(sourceId);
         if (!source) continue;
         await this.fetchSource(sourceId, source.url);
       } catch (err) {
@@ -352,7 +383,7 @@ class NewsDigestFeature implements FeatureModule {
 
       const title = getTag('title');
       const description = getTag('description') ?? undefined;
-      const content = (getTag('content:encoded') || getTag('content')) ?? undefined;
+      const content = (getTag('content:encoded') ?? getTag('content')) ?? undefined;
 
       // Parse pubDate
       const pubDateStr = getTag('pubDate');
@@ -408,7 +439,7 @@ class NewsDigestFeature implements FeatureModule {
       const content = getTag('content') ?? undefined;
 
       // Parse updated or published
-      const updatedStr = getTag('updated') || getTag('published');
+      const updatedStr = getTag('updated') ?? getTag('published');
       const publishedAt = updatedStr ? new Date(updatedStr).getTime() : Date.now();
 
       if (title && link) {
@@ -439,14 +470,16 @@ class NewsDigestFeature implements FeatureModule {
 
   /** Get source by ID */
   getSource(id: string): NewsSource | null {
-    const row = this.db.prepare('SELECT * FROM news_sources WHERE id = ?').get(id) as any;
+    const row = this.db
+      .prepare<[string], NewsSourceRow>('SELECT * FROM news_sources WHERE id = ?')
+      .get(id);
     if (!row) return null;
     return {
       id: row.id,
       url: row.url,
-      name: row.name,
+      name: row.name ?? undefined,
       addedAt: row.added_at,
-      lastFetched: row.last_fetched,
+      lastFetched: row.last_fetched ?? undefined,
       lastArticleCount: row.last_article_count,
     };
   }

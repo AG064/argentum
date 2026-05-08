@@ -57,6 +57,32 @@ export interface RecurrenceRule {
   byMonthDay?: number; // Day of month
 }
 
+type BindValue = string | number | bigint | Buffer | null;
+
+interface CalendarEventRow {
+  id: string;
+  title: string;
+  description: string | null;
+  start_time: number;
+  end_time: number;
+  all_day: number;
+  location: string | null;
+  recurrence_rule: string | null;
+  recurrence_interval: number;
+  recurrence_until: number | null;
+  recurrence_count: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface ReminderRow {
+  id: string;
+  event_id: string;
+  time: number;
+  triggered: number;
+  method: Reminder['method'];
+}
+
 /**
  * Calendar Integration feature — local calendar with events and reminders.
  *
@@ -192,7 +218,7 @@ class CalendarIntegrationFeature implements FeatureModule {
       endOfDay,
       startOfDay,
       endOfDay,
-    ) as any[];
+    ) as CalendarEventRow[];
     return rows.map((row) => this.rowToEvent(row));
   }
 
@@ -252,7 +278,7 @@ class CalendarIntegrationFeature implements FeatureModule {
         const remId = rem.id ?? `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         // Determine reminder time
         const remTime: number =
-          rem.time || startTime - this.config.defaultReminderMinutes * 60 * 1000;
+          rem.time ?? startTime - this.config.defaultReminderMinutes * 60 * 1000;
         remStmt.run(remId, id, remTime, rem.triggered ? 1 : 0, rem.method ?? 'notification');
       }
     }
@@ -262,7 +288,9 @@ class CalendarIntegrationFeature implements FeatureModule {
 
   /** Get an event by ID */
   getEvent(id: string): CalendarEvent | null {
-    const row = this.db.prepare('SELECT * FROM events WHERE id = ?').get(id) as any;
+    const row = this.db
+      .prepare<[string], CalendarEventRow>('SELECT * FROM events WHERE id = ?')
+      .get(id);
     if (!row) return null;
     const event = this.rowToEvent(row);
     event.reminders = this.getRemindersForEvent(id);
@@ -288,7 +316,7 @@ class CalendarIntegrationFeature implements FeatureModule {
     }
 
     const updateFields: string[] = [];
-    const updateValues: any[] = [];
+    const updateValues: BindValue[] = [];
 
     if (data.title !== undefined) {
       updateFields.push('title = ?');
@@ -354,8 +382,8 @@ class CalendarIntegrationFeature implements FeatureModule {
   /** Get reminders for an event */
   private getRemindersForEvent(eventId: string): Reminder[] {
     const rows = this.db
-      .prepare('SELECT * FROM reminders WHERE event_id = ?')
-      .all(eventId) as any[];
+      .prepare<[string], ReminderRow>('SELECT * FROM reminders WHERE event_id = ?')
+      .all(eventId);
     return rows.map((row) => ({
       id: row.id,
       eventId: row.event_id,
@@ -366,21 +394,21 @@ class CalendarIntegrationFeature implements FeatureModule {
   }
 
   /** Convert DB row to CalendarEvent */
-  private rowToEvent(row: any): CalendarEvent {
+  private rowToEvent(row: CalendarEventRow): CalendarEvent {
     return {
       id: row.id,
       title: row.title,
-      description: row.description,
+      description: row.description ?? undefined,
       startTime: row.start_time,
       endTime: row.end_time,
       allDay: Boolean(row.all_day),
-      location: row.location,
+      location: row.location ?? undefined,
       recurrence: row.recurrence_rule
         ? {
             frequency: row.recurrence_rule as RecurrenceRule['frequency'],
             interval: row.recurrence_interval,
-            until: row.recurrence_until,
-            count: row.recurrence_count,
+            until: row.recurrence_until ?? undefined,
+            count: row.recurrence_count ?? undefined,
           }
         : undefined,
       createdAt: row.created_at,
@@ -396,7 +424,7 @@ class CalendarIntegrationFeature implements FeatureModule {
 
     const id = `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const time: number =
-      reminder.time || event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
+      reminder.time ?? event.startTime - this.config.defaultReminderMinutes * 60 * 1000;
 
     const stmt = this.db.prepare(
       'INSERT INTO reminders (id, event_id, time, triggered, method) VALUES (?, ?, ?, ?, ?)',
@@ -423,8 +451,8 @@ class CalendarIntegrationFeature implements FeatureModule {
   getPendingReminders(): Reminder[] {
     const now = Date.now();
     const rows = this.db
-      .prepare('SELECT * FROM reminders WHERE triggered = 0 AND time <= ?')
-      .all(now) as any[];
+      .prepare<[number], ReminderRow>('SELECT * FROM reminders WHERE triggered = 0 AND time <= ?')
+      .all(now);
     return rows.map((row) => ({
       id: row.id,
       eventId: row.event_id,
@@ -449,7 +477,7 @@ class CalendarIntegrationFeature implements FeatureModule {
       ORDER BY start_time ASC
       LIMIT ?
     `);
-    const rows = stmt.all(now, limit) as any[];
+    const rows = stmt.all(now, limit) as CalendarEventRow[];
     return rows
       .map((row) => this.rowToEvent(row))
       .map((event) => ({
@@ -469,7 +497,7 @@ class CalendarIntegrationFeature implements FeatureModule {
       OR (start_time <= ? AND end_time >= ?)
       ORDER BY start_time ASC
     `);
-    const rows = stmt.all(start, end, start, end, start, end) as any[];
+    const rows = stmt.all(start, end, start, end, start, end) as CalendarEventRow[];
     return rows
       .map((row) => this.rowToEvent(row))
       .map((event) => ({

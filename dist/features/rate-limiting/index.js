@@ -28,7 +28,7 @@ class RateLimitingFeature {
     constructor() {
         const dataDir = path_1.default.join(process.cwd(), 'data');
         (0, fs_1.mkdirSync)(dataDir, { recursive: true });
-        const dbPath = process.env.AGCLAW_DB_PATH || path_1.default.join(dataDir, 'agclaw.db');
+        const dbPath = process.env.AGCLAW_DB_PATH ?? path_1.default.join(dataDir, 'agclaw.db');
         this.db = new better_sqlite3_1.default(dbPath);
     }
     async init(config, context) {

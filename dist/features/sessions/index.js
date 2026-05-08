@@ -38,11 +38,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const crypto = __importStar(require("crypto"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-// ─── Feature ─────────────────────────────────────────────────────────────────
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SessionsFeature {
     meta = {
         name: 'sessions',
@@ -54,12 +57,12 @@ class SessionsFeature {
     db = null;
     async init(config, context) {
         this._ctx = context;
-        const dbPath = config['dbPath'] || './data/sessions.db';
+        const configuredDbPath = config['dbPath'];
+        const dbPath = typeof configuredDbPath === 'string' ? configuredDbPath : './data/sessions.db';
         const dir = path.dirname(dbPath);
         if (!fs.existsSync(dir))
             fs.mkdirSync(dir, { recursive: true });
-        const Database = require('better-sqlite3');
-        this.db = new Database(dbPath);
+        this.db = new better_sqlite3_1.default(dbPath);
         this.db.pragma('journal_mode = WAL');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -104,8 +107,8 @@ class SessionsFeature {
     }
     async healthCheck() {
         try {
-            const sessionCount = this.db.prepare('SELECT COUNT(*) as c FROM sessions').get().c;
-            const messageCount = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
+            const sessionCount = this.database.prepare('SELECT COUNT(*) as c FROM sessions').get()?.c ?? 0;
+            const messageCount = this.database.prepare('SELECT COUNT(*) as c FROM messages').get()?.c ?? 0;
             return {
                 healthy: true,
                 details: { sessions: sessionCount, messages: messageCount },
@@ -115,44 +118,35 @@ class SessionsFeature {
             return { healthy: false, details: { error: 'Database error' } };
         }
     }
-    // ─── Session CRUD ───────────────────────────────────────────────────────
     create(title, model) {
         const id = crypto.randomUUID();
         const now = Date.now();
         const session = {
             id,
-            title: title || 'New Session',
+            title: title ?? 'New Session',
             createdAt: now,
             updatedAt: now,
             messageCount: 0,
-            model: model || '',
+            model: model ?? '',
             status: 'active',
             tags: [],
             metadata: {},
         };
-        this.db
+        this.database
             .prepare('INSERT INTO sessions (id, title, created_at, updated_at, model, status) VALUES (?, ?, ?, ?, ?, ?)')
             .run(id, session.title, now, now, session.model, 'active');
         return session;
     }
     get(id) {
-        const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
+        const row = this.database
+            .prepare('SELECT * FROM sessions WHERE id = ?')
+            .get(id);
         if (!row)
             return null;
-        const msgCount = this.db
+        const msgCount = this.database
             .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
-            .get(id).c;
-        return {
-            id: row.id,
-            title: row.title,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-            messageCount: msgCount,
-            model: row.model,
-            status: row.status,
-            tags: JSON.parse(row.tags || '[]'),
-            metadata: JSON.parse(row.metadata || '{}'),
-        };
+            .get(id)?.c ?? 0;
+        return this.mapSessionRow(row, msgCount);
     }
     list(options) {
         let query = 'SELECT * FROM sessions';
@@ -170,22 +164,12 @@ class SessionsFeature {
                 params.push(options.offset);
             }
         }
-        const rows = this.db.prepare(query).all(...params);
+        const rows = this.database.prepare(query).all(...params);
         return rows.map((row) => {
-            const msgCount = this.db
+            const msgCount = this.database
                 .prepare('SELECT COUNT(*) as c FROM messages WHERE session_id = ?')
-                .get(row.id).c;
-            return {
-                id: row.id,
-                title: row.title,
-                createdAt: row.created_at,
-                updatedAt: row.updated_at,
-                messageCount: msgCount,
-                model: row.model,
-                status: row.status,
-                tags: JSON.parse(row.tags || '[]'),
-                metadata: JSON.parse(row.metadata || '{}'),
-            };
+                .get(row.id)?.c ?? 0;
+            return this.mapSessionRow(row, msgCount);
         });
     }
     update(id, updates) {
@@ -208,7 +192,7 @@ class SessionsFeature {
         sets.push('updated_at = ?');
         params.push(Date.now());
         params.push(id);
-        const result = this.db
+        const result = this.database
             .prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`)
             .run(...params);
         return result.changes > 0;
@@ -217,24 +201,24 @@ class SessionsFeature {
         return this.update(id, { status: 'archived' });
     }
     delete(id) {
-        this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
-        this.db.prepare('DELETE FROM session_state WHERE session_id = ?').run(id);
-        const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+        this.database.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
+        this.database.prepare('DELETE FROM session_state WHERE session_id = ?').run(id);
+        const result = this.database.prepare('DELETE FROM sessions WHERE id = ?').run(id);
         return result.changes > 0;
     }
-    // ─── Messages ───────────────────────────────────────────────────────────
     addMessage(sessionId, role, content, toolCalls) {
         const id = crypto.randomUUID();
         const now = Date.now();
-        this.db
+        this.database
             .prepare('INSERT INTO messages (id, session_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?)')
             .run(id, sessionId, role, content, now, toolCalls ? JSON.stringify(toolCalls) : null);
-        // Update session timestamp
-        this.db.prepare('UPDATE sessions SET updated_at = ? WHERE id = ?').run(now, sessionId);
+        this.database
+            .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
+            .run(now, sessionId);
         return {
             id,
             sessionId,
-            role: role,
+            role,
             content,
             timestamp: now,
             toolCalls,
@@ -250,21 +234,23 @@ class SessionsFeature {
         query += ' ORDER BY timestamp ASC';
         if (options?.limit) {
             query += ' LIMIT ? OFFSET ?';
-            params.push(options.limit, options.offset || 0);
+            params.push(options.limit, options.offset ?? 0);
         }
-        const rows = this.db.prepare(query).all(...params);
+        const rows = this.database.prepare(query).all(...params);
         return rows.map((row) => ({
             id: row.id,
             sessionId: row.session_id,
             role: row.role,
             content: row.content,
             timestamp: row.timestamp,
-            toolCalls: row.tool_calls ? JSON.parse(row.tool_calls) : undefined,
-            metadata: JSON.parse(row.metadata || '{}'),
+            toolCalls: row.tool_calls
+                ? JSON.parse(row.tool_calls)
+                : undefined,
+            metadata: JSON.parse(row.metadata ?? '{}'),
         }));
     }
     search(query, limit = 20) {
-        const rows = this.db
+        const rows = this.database
             .prepare('SELECT m.id as message_id, m.session_id, m.content, m.role, m.timestamp FROM messages m WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT ?')
             .all(`%${query}%`, limit);
         return rows.map((row) => ({
@@ -275,25 +261,23 @@ class SessionsFeature {
             timestamp: row.timestamp,
         }));
     }
-    // ─── Session State ──────────────────────────────────────────────────────
     setState(sessionId, key, value) {
-        this.db
+        this.database
             .prepare('INSERT OR REPLACE INTO session_state (session_id, key, value, updated_at) VALUES (?, ?, ?, ?)')
             .run(sessionId, key, value, Date.now());
     }
     getState(sessionId, key) {
-        const row = this.db
+        const row = this.database
             .prepare('SELECT value FROM session_state WHERE session_id = ? AND key = ?')
             .get(sessionId, key);
         return row?.value ?? null;
     }
     getAllState(sessionId) {
-        const rows = this.db
+        const rows = this.database
             .prepare('SELECT key, value FROM session_state WHERE session_id = ?')
             .all(sessionId);
-        return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+        return Object.fromEntries(rows.map((row) => [row.key, row.value]));
     }
-    // ─── Export/Import ──────────────────────────────────────────────────────
     export(sessionId) {
         const session = this.get(sessionId);
         if (!session)
@@ -304,18 +288,36 @@ class SessionsFeature {
             state: this.getAllState(sessionId),
         };
     }
-    // ─── Stats ──────────────────────────────────────────────────────────────
     getStats() {
-        const totalSessions = this.db.prepare('SELECT COUNT(*) as c FROM sessions').get().c;
-        const activeSessions = this.db
+        const totalSessions = this.database.prepare('SELECT COUNT(*) as c FROM sessions').get()?.c ?? 0;
+        const activeSessions = this.database
             .prepare("SELECT COUNT(*) as c FROM sessions WHERE status = 'active'")
-            .get().c;
-        const totalMessages = this.db.prepare('SELECT COUNT(*) as c FROM messages').get().c;
+            .get()?.c ?? 0;
+        const totalMessages = this.database.prepare('SELECT COUNT(*) as c FROM messages').get()?.c ?? 0;
         return {
             totalSessions,
             activeSessions,
             totalMessages,
             avgMessagesPerSession: totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0,
+        };
+    }
+    get database() {
+        if (!this.db) {
+            throw new Error('Sessions database is not initialized');
+        }
+        return this.db;
+    }
+    mapSessionRow(row, messageCount) {
+        return {
+            id: row.id,
+            title: row.title,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            messageCount,
+            model: row.model,
+            status: row.status,
+            tags: JSON.parse(row.tags ?? '[]'),
+            metadata: JSON.parse(row.metadata ?? '{}'),
         };
     }
 }

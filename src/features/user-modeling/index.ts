@@ -100,10 +100,12 @@ class UserModelingFeature implements FeatureModule {
     this.ctx = context;
 
     // Determine paths
+    const configuredWorkDir = config['workDir'];
     const workDir =
-      (config['workDir'] as string) ||
-      process.env.AGCLAW_WORKDIR ||
-      path.join(process.env.HOME || '~', '.openclaw', 'workspace');
+      typeof configuredWorkDir === 'string'
+        ? configuredWorkDir
+        : process.env.AGCLAW_WORKDIR ??
+          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
 
     const memoryDir = path.join(workDir, 'memory');
     if (!existsSync(memoryDir)) {
@@ -238,7 +240,7 @@ class UserModelingFeature implements FeatureModule {
     const hourCounts = new Map<number, number>();
     for (const sample of this.samples) {
       const hour = new Date(sample.timestamp).getHours();
-      hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+      hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
     }
 
     // Return hours with >1 sample
@@ -374,7 +376,9 @@ class UserModelingFeature implements FeatureModule {
         if (typeof totalInteractions === 'number') {
           this.preferences.totalInteractions = totalInteractions;
         }
-      } catch {}
+      } catch (err) {
+        this.ctx.logger?.warn('Failed to parse user model frontmatter', { error: String(err) });
+      }
       body = content.slice(frontmatterMatch[0].length);
     }
 

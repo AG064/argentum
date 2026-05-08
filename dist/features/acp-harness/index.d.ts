@@ -49,6 +49,8 @@ declare class ACPHarnessFeature implements FeatureModule {
     stop(): Promise<void>;
     healthCheck(): Promise<HealthStatus>;
     private handleHTTP;
+    private handleExecuteBody;
+    private writeExecutionError;
     private execute;
     private executeWithStream;
     private getCommand;

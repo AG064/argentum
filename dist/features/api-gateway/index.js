@@ -434,7 +434,7 @@ class ApiGatewayFeature {
         return false;
     }
     /** Rate limiting middleware */
-    async rateLimitMiddleware(req, res, next) {
+    rateLimitMiddleware(req, res, next) {
         // Skip rate limiting for health check
         if (req.path.endsWith('/health')) {
             next();

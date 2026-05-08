@@ -15,8 +15,11 @@ const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const path_1 = require("path");
 // ─── Constants ────────────────────────────────────────────────────────────────
-const GENERATE_SCRIPT_PATH = (0, path_1.join)(process.env.HOME || '/home/ag064', '.openclaw', 'workspace', 'skills', 'image-gen', 'scripts', 'generate_image.py');
+const GENERATE_SCRIPT_PATH = (0, path_1.join)(process.env.HOME ?? '/home/ag064', '.openclaw', 'workspace', 'skills', 'image-gen', 'scripts', 'generate_image.py');
 const DEFAULT_TIMEOUT_MS = 180_000;
+function firstNonEmptySecret(...values) {
+    return values.find((value) => value !== undefined && value.length > 0);
+}
 // ─── Feature ─────────────────────────────────────────────────────────────────
 class ImageGenerationFeature {
     meta = {
@@ -101,11 +104,13 @@ class ImageGenerationFeature {
             let stdout = '';
             let stderr = '';
             let settled = false;
+            const geminiApiKey = firstNonEmptySecret(apiKey, process.env.GEMINI_API_KEY);
+            const siliconFlowApiKey = firstNonEmptySecret(fallbackApiKey, process.env.SILICONFLOW_API_KEY);
             const proc = (0, child_process_1.spawn)('uv', args, {
                 env: {
                     ...process.env,
-                    ...(apiKey || process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: apiKey || process.env.GEMINI_API_KEY } : {}),
-                    SILICONFLOW_API_KEY: fallbackApiKey || process.env.SILICONFLOW_API_KEY,
+                    ...(geminiApiKey ? { GEMINI_API_KEY: geminiApiKey } : {}),
+                    ...(siliconFlowApiKey ? { SILICONFLOW_API_KEY: siliconFlowApiKey } : {}),
                 },
             });
             const timer = setTimeout(() => {

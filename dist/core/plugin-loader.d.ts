@@ -81,6 +81,8 @@ export declare class PluginLoader {
     healthCheckAll(): Promise<Map<string, HealthStatus>>;
     /** Get feature state */
     getFeatureState(name: string): FeatureState | undefined;
+    /** Get a loaded feature module by name. */
+    getFeature<TFeature extends FeatureModule = FeatureModule>(name: string): TFeature | undefined;
     /** List all features and their states */
     listFeatures(): Array<{
         name: string;

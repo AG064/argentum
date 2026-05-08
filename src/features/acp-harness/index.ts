@@ -17,9 +17,14 @@
  */
 
 import { spawn } from 'child_process';
-import { createServer, type IncomingMessage, type ServerResponse } from 'http';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from 'http';
 
-import { WebSocketServer } from 'ws';
+import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 
 import {
   type FeatureModule,
@@ -70,8 +75,8 @@ class ACPHarnessFeature implements FeatureModule {
 
   private config: ACPConfig = { ...DEFAULT_CONFIG };
   private ctx!: FeatureContext;
-  private server: any = null;
-  private wsServer: any = null;
+  private server: HttpServer | null = null;
+  private wsServer: WebSocketServer | null = null;
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -81,7 +86,7 @@ class ACPHarnessFeature implements FeatureModule {
   async start(): Promise<void> {
     if (!this.config.enabled) return;
 
-    this.server = createServer(async (req, res) => {
+    this.server = createServer((req, res) => {
       this.handleHTTP(req, res);
     });
 
@@ -94,11 +99,17 @@ class ACPHarnessFeature implements FeatureModule {
 
     // WebSocket server for streaming
     this.wsServer = new WebSocketServer({ server: this.server, path: '/acp/stream' });
-    this.wsServer.on('connection', (ws: any) => {
-      ws.on('message', (data: Buffer) => {
+    this.wsServer.on('connection', (ws: WebSocket) => {
+      ws.on('message', (data: RawData) => {
         try {
           const req = JSON.parse(data.toString()) as ACPExecuteRequest;
-          this.executeWithStream(ws, req);
+          void this.executeWithStream(ws, req).catch((err: unknown) => {
+            ws.send(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : 'Stream execution failed',
+              }),
+            );
+          });
         } catch (err) {
           ws.send(JSON.stringify({ error: 'Invalid request' }));
         }
@@ -118,7 +129,7 @@ class ACPHarnessFeature implements FeatureModule {
     };
   }
 
-  private async handleHTTP(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private handleHTTP(req: IncomingMessage, res: ServerResponse): void {
     // Simple router
     if (req.method !== 'POST' || req.url !== '/acp/execute') {
       res.statusCode = 404;
@@ -128,7 +139,7 @@ class ACPHarnessFeature implements FeatureModule {
 
     // Auth check
     if (this.config.authToken) {
-      const auth = req.headers.authorization || '';
+      const auth = req.headers.authorization ?? '';
       if (!auth.startsWith('Bearer ') || auth.slice(7) !== this.config.authToken) {
         res.statusCode = 401;
         res.end('Unauthorized');
@@ -139,38 +150,47 @@ class ACPHarnessFeature implements FeatureModule {
     // Parse body
     let body = '';
     req.on('data', (chunk) => (body += chunk));
-    req.on('end', async () => {
-      try {
-        const reqBody: ACPExecuteRequest = JSON.parse(body);
-        const result = await this.execute(reqBody);
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        res.statusCode = 500;
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        // Escape HTML in error message to prevent XSS if displayed in HTML context
-        const escapedError = errorMsg
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;');
-        res.end(
-          JSON.stringify({
-            success: false,
-            error: escapedError,
-            stdout: '',
-            stderr: '',
-            exitCode: -1,
-            durationMs: 0,
-          }),
-        );
-      }
+    req.on('end', () => {
+      void this.handleExecuteBody(body, res).catch((err: unknown) => {
+        this.writeExecutionError(res, err);
+      });
     });
+  }
+
+  private async handleExecuteBody(body: string, res: ServerResponse): Promise<void> {
+    try {
+      const reqBody = JSON.parse(body) as ACPExecuteRequest;
+      const result = await this.execute(reqBody);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      this.writeExecutionError(res, err);
+    }
+  }
+
+  private writeExecutionError(res: ServerResponse, err: unknown): void {
+    res.statusCode = 500;
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    const escapedError = errorMsg
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    res.end(
+      JSON.stringify({
+        success: false,
+        error: escapedError,
+        stdout: '',
+        stderr: '',
+        exitCode: -1,
+        durationMs: 0,
+      }),
+    );
   }
 
   private async execute(req: ACPExecuteRequest): Promise<ACPExecuteResponse> {
     const start = Date.now();
-    const timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
+    const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
 
     // Simple execution via child_process (non-isolated)
     return new Promise((resolve) => {
@@ -206,9 +226,9 @@ class ACPHarnessFeature implements FeatureModule {
     });
   }
 
-  private async executeWithStream(ws: any, req: ACPExecuteRequest): Promise<void> {
+  private async executeWithStream(ws: WebSocket, req: ACPExecuteRequest): Promise<void> {
     const _start = Date.now();
-    const _timeoutMs = req.timeoutMs || this.config.defaultTimeoutMs;
+    const _timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
 
     // For streaming, we'll just execute and send incremental updates
     // A proper implementation would stream stdout/stderr in real-time

@@ -54,6 +54,7 @@ declare class AutoUpdateFeature implements FeatureModule {
     private loadUpdateHistory;
     private recordUpdate;
     private db;
+    private get database();
 }
 declare const _default: AutoUpdateFeature;
 export default _default;

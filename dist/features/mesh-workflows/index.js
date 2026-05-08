@@ -10,29 +10,46 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const jsep_1 = __importDefault(require("jsep"));
+function assertExpression(value) {
+    if (!value || typeof value !== 'object' || !('type' in value)) {
+        throw new Error('Invalid expression node');
+    }
+    return value;
+}
+function propertyKey(value) {
+    return typeof value === 'string' || typeof value === 'number' ? value : undefined;
+}
+function asRecord(value) {
+    return value && typeof value === 'object'
+        ? value
+        : undefined;
+}
 // Evaluate parsed AST node
 function evalNode(node, vars) {
     switch (node.type) {
         case 'BinaryExpression': {
-            const left = evalNode(node.left, vars);
-            const right = evalNode(node.right, vars);
+            const binaryNode = node;
+            const left = evalNode(binaryNode.left, vars);
+            const right = evalNode(binaryNode.right, vars);
             switch (node.operator) {
                 case '+':
-                    return left + right;
+                    return typeof left === 'number' && typeof right === 'number'
+                        ? left + right
+                        : `${left ?? ''}${right ?? ''}`;
                 case '-':
-                    return left - right;
+                    return Number(left) - Number(right);
                 case '*':
-                    return left * right;
+                    return Number(left) * Number(right);
                 case '/':
-                    return left / right;
+                    return Number(left) / Number(right);
                 case '>':
-                    return left > right;
+                    return Number(left) > Number(right);
                 case '<':
-                    return left < right;
+                    return Number(left) < Number(right);
                 case '>=':
-                    return left >= right;
+                    return Number(left) >= Number(right);
                 case '<=':
-                    return left <= right;
+                    return Number(left) <= Number(right);
                 case '==':
                     return left == right;
                 case '!=':
@@ -43,28 +60,32 @@ function evalNode(node, vars) {
                     return left !== right;
             }
             // Handle LogicalExpression operators in BinaryExpression case (jsep quirk)
-            if (node.operator === '&&')
-                return evalNode(node.left, vars) && evalNode(node.right, vars);
-            if (node.operator === '||')
-                return evalNode(node.left, vars) || evalNode(node.right, vars);
-            throw new Error(`Unsupported operator: ${node.operator}`);
+            if (binaryNode.operator === '&&')
+                return Boolean(left) && Boolean(right);
+            if (binaryNode.operator === '||')
+                return Boolean(left) || Boolean(right);
+            throw new Error(`Unsupported operator: ${binaryNode.operator}`);
         }
         case 'LogicalExpression': {
-            if (node.operator === '&&')
-                return evalNode(node.left, vars) && evalNode(node.right, vars);
-            if (node.operator === '||')
-                return evalNode(node.left, vars) || evalNode(node.right, vars);
-            throw new Error(`Unsupported logical operator: ${node.operator}`);
+            const logicalNode = node;
+            if (logicalNode.operator === '&&') {
+                return Boolean(evalNode(logicalNode.left, vars)) && Boolean(evalNode(logicalNode.right, vars));
+            }
+            if (logicalNode.operator === '||') {
+                return Boolean(evalNode(logicalNode.left, vars)) || Boolean(evalNode(logicalNode.right, vars));
+            }
+            throw new Error(`Unsupported logical operator: ${logicalNode.operator}`);
         }
         case 'UnaryExpression': {
-            const val = evalNode(node.argument, vars);
-            if (node.operator === '!')
+            const unaryNode = node;
+            const val = evalNode(unaryNode.argument, vars);
+            if (unaryNode.operator === '!')
                 return !val;
-            if (node.operator === '+')
-                return +val;
-            if (node.operator === '-')
-                return -val;
-            throw new Error(`Unsupported unary operator: ${node.operator}`);
+            if (unaryNode.operator === '+')
+                return +Number(val);
+            if (unaryNode.operator === '-')
+                return -Number(val);
+            throw new Error(`Unsupported unary operator: ${unaryNode.operator}`);
         }
         case 'Identifier': {
             const name = node.name;
@@ -75,16 +96,19 @@ function evalNode(node, vars) {
         case 'Literal':
             return node.value;
         case 'MemberExpression': {
-            const obj = evalNode(node.object, vars);
-            const prop = node.computed ? evalNode(node.property, vars) : node.property.name;
-            return obj ? obj[prop] : undefined;
+            const memberNode = node;
+            const obj = asRecord(evalNode(memberNode.object, vars));
+            const prop = propertyKey(memberNode.computed
+                ? evalNode(memberNode.property, vars)
+                : memberNode.property.name);
+            return obj && prop !== undefined ? obj[prop] : undefined;
         }
         case 'Compound':
             // Handle multiple expressions (e.g., from jsep parsing)
             if (Array.isArray(node.body)) {
-                return node.body.reduce((_acc, n) => evalNode(n, vars), undefined);
+                return node.body.reduce((_acc, expression) => evalNode(expression, vars), undefined);
             }
-            return evalNode(node.body, vars);
+            return evalNode(assertExpression(node.body), vars);
         default:
             throw new Error(`Unsupported node type: ${node.type}`);
     }
@@ -378,7 +402,13 @@ class MeshWorkflowsFeature {
                                     if (handler)
                                         await handler(errorStep, execution.variables, execution);
                                 }
-                                catch { }
+                                catch (handlerError) {
+                                    this.ctx.logger.error('Error recovery step failed', {
+                                        executionId: execution.id,
+                                        stepId: errorStep.id,
+                                        error: handlerError instanceof Error ? handlerError.message : String(handlerError),
+                                    });
+                                }
                             }
                         }
                     }
@@ -403,7 +433,12 @@ class MeshWorkflowsFeature {
             try {
                 listener(exec);
             }
-            catch { }
+            catch (listenerError) {
+                this.ctx.logger.warn('Workflow progress listener failed', {
+                    executionId: exec.id,
+                    error: listenerError instanceof Error ? listenerError.message : String(listenerError),
+                });
+            }
         }
     }
     /** Get execution status */
@@ -425,8 +460,16 @@ class MeshWorkflowsFeature {
         if (exec?.status === 'paused') {
             exec.status = 'running';
             const workflow = this.workflows.get(exec.workflowId);
-            if (workflow)
-                this.runExecution(exec, workflow);
+            if (workflow) {
+                void this.runExecution(exec, workflow).catch((error) => {
+                    exec.status = 'failed';
+                    exec.error = error instanceof Error ? error.message : String(error);
+                    this.ctx.logger.error('Workflow resume failed', {
+                        executionId,
+                        error: exec.error,
+                    });
+                });
+            }
             return true;
         }
         return false;

@@ -194,9 +194,17 @@ class MorningBriefingFeature implements FeatureModule {
     }
 
     const delay = target.getTime() - now.getTime();
-    this.timer = setTimeout(async () => {
-      await this.generateBriefing();
-      this.scheduleNextBriefing(); // Reschedule for next day
+    this.timer = setTimeout(() => {
+      void this.generateBriefing()
+        .then(() => {
+          this.scheduleNextBriefing();
+        })
+        .catch((error: unknown) => {
+          this.ctx.logger.error('Morning briefing failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this.scheduleNextBriefing();
+        });
     }, delay);
   }
 

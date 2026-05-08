@@ -64,7 +64,7 @@ class OrgChartFeature implements FeatureModule {
 
   constructor() {
     // Auto-init for CLI usage (singleton bypasses plugin loader)
-    const workDir = process.env.AGCLAW_WORKDIR || process.cwd();
+    const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
     this.config.dbPath = resolve(join(workDir, 'data', 'org-chart.db'));
     this.initDatabase();
     this.ensureCEO();
@@ -379,7 +379,7 @@ class OrgChartFeature implements FeatureModule {
         root = node;
       } else {
         const parent = node.parentId ?? this.config.ceoId;
-        if (!children[parent]) children[parent] = [];
+        children[parent] ??= [];
         children[parent].push(node);
       }
     }

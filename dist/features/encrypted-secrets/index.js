@@ -10,7 +10,7 @@ class EncryptedSecretsFeature {
     db;
     masterKey;
     constructor() {
-        const dbPath = process.env.AGCLAW_DB_PATH || path_1.default.join(process.cwd(), 'data', 'agclaw.db');
+        const dbPath = process.env.AGCLAW_DB_PATH ?? path_1.default.join(process.cwd(), 'data', 'agclaw.db');
         this.db = new better_sqlite3_1.default(dbPath);
         const mk = process.env.AGCLAW_MASTER_KEY;
         if (!mk) {

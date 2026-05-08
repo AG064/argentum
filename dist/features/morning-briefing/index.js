@@ -126,9 +126,17 @@ class MorningBriefingFeature {
             target.setDate(target.getDate() + 1);
         }
         const delay = target.getTime() - now.getTime();
-        this.timer = setTimeout(async () => {
-            await this.generateBriefing();
-            this.scheduleNextBriefing(); // Reschedule for next day
+        this.timer = setTimeout(() => {
+            void this.generateBriefing()
+                .then(() => {
+                this.scheduleNextBriefing();
+            })
+                .catch((error) => {
+                this.ctx.logger.error('Morning briefing failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                this.scheduleNextBriefing();
+            });
         }, delay);
     }
     async getWeatherSection() {

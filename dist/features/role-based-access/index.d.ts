@@ -15,6 +15,13 @@ export interface RoleBasedAccessConfig {
     dbPath: string;
     defaultRole: string;
 }
+export interface DelegationRow {
+    id: string;
+    from_user: string;
+    to_user: string;
+    task_id: string | null;
+    created_at: number;
+}
 declare class RoleBasedAccessFeature implements FeatureModule {
     readonly meta: FeatureMeta;
     private config;
@@ -55,7 +62,7 @@ declare class RoleBasedAccessFeature implements FeatureModule {
     /** Delegate a task from one user to another (records delegation) */
     delegateTask(fromUser: string, toUser: string, taskId?: string): Promise<string>;
     /** Get delegations for a user */
-    getDelegations(userId: string): Promise<any[]>;
+    getDelegations(userId: string): Promise<DelegationRow[]>;
     private initDatabase;
     private loadRolesFromDb;
     private ensureDefaultRoles;

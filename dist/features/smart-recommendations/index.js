@@ -214,7 +214,11 @@ class SmartRecommendationsFeature {
                     }
                 }
             }
-            catch { }
+            catch (ruleError) {
+                this.ctx.logger.warn('Suggestion rule failed', {
+                    error: ruleError instanceof Error ? ruleError.message : String(ruleError),
+                });
+            }
         }
         // Profile-based recommendations
         const sortedProfiles = Array.from(this.profiles.entries()).sort((a, b) => b[1].score - a[1].score);
@@ -247,9 +251,14 @@ class SmartRecommendationsFeature {
                 try {
                     this.onSuggestionCallback(suggestion);
                 }
-                catch { }
+                catch (callbackError) {
+                    this.ctx.logger.warn('Suggestion callback failed', {
+                        suggestionId: suggestion.id,
+                        error: callbackError instanceof Error ? callbackError.message : String(callbackError),
+                    });
+                }
             }
-            this.ctx.emit('suggestion:proactive', suggestion);
+            await this.ctx.emit('suggestion:proactive', suggestion);
         }
     }
     /** Build suggestion context from current state */

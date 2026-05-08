@@ -379,9 +379,7 @@ exports.BlueprintLoader = BlueprintLoader;
 // ─── Singleton ────────────────────────────────────────────────────────────────
 let instance = null;
 function getBlueprintLoader() {
-    if (!instance) {
-        instance = new BlueprintLoader();
-    }
+    instance ??= new BlueprintLoader();
     return instance;
 }
 //# sourceMappingURL=index.js.map

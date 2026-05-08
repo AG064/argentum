@@ -15,7 +15,7 @@ export interface SecureProfileRecord {
   email?: string;
   phone?: string;
   address?: string;
-  [k: string]: any;
+  [k: string]: unknown;
 }
 
 export interface SecureProfileConfig {
@@ -148,8 +148,8 @@ class SecureProfileFeature implements FeatureModule {
   async delete(id: string): Promise<boolean> {
     const all = this.loadAll();
     if (!(id in all)) return false;
-    delete all[id];
-    this.saveAll(all);
+    const { [id]: _removed, ...remaining } = all;
+    this.saveAll(remaining);
     return true;
   }
 }

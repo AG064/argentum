@@ -399,7 +399,7 @@ function createBuiltinTools(options = {}) {
                 const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
                 const { existsSync } = await Promise.resolve().then(() => __importStar(require('fs')));
                 const { join, basename: pathBasename } = await Promise.resolve().then(() => __importStar(require('path')));
-                const homeDir = process.env.HOME || '/home/ag064';
+                const homeDir = process.env.HOME ?? '/home/ag064';
                 const scriptPath = join(homeDir, '.openclaw', 'workspace', 'skills', 'image-gen', 'scripts', 'generate_image.py');
                 if (!existsSync(scriptPath)) {
                     return `Error: generate_image.py not found at ${scriptPath}`;
@@ -518,9 +518,8 @@ class Argentum {
         this.registerShutdownHandlers();
         // Initialize LLM provider
         try {
-            const llmConfig = this.config['llm'];
             this.llmProvider = (0, llm_provider_1.createLLMProvider)({
-                llm: llmConfig,
+                llm: this.config.llm,
             });
             this.logger.info(`LLM provider initialized: ${this.llmProvider.name} (${this.llmProvider.model})`);
         }
@@ -571,10 +570,8 @@ class Argentum {
             this.logger.debug('Webchat message received', { userId, roomId });
             try {
                 const response = await this.agent.handleMessage(content ?? '');
-                const webchatFeature = this.pluginLoader.listFeatures().find((f) => f.name === 'webchat');
-                if (webchatFeature && webchatFeature.sendAssistantMessage) {
-                    webchatFeature.sendAssistantMessage(roomId, response);
-                }
+                const webchatFeature = this.pluginLoader.getFeature('webchat');
+                webchatFeature?.sendAssistantMessage(roomId, response);
             }
             catch (err) {
                 this.logger.error('Webchat agent error', { error: err instanceof Error ? err.message : String(err) });
@@ -786,10 +783,16 @@ class Argentum {
                     `Uptime: ${Math.floor(process.uptime())}s`, { parse_mode: 'Markdown' });
             });
             // Start bot
-            bot.start({
+            void bot
+                .start({
                 onStart: (info) => {
                     this.logger.info('Telegram bot started', { username: info.username });
                 },
+            })
+                .catch((error) => {
+                this.logger.error('Telegram bot stopped with an error', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
             });
             this.logger.info('Telegram channel started', { username: 'starting...' });
         }
@@ -802,15 +805,21 @@ class Argentum {
     }
     /** Periodic health checks for active features */
     startHealthChecks() {
-        setInterval(async () => {
-            if (this.shuttingDown)
-                return;
-            const results = await this.pluginLoader.healthCheckAll();
-            for (const [name, status] of results) {
-                if (!status.healthy) {
-                    this.logger.warn(`Feature unhealthy: ${name}`, { message: status.message });
+        setInterval(() => {
+            void (async () => {
+                if (this.shuttingDown)
+                    return;
+                const results = await this.pluginLoader.healthCheckAll();
+                for (const [name, status] of results) {
+                    if (!status.healthy) {
+                        this.logger.warn(`Feature unhealthy: ${name}`, { message: status.message });
+                    }
                 }
-            }
+            })().catch((error) => {
+                this.logger.error('Health check failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
         }, 60_000); // Every minute
     }
     /** Register OMEGA Memory tools for the agent */
@@ -888,13 +897,20 @@ class Argentum {
     registerShutdownHandlers() {
         const signals = ['SIGINT', 'SIGTERM', 'SIGUSR2'];
         for (const signal of signals) {
-            process.on(signal, async () => {
+            process.on(signal, () => {
                 if (this.shuttingDown)
                     return;
                 this.shuttingDown = true;
-                this.logger.info(`Received ${signal}, shutting down gracefully...`);
-                await this.shutdown();
-                process.exit(0);
+                void (async () => {
+                    this.logger.info(`Received ${signal}, shutting down gracefully...`);
+                    await this.shutdown();
+                    process.exit(0);
+                })().catch((error) => {
+                    this.logger.error('Shutdown failed', {
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                    process.exit(1);
+                });
             });
         }
         process.on('uncaughtException', (err) => {
@@ -932,9 +948,7 @@ exports.Argentum = Argentum;
 // Singleton instance for import by other modules
 let appInstance = null;
 function getArgentum() {
-    if (!appInstance) {
-        appInstance = new Argentum();
-    }
+    appInstance ??= new Argentum();
     return appInstance;
 }
 // Start if run directly
