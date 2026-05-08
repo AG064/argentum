@@ -54,7 +54,7 @@ interface UpdateHistoryRow {
 class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Automatic updates for Argentum components with backup and rollback',
     dependencies: [],
   };
@@ -87,7 +87,7 @@ class AutoUpdateFeature implements FeatureModule {
       const pkgPath = resolve(process.cwd(), 'package.json');
       if (existsSync(pkgPath)) {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageMetadata;
-        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.4';
+        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.5';
       } else {
         this.currentVersion = '0.0.4';
       }

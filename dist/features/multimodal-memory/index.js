@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class MultimodalMemoryFeature {
     meta = {
         name: 'multimodal-memory',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Cross-modal memory storage with semantic search',
         dependencies: [],
     };

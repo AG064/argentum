@@ -202,7 +202,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
   const config: Record<string, unknown> = {
     $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
     name: nonEmptyTrimmed(options.name, 'My Argentum Instance'),
-    version: '0.0.4',
+    version: '0.0.5',
     server: {
       port,
       host: '127.0.0.1',

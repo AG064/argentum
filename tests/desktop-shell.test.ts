@@ -17,7 +17,7 @@ describe('Argentum desktop shell', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.4');
+    expect(config.version).toBe('0.0.5');
     expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
@@ -400,6 +400,9 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('agentName:');
     expect(state).toContain('userName:');
     expect(css).toContain('.recent-chat-list');
+    expect(css).toContain('height: calc(100vh - 138px)');
+    expect(css).toContain('grid-template-rows: auto auto minmax(0, 1fr) auto');
+    expect(css).toContain('overflow-y: auto');
     expect(css).toContain('.composer-tools');
     expect(css).toContain('.markdown-body');
     expect(css).toContain('.typing-indicator');
@@ -453,6 +456,10 @@ describe('Argentum desktop shell', () => {
     expect(cliLaunch).toContain("childEnv.ARGENTUM_PLAIN_OUTPUT = '1'");
     expect(sections).toContain('gateway-terminal-shell');
     expect(sections).toContain('gateway-status-grid');
+    expect(read('src/ui/desktop/main.js')).toContain("addTerminalEntry(command, 'Running...'");
+    expect(rust).toContain('Use Gateway Status for PID, health URL, and log path');
+    expect(rust).toContain('"State: {}"');
+    expect(rust).toContain('format!("Log: {}", log_path.display())');
     expect(css).toContain('overflow-x: hidden');
     expect(css).toContain('.gateway-terminal-shell');
     expect(css).toContain('white-space: pre-wrap');
@@ -523,17 +530,22 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain('MiniMax-M2.7');
     expect(constants).toContain('M2.7 requests reset on a rolling 5-hour window');
     expect(constants).toContain('providerCatalogTabs');
-    expect(constants).toContain("id: 'beta'");
+    expect(constants).toContain("id: 'testing'");
+    expect(constants).toContain('M2.7 requests reset on a rolling 5-hour window');
     expect(setup).toContain('result.usage');
     expect(chat).toContain('formatUsageLine');
     expect(chat).toContain('usageSnapshot.summary');
     expect(sections).toContain('usage?.summary');
+    expect(sections).toContain('requestResetCadence');
+    expect(sections).toContain('resetCadence');
     expect(rust).toContain('MINIMAX_TOKEN_PLAN_REMAINS_URL');
     expect(rust).toContain('https://www.minimax.io/v1/token_plan/remains');
     expect(rust).toContain('async fn minimax_token_plan_usage');
     expect(rust).toContain('fn minimax_usage_snapshot');
     expect(rust).toContain('MiniMax Token Plan');
     expect(rust).toContain('M2.7 best practice');
+    expect(rust).toContain('Provider usage visible to agent');
+    expect(rust).toContain('reset_cadence');
     expect(rust).toContain('usage: Option<UsageLimitSnapshot>');
     expect(rust).toContain('usage = snapshot.or(usage)');
   });
@@ -570,7 +582,7 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('.chat-delete-confirm');
   });
 
-  test('hides non-GPT providers behind a beta access tab', () => {
+  test('keeps ChatGPT/OpenAI and MiniMax stable while other providers are testing', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
     const sections = read('src/ui/desktop/modules/sections.js');
@@ -578,16 +590,18 @@ describe('Argentum desktop shell', () => {
 
     expect(constants).toContain('providerCatalogTabs');
     expect(constants).toContain("access: 'stable'");
-    expect(constants).toContain("access: 'beta'");
+    expect(constants).toContain("access: 'testing'");
+    expect(constants).toContain("label: 'ChatGPT / OpenAI'");
+    expect(constants).toContain("id: 'minimax'");
     expect(onboarding).toContain('provider-access-tabs');
     expect(onboarding).toContain('data-provider-catalog-tab');
     expect(onboarding).toContain('visibleProviders');
     expect(sections).toContain('data-provider-access');
-    expect(sections).toContain('BETA access');
+    expect(sections).toContain('Testing access');
     expect(main).toContain('setProviderCatalogTab');
   });
 
-  test('uses cleaner inline selection cards and keeps active recent chat first', () => {
+  test('uses cleaner inline selection cards and keeps recent chats history-sorted', () => {
     const sections = read('src/ui/desktop/modules/sections.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
     const state = read('src/ui/desktop/modules/state.js');
@@ -599,6 +613,37 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('grid-template-columns: auto minmax(0, 1fr)');
     expect(state).toContain('touchActiveChatSession');
     expect(state).toContain('state.chatSessions = sortChatSessions');
+    expect(state).toContain(".sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))");
+    expect(state).not.toContain("if (a.id === state.activeChatId) return -1");
+  });
+
+  test('separates provider reasoning tags and exposes reasoning output preferences', () => {
+    const state = read('src/ui/desktop/modules/state.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const main = read('src/ui/desktop/main.js');
+    const css = read('src/ui/desktop/styles.css');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(state).toContain('REASONING_BLOCK_PATTERN');
+    expect(state).toContain('splitReasoningFromMessage');
+    expect(state).toContain('redactPrivateText');
+    expect(state).toContain('showThinkingInChat: true');
+    expect(state).toContain('showThinkingInTelegram: false');
+    expect(chat).toContain('renderReasoningPanel');
+    expect(chat).toContain('reasoning-panel');
+    expect(sections).toContain('settings-show-thinking-chat');
+    expect(sections).toContain('settings-show-thinking-telegram');
+    expect(setup).toContain('showThinkingInChat');
+    expect(setup).toContain('showThinkingInTelegram');
+    expect(main).toContain('settings-show-thinking-chat');
+    expect(main).toContain('settings-show-thinking-telegram');
+    expect(css).toContain('.reasoning-panel');
+    expect(rust).toContain('show_thinking_in_chat');
+    expect(rust).toContain('show_thinking_in_telegram');
+    expect(rust).toContain('reasoningOutput');
+    expect(rust).toContain('Privacy boundary');
   });
 
   test('writes Telegram runtime config and passes workspace secrets to the gateway child', () => {
@@ -609,13 +654,16 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('fn split_telegram_allowlist');
     expect(rust).toContain('allowedUsers:');
     expect(rust).toContain('allowedChats:');
+    expect(rust).toContain('sendReasoning:');
     expect(rust).toContain('allowAll:');
     expect(rust).not.toContain('allowlist: {telegram_allowlist}');
-    expect(cli).toContain('function loadWorkspaceEnv');
     expect(cli).toContain('secrets.env');
-    expect(cli).toContain('resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))');
     expect(cliLaunch).toContain('extraEnv?: NodeJS.ProcessEnv');
     expect(cliLaunch).toContain('Object.assign(childEnv, extraEnv)');
+    expect(read('src/channels/telegram.ts')).toContain('formatAgentResponse');
+    expect(read('src/features/telegram/index.ts')).toContain('formatOutboundText');
+    expect(cli).toContain('function loadWorkspaceEnv');
+    expect(cli).toContain('resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))');
   });
 
   test('gateway start refuses missing config and verifies the spawned process stays alive', () => {
@@ -666,6 +714,8 @@ describe('Argentum desktop shell', () => {
     expect(setup).toContain('systemPrompt');
     expect(setup).toContain('selectedContextAccess');
     expect(setup).toContain('thinkingLevel');
+    expect(setup).toContain('showThinkingInChat');
+    expect(setup).toContain('showThinkingInTelegram');
     expect(setup).toContain('securityProfile');
     expect(setup).toContain('selectedChannels');
     expect(onboarding).toContain('id="onboarding-user-name"');
@@ -681,6 +731,8 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('system_prompt: String');
     expect(rust).toContain('selected_context_access: Vec<String>');
     expect(rust).toContain('thinking_level: String');
+    expect(rust).toContain('show_thinking_in_chat: bool');
+    expect(rust).toContain('show_thinking_in_telegram: bool');
     expect(rust).toContain('security_profile: String');
     expect(rust).toContain('selected_channels: Vec<String>');
     expect(rust).toContain('fn build_system_prompt');
@@ -692,5 +744,23 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('Provider keys are added by the desktop credential flow');
     expect(rust).toContain('fn render_config');
     expect(rust).toContain('workspaceRoot');
+  });
+
+  test('documents v0.0.5 release support matrix and stable provider state', () => {
+    const readme = read('README.md');
+    const release = read('docs/releases/v0.0.5.md');
+
+    for (const document of [readme, release]) {
+      expect(document).toContain('v0.0.5');
+      expect(document).toContain('Stable providers');
+      expect(document).toContain('ChatGPT');
+      expect(document).toContain('MiniMax');
+      expect(document).toContain('Testing providers');
+      expect(document).toContain('Supported OS');
+      expect(document).toContain('Hardware requirements');
+      expect(document).toContain('Windows 10/11 x64');
+      expect(document).toContain('macOS 10.15+');
+      expect(document).toContain('Ubuntu 22.04');
+    }
   });
 });

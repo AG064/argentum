@@ -168,7 +168,7 @@ async function runAction(actionId) {
   const command = action?.command || actionId;
   state.runningAction = actionId;
   state.actionStatus = `Running ${action?.title || actionId}...`;
-  addTerminalEntry(command, 'Running through the desktop bridge. Nothing leaves the workspace without the matching permission gate.', 'info');
+  addTerminalEntry(command, 'Running...', 'info');
   render();
 
   const invoke = window.__TAURI__?.core?.invoke;
@@ -238,7 +238,7 @@ function updateProviderFieldsFromPreset(providerId) {
   const provider = providerPresets.find((item) => item.id === providerId);
   if (!provider) return;
   setProvider(provider);
-  setProviderCatalogTab(provider.access || 'beta');
+  setProviderCatalogTab(provider.access || 'testing');
   state.providerSelectionConfirmed = true;
   state.providerSetupStage = 'auth';
 }
@@ -519,6 +519,34 @@ async function handleChange(event) {
     state.thinkingLevel = target.value;
     notify('info', 'Thinking level changed', `Chat thinking level set to ${target.value}.`);
     if (state.setupComplete) await persistRuntimeSettings('thinking-level', { notify: false });
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-show-thinking-chat') {
+    state.showThinkingInChat = target.checked;
+    notify(
+      'info',
+      'Reasoning display changed',
+      state.showThinkingInChat
+        ? 'Thinking and reasoning blocks will appear as collapsible chat context.'
+        : 'Thinking and reasoning blocks will stay hidden in chat.',
+    );
+    if (state.setupComplete) await persistRuntimeSettings('reasoning-output', { notify: false });
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-show-thinking-telegram') {
+    state.showThinkingInTelegram = target.checked;
+    notify(
+      'info',
+      'Telegram reasoning changed',
+      state.showThinkingInTelegram
+        ? 'Telegram may include separated reasoning blocks.'
+        : 'Telegram will omit separated reasoning blocks.',
+    );
+    if (state.setupComplete) await persistRuntimeSettings('reasoning-output', { notify: false });
     render();
     return;
   }

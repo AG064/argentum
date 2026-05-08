@@ -21,6 +21,8 @@ export function buildSetupPayload() {
     systemPrompt: state.systemPrompt,
     selectedContextAccess: state.selectedContextAccess,
     thinkingLevel: state.thinkingLevel,
+    showThinkingInChat: state.showThinkingInChat,
+    showThinkingInTelegram: state.showThinkingInTelegram,
     selectedChannels: state.selectedChannels,
     webchatToken: state.webchatToken,
     telegramToken: state.telegramToken,

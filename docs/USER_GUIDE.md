@@ -740,11 +740,11 @@ Output:
 
 ```
 NAME                    STATUS      HEALTH        VERSION
-sqlite-memory           active      ok            0.0.4
-semantic-search         active      ok            0.0.4
-audit-log               active      ok            0.0.4
-telegram                inactive    -             0.0.4
-morning-briefing         active      ok            0.0.4
+sqlite-memory           active      ok            0.0.5
+semantic-search         active      ok            0.0.5
+audit-log               active      ok            0.0.5
+telegram                inactive    -             0.0.5
+morning-briefing         active      ok            0.0.5
 ```
 
 ---
@@ -860,7 +860,7 @@ Quick reference for common endpoints:
 ```typescript
 interface ArgentumConfig {
   name: string;                          // Instance name
-  version: string;                       // Config format version (const: "0.0.4")
+  version: string;                       // Config format version (const: "0.0.5")
 
   server: {
     port: number;                         // Gateway port (default: 18789)

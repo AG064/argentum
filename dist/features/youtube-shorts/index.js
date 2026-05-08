@@ -26,7 +26,7 @@ const googleapis_1 = require("googleapis");
 class YouTubeShortsFeature {
     meta = {
         name: 'youtube-shorts',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Generate short vertical videos from YouTube URLs and publish to YouTube Shorts',
         dependencies: [],
     };

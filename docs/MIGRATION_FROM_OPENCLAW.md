@@ -274,7 +274,7 @@ import { FeatureModule } from '../../core/types';
 class MyFeature implements FeatureModule {
   readonly meta = {
     name: 'my-feature',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'My converted plugin',
     dependencies: [],
   };

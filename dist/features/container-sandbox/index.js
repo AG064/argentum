@@ -190,7 +190,7 @@ function buildDockerArgs(config, command) {
 class ContainerSandboxFeature {
     meta = {
         name: 'container-sandbox',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Docker-based command sandboxing with isolation',
         dependencies: [],
     };

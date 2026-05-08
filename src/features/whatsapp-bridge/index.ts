@@ -107,7 +107,7 @@ export interface WhatsAppBridgeConfig {
 class WhatsAppBridgeFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'whatsapp-bridge',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'WhatsApp Business API integration with webhook support',
     dependencies: [],
   };

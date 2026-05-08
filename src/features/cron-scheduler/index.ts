@@ -78,7 +78,7 @@ interface BudgetService {
 class CronSchedulerFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'cron-scheduler',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Cron-like job scheduler with persistent storage and custom handlers',
     dependencies: [],
   };

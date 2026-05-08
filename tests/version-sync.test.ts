@@ -9,7 +9,7 @@ describe('version synchronization', () => {
     };
     const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 
-    expect(packageJson.version).toBe('0.0.4');
+    expect(packageJson.version).toBe('0.0.5');
     expect(packageJson.scripts?.['version:sync']).toBe('node scripts/sync-version.js');
     expect(packageJson.scripts?.['version:check']).toBe('node scripts/sync-version.js --check');
     expect(existsSync('scripts/sync-version.js')).toBe(true);

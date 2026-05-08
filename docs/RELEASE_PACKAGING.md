@@ -4,21 +4,21 @@ Argentum releases publish GUI desktop installers from the Desktop Builds workflo
 
 ## Release assets
 
-For version `0.0.4`, the desktop workflow produces the user-facing app installers:
+For version `0.0.5`, the desktop workflow produces the user-facing app installers:
 
-- `Argentum_0.0.4_x64-setup.exe` - graphical Windows setup executable
-- `Argentum_0.0.4_x64_en-US.msi` - Windows Installer package
-- `Argentum_0.0.4_amd64.AppImage` - Linux desktop AppImage
-- `Argentum_0.0.4_amd64.deb` - Linux Debian package
-- `Argentum-0.0.4-1.x86_64.rpm` - Linux RPM package
-- `Argentum_0.0.4_x64.dmg` - macOS Intel desktop package
-- `Argentum_0.0.4_aarch64.dmg` - macOS Apple Silicon desktop package
+- `Argentum_0.0.5_x64-setup.exe` - graphical Windows setup executable
+- `Argentum_0.0.5_x64_en-US.msi` - Windows Installer package
+- `Argentum_0.0.5_amd64.AppImage` - Linux desktop AppImage
+- `Argentum_0.0.5_amd64.deb` - Linux Debian package
+- `Argentum-0.0.5-1.x86_64.rpm` - Linux RPM package
+- `Argentum_0.0.5_x64.dmg` - macOS Intel desktop package
+- `Argentum_0.0.5_aarch64.dmg` - macOS Apple Silicon desktop package
 
 The release workflow also produces optional terminal-first CLI binaries:
 
-- `argentum-cli-v0.0.4-win-x64.exe` - portable Windows CLI executable
-- `argentum-v0.0.4-linux-x64` - portable Linux CLI executable
-- `argentum-v0.0.4-macos-x64` - portable macOS CLI executable
+- `argentum-cli-v0.0.5-win-x64.exe` - portable Windows CLI executable
+- `argentum-v0.0.5-linux-x64` - portable Linux CLI executable
+- `argentum-v0.0.5-macos-x64` - portable macOS CLI executable
 - `SHA256SUMS-portable.txt` - checksums for portable CLI binaries
 
 The Windows setup executable and MSI are GUI desktop installers. They create normal Windows app entries and should launch the Argentum interface, not the terminal CLI. CLI assets are deliberately named with `argentum-cli-`.
@@ -36,8 +36,8 @@ npm test -- --runInBand
 3. Tag and push the release:
 
 ```bash
-git tag v0.0.4
-git push origin v0.0.4
+git tag v0.0.5
+git push origin v0.0.5
 ```
 
 The `Release` workflow builds the artifacts and attaches them to the GitHub release.

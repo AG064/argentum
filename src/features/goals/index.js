@@ -20,7 +20,7 @@ class GoalsFeature {
   constructor() {
     this.meta = {
       name: 'goals',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Hierarchical goal management with task linking',
       dependencies: [],
     };

@@ -24,6 +24,7 @@ export interface TelegramConfig {
     markdown: {
         tables: 'code' | 'markdown' | 'plain';
     };
+    sendReasoning?: boolean;
 }
 interface TelegramMessage {
     id: number;
@@ -59,6 +60,7 @@ declare class TelegramFeature {
         parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
         replyTo?: number;
     }): Promise<void>;
+    private formatOutboundText;
     sendPhoto(chatId: number | string, photo: string | Buffer, caption?: string): Promise<void>;
     sendVoice(chatId: number | string, voice: Buffer, caption?: string): Promise<void>;
     generatePairingCode(): string;

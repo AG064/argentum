@@ -62,7 +62,7 @@ export interface LocalResource {
 class AirGappedFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'air-gapped',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Fully offline operation mode with local models',
     dependencies: [],
   };

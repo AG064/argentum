@@ -55,7 +55,7 @@ const grammy_1 = require("grammy");
 class TelegramFeature {
     meta = {
         name: 'telegram',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Telegram bot integration via Grammy',
         dependencies: ['allowlists'],
     };
@@ -70,6 +70,7 @@ class TelegramFeature {
         reactionNotifications: 'disabled',
         reactionLevel: 'minimal',
         markdown: { tables: 'code' },
+        sendReasoning: false,
     };
     bot = null;
     ctx;
@@ -331,10 +332,24 @@ class TelegramFeature {
     async sendMessage(chatId, text, options) {
         if (!this.bot)
             throw new Error('Bot not initialized');
-        await this.bot.api.sendMessage(chatId, text, {
+        await this.bot.api.sendMessage(chatId, this.formatOutboundText(text), {
             parse_mode: options?.parseMode ?? 'Markdown',
             reply_to_message_id: options?.replyTo,
         });
+    }
+    formatOutboundText(text) {
+        const reasoning = [];
+        const visible = String(text ?? '')
+            .replace(/<(think|reasoning)>([\s\S]*?)<\/\1>/gi, (_match, tag, content) => {
+            reasoning.push(`${tag}: ${String(content ?? '').trim()}`);
+            return '';
+        })
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        if (this.config.sendReasoning && reasoning.length > 0) {
+            return [`Reasoning:\n${reasoning.join('\n\n')}`, visible || 'Done.'].join('\n\n');
+        }
+        return visible || 'Done.';
     }
     async sendPhoto(chatId, photo, caption) {
         if (!this.bot)

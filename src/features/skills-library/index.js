@@ -24,7 +24,7 @@ class SkillsLibraryFeature {
   constructor() {
     this.meta = {
       name: 'skills-library',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Library of agent skills with versioning (SQLite)',
       dependencies: [],
     };

@@ -30,7 +30,7 @@ class GroupManagementFeature {
   constructor() {
     this.meta = {
       name: 'group-management',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Multi-user group management with roles and permissions',
       dependencies: [],
     };

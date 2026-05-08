@@ -27,7 +27,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class MobilePushFeature {
     meta = {
         name: 'mobile-push',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Mobile push notification service with FCM/APNs support',
         dependencies: [],
     };

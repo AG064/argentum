@@ -10,7 +10,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class AutoUpdateFeature {
     meta = {
         name: 'auto-update',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Automatic updates for Argentum components with backup and rollback',
         dependencies: [],
     };
@@ -36,7 +36,7 @@ class AutoUpdateFeature {
             const pkgPath = (0, path_1.resolve)(process.cwd(), 'package.json');
             if ((0, fs_1.existsSync)(pkgPath)) {
                 const pkg = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf8'));
-                this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.4';
+                this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.5';
             }
             else {
                 this.currentVersion = '0.0.4';

@@ -51,7 +51,7 @@ const express_1 = __importStar(require("express"));
 class MobileChannel {
     meta = {
         name: 'mobile',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Push notification channel for mobile companion apps with HTTP endpoint',
         dependencies: [],
     };

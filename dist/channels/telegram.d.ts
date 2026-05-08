@@ -17,6 +17,7 @@ export interface TelegramChannelConfig {
     allowedChats?: number[];
     blockedChats?: number[];
     parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+    sendReasoning?: boolean;
 }
 /**
  * Telegram channel — real grammY bot.
@@ -43,6 +44,7 @@ declare class TelegramChannel implements FeatureModule {
     private registerHandlers;
     /** Split a message into chunks respecting Telegram limits */
     private splitMessage;
+    private formatAgentResponse;
 }
 declare const _default: TelegramChannel;
 export default _default;

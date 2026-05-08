@@ -56,7 +56,7 @@ const path = __importStar(require("path"));
  * ---
  * name: my-skill
  * description: Brief description
- * version: 0.0.4
+ * version: 0.0.5
  * ---
  */
 function parseFrontmatter(content) {
@@ -113,7 +113,7 @@ function extractBody(content) {
 class SkillsLoaderFeature {
     meta = {
         name: 'skills-loader',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Load OpenClaw skills with Hermes-style progressive disclosure',
         dependencies: [],
     };
@@ -246,7 +246,7 @@ class SkillsLoaderFeature {
             const frontmatter = parseFrontmatter(content) ?? {
                 name,
                 description: '',
-                version: '0.0.4',
+                version: '0.0.5',
             };
             const body = extractBody(content);
             // Extract description

@@ -1,6 +1,6 @@
 {
   "name": "argentum",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

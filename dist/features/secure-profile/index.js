@@ -9,7 +9,7 @@ const path_1 = __importDefault(require("path"));
 class SecureProfileFeature {
     meta = {
         name: 'secure-profile',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Encrypted storage for personal profile data (AES-256-GCM)',
         dependencies: [],
     };

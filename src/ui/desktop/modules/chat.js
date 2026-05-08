@@ -94,7 +94,7 @@ function renderChatSection(state) {
           </div>
         </div>
         <div class="chat-transcript">
-          ${state.chatBlocks.map((block) => renderChatBlock(block)).join('')}
+          ${state.chatBlocks.map((block) => renderChatBlock(block, state)).join('')}
           ${renderTypingIndicator(state)}
         </div>
         <div class="composer">
@@ -148,7 +148,12 @@ function formatUsageLine(usageSnapshot) {
   if (!usageSnapshot) return 'Provider rate-limit headers are not reported yet.';
   if (usageSnapshot.summary) return usageSnapshot.summary;
 
-  return `Provider rate: ${usageSnapshot.requestRemaining || 'unknown'} requests and ${usageSnapshot.tokenRemaining || 'unknown'} tokens remaining. Reset: ${usageSnapshot.requestReset || usageSnapshot.tokenReset || 'not reported'}.`;
+  const cadence =
+    usageSnapshot.requestResetCadence ||
+    usageSnapshot.tokenResetCadence ||
+    usageSnapshot.resetCadence ||
+    'cadence not reported';
+  return `Provider rate: ${usageSnapshot.requestRemaining || 'unknown'} requests and ${usageSnapshot.tokenRemaining || 'unknown'} tokens remaining. Reset: ${usageSnapshot.requestReset || usageSnapshot.tokenReset || 'not reported'} (${cadence}).`;
 }
 
 function renderTypingIndicator(state) {
@@ -178,7 +183,18 @@ function renderAttachmentTray(state) {
   `;
 }
 
-function renderChatBlock(block) {
+function renderReasoningPanel(block, state) {
+  if (!state.showThinkingInChat || !block.reasoning) return '';
+
+  return `
+    <details class="reasoning-panel">
+      <summary>Reasoning context</summary>
+      <div class="markdown-body">${renderMarkdown(block.reasoning)}</div>
+    </details>
+  `;
+}
+
+function renderChatBlock(block, state) {
   if (block.type === 'optionGroup') {
     return `
       <article class="chat-block option-group">
@@ -212,6 +228,7 @@ function renderChatBlock(block) {
   return `
     <article class="message ${block.role === 'user' ? 'user' : 'assistant'}">
       <span>${escapeHtml(block.title || 'Argentum')}</span>
+      ${renderReasoningPanel(block, state)}
       <div class="markdown-body">${renderMarkdown(block.body)}</div>
     </article>
   `;

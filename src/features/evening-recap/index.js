@@ -16,7 +16,7 @@ class EveningRecapFeature {
   constructor() {
     this.meta = {
       name: 'evening-recap',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'End-of-day summary with accomplishments and metrics',
       dependencies: [],
     };

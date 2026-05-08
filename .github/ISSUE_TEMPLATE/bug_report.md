@@ -28,7 +28,7 @@ assignees: @AG064
 
 - OS: [e.g., Ubuntu 22.04]
 - Node.js version: [e.g., v20.10.0]
-- Argentum version: [e.g., v0.0.4]
+- Argentum version: [e.g., v0.0.5]
 
 ## 📋 Additional Context
 

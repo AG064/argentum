@@ -49,7 +49,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SessionsFeature {
     meta = {
         name: 'sessions',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Session management for conversations and agent interactions',
         dependencies: ['sqlite-memory'],
     };

@@ -19,7 +19,7 @@ class BudgetFeature {
   constructor() {
     this.meta = {
       name: 'budget',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Token usage budget enforcement with per-agent limits',
       dependencies: [],
     };

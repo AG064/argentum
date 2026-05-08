@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class LiveCanvasFeature {
     meta = {
         name: 'live-canvas',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Real-time collaborative drawing and visualization canvas',
         dependencies: [],
     };

@@ -92,7 +92,7 @@ interface ReminderRow {
 class CalendarIntegrationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'calendar-integration',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Local calendar with events and reminders',
     dependencies: [],
   };

@@ -204,7 +204,7 @@ Example from `audit-log`:
 ```typescript
 export default {
   name: 'audit-log',
-  version: '0.0.4',
+  version: '0.0.5',
   init() {
     this.db = new Database(dbPath);
     this.initTables();
@@ -345,7 +345,7 @@ import * as https from 'node:https';
 
 export default {
   name: 'stock-prices',
-  version: '0.0.4',
+  version: '0.0.5',
   dependencies: [],  // optional: list required features
 
   init() {
@@ -440,7 +440,7 @@ describe('stock-prices feature', () => {
   it('has correct metadata', () => {
     const feature = require('../../../src/features/stock-prices').default;
     expect(feature.name).toBe('stock-prices');
-    expect(feature.version).toBe('0.0.4');
+    expect(feature.version).toBe('0.0.5');
   });
 });
 ```
@@ -623,7 +623,7 @@ export async function execute(
 
 export const metadata = {
   name: 'my-skill',
-  version: '0.0.4',
+  version: '0.0.5',
   description: 'Does something useful',
   author: 'Your Name',
 };
@@ -677,8 +677,8 @@ Add entries under `## [unreleased]` with section headers:
 
 ```bash
 git add -A
-git commit -m "Release v0.0.4"
-git tag v0.0.4
+git commit -m "Release v0.0.5"
+git tag v0.0.5
 git push --tags
 ```
 
@@ -691,7 +691,7 @@ npm publish --access public
 #### 6. Create GitHub Release
 
 Use the tag to create a GitHub Release with:
-- Release title: `v0.0.4`
+- Release title: `v0.0.5`
 - Description from CHANGELOG.md
 - Any special upgrade instructions
 

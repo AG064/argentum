@@ -48,7 +48,7 @@ export interface CheckpointSummary {
 class CheckpointFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'checkpoint',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Task checkpoint and resume across sessions',
     dependencies: [],
   };

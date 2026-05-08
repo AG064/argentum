@@ -31,7 +31,7 @@ npm link
 
 ```bash
 argentum --version
-# 0.0.4
+# 0.0.5
 ```
 
 ---
@@ -97,7 +97,7 @@ curl http://localhost:18789/health
   "success": true,
   "data": {
     "status": "ok",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "uptime": 3,
     "features": "12/59 active",
     "memory": { "semantic": 0, "knowledge_graph": 0, "sessions": 0 }

@@ -20,7 +20,7 @@ class TelegramChannel {
   constructor() {
     this.meta = {
       name: 'telegram',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Telegram channel integration via grammY',
       dependencies: [],
     };
@@ -154,8 +154,9 @@ class TelegramChannel {
       try {
         if (this.agent) {
           const response = await this.agent.handleMessage(text);
+          const formattedResponse = this.formatAgentResponse(response);
           // Split long messages (Telegram limit is 4096 chars)
-          const chunks = this.splitMessage(response, 4000);
+          const chunks = this.splitMessage(formattedResponse, 4000);
           for (const chunk of chunks) {
             await ctx.reply(chunk);
           }
@@ -208,9 +209,9 @@ class TelegramChannel {
         // Process with agent
         if (this.agent) {
           const response = await this.agent.handleMessage(transcription);
-          await ctx.reply(`🎤 Transcription: ${transcription}\n\n${response}`);
+          await ctx.reply(`Transcription: ${transcription}\n\n${this.formatAgentResponse(response)}`);
         } else {
-          await ctx.reply(`🎤 Transcription: ${transcription}\n\n(Agent not initialized)`);
+          await ctx.reply(`Transcription: ${transcription}\n\n(Agent not initialized)`);
         }
       } catch (err) {
         this.ctx.logger.error('Voice processing error', {
@@ -255,6 +256,20 @@ class TelegramChannel {
       remaining = remaining.slice(splitAt).trimStart();
     }
     return chunks;
+  }
+  formatAgentResponse(response) {
+    const reasoning = [];
+    const visible = String(response || '')
+      .replace(/<(think|reasoning)>([\s\S]*?)<\/\1>/gi, (_match, tag, content) => {
+        reasoning.push(`${tag}: ${String(content || '').trim()}`);
+        return '';
+      })
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (this.config.sendReasoning && reasoning.length > 0) {
+      return [`Reasoning:\n${reasoning.join('\n\n')}`, visible || 'Done.'].join('\n\n');
+    }
+    return visible || 'Done.';
   }
 }
 exports.default = new TelegramChannel();

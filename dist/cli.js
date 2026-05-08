@@ -59,7 +59,7 @@ const esm_1 = require("./core/esm");
 const onboarding_1 = require("./core/onboarding");
 const plugin_loader_1 = require("./core/plugin-loader");
 const modelDiscovery_js_1 = require("./utils/modelDiscovery.js");
-const VERSION = '0.0.4';
+const VERSION = '0.0.5';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -596,7 +596,7 @@ function cmdInit() {
         const defaultConfig = {
             $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
             name: 'My ARGENTUM Instance',
-            version: '0.0.4',
+            version: '0.0.5',
             server: {
                 port: 3000,
                 host: '0.0.0.0',

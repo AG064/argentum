@@ -63,7 +63,7 @@ export interface MemorySearchResult {
 class MultimodalMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'multimodal-memory',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Cross-modal memory storage with semantic search',
     dependencies: [],
   };

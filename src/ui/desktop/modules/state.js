@@ -4,6 +4,7 @@ import { defaultModelForAuth, modelAllowedForAuth } from './utils.js';
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
 const CHAT_HISTORY_STORAGE_KEY = 'argentum.chatHistory.v1';
 const UI_PREFERENCES_STORAGE_KEY = 'argentum.uiPreferences.v1';
+const REASONING_BLOCK_PATTERN = /<(think|reasoning)>([\s\S]*?)<\/\1>/gi;
 
 const openingChatBlocks = [
   {
@@ -34,6 +35,46 @@ function titleFromChat(blocks, fallback) {
 
   const text = String(firstUserMessage.body).replace(/\s+/g, ' ').trim();
   return text.length > 34 ? `${text.slice(0, 31)}...` : text;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function redactPrivateText(text) {
+  let output = String(text || '');
+  const systemPrompt = String(state.systemPrompt || '').trim();
+  if (systemPrompt && output.includes(systemPrompt)) {
+    output = output.split(systemPrompt).join('[system prompt hidden]');
+  }
+
+  for (const [label, value, replacement] of [
+    ['Agent name', state.agentName, '[agent name hidden]'],
+    ['User name', state.userName, '[user name hidden]'],
+  ]) {
+    const current = String(value || '').trim();
+    if (!current) continue;
+    output = output.replace(new RegExp(`(${label}\\s*[:=]\\s*)${escapeRegExp(current)}`, 'gi'), `$1${replacement}`);
+  }
+
+  return output;
+}
+
+function splitReasoningFromMessage(body) {
+  const source = String(body || '');
+  const reasoning = [];
+  const visible = source
+    .replace(REASONING_BLOCK_PATTERN, (_match, tag, content) => {
+      reasoning.push(`${tag}: ${String(content || '').trim()}`);
+      return '';
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return {
+    body: redactPrivateText(visible || 'I completed the reasoning, but the provider did not return a separate visible answer.'),
+    reasoning: redactPrivateText(reasoning.join('\n\n').trim()),
+  };
 }
 
 function persistChatHistory() {
@@ -124,6 +165,8 @@ export const state = {
     'You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities.',
   agentPurpose: '',
   thinkingLevel: 'balanced',
+  showThinkingInChat: true,
+  showThinkingInTelegram: false,
   chatStreaming: false,
   chatAttachments: [],
   voiceInputStatus: 'idle',
@@ -279,11 +322,7 @@ export function terminalEntriesForDisplay(filter = '') {
 
 function sortChatSessions(sessions) {
   return [...sessions]
-    .sort((a, b) => {
-      if (a.id === state.activeChatId) return -1;
-      if (b.id === state.activeChatId) return 1;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    })
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
     .slice(0, 24);
 }
 
@@ -325,7 +364,7 @@ export function setActiveChatSession(chatId) {
   state.chatBlocks = cloneBlocks(session.blocks?.length ? session.blocks : openingChatBlocks);
   state.draftMessage = '';
   state.chatAttachments = [];
-  touchActiveChatSession();
+  persistChatHistory();
 }
 
 export function createChatSession() {
@@ -391,7 +430,7 @@ export function confirmDeleteChatSession(chatId) {
 }
 
 export function setProviderCatalogTab(tabId) {
-  state.providerCatalogTab = tabId === 'beta' ? 'beta' : 'stable';
+  state.providerCatalogTab = tabId === 'testing' || tabId === 'beta' ? 'testing' : 'stable';
 }
 
 export function hydrateChatHistory() {
@@ -504,11 +543,13 @@ export function setChannel(channelId, enabled) {
 }
 
 export function appendChatMessage(role, body) {
+  const parsed = role === 'user' ? { body: redactPrivateText(body), reasoning: '' } : splitReasoningFromMessage(body);
   state.chatBlocks.push({
     type: 'message',
     role,
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',
-    body,
+    body: parsed.body,
+    reasoning: parsed.reasoning,
   });
   syncActiveChatSession();
 }

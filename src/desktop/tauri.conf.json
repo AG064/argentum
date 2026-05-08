@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Argentum",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "identifier": "com.argentum.desktop",
   "build": {
     "frontendDist": "../ui/desktop"
@@ -36,7 +36,9 @@
       "../../installer/macos/argentum.icns",
       "../../installer/wix/argentum.ico"
     ],
-    "externalBin": ["binaries/argentum-cli"],
+    "externalBin": [
+      "binaries/argentum-cli"
+    ],
     "windows": {
       "wix": {
         "language": "en-US"

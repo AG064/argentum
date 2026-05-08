@@ -21,7 +21,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class MemoryCompressionFeature {
     meta = {
         name: 'memory-compression',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Compress and archive old memory entries',
         dependencies: [],
     };

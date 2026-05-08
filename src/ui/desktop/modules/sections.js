@@ -282,9 +282,9 @@ const settingsModule = {
               ${providerCatalogTabs
                 .map(
                   (tab) => `
-                    <optgroup label="${escapeAttribute(tab.id === 'beta' ? 'BETA access' : tab.label)}">
+                    <optgroup label="${escapeAttribute(tab.id === 'testing' ? 'Testing access' : tab.label)}">
                       ${providerPresets
-                        .filter((item) => (item.access || 'beta') === tab.id)
+                        .filter((item) => (item.access || 'testing') === tab.id)
                         .map(
                           (item) => `
                             <option value="${item.id}" data-provider-access="${escapeAttribute(tab.id)}" ${item.id === state.llmProvider ? 'selected' : ''}>${escapeHtml(item.label)}</option>
@@ -345,6 +345,26 @@ const settingsModule = {
                 )
                 .join('')}
             </select>
+          </label>
+          <label class="check-card compact-toggle ${state.showThinkingInChat ? 'active' : ''}">
+            <span class="check-card-head">
+              <input id="settings-show-thinking-chat" type="checkbox" ${state.showThinkingInChat ? 'checked' : ''} />
+              <span>
+                <em>Chat display</em>
+                <strong>Show reasoning blocks</strong>
+              </span>
+            </span>
+            <p>Provider text inside &lt;think&gt; or &lt;reasoning&gt; is shown in a muted, collapsible panel above the answer.</p>
+          </label>
+          <label class="check-card compact-toggle ${state.showThinkingInTelegram ? 'active' : ''}">
+            <span class="check-card-head">
+              <input id="settings-show-thinking-telegram" type="checkbox" ${state.showThinkingInTelegram ? 'checked' : ''} />
+              <span>
+                <em>Telegram output</em>
+                <strong>Send reasoning blocks</strong>
+              </span>
+            </span>
+            <p>When enabled, Telegram channel replies may include separated reasoning context. Keep this off for cleaner bot chats.</p>
           </label>
           <label>
             Permission profile
@@ -507,6 +527,14 @@ const diagnosticsModule = {
       : usage
       ? `${usage.requestRemaining || '?'} requests / ${usage.tokenRemaining || '?'} tokens left`
       : 'Not reported yet';
+    const resetCadence =
+      usage?.requestResetCadence ||
+      usage?.tokenResetCadence ||
+      usage?.resetCadence ||
+      (usage?.source === 'MiniMax Token Plan'
+        ? 'M2.7 requests use a rolling 5-hour reset; other MiniMax modalities reset daily.'
+        : 'Provider did not report a reset cadence.');
+    const providerReset = usage?.requestReset || usage?.tokenReset || 'Unknown';
 
     return `
       ${renderNotifications()}
@@ -528,7 +556,7 @@ const diagnosticsModule = {
         <div class="panel-body usage-grid">
           <div><span>Estimated chat context</span><strong>${estimatedTokens.toLocaleString()} tokens</strong></div>
           <div><span>Provider rate limits</span><strong>${escapeHtml(providerUsage)}</strong></div>
-          <div><span>Provider reset</span><strong>${escapeHtml(usage?.requestReset || usage?.tokenReset || 'Unknown')}</strong></div>
+          <div><span>Provider reset</span><strong>${escapeHtml(providerReset)}</strong><small>${escapeHtml(resetCadence)}</small></div>
           <div><span>Terminal entries</span><strong>${state.terminalEntries.length}</strong></div>
           <div><span>Notifications stored</span><strong>${state.notificationHistory.length}</strong></div>
           <div><span>Gateway</span><strong>${state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped'}</strong></div>

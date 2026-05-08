@@ -21,7 +21,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class WeatherAlertsFeature {
     meta = {
         name: 'weather-alerts',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'Weather data retrieval and alerting via wttr.in',
         dependencies: [],
     };

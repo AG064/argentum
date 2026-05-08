@@ -31,6 +31,7 @@ export interface TelegramConfig {
   reactionNotifications: 'all' | 'mentions' | 'disabled';
   reactionLevel: 'minimal' | 'standard' | 'verbose';
   markdown: { tables: 'code' | 'markdown' | 'plain' };
+  sendReasoning?: boolean;
 }
 
 interface TelegramMessage {
@@ -65,7 +66,7 @@ interface CountRow {
 class TelegramFeature {
   readonly meta = {
     name: 'telegram',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Telegram bot integration via Grammy',
     dependencies: ['allowlists'],
   };
@@ -81,6 +82,7 @@ class TelegramFeature {
     reactionNotifications: 'disabled',
     reactionLevel: 'minimal',
     markdown: { tables: 'code' },
+    sendReasoning: false,
   };
 
   private bot: Bot | null = null;
@@ -373,10 +375,27 @@ class TelegramFeature {
     options?: { parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML'; replyTo?: number },
   ): Promise<void> {
     if (!this.bot) throw new Error('Bot not initialized');
-    await this.bot.api.sendMessage(chatId, text, {
+    await this.bot.api.sendMessage(chatId, this.formatOutboundText(text), {
       parse_mode: options?.parseMode ?? 'Markdown',
       reply_to_message_id: options?.replyTo,
     });
+  }
+
+  private formatOutboundText(text: string): string {
+    const reasoning: string[] = [];
+    const visible = String(text ?? '')
+      .replace(/<(think|reasoning)>([\s\S]*?)<\/\1>/gi, (_match, tag, content) => {
+        reasoning.push(`${tag}: ${String(content ?? '').trim()}`);
+        return '';
+      })
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (this.config.sendReasoning && reasoning.length > 0) {
+      return [`Reasoning:\n${reasoning.join('\n\n')}`, visible || 'Done.'].join('\n\n');
+    }
+
+    return visible || 'Done.';
   }
 
   async sendPhoto(

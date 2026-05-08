@@ -322,7 +322,7 @@ function renderProviderStep() {
 
 function renderProviderChoiceStep() {
   const visibleProviders = providerPresets.filter(
-    (item) => (item.access || 'beta') === state.providerCatalogTab,
+    (item) => (item.access || 'testing') === state.providerCatalogTab,
   );
 
   return `
@@ -351,7 +351,7 @@ function renderProviderChoiceStep() {
               <article class="provider-card ${state.llmProvider === item.id ? 'active' : ''}">
                 <button class="provider-select-button" data-provider-id="${item.id}">
                   <strong>${escapeHtml(item.label)}</strong>
-                  <span>${item.access === 'stable' ? 'Stable GPT route' : 'BETA access'}</span>
+                  <span>${item.access === 'stable' ? 'Stable route' : 'Testing access'}</span>
                 </button>
                 <a class="provider-website-link" href="${escapeAttribute(item.websiteUrl)}" data-open-external="${escapeAttribute(item.websiteUrl)}">
                   Provider website

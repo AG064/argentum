@@ -175,7 +175,7 @@ class ContainerSandboxFeature {
   constructor() {
     this.meta = {
       name: 'container-sandbox',
-      version: '0.0.4',
+      version: '0.0.5',
       description: 'Docker-based command sandboxing with isolation',
       dependencies: [],
     };

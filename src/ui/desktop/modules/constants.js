@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.0.4';
+export const APP_VERSION = '0.0.5';
 
 export const sections = [
   { id: 'onboarding', icon: 'spark', title: 'Onboarding', eyebrow: 'First run', requiresSetup: false },
@@ -236,7 +236,7 @@ export const modelMetadata = {
     maxContextWindow: 'Provider dependent',
     currentContextLabel: 'Legacy MiniMax text endpoint. Prefer M2.7 when Token Plan is active.',
     capabilities: ['chat', 'text generation'],
-    detail: 'MiniMax text model kept under Beta access until the provider test confirms support.',
+    detail: 'MiniMax text model kept as a testing model until the provider test confirms support.',
   },
 };
 
@@ -307,12 +307,12 @@ export const providerCatalogTabs = [
   {
     id: 'stable',
     label: 'Stable',
-    detail: 'OpenAI GPT routes that are currently wired for live chat and browser-account authorization.',
+    detail: 'ChatGPT/OpenAI and MiniMax routes wired for live chat, provider tests, and usage reporting.',
   },
   {
-    id: 'beta',
-    label: 'BETA access',
-    detail: 'MiniMax and other providers remain selectable, but each must pass Test Provider before live use.',
+    id: 'testing',
+    label: 'Testing',
+    detail: 'Other providers remain selectable for testing, but they must pass Test Provider before live use.',
   },
 ];
 
@@ -320,7 +320,7 @@ export const providerPresets = [
   {
     id: 'openai',
     access: 'stable',
-    label: 'OpenAI',
+    label: 'ChatGPT / OpenAI',
     api: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
     websiteUrl: 'https://platform.openai.com',
@@ -348,11 +348,11 @@ export const providerPresets = [
       { id: 'gpt-4.1', label: 'GPT-4.1' },
     ],
     requiresKey: true,
-    detail: 'General hosted models with strong tool and chat support.',
+    detail: 'ChatGPT browser-account authorization and OpenAI Platform API routes with strong tool and chat support.',
   },
   {
     id: 'anthropic',
-    access: 'beta',
+    access: 'testing',
     label: 'Anthropic Claude',
     api: 'anthropic',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
@@ -370,7 +370,7 @@ export const providerPresets = [
   },
   {
     id: 'google',
-    access: 'beta',
+    access: 'testing',
     label: 'Google Gemini',
     api: 'openai',
     apiKeyEnv: 'GOOGLE_API_KEY',
@@ -388,7 +388,7 @@ export const providerPresets = [
   },
   {
     id: 'openrouter',
-    access: 'beta',
+    access: 'testing',
     label: 'OpenRouter',
     api: 'openai',
     apiKeyEnv: 'OPENROUTER_API_KEY',
@@ -408,7 +408,7 @@ export const providerPresets = [
   },
   {
     id: 'nvidia',
-    access: 'beta',
+    access: 'testing',
     label: 'NVIDIA',
     api: 'openai',
     apiKeyEnv: 'NVIDIA_API_KEY',
@@ -426,7 +426,7 @@ export const providerPresets = [
   },
   {
     id: 'groq',
-    access: 'beta',
+    access: 'testing',
     label: 'Groq',
     api: 'openai',
     apiKeyEnv: 'GROQ_API_KEY',
@@ -445,7 +445,7 @@ export const providerPresets = [
   },
   {
     id: 'minimax',
-    access: 'beta',
+    access: 'stable',
     label: 'MiniMax',
     api: 'openai',
     apiKeyEnv: 'MINIMAX_API_KEY',
@@ -463,7 +463,7 @@ export const providerPresets = [
   },
   {
     id: 'ollama',
-    access: 'beta',
+    access: 'testing',
     label: 'Ollama / local',
     api: 'openai',
     apiKeyEnv: 'OLLAMA_API_KEY',
@@ -483,7 +483,7 @@ export const providerPresets = [
   },
   {
     id: 'custom',
-    access: 'beta',
+    access: 'testing',
     label: 'Custom endpoint',
     api: 'openai',
     apiKeyEnv: 'CUSTOM_API_KEY',

@@ -75,15 +75,15 @@ Argentum will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `Argentum_0.0.4_x64-setup.exe` for the normal GUI setup flow
-- `Argentum_0.0.4_x64_en-US.msi` for the direct Windows Installer package
-- `argentum-cli-v0.0.4-win-x64.exe` only if you want the terminal CLI
+- `Argentum_0.0.5_x64-setup.exe` for the normal GUI setup flow
+- `Argentum_0.0.5_x64_en-US.msi` for the direct Windows Installer package
+- `argentum-cli-v0.0.5-win-x64.exe` only if you want the terminal CLI
 
 The setup executable and MSI install the desktop application and create Start Menu and desktop shortcuts. The app opens the Argentum GUI; terminal commands remain available through the separate CLI binary:
 
 ```powershell
-.\argentum-cli-v0.0.4-win-x64.exe --version
-.\argentum-cli-v0.0.4-win-x64.exe onboard
+.\argentum-cli-v0.0.5-win-x64.exe --version
+.\argentum-cli-v0.0.5-win-x64.exe onboard
 ```
 
 See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.

@@ -45,7 +45,7 @@ interface TaskRow {
 class TaskCheckoutFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'task-checkout',
-    version: '0.0.4',
+    version: '0.0.5',
     description: 'Atomic task checkout to prevent agent conflicts',
     dependencies: [],
   };

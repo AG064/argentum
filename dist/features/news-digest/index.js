@@ -24,7 +24,7 @@ function isUniqueConstraintError(error) {
 class NewsDigestFeature {
     meta = {
         name: 'news-digest',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'RSS/Atom feed aggregation with caching',
         dependencies: [],
     };

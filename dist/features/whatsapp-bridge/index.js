@@ -28,7 +28,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class WhatsAppBridgeFeature {
     meta = {
         name: 'whatsapp-bridge',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'WhatsApp Business API integration with webhook support',
         dependencies: [],
     };

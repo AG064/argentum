@@ -19,7 +19,7 @@ const chokidar_1 = __importDefault(require("chokidar"));
 class FileWatcherFeature {
     meta = {
         name: 'file-watcher',
-        version: '0.0.4',
+        version: '0.0.5',
         description: 'File system monitoring with chokidar',
         dependencies: [],
     };
