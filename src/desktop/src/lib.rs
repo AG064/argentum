@@ -145,6 +145,19 @@ struct SendChatMessageResponse {
     provider: String,
     model: String,
     offline: bool,
+    usage: Option<UsageLimitSnapshot>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UsageLimitSnapshot {
+    source: String,
+    request_limit: Option<String>,
+    request_remaining: Option<String>,
+    request_reset: Option<String>,
+    token_limit: Option<String>,
+    token_remaining: Option<String>,
+    token_reset: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -384,12 +397,14 @@ fn render_config(request: &SaveSetupRequest) -> String {
     let webchat_enabled = channel_enabled(request, "webchat");
     let telegram_enabled = channel_enabled(request, "telegram");
     let whatsapp_selected = channel_enabled(request, "whatsapp");
-    let telegram_allowlist = request.telegram_allowlist.trim();
+    let (telegram_allow_all, telegram_allowed_users, telegram_allowed_chats) =
+        split_telegram_allowlist(&request.telegram_allowlist);
+    let telegram_allowed_users = yaml_number_list(&telegram_allowed_users, "      ");
+    let telegram_allowed_chats = yaml_number_list(&telegram_allowed_chats, "      ");
     let whatsapp_phone_id = request.whatsapp_phone_id.trim();
-    let quoted_telegram_allowlist = yaml_quote(telegram_allowlist);
     let quoted_whatsapp_phone_id = yaml_quote(whatsapp_phone_id);
     format!(
-        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nprofile:\n  agentName: {agent_name}\n  userName: {user_name}\n  systemPrompt: {system_prompt}\n  thinkingLevel: {thinking_level}\n  contextAccess:\n{context_access}logging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      auth_method: {provider_auth_method}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowlist: {telegram_allowlist}\n  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
+        "version: \"{version}\"\nexperienceLevel: {experience}\nruntimeMode: {runtime}\nprofile:\n  agentName: {agent_name}\n  userName: {user_name}\n  systemPrompt: {system_prompt}\n  thinkingLevel: {thinking_level}\n  contextAccess:\n{context_access}logging:\n  level: info\n  format: json\nllm:\n  default: {provider_name}\n  providers:\n    {provider_name}:\n      label: {provider_label}\n      base_url: {provider_base_url}\n      api_key_env: {api_key_env}\n      api: {provider_api}\n      auth_method: {provider_auth_method}\n      models:\n        - {provider_model}\nsecurity:\n  capabilities:\n    defaultProfile: {profile}\n    workspaceRoot: {workspace}\n    auditPath: ./data/audit/capabilities.log\nfeatures:\n  webchat:\n    enabled: {webchat}\n  whatsapp-bridge:\n    enabled: false\n    selected: {whatsapp_selected}\n    phoneNumberId: {whatsapp_phone_id}\nchannels:\n  local:\n    enabled: true\n  webchat:\n    enabled: {webchat}\n  telegram:\n    enabled: {telegram}\n    allowAll: {telegram_allow_all}\n    allowedUsers:\n{telegram_allowed_users}    allowedChats:\n{telegram_allowed_chats}  whatsapp:\n    enabled: false\n    selected: {whatsapp_selected}\n",
         version = request.version,
         experience = request.experience_level,
         runtime = request.runtime_mode,
@@ -407,12 +422,14 @@ fn render_config(request: &SaveSetupRequest) -> String {
         context_access = context_access,
         profile = profile,
         workspace = quoted_workspace,
-        webchat = webchat_enabled,
-        telegram = telegram_enabled,
-        telegram_allowlist = quoted_telegram_allowlist,
-        whatsapp_selected = whatsapp_selected,
-        whatsapp_phone_id = quoted_whatsapp_phone_id,
-    )
+            webchat = webchat_enabled,
+            telegram = telegram_enabled,
+            telegram_allow_all = telegram_allow_all,
+            telegram_allowed_users = telegram_allowed_users,
+            telegram_allowed_chats = telegram_allowed_chats,
+            whatsapp_selected = whatsapp_selected,
+            whatsapp_phone_id = quoted_whatsapp_phone_id,
+        )
 }
 
 fn provider_defaults(provider: &str) -> Option<ProviderDefaults> {
@@ -684,6 +701,51 @@ fn yaml_list(values: &[String]) -> String {
         .collect::<String>()
 }
 
+fn yaml_number_list(values: &[i64], indent: &str) -> String {
+    if values.is_empty() {
+        return format!("{indent}[]\n");
+    }
+
+    values
+        .iter()
+        .map(|value| format!("{indent}- {value}\n"))
+        .collect::<String>()
+}
+
+fn split_telegram_allowlist(value: &str) -> (bool, Vec<i64>, Vec<i64>) {
+    let mut allow_all = false;
+    let mut allowed_users = Vec::new();
+    let mut allowed_chats = Vec::new();
+
+    for item in value
+        .split([',', '\n', ';'])
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
+        if matches!(item.to_ascii_lowercase().as_str(), "*" | "all" | "any") {
+            allow_all = true;
+            continue;
+        }
+
+        let Ok(id) = item.parse::<i64>() else {
+            continue;
+        };
+
+        if id >= 0 {
+            if !allowed_users.contains(&id) {
+                allowed_users.push(id);
+            }
+            if !allowed_chats.contains(&id) {
+                allowed_chats.push(id);
+            }
+        } else if !allowed_chats.contains(&id) {
+            allowed_chats.push(id);
+        }
+    }
+
+    (allow_all, allowed_users, allowed_chats)
+}
+
 fn target_triple() -> &'static str {
     if cfg!(target_os = "windows") {
         "x86_64-pc-windows-msvc"
@@ -775,6 +837,52 @@ fn strip_ansi(input: &str) -> String {
         .replace("âœ“", "OK")
         .replace("â„¹", "Info")
         .replace("âš ", "Warning")
+        .replace("�[36m", "")
+        .replace("�[32m", "")
+        .replace("�[33m", "")
+        .replace("�[31m", "")
+        .replace("�[0m", "")
+        .replace('\u{fffd}', "")
+}
+
+fn is_argentum_banner_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if trimmed == "ARGENTUM" || trimmed.contains("Modular AI Agent Framework") {
+        return true;
+    }
+
+    let non_space = trimmed.chars().filter(|character| !character.is_whitespace()).count();
+    let uppercase = trimmed
+        .chars()
+        .filter(|character| character.is_ascii_uppercase())
+        .count();
+
+    non_space > 12
+        && uppercase.saturating_mul(100) / non_space >= 75
+        && ["AAAAA", "RRRRR", "GGGGG", "EEEEEEE", "TTTTTTT", "UUUUU", "M     M"]
+            .iter()
+            .any(|marker| trimmed.contains(marker))
+}
+
+fn strip_argentum_banner(input: &str) -> String {
+    input
+        .lines()
+        .filter(|line| !is_argentum_banner_line(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn clean_terminal_output(input: &str) -> String {
+    strip_argentum_banner(&strip_ansi(input))
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn run_sidecar(app: &tauri::AppHandle, workspace: &Path, args: &[&str]) -> Result<String, String> {
@@ -783,19 +891,23 @@ fn run_sidecar(app: &tauri::AppHandle, workspace: &Path, args: &[&str]) -> Resul
         .args(args)
         .env("ARGENTUM_WORKDIR", workspace)
         .env("ARGENTUM_SKIP_EXIT_PAUSE", "1")
+        .env("ARGENTUM_LOG_FORMAT", "json")
+        .env("ARGENTUM_NO_BANNER", "1")
+        .env("ARGENTUM_PLAIN_OUTPUT", "1")
         .env("AGCLAW_WORKDIR", "")
         .env("AGCLAW_SKIP_EXIT_PAUSE", "1")
         .current_dir(workspace)
         .output()
         .map_err(|error| format!("Failed to run Argentum sidecar: {error}"))?;
 
-    let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
-    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = [stdout.trim(), stderr.trim()]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
+    let combined = clean_terminal_output(&combined);
 
     if output.status.success() {
         Ok(redact_sensitive_output(&combined))
@@ -917,7 +1029,8 @@ fn read_preview(path: &Path, max_lines: usize) -> String {
         return "No entries yet.".to_string();
     };
 
-    let lines = contents.lines().collect::<Vec<_>>();
+    let cleaned = clean_terminal_output(&contents);
+    let lines = cleaned.lines().collect::<Vec<_>>();
     let start = lines.len().saturating_sub(max_lines);
 
     lines[start..]
@@ -1538,6 +1651,39 @@ fn provider_http_error(provider: &str, status: u16, body: &str) -> String {
         _ => format!(
             "{provider} responded with HTTP {status}. Check the endpoint and selected model, then test again.{suffix}"
         ),
+    }
+}
+
+fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn usage_limits_from_headers(headers: &HeaderMap, source: &str) -> Option<UsageLimitSnapshot> {
+    let snapshot = UsageLimitSnapshot {
+        source: source.to_string(),
+        request_limit: header_text(headers, "x-ratelimit-limit-requests"),
+        request_remaining: header_text(headers, "x-ratelimit-remaining-requests"),
+        request_reset: header_text(headers, "x-ratelimit-reset-requests"),
+        token_limit: header_text(headers, "x-ratelimit-limit-tokens"),
+        token_remaining: header_text(headers, "x-ratelimit-remaining-tokens"),
+        token_reset: header_text(headers, "x-ratelimit-reset-tokens"),
+    };
+
+    if snapshot.request_limit.is_some()
+        || snapshot.request_remaining.is_some()
+        || snapshot.request_reset.is_some()
+        || snapshot.token_limit.is_some()
+        || snapshot.token_remaining.is_some()
+        || snapshot.token_reset.is_some()
+    {
+        Some(snapshot)
+    } else {
+        None
     }
 }
 
@@ -2193,7 +2339,7 @@ async fn send_codex_chat_message(
     message: &str,
     system_prompt: &str,
     thinking_level: &str,
-) -> Result<String, String> {
+) -> Result<(String, Option<UsageLimitSnapshot>), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
         .build()
@@ -2225,13 +2371,14 @@ async fn send_codex_chat_message(
         response
     };
     let status = response.status();
+    let usage = usage_limits_from_headers(response.headers(), "OpenAI/Codex response");
     let body = response.text().await.unwrap_or_default();
 
     if !status.is_success() {
         return Err(codex_http_error(status.as_u16(), &body));
     }
 
-    parse_codex_sse_response(&body)
+    Ok((parse_codex_sse_response(&body)?, usage))
 }
 
 #[tauri::command]
@@ -2550,6 +2697,7 @@ async fn send_chat_message(
                 provider: "Offline".to_string(),
                 model: "local-guided".to_string(),
                 offline: true,
+                usage: None,
             });
         }
     };
@@ -2606,6 +2754,7 @@ async fn send_chat_message(
             provider: config.label,
             model: config.model,
             offline: true,
+            usage: None,
         });
     }
 
@@ -2620,9 +2769,10 @@ async fn send_chat_message(
                 provider: config.label,
                 model: config.model,
                 offline: true,
+                usage: None,
             });
         }
-        let answer =
+        let (answer, usage) =
             send_codex_chat_message(&workspace, &config, message, &system_prompt, thinking_level)
                 .await?;
 
@@ -2632,6 +2782,7 @@ async fn send_chat_message(
             provider: config.label,
             model: config.model,
             offline: false,
+            usage,
         });
     }
 
@@ -2648,6 +2799,7 @@ async fn send_chat_message(
             provider: config.label,
             model: config.model,
             offline: true,
+            usage: None,
         });
     }
 
@@ -2693,6 +2845,7 @@ async fn send_chat_message(
         .await
         .map_err(redact_provider_error)?;
     let status = response.status();
+    let mut usage = usage_limits_from_headers(response.headers(), &format!("{} response", config.label));
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
         let error_body = response.text().await.unwrap_or_default();
@@ -2746,6 +2899,10 @@ async fn send_chat_message(
                 .await
                 .map_err(redact_provider_error)?;
             let followup_status = followup_response.status();
+            let followup_usage = usage_limits_from_headers(
+                followup_response.headers(),
+                &format!("{} tool follow-up", config.label),
+            );
             if !followup_status.is_success() {
                 let error_body = followup_response.text().await.unwrap_or_default();
                 return Err(provider_http_error(
@@ -2760,6 +2917,7 @@ async fn send_chat_message(
                 .map_err(|_| {
                     "Provider returned a tool response Argentum could not read.".to_string()
                 })?;
+            usage = followup_usage.or(usage);
             parse_openai_chat_response(followup_value)?
         }
     } else {
@@ -2772,6 +2930,7 @@ async fn send_chat_message(
         provider: config.label,
         model: config.model,
         offline: false,
+        usage,
     })
 }
 
@@ -2837,7 +2996,7 @@ fn desktop_state(request: DesktopStateRequest) -> Result<DesktopStateResponse, S
         data_exists: data_dir.exists(),
         logs_exists: logs_dir.exists(),
         gateway_pid: read_gateway_pid(&gateway_pid_path),
-        gateway_log_preview: read_preview(&gateway_log_path, 12),
+        gateway_log_preview: read_preview(&gateway_log_path, 160),
         audit_log_preview: read_preview(&audit_log_path, 12),
     })
 }
@@ -3036,13 +3195,13 @@ fn run_gateway_action(
 
             let port_text = port.to_string();
             let start_args = ["gateway", "start", "--port", port_text.as_str()];
-            let start_output = run_sidecar(app, workspace, &start_args)?;
-            std::thread::sleep(Duration::from_millis(700));
-            let after_output = run_sidecar(app, workspace, &status_args).unwrap_or_default();
-            let pid = parse_gateway_pid(&after_output).or_else(|| parse_gateway_pid(&start_output));
+                let start_output = run_sidecar(app, workspace, &start_args)?;
+                std::thread::sleep(Duration::from_millis(700));
+                let after_output = run_sidecar(app, workspace, &status_args).unwrap_or_default();
+                let pid = parse_gateway_pid(&after_output);
 
-            let Some(pid) = pid else {
-                return Err(
+                let Some(pid) = pid else {
+                    return Err(
                     "Gateway failed to start. Check the gateway log for details.".to_string(),
                 );
             };

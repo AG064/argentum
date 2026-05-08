@@ -1,8 +1,9 @@
-import { APP_VERSION, providerPresets } from './constants.js';
+import { APP_VERSION, fontOptions, providerPresets } from './constants.js';
 import { defaultModelForAuth, modelAllowedForAuth } from './utils.js';
 
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
 const CHAT_HISTORY_STORAGE_KEY = 'argentum.chatHistory.v1';
+const UI_PREFERENCES_STORAGE_KEY = 'argentum.uiPreferences.v1';
 
 const openingChatBlocks = [
   {
@@ -91,6 +92,7 @@ export const state = {
     status: 'idle',
     message: 'Provider has not been tested yet.',
   },
+  usageSnapshot: null,
   notifications: [
     {
       id: 'welcome',
@@ -109,6 +111,8 @@ export const state = {
   ],
   notificationsMuted: false,
   notificationsMenuOpen: false,
+  uiFontFamily: fontOptions.ui[0].css,
+  codeFontFamily: fontOptions.mono[0].css,
   savedConfigPath: '',
   actionStatus: 'No GUI action has run in this session.',
   runningAction: '',
@@ -263,6 +267,28 @@ export function addTerminalEntry(command, output, status = 'info') {
   ].slice(0, 24);
 }
 
+function sortChatSessions(sessions) {
+  return [...sessions]
+    .sort((a, b) => {
+      if (a.id === state.activeChatId) return -1;
+      if (b.id === state.activeChatId) return 1;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    })
+    .slice(0, 24);
+}
+
+export function touchActiveChatSession() {
+  const index = state.chatSessions.findIndex((chat) => chat.id === state.activeChatId);
+  if (index !== -1) {
+    state.chatSessions[index] = {
+      ...state.chatSessions[index],
+      updatedAt: Date.now(),
+    };
+  }
+  state.chatSessions = sortChatSessions(state.chatSessions);
+  persistChatHistory();
+}
+
 export function syncActiveChatSession() {
   const index = state.chatSessions.findIndex((chat) => chat.id === state.activeChatId);
   if (index === -1) return;
@@ -276,7 +302,7 @@ export function syncActiveChatSession() {
     blocks: cloneBlocks(state.chatBlocks),
     updatedAt: Date.now(),
   };
-  state.chatSessions = [...state.chatSessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 24);
+  state.chatSessions = sortChatSessions(state.chatSessions);
   persistChatHistory();
 }
 
@@ -289,7 +315,7 @@ export function setActiveChatSession(chatId) {
   state.chatBlocks = cloneBlocks(session.blocks?.length ? session.blocks : openingChatBlocks);
   state.draftMessage = '';
   state.chatAttachments = [];
-  persistChatHistory();
+  touchActiveChatSession();
 }
 
 export function createChatSession() {
@@ -336,6 +362,7 @@ export function hydrateChatHistory() {
       : state.chatSessions[0].id;
     const active = state.chatSessions.find((session) => session.id === state.activeChatId);
     state.chatBlocks = cloneBlocks(active?.blocks?.length ? active.blocks : openingChatBlocks);
+    state.chatSessions = sortChatSessions(state.chatSessions);
     return true;
   } catch (_error) {
     try {
@@ -345,6 +372,52 @@ export function hydrateChatHistory() {
     }
     return false;
   }
+}
+
+export function hydrateUiPreferences() {
+  try {
+    const storage = typeof window === 'undefined' ? null : window.localStorage;
+    if (!storage) return;
+    const saved = JSON.parse(storage.getItem(UI_PREFERENCES_STORAGE_KEY) || 'null');
+    if (!saved || typeof saved !== 'object') return;
+
+    if (fontOptions.ui.some((option) => option.css === saved.uiFontFamily)) {
+      state.uiFontFamily = saved.uiFontFamily;
+    }
+    if (fontOptions.mono.some((option) => option.css === saved.codeFontFamily)) {
+      state.codeFontFamily = saved.codeFontFamily;
+    }
+  } catch (_error) {
+    // UI preference persistence is optional.
+  }
+}
+
+function persistUiPreferences() {
+  try {
+    const storage = typeof window === 'undefined' ? null : window.localStorage;
+    if (!storage) return;
+    storage.setItem(
+      UI_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        uiFontFamily: state.uiFontFamily,
+        codeFontFamily: state.codeFontFamily,
+      }),
+    );
+  } catch (_error) {
+    // UI preference persistence is optional.
+  }
+}
+
+export function setUiPreference(key, value) {
+  if (key === 'uiFontFamily' && fontOptions.ui.some((option) => option.css === value)) {
+    state.uiFontFamily = value;
+  }
+
+  if (key === 'codeFontFamily' && fontOptions.mono.some((option) => option.css === value)) {
+    state.codeFontFamily = value;
+  }
+
+  persistUiPreferences();
 }
 
 export function setProvider(provider) {

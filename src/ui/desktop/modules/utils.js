@@ -76,6 +76,26 @@ export function estimateContextTokens(blocks = [], draft = '') {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
+export function contextTokenLimit(metadata = {}) {
+  if (Number.isFinite(metadata.maxContextTokens)) return metadata.maxContextTokens;
+
+  const label = `${metadata.maxContextWindow || metadata.contextWindow || ''}`.toLowerCase();
+  const match = label.match(/([\d.]+)\s*([km])?/);
+  if (!match) return 32000;
+
+  const value = Number(match[1]);
+  const suffix = match[2];
+  if (!Number.isFinite(value) || value <= 0) return 32000;
+  if (suffix === 'm') return Math.round(value * 1000000);
+  if (suffix === 'k') return Math.round(value * 1000);
+  return Math.round(value);
+}
+
+export function contextUsagePercent(tokens, metadata = {}) {
+  const limit = contextTokenLimit(metadata);
+  return Math.max(1, Math.min(100, Math.round((tokens / limit) * 100)));
+}
+
 export function renderMarkdown(value) {
   const escaped = escapeHtml(value || '').replace(/\r\n/g, '\n');
   const segments = escaped.split(/(```[\s\S]*?```)/g);

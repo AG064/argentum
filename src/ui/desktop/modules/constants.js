@@ -21,6 +21,53 @@ export const onboardingSteps = [
   'Review > Test > Pass',
 ];
 
+export const fontOptions = {
+  ui: [
+    {
+      id: 'system',
+      label: 'System UI',
+      css: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
+    {
+      id: 'github',
+      label: 'GitHub Sans',
+      css: "'Mona Sans', 'Hubot Sans', Inter, ui-sans-serif, system-ui, sans-serif",
+    },
+    {
+      id: 'windows',
+      label: 'Segoe UI',
+      css: "'Segoe UI', Inter, ui-sans-serif, system-ui, sans-serif",
+    },
+    {
+      id: 'compact',
+      label: 'Compact Sans',
+      css: "'Arial', 'Helvetica Neue', ui-sans-serif, system-ui, sans-serif",
+    },
+  ],
+  mono: [
+    {
+      id: 'jetbrains',
+      label: 'JetBrains Mono',
+      css: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+    },
+    {
+      id: 'cascadia',
+      label: 'Cascadia Code',
+      css: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+    },
+    {
+      id: 'github-mono',
+      label: 'GitHub Mono',
+      css: "'Monaspace Neon', 'SFMono-Regular', Consolas, monospace",
+    },
+    {
+      id: 'system-mono',
+      label: 'System mono',
+      css: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+    },
+  ],
+};
+
 export const thinkingLevels = [
   {
     id: 'fast',
@@ -71,6 +118,7 @@ export const contextAccessOptions = [
 
 export const modelMetadata = {
   'gpt-5.5': {
+    maxContextTokens: 272000,
     contextWindow: '272k tokens',
     maxContextWindow: '272k tokens',
     currentContextLabel: 'Codex catalog: large workspace context',
@@ -78,6 +126,7 @@ export const modelMetadata = {
     detail: 'Frontier Codex model for complex coding, research, and real-world work.',
   },
   'gpt-5.5-pro': {
+    maxContextTokens: 272000,
     contextWindow: 'Plan/account dependent',
     maxContextWindow: 'Plan/account dependent',
     currentContextLabel: 'Confirm availability with provider test',
@@ -85,6 +134,7 @@ export const modelMetadata = {
     detail: 'High-end OpenAI option. Availability and limits depend on the selected authorization method.',
   },
   'gpt-5.4': {
+    maxContextTokens: 272000,
     contextWindow: '272k tokens',
     maxContextWindow: '1M tokens when available',
     currentContextLabel: 'Codex catalog: expandable large context',
@@ -92,6 +142,7 @@ export const modelMetadata = {
     detail: 'Strong model for everyday coding and agent work.',
   },
   'gpt-5.4-pro': {
+    maxContextTokens: 272000,
     contextWindow: 'Plan/account dependent',
     maxContextWindow: 'Plan/account dependent',
     currentContextLabel: 'Confirm availability with provider test',
@@ -99,6 +150,7 @@ export const modelMetadata = {
     detail: 'Higher-capability GPT-5.4 profile when exposed by the selected provider.',
   },
   'gpt-5.4-mini': {
+    maxContextTokens: 272000,
     contextWindow: '272k tokens',
     maxContextWindow: '272k tokens',
     currentContextLabel: 'Codex catalog: fast large context',
@@ -106,6 +158,7 @@ export const modelMetadata = {
     detail: 'Small, fast, cost-efficient model for simpler coding and setup tasks.',
   },
   'gpt-5.4-nano': {
+    maxContextTokens: 128000,
     contextWindow: 'Provider dependent',
     maxContextWindow: 'Provider dependent',
     currentContextLabel: 'Best for short tasks',
@@ -113,6 +166,7 @@ export const modelMetadata = {
     detail: 'Lightweight option for quick replies when exposed by the provider.',
   },
   'gpt-5-mini': {
+    maxContextTokens: 128000,
     contextWindow: 'Provider dependent',
     maxContextWindow: 'Provider dependent',
     currentContextLabel: 'Best for short tasks',
@@ -120,6 +174,7 @@ export const modelMetadata = {
     detail: 'Compact GPT-5 profile for simple chat and routing.',
   },
   'gpt-5-nano': {
+    maxContextTokens: 64000,
     contextWindow: 'Provider dependent',
     maxContextWindow: 'Provider dependent',
     currentContextLabel: 'Best for tiny tasks',
@@ -127,6 +182,7 @@ export const modelMetadata = {
     detail: 'Smallest GPT-5-style profile when exposed by the provider.',
   },
   gpt5: {
+    maxContextTokens: 128000,
     contextWindow: 'Provider alias',
     maxContextWindow: 'Provider alias',
     currentContextLabel: 'Alias depends on endpoint',
@@ -134,6 +190,7 @@ export const modelMetadata = {
     detail: 'Provider alias. Argentum tests the endpoint to confirm what it maps to.',
   },
   'gpt-4.1': {
+    maxContextTokens: 128000,
     contextWindow: 'Provider dependent',
     maxContextWindow: 'Provider dependent',
     currentContextLabel: 'Stable general-purpose context',
@@ -141,6 +198,7 @@ export const modelMetadata = {
     detail: 'Stable general-purpose model option for API-key based chat.',
   },
   'gpt-5.3-codex': {
+    maxContextTokens: 272000,
     contextWindow: '272k tokens',
     maxContextWindow: '272k tokens',
     currentContextLabel: 'Codex catalog: coding optimized',
@@ -148,6 +206,7 @@ export const modelMetadata = {
     detail: 'Coding-optimized Codex model.',
   },
   'gpt-5.2': {
+    maxContextTokens: 272000,
     contextWindow: '272k tokens',
     maxContextWindow: '272k tokens',
     currentContextLabel: 'Codex catalog: long-running agents',

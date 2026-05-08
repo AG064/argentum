@@ -2,6 +2,8 @@ import { modelMetadata, providerPresets, thinkingLevels } from './constants.js';
 import { renderNotifications } from './shell.js';
 import {
   currentProvider,
+  contextTokenLimit,
+  contextUsagePercent,
   escapeAttribute,
   escapeHtml,
   estimateContextTokens,
@@ -28,7 +30,7 @@ function renderChatSection(state) {
   const provider = currentProvider(providerPresets, state);
   const metadata = modelMetadataFor(state.providerModel, modelMetadata);
   const estimatedTokens = estimateContextTokens(state.chatBlocks, state.draftMessage);
-  const contextLabel = `${estimatedTokens.toLocaleString()} used / ${metadata.contextWindow}`;
+  const contextPercent = contextUsagePercent(estimatedTokens, metadata);
 
   return `
     ${renderNotifications()}
@@ -63,18 +65,18 @@ function renderChatSection(state) {
             <small>${escapeHtml(metadata.currentContextLabel)}</small>
           </div>
         </div>
-        <div class="context-meter" aria-label="Conversation context">
+        <div class="context-meter compact" aria-label="Conversation context">
           <div>
             <span>Context</span>
-            <strong>${escapeHtml(contextLabel)}</strong>
+            <strong>${estimatedTokens.toLocaleString()} tokens used</strong>
           </div>
           <div>
-            <span>Thinking</span>
+            <span>Mode</span>
             <strong>${escapeHtml(thinkingLevels.find((level) => level.id === state.thinkingLevel)?.label || state.thinkingLevel)}</strong>
           </div>
           <div>
-            <span>Capabilities</span>
-            <strong>${escapeHtml(metadata.capabilities.join(', '))}</strong>
+            <span>Model</span>
+            <strong>${escapeHtml(metadata.contextWindow)}</strong>
           </div>
         </div>
         <div class="chat-transcript">
@@ -100,9 +102,32 @@ function renderChatSection(state) {
           </div>
           ${renderAttachmentTray(state)}
           <textarea id="chat-draft" placeholder="Tell Argentum what to call you, or ask what to configure next.">${escapeHtml(state.draftMessage)}</textarea>
-          <button class="button primary" id="send-chat">Send</button>
+          <div class="composer-status">
+            ${renderContextRing(estimatedTokens, metadata, contextPercent, state.usageSnapshot)}
+            <button class="button primary" id="send-chat">Send</button>
+          </div>
         </div>
       </section>
+    </div>
+  `;
+}
+
+function renderContextRing(estimatedTokens, metadata, contextPercent, usageSnapshot) {
+  const limit = contextTokenLimit(metadata);
+  const status = contextPercent >= 85 ? 'hot' : contextPercent >= 65 ? 'warm' : 'calm';
+  const usageLine = usageSnapshot
+    ? `Provider rate: ${usageSnapshot.requestRemaining || 'unknown'} requests and ${usageSnapshot.tokenRemaining || 'unknown'} tokens remaining. Reset: ${usageSnapshot.requestReset || usageSnapshot.tokenReset || 'not reported'}.`
+    : 'Provider rate-limit headers are not reported yet.';
+
+  return `
+    <div class="context-usage-ring ${status}" style="--context-percent:${contextPercent};" aria-label="Context ${contextPercent}% used" tabindex="0">
+      <span>${contextPercent}%</span>
+      <div class="context-ring-popover" role="tooltip">
+        <strong>Context</strong>
+        <p>${estimatedTokens.toLocaleString()} estimated tokens used of ${limit.toLocaleString()}.</p>
+        <p>${escapeHtml(metadata.currentContextLabel)}</p>
+        <p>${escapeHtml(usageLine)}</p>
+      </div>
     </div>
   `;
 }

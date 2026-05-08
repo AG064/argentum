@@ -30,14 +30,18 @@ function firstNonEmpty(...values: Array<string | undefined>): string {
 export function resolveGatewayChildEnvironment(
   env: NodeJS.ProcessEnv,
   workDir: string,
+  extraEnv?: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const childEnv = Object.fromEntries(
     Object.entries(env).filter(([key]) => !key.toUpperCase().startsWith('PKG_')),
   ) as NodeJS.ProcessEnv;
+  if (extraEnv) Object.assign(childEnv, extraEnv);
   childEnv.PKG_EXECPATH = '';
   childEnv.ARGENTUM_WORKDIR = workDir;
   childEnv.ARGENTUM_SKIP_EXIT_PAUSE = '1';
   childEnv.ARGENTUM_LOG_FORMAT = 'json';
+  childEnv.ARGENTUM_NO_BANNER = '1';
+  childEnv.ARGENTUM_PLAIN_OUTPUT = '1';
   return childEnv;
 }
 

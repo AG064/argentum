@@ -10,11 +10,13 @@ import {
   dismissNotification,
   ensureProviderModelAllowed,
   hydrateChatHistory,
+  hydrateUiPreferences,
   notify,
   scheduleVisibleNotifications,
   setChannel,
   setActiveChatSession,
   setProvider,
+  setUiPreference,
   state,
   syncActiveChatSession,
   toggleNotificationsMenu,
@@ -46,11 +48,17 @@ const chatActions = {
   settings: { section: 'settings', label: 'Open Settings' },
 };
 
+function applyUiPreferences() {
+  document.documentElement.style.setProperty('--font-ui', state.uiFontFamily);
+  document.documentElement.style.setProperty('--font-mono', state.codeFontFamily);
+}
+
 function activeSection() {
   return sections.find((section) => section.id === state.activeSection && section.id !== 'onboarding') || sections[1];
 }
 
 function render() {
+  applyUiPreferences();
   const section = activeSection();
   const module = modules[section.id] || modules.chat;
 
@@ -371,6 +379,7 @@ async function sendChatDraft() {
         message: `${result.provider || 'Provider'} answered with ${result.model || 'the configured model'}.`,
       };
     }
+    if (result?.usage) state.usageSnapshot = result.usage;
 
     appendChatMessage('argentum', result?.message || buildLocalReply(draft));
   } catch (error) {
@@ -466,6 +475,18 @@ function handleChange(event) {
   if (target.id === 'thinking-level') {
     state.thinkingLevel = target.value;
     notify('info', 'Thinking level changed', `Chat thinking level set to ${target.value}.`);
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-ui-font') {
+    setUiPreference('uiFontFamily', target.value);
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-code-font') {
+    setUiPreference('codeFontFamily', target.value);
     render();
     return;
   }
@@ -784,6 +805,7 @@ document.addEventListener('change', handleChange);
 window.addEventListener('argentum:state-change', render);
 
 hydrateStaticIcons(document);
+hydrateUiPreferences();
 const chatHistoryRestored = hydrateChatHistory();
 scheduleVisibleNotifications();
 hydrateDesktopDefaults()

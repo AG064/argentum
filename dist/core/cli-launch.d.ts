@@ -19,7 +19,7 @@ export interface GatewayChildProcess {
     command: string;
     args: string[];
 }
-export declare function resolveGatewayChildEnvironment(env: NodeJS.ProcessEnv, workDir: string): NodeJS.ProcessEnv;
+export declare function resolveGatewayChildEnvironment(env: NodeJS.ProcessEnv, workDir: string, extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
 export declare function resolveCliLaunch(args: string[], env: CliLaunchEnvironment): CliLaunch;
 export declare function resolveGatewayChildProcess(options: GatewayChildProcessOptions): GatewayChildProcess;
 //# sourceMappingURL=cli-launch.d.ts.map

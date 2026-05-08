@@ -262,9 +262,13 @@ function renderCapabilitiesStep() {
         .map(
           (option) => `
             <label class="check-card ${state.selectedContextAccess.includes(option.id) ? 'active' : ''}">
-              <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
-              <span>${escapeHtml(option.status)}</span>
-              <strong>${escapeHtml(option.label)}</strong>
+              <span class="check-card-head">
+                <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
+                <span>
+                  <em>${escapeHtml(option.status)}</em>
+                  <strong>${escapeHtml(option.label)}</strong>
+                </span>
+              </span>
               <p>${escapeHtml(option.detail)}</p>
             </label>
           `,
@@ -593,9 +597,13 @@ function renderChannelsStep() {
         .map(
           (channel) => `
             <label class="check-card ${state.selectedChannels.includes(channel.id) ? 'active' : ''}">
-              <input type="checkbox" data-channel-id="${channel.id}" ${checked(state.selectedChannels, channel.id)} ${channel.locked ? 'disabled' : ''} />
-              <span>${escapeHtml(channel.status)}</span>
-              <strong>${escapeHtml(channel.label)}</strong>
+              <span class="check-card-head">
+                <input type="checkbox" data-channel-id="${channel.id}" ${checked(state.selectedChannels, channel.id)} ${channel.locked ? 'disabled' : ''} />
+                <span>
+                  <em>${escapeHtml(channel.status)}</em>
+                  <strong>${escapeHtml(channel.label)}</strong>
+                </span>
+              </span>
               <p>${escapeHtml(channel.detail)}</p>
             </label>
           `,

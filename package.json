@@ -42,7 +42,7 @@
     "package:win:exe": "npm run package:win:cli",
     "desktop:dev": "cd src/desktop && tauri dev",
     "desktop:build": "cd src/desktop && tauri build",
-    "predesktop:build": "npm run build:desktop-sidecar",
+    "predesktop:build": "npm run build && npm run build:desktop-sidecar",
     "build:desktop-sidecar": "node scripts/build-desktop-sidecar.js",
     "version:sync": "node scripts/sync-version.js",
     "version:check": "node scripts/sync-version.js --check",

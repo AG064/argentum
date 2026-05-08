@@ -47,6 +47,8 @@ const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
 const SKIP_EXIT_PAUSE_ENV = 'ARGENTUM_SKIP_EXIT_PAUSE';
+const NO_BANNER_ENV = 'ARGENTUM_NO_BANNER';
+const PLAIN_OUTPUT_ENV = 'ARGENTUM_PLAIN_OUTPUT';
 const args = process.argv.slice(2);
 const launch = resolveCliLaunch(args, {
   execPath: process.execPath,
@@ -247,19 +249,19 @@ function print(text: string): void {
 }
 
 function error(text: string): void {
-  process.stderr.write(`\x1b[31mError:\x1b[0m ${text}\n`);
+  process.stderr.write(isPlainOutput() ? `Error: ${text}\n` : `\x1b[31mError:\x1b[0m ${text}\n`);
 }
 
 function success(text: string): void {
-  print(`\x1b[32m✓\x1b[0m ${text}`);
+  print(isPlainOutput() ? `OK ${text}` : `\x1b[32m✓\x1b[0m ${text}`);
 }
 
 function info(text: string): void {
-  print(`\x1b[36mℹ\x1b[0m ${text}`);
+  print(isPlainOutput() ? `Info ${text}` : `\x1b[36mℹ\x1b[0m ${text}`);
 }
 
 function warn(text: string): void {
-  print(`\x1b[33m⚠\x1b[0m ${text}`);
+  print(isPlainOutput() ? `Warning ${text}` : `\x1b[33m⚠\x1b[0m ${text}`);
 }
 
 function setProgramTitle(title: string): void {
@@ -273,8 +275,18 @@ function isPackagedRuntime(): boolean {
   return Boolean((process as NodeJS.Process & { pkg?: unknown }).pkg);
 }
 
+function isPlainOutput(): boolean {
+  return process.env[PLAIN_OUTPUT_ENV] === '1' || !process.stdout.isTTY;
+}
+
+function shouldPrintBanner(): boolean {
+  return process.env.ARGENTUM_NO_BANNER !== '1' && process.env[NO_BANNER_ENV] !== '1';
+}
+
 function banner(): void {
-  console.info(formatArgentumBanner(VERSION));
+  if (shouldPrintBanner()) {
+    console.info(formatArgentumBanner(VERSION));
+  }
 }
 
 function getWorkDir(): string {
@@ -288,6 +300,55 @@ function getWorkDir(): string {
   }
 
   return process.cwd();
+}
+
+function parseEnvValue(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    if (trimmed.startsWith('"')) {
+      try {
+        return JSON.parse(trimmed) as string;
+      } catch (_error) {
+        return trimmed.slice(1, -1);
+      }
+    }
+
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed;
+}
+
+function readEnvFile(filePath: string): NodeJS.ProcessEnv {
+  if (!fs.existsSync(filePath)) return {};
+
+  const parsed: NodeJS.ProcessEnv = {};
+  const contents = fs.readFileSync(filePath, 'utf8');
+
+  for (const line of contents.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const separator = trimmed.indexOf('=');
+    if (separator <= 0) continue;
+
+    const key = trimmed.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+
+    parsed[key] = parseEnvValue(trimmed.slice(separator + 1));
+  }
+
+  return parsed;
+}
+
+function loadWorkspaceEnv(workDir: string): NodeJS.ProcessEnv {
+  return {
+    ...readEnvFile(path.join(workDir, '.env')),
+    ...readEnvFile(path.join(workDir, 'secrets.env')),
+  };
 }
 
 function hasFlag(...flags: string[]): boolean {
@@ -1508,6 +1569,17 @@ async function cmdGateway(): Promise<void> {
     return null;
   };
 
+  const verifySpawnedGateway = async (pid: number | undefined, logFile: string): Promise<boolean> => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    if (pid && getPid() === pid) {
+      return true;
+    }
+
+    process.exitCode = 1;
+    error(`Gateway process exited before it became healthy. Check log: ${logFile}`);
+    return false;
+  };
+
   switch (subcommand) {
     case 'status': {
       banner();
@@ -1525,6 +1597,11 @@ async function cmdGateway(): Promise<void> {
       banner();
       if (getPid()) {
         warn('Gateway already running');
+        return;
+      }
+      if (!projectConfigExists(workDir)) {
+        process.exitCode = 1;
+        error('Gateway cannot start because config/default.yaml is missing. Finish onboarding first.');
         return;
       }
       const port = args.includes('--port')
@@ -1549,7 +1626,7 @@ async function cmdGateway(): Promise<void> {
         logFile,
         `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
       );
-      const childEnv = resolveGatewayChildEnvironment(process.env, workDir);
+      const childEnv = resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir));
       const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
         env: childEnv,
@@ -1564,6 +1641,7 @@ async function cmdGateway(): Promise<void> {
 
       // Write PID
       fs.writeFileSync(pidFile, String(child.pid));
+      if (!(await verifySpawnedGateway(child.pid, logFile))) return;
       success(`Gateway started (PID: ${child.pid})`);
       info(`Log: ${logFile}`);
       info(`Stop: argentum gateway stop`);
@@ -1604,6 +1682,11 @@ async function cmdGateway(): Promise<void> {
       const port = args.includes('--port')
         ? parseInt(args[args.indexOf('--port') + 1] ?? '', 10)
         : 3000;
+      if (!projectConfigExists(workDir)) {
+        process.exitCode = 1;
+        error('Gateway cannot start because config/default.yaml is missing. Finish onboarding first.');
+        return;
+      }
       info(`Restarting Argentum gateway on port ${port}...`);
       const logFile = path.join(workDir, 'data', 'gateway.log');
 
@@ -1622,7 +1705,7 @@ async function cmdGateway(): Promise<void> {
         logFile,
         `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
       );
-      const childEnv = resolveGatewayChildEnvironment(process.env, workDir);
+      const childEnv = resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir));
       const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
         env: childEnv,
@@ -1636,6 +1719,7 @@ async function cmdGateway(): Promise<void> {
       child.unref();
 
       fs.writeFileSync(pidFile, String(child.pid));
+      if (!(await verifySpawnedGateway(child.pid, logFile))) return;
       success(`Gateway restarted (PID: ${child.pid})`);
       break;
     }

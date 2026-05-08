@@ -1,5 +1,6 @@
 import {
   contextAccessOptions,
+  fontOptions,
   modelMetadata,
   providerAuthMethods,
   providerPresets,
@@ -33,12 +34,19 @@ function terminalPreview(state, filter = '') {
     ? state.terminalEntries.filter((entry) => entry.command.includes(filter))
     : state.terminalEntries;
 
-  return entries.length === 0
-    ? 'No action output yet.'
-    : entries
-        .slice(0, 5)
-        .map((entry) => `$ ${entry.command}\n${entry.output}`)
-        .join('\n\n');
+  const actionOutput =
+    entries.length === 0
+      ? ''
+      : entries
+          .slice(0, 8)
+          .map((entry) => `$ ${entry.command}\n${entry.output}`)
+          .join('\n\n');
+  const logOutput = filter === 'gateway' ? state.desktopState?.gatewayLogPreview || '' : '';
+
+  return [actionOutput, logOutput]
+    .filter((part) => part && part !== 'No entries yet.')
+    .join('\n\n')
+    .trim() || 'No action output yet.';
 }
 
 function gatewayModule() {
@@ -58,25 +66,33 @@ function gatewayModule() {
 
       return `
         ${renderNotifications()}
-        ${renderHero(
-          'Gateway',
-          running ? 'Local gateway is running' : 'Local gateway is stopped',
-          'Start, stop, inspect, and read logs for the workspace gateway. These buttons execute fixed Argentum commands through the native bridge.',
-          [
-            { label: 'State', value: running ? 'Running' : 'Stopped' },
-            { label: 'PID', value: state.desktopState?.gatewayPid || 'None' },
-            { label: 'Health', value: healthUrl },
-          ],
-        )}
+        <section class="panel gateway-overview">
+          <div class="gateway-copy">
+            <span class="eyebrow">Gateway</span>
+            <h2>${running ? 'Local gateway is running' : 'Local gateway is stopped'}</h2>
+            <p>The gateway is Argentum's local service entrance. It exposes approved localhost APIs and integrations only after you start it, and each action below is a fixed desktop command.</p>
+          </div>
+          <div class="gateway-status-grid">
+            <div class="metric compact"><span>State</span><strong>${running ? 'Running' : 'Stopped'}</strong></div>
+            <div class="metric compact"><span>PID</span><strong>${escapeHtml(state.desktopState?.gatewayPid || 'None')}</strong></div>
+            <div class="metric compact"><span>Health</span><strong>${escapeHtml(healthUrl)}</strong></div>
+          </div>
+          <div class="gateway-action-row">
+            <button class="button primary" data-run-action="gateway-start">Start Gateway</button>
+            <button class="button" data-run-action="gateway-status">Check Status</button>
+            <button class="button" data-run-action="gateway-stop">Stop Gateway</button>
+            <button class="button" data-run-action="gateway-logs">View Logs</button>
+          </div>
+        </section>
         <div class="gateway-grid">
-          <section class="panel">
+          <section class="panel gateway-actions-panel">
             <div class="panel-header">
-              <h3>What the gateway does</h3>
-              <p>The gateway is Argentum's local service entrance. It can expose approved workspace APIs, webchat, and integrations on localhost after you start it. It is off by default and each GUI button maps to a fixed, whitelisted action.</p>
+              <h3>Allowed gateway commands</h3>
+              <p>These are the only gateway commands exposed to the GUI. Output, PID, health URL, and failures appear in the terminal panel.</p>
             </div>
             ${renderActionCards('gateway')}
           </section>
-          <section class="panel terminal-panel">
+          <section class="panel terminal-panel gateway-terminal-shell">
             <div class="panel-header split-header">
               <h3>Gateway Output</h3>
               <button class="button" data-run-action="gateway-status">Refresh</button>
@@ -342,6 +358,30 @@ const settingsModule = {
             </select>
           </label>
           <label>
+            Interface font
+            <select id="settings-ui-font">
+              ${fontOptions.ui
+                .map(
+                  (font) => `
+                    <option value="${escapeAttribute(font.css)}" ${selected(state.uiFontFamily, font.css)}>${escapeHtml(font.label)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
+            Code and terminal font
+            <select id="settings-code-font">
+              ${fontOptions.mono
+                .map(
+                  (font) => `
+                    <option value="${escapeAttribute(font.css)}" ${selected(state.codeFontFamily, font.css)}>${escapeHtml(font.label)}</option>
+                  `,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
             Your name
             <input id="profile-user-name" value="${escapeAttribute(state.userName)}" placeholder="Example: AG" />
           </label>
@@ -429,6 +469,10 @@ const diagnosticsModule = {
       ['Secrets', 'Stored outside YAML', true],
     ];
     const estimatedTokens = estimateContextTokens(state.chatBlocks, state.draftMessage);
+    const usage = state.usageSnapshot;
+    const providerUsage = usage
+      ? `${usage.requestRemaining || '?'} requests / ${usage.tokenRemaining || '?'} tokens left`
+      : 'Not reported yet';
 
     return `
       ${renderNotifications()}
@@ -449,6 +493,8 @@ const diagnosticsModule = {
         </div>
         <div class="panel-body usage-grid">
           <div><span>Estimated chat context</span><strong>${estimatedTokens.toLocaleString()} tokens</strong></div>
+          <div><span>Provider rate limits</span><strong>${escapeHtml(providerUsage)}</strong></div>
+          <div><span>Provider reset</span><strong>${escapeHtml(usage?.requestReset || usage?.tokenReset || 'Unknown')}</strong></div>
           <div><span>Terminal entries</span><strong>${state.terminalEntries.length}</strong></div>
           <div><span>Notifications stored</span><strong>${state.notificationHistory.length}</strong></div>
           <div><span>Gateway</span><strong>${state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped'}</strong></div>
@@ -482,9 +528,13 @@ function renderContextAccessCards(state) {
     .map(
       (option) => `
         <label class="check-card ${state.selectedContextAccess.includes(option.id) ? 'active' : ''}">
-          <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
-          <span>${escapeHtml(option.status)}</span>
-          <strong>${escapeHtml(option.label)}</strong>
+          <span class="check-card-head">
+            <input type="checkbox" data-context-access="${escapeAttribute(option.id)}" ${checked(state.selectedContextAccess, option.id)} />
+            <span>
+              <em>${escapeHtml(option.status)}</em>
+              <strong>${escapeHtml(option.label)}</strong>
+            </span>
+          </span>
           <p>${escapeHtml(option.detail)}</p>
         </label>
       `,

@@ -431,7 +431,106 @@ describe('Argentum desktop shell', () => {
     expect(main).toContain("actionId: 'gateway-start'");
     expect(packageJson).toContain('build:desktop-sidecar');
     expect(packageJson).toContain('predesktop:build');
+    expect(packageJson).toContain('npm run build && npm run build:desktop-sidecar');
     expect(workflow).toContain('Build desktop CLI sidecar');
+  });
+
+  test('cleans gateway terminal output and keeps gateway layout inside the viewport', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const cli = read('src/cli.ts');
+    const cliLaunch = read('src/core/cli-launch.ts');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(rust).toContain('fn clean_terminal_output');
+    expect(rust).toContain('strip_argentum_banner');
+    expect(rust).toContain('ARGENTUM_NO_BANNER');
+    expect(rust).toContain('ARGENTUM_PLAIN_OUTPUT');
+    expect(rust).toContain('read_preview(&gateway_log_path, 160)');
+    expect(cli).toContain('function shouldPrintBanner');
+    expect(cli).toContain('process.env.ARGENTUM_NO_BANNER');
+    expect(cliLaunch).toContain("childEnv.ARGENTUM_NO_BANNER = '1'");
+    expect(cliLaunch).toContain("childEnv.ARGENTUM_PLAIN_OUTPUT = '1'");
+    expect(sections).toContain('gateway-terminal-shell');
+    expect(sections).toContain('gateway-status-grid');
+    expect(css).toContain('overflow-x: hidden');
+    expect(css).toContain('.gateway-terminal-shell');
+    expect(css).toContain('white-space: pre-wrap');
+    expect(css).toContain('overflow-wrap: anywhere');
+    expect(css).not.toContain('min-width: 960px');
+  });
+
+  test('renders a compact chat context ring near send and supports font preferences', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(constants).toContain('fontOptions');
+    expect(constants).toContain('JetBrains Mono');
+    expect(constants).toContain('Cascadia Code');
+    expect(state).toContain("uiFontFamily:");
+    expect(state).toContain("codeFontFamily:");
+    expect(state).toContain('hydrateUiPreferences');
+    expect(state).toContain('setUiPreference');
+    expect(main).toContain('applyUiPreferences');
+    expect(main).toContain('hydrateUiPreferences');
+    expect(chat).toContain('renderContextRing');
+    expect(chat).toContain('context-usage-ring');
+    expect(chat).toContain('contextPercent');
+    expect(chat).toContain('composer-status');
+    expect(sections).toContain('settings-ui-font');
+    expect(sections).toContain('settings-code-font');
+    expect(utils).toContain('contextTokenLimit');
+    expect(utils).toContain('contextUsagePercent');
+    expect(css).toContain('.context-usage-ring');
+    expect(css).toContain('.context-usage-ring.hot');
+    expect(css).toContain('var(--font-ui)');
+    expect(css).toContain('var(--font-mono)');
+  });
+
+  test('uses cleaner inline selection cards and keeps active recent chat first', () => {
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(sections).toContain('check-card-head');
+    expect(onboarding).toContain('check-card-head');
+    expect(css).toContain('.check-card-head');
+    expect(css).toContain('grid-template-columns: auto minmax(0, 1fr)');
+    expect(state).toContain('touchActiveChatSession');
+    expect(state).toContain('state.chatSessions = sortChatSessions');
+  });
+
+  test('writes Telegram runtime config and passes workspace secrets to the gateway child', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const cli = read('src/cli.ts');
+    const cliLaunch = read('src/core/cli-launch.ts');
+
+    expect(rust).toContain('fn split_telegram_allowlist');
+    expect(rust).toContain('allowedUsers:');
+    expect(rust).toContain('allowedChats:');
+    expect(rust).toContain('allowAll:');
+    expect(rust).not.toContain('allowlist: {telegram_allowlist}');
+    expect(cli).toContain('function loadWorkspaceEnv');
+    expect(cli).toContain('secrets.env');
+    expect(cli).toContain('resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))');
+    expect(cliLaunch).toContain('extraEnv?: NodeJS.ProcessEnv');
+    expect(cliLaunch).toContain('Object.assign(childEnv, extraEnv)');
+  });
+
+  test('gateway start refuses missing config and verifies the spawned process stays alive', () => {
+    const cli = read('src/cli.ts');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(cli).toContain('Gateway cannot start because config/default.yaml is missing');
+    expect(cli).toContain('verifySpawnedGateway');
+    expect(cli).toContain('process.exitCode = 1');
+    expect(rust).not.toContain('or_else(|| parse_gateway_pid(&start_output))');
   });
 
   test('routes OpenAI browser-account OAuth through live Codex chat runtime', () => {
