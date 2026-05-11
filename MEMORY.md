@@ -106,6 +106,8 @@
 - **HuggingFace:** (key in TOOLS.md)
 
 ## Nova Night Research (MemoAgent self-improvement)
+**Status 2026-05-12 (catch-up): AutoTTS (LLM discovers test-time scaling strategies), The Memory Curse (wider context degrades multi-agent cooperation), GraphDPO (DAG-structured preference alignment), Rubric-Grounded RL (partial-credit reward from LLM judges), VecCISC (47% token savings for confidence self-consistency)**
+
 **Status 2026-04-16 4AM: MemCoT (inference-time memory-driven CoT), SEARL/ACL (joint RL+tool graph), Mem²Evolve (experience+asset co-evolution), MIA (manager-planner-executor with test-time learning), Combee (parallel prompt learning, 17x speedup), CoEvoSkills (autonomous multi-file skill generation)**
 
 **Status 2026-04-15 4AM: AgentWebBench (multi-agent web benchmark), PAC-Bench (privacy breaks multi-agent collab), Governance by Design (≤19% governance coverage in agent ecosystems), Distributed QRL (multi-agent RL infrastructure), SE-RL (ICLR 2026 — unified single/multi-agent self-evolution)**
