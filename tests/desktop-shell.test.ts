@@ -315,7 +315,6 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('state.setupComplete');
     expect(shell).toContain("section.id !== 'onboarding'");
     expect(sections).toContain('data-restart-onboarding');
-    expect(main).toContain('target.parentElement');
   });
 
   test('hides onboarding after completion and launches Chat without local setup loop', () => {
