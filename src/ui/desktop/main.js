@@ -584,7 +584,12 @@ async function handleChange(event) {
 
 async function handleClick(event) {
   const target = event.target;
-  const element = target instanceof Element ? target : null;
+  const element =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null;
   if (!element) return;
 
   const externalLink = element.closest('[data-open-external]');
