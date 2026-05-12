@@ -104,9 +104,21 @@
 - **Local:** lmstudio/nemotron-cascade-2-30b-a3b-i1 at http://10.5.5.5:1234 (not running)
 - **ElevenLabs:** (key in TOOLS.md — free 10K chars/mo)
 - **HuggingFace:** (key in TOOLS.md)
+- **MiniMax Music API:** music-2.6 model via api.minimax.io/v1/music_generation (Coding Plan key works)
+  - Params: `{"model": "music-2.6", "prompt": "...", "lyrics": "..."}` — lyrics REQUIRED (even "la la")
+  - Response: hex-encoded MP3, ~24-60 sec, 256kbps stereo
+  - Limit: 100 tracks / 5 hours (shows 0/100 in usage dashboard)
+  - True instrumental mode: NOT AVAILABLE in API — lyrics field always required
+  - Best workaround: use musical symbols as lyrics: `♪ ♫ ♪` (produces near-instrumental, just musical sounds no words)
+  - MiniMax website has "器乐提升" (instrumental enhancement) tab but this is for vocal removal from existing audio, not text-to-music instrumental generation
+  - Rate limit: excessive requests cause timeout ban (wait 5+ min before retry)
+  - Send to Telegram: `curl -X POST https://api.telegram.org/bot8764765001:AAFoYaA9S79vfHlV0P5kRK4G5NrtPQyo5ps/sendAudio -F chat_id=386565331 -F audio=@file.mp3`
+  - Suno API (alternative, free, supports instrumental): currently 503 unavailable
 
 ## Nova Night Research (MemoAgent self-improvement)
-**Status 2026-05-12 (catch-up): AutoTTS (LLM discovers test-time scaling strategies), The Memory Curse (wider context degrades multi-agent cooperation), GraphDPO (DAG-structured preference alignment), Rubric-Grounded RL (partial-credit reward from LLM judges), VecCISC (47% token savings for confidence self-consistency)**
+**Status 2026-05-13 (catch-up): AutoTTS (LLM discovers test-time scaling strategies), The Memory Curse (wider context degrades multi-agent cooperation), GraphDPO (DAG-structured preference alignment), Rubric-Grounded RL (partial-credit reward from LLM judges), VecCISC (47% token savings for confidence self-consistency)**
+
+**Status 2026-05-13 night research: Shepherd (meta-agent runtime with Git-like execution traces + state forking), DeMem (decision-centric memory as rate-distortion compression), MATRA (threat modeling for agentic AI, EuroS&P 2026), k-step Policy Gradients (k-step lookahead fixes myopia), On-Policy Distillation (per-token diagnostic for teacher-student gaps)**
 
 **Status 2026-04-16 4AM: MemCoT (inference-time memory-driven CoT), SEARL/ACL (joint RL+tool graph), Mem²Evolve (experience+asset co-evolution), MIA (manager-planner-executor with test-time learning), Combee (parallel prompt learning, 17x speedup), CoEvoSkills (autonomous multi-file skill generation)**
 
