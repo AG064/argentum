@@ -384,7 +384,7 @@ export class SandboxExecutor {
         });
 
         child.on('close', (code, signal) => {
-          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const timedOut = signal === 'SIGTERM';
           const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
@@ -477,7 +477,7 @@ export class SandboxExecutor {
         });
 
         child.on('close', (code, signal) => {
-          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const timedOut = signal === 'SIGTERM';
           const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
@@ -579,7 +579,7 @@ export class SandboxExecutor {
         });
 
         child.on('close', (code, signal) => {
-          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const timedOut = signal === 'SIGTERM';
           const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
