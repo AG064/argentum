@@ -104,6 +104,19 @@
 - **Local:** lmstudio/nemotron-cascade-2-30b-a3b-i1 at http://10.5.5.5:1234 (not running)
 - **ElevenLabs:** (key in TOOLS.md — free 10K chars/mo)
 - **HuggingFace:** (key in TOOLS.md)
+- **MiniMax TTS (Speech API):** sk-api-w3DHewNRGLNEFiZ7uzE4nsjBRXaLCGEOuWeKgGX3GegEcs8SNVVuqFsz90ahXBCPG_PLeVuuq1uwg2ES_m6dKikkmUsy4Ca_P9_MDNrgxxSdb3AOAIRO7O0
+  - Endpoint: POST https://api.minimax.io/v1/t2a_v2
+  - Params: model="speech-02-hd" или "speech-01-hd", text, output_format="hex" (only hex/url supported, NOT mp3/wav)
+  - voice_setting.voice_id: custom voice ID from MiniMax dashboard (moss_audio_xxx) OR built-in:
+    - "male-qn-qingse" ✅
+    - "female-tianmei" ✅
+  - Response: hex-encoded MP3, 32kHz mono 128kbps
+  - Usage: ~1 credit per char; 100k quota on sk-api key
+  - Custom voice ID: moss_audio_ff7c1e7c-4aea-11f1-b2d6-f2fd17c30dcc (Aleksey's voice — PRIMARY, use always)
+  - Soundtags: ENGLISH only — (laughs), (chuckle), (coughs), (clear-throat), (groans), (breath), (pant), (inhale)
+  - DO NOT use Russian words like (laugh), (cry), (sigh) — they are pronounced as words, not sounds!
+  - Emotions: neutral, happy, sad, angry, calm, fearful, surprised
+
 - **MiniMax Music API:** music-2.6 model via api.minimax.io/v1/music_generation (Coding Plan key works)
   - Params: `{"model": "music-2.6", "prompt": "...", "lyrics": "..."}` — lyrics REQUIRED (even "la la")
   - Response: hex-encoded MP3, ~24-60 sec, 256kbps stereo
@@ -119,6 +132,10 @@
 **Status 2026-05-13 (catch-up): AutoTTS (LLM discovers test-time scaling strategies), The Memory Curse (wider context degrades multi-agent cooperation), GraphDPO (DAG-structured preference alignment), Rubric-Grounded RL (partial-credit reward from LLM judges), VecCISC (47% token savings for confidence self-consistency)**
 
 **Status 2026-05-13 night research: Shepherd (meta-agent runtime with Git-like execution traces + state forking), DeMem (decision-centric memory as rate-distortion compression), MATRA (threat modeling for agentic AI, EuroS&P 2026), k-step Policy Gradients (k-step lookahead fixes myopia), On-Policy Distillation (per-token diagnostic for teacher-student gaps)**
+
+**Status 2026-05-14 night research: LongMemEval-V2 (coding-agent-over-trajectories beats RAG 72.5% vs 48.5%), Sparse-to-Dense Reward Principle (GRPO + distillation are same spectrum), Reward Hacking in Rubric-Based RL (verifier-free diagnostic for training failure), OPSD (logit-level contrast for self-distillation), KV-Fold (training-free 100% needle retrieval at 128K tokens on 1 GPU)**
+
+**Status 2026-05-16 night research: Evolving-RL (joint RL optimization of experience extraction+utilization), RAO (recursive self-spawning sub-agents, scales beyond context), LLMA-Mem (memory topology for multi-agent lifelong learning), SkillGen (multi-agent skill synthesis from trajectories), Constraint Drift (safety constraints erode through delegation chains), MemRL (runtime RL on episodic memory, no weight updates)**
 
 **Status 2026-04-16 4AM: MemCoT (inference-time memory-driven CoT), SEARL/ACL (joint RL+tool graph), Mem²Evolve (experience+asset co-evolution), MIA (manager-planner-executor with test-time learning), Combee (parallel prompt learning, 17x speedup), CoEvoSkills (autonomous multi-file skill generation)**
 
