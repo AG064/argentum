@@ -241,7 +241,10 @@ class SandboxExecutor {
                 language: langLower,
             };
         }
-        const timeout = options?.timeoutMs ?? this.config.maxExecutionTimeMs;
+        const requestedTimeout = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
+            ? options.timeoutMs
+            : this.config.maxExecutionTimeMs;
+        const timeout = Math.min(this.config.maxExecutionTimeMs, Math.max(1, Math.floor(requestedTimeout)));
         try {
             this.executionCount++;
             let result;
