@@ -121,6 +121,15 @@ export class SandboxExecutor {
     return { ...this.config };
   }
 
+  private normalizeTimeoutMs(timeoutMs: number): number {
+    const maxTimeoutMs = this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs;
+    if (!Number.isFinite(timeoutMs)) {
+      return maxTimeoutMs;
+    }
+
+    return Math.min(maxTimeoutMs, Math.max(1, Math.floor(timeoutMs)));
+  }
+
   // ─── Path Checks ──────────────────────────────────────────────────────────
 
   /**
@@ -245,10 +254,7 @@ export class SandboxExecutor {
       typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
         ? options.timeoutMs
         : this.config.maxExecutionTimeMs;
-    const timeout = Math.min(
-      this.config.maxExecutionTimeMs!,
-      Math.max(1, Math.floor(requestedTimeout)),
-    );
+    const timeout = this.normalizeTimeoutMs(requestedTimeout);
 
     try {
       this.executionCount++;
@@ -324,6 +330,7 @@ export class SandboxExecutor {
     workingDir?: string,
   ): Promise<SandboxResult> {
     const startTime = Date.now();
+    const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
 
     return new Promise((resolve) => {
       let settled = false;
@@ -355,7 +362,7 @@ export class SandboxExecutor {
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
 
         const child = spawn('node', [scriptPath], {
-          timeout: timeoutMs,
+          timeout: effectiveTimeoutMs,
           cwd: baseDir,
           env: {
             ...process.env,
@@ -402,11 +409,11 @@ export class SandboxExecutor {
           child.kill('SIGTERM');
           void finalize({
             success: false,
-            error: `Execution timed out after ${timeoutMs}ms`,
+            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
             executionTimeMs: Date.now() - startTime,
             language: 'javascript',
           });
-        }, timeoutMs + 100);
+        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,
@@ -424,6 +431,7 @@ export class SandboxExecutor {
     workingDir?: string,
   ): Promise<SandboxResult> {
     const startTime = Date.now();
+    const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
 
     return new Promise((resolve) => {
       let settled = false;
@@ -455,7 +463,7 @@ export class SandboxExecutor {
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
 
         const child = spawn('python3', [scriptPath], {
-          timeout: timeoutMs,
+          timeout: effectiveTimeoutMs,
           cwd: baseDir,
           env: {
             ...process.env,
@@ -501,11 +509,11 @@ export class SandboxExecutor {
           child.kill('SIGTERM');
           void finalize({
             success: false,
-            error: `Execution timed out after ${timeoutMs}ms`,
+            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
             executionTimeMs: Date.now() - startTime,
             language: 'python',
           });
-        }, timeoutMs + 100);
+        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,
@@ -532,6 +540,7 @@ export class SandboxExecutor {
     }
 
     const startTime = Date.now();
+    const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
 
     return new Promise((resolve) => {
       let settled = false;
@@ -563,7 +572,7 @@ export class SandboxExecutor {
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o700 });
 
         const child = spawn('bash', [scriptPath], {
-          timeout: timeoutMs,
+          timeout: effectiveTimeoutMs,
           cwd: baseDir,
           env: {
             ...process.env,
@@ -609,11 +618,11 @@ export class SandboxExecutor {
           child.kill('SIGTERM');
           void finalize({
             success: false,
-            error: `Execution timed out after ${timeoutMs}ms`,
+            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
             executionTimeMs: Date.now() - startTime,
             language: 'bash',
           });
-        }, timeoutMs + 100);
+        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,

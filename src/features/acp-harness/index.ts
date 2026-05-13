@@ -32,6 +32,7 @@ import {
   type HealthStatus,
 } from '../../core/plugin-loader';
 import { SandboxExecutor } from '../../security/sandbox';
+import { createWorkspaceBoundary } from '../../security/workspace-boundary';
 
 export interface ACPConfig {
   enabled: boolean;
@@ -39,6 +40,7 @@ export interface ACPConfig {
   host: string;
   authToken?: string;
   defaultTimeoutMs: number;
+  workspaceRoot?: string;
 }
 
 export interface ACPExecuteRequest {
@@ -192,10 +194,13 @@ class ACPHarnessFeature implements FeatureModule {
   private async execute(req: ACPExecuteRequest): Promise<ACPExecuteResponse> {
     const start = Date.now();
     const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
+    const workspaceRoot = this.config.workspaceRoot ?? this.ctx.config.security.capabilities.workspaceRoot;
+    const workspaceBoundary = createWorkspaceBoundary(workspaceRoot);
+    const workingDir = req.workspace ? workspaceBoundary.assertPath(req.workspace) : undefined;
 
     const result = await this.sandbox.execute(req.code, req.language, {
       timeoutMs,
-      workingDir: req.workspace,
+      workingDir,
     });
 
     return {
