@@ -54,16 +54,6 @@ function getRequiredString(input, key) {
     }
     return value;
 }
-function getOptionalNumber(input, key, fallback) {
-    const value = input[key];
-    return typeof value === 'number' ? value : fallback;
-}
-function toExecFailure(error) {
-    if (error && typeof error === 'object') {
-        return error;
-    }
-    return { message: String(error) };
-}
 /**
  * MCP Server implementation
  */
@@ -224,45 +214,6 @@ exports.builtInTools = {
         content = content.replace(oldString, newString);
         await fs.writeFile(filePath, content, 'utf-8');
         return { success: true, replacements: 1 };
-    }),
-    Bash: createTool('Bash', 'Execute bash command', {
-        type: 'object',
-        properties: { command: { type: 'string' }, timeout: { type: 'number' } },
-        required: ['command'],
-    }, async (input) => {
-        const { exec } = await Promise.resolve().then(() => __importStar(require('child_process')));
-        const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
-        const execAsync = promisify(exec);
-        const command = getRequiredString(input, 'command');
-        const timeout = getOptionalNumber(input, 'timeout', 60000);
-        try {
-            const { stdout, stderr } = await execAsync(command, {
-                timeout,
-            });
-            return { stdout, stderr, exitCode: 0 };
-        }
-        catch (error) {
-            const failure = toExecFailure(error);
-            return {
-                stdout: failure.stdout ?? '',
-                stderr: failure.stderr ?? failure.message ?? 'Command failed',
-                exitCode: failure.code ?? 1,
-            };
-        }
-    }),
-    Grep: createTool('Grep', 'Search pattern in files', {
-        type: 'object',
-        properties: { pattern: { type: 'string' }, path: { type: 'string' } },
-        required: ['pattern', 'path'],
-    }, async (input) => {
-        const { exec } = await Promise.resolve().then(() => __importStar(require('child_process')));
-        const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
-        const execAsync = promisify(exec);
-        const pattern = getRequiredString(input, 'pattern');
-        const searchPath = getRequiredString(input, 'path');
-        const { stdout } = await execAsync(`grep -r "${pattern}" ${searchPath} 2>/dev/null || true`);
-        const matches = stdout.trim().split('\n').filter(Boolean);
-        return { matches, count: matches.length };
     }),
 };
 exports.default = MCPServer;

@@ -16,7 +16,6 @@
  *   WS  /acp/stream   - streaming output
  */
 
-import { spawn } from 'child_process';
 import {
   createServer,
   type IncomingMessage,
@@ -32,6 +31,8 @@ import {
   type FeatureMeta,
   type HealthStatus,
 } from '../../core/plugin-loader';
+import { SandboxExecutor } from '../../security/sandbox';
+import { createWorkspaceBoundary } from '../../security/workspace-boundary';
 
 export interface ACPConfig {
   enabled: boolean;
@@ -39,6 +40,7 @@ export interface ACPConfig {
   host: string;
   authToken?: string;
   defaultTimeoutMs: number;
+  workspaceRoot?: string;
 }
 
 export interface ACPExecuteRequest {
@@ -77,6 +79,7 @@ class ACPHarnessFeature implements FeatureModule {
   private ctx!: FeatureContext;
   private server: HttpServer | null = null;
   private wsServer: WebSocketServer | null = null;
+  private sandbox = new SandboxExecutor();
 
   async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
     this.ctx = context;
@@ -191,39 +194,24 @@ class ACPHarnessFeature implements FeatureModule {
   private async execute(req: ACPExecuteRequest): Promise<ACPExecuteResponse> {
     const start = Date.now();
     const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
+    const workspaceRoot =
+      this.config.workspaceRoot ?? this.ctx.config.security.capabilities.workspaceRoot ?? '.';
+    const workspaceBoundary = createWorkspaceBoundary(workspaceRoot);
+    const workingDir = req.workspace ? workspaceBoundary.assertPath(req.workspace) : undefined;
 
-    // Simple execution via child_process (non-isolated)
-    return new Promise((resolve) => {
-      const cmd = this.getCommand(req.language);
-      const proc = spawn(cmd, ['-e', req.code], { timeout: timeoutMs });
-
-      let stdout = '',
-        stderr = '';
-      proc.stdout?.on('data', (d) => (stdout += d));
-      proc.stderr?.on('data', (d) => (stderr += d));
-
-      proc.on('close', (code) => {
-        resolve({
-          success: code === 0,
-          stdout,
-          stderr,
-          exitCode: code ?? -1,
-          durationMs: Date.now() - start,
-          timedOut: false,
-        });
-      });
-
-      proc.on('error', (err) => {
-        resolve({
-          success: false,
-          stdout: '',
-          stderr: err.message,
-          exitCode: -1,
-          durationMs: Date.now() - start,
-          timedOut: false,
-        });
-      });
+    const result = await this.sandbox.execute(req.code, req.language, {
+      timeoutMs,
+      workingDir,
     });
+
+    return {
+      success: result.success,
+      stdout: result.output ?? '',
+      stderr: result.error ?? '',
+      exitCode: result.exitCode ?? (result.success ? 0 : -1),
+      durationMs: Date.now() - start,
+      timedOut: result.error?.includes('timed out') ?? false,
+    };
   }
 
   private async executeWithStream(ws: WebSocket, req: ACPExecuteRequest): Promise<void> {
@@ -236,18 +224,7 @@ class ACPHarnessFeature implements FeatureModule {
     ws.send(JSON.stringify(result));
   }
 
-  private getCommand(language: string): string {
-    switch (language) {
-      case 'javascript':
-        return 'node';
-      case 'python':
-        return 'python3';
-      case 'bash':
-        return 'sh';
-      default:
-        throw new Error(`Unsupported language: ${language}`);
-    }
-  }
+  // Note: language mapping and execution is delegated to SandboxExecutor.
 }
 
 export default new ACPHarnessFeature();

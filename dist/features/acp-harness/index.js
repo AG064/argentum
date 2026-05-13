@@ -17,9 +17,9 @@
  *   WS  /acp/stream   - streaming output
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-const child_process_1 = require("child_process");
 const http_1 = require("http");
 const ws_1 = require("ws");
+const sandbox_1 = require("../../security/sandbox");
 const DEFAULT_CONFIG = {
     enabled: false,
     port: 3004,
@@ -37,6 +37,7 @@ class ACPHarnessFeature {
     ctx;
     server = null;
     wsServer = null;
+    sandbox = new sandbox_1.SandboxExecutor();
     async init(config, context) {
         this.ctx = context;
         this.config = { ...this.config, ...config };
@@ -137,34 +138,18 @@ class ACPHarnessFeature {
     async execute(req) {
         const start = Date.now();
         const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
-        // Simple execution via child_process (non-isolated)
-        return new Promise((resolve) => {
-            const cmd = this.getCommand(req.language);
-            const proc = (0, child_process_1.spawn)(cmd, ['-e', req.code], { timeout: timeoutMs });
-            let stdout = '', stderr = '';
-            proc.stdout?.on('data', (d) => (stdout += d));
-            proc.stderr?.on('data', (d) => (stderr += d));
-            proc.on('close', (code) => {
-                resolve({
-                    success: code === 0,
-                    stdout,
-                    stderr,
-                    exitCode: code ?? -1,
-                    durationMs: Date.now() - start,
-                    timedOut: false,
-                });
-            });
-            proc.on('error', (err) => {
-                resolve({
-                    success: false,
-                    stdout: '',
-                    stderr: err.message,
-                    exitCode: -1,
-                    durationMs: Date.now() - start,
-                    timedOut: false,
-                });
-            });
+        const result = await this.sandbox.execute(req.code, req.language, {
+            timeoutMs,
+            workingDir: req.workspace,
         });
+        return {
+            success: result.success,
+            stdout: result.output ?? '',
+            stderr: result.error ?? '',
+            exitCode: result.exitCode ?? (result.success ? 0 : -1),
+            durationMs: Date.now() - start,
+            timedOut: result.error?.includes('timed out') ?? false,
+        };
     }
     async executeWithStream(ws, req) {
         const _start = Date.now();
@@ -173,18 +158,6 @@ class ACPHarnessFeature {
         // A proper implementation would stream stdout/stderr in real-time
         const result = await this.execute(req);
         ws.send(JSON.stringify(result));
-    }
-    getCommand(language) {
-        switch (language) {
-            case 'javascript':
-                return 'node';
-            case 'python':
-                return 'python3';
-            case 'bash':
-                return 'sh';
-            default:
-                throw new Error(`Unsupported language: ${language}`);
-        }
     }
 }
 exports.default = new ACPHarnessFeature();

@@ -134,11 +134,6 @@ describe('MCPServer', () => {
       const tools = server.listTools();
       expect(tools.some((t) => t.name === 'Write')).toBe(true);
     });
-
-    test('should have Bash tool', () => {
-      const tools = server.listTools();
-      expect(tools.some((t) => t.name === 'Bash')).toBe(true);
-    });
   });
 });
 

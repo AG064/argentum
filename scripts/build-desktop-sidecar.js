@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const { existsSync, mkdirSync } = require('fs');
-const { join } = require('path');
+const { basename, join } = require('path');
 const { spawnSync } = require('child_process');
 
 const root = join(__dirname, '..');
@@ -31,11 +31,19 @@ const targets = {
 };
 
 function run(command, args) {
+  const commandName = basename(command).toLowerCase();
+  const isWindowsCmd =
+    process.platform === 'win32' && (commandName.endsWith('.cmd') || commandName.endsWith('.bat'));
   const result = spawnSync(command, args, {
     cwd: root,
     stdio: 'inherit',
-    shell: false,
+    shell: isWindowsCmd ? 'cmd.exe' : false,
   });
+
+  if (result.error) {
+    console.error(`[build-desktop-sidecar] Failed to run ${command}: ${result.error.message}`);
+    process.exit(1);
+  }
 
   if (result.status !== 0) {
     process.exit(result.status || 1);

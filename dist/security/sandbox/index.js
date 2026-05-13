@@ -11,11 +11,45 @@
  * - Language-specific sandboxes (JS, Python, Bash)
  * - Full audit trail
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SandboxExecutor = void 0;
 exports.getSandboxExecutor = getSandboxExecutor;
 exports.resetSandboxExecutor = resetSandboxExecutor;
 const child_process_1 = require("child_process");
+const fs_1 = require("fs");
 const os_1 = require("os");
 const path_1 = require("path");
 const logger_1 = require("../../core/logger");
@@ -207,7 +241,10 @@ class SandboxExecutor {
                 language: langLower,
             };
         }
-        const timeout = options?.timeoutMs ?? this.config.maxExecutionTimeMs;
+        const requestedTimeout = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
+            ? options.timeoutMs
+            : this.config.maxExecutionTimeMs;
+        const timeout = Math.min(this.config.maxExecutionTimeMs, Math.max(1, Math.floor(requestedTimeout)));
         try {
             this.executionCount++;
             let result;
@@ -259,105 +296,170 @@ class SandboxExecutor {
     async executeJavaScript(code, timeoutMs, workingDir) {
         const startTime = Date.now();
         return new Promise((resolve) => {
-            // Use Node.js to execute with --input-type=module and restricted globals
-            const child = (0, child_process_1.spawn)('node', ['--input-type=module', '--eval', code], {
-                timeout: timeoutMs,
-                cwd: workingDir ?? '/tmp',
-                env: {
-                    ...process.env,
-                    // Restrict environment
-                    NODE_ENV: 'production',
-                },
-                stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            let stdout = '';
-            let stderr = '';
-            child.stdout?.on('data', (data) => {
-                stdout += data.toString();
-            });
-            child.stderr?.on('data', (data) => {
-                stderr += data.toString();
-            });
-            child.on('close', (code) => {
-                const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
-                resolve({
-                    success: code === 0,
-                    output: output || undefined,
-                    error: stderr || undefined,
-                    exitCode: code ?? undefined,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'javascript',
+            let settled = false;
+            let sandboxDir;
+            const finalize = async (result) => {
+                if (settled)
+                    return;
+                settled = true;
+                try {
+                    if (sandboxDir) {
+                        const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                        await fs.rm(sandboxDir, { recursive: true, force: true });
+                    }
+                }
+                catch {
+                    // ignore cleanup failures
+                }
+                resolve(result);
+            };
+            const baseDir = workingDir ??
+                ((0, fs_1.existsSync)('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+            void (async () => {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                const path = await Promise.resolve().then(() => __importStar(require('path')));
+                sandboxDir = await fs.mkdtemp(path.join(baseDir, 'argentum-sandbox-'));
+                const scriptPath = path.join(sandboxDir, 'snippet.mjs');
+                await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
+                const child = (0, child_process_1.spawn)('node', [scriptPath], {
+                    timeout: timeoutMs,
+                    cwd: baseDir,
+                    env: {
+                        ...process.env,
+                        // Restrict environment
+                        NODE_ENV: 'production',
+                    },
+                    stdio: ['pipe', 'pipe', 'pipe'],
                 });
-            });
-            child.on('error', (err) => {
-                resolve({
+                let stdout = '';
+                let stderr = '';
+                child.stdout?.on('data', (data) => {
+                    stdout += data.toString();
+                });
+                child.stderr?.on('data', (data) => {
+                    stderr += data.toString();
+                });
+                child.on('close', (code) => {
+                    const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
+                    void finalize({
+                        success: code === 0,
+                        output: output || undefined,
+                        error: stderr || undefined,
+                        exitCode: code ?? undefined,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'javascript',
+                    });
+                });
+                child.on('error', (err) => {
+                    void finalize({
+                        success: false,
+                        error: err.message,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'javascript',
+                    });
+                });
+                // Timeout handling
+                setTimeout(() => {
+                    child.kill('SIGTERM');
+                    void finalize({
+                        success: false,
+                        error: `Execution timed out after ${timeoutMs}ms`,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'javascript',
+                    });
+                }, timeoutMs + 100);
+            })().catch((err) => {
+                void finalize({
                     success: false,
-                    error: err.message,
+                    error: err instanceof Error ? err.message : String(err),
                     executionTimeMs: Date.now() - startTime,
                     language: 'javascript',
                 });
             });
-            // Timeout handling
-            setTimeout(() => {
-                child.kill('SIGTERM');
-                resolve({
-                    success: false,
-                    error: `Execution timed out after ${timeoutMs}ms`,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'javascript',
-                });
-            }, timeoutMs + 100);
         });
     }
     async executePython(code, timeoutMs, workingDir) {
         const startTime = Date.now();
         return new Promise((resolve) => {
-            const child = (0, child_process_1.spawn)('python3', ['-c', code], {
-                timeout: timeoutMs,
-                cwd: workingDir ?? '/tmp',
-                env: {
-                    ...process.env,
-                    PYTHONDONTWRITEBYTECODE: '1',
-                    PYTHONUNBUFFERED: '1',
-                },
-                stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            let stdout = '';
-            let stderr = '';
-            child.stdout?.on('data', (data) => {
-                stdout += data.toString();
-            });
-            child.stderr?.on('data', (data) => {
-                stderr += data.toString();
-            });
-            child.on('close', (code) => {
-                const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
-                resolve({
-                    success: code === 0,
-                    output: output || undefined,
-                    error: stderr || undefined,
-                    exitCode: code ?? undefined,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'python',
+            let settled = false;
+            let sandboxDir;
+            const finalize = async (result) => {
+                if (settled)
+                    return;
+                settled = true;
+                try {
+                    if (sandboxDir) {
+                        const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                        await fs.rm(sandboxDir, { recursive: true, force: true });
+                    }
+                }
+                catch {
+                    // ignore cleanup failures
+                }
+                resolve(result);
+            };
+            const baseDir = workingDir ??
+                ((0, fs_1.existsSync)('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+            void (async () => {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                const path = await Promise.resolve().then(() => __importStar(require('path')));
+                sandboxDir = await fs.mkdtemp(path.join(baseDir, 'argentum-sandbox-'));
+                const scriptPath = path.join(sandboxDir, 'snippet.py');
+                await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
+                const child = (0, child_process_1.spawn)('python3', [scriptPath], {
+                    timeout: timeoutMs,
+                    cwd: baseDir,
+                    env: {
+                        ...process.env,
+                        PYTHONDONTWRITEBYTECODE: '1',
+                        PYTHONUNBUFFERED: '1',
+                    },
+                    stdio: ['pipe', 'pipe', 'pipe'],
                 });
-            });
-            child.on('error', (err) => {
-                resolve({
+                let stdout = '';
+                let stderr = '';
+                child.stdout?.on('data', (data) => {
+                    stdout += data.toString();
+                });
+                child.stderr?.on('data', (data) => {
+                    stderr += data.toString();
+                });
+                child.on('close', (code) => {
+                    const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
+                    void finalize({
+                        success: code === 0,
+                        output: output || undefined,
+                        error: stderr || undefined,
+                        exitCode: code ?? undefined,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'python',
+                    });
+                });
+                child.on('error', (err) => {
+                    void finalize({
+                        success: false,
+                        error: err.message,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'python',
+                    });
+                });
+                setTimeout(() => {
+                    child.kill('SIGTERM');
+                    void finalize({
+                        success: false,
+                        error: `Execution timed out after ${timeoutMs}ms`,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'python',
+                    });
+                }, timeoutMs + 100);
+            })().catch((err) => {
+                void finalize({
                     success: false,
-                    error: err.message,
+                    error: err instanceof Error ? err.message : String(err),
                     executionTimeMs: Date.now() - startTime,
                     language: 'python',
                 });
             });
-            setTimeout(() => {
-                child.kill('SIGTERM');
-                resolve({
-                    success: false,
-                    error: `Execution timed out after ${timeoutMs}ms`,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'python',
-                });
-            }, timeoutMs + 100);
         });
     }
     async executeBash(code, timeoutMs, workingDir) {
@@ -371,54 +473,85 @@ class SandboxExecutor {
         }
         const startTime = Date.now();
         return new Promise((resolve) => {
-            // nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell
-            // This is intentional - sandbox executes user-provided bash code in a restricted environment
-            const child = (0, child_process_1.spawn)('bash', ['-c', code], {
-                timeout: timeoutMs,
-                cwd: workingDir ?? '/tmp',
-                env: {
-                    ...process.env,
-                    // Remove sensitive env vars
-                    PATH: '/usr/bin:/bin:/usr/local/bin:/tmp',
-                },
-                stdio: ['pipe', 'pipe', 'pipe'],
-            });
-            let stdout = '';
-            let stderr = '';
-            child.stdout?.on('data', (data) => {
-                stdout += data.toString();
-            });
-            child.stderr?.on('data', (data) => {
-                stderr += data.toString();
-            });
-            child.on('close', (code) => {
-                const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
-                resolve({
-                    success: code === 0,
-                    output: output || undefined,
-                    error: stderr || undefined,
-                    exitCode: code ?? undefined,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'bash',
+            let settled = false;
+            let sandboxDir;
+            const finalize = async (result) => {
+                if (settled)
+                    return;
+                settled = true;
+                try {
+                    if (sandboxDir) {
+                        const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                        await fs.rm(sandboxDir, { recursive: true, force: true });
+                    }
+                }
+                catch {
+                    // ignore cleanup failures
+                }
+                resolve(result);
+            };
+            const baseDir = workingDir ??
+                ((0, fs_1.existsSync)('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+            void (async () => {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
+                const path = await Promise.resolve().then(() => __importStar(require('path')));
+                sandboxDir = await fs.mkdtemp(path.join(baseDir, 'argentum-sandbox-'));
+                const scriptPath = path.join(sandboxDir, 'snippet.sh');
+                await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o700 });
+                const child = (0, child_process_1.spawn)('bash', [scriptPath], {
+                    timeout: timeoutMs,
+                    cwd: baseDir,
+                    env: {
+                        ...process.env,
+                        // Remove sensitive env vars
+                        PATH: '/usr/bin:/bin:/usr/local/bin:/tmp',
+                    },
+                    stdio: ['pipe', 'pipe', 'pipe'],
                 });
-            });
-            child.on('error', (err) => {
-                resolve({
+                let stdout = '';
+                let stderr = '';
+                child.stdout?.on('data', (data) => {
+                    stdout += data.toString();
+                });
+                child.stderr?.on('data', (data) => {
+                    stderr += data.toString();
+                });
+                child.on('close', (code) => {
+                    const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
+                    void finalize({
+                        success: code === 0,
+                        output: output || undefined,
+                        error: stderr || undefined,
+                        exitCode: code ?? undefined,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'bash',
+                    });
+                });
+                child.on('error', (err) => {
+                    void finalize({
+                        success: false,
+                        error: err.message,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'bash',
+                    });
+                });
+                setTimeout(() => {
+                    child.kill('SIGTERM');
+                    void finalize({
+                        success: false,
+                        error: `Execution timed out after ${timeoutMs}ms`,
+                        executionTimeMs: Date.now() - startTime,
+                        language: 'bash',
+                    });
+                }, timeoutMs + 100);
+            })().catch((err) => {
+                void finalize({
                     success: false,
-                    error: err.message,
+                    error: err instanceof Error ? err.message : String(err),
                     executionTimeMs: Date.now() - startTime,
                     language: 'bash',
                 });
             });
-            setTimeout(() => {
-                child.kill('SIGTERM');
-                resolve({
-                    success: false,
-                    error: `Execution timed out after ${timeoutMs}ms`,
-                    executionTimeMs: Date.now() - startTime,
-                    language: 'bash',
-                });
-            }, timeoutMs + 100);
         });
     }
     /**

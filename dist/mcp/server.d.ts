@@ -66,8 +66,6 @@ export declare const builtInTools: {
     Read: ExecutableMCPTool;
     Write: ExecutableMCPTool;
     Edit: ExecutableMCPTool;
-    Bash: ExecutableMCPTool;
-    Grep: ExecutableMCPTool;
 };
 export default MCPServer;
 //# sourceMappingURL=server.d.ts.map
