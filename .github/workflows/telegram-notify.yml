@@ -6,10 +6,10 @@ on:
   pull_request:
     types: [closed]
 
+permissions: {}
+
 jobs:
   notify:
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)
     steps:

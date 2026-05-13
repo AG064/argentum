@@ -31,16 +31,11 @@ const targets = {
 };
 
 function run(command, args) {
-  const isWindows = process.platform === 'win32';
-  const result = spawnSync(
-    isWindows ? process.env.ComSpec || 'cmd.exe' : command,
-    isWindows ? ['/d', '/s', '/c', command, ...args] : args,
-    {
+  const result = spawnSync(command, args, {
     cwd: root,
     stdio: 'inherit',
-      shell: false,
-    },
-  );
+    shell: false,
+  });
 
   if (result.status !== 0) {
     process.exit(result.status || 1);

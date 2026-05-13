@@ -3,10 +3,11 @@ name: Build Binary
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   portable-binaries:
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
