@@ -80,7 +80,7 @@
     "@clack/prompts": "^1.2.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^12.10.0",
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.1",
     "express": "^4.18.2",
@@ -93,7 +93,7 @@
     "pino": "^10.3.1",
     "pino-pretty": "^10.3.1",
     "sanitize-html": "^2.17.3",
-    "ws": "^8.16.0",
+    "ws": "^8.20.1",
     "yaml": "^2.3.4",
     "zod": "^4.3.6"
   },
