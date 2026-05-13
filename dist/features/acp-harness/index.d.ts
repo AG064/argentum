@@ -44,6 +44,7 @@ declare class ACPHarnessFeature implements FeatureModule {
     private ctx;
     private server;
     private wsServer;
+    private sandbox;
     init(config: Record<string, unknown>, context: FeatureContext): Promise<void>;
     start(): Promise<void>;
     stop(): Promise<void>;
@@ -53,7 +54,6 @@ declare class ACPHarnessFeature implements FeatureModule {
     private writeExecutionError;
     private execute;
     private executeWithStream;
-    private getCommand;
 }
 declare const _default: ACPHarnessFeature;
 export default _default;

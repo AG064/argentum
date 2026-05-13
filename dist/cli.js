@@ -367,32 +367,26 @@ function cmdACP() {
     info('Executing code...');
     const start = Date.now();
     try {
-        const { spawn } = require('child_process');
-        const cmd = 'node';
-        const proc = spawn(cmd, ['-e', code], { timeout: 30000 });
-        let stdout = '', stderr = '';
-        proc.stdout?.on('data', (d) => {
-            stdout += d;
-        });
-        proc.stderr?.on('data', (d) => {
-            stderr += d;
-        });
-        proc.on('close', (code) => {
+        const { SandboxExecutor } = require('./security/sandbox');
+        const sandbox = new SandboxExecutor();
+        void sandbox
+            .execute(code, 'javascript', { timeoutMs: 30000, workingDir: process.cwd() })
+            .then((result) => {
             const duration = Date.now() - start;
             print('');
-            if (code === 0) {
-                success(`Exit code: ${code} (${duration}ms)`);
+            if (result.success) {
+                success(`Exit code: ${result.exitCode ?? 0} (${duration}ms)`);
             }
             else {
-                warn(`Exit code: ${code} (${duration}ms)`);
+                warn(`Exit code: ${result.exitCode ?? 1} (${duration}ms)`);
             }
-            if (stdout)
-                print(`[stdout]\n${stdout}`);
-            if (stderr)
-                print(`[stderr]\n${stderr}`);
-        });
-        proc.on('error', (err) => {
-            error(`Failed to start process: ${err.message}`);
+            if (result.output)
+                print(`[stdout]\n${result.output}`);
+            if (result.error)
+                print(`[stderr]\n${result.error}`);
+        })
+            .catch((err) => {
+            error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
         });
     }
     catch (err) {
