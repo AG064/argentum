@@ -381,15 +381,88 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         command: { type: 'string', description: 'Shell command to execute', required: true },
       },
       execute: async (params) => {
-        const { execSync } = await import('child_process');
+        const { spawnSync } = await import('child_process');
         const cmd = params['command'] as string;
 
         if (!cmd) return 'Error: command parameter is required';
 
-        // Block dangerous commands
-        const blocked = ['rm -rf /', 'mkfs', 'dd if=', ':(){ :|:& };:', 'chmod 777'];
-        if (blocked.some((b) => cmd.includes(b))) {
-          return 'Error: This command is blocked for safety reasons.';
+        const tokenize = (input: string): string[] | { error: string } => {
+          const tokens: string[] = [];
+          let current = '';
+          let quote: 'single' | 'double' | null = null;
+
+          for (let i = 0; i < input.length; i++) {
+            const ch = input[i]!;
+
+            if (quote === null) {
+              if (ch === "'" || ch === '"') {
+                quote = ch === "'" ? 'single' : 'double';
+                continue;
+              }
+              if (ch === '\\') {
+                const next = input[i + 1];
+                if (next === undefined) return { error: 'Trailing backslash in command' };
+                current += next;
+                i++;
+                continue;
+              }
+              if (/\s/.test(ch)) {
+                if (current.length > 0) {
+                  tokens.push(current);
+                  current = '';
+                }
+                continue;
+              }
+              current += ch;
+              continue;
+            }
+
+            if (quote === 'single') {
+              if (ch === "'") {
+                quote = null;
+                continue;
+              }
+              current += ch;
+              continue;
+            }
+
+            // double quote
+            if (ch === '"') {
+              quote = null;
+              continue;
+            }
+            if (ch === '\\') {
+              const next = input[i + 1];
+              if (next === undefined) return { error: 'Trailing backslash in command' };
+              current += next;
+              i++;
+              continue;
+            }
+            current += ch;
+          }
+
+          if (quote !== null) return { error: 'Unterminated quote in command' };
+          if (current.length > 0) tokens.push(current);
+          return tokens;
+        };
+
+        const parsed = tokenize(cmd.trim());
+        if (!Array.isArray(parsed)) return `Error: ${parsed.error}`;
+
+        // Intentionally restrict supported commands: this tool is a privileged escape hatch
+        // and should not provide a general-purpose shell surface area.
+        const [program, ...args] = parsed;
+        if (program !== 'node') {
+          return 'Error: Only "node -e <code>" and "node -v/--version" are supported.';
+        }
+        if (
+          !(args.length === 1 && (args[0] === '-v' || args[0] === '--version')) &&
+          !(args.length === 2 && args[0] === '-e' && typeof args[1] === 'string')
+        ) {
+          return 'Error: Only "node -e <code>" and "node -v/--version" are supported.';
+        }
+        if (args[0] === '-e' && args[1]!.length > 10_000) {
+          return 'Error: Inline node script is too large.';
         }
 
         const decision = capabilityBroker.authorize({
@@ -403,18 +476,28 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         }
 
         try {
-          const output = execSync(cmd, {
+          const result = spawnSync(program, args, {
             cwd: capabilityBroker.workspaceRoot,
             timeout: 30000,
             encoding: 'utf-8',
             maxBuffer: 1024 * 1024,
+            shell: false,
           });
-          return output.length > 5000
-            ? `${output.slice(0, 5000)}\n... (truncated)`
-            : output || '(no output)';
+
+          if (result.error) {
+            return `Command failed: ${result.error.message}`;
+          }
+
+          const stdout = String(result.stdout ?? '');
+          const stderr = String(result.stderr ?? '');
+          if (result.status === 0) {
+            const output = stdout || '(no output)';
+            return output.length > 5000 ? `${output.slice(0, 5000)}\n... (truncated)` : output;
+          }
+
+          return `Command failed (exit code ${result.status ?? 1}).\n${stderr || stdout}`;
         } catch (err: unknown) {
-          const e = err as { message: string; stderr?: string };
-          return `Command failed: ${e.message}\n${e.stderr ?? ''}`;
+          return `Command failed: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     });

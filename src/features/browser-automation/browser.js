@@ -39,8 +39,9 @@ async function runCommand(args) {
   switch (command) {
     case 'install':
       console.log('Installing Playwright Chromium...');
-      const { execSync } = require('child_process');
-      execSync('npx playwright install chromium', { stdio: 'inherit' });
+      const { execFileSync } = require('child_process');
+      const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+      execFileSync(npx, ['playwright', 'install', 'chromium'], { stdio: 'inherit' });
       console.log('Done!');
       break;
 

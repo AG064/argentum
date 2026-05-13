@@ -5,6 +5,13 @@ const nativeDynamicImport = new Function(
   'return import(specifier)',
 ) as <T>(specifier: string) => Promise<T>;
 
+const allowedEsmSpecifiers = new Set<string>([
+  '@clack/prompts',
+]);
+
 export function importEsmModule<T>(specifier: string): Promise<T> {
+  if (!allowedEsmSpecifiers.has(specifier)) {
+    throw new Error(`Refusing to dynamically import unexpected ESM module: ${specifier}`);
+  }
   return nativeDynamicImport<T>(specifier);
 }
