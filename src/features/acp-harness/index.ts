@@ -194,7 +194,8 @@ class ACPHarnessFeature implements FeatureModule {
   private async execute(req: ACPExecuteRequest): Promise<ACPExecuteResponse> {
     const start = Date.now();
     const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
-    const workspaceRoot = this.config.workspaceRoot ?? this.ctx.config.security.capabilities.workspaceRoot;
+    const workspaceRoot =
+      this.config.workspaceRoot ?? this.ctx.config.security.capabilities.workspaceRoot ?? '.';
     const workspaceBoundary = createWorkspaceBoundary(workspaceRoot);
     const workingDir = req.workspace ? workspaceBoundary.assertPath(req.workspace) : undefined;
 

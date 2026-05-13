@@ -122,7 +122,7 @@ export class SandboxExecutor {
   }
 
   private normalizeTimeoutMs(timeoutMs: number): number {
-    const maxTimeoutMs = this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs;
+    const maxTimeoutMs = this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs ?? 30000;
     if (!Number.isFinite(timeoutMs)) {
       return maxTimeoutMs;
     }
@@ -383,12 +383,14 @@ export class SandboxExecutor {
           stderr += data.toString();
         });
 
-        child.on('close', (code) => {
+        child.on('close', (code, signal) => {
+          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
-            success: code === 0,
+            success,
             output: output || undefined,
-            error: stderr || undefined,
+            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'javascript',
@@ -404,16 +406,6 @@ export class SandboxExecutor {
           });
         });
 
-        // Timeout handling
-        setTimeout(() => {
-          child.kill('SIGTERM');
-          void finalize({
-            success: false,
-            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
-            executionTimeMs: Date.now() - startTime,
-            language: 'javascript',
-          });
-        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,
@@ -484,12 +476,14 @@ export class SandboxExecutor {
           stderr += data.toString();
         });
 
-        child.on('close', (code) => {
+        child.on('close', (code, signal) => {
+          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
-            success: code === 0,
+            success,
             output: output || undefined,
-            error: stderr || undefined,
+            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'python',
@@ -505,15 +499,6 @@ export class SandboxExecutor {
           });
         });
 
-        setTimeout(() => {
-          child.kill('SIGTERM');
-          void finalize({
-            success: false,
-            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
-            executionTimeMs: Date.now() - startTime,
-            language: 'python',
-          });
-        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,
@@ -593,12 +578,14 @@ export class SandboxExecutor {
           stderr += data.toString();
         });
 
-        child.on('close', (code) => {
+        child.on('close', (code, signal) => {
+          const timedOut = signal === 'SIGTERM' && Date.now() - startTime > effectiveTimeoutMs;
+          const success = code === 0 && !timedOut;
           const output = stdout.slice(0, this.config.maxOutputSizeKb! * 1024);
           void finalize({
-            success: code === 0,
+            success,
             output: output || undefined,
-            error: stderr || undefined,
+            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'bash',
@@ -614,15 +601,6 @@ export class SandboxExecutor {
           });
         });
 
-        setTimeout(() => {
-          child.kill('SIGTERM');
-          void finalize({
-            success: false,
-            error: `Execution timed out after ${effectiveTimeoutMs}ms`,
-            executionTimeMs: Date.now() - startTime,
-            language: 'bash',
-          });
-        }, effectiveTimeoutMs + 100);
       })().catch((err) => {
         void finalize({
           success: false,
