@@ -31,11 +31,17 @@ const targets = {
 };
 
 function run(command, args) {
+  const isWindowsCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
   const result = spawnSync(command, args, {
     cwd: root,
     stdio: 'inherit',
-    shell: false,
+    shell: isWindowsCmd,
   });
+
+  if (result.error) {
+    console.error(`[build-desktop-sidecar] Failed to run ${command}: ${result.error.message}`);
+    process.exit(1);
+  }
 
   if (result.status !== 0) {
     process.exit(result.status || 1);
