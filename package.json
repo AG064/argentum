@@ -47,7 +47,8 @@
     "version:sync": "node scripts/sync-version.js",
     "version:check": "node scripts/sync-version.js --check",
     "prebuild": "npm run clean",
-    "postinstall": "node scripts/postinstall-patch.js"
+    "postinstall": "is-ci || husky install",
+    "prepare": "husky install"
   },
   "pkg": {
     "scripts": [
@@ -117,8 +118,10 @@
     "eslint-plugin-jest": "^29.15.1",
     "eslint-plugin-unicorn": "^50.0.1",
     "globals": "^17.4.0",
+    "husky": "^9.1.7",
     "jest": "^30.4.1",
     "jest-esbuild": "^0.4.0",
+    "lint-staged": "^17.0.5",
     "prettier": "^3.8.1",
     "rcedit": "4.0.1",
     "ts-node": "^10.9.2",
@@ -145,5 +148,14 @@
     },
     "ip-address": "^10.2.0",
     "postcss": "^8.5.10"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yaml,yml}": [
+      "prettier --write"
+    ]
   }
 }
