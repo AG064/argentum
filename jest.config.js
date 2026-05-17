@@ -16,11 +16,8 @@ module.exports = {
     '/tests/unit/mcp.test.ts',
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
+    '^.+\\.[jt]sx?$': 'jest-esbuild',
   },
-  transformIgnorePatterns: [
-    '/node_modules/(?!(pino|test-exclude)/)',
-  ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@core/(.*)$': '<rootDir>/src/core/$1',
