@@ -59,7 +59,8 @@ const esm_1 = require("./core/esm");
 const onboarding_1 = require("./core/onboarding");
 const plugin_loader_1 = require("./core/plugin-loader");
 const modelDiscovery_js_1 = require("./utils/modelDiscovery.js");
-const VERSION = '0.0.5';
+const index_js_1 = require("./ui/server/index.js");
+const VERSION = '0.0.6';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -590,7 +591,7 @@ function cmdInit() {
         const defaultConfig = {
             $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
             name: 'My ARGENTUM Instance',
-            version: '0.0.5',
+            version: '0.0.6',
             server: {
                 port: 3000,
                 host: '0.0.0.0',
@@ -1472,6 +1473,38 @@ async function cmdGateway() {
         default:
             error(`Unknown gateway command: ${subcommand}`);
             print('Usage: argentum gateway [status|start|stop|restart|logs]');
+    }
+}
+async function cmdDashboard() {
+    banner();
+    const subcommand = args[1] ?? 'start';
+    switch (subcommand) {
+        case 'start': {
+            const portIdx = args.indexOf('--port');
+            const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : undefined;
+            info(`Starting Argentum dashboard server...`);
+            try {
+                const server = await (0, index_js_1.startDashboardServer)(port ? { port } : undefined);
+                success(`Dashboard running`);
+                info('Press Ctrl+C to stop');
+                process.on('SIGINT', () => {
+                    (0, index_js_1.stopDashboardServer)(server);
+                    process.exit(0);
+                });
+            }
+            catch (err) {
+                error(`Failed to start dashboard: ${err instanceof Error ? err.message : String(err)}`);
+                process.exitCode = 1;
+            }
+            break;
+        }
+        case 'stop': {
+            info('Dashboard server runs in foreground — press Ctrl+C to stop');
+            break;
+        }
+        default:
+            error(`Unknown dashboard command: ${subcommand}`);
+            print('Usage: argentum dashboard [start|stop] [--port PORT]');
     }
 }
 async function cmdPlugins() {
@@ -4040,6 +4073,9 @@ async function main() {
             break;
         case 'gateway':
             await cmdGateway();
+            break;
+        case 'dashboard':
+            await cmdDashboard();
             break;
         case 'plugins':
             await cmdPlugins();

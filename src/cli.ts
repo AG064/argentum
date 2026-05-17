@@ -41,6 +41,7 @@ import {
 } from './core/onboarding';
 import { PluginLoader } from './core/plugin-loader';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
+import { startDashboardServer, stopDashboardServer } from './ui/server/index.js';
 
 const VERSION = '0.0.6';
 const PROGRAM_TITLE = 'Argentum';
@@ -1730,6 +1731,39 @@ async function cmdGateway(): Promise<void> {
     default:
       error(`Unknown gateway command: ${subcommand}`);
       print('Usage: argentum gateway [status|start|stop|restart|logs]');
+  }
+}
+
+async function cmdDashboard(): Promise<void> {
+  banner();
+  const subcommand = args[1] ?? 'start';
+
+  switch (subcommand) {
+    case 'start': {
+      const portIdx = args.indexOf('--port');
+      const port = portIdx !== -1 ? parseInt(args[portIdx + 1] ?? '', 10) : undefined;
+      info(`Starting Argentum dashboard server...`);
+      try {
+        const server = await startDashboardServer(port ? { port } : undefined);
+        success(`Dashboard running`);
+        info('Press Ctrl+C to stop');
+        process.on('SIGINT', () => {
+          stopDashboardServer(server);
+          process.exit(0);
+        });
+      } catch (err) {
+        error(`Failed to start dashboard: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      }
+      break;
+    }
+    case 'stop': {
+      info('Dashboard server runs in foreground — press Ctrl+C to stop');
+      break;
+    }
+    default:
+      error(`Unknown dashboard command: ${subcommand}`);
+      print('Usage: argentum dashboard [start|stop] [--port PORT]');
   }
 }
 
@@ -4588,6 +4622,9 @@ async function main(): Promise<void> {
       break;
     case 'gateway':
       await cmdGateway();
+      break;
+    case 'dashboard':
+      await cmdDashboard();
       break;
     case 'plugins':
       await cmdPlugins();

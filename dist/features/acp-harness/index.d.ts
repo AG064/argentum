@@ -22,6 +22,7 @@ export interface ACPConfig {
     host: string;
     authToken?: string;
     defaultTimeoutMs: number;
+    workspaceRoot?: string;
 }
 export interface ACPExecuteRequest {
     code: string;

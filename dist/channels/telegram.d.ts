@@ -36,6 +36,7 @@ declare class TelegramChannel implements FeatureModule {
     start(): Promise<void>;
     stop(): Promise<void>;
     healthCheck(): Promise<HealthStatus>;
+    private streamAgentResponse;
     /** Set the agent for message handling */
     setAgent(agent: Agent): void;
     /** Check if a user/chat is allowed */

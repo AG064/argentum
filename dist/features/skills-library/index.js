@@ -21,7 +21,7 @@ const DEFAULT_CONFIG = {
 class SkillsLibraryFeature {
     meta = {
         name: 'skills-library',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Library of agent skills with versioning (SQLite)',
         dependencies: [],
     };

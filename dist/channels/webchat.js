@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 class WebchatChannel {
     meta = {
         name: 'webchat-channel',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Web-based chat with SSE streaming responses',
         dependencies: ['webchat'],
     };

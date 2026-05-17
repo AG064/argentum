@@ -65,6 +65,7 @@ declare class Argentum {
     private shuttingDown;
     private semanticMemory;
     private memoryGraph;
+    private channelHistories;
     constructor();
     /** Get the agent instance (for channels to use) */
     getAgent(): Agent;
@@ -74,6 +75,14 @@ declare class Argentum {
     getSemanticMemory(): SemanticMemory;
     /** Get the memory graph instance */
     getMemoryGraph(): MemoryGraph;
+    private channelSessionsPath;
+    private telegramDiagnosticsPath;
+    private writeTelegramDiagnostics;
+    private readChannelSessions;
+    private writeChannelSessions;
+    private ensureChannelSession;
+    private conversationHistoryForChannelSession;
+    private appendChannelSessionMessage;
     /** Start the Argentum framework */
     start(): Promise<void>;
     /** Start configured channels (Telegram, Webchat) */

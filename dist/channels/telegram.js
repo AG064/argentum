@@ -19,7 +19,7 @@ const grammy_1 = require("grammy");
 class TelegramChannel {
     meta = {
         name: 'telegram',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Telegram channel integration via grammY',
         dependencies: [],
     };
@@ -76,6 +76,40 @@ class TelegramChannel {
             healthy: this.running && this.bot !== null,
             message: this.running ? 'Connected' : 'Disconnected',
         };
+    }
+    async streamAgentResponse(ctx, response) {
+        const formatted = this.formatAgentResponse(response);
+        const chatId = ctx.chat?.id;
+        const chunks = this.splitMessage(formatted, 3900);
+        if (!chatId) {
+            for (const chunk of chunks)
+                await ctx.reply(chunk);
+            return;
+        }
+        try {
+            const first = chunks.shift() ?? 'Done.';
+            const sent = await ctx.reply('Argentum is typing...');
+            let visible = '';
+            const streamParts = first.match(/[\s\S]{1,220}/g) ?? [first];
+            for (const part of streamParts) {
+                visible += part;
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 650);
+                });
+                await ctx.api.editMessageText(chatId, sent.message_id, visible.slice(-3900));
+            }
+            for (const chunk of chunks) {
+                await ctx.reply(chunk);
+            }
+        }
+        catch (err) {
+            this.ctx.logger.warn('Telegram streaming edit failed; sending final reply', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            for (const chunk of this.splitMessage(formatted, 3900)) {
+                await ctx.reply(chunk);
+            }
+        }
     }
     /** Set the agent for message handling */
     setAgent(agent) {
@@ -149,12 +183,7 @@ class TelegramChannel {
             try {
                 if (this.agent) {
                     const response = await this.agent.handleMessage(text);
-                    const formattedResponse = this.formatAgentResponse(response);
-                    // Split long messages (Telegram limit is 4096 chars)
-                    const chunks = this.splitMessage(formattedResponse, 4000);
-                    for (const chunk of chunks) {
-                        await ctx.reply(chunk);
-                    }
+                    await this.streamAgentResponse(ctx, response);
                 }
                 else {
                     await ctx.reply('Agent not initialized. Please try again later.');
@@ -207,7 +236,7 @@ class TelegramChannel {
                 // Process with agent
                 if (this.agent) {
                     const response = await this.agent.handleMessage(transcription);
-                    await ctx.reply(`Transcription: ${transcription}\n\n${this.formatAgentResponse(response)}`);
+                    await this.streamAgentResponse(ctx, `Transcription: ${transcription}\n\n${response}`);
                 }
                 else {
                     await ctx.reply(`Transcription: ${transcription}\n\n(Agent not initialized)`);

@@ -19,7 +19,7 @@ module.exports = {
     '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!(pino)/)',
+    '/node_modules/(?!(pino|test-exclude)/)',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

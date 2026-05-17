@@ -17,7 +17,7 @@ const semantic_1 = require("../../memory/semantic");
 class SemanticSearchFeature {
     meta = {
         name: 'semantic-search',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Semantic vector search with embedding-based similarity',
         dependencies: [],
     };
