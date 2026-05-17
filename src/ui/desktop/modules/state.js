@@ -1,10 +1,10 @@
 import { APP_VERSION, fontOptions, providerPresets } from './constants.js';
+import { parseReasoningBlocks } from './reasoning-parser.js';
 import { defaultModelForAuth, modelAllowedForAuth } from './utils.js';
 
 const defaultProvider = providerPresets.find((provider) => provider.id === 'openai');
 const CHAT_HISTORY_STORAGE_KEY = 'argentum.chatHistory.v1';
 const UI_PREFERENCES_STORAGE_KEY = 'argentum.uiPreferences.v1';
-const REASONING_BLOCK_PATTERN = /<(think|reasoning)>([\s\S]*?)<\/\1>/gi;
 
 const openingChatBlocks = [
   {
@@ -61,19 +61,16 @@ function redactPrivateText(text) {
 }
 
 function splitReasoningFromMessage(body) {
-  const source = String(body || '');
-  const reasoning = [];
-  const visible = source
-    .replace(REASONING_BLOCK_PATTERN, (_match, tag, content) => {
-      reasoning.push(`${tag}: ${String(content || '').trim()}`);
-      return '';
-    })
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const parsed = parseReasoningBlocks(body);
+  if (!parsed.rawBody.trim()) {
+    return { rawBody: parsed.rawBody, body: '', reasoning: '' };
+  }
+  const visible = parsed.body;
 
   return {
+    rawBody: parsed.rawBody,
     body: redactPrivateText(visible || 'I completed the reasoning, but the provider did not return a separate visible answer.'),
-    reasoning: redactPrivateText(reasoning.join('\n\n').trim()),
+    reasoning: redactPrivateText(parsed.reasoning),
   };
 }
 
@@ -97,12 +94,16 @@ export const state = {
   activeSection: 'chat',
   onboardingStep: 1,
   onboardingOpen: true,
+  onboardingError: '',
+  onboardingValidationErrors: [],
+  onboardingDebug: null,
+  onboardingProgressLoaded: false,
   setupComplete: false,
   setupStatus: 'setup_pending',
   setupAnimation: false,
   version: APP_VERSION,
   workspacePath: '%LOCALAPPDATA%\\Programs\\Argentum\\workspace',
-  experienceLevel: 'beginner',
+  experienceLevel: '',
   runtimeMode: 'desktop',
   llmProvider: 'openai',
   providerApi: defaultProvider.api,
@@ -151,8 +152,17 @@ export const state = {
       message: 'Choose a workspace folder first. Argentum will keep default access inside that folder.',
     },
   ],
+  appLogEntries: [],
   notificationsMuted: false,
   notificationsMenuOpen: false,
+  quickSecurityMenuOpen: false,
+  quickSettingsMenuOpen: false,
+  helpOpen: false,
+  workspaceMenuOpen: false,
+  viewMode: 'chat',
+  chatFilter: 'recent',
+  conversationMenuChatId: '',
+  settingsSection: 'overview',
   uiFontFamily: fontOptions.ui[0].css,
   codeFontFamily: fontOptions.mono[0].css,
   savedConfigPath: '',
@@ -165,12 +175,16 @@ export const state = {
     'You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities.',
   agentPurpose: '',
   thinkingLevel: 'balanced',
-  showThinkingInChat: true,
+  showThinkingInChat: false,
   showThinkingInTelegram: false,
   chatStreaming: false,
+  activeAssistantMessageId: '',
+  chatAbortRequested: false,
+  chatScrollIntent: '',
   chatAttachments: [],
   voiceInputStatus: 'idle',
   selectedContextAccess: ['workspace-summary', 'profile', 'tool-state'],
+  onboardingOpenDisclosures: [],
   activeChatId: 'setup',
   pendingDeleteChatId: '',
   chatSessions: [
@@ -180,6 +194,11 @@ export const state = {
       subtitle: 'Workspace, provider, and permissions',
       blocks: cloneBlocks(openingChatBlocks),
       updatedAt: Date.now(),
+      lastMessageAt: Date.now(),
+      selectedAt: Date.now(),
+      lastOpenedAt: Date.now(),
+      pinned: false,
+      unreadCount: 0,
     },
     {
       id: 'general',
@@ -194,6 +213,11 @@ export const state = {
         },
       ],
       updatedAt: Date.now() - 1,
+      lastMessageAt: Date.now() - 1,
+      selectedAt: 0,
+      lastOpenedAt: 0,
+      pinned: false,
+      unreadCount: 0,
     },
   ],
   desktopState: {
@@ -204,6 +228,30 @@ export const state = {
     gatewayPid: null,
     gatewayLogPreview: 'No entries yet.',
     auditLogPreview: 'No entries yet.',
+    appLogPreview: 'No entries yet.',
+    systemStats: {
+      collectedAt: '',
+      hostName: 'Unavailable',
+      osName: 'Unavailable',
+      osVersion: 'Unavailable',
+      kernelVersion: 'Unavailable',
+      cpuBrand: 'Unavailable',
+      cpuCores: 0,
+      cpuUsagePercent: 0,
+      memoryTotalBytes: 0,
+      memoryUsedBytes: 0,
+      memoryUsedPercent: 0,
+      swapTotalBytes: 0,
+      swapUsedBytes: 0,
+      diskTotalBytes: 0,
+      diskAvailableBytes: 0,
+      diskUsedPercent: 0,
+      networkReceivedBytes: 0,
+      networkTransmittedBytes: 0,
+      uptimeSeconds: 0,
+      temperatureCelsius: null,
+      disks: [],
+    },
   },
   chatBlocks: cloneBlocks(openingChatBlocks),
   draftMessage: '',
@@ -274,6 +322,105 @@ export function clearNotifications() {
   }
 }
 
+export function setViewMode(mode) {
+  const nextMode = ['chat', 'split', 'full'].includes(mode) ? mode : 'chat';
+  if (state.viewMode === nextMode) return;
+  state.viewMode = nextMode;
+  recordUiEvent('view.mode_changed', 'ok', `View mode changed to ${nextMode}.`, { viewMode: nextMode });
+  persistUiPreferences();
+}
+
+export function setChatFilter(filter) {
+  const nextFilter = ['recent', 'pinned', 'all'].includes(filter) ? filter : 'recent';
+  state.chatFilter = nextFilter;
+  state.conversationMenuChatId = '';
+  recordUiEvent('chat.filter_changed', 'ok', `Conversation filter changed to ${nextFilter}.`, { filter: nextFilter });
+}
+
+export function toggleConversationMenu(chatId) {
+  state.conversationMenuChatId = state.conversationMenuChatId === chatId ? '' : chatId;
+}
+
+export function toggleChatPinned(chatId) {
+  const chat = state.chatSessions.find((session) => session.id === chatId);
+  if (!chat) return;
+  chat.pinned = !chat.pinned;
+  chat.updatedAt = Date.now();
+  state.conversationMenuChatId = '';
+  recordUiEvent('chat.pin_changed', 'ok', `${chat.pinned ? 'Pinned' : 'Unpinned'} ${chat.title || chat.id}.`, {
+    chatId,
+    pinned: chat.pinned,
+  });
+  persistChatHistory();
+}
+
+export function clearChatSession(chatId) {
+  const chat = state.chatSessions.find((session) => session.id === chatId);
+  if (!chat) return;
+  const now = Date.now();
+  chat.blocks = cloneBlocks(openingChatBlocks);
+  chat.subtitle = 'No messages yet';
+  chat.updatedAt = now;
+  chat.lastMessageAt = now;
+  chat.unreadCount = 0;
+  state.conversationMenuChatId = '';
+  if (state.activeChatId === chatId) {
+    state.chatBlocks = cloneBlocks(openingChatBlocks);
+  }
+  recordUiEvent('chat.cleared', 'ok', `Cleared ${chat.title || chat.id}.`, { chatId });
+  state.chatSessions = sortChatSessions(state.chatSessions);
+  persistChatHistory();
+}
+
+export function renameChatSession(chatId, title) {
+  const chat = state.chatSessions.find((session) => session.id === chatId);
+  const cleanTitle = String(title || '').trim();
+  if (!chat || !cleanTitle) return;
+  chat.title = cleanTitle.slice(0, 80);
+  chat.updatedAt = Date.now();
+  state.conversationMenuChatId = '';
+  recordUiEvent('chat.renamed', 'ok', `Renamed chat to ${chat.title}.`, { chatId });
+  persistChatHistory();
+}
+
+export function toggleHelp(open) {
+  state.helpOpen = typeof open === 'boolean' ? open : !state.helpOpen;
+  if (state.helpOpen) {
+    recordUiEvent('help.opened', 'ok', `Opened help for ${state.activeSection}.`, { section: state.activeSection });
+  }
+}
+
+export function toggleWorkspaceMenu(open) {
+  state.workspaceMenuOpen = typeof open === 'boolean' ? open : !state.workspaceMenuOpen;
+  if (state.workspaceMenuOpen) {
+    recordUiEvent('workspace.menu_opened', 'ok', 'Opened workspace menu.', { workspacePath: state.workspacePath });
+  }
+}
+
+export function setSettingsSection(sectionId) {
+  const allowed = ['overview', 'workspace', 'provider', 'model', 'context', 'chat', 'telegram', 'security', 'advanced'];
+  state.settingsSection = allowed.includes(sectionId) ? sectionId : 'overview';
+  recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, { section: state.settingsSection });
+}
+
+export function recordUiEvent(event, status, message, details = {}) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    event,
+    status,
+    message,
+    details,
+    timestamp: new Date().toISOString(),
+  };
+  state.appLogEntries = [entry, ...state.appLogEntries].slice(0, 250);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('argentum:state-change'));
+  }
+
+  return entry;
+}
+
 export function scheduleVisibleNotifications() {
   if (typeof window === 'undefined') return;
 
@@ -293,10 +440,37 @@ export function toggleNotificationsMuted() {
   }
 }
 
-export function toggleNotificationsMenu() {
-  state.notificationsMenuOpen = !state.notificationsMenuOpen;
+export function toggleNotificationsMenu(open) {
+  state.notificationsMenuOpen = typeof open === 'boolean' ? open : !state.notificationsMenuOpen;
+  if (state.notificationsMenuOpen) {
+    state.quickSecurityMenuOpen = false;
+    state.quickSettingsMenuOpen = false;
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('argentum:state-change'));
+  }
+}
+
+export function toggleQuickSecurityMenu(open) {
+  state.quickSecurityMenuOpen = typeof open === 'boolean' ? open : !state.quickSecurityMenuOpen;
+  if (state.quickSecurityMenuOpen) {
+    state.notificationsMenuOpen = false;
+    state.quickSettingsMenuOpen = false;
+    recordUiEvent('security.quick_menu_opened', 'ok', 'Opened current-view security controls.', {
+      section: state.activeSection,
+      securityProfile: state.securityProfile,
+    });
+  }
+}
+
+export function toggleQuickSettingsMenu(open) {
+  state.quickSettingsMenuOpen = typeof open === 'boolean' ? open : !state.quickSettingsMenuOpen;
+  if (state.quickSettingsMenuOpen) {
+    state.notificationsMenuOpen = false;
+    state.quickSecurityMenuOpen = false;
+    recordUiEvent('settings.quick_menu_opened', 'ok', 'Opened current-view quick settings.', {
+      section: state.activeSection,
+    });
   }
 }
 
@@ -322,8 +496,71 @@ export function terminalEntriesForDisplay(filter = '') {
 
 function sortChatSessions(sessions) {
   return [...sessions]
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))
     .slice(0, 24);
+}
+
+function normalizeChatBlocks(blocks, channel = '') {
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .filter((block) => block && typeof block === 'object' && block.body)
+    .map((block) => {
+      const role = block.role === 'user' ? 'user' : 'argentum';
+      const parsed = role === 'user' ? { body: block.body, reasoning: block.reasoning || '', rawBody: block.rawBody || block.body } : splitReasoningFromMessage(block.rawBody || block.body);
+      return {
+        type: block.type || 'message',
+        role,
+        title: block.title || (role === 'user' ? 'You' : channel === 'telegram' ? 'Telegram' : state.agentName || 'Argentum'),
+        body: role === 'user' ? redactPrivateText(block.body) : parsed.body,
+        reasoning: role === 'user' ? redactPrivateText(block.reasoning || '') : parsed.reasoning,
+        rawBody: parsed.rawBody,
+        status: block.status || 'sent',
+        createdAt: block.createdAt || Date.now(),
+        attachments: Array.isArray(block.attachments) ? block.attachments : [],
+      };
+    });
+}
+
+export function mergeChannelChatSessions(channelSessions = []) {
+  if (!Array.isArray(channelSessions) || channelSessions.length === 0) return;
+
+  const byId = new Map(state.chatSessions.map((session) => [session.id, session]));
+  for (const raw of channelSessions) {
+    if (!raw?.id) continue;
+    const channel = raw.channel === 'telegram' ? 'telegram' : String(raw.channel || 'external');
+    const blocks = normalizeChatBlocks(raw.blocks, channel);
+    const existing = byId.get(raw.id);
+    const lastMessageAt = Number(raw.lastMessageAt || raw.updatedAt || existing?.lastMessageAt || existing?.updatedAt || Date.now());
+    const lastOpenedAt = Number(existing?.lastOpenedAt || 0);
+    const unreadCount =
+      raw.id === state.activeChatId
+        ? 0
+        : lastMessageAt > lastOpenedAt
+          ? Math.max(Number(existing?.unreadCount || 0), 1)
+          : Number(existing?.unreadCount || 0);
+    const session = {
+      ...existing,
+      id: raw.id,
+      channel,
+      title: raw.title || existing?.title || (channel === 'telegram' ? 'Telegram chat' : 'External chat'),
+      subtitle: raw.subtitle || summarizeChat(blocks) || existing?.subtitle || 'Imported channel conversation',
+      blocks: blocks.length > 0 ? blocks : existing?.blocks || cloneBlocks(openingChatBlocks),
+      updatedAt: Number(raw.updatedAt || existing?.updatedAt || Date.now()),
+      lastMessageAt,
+      selectedAt: Number(existing?.selectedAt || 0),
+      lastOpenedAt: raw.id === state.activeChatId ? Date.now() : lastOpenedAt,
+      pinned: Boolean(raw.pinned || existing?.pinned),
+      unreadCount,
+    };
+    byId.set(session.id, session);
+
+    if (session.id === state.activeChatId) {
+      state.chatBlocks = cloneBlocks(session.blocks);
+    }
+  }
+
+  state.chatSessions = sortChatSessions([...byId.values()]);
+  persistChatHistory();
 }
 
 export function touchActiveChatSession() {
@@ -332,24 +569,27 @@ export function touchActiveChatSession() {
     state.chatSessions[index] = {
       ...state.chatSessions[index],
       updatedAt: Date.now(),
+      lastMessageAt: Date.now(),
     };
   }
   state.chatSessions = sortChatSessions(state.chatSessions);
   persistChatHistory();
 }
 
-export function syncActiveChatSession() {
+export function syncActiveChatSession(options = {}) {
   const index = state.chatSessions.findIndex((chat) => chat.id === state.activeChatId);
   if (index === -1) return;
 
   const current = state.chatSessions[index];
+  const now = Date.now();
   const fallbackTitle = current.title || 'New chat';
   state.chatSessions[index] = {
     ...current,
     title: titleFromChat(state.chatBlocks, fallbackTitle === 'New chat' ? 'New chat' : fallbackTitle),
     subtitle: summarizeChat(state.chatBlocks),
     blocks: cloneBlocks(state.chatBlocks),
-    updatedAt: Date.now(),
+    updatedAt: now,
+    lastMessageAt: options.messageActivity ? now : current.lastMessageAt || current.updatedAt || now,
   };
   state.chatSessions = sortChatSessions(state.chatSessions);
   persistChatHistory();
@@ -360,10 +600,15 @@ export function setActiveChatSession(chatId) {
   const session = state.chatSessions.find((chat) => chat.id === chatId) || state.chatSessions[0];
   if (!session) return;
 
+  const now = Date.now();
   state.activeChatId = session.id;
+  session.selectedAt = now;
+  session.lastOpenedAt = now;
+  session.unreadCount = 0;
   state.chatBlocks = cloneBlocks(session.blocks?.length ? session.blocks : openingChatBlocks);
   state.draftMessage = '';
   state.chatAttachments = [];
+  recordUiEvent('chat.selected', 'ok', `Selected chat ${session.title || session.id}.`, { chatId: session.id });
   persistChatHistory();
 }
 
@@ -383,6 +628,11 @@ export function createChatSession() {
       },
     ],
     updatedAt: Date.now(),
+    lastMessageAt: Date.now(),
+    selectedAt: Date.now(),
+    lastOpenedAt: Date.now(),
+    pinned: false,
+    unreadCount: 0,
   };
 
   state.chatSessions = [session, ...state.chatSessions].slice(0, 24);
@@ -413,6 +663,11 @@ export function confirmDeleteChatSession(chatId) {
       subtitle: 'No messages yet',
       blocks: cloneBlocks(openingChatBlocks),
       updatedAt: Date.now(),
+      lastMessageAt: Date.now(),
+      selectedAt: Date.now(),
+      lastOpenedAt: Date.now(),
+      pinned: false,
+      unreadCount: 0,
     };
     state.chatSessions = [replacement];
   } else {
@@ -442,7 +697,21 @@ export function hydrateChatHistory() {
 
     state.chatSessions = saved.chatSessions
       .filter((session) => session?.id && Array.isArray(session.blocks))
-      .slice(0, 24);
+      .slice(0, 24)
+      .map((session) => {
+        const updatedAt = Number(session.updatedAt || Date.now());
+        const lastMessageAt = Number(session.lastMessageAt || updatedAt);
+        return {
+          ...session,
+          blocks: normalizeChatBlocks(session.blocks, session.channel || ''),
+          updatedAt,
+          lastMessageAt,
+          selectedAt: Number(session.selectedAt || 0),
+          lastOpenedAt: Number(session.lastOpenedAt || 0),
+          pinned: Boolean(session.pinned),
+          unreadCount: Number(session.unreadCount || 0),
+        };
+      });
     if (state.chatSessions.length === 0) return false;
 
     state.activeChatId = state.chatSessions.some((session) => session.id === saved.activeChatId)
@@ -475,6 +744,12 @@ export function hydrateUiPreferences() {
     if (fontOptions.mono.some((option) => option.css === saved.codeFontFamily)) {
       state.codeFontFamily = saved.codeFontFamily;
     }
+    if (['chat', 'split', 'full'].includes(saved.viewMode)) {
+      state.viewMode = saved.viewMode;
+    }
+    if (['recent', 'pinned', 'all'].includes(saved.chatFilter)) {
+      state.chatFilter = saved.chatFilter;
+    }
   } catch (_error) {
     // UI preference persistence is optional.
   }
@@ -489,6 +764,8 @@ function persistUiPreferences() {
       JSON.stringify({
         uiFontFamily: state.uiFontFamily,
         codeFontFamily: state.codeFontFamily,
+        viewMode: state.viewMode,
+        chatFilter: state.chatFilter,
       }),
     );
   } catch (_error) {
@@ -542,14 +819,93 @@ export function setChannel(channelId, enabled) {
   state.selectedChannels = [...channels];
 }
 
-export function appendChatMessage(role, body) {
-  const parsed = role === 'user' ? { body: redactPrivateText(body), reasoning: '' } : splitReasoningFromMessage(body);
-  state.chatBlocks.push({
+export function setOnboardingDisclosure(disclosureId, open) {
+  const current = new Set(state.onboardingOpenDisclosures || []);
+  if (open) current.add(disclosureId);
+  else current.delete(disclosureId);
+  state.onboardingOpenDisclosures = [...current];
+}
+
+export function compactActiveChatSession(options = {}) {
+  const messageBlocks = state.chatBlocks.filter((block) => block.type === 'message');
+  const nonMessageBlocks = state.chatBlocks.filter((block) => block.type !== 'message');
+  const keepCount = Math.max(4, Number(options.keepCount || 12));
+  if (messageBlocks.length <= keepCount + 2) return false;
+
+  const older = messageBlocks.slice(0, Math.max(0, messageBlocks.length - keepCount));
+  const recent = messageBlocks.slice(-keepCount);
+  const summary = older
+    .map((block) => {
+      const speaker = block.role === 'user' ? 'User' : state.agentName || 'Argentum';
+      return `${speaker}: ${String(block.body || '').replace(/\s+/g, ' ').trim()}`;
+    })
+    .join('\n')
+    .slice(-1800);
+
+  const compactedBlock = {
+    id: `compact-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    type: 'summary',
+    title: options.automatic ? 'Auto-compacted context' : 'Compacted context',
+    body: `Earlier conversation was compacted locally to keep this session responsive.\n\n${summary}`,
+    status: 'sent',
+    createdAt: Date.now(),
+  };
+
+  state.chatBlocks = [...nonMessageBlocks, compactedBlock, ...recent];
+  syncActiveChatSession({ messageActivity: false });
+  recordUiEvent(
+    options.automatic ? 'chat.context_auto_compacted' : 'chat.context_compacted',
+    'ok',
+    options.automatic ? 'Conversation context was auto-compacted.' : 'Conversation context was compacted by the user.',
+    {
+      chatId: state.activeChatId,
+      compactedMessages: older.length,
+    },
+  );
+  return true;
+}
+
+export function appendChatMessage(role, body, options = {}) {
+  const sourceBody = Object.prototype.hasOwnProperty.call(options, 'rawBody') ? options.rawBody : body;
+  const parsed = role === 'user' ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' } : splitReasoningFromMessage(sourceBody);
+  const block = {
+    id: options.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     type: 'message',
     role,
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',
+    rawBody: parsed.rawBody,
     body: parsed.body,
-    reasoning: parsed.reasoning,
-  });
-  syncActiveChatSession();
+    reasoning: Object.prototype.hasOwnProperty.call(options, 'reasoning') ? options.reasoning : parsed.reasoning,
+    status: options.status || 'sent',
+    createdAt: options.createdAt || Date.now(),
+    attachments: Array.isArray(options.attachments) ? options.attachments : [],
+    error: options.error || '',
+  };
+  state.chatBlocks.push(block);
+  syncActiveChatSession({ messageActivity: true });
+  return block;
+}
+
+export function updateChatMessage(messageId, patch = {}) {
+  const index = state.chatBlocks.findIndex((block) => block.id === messageId);
+  if (index === -1) return null;
+  const current = state.chatBlocks[index];
+  const rawBody = Object.prototype.hasOwnProperty.call(patch, 'rawBody')
+    ? patch.rawBody
+    : Object.prototype.hasOwnProperty.call(patch, 'body')
+      ? patch.body
+      : current.rawBody || current.body;
+  const parsed =
+    current.role === 'user'
+      ? { rawBody: String(rawBody || ''), body: redactPrivateText(rawBody), reasoning: current.reasoning || '' }
+      : splitReasoningFromMessage(rawBody);
+  state.chatBlocks[index] = {
+    ...current,
+    ...patch,
+    rawBody: parsed.rawBody,
+    body: parsed.body,
+    reasoning: Object.prototype.hasOwnProperty.call(patch, 'reasoning') ? patch.reasoning : parsed.reasoning,
+  };
+  syncActiveChatSession({ messageActivity: patch.status === 'sent' || patch.status === 'stopped' || patch.messageActivity === true });
+  return state.chatBlocks[index];
 }

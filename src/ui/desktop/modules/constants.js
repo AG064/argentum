@@ -1,10 +1,11 @@
-export const APP_VERSION = '0.0.5';
+export const APP_VERSION = '0.0.6';
 
 export const sections = [
   { id: 'onboarding', icon: 'spark', title: 'Onboarding', eyebrow: 'First run', requiresSetup: false },
   { id: 'chat', icon: 'chat', title: 'Chat', eyebrow: 'Workspace', requiresSetup: false },
   { id: 'gateway', icon: 'gateway', title: 'Gateway', eyebrow: 'Runtime', requiresSetup: true },
   { id: 'security', icon: 'shield', title: 'Security & Permissions', eyebrow: 'Control', requiresSetup: false },
+  { id: 'pc-stats', icon: 'cpu', title: 'PC Statistics', eyebrow: 'System', requiresSetup: false },
   { id: 'settings', icon: 'settings', title: 'Settings', eyebrow: 'Configuration', requiresSetup: false },
   { id: 'diagnostics', icon: 'pulse', title: 'Diagnostics', eyebrow: 'Doctor', requiresSetup: false },
   { id: 'logs', icon: 'logs', title: 'Activity Logs', eyebrow: 'Timeline', requiresSetup: true },
@@ -12,21 +13,25 @@ export const sections = [
 
 export const onboardingSteps = [
   'Welcome',
-  'Workspace location',
-  'Runtime mode',
-  'Capabilities',
-  'AI provider',
-  'Channels',
-  'Security posture',
-  'Review > Test > Pass',
+  'Workspace',
+  'Choose provider',
+  'Configure access',
+  'Choose model',
+  'Basic behavior',
+  'Test and start',
 ];
 
 export const fontOptions = {
   ui: [
     {
+      id: 'monaspace-krypton',
+      label: 'Monaspace Krypton',
+      css: "'Monaspace Krypton', 'Cascadia Code', 'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+    },
+    {
       id: 'system',
       label: 'System UI',
-      css: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      css: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
     {
       id: 'github',
@@ -45,6 +50,11 @@ export const fontOptions = {
     },
   ],
   mono: [
+    {
+      id: 'monaspace-krypton',
+      label: 'Monaspace Krypton',
+      css: "'Monaspace Krypton', 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace",
+    },
     {
       id: 'jetbrains',
       label: 'JetBrains Mono',
@@ -218,7 +228,7 @@ export const modelMetadata = {
     contextWindow: '200k practical target',
     maxContextWindow: 'Provider controlled',
     currentContextLabel: 'MiniMax Token Plan: M2.7 requests reset on a rolling 5-hour window.',
-    capabilities: ['agentic coding', 'tool use', 'long task state tracking', 'multimodal token plan'],
+    capabilities: ['agentic coding', 'tool use', 'vision', 'long task state tracking', 'multimodal token plan'],
     detail:
       'MiniMax M2.7 works best with clear intent, concrete examples, phased long tasks, and state tracking.',
   },
@@ -227,7 +237,7 @@ export const modelMetadata = {
     contextWindow: '200k practical target',
     maxContextWindow: 'Plan dependent',
     currentContextLabel: 'MiniMax Token Plan high-speed tier, when available for the selected key.',
-    capabilities: ['faster M2.7 routing', 'agentic coding', 'tool use'],
+    capabilities: ['faster M2.7 routing', 'agentic coding', 'tool use', 'vision'],
     detail: 'High-speed MiniMax M2.7 profile. Argentum verifies availability with Test Provider.',
   },
   'MiniMax-Text-01': {
@@ -249,7 +259,7 @@ export const experienceLevels = [
   },
   {
     id: 'comfortable',
-    label: 'Comfortable',
+    label: 'Intermediate',
     headline: 'Balanced guidance',
     detail: 'You get the important tradeoffs without every setting slowing you down.',
   },
@@ -648,6 +658,15 @@ export const commandCatalog = [
     command: 'argentum config',
     buttonLabel: 'Open',
     summary: 'Open current config values and verify where they are stored.',
+    risk: 'Read-only',
+  },
+  {
+    id: 'telegram-status',
+    section: 'settings',
+    title: 'Telegram status',
+    command: 'argentum telegram status',
+    buttonLabel: 'Test',
+    summary: 'Read the latest Telegram bot diagnostics captured by Argentum.',
     risk: 'Read-only',
   },
 ];

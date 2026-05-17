@@ -27,7 +27,7 @@ export interface MarkdownMemoryConfig {
 class MarkdownMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'markdown-memory',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Markdown file-based memory store with frontmatter',
     dependencies: [],
   };

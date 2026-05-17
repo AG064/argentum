@@ -66,7 +66,7 @@ interface CountRow {
 class TelegramFeature {
   readonly meta = {
     name: 'telegram',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Telegram bot integration via Grammy',
     dependencies: ['allowlists'],
   };

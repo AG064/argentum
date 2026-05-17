@@ -76,7 +76,7 @@ function firstNonEmptySecret(...values: Array<string | undefined>): string | und
 class ImageGenerationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'image-generation',
-    version: '0.0.5',
+    version: '0.0.6',
     description:
       'AI image generation via Gemini 3 Pro Image with SiliconFlow FLUX.1-dev fallback',
     dependencies: [],

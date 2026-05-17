@@ -69,7 +69,7 @@ interface AgentRow {
 class MultiAgentCoordinationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'multi-agent-coordination',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Coordination between multiple agents with task assignment and broadcasting',
     dependencies: [],
   };

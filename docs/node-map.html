@@ -104,45 +104,45 @@ const categories = {
 
 const features = [
   // Communication
-  { id: 'webchat', name: 'WebChat', ver: '0.0.5', cat: 'communication', desc: 'Full-featured web UI with Markdown, file upload, WebSocket messaging, dark/light themes.', status: 'stable' },
-  { id: 'telegram', name: 'Telegram', ver: '0.0.5', cat: 'communication', desc: 'Telegram bot integration with command handling, inline queries, and media support.', status: 'stable' },
-  { id: 'webhooks', name: 'WebHooks', ver: '0.0.5', cat: 'communication', desc: 'Incoming webhook receiver for external integrations with signature verification.', status: 'beta' },
-  { id: 'group-management', name: 'Group Mgmt', ver: '0.0.5', cat: 'communication', desc: 'Manage multiple user groups, permissions, and shared workspaces.', status: 'beta' },
+  { id: 'webchat', name: 'WebChat', ver: '0.0.6', cat: 'communication', desc: 'Full-featured web UI with Markdown, file upload, WebSocket messaging, dark/light themes.', status: 'stable' },
+  { id: 'telegram', name: 'Telegram', ver: '0.0.6', cat: 'communication', desc: 'Telegram bot integration with command handling, inline queries, and media support.', status: 'stable' },
+  { id: 'webhooks', name: 'WebHooks', ver: '0.0.6', cat: 'communication', desc: 'Incoming webhook receiver for external integrations with signature verification.', status: 'beta' },
+  { id: 'group-management', name: 'Group Mgmt', ver: '0.0.6', cat: 'communication', desc: 'Manage multiple user groups, permissions, and shared workspaces.', status: 'beta' },
 
   // Memory
-  { id: 'knowledge-graph', name: 'Knowledge Graph', ver: '0.0.5', cat: 'memory', desc: 'Entity-relationship graph with Markdown/JSON import, BFS pathfinding, SQLite + memory backends.', status: 'stable' },
-  { id: 'multimodal-memory', name: 'Multimodal Memory', ver: '0.0.5', cat: 'memory', desc: 'Cross-modal memory storage (text, images, audio, docs) with semantic search and importance-based retention.', status: 'beta' },
-  { id: 'auto-capture', name: 'Auto Capture', ver: '0.0.5', cat: 'memory', desc: 'Automatic context capture from chats, files, and external sources into memory.', status: 'alpha' },
+  { id: 'knowledge-graph', name: 'Knowledge Graph', ver: '0.0.6', cat: 'memory', desc: 'Entity-relationship graph with Markdown/JSON import, BFS pathfinding, SQLite + memory backends.', status: 'stable' },
+  { id: 'multimodal-memory', name: 'Multimodal Memory', ver: '0.0.6', cat: 'memory', desc: 'Cross-modal memory storage (text, images, audio, docs) with semantic search and importance-based retention.', status: 'beta' },
+  { id: 'auto-capture', name: 'Auto Capture', ver: '0.0.6', cat: 'memory', desc: 'Automatic context capture from chats, files, and external sources into memory.', status: 'alpha' },
 
   // Automation
-  { id: 'container-sandbox', name: 'Container Sandbox', ver: '0.0.5', cat: 'automation', desc: 'Execute code in isolated Docker containers with resource limits and timeout control.', status: 'beta' },
-  { id: 'browser-automation', name: 'Browser Automation', ver: '0.0.5', cat: 'automation', desc: 'Headless browser control with Puppeteer for web scraping and automation.', status: 'alpha' },
-  { id: 'mesh-workflows', name: 'Mesh Workflows', ver: '0.0.5', cat: 'automation', desc: 'Visual workflow designer with branching, loops, and parallel execution.', status: 'alpha' },
-  { id: 'task-checkout', name: 'Task Checkout', ver: '0.0.5', cat: 'automation', desc: 'Turn tasks into working features with bounded scope and git branching.', status: 'beta' },
-  { id: 'goals', name: 'Goals', ver: '0.0.5', cat: 'automation', desc: 'Goal tracking with milestones, progress metrics, and adaptive planning.', status: 'beta' },
-  { id: 'checkpoint', name: 'Checkpoint', ver: '0.0.5', cat: 'automation', desc: 'State persistence and recovery for long-running tasks and workflows.', status: 'alpha' },
+  { id: 'container-sandbox', name: 'Container Sandbox', ver: '0.0.6', cat: 'automation', desc: 'Execute code in isolated Docker containers with resource limits and timeout control.', status: 'beta' },
+  { id: 'browser-automation', name: 'Browser Automation', ver: '0.0.6', cat: 'automation', desc: 'Headless browser control with Puppeteer for web scraping and automation.', status: 'alpha' },
+  { id: 'mesh-workflows', name: 'Mesh Workflows', ver: '0.0.6', cat: 'automation', desc: 'Visual workflow designer with branching, loops, and parallel execution.', status: 'alpha' },
+  { id: 'task-checkout', name: 'Task Checkout', ver: '0.0.6', cat: 'automation', desc: 'Turn tasks into working features with bounded scope and git branching.', status: 'beta' },
+  { id: 'goals', name: 'Goals', ver: '0.0.6', cat: 'automation', desc: 'Goal tracking with milestones, progress metrics, and adaptive planning.', status: 'beta' },
+  { id: 'checkpoint', name: 'Checkpoint', ver: '0.0.6', cat: 'automation', desc: 'State persistence and recovery for long-running tasks and workflows.', status: 'alpha' },
 
   // Security
-  { id: 'air-gapped', name: 'Air-Gapped', ver: '0.0.5', cat: 'security', desc: 'Offline operation mode with no external network connections. Data stays local.', status: 'alpha' },
-  { id: 'governance', name: 'Governance', ver: '0.0.5', cat: 'security', desc: 'Audit trails, access controls, policy enforcement, and compliance logging.', status: 'beta' },
+  { id: 'air-gapped', name: 'Air-Gapped', ver: '0.0.6', cat: 'security', desc: 'Offline operation mode with no external network connections. Data stays local.', status: 'alpha' },
+  { id: 'governance', name: 'Governance', ver: '0.0.6', cat: 'security', desc: 'Audit trails, access controls, policy enforcement, and compliance logging.', status: 'beta' },
 
   // Daily
-  { id: 'morning-briefing', name: 'Morning Briefing', ver: '0.0.5', cat: 'daily', desc: 'Personalized daily briefing with weather, calendar, news, tasks, and insights.', status: 'beta' },
-  { id: 'evening-recap', name: 'Evening Recap', ver: '0.0.5', cat: 'daily', desc: 'End-of-day summary of accomplishments, learnings, and tomorrow\'s plan.', status: 'alpha' },
-  { id: 'life-domains', name: 'Life Domains', ver: '0.0.5', cat: 'daily', desc: 'Track and balance different life areas (health, career, relationships, growth).', status: 'alpha' },
+  { id: 'morning-briefing', name: 'Morning Briefing', ver: '0.0.6', cat: 'daily', desc: 'Personalized daily briefing with weather, calendar, news, tasks, and insights.', status: 'beta' },
+  { id: 'evening-recap', name: 'Evening Recap', ver: '0.0.6', cat: 'daily', desc: 'End-of-day summary of accomplishments, learnings, and tomorrow\'s plan.', status: 'alpha' },
+  { id: 'life-domains', name: 'Life Domains', ver: '0.0.6', cat: 'daily', desc: 'Track and balance different life areas (health, career, relationships, growth).', status: 'alpha' },
 
   // Collaboration
-  { id: 'skills-library', name: 'Skills Library', ver: '0.0.5', cat: 'collaboration', desc: 'Central repository for discovering, installing, and sharing agent skills from ClawHub.', status: 'stable' },
-  { id: 'company-templates', name: 'Company Templates', ver: '0.0.5', cat: 'collaboration', desc: 'Shared organization templates for consistent workflows and documentation.', status: 'alpha' },
+  { id: 'skills-library', name: 'Skills Library', ver: '0.0.6', cat: 'collaboration', desc: 'Central repository for discovering, installing, and sharing agent skills from ClawHub.', status: 'stable' },
+  { id: 'company-templates', name: 'Company Templates', ver: '0.0.6', cat: 'collaboration', desc: 'Shared organization templates for consistent workflows and documentation.', status: 'alpha' },
 
   // Creative
-  { id: 'live-canvas', name: 'Live Canvas', ver: '0.0.5', cat: 'creative', desc: 'Real-time collaborative whiteboard with drawing, shapes, and embedded media.', status: 'beta' },
-  { id: 'voice', name: 'Voice', ver: '0.0.5', cat: 'creative', desc: 'Voice input/output with speech recognition, synthesis, and voice commands.', status: 'alpha' },
+  { id: 'live-canvas', name: 'Live Canvas', ver: '0.0.6', cat: 'creative', desc: 'Real-time collaborative whiteboard with drawing, shapes, and embedded media.', status: 'beta' },
+  { id: 'voice', name: 'Voice', ver: '0.0.6', cat: 'creative', desc: 'Voice input/output with speech recognition, synthesis, and voice commands.', status: 'alpha' },
 
   // Platform
-  { id: 'budget', name: 'Budget', ver: '0.0.5', cat: 'platform', desc: 'Track API usage, costs, and resource consumption across features.', status: 'alpha' },
-  { id: 'consolidation', name: 'Consolidation', ver: '0.0.5', cat: 'platform', desc: 'Data aggregation and reporting from multiple sources into unified views.', status: 'alpha' },
-  { id: 'smart-recommendations', name: 'Smart Recs', ver: '0.0.5', cat: 'platform', desc: 'AI-powered suggestions for features, actions, and optimizations based on usage patterns.', status: 'alpha' }
+  { id: 'budget', name: 'Budget', ver: '0.0.6', cat: 'platform', desc: 'Track API usage, costs, and resource consumption across features.', status: 'alpha' },
+  { id: 'consolidation', name: 'Consolidation', ver: '0.0.6', cat: 'platform', desc: 'Data aggregation and reporting from multiple sources into unified views.', status: 'alpha' },
+  { id: 'smart-recommendations', name: 'Smart Recs', ver: '0.0.6', cat: 'platform', desc: 'AI-powered suggestions for features, actions, and optimizations based on usage patterns.', status: 'alpha' }
 ];
 
 const edges = [
