@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 
-const read = (path: string): string => readFileSync(path, 'utf8');
+const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
 describe('Argentum desktop shell', () => {
   test('defines a native desktop application branded as Argentum', () => {
@@ -17,7 +17,7 @@ describe('Argentum desktop shell', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.5');
+    expect(config.version).toBe('0.0.6');
     expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
@@ -39,6 +39,19 @@ describe('Argentum desktop shell', () => {
     expect(html).toContain('data-icon="shield"');
     expect(html).toContain('data-icon="settings"');
     expect(html).not.toContain('../../assets/brand/argentum.png');
+  });
+
+  test('uses the May 2026 AG logo source across bundled brand assets', () => {
+    const brand = readFileSync('assets/brand/argentum.png');
+    const desktop = readFileSync('src/ui/desktop/assets/argentum.png');
+
+    expect(desktop.equals(brand)).toBe(true);
+
+    // PNG signature plus IHDR dimensions for the provided 1254x1254 transparent source.
+    expect(brand.length).toBeGreaterThan(0);
+    expect(brand.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(brand.readUInt32BE(16)).toBe(1254);
+    expect(brand.readUInt32BE(20)).toBe(1254);
   });
 
   test('splits desktop UI into focused modules with small contracts', () => {
@@ -90,6 +103,7 @@ describe('Argentum desktop shell', () => {
       "title: 'Security & Permissions'",
       "title: 'Settings'",
       "title: 'Diagnostics'",
+      "title: 'PC Statistics'",
     ]) {
       expect(constants).toContain(title);
     }
@@ -108,33 +122,147 @@ describe('Argentum desktop shell', () => {
     expect(shell).not.toContain('Prepared</button>');
   });
 
+  test('adds PC statistics as a real desktop-backed tab', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(constants).toContain("id: 'pc-stats'");
+    expect(constants).toContain("icon: 'cpu'");
+    expect(sections).toContain('const pcStatsModule');
+    expect(sections).toContain('state.desktopState?.systemStats');
+    expect(sections).toContain('data-refresh-state="true"');
+    expect(setup).toContain('systemStats: previewSystemStats()');
+    expect(rust).toContain('struct PcStatsSnapshot');
+    expect(rust).toContain('system_stats: PcStatsSnapshot');
+    expect(rust).toContain('fn collect_pc_stats() -> PcStatsSnapshot');
+  });
+
   test('rewrites onboarding with plain-language access and non-repeating steps', () => {
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
     const constants = read('src/ui/desktop/modules/constants.js');
+    const main = read('src/ui/desktop/main.js');
 
-    expect(constants).toContain('Workspace location');
-    expect(constants).toContain('Capabilities');
-    expect(constants).toContain('Review > Test > Pass');
+    expect(constants).toContain('Welcome');
+    expect(constants).toContain('Workspace');
+    expect(constants).toContain('Choose provider');
+    expect(constants).toContain('Configure access');
+    expect(constants).toContain('Choose model');
+    expect(constants).toContain('Basic behavior');
+    expect(constants).toContain('Test and start');
+    expect(constants).toContain("export const onboardingSteps = [\n  'Welcome',\n  'Workspace',\n  'Choose provider',\n  'Configure access',\n  'Choose model',\n  'Basic behavior',\n  'Test and start',\n];");
+    expect(constants).not.toContain('Runtime mode');
+    expect(constants).not.toContain('Capabilities');
+    expect(constants).not.toContain('Channels');
+    expect(constants).not.toContain('Security posture');
+    expect(constants).not.toContain('Review > Test > Pass');
     expect(constants).not.toContain('Finish and launch');
     expect(onboarding).toContain('onboarding-backdrop');
     expect(onboarding).toContain('onboarding-modal');
     expect(onboarding).toContain('What Argentum is');
     expect(onboarding).toContain('Default access: all folders/files inside workspace folder');
-    expect(onboarding).toContain('renderCapabilitiesStep');
+    expect(onboarding).toContain('renderWorkspaceStep');
+    expect(onboarding).toContain('renderProviderChoiceStep');
+    expect(onboarding).toContain('renderProviderCredentialStep');
+    expect(onboarding).toContain('renderProviderModelStep');
+    expect(onboarding).toContain('renderBehaviorStep');
+    expect(onboarding).toContain('renderTestAndStartStep');
     expect(onboarding).toContain('Self-repair');
+    expect(onboarding).not.toContain('function renderRuntimeStep');
+    expect(onboarding).not.toContain('function renderCapabilitiesStep');
+    expect(onboarding).not.toContain('function renderChannelsStep');
+    expect(onboarding).not.toContain('function renderSecurityStep');
     expect(onboarding).not.toContain('renderFinishStep');
     expect(onboarding).not.toContain('Default access</span><strong>Workspace</strong>');
+    expect(main).toContain('goToStep(Number(stepButton.dataset.onboardingStep))');
+    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain('Finish the current setup step before jumping ahead.');
+    expect(main).toContain('nextStep()');
+    expect(main).toContain('previousStep()');
   });
 
-  test('supports Beginner Comfortable Expert experience levels', () => {
+  test('supports Beginner Intermediate Expert experience levels', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const state = read('src/ui/desktop/modules/state.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
 
     expect(constants).toContain("id: 'beginner'");
     expect(constants).toContain("id: 'comfortable'");
     expect(constants).toContain("id: 'expert'");
-    expect(state).toContain("experienceLevel: 'beginner'");
+    expect(constants).toContain("label: 'Intermediate'");
+    expect(constants).not.toContain("label: 'Comfortable'");
+    expect(state).toContain("experienceLevel: ''");
+    const controller = read('src/ui/desktop/modules/onboarding-controller.js');
+    expect(controller).toContain("currentStep === 1 && !state.experienceLevel.trim()");
+    expect(controller).toContain('Choose Beginner, Intermediate, or Expert before continuing.');
+    expect(onboarding).toContain('type="button" class="interface-card');
+    expect(onboarding).toContain('type="button" class="button primary" id="next-button"');
     expect(constants).not.toContain('AI Noob');
+  });
+
+  test('routes onboarding actions through one controller with visible validation state', () => {
+    const controller = read('src/ui/desktop/modules/onboarding-controller.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const main = read('src/ui/desktop/main.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    for (const action of [
+      'selectProvider',
+      'selectModel',
+      'nextStep',
+      'previousStep',
+      'validateCurrentStep',
+      'completeOnboarding',
+    ]) {
+      expect(controller).toContain(`function ${action}`);
+    }
+
+    expect(state).toContain("onboardingError: ''");
+    expect(state).toContain('onboardingValidationErrors: []');
+    expect(onboarding).toContain('renderValidationError');
+    expect(onboarding).toContain('role="alert"');
+    expect(css).toContain('.onboarding-validation');
+    expect(main).toContain('selectProvider(providerId)');
+    expect(main).toContain('selectModel(target.value)');
+    expect(main).toContain('goToStep(5)');
+    expect(main).toContain('completeOnboarding(result)');
+    expect(main).toContain('hydrateOnboardingProgress()');
+    expect(controller).toContain('ONBOARDING_PROGRESS_STORAGE_KEY');
+    expect(controller).toContain('state.onboardingStep = targetStep');
+    expect(controller).toContain('state.onboardingOpen = false');
+    expect(controller).toContain('state.activeSection =');
+  });
+
+  test('renders onboarding in a dedicated overlay root so setup controls stay clickable', () => {
+    const html = read('src/ui/desktop/index.html');
+    const main = read('src/ui/desktop/main.js');
+
+    expect(html).toContain('id="overlay-root"');
+    expect(main).toContain("const overlayRoot = document.querySelector('#overlay-root');");
+    expect(main).toContain('function eventTargetElement(event)');
+    expect(main).toContain('event.composedPath');
+    expect(main).toContain('target?.parentElement');
+    expect(main).toContain('document.elementFromPoint(event.clientX, event.clientY)');
+    expect(main).toContain('const element = eventTargetElement(event);');
+    expect(main).toContain('function handleActivation(event)');
+    expect(main).toContain('const onboardingKeyboardActivationEvents = new Set');
+    expect(main).toContain("'keyup'");
+    expect(main).toContain("event.key === 'Enter'");
+    expect(main).toContain("event.key === ' '");
+    expect(main).toContain('onboardingKeyboardActivationEvents.has(event.type)');
+    expect(main).toContain('for (const activationEvent of onboardingKeyboardActivationEvents)');
+    expect(main).toContain('function addActivationListeners');
+    expect(main).toContain("target.addEventListener('click', handleActivation, true);");
+    expect(main).toContain('addActivationListeners(document);');
+    expect(main).toContain('addActivationListeners(overlayRoot);');
+    expect(main).not.toContain('lastOnboardingPointerActivation');
+    expect(main).not.toContain('wasHandledByPointer');
+    expect(main).not.toContain('const element = target instanceof Element ? target : null;');
+    expect(main).toContain('viewRoot.innerHTML = renderModule(module);');
+    expect(main).toContain('overlayRoot.innerHTML =');
+    expect(main).not.toContain("document.addEventListener('click', handleClick);");
+    expect(main).not.toContain("viewRoot.addEventListener('click', handleClick)");
   });
 
   test('uses the native Tauri dialog plugin for workspace folder selection', () => {
@@ -185,13 +313,16 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain("providerSetupStage: 'provider'");
     expect(state).toContain('providerSelectionConfirmed: false');
     expect(onboarding).toContain('function renderProviderChoiceStep');
-    expect(onboarding).toContain('function renderProviderAuthStep');
     expect(onboarding).toContain('function renderProviderCredentialStep');
     expect(onboarding).toContain('function renderProviderModelStep');
-    expect(onboarding).toContain("state.providerSetupStage === 'provider'");
-    expect(onboarding).toContain('data-provider-setup-stage="auth"');
-    expect(onboarding).toContain('data-provider-setup-stage="model"');
+    expect(onboarding).toContain('function renderBehaviorStep');
+    expect(onboarding).toContain('function renderTestAndStartStep');
+    expect(onboarding).toContain('renderAuthMethodPicker');
+    expect(onboarding).not.toContain("state.providerSetupStage === 'provider'");
+    expect(onboarding).not.toContain('data-provider-setup-stage="auth"');
+    expect(onboarding).not.toContain('data-provider-setup-stage="model"');
     expect(onboarding).toContain('id="continue-provider-model"');
+    expect(main).toContain('goToStep(5)');
     expect(onboarding).toContain('id="provider-base-url"');
     expect(onboarding).toContain('<select id="provider-model"');
     expect(onboarding).not.toContain('<input id="provider-model"');
@@ -217,7 +348,7 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain('providerAuthMethods');
     expect(constants).toContain('API key / Platform API');
     expect(constants).toContain('Browser account authorization');
-    expect(onboarding).toContain('id="provider-auth-method"');
+    expect(onboarding).toContain('data-provider-auth-method');
     expect(onboarding).toContain('id="start-codex-oauth"');
     expect(onboarding).toContain('id="complete-codex-oauth"');
     expect(state).toContain("providerAuthMethod: 'api-key'");
@@ -284,7 +415,8 @@ describe('Argentum desktop shell', () => {
 
     expect(shell).toContain('renderNotifications');
     expect(shell).toContain('notification-layer');
-    expect(shell).toContain('notification-menu');
+    expect(main).toContain('renderNotificationMenu');
+    expect(main).toContain('notification-menu');
     expect(state).toContain('notificationHistory:');
     expect(state).toContain('notificationsMuted:');
     expect(state).toContain('notificationsMenuOpen:');
@@ -320,9 +452,8 @@ describe('Argentum desktop shell', () => {
   test('hides onboarding after completion and launches Chat without local setup loop', () => {
     const main = read('src/ui/desktop/main.js');
 
-    expect(main).toContain("state.setupComplete = true");
-    expect(main).toContain("state.onboardingOpen = false");
-    expect(main).toContain("state.activeSection = 'chat'");
+    expect(main).toContain('completeOnboarding(result)');
+    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain("state.activeSection = 'chat'");
     expect(main).toContain('resetIntroChat');
     expect(main).not.toContain(
       'Got it. I am keeping this local for now. Once provider testing passes, this same chat surface can switch to live model execution.',
@@ -357,7 +488,7 @@ describe('Argentum desktop shell', () => {
     expect(chat).toContain('renderMarkdown');
     expect(chat).toContain('markdown-body');
     expect(chat).toContain('renderTypingIndicator');
-    expect(chat).toContain('context-meter');
+    expect(chat).toContain('context-usage-ring');
     expect(chat).toContain('model-context-summary');
     expect(utils).toContain('function renderMarkdown');
     expect(utils).toContain('estimateContextTokens');
@@ -369,7 +500,7 @@ describe('Argentum desktop shell', () => {
     expect(chat).toContain('recent-chat-list');
     expect(chat).toContain('new-chat');
     expect(chat).toContain('activeChatId');
-    expect(chat).toContain('composer-tools');
+    expect(chat).toContain('composer-inline');
     expect(chat).toContain('id="attach-file"');
     expect(chat).toContain('id="voice-input"');
     expect(chat).toContain('id="thinking-level"');
@@ -403,11 +534,119 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('height: calc(100vh - 138px)');
     expect(css).toContain('grid-template-rows: auto auto minmax(0, 1fr) auto');
     expect(css).toContain('overflow-y: auto');
-    expect(css).toContain('.composer-tools');
+    expect(css).toContain('.composer-inline');
     expect(css).toContain('.markdown-body');
     expect(css).toContain('.typing-indicator');
-    expect(css).toContain('.context-meter');
+    expect(css).toContain('.context-usage-ring');
     expect(css).toContain('.model-detail-panel');
+  });
+
+  test('matches the new concept layout with conversation canvas and right inspector', () => {
+    const html = read('src/ui/desktop/index.html');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const shell = read('src/ui/desktop/modules/shell.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(html).toContain('class="breadcrumb-bar"');
+    expect(html).toContain('class="view-mode-switcher"');
+    expect(html).toContain('id="provider-status-pill"');
+    expect(html).toContain('brand-shard');
+    expect(shell).toContain('renderProviderStatusPill');
+    expect(chat).toContain('conversation-column');
+    expect(chat).toContain('chat-canvas');
+    expect(chat).toContain('workspace-empty-state');
+    expect(chat).toContain('inspector-panel');
+    expect(chat).toContain('prompt-suggestion-row');
+    expect(chat).toContain('conversation-tabs');
+    expect(css).toContain('.chat-product-shell');
+    expect(css).toContain('grid-template-columns: minmax(236px, 292px) minmax(0, 1fr) minmax(260px, 320px)');
+    expect(css).toContain('.conversation-composer');
+    expect(css).toContain('.inspector-panel');
+    expect(css).toContain('overflow-x: hidden');
+  });
+
+  test('uses the target active chat visual shell without replacing chat handlers', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    for (const className of [
+      'arg-chat-shell',
+      'arg-conversation-rail',
+      'arg-chat-stage',
+      'arg-chat-toolbar',
+      'arg-message-canvas',
+      'arg-composer-shell',
+      'arg-chat-inspector',
+      'arg-telemetry-strip',
+    ]) {
+      expect(chat).toContain(className);
+      expect(css).toContain(`.${className}`);
+    }
+
+    for (const hook of [
+      'id="send-chat"',
+      'data-send-chat-button="true"',
+      'id="chat-draft"',
+      'data-recent-chat',
+      'data-chat-filter="recent"',
+      'data-conversation-menu',
+      'data-regenerate-message',
+      'data-copy-message',
+    ]) {
+      expect(chat).toContain(hook);
+    }
+
+    expect(chat).toContain('renderChatTelemetry');
+    expect(chat).toContain('arg-chat-line-user');
+    expect(chat).toContain('arg-chat-line-assistant');
+    expect(chat).toContain('arg-context-ring');
+    expect(css).toContain('.view-mode-chat .arg-chat-inspector');
+    expect(css).toContain('display: none');
+    expect(css).toContain('.arg-chat-line-user');
+    expect(css).toContain('justify-content: flex-end');
+    expect(css).toContain('.arg-chat-line-assistant');
+    expect(css).toContain('justify-content: flex-start');
+    expect(css).toContain('conic-gradient(var(--ring-color)');
+  });
+
+  test('renders discord-style chat lines instead of message bubbles', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const css = read('src/ui/desktop/styles.css');
+    const messageRenderer = chat.slice(chat.indexOf('function renderMessageComponent'), chat.indexOf('function renderMessageAttachments'));
+    const chatLineCss = css.slice(css.indexOf('.arg-chat-line {'), css.indexOf('.arg-composer-shell'));
+
+    expect(messageRenderer).toContain('arg-chat-line');
+    expect(messageRenderer).toContain('arg-chat-line-user');
+    expect(messageRenderer).toContain('arg-chat-line-assistant');
+    expect(messageRenderer).toContain('arg-chat-content');
+    expect(messageRenderer).toContain('arg-chat-meta');
+    expect(messageRenderer).not.toContain('arg-msg');
+    expect(chatLineCss).toContain('background: transparent;');
+    expect(chatLineCss).toContain('border: 0;');
+    expect(chatLineCss).toContain('box-shadow: none;');
+    expect(chatLineCss).toContain('border-radius: 0;');
+    expect(chatLineCss).not.toContain('clip-path: polygon');
+  });
+
+  test('keeps typing status outside chat history and uses angular seamless chat surfaces', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    const transcript = chat.slice(
+      chat.indexOf('<div class="chat-transcript arg-message-canvas"'),
+      chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'),
+    );
+    const typing = chat.slice(chat.indexOf('function renderTypingIndicator'), chat.indexOf('function renderAttachmentTray'));
+
+    expect(transcript).not.toContain('${renderTypingIndicator(state)}');
+    expect(chat.indexOf('${renderTypingIndicator(state)}')).toBeGreaterThan(chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'));
+    expect(typing).toContain('arg-typing-status');
+    expect(typing).not.toContain('message-row');
+    expect(typing).not.toContain('arg-msg');
+    expect(css).toContain('.arg-typing-status');
+    expect(css).toContain('.arg-chat-stage');
+    expect(css).toContain('clip-path: polygon');
+    expect(css).toContain('border-radius: 0');
   });
 
   test('desktop actions execute through whitelisted Tauri commands with structured output', () => {
@@ -488,7 +727,7 @@ describe('Argentum desktop shell', () => {
     expect(chat).toContain('renderContextRing');
     expect(chat).toContain('context-usage-ring');
     expect(chat).toContain('contextPercent');
-    expect(chat).toContain('composer-status');
+    expect(chat).toContain('composer-inline');
     expect(sections).toContain('settings-ui-font');
     expect(sections).toContain('settings-code-font');
     expect(utils).toContain('contextTokenLimit');
@@ -507,9 +746,10 @@ describe('Argentum desktop shell', () => {
 
     expect(setup).toContain('persistRuntimeSettings');
     expect(sections).toContain('id="settings-provider-api-key"');
-    expect(sections).toContain('Paste a new key to replace the saved one');
+    expect(sections).toContain('Paste a new key, or leave blank to keep saved key.');
     expect(sections).toContain('id="save-settings"');
-    expect(sections).toContain('Runtime behavior');
+    expect(sections).toContain('settingsSections');
+    expect(sections).toContain("['advanced', 'Advanced']");
     expect(main).toContain('async function saveSettingsFromInputs');
     expect(main).toContain("target.id === 'settings-provider-api-key'");
     expect(main).toContain("await persistRuntimeSettings('settings'");
@@ -550,6 +790,149 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('usage = snapshot.or(usage)');
   });
 
+  test('tracks provider usage windows and central redacted app logs', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const state = read('src/ui/desktop/modules/state.js');
+
+    expect(rust).toContain('struct UsageQuotaWindow');
+    expect(rust).toContain('modality_quotas');
+    expect(rust).toContain('weekly_request_budget');
+    expect(rust).toContain('five_hour_request_limit');
+    expect(rust).toContain('fn append_app_log');
+    expect(rust).toContain('fn app_log_path');
+    expect(rust).toContain('provider.test');
+    expect(rust).toContain('chat.send');
+    expect(rust).toContain('gateway.action');
+    expect(setup).toContain('recordUiEvent');
+    expect(setup).toContain('providerUsageLine');
+    expect(sections).toContain('usage-window-grid');
+    expect(sections).toContain('Activity event log');
+    expect(state).toContain('appLogEntries');
+  });
+
+  test('calculates chat context from the real runtime payload including system prompt', () => {
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(utils).toContain('buildApprovedRuntimeContextText');
+    expect(utils).toContain('System prompt:');
+    expect(utils).toContain('estimateRuntimeContextTokens');
+    expect(chat).toContain('estimateRuntimeContextTokens(state, state.draftMessage)');
+    expect(chat).toContain('state.usageSnapshot?.contextTokens');
+    expect(rust).toContain('usage_from_response_body');
+    expect(rust).toContain('prompt_tokens');
+    expect(rust).toContain('input_tokens');
+    expect(rust).toContain('Provider-reported input/context tokens');
+    expect(rust).toContain('Last request context tokens');
+  });
+
+  test('keeps only the persistent rail logo and moves context out of the inspector', () => {
+    const html = read('src/ui/desktop/index.html');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(html).toContain('brand-wordmark');
+    expect(html).toContain('brand-shard');
+    expect(html).not.toContain('<div class="brand">\n          <img');
+    expect(chat).not.toContain('workspace-empty-logo');
+    expect(chat).not.toContain('<img class="workspace-empty-logo" src="./assets/argentum.png"');
+    expect(chat).not.toContain('Context usage');
+    expect(chat).not.toContain('context-gauge');
+    expect(chat).toContain('Session ID');
+    expect(chat).toContain('state.activeChatId');
+    expect(css).toContain('.brand-shard');
+    expect(css).toContain('.brand-wordmark');
+    expect(css).toContain('.brand-shard');
+  });
+
+  test('sends compacted full chat history and keeps the composer on one line', () => {
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const rust = read('src/desktop/src/lib.rs');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(utils).toContain('compactConversationForProvider');
+    expect(utils).toContain('conversationSummary');
+    expect(setup).toContain('conversationHistory');
+    expect(setup).toContain('compactConversationForProvider(state.chatBlocks, message)');
+    expect(rust).toContain('conversation_history');
+    expect(rust).toContain('conversation_summary');
+    expect(rust).toContain('fn openai_chat_messages_from_history');
+    expect(rust).toContain('Compacted earlier conversation');
+    expect(chat).toContain('composer-inline');
+    expect(css).toContain('.composer-inline');
+    expect(css).toContain('grid-template-columns: auto auto auto minmax(180px, 1fr) auto auto');
+  });
+
+  test('keeps prompt examples above the action cards and prevents top-level chat overflow', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const css = read('src/ui/desktop/styles.css');
+    const emptyState = chat.slice(chat.indexOf('function renderWorkspaceEmptyState'), chat.indexOf('function renderPromptSuggestions'));
+    const composer = chat.slice(chat.indexOf('<div class="conversation-composer composer">'), chat.indexOf('${renderAttachmentTray(state)}'));
+
+    expect(emptyState).toContain('${renderPromptSuggestions()}');
+    expect(emptyState.indexOf('${renderPromptSuggestions()}')).toBeLessThan(emptyState.indexOf('<div class="workspace-action-grid">'));
+    expect(composer).not.toContain('${renderPromptSuggestions()}');
+    expect(composer.indexOf('<div class="conversation-composer composer">')).toBeLessThan(composer.indexOf('<div class="composer-inline">'));
+    expect(main).toContain("viewRoot.className = `view-root view-root-${section.id} view-mode-${state.viewMode}`");
+    expect(css).toContain('.view-root-chat');
+    expect(css).toContain('overflow: hidden');
+    expect(css).toContain('.chat-product-shell');
+    expect(css).toContain('height: 100%');
+    expect(css).toContain('max-width: 100%');
+  });
+
+  test('imports Telegram channel sessions into desktop chat history', () => {
+    const state = read('src/ui/desktop/modules/state.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const rust = read('src/desktop/src/lib.rs');
+    const index = read('src/index.ts');
+
+    expect(state).toContain('mergeChannelChatSessions');
+    expect(state).toContain("raw.channel === 'telegram'");
+    expect(setup).toContain('mergeChannelChatSessions(result.channelSessions');
+    expect(rust).toContain('channel_sessions');
+    expect(rust).toContain('read_channel_sessions');
+    expect(index).toContain('telegramSessionId');
+    expect(index).toContain('appendChannelSessionMessage');
+    expect(index).toContain('conversationHistoryForChannelSession');
+    expect(index).toContain('this.agent.handleMessage(text, history)');
+  });
+
+  test('polishes non-chat tabs with the visual product shell', () => {
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(sections).toContain('function renderProductHero');
+    expect(sections).toContain('function renderProductTabShell');
+    expect(sections).toContain("renderProductTabShell(\n          'gateway'");
+    expect(sections).toContain("renderProductTabShell(\n      'security'");
+    expect(sections).toContain("renderProductTabShell(\n        'settings'");
+    expect(sections).toContain("renderProductTabShell(\n        'diagnostics'");
+    expect(sections).toContain("renderProductTabShell(\n      'logs'");
+    expect(sections).toContain('section-command-dock');
+    expect(sections).toContain('settings-workbench');
+    expect(sections).toContain('security-map-grid');
+    expect(sections).toContain('diagnostics-matrix');
+    expect(sections).toContain('log-console-grid');
+
+    expect(css).toContain('.product-tab-shell');
+    expect(css).toContain('.product-hero');
+    expect(css).toContain('.section-command-dock');
+    expect(css).toContain('.glass-panel');
+    expect(css).toContain('.settings-workbench');
+    expect(css).toContain('.security-map-grid');
+    expect(css).toContain('.diagnostics-matrix');
+    expect(css).toContain('.log-console-grid');
+    expect(css).toContain('.product-tab-shell .panel');
+    expect(css).toContain('box-shadow: 0 24px 70px');
+  });
+
   test('keeps gateway terminal chronological and scrolls terminal panels to the latest output', () => {
     const sections = read('src/ui/desktop/modules/sections.js');
     const state = read('src/ui/desktop/modules/state.js');
@@ -582,6 +965,47 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('.chat-delete-confirm');
   });
 
+  test('wires view modes, conversation filters, menus, workspace menu, and help panel', () => {
+    const html = read('src/ui/desktop/index.html');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    for (const mode of ['data-view-mode="chat"', 'data-view-mode="split"', 'data-view-mode="full"']) {
+      expect(html).toContain(mode);
+    }
+    expect(html).toContain('id="help-button"');
+    expect(html).toContain('id="workspace-button"');
+    expect(chat).toContain('data-chat-filter="recent"');
+    expect(chat).toContain('data-chat-filter="pinned"');
+    expect(chat).toContain('data-chat-filter="all"');
+    expect(chat).toContain('filteredChatSessions');
+    expect(chat).toContain('data-conversation-menu');
+    expect(chat).toContain('data-pin-chat');
+    expect(chat).toContain('data-clear-chat');
+    expect(chat).toContain('data-rename-chat');
+    expect(chat).toContain('data-view-mode="chat" title="Hide inspector"');
+    expect(state).toContain('viewMode:');
+    expect(state).toContain('chatFilter:');
+    expect(state).toContain('lastMessageAt');
+    expect(state).toContain('lastOpenedAt');
+    expect(state).toContain('unreadCount');
+    expect(state).toContain('setViewMode');
+    expect(state).toContain('setChatFilter');
+    expect(state).toContain('toggleChatPinned');
+    expect(state).toContain('toggleWorkspaceMenu');
+    expect(state).toContain('toggleHelp');
+    expect(main).toContain('renderHelpPanel');
+    expect(main).toContain('renderWorkspacePanel');
+    expect(main).toContain('regenerateAssistantResponse');
+    expect(main).toContain('chat.regenerate_state_reset');
+    expect(css).toContain('.chat-product-shell.view-mode-chat');
+    expect(css).toContain('.chat-product-shell.view-mode-split');
+    expect(css).toContain('.conversation-action-menu');
+    expect(css).toContain('.floating-panel');
+  });
+
   test('keeps ChatGPT/OpenAI and MiniMax stable while other providers are testing', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
@@ -598,7 +1022,7 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('visibleProviders');
     expect(sections).toContain('data-provider-access');
     expect(sections).toContain('Testing access');
-    expect(main).toContain('setProviderCatalogTab');
+    expect(main).toContain('state.providerCatalogTab = providerCatalogButton.dataset.providerCatalogTab');
   });
 
   test('uses cleaner inline selection cards and keeps recent chats history-sorted', () => {
@@ -613,7 +1037,7 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('grid-template-columns: auto minmax(0, 1fr)');
     expect(state).toContain('touchActiveChatSession');
     expect(state).toContain('state.chatSessions = sortChatSessions');
-    expect(state).toContain(".sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))");
+    expect(state).toContain('.sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))');
     expect(state).not.toContain("if (a.id === state.activeChatId) return -1");
   });
 
@@ -626,10 +1050,12 @@ describe('Argentum desktop shell', () => {
     const css = read('src/ui/desktop/styles.css');
     const rust = read('src/desktop/src/lib.rs');
 
-    expect(state).toContain('REASONING_BLOCK_PATTERN');
+    expect(state).toContain("import { parseReasoningBlocks } from './reasoning-parser.js'");
+    expect(existsSync('src/ui/desktop/modules/reasoning-parser.js')).toBe(true);
+    expect(state).toContain('rawBody');
     expect(state).toContain('splitReasoningFromMessage');
     expect(state).toContain('redactPrivateText');
-    expect(state).toContain('showThinkingInChat: true');
+    expect(state).toContain('showThinkingInChat: false');
     expect(state).toContain('showThinkingInTelegram: false');
     expect(chat).toContain('renderReasoningPanel');
     expect(chat).toContain('reasoning-panel');
@@ -644,6 +1070,223 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('show_thinking_in_telegram');
     expect(rust).toContain('reasoningOutput');
     expect(rust).toContain('Privacy boundary');
+  });
+
+  test('deeply redesigns chat primitives, icons, attachments, streaming, and context controls', () => {
+    const constants = read('src/ui/desktop/modules/constants.js');
+    const icons = read('src/ui/desktop/modules/icons.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const css = read('src/ui/desktop/styles.css');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(constants).toContain('Monaspace Krypton');
+    expect(css).toContain('@font-face');
+    expect(css).toContain('Monaspace Krypton');
+    expect(state).toContain('activeAssistantMessageId');
+    expect(state).toContain('chatAbortRequested');
+
+    for (const name of ['plus', 'x', 'trash', 'send', 'stop', 'copy', 'image', 'file', 'refresh']) {
+      expect(icons).toContain(`${name}:`);
+    }
+
+    expect(chat).toContain('function renderMessageComponent');
+    expect(chat).toContain('function renderComposer');
+    expect(chat).toContain('function renderAttachmentPreview');
+    expect(chat).toContain('function renderMessageActions');
+    expect(chat).toContain('Context ');
+    expect(chat).toContain('message system');
+    expect(chat).toContain('data-copy-message');
+    expect(chat).toContain('data-regenerate-message');
+    expect(chat).toContain('data-retry-message');
+    expect(chat).not.toContain('+ New chat');
+    expect(chat).not.toContain('>...</button>');
+
+    expect(main).toContain('function streamAssistantMessage');
+    expect(main).toContain('state.chatAbortRequested');
+    expect(main).toContain('data-stop-generation');
+    expect(main).toContain('attachmentToPayload');
+    expect(main).not.toContain('Attached files:\\n');
+    expect(setup).toContain('sendChatMessage(message, attachments = [])');
+    expect(setup).toContain('attachments,');
+    expect(utils).toContain('function inferAttachmentKind');
+    expect(utils).toContain('function filePreviewUrl');
+
+    expect(rust).toContain('struct ChatAttachmentRequest');
+    expect(rust).toContain('attachments: Vec<ChatAttachmentRequest>');
+    expect(rust).toContain('data:image/');
+    expect(rust).toContain('validate_chat_attachments');
+    expect(rust).toContain('image_url');
+    expect(rust).toContain('Provider usage unavailable');
+  });
+
+  test('keeps fresh chat composer send action enabled after typing', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+
+    expect(chat).toContain('data-send-chat-button');
+    expect(chat).toContain('id="send-chat-status"');
+    expect(main).toContain('function syncComposerSendState');
+    expect(main).toContain("if (target.id === 'chat-draft') {");
+    expect(main).toContain('syncComposerSendState();');
+    expect(main).toContain("recordUiEvent('chat.send_attempt'");
+    expect(main).toContain("recordUiEvent('chat.send_failed'");
+    expect(main).toContain("recordUiEvent('chat.send_success'");
+  });
+
+  test('removes diagonal placeholder artifact while preserving product hero structure', () => {
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(sections).not.toContain('product-hero-signal');
+    expect(css).not.toContain('.product-hero-signal');
+    expect(css).not.toContain('linear-gradient(135deg, transparent 42%');
+    expect(css).toContain('.product-hero-status');
+  });
+
+  test('renders a distinct fresh chat state and calmer onboarding wizard', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(chat).toContain('fresh-conversation-hero');
+    expect(chat).toContain('fresh-action-grid');
+    expect(chat).toContain('Fresh conversation');
+    expect(chat).toContain('Start with a prompt, inspect context, or open a runtime tool.');
+    expect(onboarding).toContain('onboarding-wizard');
+    expect(onboarding).toContain('onboarding-step-layout');
+    expect(onboarding).toContain('onboarding-step-list');
+    expect(onboarding).not.toContain('setup-mini-map');
+    expect(onboarding).not.toContain('copy-block compact-copy');
+    expect(css).toContain('.fresh-conversation-hero');
+    expect(css).toContain('.onboarding-wizard');
+  });
+
+  test('keeps onboarding stable while choices change and moves detail into hover affordances', () => {
+    const onboarding = read('src/ui/desktop/modules/onboarding.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const main = read('src/ui/desktop/main.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(css).toContain('height: min(720px, calc(100vh - 56px));');
+    expect(css).toContain('.onboarding-step-panel');
+    expect(css).toContain('overflow-y: auto;');
+    expect(css).toContain('scrollbar-gutter: stable;');
+    expect(onboarding).toContain('id="onboarding-provider-select"');
+    expect(onboarding).toContain('data-disclosure-id="permissions"');
+    expect(onboarding).toContain('<summary>Basic permissions</summary>');
+    expect(onboarding).toContain('<summary>Channels</summary>');
+    expect(onboarding).toContain('Advanced provider details');
+    expect(onboarding).toContain('Selected channel settings');
+    expect(onboarding).toContain('compact-choice');
+    expect(onboarding).toContain('compact-panel');
+    expect(onboarding).toContain('inline-disclosure');
+    expect(onboarding).toContain('data-tooltip');
+    expect(onboarding).toContain('capability-chip-row');
+    expect(state).toContain('onboardingOpenDisclosures');
+    expect(state).toContain('setOnboardingDisclosure');
+    expect(main).toContain("document.addEventListener('toggle'");
+    expect(main).toContain("target.id === 'onboarding-provider-select'");
+  });
+
+  test('keeps chat scroll stable and exposes manual context compaction', () => {
+    const chat = read('src/ui/desktop/modules/chat.js');
+    const main = read('src/ui/desktop/main.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const utils = read('src/ui/desktop/modules/utils.js');
+
+    expect(main).toContain('function captureChatTranscriptScroll');
+    expect(main).toContain('function restoreChatTranscriptScroll');
+    expect(main).toContain("state.chatScrollIntent = 'bottom'");
+    expect(main).toContain('data-compact-context');
+    expect(state).toContain('compactActiveChatSession');
+    expect(chat).toContain('contextTokenLimit');
+    expect(utils).toContain('block.rawBody || block.body');
+  });
+
+  test('adds quick top-right panels and modern notification history', () => {
+    const main = read('src/ui/desktop/main.js');
+    const shell = read('src/ui/desktop/modules/shell.js');
+    const state = read('src/ui/desktop/modules/state.js');
+    const css = read('src/ui/desktop/styles.css');
+
+    expect(main).toContain('renderQuickSecurityPanel');
+    expect(main).toContain('renderQuickSettingsPanel');
+    expect(main).toContain('renderNotificationMenu');
+    expect(main).toContain('toggleQuickSecurityMenu');
+    expect(main).toContain('toggleQuickSettingsMenu');
+    expect(state).toContain('quickSecurityMenuOpen');
+    expect(state).toContain('quickSettingsMenuOpen');
+    expect(shell).not.toContain('state.notificationsMenuOpen');
+    expect(css).toContain('.notification-history-item.success');
+    expect(css).toContain('.quick-choice.active');
+  });
+
+  test('exposes secure workspace file and localhost fetch tools to compatible providers', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const utils = read('src/ui/desktop/modules/utils.js');
+
+    for (const tool of [
+      'argentum_read_workspace_file',
+      'argentum_write_workspace_file',
+      'argentum_http_fetch',
+    ]) {
+      expect(rust).toContain(tool);
+    }
+
+    expect(rust).toContain('resolve_workspace_tool_path');
+    expect(rust).toContain('HTTP fetch is limited to localhost or loopback URLs');
+    expect(rust).toContain('config.api == "openai"');
+    expect(rust).toContain('tool_arguments');
+    expect(utils).toContain('approved model tools may read/write files inside the selected workspace');
+  });
+
+  test('streams Telegram replies into channel sessions without leaking reasoning by default', () => {
+    const index = read('src/index.ts');
+    const telegramChannel = read('src/channels/telegram.ts');
+    const rust = read('src/desktop/src/lib.rs');
+    const sections = read('src/ui/desktop/modules/sections.js');
+
+    expect(index).toContain('formatTelegramAgentResponse');
+    expect(index).toContain('splitAgentReasoning');
+    expect(index).toContain('streamTelegramReply');
+    expect(index).toContain('ctx.api.editMessageText');
+    expect(index).toContain('sendReasoning');
+    expect(index).toContain("if (!text || text.startsWith('/')) return");
+    expect(index).toContain('ensureChannelSession');
+    expect(index).toContain('writeTelegramDiagnostics');
+    expect(index).toContain('lastResponseStatus');
+    expect(index).toContain('appendChannelSessionMessage(sessionId,');
+    expect(index).toContain('conversationHistoryForChannelSession(sessionId)');
+    expect(index).not.toContain('await ctx.reply(response);');
+    expect(index).not.toContain('🤖 Welcome to Argentum');
+    expect(rust).toContain('telegram_diagnostics');
+    expect(rust).toContain('telegram-status.json');
+    expect(rust).toContain('telegram-status');
+    expect(sections).toContain('Test Telegram status');
+    expect(sections).toContain('state.desktopState?.telegramDiagnostics');
+
+    expect(telegramChannel).toContain('streamAgentResponse');
+    expect(telegramChannel).toContain('ctx.api.editMessageText');
+    expect(telegramChannel).toContain('this.config.sendReasoning');
+  });
+
+  test('does not invent MiniMax usage and exposes real counters or unavailable states', () => {
+    const rust = read('src/desktop/src/lib.rs');
+    const sections = read('src/ui/desktop/modules/sections.js');
+    const setup = read('src/ui/desktop/modules/setup.js');
+    const chat = read('src/ui/desktop/modules/chat.js');
+
+    expect(rust).not.toContain('MiniMax Token Plan usage checked.');
+    expect(rust).not.toContain('Optional local weekly budget overlay can be configured in Settings.');
+    expect(rust).toContain('Provider usage unavailable');
+    expect(rust).toContain('actual_usage_summary');
+    expect(sections).not.toContain('Weekly local budget');
+    expect(setup).toContain('Usage unavailable from provider');
+    expect(chat).toContain('Usage unavailable from provider');
   });
 
   test('writes Telegram runtime config and passes workspace secrets to the gateway child', () => {
@@ -746,21 +1389,43 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('workspaceRoot');
   });
 
-  test('documents v0.0.5 release support matrix and stable provider state', () => {
+  test('documents current support matrix and stable provider state', () => {
+    const packageJson = JSON.parse(read('package.json')) as { version: string };
     const readme = read('README.md');
-    const release = read('docs/releases/v0.0.5.md');
+    const release = read(`docs/releases/v${packageJson.version}.md`);
+
+    expect(readme).toContain(`v${packageJson.version}`);
+    expect(release).toContain(`v${packageJson.version}`);
 
     for (const document of [readme, release]) {
-      expect(document).toContain('v0.0.5');
-      expect(document).toContain('Stable providers');
+      expect(document).toContain('Stable Providers');
       expect(document).toContain('ChatGPT');
       expect(document).toContain('MiniMax');
-      expect(document).toContain('Testing providers');
+      expect(document).toContain('Testing Providers');
       expect(document).toContain('Supported OS');
-      expect(document).toContain('Hardware requirements');
+      expect(document).toContain('Hardware Requirements');
       expect(document).toContain('Windows 10/11 x64');
       expect(document).toContain('macOS 10.15+');
       expect(document).toContain('Ubuntu 22.04');
     }
+  });
+
+  test('documents multi-workspace/agent architecture and app-awareness boundary', () => {
+    const workspaces = read('docs/WORKSPACES_AND_AGENTS.md');
+    const knowledge = read('docs/ARGENTUM_APP_KNOWLEDGE.md');
+    const utils = read('src/ui/desktop/modules/utils.js');
+    const rust = read('src/desktop/src/lib.rs');
+
+    expect(workspaces).toContain('Workspace');
+    expect(workspaces).toContain('Session');
+    expect(workspaces).toContain('Agent');
+    expect(workspaces).toContain('Planned Multi-Workspace Flow');
+    expect(knowledge).toContain('Current Desktop Surfaces');
+    expect(knowledge).toContain('What The Assistant May Know When Approved');
+    expect(knowledge).toContain('Privacy Boundary');
+    expect(utils).toContain('Argentum app knowledge');
+    expect(utils).toContain('Current page:');
+    expect(utils).toContain('Active session:');
+    expect(rust).toContain('Available app actions in the desktop MVP');
   });
 });

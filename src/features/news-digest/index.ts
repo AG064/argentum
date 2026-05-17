@@ -91,7 +91,7 @@ function isUniqueConstraintError(error: unknown): boolean {
 class NewsDigestFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'news-digest',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'RSS/Atom feed aggregation with caching',
     dependencies: [],
   };

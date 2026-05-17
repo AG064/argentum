@@ -10,6 +10,9 @@
  * - Sets up graceful shutdown
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import 'dotenv/config';
 
 import { getConfig, type ArgentumConfig } from './core/config';
@@ -40,6 +43,163 @@ export interface Tool {
 
 interface WebchatFeature extends FeatureModule {
   sendAssistantMessage(roomId: string, content: string): void;
+}
+
+type ChannelSessionRole = 'user' | 'assistant';
+
+interface ChannelSessionBlock {
+  type: 'message';
+  role: 'user' | 'argentum';
+  title: string;
+  body: string;
+  reasoning?: string;
+  rawBody?: string;
+}
+
+interface ChannelSessionRecord {
+  id: string;
+  channel: 'telegram';
+  title: string;
+  subtitle: string;
+  updatedAt: number;
+  blocks: ChannelSessionBlock[];
+}
+
+interface ParsedAgentResponse {
+  visible: string;
+  reasoning: string;
+  rawBody: string;
+}
+
+interface TelegramDiagnostics {
+  configured?: boolean;
+  lastUpdateReceived?: string;
+  lastSessionId?: string;
+  lastResponseStatus?: string;
+  lastError?: string | null;
+  updatedAt?: string;
+}
+
+function splitAgentReasoning(response: string): ParsedAgentResponse {
+  const reasoning: string[] = [];
+  const visible = String(response ?? '')
+    .replace(/<(think|reasoning)>([\s\S]*?)<\/\1>/gi, (_match, tag, content) => {
+      reasoning.push(`${tag}: ${String(content ?? '').trim()}`);
+      return '';
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return {
+    visible: visible || 'Done.',
+    reasoning: reasoning.join('\n\n').trim(),
+    rawBody: String(response ?? ''),
+  };
+}
+
+function formatTelegramAgentResponse(response: string, sendReasoning = false): string {
+  const parsed = splitAgentReasoning(response);
+
+  if (sendReasoning && parsed.reasoning) {
+    return [`Reasoning:\n${parsed.reasoning}`, parsed.visible].join('\n\n');
+  }
+
+  return parsed.visible;
+}
+
+function splitTelegramMessage(text: string, maxLength = 3900): string[] {
+  if (text.length <= maxLength) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf('\n', maxLength);
+    if (splitAt < maxLength / 2) splitAt = remaining.lastIndexOf(' ', maxLength);
+    if (splitAt < maxLength / 2) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  return chunks;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function streamTelegramReply(
+  ctx: {
+    chat?: { id: number };
+    reply: (text: string, options?: Record<string, unknown>) => Promise<{ message_id: number }>;
+    api: {
+      editMessageText: (
+        chatId: number,
+        messageId: number,
+        text: string,
+        options?: Record<string, unknown>,
+      ) => Promise<unknown>;
+    };
+  },
+  response: string,
+  sendReasoning = false,
+  logger?: Logger,
+): Promise<void> {
+  const formatted = formatTelegramAgentResponse(response, sendReasoning);
+  const chatId = ctx.chat?.id;
+  const chunks = splitTelegramMessage(formatted);
+
+  if (!chatId) {
+    for (const chunk of chunks) await ctx.reply(chunk);
+    return;
+  }
+
+  try {
+    const first = chunks.shift() ?? 'Done.';
+    const sent = await ctx.reply('Argentum is typing...');
+    let visible = '';
+    const streamParts = first.match(/[\s\S]{1,220}/g) ?? [first];
+    for (const part of streamParts) {
+      visible = `${visible}${part}`;
+      await delay(650);
+      await ctx.api.editMessageText(chatId, sent.message_id, visible.slice(-3900));
+    }
+    if (visible.trim() !== first.trim()) {
+      await ctx.api.editMessageText(chatId, sent.message_id, first);
+    }
+    for (const chunk of chunks) {
+      await ctx.reply(chunk);
+    }
+  } catch (error) {
+    logger?.warn('Telegram streaming edit failed; falling back to final replies', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    for (const chunk of splitTelegramMessage(formatted)) {
+      await ctx.reply(chunk);
+    }
+  }
+}
+
+function telegramSessionId(chatId?: number, userId?: number): string {
+  const chat = Number.isFinite(chatId) ? String(chatId) : 'unknown-chat';
+  const user = Number.isFinite(userId) ? String(userId) : 'unknown-user';
+  return `telegram-${chat}-${user}`;
+}
+
+function trimChannelSubtitle(value: string): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 74 ? `${normalized.slice(0, 71)}...` : normalized;
+}
+
+function redactChannelText(value: string): string {
+  return value
+    .replace(/\b(?:sk|sk-proj|sk-ant|nvapi|gsk|or)-[A-Za-z0-9._-]{12,}\b/g, '[redacted secret]')
+    .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/gi, 'Bearer [redacted secret]')
+    .replace(/\b(?:api[_-]?key|token|secret)\s*[:=]\s*['"]?[A-Za-z0-9._-]{12,}['"]?/gi, '$1=[redacted secret]');
 }
 
 // ─── Agent Core ───────────────────────────────────────────────────────────────
@@ -381,88 +541,15 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         command: { type: 'string', description: 'Shell command to execute', required: true },
       },
       execute: async (params) => {
-        const { spawnSync } = await import('child_process');
+        const { execSync } = await import('child_process');
         const cmd = params['command'] as string;
 
         if (!cmd) return 'Error: command parameter is required';
 
-        const tokenize = (input: string): string[] | { error: string } => {
-          const tokens: string[] = [];
-          let current = '';
-          let quote: 'single' | 'double' | null = null;
-
-          for (let i = 0; i < input.length; i++) {
-            const ch = input[i]!;
-
-            if (quote === null) {
-              if (ch === "'" || ch === '"') {
-                quote = ch === "'" ? 'single' : 'double';
-                continue;
-              }
-              if (ch === '\\') {
-                const next = input[i + 1];
-                if (next === undefined) return { error: 'Trailing backslash in command' };
-                current += next;
-                i++;
-                continue;
-              }
-              if (/\s/.test(ch)) {
-                if (current.length > 0) {
-                  tokens.push(current);
-                  current = '';
-                }
-                continue;
-              }
-              current += ch;
-              continue;
-            }
-
-            if (quote === 'single') {
-              if (ch === "'") {
-                quote = null;
-                continue;
-              }
-              current += ch;
-              continue;
-            }
-
-            // double quote
-            if (ch === '"') {
-              quote = null;
-              continue;
-            }
-            if (ch === '\\') {
-              const next = input[i + 1];
-              if (next === undefined) return { error: 'Trailing backslash in command' };
-              current += next;
-              i++;
-              continue;
-            }
-            current += ch;
-          }
-
-          if (quote !== null) return { error: 'Unterminated quote in command' };
-          if (current.length > 0) tokens.push(current);
-          return tokens;
-        };
-
-        const parsed = tokenize(cmd.trim());
-        if (!Array.isArray(parsed)) return `Error: ${parsed.error}`;
-
-        // Intentionally restrict supported commands: this tool is a privileged escape hatch
-        // and should not provide a general-purpose shell surface area.
-        const [program, ...args] = parsed;
-        if (program !== 'node') {
-          return 'Error: Only "node -e <code>" and "node -v/--version" are supported.';
-        }
-        if (
-          !(args.length === 1 && (args[0] === '-v' || args[0] === '--version')) &&
-          !(args.length === 2 && args[0] === '-e' && typeof args[1] === 'string')
-        ) {
-          return 'Error: Only "node -e <code>" and "node -v/--version" are supported.';
-        }
-        if (args[0] === '-e' && args[1]!.length > 10_000) {
-          return 'Error: Inline node script is too large.';
+        // Block dangerous commands
+        const blocked = ['rm -rf /', 'mkfs', 'dd if=', ':(){ :|:& };:', 'chmod 777'];
+        if (blocked.some((b) => cmd.includes(b))) {
+          return 'Error: This command is blocked for safety reasons.';
         }
 
         const decision = capabilityBroker.authorize({
@@ -476,28 +563,18 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         }
 
         try {
-          const result = spawnSync(program, args, {
+          const output = execSync(cmd, {
             cwd: capabilityBroker.workspaceRoot,
             timeout: 30000,
             encoding: 'utf-8',
             maxBuffer: 1024 * 1024,
-            shell: false,
           });
-
-          if (result.error) {
-            return `Command failed: ${result.error.message}`;
-          }
-
-          const stdout = String(result.stdout ?? '');
-          const stderr = String(result.stderr ?? '');
-          if (result.status === 0) {
-            const output = stdout || '(no output)';
-            return output.length > 5000 ? `${output.slice(0, 5000)}\n... (truncated)` : output;
-          }
-
-          return `Command failed (exit code ${result.status ?? 1}).\n${stderr || stdout}`;
+          return output.length > 5000
+            ? `${output.slice(0, 5000)}\n... (truncated)`
+            : output || '(no output)';
         } catch (err: unknown) {
-          return `Command failed: ${err instanceof Error ? err.message : String(err)}`;
+          const e = err as { message: string; stderr?: string };
+          return `Command failed: ${e.message}\n${e.stderr ?? ''}`;
         }
       },
     });
@@ -635,6 +712,7 @@ class Argentum {
   private shuttingDown = false;
   private semanticMemory!: SemanticMemory;
   private memoryGraph!: MemoryGraph;
+  private channelHistories: Map<string, Message[]> = new Map();
 
   constructor() {
     const configManager = getConfig();
@@ -671,10 +749,160 @@ class Argentum {
     return this.memoryGraph;
   }
 
+  private channelSessionsPath(): string {
+    const workspaceRoot = this.config.security.capabilities.workspaceRoot || process.cwd();
+    return path.join(workspaceRoot, 'data', 'channel-sessions.json');
+  }
+
+  private telegramDiagnosticsPath(): string {
+    const workspaceRoot = this.config.security.capabilities.workspaceRoot || process.cwd();
+    return path.join(workspaceRoot, 'data', 'telegram-status.json');
+  }
+
+  private writeTelegramDiagnostics(patch: TelegramDiagnostics): void {
+    try {
+      const diagnosticsPath = this.telegramDiagnosticsPath();
+      fs.mkdirSync(path.dirname(diagnosticsPath), { recursive: true });
+      let current: TelegramDiagnostics = {};
+      if (fs.existsSync(diagnosticsPath)) {
+        current = JSON.parse(fs.readFileSync(diagnosticsPath, 'utf8')) as TelegramDiagnostics;
+      }
+      const next: TelegramDiagnostics = {
+        ...current,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(diagnosticsPath, JSON.stringify(next, null, 2));
+    } catch (err) {
+      this.logger.warn('Could not write Telegram diagnostics', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private readChannelSessions(): ChannelSessionRecord[] {
+    try {
+      const sessionsPath = this.channelSessionsPath();
+      if (!fs.existsSync(sessionsPath)) return [];
+      const parsed = JSON.parse(fs.readFileSync(sessionsPath, 'utf8')) as ChannelSessionRecord[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      this.logger.warn('Could not read channel sessions', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }
+  }
+
+  private writeChannelSessions(sessions: ChannelSessionRecord[]): void {
+    const sessionsPath = this.channelSessionsPath();
+    fs.mkdirSync(path.dirname(sessionsPath), { recursive: true });
+    fs.writeFileSync(
+      sessionsPath,
+      JSON.stringify(
+        sessions
+          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+          .slice(0, 24),
+        null,
+        2,
+      ),
+    );
+  }
+
+  private ensureChannelSession(
+    sessionId: string,
+    channel: 'telegram',
+    meta: { chatId?: number; userId?: number } = {},
+  ): ChannelSessionRecord {
+    const sessions = this.readChannelSessions();
+    const existing = sessions.find((item) => item.id === sessionId);
+    if (existing) return existing;
+
+    const session: ChannelSessionRecord = {
+      id: sessionId,
+      channel,
+      title: meta.chatId ? `Telegram ${meta.chatId}` : 'Telegram chat',
+      subtitle: 'Telegram session created',
+      updatedAt: Date.now(),
+      blocks: [],
+    };
+    this.writeChannelSessions([session, ...sessions]);
+    this.logger.info('Telegram channel session created', { sessionId, chatId: meta.chatId, userId: meta.userId });
+    this.writeTelegramDiagnostics({
+      configured: true,
+      lastSessionId: sessionId,
+      lastResponseStatus: 'session-created',
+      lastError: null,
+    });
+    return session;
+  }
+
+  private conversationHistoryForChannelSession(sessionId: string): Message[] {
+    const cached = this.channelHistories.get(sessionId);
+    if (cached) return cached.slice(-18);
+
+    const session = this.readChannelSessions().find((item) => item.id === sessionId);
+    const history: Message[] =
+      session?.blocks
+        ?.filter((block) => block.type === 'message' && block.body)
+        .map((block): Message => ({
+          role: block.role === 'user' ? 'user' : 'assistant',
+          content: block.body,
+        })) ?? [];
+    this.channelHistories.set(sessionId, history);
+    return history.slice(-18);
+  }
+
+  private appendChannelSessionMessage(
+    sessionId: string,
+    channel: 'telegram',
+    role: ChannelSessionRole,
+    body: string,
+    meta: { chatId?: number; userId?: number; reasoning?: string; rawBody?: string } = {},
+  ): void {
+    const sessions = this.readChannelSessions();
+    const existing = sessions.find((item) => item.id === sessionId) ?? this.ensureChannelSession(sessionId, channel, meta);
+    const blocks = existing?.blocks ?? [];
+    const title =
+      existing?.title ??
+      (meta.chatId ? `Telegram ${meta.chatId}` : 'Telegram chat');
+    const safeBody = redactChannelText(body);
+    const block: ChannelSessionBlock = {
+      type: 'message',
+      role: role === 'user' ? 'user' : 'argentum',
+      title: role === 'user' ? 'Telegram' : 'Argentum',
+      body: safeBody,
+      reasoning: meta.reasoning ? redactChannelText(meta.reasoning) : undefined,
+      rawBody: meta.rawBody,
+    };
+    const updatedBlocks = [...blocks, block].slice(-40);
+    const subtitle = trimChannelSubtitle(safeBody);
+    const updated: ChannelSessionRecord = {
+      id: sessionId,
+      channel,
+      title,
+      subtitle: subtitle.length > 0 ? subtitle : existing?.subtitle ?? 'Telegram conversation',
+      updatedAt: Date.now(),
+      blocks: updatedBlocks,
+    };
+
+    const next = [updated, ...sessions.filter((item) => item.id !== sessionId)];
+    this.writeChannelSessions(next);
+
+    const history = [
+      ...this.conversationHistoryForChannelSession(sessionId),
+      {
+        role,
+        content: safeBody,
+      } satisfies Message,
+    ].slice(-18);
+    this.channelHistories.set(sessionId, history);
+  }
+
   /** Start the Argentum framework */
   async start(): Promise<void> {
     this.logger.info('Starting Argentum Framework', {
-      version: '0.0.5',
+      version: '0.0.6',
       nodeVersion: process.version,
       platform: process.platform,
     });
@@ -787,14 +1015,25 @@ class Argentum {
         try {
           await this.startTelegram(token, channels?.['telegram']);
         } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
           this.logger.error('Failed to start Telegram channel', {
-            error: err instanceof Error ? err.message : String(err),
+            error,
+          });
+          this.writeTelegramDiagnostics({
+            configured: true,
+            lastResponseStatus: 'start-failed',
+            lastError: error,
           });
         }
       } else {
         this.logger.info(
           'Telegram channel enabled but no token provided (set ARGENTUM_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)',
         );
+        this.writeTelegramDiagnostics({
+          configured: false,
+          lastResponseStatus: 'missing-token',
+          lastError: 'Telegram is enabled but no bot token was provided.',
+        });
       }
     }
 
@@ -816,6 +1055,12 @@ class Argentum {
       const allowedUsers = (channelConfig?.['allowedUsers'] as number[] | undefined) ?? [];
       const allowedChats = (channelConfig?.['allowedChats'] as number[] | undefined) ?? [];
       const allowAll = channelConfig?.['allowAll'] === true;
+      const sendReasoning = channelConfig?.['sendReasoning'] === true;
+      this.writeTelegramDiagnostics({
+        configured: true,
+        lastResponseStatus: 'starting',
+        lastError: null,
+      });
       if (!allowAll && allowedUsers.length === 0 && allowedChats.length === 0) {
         this.logger.warn('Telegram channel has no allowlist; messages will be rejected');
       }
@@ -830,6 +1075,78 @@ class Argentum {
         return false;
       };
 
+      // Handle /start command
+      bot.command('start', async (ctx) => {
+        if (!isAllowed(ctx)) {
+          this.logger.warn('Unauthorized Telegram /start attempt', {
+            userId: ctx.from?.id,
+            chatId: ctx.chat?.id,
+          });
+          this.writeTelegramDiagnostics({
+            configured: true,
+            lastUpdateReceived: new Date().toISOString(),
+            lastResponseStatus: 'unauthorized',
+            lastError: 'Telegram /start rejected by allowlist.',
+          });
+          return;
+        }
+
+        const sessionId = telegramSessionId(ctx.chat?.id, ctx.from?.id);
+        this.logger.info('Telegram start command', { sessionId });
+        const welcome =
+          'Welcome to Argentum.\n\n' +
+          'A Telegram session has been created. Send a message and it will appear in Argentum desktop chat history. Use /status for runtime state and /usage for provider usage when available.';
+        this.ensureChannelSession(sessionId, 'telegram', {
+          chatId: ctx.chat?.id,
+          userId: ctx.from?.id,
+        });
+        this.appendChannelSessionMessage(sessionId, 'telegram', 'user', '/start', {
+          chatId: ctx.chat?.id,
+          userId: ctx.from?.id,
+        });
+        this.appendChannelSessionMessage(sessionId, 'telegram', 'assistant', welcome, {
+          chatId: ctx.chat?.id,
+          userId: ctx.from?.id,
+          rawBody: welcome,
+        });
+        this.writeTelegramDiagnostics({
+          configured: true,
+          lastUpdateReceived: new Date().toISOString(),
+          lastSessionId: sessionId,
+          lastResponseStatus: 'start-replied',
+          lastError: null,
+        });
+        await ctx.reply(welcome);
+      });
+
+      // Handle /help command
+      bot.command('help', async (ctx) => {
+        const tools = this.agent.getToolNames();
+        await ctx.reply(
+          `Argentum help\n\n` +
+            `Send any message and Argentum will answer in this Telegram session.\n\n` +
+            `Available tools: ${tools.length > 0 ? tools.join(', ') : 'none registered'}\n\n` +
+            `Commands:\n/start - Welcome message\n/help - This help message\n/status - Bot status\n/usage - Provider usage status`,
+        );
+      });
+
+      // Handle /status command
+      bot.command('status', async (ctx) => {
+        const features = this.pluginLoader.listFeatures();
+        const activeCount = features.filter((f) => f.state === 'active').length;
+        await ctx.reply(
+          'Argentum status\n\n' +
+            `LLM: ${this.llmProvider.name}\n` +
+            `Tools: ${this.agent.getToolNames().length}\n` +
+            `Features: ${activeCount}/${features.length} active\n` +
+            `Uptime: ${Math.floor(process.uptime())}s`,
+        );
+      });
+
+      bot.command('usage', async (ctx) => {
+        await ctx.reply('Provider usage is shown in the Argentum desktop Diagnostics view when the provider exposes counters.');
+      });
+
       // Handle text messages
       bot.on('message:text', async (ctx) => {
         if (!isAllowed(ctx)) {
@@ -841,16 +1158,25 @@ class Argentum {
         }
 
         const text = ctx.message.text;
-        if (!text) return;
+        if (!text || text.startsWith('/')) return;
         if (text.length > 10_000) {
           await ctx.reply('Message is too long.');
           return;
         }
 
+        const sessionId = telegramSessionId(ctx.chat?.id, ctx.from?.id);
         this.logger.info('Telegram message received', {
           userId: ctx.from?.id,
           chatId: ctx.chat?.id,
+          sessionId,
           length: text.length,
+        });
+        this.writeTelegramDiagnostics({
+          configured: true,
+          lastUpdateReceived: new Date().toISOString(),
+          lastSessionId: sessionId,
+          lastResponseStatus: 'update-received',
+          lastError: null,
         });
 
         // Auto-capture: analyze incoming message for decisions/lessons/errors
@@ -881,17 +1207,49 @@ class Argentum {
           text,
           userId: ctx.from?.id,
           chatId: ctx.chat?.id,
+          sessionId,
         });
 
         // Show typing indicator
         await ctx.replyWithChatAction('typing');
 
         try {
-          const response = await this.agent.handleMessage(text);
-          await ctx.reply(response);
+          this.ensureChannelSession(sessionId, 'telegram', {
+            chatId: ctx.chat?.id,
+            userId: ctx.from?.id,
+          });
+          const history = this.conversationHistoryForChannelSession(sessionId);
+          this.appendChannelSessionMessage(sessionId, 'telegram', 'user', text, {
+            chatId: ctx.chat?.id,
+            userId: ctx.from?.id,
+          });
+          const response = await this.agent.handleMessage(text, history);
+          const parsed = splitAgentReasoning(response);
+          const formattedResponse = formatTelegramAgentResponse(response, sendReasoning);
+          this.appendChannelSessionMessage(sessionId, 'telegram', 'assistant', formattedResponse, {
+            chatId: ctx.chat?.id,
+            userId: ctx.from?.id,
+            reasoning: parsed.reasoning,
+            rawBody: parsed.rawBody,
+          });
+          await streamTelegramReply(ctx, response, sendReasoning, this.logger);
+          this.writeTelegramDiagnostics({
+            configured: true,
+            lastSessionId: sessionId,
+            lastResponseStatus: 'response-sent',
+            lastError: null,
+          });
         } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
           this.logger.error('Agent error', {
-            error: err instanceof Error ? err.message : String(err),
+            sessionId,
+            error,
+          });
+          this.writeTelegramDiagnostics({
+            configured: true,
+            lastSessionId: sessionId,
+            lastResponseStatus: 'response-failed',
+            lastError: error,
           });
           await ctx.reply(
             'Sorry, I encountered an error processing your request. Please try again.',
@@ -937,12 +1295,33 @@ class Argentum {
 
             if (transcribeResponse.ok) {
               const { text } = (await transcribeResponse.json()) as { text: string };
-              this.logger.info('Voice transcribed', { text: text.slice(0, 100) });
+              const sessionId = telegramSessionId(ctx.chat?.id, ctx.from?.id);
+              this.logger.info('Voice transcribed', { sessionId, text: text.slice(0, 100) });
 
-              const agentResponse = await this.agent.handleMessage(text);
-              await ctx.reply(`🎤 *Transcription:* ${text}\n\n${agentResponse}`, {
-                parse_mode: 'Markdown',
+              const history = this.conversationHistoryForChannelSession(sessionId);
+              this.ensureChannelSession(sessionId, 'telegram', {
+                chatId: ctx.chat?.id,
+                userId: ctx.from?.id,
               });
+              this.appendChannelSessionMessage(sessionId, 'telegram', 'user', text, {
+                chatId: ctx.chat?.id,
+                userId: ctx.from?.id,
+              });
+              const agentResponse = await this.agent.handleMessage(text, history);
+              const parsed = splitAgentReasoning(agentResponse);
+              const formattedResponse = formatTelegramAgentResponse(agentResponse, sendReasoning);
+              this.appendChannelSessionMessage(sessionId, 'telegram', 'assistant', formattedResponse, {
+                chatId: ctx.chat?.id,
+                userId: ctx.from?.id,
+                reasoning: parsed.reasoning,
+                rawBody: parsed.rawBody,
+              });
+              await streamTelegramReply(
+                ctx,
+                `Transcription: ${text}\n\n${agentResponse}`,
+                sendReasoning,
+                this.logger,
+              );
             } else {
               await ctx.reply('Sorry, I was unable to transcribe your voice message.');
             }
@@ -959,53 +1338,27 @@ class Argentum {
         }
       });
 
-      // Handle /start command
-      bot.command('start', async (ctx) => {
-        await ctx.reply(
-          '🤖 Welcome to Argentum!\n\n' +
-            'I am an AI assistant with tool-use capabilities. Send me a message and I will do my best to help.\n\n' +
-            `Available tools: ${this.agent.getToolNames().join(', ')}`,
-        );
-      });
-
-      // Handle /help command
-      bot.command('help', async (ctx) => {
-        const tools = this.agent.getToolNames();
-        await ctx.reply(
-          `🤖 *Argentum Help*\n\n` +
-            `Just send me any message and I will respond.\n\n` +
-            `*Available tools:*\n${tools.map((t) => `• /${t}`).join('\n')}\n\n*Commands:*\n` +
-            `/start - Welcome message\n` +
-            `/help - This help message\n` +
-            `/status - Bot status`,
-          { parse_mode: 'Markdown' },
-        );
-      });
-
-      // Handle /status command
-      bot.command('status', async (ctx) => {
-        const features = this.pluginLoader.listFeatures();
-        const activeCount = features.filter((f) => f.state === 'active').length;
-        await ctx.reply(
-          '📊 *Argentum Status*\n\n' +
-            `LLM: ${this.llmProvider.name}\n` +
-            `Tools: ${this.agent.getToolNames().length}\n` +
-            `Features: ${activeCount}/${features.length} active\n` +
-            `Uptime: ${Math.floor(process.uptime())}s`,
-          { parse_mode: 'Markdown' },
-        );
-      });
-
       // Start bot
       void bot
         .start({
           onStart: (info) => {
             this.logger.info('Telegram bot started', { username: info.username });
+            this.writeTelegramDiagnostics({
+              configured: true,
+              lastResponseStatus: `bot-started:${info.username}`,
+              lastError: null,
+            });
           },
         })
         .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
           this.logger.error('Telegram bot stopped with an error', {
-            error: error instanceof Error ? error.message : String(error),
+            error: message,
+          });
+          this.writeTelegramDiagnostics({
+            configured: true,
+            lastResponseStatus: 'bot-stopped',
+            lastError: message,
           });
         });
 

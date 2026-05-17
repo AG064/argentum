@@ -68,12 +68,150 @@ export function modelMetadataFor(modelId, metadata = {}) {
   );
 }
 
+export function inferMimeType(path = '') {
+  const lower = String(path || '').toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.txt') || lower.endsWith('.md')) return 'text/plain';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+export function inferAttachmentKind(path = '', mime = inferMimeType(path)) {
+  if (String(mime).startsWith('image/')) return 'image';
+  return 'file';
+}
+
+export function filePreviewUrl(path = '') {
+  const convertFileSrc = window.__TAURI__?.core?.convertFileSrc;
+  if (typeof convertFileSrc === 'function') {
+    try {
+      return convertFileSrc(path);
+    } catch (_error) {
+      return '';
+    }
+  }
+  return '';
+}
+
+export function modelSupportsVision(modelId, metadata = {}) {
+  const capabilities = modelMetadataFor(modelId, metadata).capabilities || [];
+  return capabilities.some((capability) => String(capability).toLowerCase().includes('vision'));
+}
+
 export function estimateContextTokens(blocks = [], draft = '') {
   const text = [
-    ...blocks.map((block) => `${block.title || ''} ${block.body || ''}`),
+    ...blocks.map((block) => {
+      const attachments = Array.isArray(block.attachments)
+        ? block.attachments.map((item) => `${item.name || ''} ${item.mime || ''}`).join(' ')
+        : '';
+      return `${block.title || ''} ${block.rawBody || block.body || ''} ${block.reasoning || ''} ${attachments}`;
+    }),
     draft,
   ].join('\n');
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+export function buildApprovedRuntimeContextText(state) {
+  const access = new Set(state.selectedContextAccess || []);
+  const lines = [
+    `System prompt: ${state.systemPrompt || ''}`,
+    `Agent name: ${state.agentName || 'Argentum'}`,
+    `User name: ${state.userName || ''}`,
+    `Thinking level: ${state.thinkingLevel || 'balanced'}`,
+    `Security profile: ${state.securityProfile || 'restricted'}`,
+    `App version: ${state.version || 'unknown'}`,
+    `Current page: ${state.activeSection || 'chat'}`,
+    `View mode: ${state.viewMode || 'chat'}`,
+    `Active session: ${state.activeChatId || 'none'}`,
+  ];
+
+  if (access.has('workspace-summary')) {
+    lines.push(`Workspace: ${state.workspacePath || ''}`);
+    lines.push(`Workspace health: ${state.desktopState?.workspaceReady ? 'ready' : 'not ready'}`);
+    lines.push(`Gateway PID: ${state.desktopState?.gatewayPid || 'stopped'}`);
+  }
+
+  if (access.has('tool-state')) {
+    lines.push(`Provider status: ${state.apiTest?.status || 'idle'} - ${state.apiTest?.message || ''}`);
+    lines.push(`Channels: ${(state.selectedChannels || ['local']).join(', ')}`);
+    lines.push(`Telegram status: ${state.desktopState?.telegramDiagnostics?.lastResponseStatus || 'not reported'}`);
+    if (state.desktopState?.telegramDiagnostics?.lastError) {
+      lines.push(`Telegram last error: ${state.desktopState.telegramDiagnostics.lastError}`);
+    }
+  }
+
+  if (access.has('logs') && state.appLogEntries?.length) {
+    lines.push(
+      `Recent app log summary: ${state.appLogEntries
+        .slice(0, 6)
+        .map((entry) => `${entry.event}:${entry.status}`)
+        .join(', ')}`,
+    );
+  }
+
+  if (state.usageSnapshot) {
+    const usage = state.usageSnapshot;
+    const usageParts = [];
+    if (usage.summary) usageParts.push(usage.summary);
+    if (usage.requestRemaining) {
+      usageParts.push(`requests remaining ${usage.requestRemaining}${usage.requestLimit ? ` of ${usage.requestLimit}` : ''}`);
+    }
+    if (usage.tokenRemaining) {
+      usageParts.push(`tokens remaining ${usage.tokenRemaining}${usage.tokenLimit ? ` of ${usage.tokenLimit}` : ''}`);
+    }
+    if (usageParts.length > 0) {
+      lines.push(`Provider usage: ${usageParts.join('; ')}`);
+    } else {
+      lines.push('Provider usage: Usage unavailable from provider');
+    }
+  }
+
+  lines.push(
+    'Argentum app knowledge: visible buttons are fixed app actions; approved model tools may read/write files inside the selected workspace and fetch localhost/loopback URLs. The assistant may summarize approved app state and logs but cannot run arbitrary shell, OS, RAM, browser-session, external-network, or external-folder actions without a permission-gated feature.',
+  );
+
+  return lines.filter(Boolean).join('\n');
+}
+
+export function estimateRuntimeContextTokens(state, draft = state?.draftMessage || '') {
+  const chatTokens = estimateContextTokens(state?.chatBlocks || [], draft);
+  const approvedContextTokens = Math.ceil(buildApprovedRuntimeContextText(state || {}).length / 4);
+  return Math.max(1, chatTokens + approvedContextTokens);
+}
+
+export function compactConversationForProvider(blocks = [], currentMessage = '', options = {}) {
+  const maxRecentMessages = options.maxRecentMessages || 14;
+  const maxSummaryCharacters = options.maxSummaryCharacters || 1800;
+  const messages = blocks
+    .filter((block) => block?.type === 'message' && block.body)
+    .map((block) => ({
+      role: block.role === 'user' ? 'user' : 'assistant',
+      content: String(block.body || '').trim(),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  const recent = messages.slice(-maxRecentMessages);
+  const older = messages.slice(0, Math.max(0, messages.length - recent.length));
+  const conversationSummary = older
+    .map((message) => `${message.role === 'user' ? 'User' : 'Argentum'}: ${message.content}`)
+    .join('\n')
+    .slice(-maxSummaryCharacters);
+
+  const current = String(currentMessage || '').trim();
+  const last = recent.at(-1);
+  const conversationHistory =
+    current && (!last || last.role !== 'user' || last.content !== current)
+      ? [...recent, { role: 'user', content: current }]
+      : recent;
+
+  return {
+    conversationHistory,
+    conversationSummary,
+  };
 }
 
 export function contextTokenLimit(metadata = {}) {

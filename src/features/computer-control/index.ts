@@ -460,7 +460,7 @@ class WindowsComputerControl implements ComputerControl {
 class ComputerControlFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'computer-control',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Vision-based desktop automation via screenshot + mouse/keyboard control',
     dependencies: [],
   };

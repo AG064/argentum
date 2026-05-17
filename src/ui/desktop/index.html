@@ -10,27 +10,46 @@
   <body>
     <main class="shell">
       <aside class="rail" aria-label="Argentum navigation">
-        <div class="brand">
-          <img src="./assets/argentum.png" alt="" />
-          <div>
-            <strong>Argentum</strong>
-            <span>v0.0.5</span>
-          </div>
+        <div class="brand-wordmark">
+          <strong>Argentum</strong>
+          <span>v0.0.6</span>
         </div>
         <nav id="section-nav" class="section-nav"></nav>
-        <div class="workspace-card">
+        <button class="workspace-card" id="workspace-button" type="button" aria-haspopup="menu">
           <span>Workspace</span>
           <strong id="workspace-path">%LOCALAPPDATA%\Programs\Argentum\workspace</strong>
-        </div>
+        </button>
+        <img class="brand-shard" src="./assets/argentum.png" alt="" />
       </aside>
 
       <section class="content">
         <header class="topbar">
-          <div>
-            <p id="eyebrow" class="eyebrow">Onboarding</p>
-            <h1 id="section-title">Welcome</h1>
+          <div class="topbar-left">
+            <nav class="breadcrumb-bar" aria-label="Workspace breadcrumb">
+              <span>Workspaces</span>
+              <span>Argentum</span>
+              <strong>workspace</strong>
+            </nav>
+            <div>
+              <p id="eyebrow" class="eyebrow">Onboarding</p>
+              <h1 id="section-title">Welcome</h1>
+            </div>
+          </div>
+          <div class="view-mode-switcher" role="group" aria-label="View mode">
+            <button class="active" type="button" data-view-mode="chat">Chat only</button>
+            <button type="button" data-view-mode="split">Split view</button>
+            <button type="button" data-view-mode="full">Full workspace</button>
           </div>
           <div class="topbar-actions">
+            <div id="provider-status-pill"></div>
+            <button
+              class="icon-button"
+              id="help-button"
+              title="Help for this screen"
+              aria-label="Help for this screen"
+            >
+              <span data-icon="help"></span>
+            </button>
             <button
               class="icon-button"
               id="notifications-button"
@@ -61,6 +80,7 @@
         <div id="view-root" class="view-root"></div>
       </section>
     </main>
+    <div id="overlay-root"></div>
     <script type="module" src="main.js"></script>
   </body>
 </html>

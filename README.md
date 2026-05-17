@@ -4,23 +4,23 @@
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
 </p>
 
-Argentum is a local-first AI agent framework for people who want a capable assistant they can own, inspect, and extend. It combines a TypeScript agent runtime, modular features, memory backends, communication channels, and security controls into one self-hosted system.
+Argentum is a local-first AI workspace. It gives you a desktop chat app, a TypeScript agent runtime, provider routing, memory, channels, logs, and security controls in one project you can run and inspect yourself.
 
-[![Version](https://img.shields.io/badge/version-v0.0.5-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.6-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
 
-## Install First
+## Install
 
 ### Windows Setup
 
-Download the latest Windows desktop setup executable from the release page:
+For most people on Windows, use the desktop installer:
 
-[Argentum_0.0.5_x64-setup.exe](https://github.com/AG064/argentum/releases/latest)
+[Argentum_0.0.6_x64-setup.exe](https://github.com/AG064/ag-claw/releases/latest)
 
-This is the normal GUI app. The setup wizard installs Argentum like a regular Windows program:
+The setup wizard behaves like a normal Windows installer:
 
 - shows the license agreement
 - shows the default install location, usually `C:\Program Files\Argentum`
@@ -29,32 +29,36 @@ This is the normal GUI app. The setup wizard installs Argentum like a regular Wi
 - adds a desktop shortcut
 - offers to launch the Argentum desktop interface when setup completes
 
-After setup, launch Argentum from the Start Menu. The desktop app opens the onboarding flow first, then continues into the main interface.
+After setup, launch Argentum from the Start Menu. First launch opens onboarding. After that, Argentum opens directly into the desktop app.
+
+### What Changed In v0.0.6
+
+v0.0.6 is a desktop-focused release. It cleans up the chat surface, makes onboarding harder to get stuck in, adds the Monaspace Krypton font, keeps reasoning output separate from normal replies, and improves Telegram session handling. It also keeps the recent security cleanup from `development`.
 
 ## Provider Status
 
-Stable providers in v0.0.5:
+### Stable Providers
 
 | Provider | Status | Auth modes | Notes |
 | --- | --- | --- | --- |
 | ChatGPT / OpenAI | Stable | API key, ChatGPT/Codex browser-account authorization | Live chat, model picker, provider test, and usage/error reporting are wired. |
 | MiniMax | Stable | API key | Live chat, MiniMax Token Plan usage checks, reset cadence, and M2.7 best-practice context are wired. |
 
-Testing providers:
+### Testing Providers
 
-Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, Ollama/local, and Custom endpoint remain available under Testing. They can be selected and tested, but they are not promoted as stable release routes yet.
+Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, Ollama/local, and Custom endpoint are still under Testing. They are visible for configuration and provider tests, but they are not stable desktop routes yet.
 
 ## Supported OS
 
-| Platform | Supported release target | Release assets | Runtime notes |
+| Platform | Current support | Assets | Runtime notes |
 | --- | --- | --- | --- |
-| Windows | Windows 10/11 x64 | `Argentum_0.0.5_x64-setup.exe`, `Argentum_0.0.5_x64_en-US.msi`, optional `argentum-cli-v0.0.5-win-x64.exe` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing. |
-| Linux | Ubuntu 22.04+ x64 and compatible desktop distributions with WebKitGTK 4.1 | `Argentum_0.0.5_amd64.AppImage`, `.deb`, `.rpm`, optional `argentum-v0.0.5-linux-x64` | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu/Debian/Fedora/Arch/openSUSE are the intended targets. |
-| macOS | macOS 10.15+ on Intel and Apple Silicon | `Argentum_0.0.5_x64.dmg`, `Argentum_0.0.5_aarch64.dmg`, optional `argentum-v0.0.5-macos-x64` | Uses the system WKWebView. Apple Silicon users should prefer the `aarch64` DMG. |
+| Windows | Windows 10/11 x64 | `Argentum_0.0.6_x64-setup.exe`, `Argentum_0.0.6_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing. |
+| Linux | Source-supported target | Linux desktop packages are planned for release automation | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu 22.04+ and similar Debian/Fedora/Arch/openSUSE desktops are the intended targets. |
+| macOS | Source-supported target | macOS DMGs are planned for release automation | Uses the system WKWebView. The intended targets are macOS 10.15+ on Intel and Apple Silicon. |
 
 ## Hardware Requirements
 
-Hardware requirements for v0.0.5 are intentionally modest because the desktop app uses native webviews and hosted providers by default.
+Argentum uses the system webview and hosted providers by default, so the desktop app does not need a large local GPU.
 
 | Level | Requirement |
 | --- | --- |
@@ -63,24 +67,13 @@ Hardware requirements for v0.0.5 are intentionally modest because the desktop ap
 | Gateway | Localhost port `3000` available by default, with provider/network access only when you configure and approve it. |
 | Provider usage | ChatGPT/OpenAI usage follows the selected account or API plan. MiniMax Token Plan usage is shown in Diagnostics and reset information is surfaced to the model context. |
 
-### Windows Portable CLI
+### Portable CLI
 
-Use this only when you explicitly want the terminal CLI without the desktop app:
-
-[argentum-cli-v0.0.5-win-x64.exe](https://github.com/AG064/argentum/releases/latest)
-
-```powershell
-.\argentum-cli-v0.0.5-win-x64.exe onboard
-.\argentum-cli-v0.0.5-win-x64.exe doctor
-```
-
-### Linux and macOS Binaries
-
-Download the matching release asset, make it executable, then run onboarding:
+Use the CLI when you want the terminal workflow instead of the desktop app. Windows CLI binaries are release assets when built; Linux and macOS CLI binaries can be built from source until CI packaging is enabled.
 
 ```bash
-chmod +x argentum-v0.0.5-linux-x64
-./argentum-v0.0.5-linux-x64 onboard
+argentum onboard
+argentum doctor
 ```
 
 ### Docker
@@ -92,23 +85,23 @@ docker run -it ag064/argentum
 ### From Source
 
 ```bash
-git clone https://github.com/AG064/argentum.git
-cd argentum
+git clone https://github.com/AG064/ag-claw.git
+cd ag-claw
 npm install
 npm run onboard
 npm run dev
 ```
 
-## What Argentum Gives You
+## What Argentum Includes
 
-Argentum is built for practical, self-hosted agent workflows:
+The current project includes:
 
 - local configuration and data ownership
 - 65+ modular features you can enable as needed
-- Telegram, Discord, Slack, WhatsApp, email, SMS, webchat, and mobile channels
+- Telegram session routing, plus Discord, Slack, WhatsApp, email, SMS, webchat, and mobile channel modules
 - SQLite, semantic search, knowledge graph, markdown, and hierarchical memory options
 - encrypted secrets, allowlists, policy controls, audit logs, and rate limiting
-- Docker and binary release paths for production-style deployment
+- a desktop shell, a CLI, Docker support, and release packaging scripts
 
 ## Everyday Commands
 

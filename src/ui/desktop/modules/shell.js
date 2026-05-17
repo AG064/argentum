@@ -18,7 +18,7 @@ export function renderNavigation() {
 }
 
 export function renderNotifications() {
-  if (state.notifications.length === 0 && !state.notificationsMenuOpen) return '';
+  if (state.notifications.length === 0) return '';
 
   return `
     <div class="notification-layer" aria-live="polite">
@@ -37,43 +37,23 @@ export function renderNotifications() {
           )
           .join('')}
       </div>
-      ${
-        state.notificationsMenuOpen
-          ? `
-            <section class="notification-menu">
-              <div class="split-header">
-                <div>
-                  <h3>Notifications</h3>
-                  <p>${state.notificationsMuted ? 'Muted. Important messages are kept in history.' : 'Toasts disappear automatically.'}</p>
-                </div>
-                <span class="pill ${state.notificationsMuted ? 'warn' : 'ok'}">${state.notificationsMuted ? 'Muted' : 'Live'}</span>
-              </div>
-              <div class="button-row split">
-                <button class="button" data-toggle-notification-mute="true">${state.notificationsMuted ? 'Unmute' : 'Mute'}</button>
-                <button class="button" data-clear-notifications="true">Clear</button>
-              </div>
-              <div class="notification-history">
-                ${
-                  state.notificationHistory.length === 0
-                    ? '<div><strong>No notifications</strong><p>History is clear.</p></div>'
-                    : state.notificationHistory
-                        .slice(0, 6)
-                        .map(
-                          (notification) => `
-                            <div>
-                              <strong>${escapeHtml(notification.title)}</strong>
-                              <p>${escapeHtml(notification.message)}</p>
-                            </div>
-                          `,
-                        )
-                        .join('')
-                }
-              </div>
-            </section>
-          `
-          : ''
-      }
     </div>
+  `;
+}
+
+export function renderProviderStatusPill() {
+  const provider = currentProvider(providerPresets, state);
+  const ready = state.apiTest.status === 'ok';
+  const testing = state.apiTest.status === 'testing';
+  const status = testing ? 'Testing' : ready ? 'Provider ready' : 'Provider offline';
+  const className = testing ? 'warn' : ready ? 'ok' : 'warn';
+
+  return `
+    <button class="provider-status-pill ${className}" type="button" data-section="settings" title="${escapeAttribute(state.apiTest.message || status)}">
+      <span aria-hidden="true"></span>
+      ${escapeHtml(status)}
+      <small>${escapeHtml(provider.label)}</small>
+    </button>
   `;
 }
 

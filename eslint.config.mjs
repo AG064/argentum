@@ -23,6 +23,7 @@ export default tseslint.config(
       '.git/',
       'coverage/',
       'data/',
+      'src/desktop/target/',
       'src/features/browser-automation/',
       '**/*.js',
       '!eslint.config.mjs',

@@ -81,7 +81,7 @@ export interface MobilePushConfig {
 class MobilePushFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mobile-push',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Mobile push notification service with FCM/APNs support',
     dependencies: [],
   };

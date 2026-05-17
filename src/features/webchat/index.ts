@@ -382,7 +382,7 @@ connect();
 class WebchatFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webchat',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Full-featured web chat UI with Markdown, file upload, themes',
     dependencies: [],
   };

@@ -1,6 +1,6 @@
 import { APP_VERSION, providerPresets } from './constants.js';
-import { ensureProviderModelAllowed, notify, state } from './state.js';
-import { currentProvider, invokeTauri, normalizeError, openFolder } from './utils.js';
+import { ensureProviderModelAllowed, mergeChannelChatSessions, notify, recordUiEvent, state } from './state.js';
+import { compactConversationForProvider, currentProvider, invokeTauri, normalizeError, openFolder } from './utils.js';
 
 export function buildSetupPayload() {
   const provider = currentProvider(providerPresets, state);
@@ -33,11 +33,66 @@ export function buildSetupPayload() {
   };
 }
 
+export function providerUsageLine(usage) {
+  if (!usage) return 'Usage is unavailable until a provider test or chat response returns limits.';
+
+  const windows = Array.isArray(usage.modalityQuotas) ? usage.modalityQuotas : [];
+  const windowLine = windows
+    .map((window) => {
+      const remaining = window.remaining || 'unknown remaining';
+      const limit = window.limit ? ` of ${window.limit}` : '';
+      const cadence = window.resetCadence || window.reset || 'reset not reported';
+      return `${window.label}: ${remaining}${limit}, ${cadence}`;
+    })
+    .join(' | ');
+
+  const requestLine = usage.fiveHourRequestLimit
+    ? `M2.7 rolling window: ${usage.requestRemaining || 'unknown remaining'} of ${usage.fiveHourRequestLimit}`
+    : usage.requestRemaining
+      ? `Requests remaining: ${usage.requestRemaining}`
+      : '';
+  const weeklyLine = usage.weeklyRequestBudget ? `Weekly budget overlay: ${usage.weeklyRequestBudget}` : '';
+  const summary = usage.summary || [requestLine, weeklyLine, windowLine].filter(Boolean).join(' | ');
+
+  return summary || 'Usage unavailable from provider';
+}
+
+function previewSystemStats() {
+  const memory = window.navigator?.deviceMemory ? Number(window.navigator.deviceMemory) * 1024 ** 3 : 0;
+  const cores = Number(window.navigator?.hardwareConcurrency || 0);
+  return {
+    collectedAt: String(Math.floor(Date.now() / 1000)),
+    hostName: 'Preview browser',
+    osName: 'Desktop preview',
+    osVersion: 'Unavailable until the installed app runs',
+    kernelVersion: 'Unavailable',
+    cpuBrand: cores ? `${cores} logical cores reported by browser` : 'Unavailable in browser preview',
+    cpuCores: cores,
+    cpuUsagePercent: 0,
+    memoryTotalBytes: memory,
+    memoryUsedBytes: 0,
+    memoryUsedPercent: 0,
+    swapTotalBytes: 0,
+    swapUsedBytes: 0,
+    diskTotalBytes: 0,
+    diskAvailableBytes: 0,
+    diskUsedPercent: 0,
+    networkReceivedBytes: 0,
+    networkTransmittedBytes: 0,
+    uptimeSeconds: 0,
+    temperatureCelsius: null,
+    disks: [],
+  };
+}
+
 export async function saveSetup() {
   const request = buildSetupPayload();
   const promise = invokeTauri('save_setup', { request });
 
   if (!promise) {
+    recordUiEvent('onboarding.save', 'preview', 'Preview setup saved locally in browser state.', {
+      workspacePath: request.workspacePath,
+    });
     return {
       status: 'setup_saved',
       configPath: `${request.workspacePath}\\config\\default.yaml`,
@@ -45,7 +100,11 @@ export async function saveSetup() {
     };
   }
 
-  return promise;
+  const result = await promise;
+  recordUiEvent('onboarding.save', 'ok', 'Configuration was saved to the selected workspace.', {
+    workspacePath: request.workspacePath,
+  });
+  return result;
 }
 
 export async function persistRuntimeSettings(reason = 'settings', options = {}) {
@@ -69,6 +128,11 @@ export async function testProvider() {
     status: 'testing',
     message: `Testing ${provider.label}...`,
   };
+  recordUiEvent('provider.test', 'running', state.apiTest.message, {
+    provider: provider.id,
+    authMethod: state.providerAuthMethod || 'api-key',
+    model: state.providerModel || provider.defaultModel,
+  });
 
   if (state.setupComplete) {
     try {
@@ -79,6 +143,9 @@ export async function testProvider() {
         message: normalizeError(error),
       };
       notify('error', 'Settings could not be saved', state.apiTest.message);
+      recordUiEvent('provider.test', 'error', state.apiTest.message, {
+        provider: provider.id,
+      });
       return state.apiTest;
     }
   }
@@ -103,6 +170,10 @@ export async function testProvider() {
         : 'Preview mode: add an API key in the installed app to run a live test.',
     };
     notify(state.apiTest.status === 'ok' ? 'success' : 'warning', 'Provider test', state.apiTest.message);
+    recordUiEvent('provider.test', state.apiTest.status, providerUsageLine(state.usageSnapshot), {
+      provider: provider.id,
+      preview: true,
+    });
     return state.apiTest;
   }
 
@@ -114,6 +185,10 @@ export async function testProvider() {
     };
     if (result.usage) state.usageSnapshot = result.usage;
     notify(state.apiTest.status === 'ok' ? 'success' : 'warning', 'Provider test', state.apiTest.message);
+    recordUiEvent('provider.test', state.apiTest.status, providerUsageLine(result.usage), {
+      provider: provider.id,
+      model: request.model,
+    });
     return state.apiTest;
   } catch (error) {
     state.apiTest = {
@@ -125,6 +200,10 @@ export async function testProvider() {
       'Provider test failed',
       `${state.apiTest.message} Check the provider, key, endpoint, and model, then test again.`,
     );
+    recordUiEvent('provider.test', 'error', state.apiTest.message, {
+      provider: provider.id,
+      model: request.model,
+    });
     return state.apiTest;
   }
 }
@@ -283,8 +362,14 @@ export async function openExternalUrl(url) {
   }
 }
 
-export async function sendChatMessage(message) {
+export async function sendChatMessage(message, attachments = []) {
   await persistRuntimeSettings('chat');
+  const { conversationHistory, conversationSummary } = compactConversationForProvider(state.chatBlocks, message);
+  recordUiEvent('chat.send', 'running', 'Sending chat message to the configured provider.', {
+    provider: state.llmProvider,
+    model: state.providerModel,
+    historyMessages: conversationHistory.length,
+  });
   const promise = invokeTauri('send_chat_message', {
     request: {
       workspacePath: state.workspacePath,
@@ -296,10 +381,16 @@ export async function sendChatMessage(message) {
       thinkingLevel: state.thinkingLevel,
       securityProfile: state.securityProfile,
       selectedChannels: state.selectedChannels,
+      conversationHistory,
+      conversationSummary,
+      attachments,
     },
   });
 
   if (!promise) {
+    recordUiEvent('chat.send', 'offline', 'Desktop bridge unavailable; chat stayed in preview mode.', {
+      provider: 'Preview',
+    });
     return {
       status: 'offline',
       message:
@@ -310,7 +401,14 @@ export async function sendChatMessage(message) {
     };
   }
 
-  return promise;
+  const result = await promise;
+  if (result.usage) state.usageSnapshot = result.usage;
+  recordUiEvent('chat.send', result.offline ? 'offline' : result.status || 'ok', result.message || 'Chat response received.', {
+    provider: result.provider,
+    model: result.model,
+    usage: providerUsageLine(result.usage),
+  });
+  return result;
 }
 
 export async function chooseWorkspaceFolder() {
@@ -360,13 +458,21 @@ export async function refreshDesktopState(options = {}) {
       gatewayPid: null,
       gatewayLogPreview: 'Desktop preview mode. Run the installed app to read local logs.',
       auditLogPreview: 'Desktop preview mode. Run the installed app to read audit history.',
+      appLogPreview: 'Desktop preview mode. Run the installed app to read structured activity logs.',
+      systemStats: previewSystemStats(),
+      telegramDiagnostics: {
+        configured: state.selectedChannels.includes('telegram'),
+        lastResponseStatus: state.selectedChannels.includes('telegram') ? 'preview-mode' : 'not-selected',
+      },
     };
     if (announce) notify('success', 'Workspace state refreshed', 'Preview state was refreshed.');
     return;
   }
 
   try {
-    state.desktopState = await promise;
+    const result = await promise;
+    state.desktopState = result;
+    mergeChannelChatSessions(result.channelSessions || []);
     if (announce) notify('success', 'Workspace state refreshed', 'Local workspace state was refreshed.');
   } catch (error) {
     notify('error', 'Workspace state failed', normalizeError(error));

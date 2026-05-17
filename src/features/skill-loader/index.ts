@@ -37,7 +37,7 @@ export interface SkillLoaderConfig {
 class SkillLoaderFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skill-loader',
-    version: '0.0.5',
+    version: '0.0.6',
     description: 'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
     dependencies: [],
   };
