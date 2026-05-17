@@ -40,11 +40,7 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/features/browser-automation/**/*.ts"
-  ],
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/features/browser-automation/**/*.ts"],
   "references": []
 }
