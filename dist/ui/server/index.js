@@ -349,7 +349,7 @@ function handleRequest(req, res) {
     if (pathname === '/health') {
         sendJSON(res, 200, {
             status: 'ok',
-            version: '0.0.5',
+            version: '0.0.6',
             uptime: process.uptime(),
             wsClients: wsClients.size,
         });
@@ -584,13 +584,13 @@ function handleSkillsAPI(req, res, body) {
         installed: [
             {
                 name: 'clawhub',
-                version: '0.0.5',
+                version: '0.0.6',
                 category: 'utility',
                 description: 'Install and manage skills.',
             },
             {
                 name: 'weather',
-                version: '0.0.5',
+                version: '0.0.6',
                 category: 'utility',
                 description: 'Get weather forecasts.',
             },
@@ -599,7 +599,7 @@ function handleSkillsAPI(req, res, body) {
             {
                 name: 'slack-bot',
                 slug: 'slack-bot',
-                version: '0.0.5',
+                version: '0.0.6',
                 category: 'integration',
                 author: 'community',
                 description: 'Send messages to Slack.',
@@ -745,4 +745,3 @@ if (require.main === module) {
         console.info('Unknown command. Use "start" or "help".');
     }
 }
-//# sourceMappingURL=index.js.map

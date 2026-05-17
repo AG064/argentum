@@ -21,6 +21,7 @@ export declare class SandboxExecutor {
      */
     updateConfig(config: Partial<SandboxConfig>): void;
     getConfig(): SandboxConfig;
+    private normalizeTimeoutMs;
     /**
      * Check if a path is allowed for filesystem operations.
      * Returns { allowed: true } or { allowed: false, reason: string }.

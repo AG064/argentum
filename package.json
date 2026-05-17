@@ -112,6 +112,7 @@
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.58.1",
     "@typescript-eslint/parser": "^8.58.1",
+    "babel-plugin-istanbul": "^8.0.0",
     "eslint": "^10.2.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-jest": "^29.15.1",
@@ -144,6 +145,10 @@
       "picomatch": "^2.3.1"
     },
     "ip-address": "^10.2.0",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "@jest/transform": {
+      "babel-plugin-istanbul": "^8.0.0"
+    },
+    "test-exclude": "^7.0.1"
   }
 }

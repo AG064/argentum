@@ -393,7 +393,7 @@ class WindowsComputerControl {
 class ComputerControlFeature {
     meta = {
         name: 'computer-control',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Vision-based desktop automation via screenshot + mouse/keyboard control',
         dependencies: [],
     };

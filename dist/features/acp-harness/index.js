@@ -20,6 +20,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const http_1 = require("http");
 const ws_1 = require("ws");
 const sandbox_1 = require("../../security/sandbox");
+const workspace_boundary_1 = require("../../security/workspace-boundary");
 const DEFAULT_CONFIG = {
     enabled: false,
     port: 3004,
@@ -29,7 +30,7 @@ const DEFAULT_CONFIG = {
 class ACPHarnessFeature {
     meta = {
         name: 'acp',
-        version: '0.0.5',
+        version: '0.0.6',
         description: 'Agent Control Protocol harness for code execution',
         dependencies: [],
     };
@@ -138,9 +139,12 @@ class ACPHarnessFeature {
     async execute(req) {
         const start = Date.now();
         const timeoutMs = req.timeoutMs ?? this.config.defaultTimeoutMs;
+        const workspaceRoot = this.config.workspaceRoot ?? this.ctx.config.security.capabilities.workspaceRoot ?? '.';
+        const workspaceBoundary = (0, workspace_boundary_1.createWorkspaceBoundary)(workspaceRoot);
+        const workingDir = req.workspace ? workspaceBoundary.assertPath(req.workspace) : undefined;
         const result = await this.sandbox.execute(req.code, req.language, {
             timeoutMs,
-            workingDir: req.workspace,
+            workingDir,
         });
         return {
             success: result.success,

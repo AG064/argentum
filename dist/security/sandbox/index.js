@@ -141,6 +141,13 @@ class SandboxExecutor {
     getConfig() {
         return { ...this.config };
     }
+    normalizeTimeoutMs(timeoutMs) {
+        const maxTimeoutMs = this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs ?? 30000;
+        if (!Number.isFinite(timeoutMs)) {
+            return maxTimeoutMs;
+        }
+        return Math.min(maxTimeoutMs, Math.max(1, Math.floor(timeoutMs)));
+    }
     // ─── Path Checks ──────────────────────────────────────────────────────────
     /**
      * Check if a path is allowed for filesystem operations.
@@ -244,7 +251,7 @@ class SandboxExecutor {
         const requestedTimeout = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
             ? options.timeoutMs
             : this.config.maxExecutionTimeMs;
-        const timeout = Math.min(this.config.maxExecutionTimeMs, Math.max(1, Math.floor(requestedTimeout)));
+        const timeout = this.normalizeTimeoutMs(requestedTimeout);
         try {
             this.executionCount++;
             let result;
@@ -295,6 +302,7 @@ class SandboxExecutor {
     }
     async executeJavaScript(code, timeoutMs, workingDir) {
         const startTime = Date.now();
+        const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
         return new Promise((resolve) => {
             let settled = false;
             let sandboxDir;
@@ -322,7 +330,7 @@ class SandboxExecutor {
                 const scriptPath = path.join(sandboxDir, 'snippet.mjs');
                 await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
                 const child = (0, child_process_1.spawn)('node', [scriptPath], {
-                    timeout: timeoutMs,
+                    timeout: effectiveTimeoutMs,
                     cwd: baseDir,
                     env: {
                         ...process.env,
@@ -339,12 +347,14 @@ class SandboxExecutor {
                 child.stderr?.on('data', (data) => {
                     stderr += data.toString();
                 });
-                child.on('close', (code) => {
+                child.on('close', (code, signal) => {
+                    const timedOut = signal === 'SIGTERM';
+                    const success = code === 0 && !timedOut;
                     const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
                     void finalize({
-                        success: code === 0,
+                        success,
                         output: output || undefined,
-                        error: stderr || undefined,
+                        error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
                         exitCode: code ?? undefined,
                         executionTimeMs: Date.now() - startTime,
                         language: 'javascript',
@@ -358,16 +368,6 @@ class SandboxExecutor {
                         language: 'javascript',
                     });
                 });
-                // Timeout handling
-                setTimeout(() => {
-                    child.kill('SIGTERM');
-                    void finalize({
-                        success: false,
-                        error: `Execution timed out after ${timeoutMs}ms`,
-                        executionTimeMs: Date.now() - startTime,
-                        language: 'javascript',
-                    });
-                }, timeoutMs + 100);
             })().catch((err) => {
                 void finalize({
                     success: false,
@@ -380,6 +380,7 @@ class SandboxExecutor {
     }
     async executePython(code, timeoutMs, workingDir) {
         const startTime = Date.now();
+        const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
         return new Promise((resolve) => {
             let settled = false;
             let sandboxDir;
@@ -407,7 +408,7 @@ class SandboxExecutor {
                 const scriptPath = path.join(sandboxDir, 'snippet.py');
                 await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
                 const child = (0, child_process_1.spawn)('python3', [scriptPath], {
-                    timeout: timeoutMs,
+                    timeout: effectiveTimeoutMs,
                     cwd: baseDir,
                     env: {
                         ...process.env,
@@ -424,12 +425,14 @@ class SandboxExecutor {
                 child.stderr?.on('data', (data) => {
                     stderr += data.toString();
                 });
-                child.on('close', (code) => {
+                child.on('close', (code, signal) => {
+                    const timedOut = signal === 'SIGTERM';
+                    const success = code === 0 && !timedOut;
                     const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
                     void finalize({
-                        success: code === 0,
+                        success,
                         output: output || undefined,
-                        error: stderr || undefined,
+                        error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
                         exitCode: code ?? undefined,
                         executionTimeMs: Date.now() - startTime,
                         language: 'python',
@@ -443,15 +446,6 @@ class SandboxExecutor {
                         language: 'python',
                     });
                 });
-                setTimeout(() => {
-                    child.kill('SIGTERM');
-                    void finalize({
-                        success: false,
-                        error: `Execution timed out after ${timeoutMs}ms`,
-                        executionTimeMs: Date.now() - startTime,
-                        language: 'python',
-                    });
-                }, timeoutMs + 100);
             })().catch((err) => {
                 void finalize({
                     success: false,
@@ -472,6 +466,7 @@ class SandboxExecutor {
             };
         }
         const startTime = Date.now();
+        const effectiveTimeoutMs = this.normalizeTimeoutMs(timeoutMs);
         return new Promise((resolve) => {
             let settled = false;
             let sandboxDir;
@@ -499,7 +494,7 @@ class SandboxExecutor {
                 const scriptPath = path.join(sandboxDir, 'snippet.sh');
                 await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o700 });
                 const child = (0, child_process_1.spawn)('bash', [scriptPath], {
-                    timeout: timeoutMs,
+                    timeout: effectiveTimeoutMs,
                     cwd: baseDir,
                     env: {
                         ...process.env,
@@ -516,12 +511,14 @@ class SandboxExecutor {
                 child.stderr?.on('data', (data) => {
                     stderr += data.toString();
                 });
-                child.on('close', (code) => {
+                child.on('close', (code, signal) => {
+                    const timedOut = signal === 'SIGTERM';
+                    const success = code === 0 && !timedOut;
                     const output = stdout.slice(0, this.config.maxOutputSizeKb * 1024);
                     void finalize({
-                        success: code === 0,
+                        success,
                         output: output || undefined,
-                        error: stderr || undefined,
+                        error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
                         exitCode: code ?? undefined,
                         executionTimeMs: Date.now() - startTime,
                         language: 'bash',
@@ -535,15 +532,6 @@ class SandboxExecutor {
                         language: 'bash',
                     });
                 });
-                setTimeout(() => {
-                    child.kill('SIGTERM');
-                    void finalize({
-                        success: false,
-                        error: `Execution timed out after ${timeoutMs}ms`,
-                        executionTimeMs: Date.now() - startTime,
-                        language: 'bash',
-                    });
-                }, timeoutMs + 100);
             })().catch((err) => {
                 void finalize({
                     success: false,
