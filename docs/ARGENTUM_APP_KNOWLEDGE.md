@@ -8,7 +8,7 @@ This file lists the app facts Argentum may summarize when the user enables app c
 - Gateway: start, status, stop, and logs through fixed desktop bridge commands.
 - Security: workspace boundary, context approvals, capability posture, and audit state.
 - Settings: workspace, provider, model, context, chat display, Telegram, security, and advanced sections.
-- Diagnostics: provider usage, Telegram status, gateway state, workspace health, PC statistics, and recent redacted activity.
+- Diagnostics: provider usage, Telegram status, gateway state, workspace health, Argentum System Dashboard, and recent redacted activity.
 - Activity Logs: gateway, audit, and structured app events with secrets removed.
 
 ## What The Assistant May Know When Approved
