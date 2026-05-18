@@ -103,7 +103,7 @@ describe('Argentum desktop shell', () => {
       "title: 'Security & Permissions'",
       "title: 'Settings'",
       "title: 'Diagnostics'",
-      "title: 'PC Statistics'",
+      "title: 'Argentum System Dashboard'",
     ]) {
       expect(constants).toContain(title);
     }
@@ -122,17 +122,31 @@ describe('Argentum desktop shell', () => {
     expect(shell).not.toContain('Prepared</button>');
   });
 
-  test('adds PC statistics as a real desktop-backed tab', () => {
+  test('adds Argentum System Dashboard as a real desktop-backed tab', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const sections = read('src/ui/desktop/modules/sections.js');
     const setup = read('src/ui/desktop/modules/setup.js');
     const rust = read('src/desktop/src/lib.rs');
+    const main = read('src/ui/desktop/main.js');
+    const dashboard = read('src/ui/dashboard/index.html');
+    const packagedDashboard = read('src/ui/desktop/dashboard/index.html');
+    const packagedDashboardScript = read('src/ui/desktop/dashboard/dashboard.js');
 
     expect(constants).toContain("id: 'pc-stats'");
     expect(constants).toContain("icon: 'cpu'");
+    expect(constants).toContain("title: 'Argentum System Dashboard'");
     expect(sections).toContain('const pcStatsModule');
+    expect(sections).toContain("label: 'Argentum System Dashboard'");
+    expect(sections).toContain('src="./dashboard/index.html"');
+    expect(sections).toContain('data-system-dashboard-frame="true"');
     expect(sections).toContain('state.desktopState?.systemStats');
     expect(sections).toContain('data-refresh-state="true"');
+    expect(main).toContain('function syncSystemDashboardFrame');
+    expect(main).toContain("type: 'argentum-system-stats'");
+    expect(dashboard).toContain('<title>Argentum System Dashboard</title>');
+    expect(packagedDashboard).toContain('<title>Argentum System Dashboard</title>');
+    expect(packagedDashboard).toContain('<script src="./dashboard.js"></script>');
+    expect(packagedDashboardScript).toContain('desktopBridgeShape');
     expect(setup).toContain('systemStats: previewSystemStats()');
     expect(rust).toContain('struct PcStatsSnapshot');
     expect(rust).toContain('system_stats: PcStatsSnapshot');
@@ -151,7 +165,9 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain('Choose model');
     expect(constants).toContain('Basic behavior');
     expect(constants).toContain('Test and start');
-    expect(constants).toContain("export const onboardingSteps = [\n  'Welcome',\n  'Workspace',\n  'Choose provider',\n  'Configure access',\n  'Choose model',\n  'Basic behavior',\n  'Test and start',\n];");
+    expect(constants).toContain(
+      "export const onboardingSteps = [\n  'Welcome',\n  'Workspace',\n  'Choose provider',\n  'Configure access',\n  'Choose model',\n  'Basic behavior',\n  'Test and start',\n];",
+    );
     expect(constants).not.toContain('Runtime mode');
     expect(constants).not.toContain('Capabilities');
     expect(constants).not.toContain('Channels');
@@ -176,7 +192,9 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).not.toContain('renderFinishStep');
     expect(onboarding).not.toContain('Default access</span><strong>Workspace</strong>');
     expect(main).toContain('goToStep(Number(stepButton.dataset.onboardingStep))');
-    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain('Finish the current setup step before jumping ahead.');
+    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain(
+      'Finish the current setup step before jumping ahead.',
+    );
     expect(main).toContain('nextStep()');
     expect(main).toContain('previousStep()');
   });
@@ -193,7 +211,7 @@ describe('Argentum desktop shell', () => {
     expect(constants).not.toContain("label: 'Comfortable'");
     expect(state).toContain("experienceLevel: ''");
     const controller = read('src/ui/desktop/modules/onboarding-controller.js');
-    expect(controller).toContain("currentStep === 1 && !state.experienceLevel.trim()");
+    expect(controller).toContain('currentStep === 1 && !state.experienceLevel.trim()');
     expect(controller).toContain('Choose Beginner, Intermediate, or Expert before continuing.');
     expect(onboarding).toContain('type="button" class="interface-card');
     expect(onboarding).toContain('type="button" class="button primary" id="next-button"');
@@ -271,7 +289,9 @@ describe('Argentum desktop shell', () => {
     const capabilities = read('src/desktop/capabilities/default.json');
     const setup = read('src/ui/desktop/modules/setup.js');
     const utils = read('src/ui/desktop/modules/utils.js');
-    const packageJson = JSON.parse(read('package.json')) as { dependencies?: Record<string, string> };
+    const packageJson = JSON.parse(read('package.json')) as {
+      dependencies?: Record<string, string>;
+    };
 
     expect(packageJson.dependencies).toHaveProperty('@tauri-apps/plugin-dialog');
     expect(cargo).toContain('tauri-plugin-dialog');
@@ -453,7 +473,9 @@ describe('Argentum desktop shell', () => {
     const main = read('src/ui/desktop/main.js');
 
     expect(main).toContain('completeOnboarding(result)');
-    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain("state.activeSection = 'chat'");
+    expect(read('src/ui/desktop/modules/onboarding-controller.js')).toContain(
+      "state.activeSection = 'chat'",
+    );
     expect(main).toContain('resetIntroChat');
     expect(main).not.toContain(
       'Got it. I am keeping this local for now. Once provider testing passes, this same chat surface can switch to live model execution.',
@@ -509,8 +531,8 @@ describe('Argentum desktop shell', () => {
     expect(main).toContain('startVoiceInput');
     expect(main).toContain('addTerminalEntry');
     expect(main).toContain('sendChatMessage');
-    expect(main).toContain("state.chatStreaming = true");
-    expect(main).toContain("state.chatStreaming = false");
+    expect(main).toContain('state.chatStreaming = true');
+    expect(main).toContain('state.chatStreaming = false');
     expect(main).toContain('setActiveChatSession');
     expect(main).toContain('createChatSession');
     expect(main).toContain('hydrateChatHistory');
@@ -559,7 +581,9 @@ describe('Argentum desktop shell', () => {
     expect(chat).toContain('prompt-suggestion-row');
     expect(chat).toContain('conversation-tabs');
     expect(css).toContain('.chat-product-shell');
-    expect(css).toContain('grid-template-columns: minmax(236px, 292px) minmax(0, 1fr) minmax(260px, 320px)');
+    expect(css).toContain(
+      'grid-template-columns: minmax(236px, 292px) minmax(0, 1fr) minmax(260px, 320px)',
+    );
     expect(css).toContain('.conversation-composer');
     expect(css).toContain('.inspector-panel');
     expect(css).toContain('overflow-x: hidden');
@@ -612,8 +636,14 @@ describe('Argentum desktop shell', () => {
   test('renders discord-style chat lines instead of message bubbles', () => {
     const chat = read('src/ui/desktop/modules/chat.js');
     const css = read('src/ui/desktop/styles.css');
-    const messageRenderer = chat.slice(chat.indexOf('function renderMessageComponent'), chat.indexOf('function renderMessageAttachments'));
-    const chatLineCss = css.slice(css.indexOf('.arg-chat-line {'), css.indexOf('.arg-composer-shell'));
+    const messageRenderer = chat.slice(
+      chat.indexOf('function renderMessageComponent'),
+      chat.indexOf('function renderMessageAttachments'),
+    );
+    const chatLineCss = css.slice(
+      css.indexOf('.arg-chat-line {'),
+      css.indexOf('.arg-composer-shell'),
+    );
 
     expect(messageRenderer).toContain('arg-chat-line');
     expect(messageRenderer).toContain('arg-chat-line-user');
@@ -636,10 +666,15 @@ describe('Argentum desktop shell', () => {
       chat.indexOf('<div class="chat-transcript arg-message-canvas"'),
       chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'),
     );
-    const typing = chat.slice(chat.indexOf('function renderTypingIndicator'), chat.indexOf('function renderAttachmentTray'));
+    const typing = chat.slice(
+      chat.indexOf('function renderTypingIndicator'),
+      chat.indexOf('function renderAttachmentTray'),
+    );
 
     expect(transcript).not.toContain('${renderTypingIndicator(state)}');
-    expect(chat.indexOf('${renderTypingIndicator(state)}')).toBeGreaterThan(chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'));
+    expect(chat.indexOf('${renderTypingIndicator(state)}')).toBeGreaterThan(
+      chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'),
+    );
     expect(typing).toContain('arg-typing-status');
     expect(typing).not.toContain('message-row');
     expect(typing).not.toContain('arg-msg');
@@ -718,8 +753,8 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain('fontOptions');
     expect(constants).toContain('JetBrains Mono');
     expect(constants).toContain('Cascadia Code');
-    expect(state).toContain("uiFontFamily:");
-    expect(state).toContain("codeFontFamily:");
+    expect(state).toContain('uiFontFamily:');
+    expect(state).toContain('codeFontFamily:');
     expect(state).toContain('hydrateUiPreferences');
     expect(state).toContain('setUiPreference');
     expect(main).toContain('applyUiPreferences');
@@ -872,14 +907,26 @@ describe('Argentum desktop shell', () => {
     const chat = read('src/ui/desktop/modules/chat.js');
     const main = read('src/ui/desktop/main.js');
     const css = read('src/ui/desktop/styles.css');
-    const emptyState = chat.slice(chat.indexOf('function renderWorkspaceEmptyState'), chat.indexOf('function renderPromptSuggestions'));
-    const composer = chat.slice(chat.indexOf('<div class="conversation-composer composer">'), chat.indexOf('${renderAttachmentTray(state)}'));
+    const emptyState = chat.slice(
+      chat.indexOf('function renderWorkspaceEmptyState'),
+      chat.indexOf('function renderPromptSuggestions'),
+    );
+    const composer = chat.slice(
+      chat.indexOf('<div class="conversation-composer composer">'),
+      chat.indexOf('${renderAttachmentTray(state)}'),
+    );
 
     expect(emptyState).toContain('${renderPromptSuggestions()}');
-    expect(emptyState.indexOf('${renderPromptSuggestions()}')).toBeLessThan(emptyState.indexOf('<div class="workspace-action-grid">'));
+    expect(emptyState.indexOf('${renderPromptSuggestions()}')).toBeLessThan(
+      emptyState.indexOf('<div class="workspace-action-grid">'),
+    );
     expect(composer).not.toContain('${renderPromptSuggestions()}');
-    expect(composer.indexOf('<div class="conversation-composer composer">')).toBeLessThan(composer.indexOf('<div class="composer-inline">'));
-    expect(main).toContain("viewRoot.className = `view-root view-root-${section.id} view-mode-${state.viewMode}`");
+    expect(composer.indexOf('<div class="conversation-composer composer">')).toBeLessThan(
+      composer.indexOf('<div class="composer-inline">'),
+    );
+    expect(main).toContain(
+      'viewRoot.className = `view-root view-root-${section.id} view-mode-${state.viewMode}`',
+    );
     expect(css).toContain('.view-root-chat');
     expect(css).toContain('overflow: hidden');
     expect(css).toContain('.chat-product-shell');
@@ -972,7 +1019,11 @@ describe('Argentum desktop shell', () => {
     const state = read('src/ui/desktop/modules/state.js');
     const css = read('src/ui/desktop/styles.css');
 
-    for (const mode of ['data-view-mode="chat"', 'data-view-mode="split"', 'data-view-mode="full"']) {
+    for (const mode of [
+      'data-view-mode="chat"',
+      'data-view-mode="split"',
+      'data-view-mode="full"',
+    ]) {
       expect(html).toContain(mode);
     }
     expect(html).toContain('id="help-button"');
@@ -1022,7 +1073,9 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('visibleProviders');
     expect(sections).toContain('data-provider-access');
     expect(sections).toContain('Testing access');
-    expect(main).toContain('state.providerCatalogTab = providerCatalogButton.dataset.providerCatalogTab');
+    expect(main).toContain(
+      'state.providerCatalogTab = providerCatalogButton.dataset.providerCatalogTab',
+    );
   });
 
   test('uses cleaner inline selection cards and keeps recent chats history-sorted', () => {
@@ -1037,8 +1090,10 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('grid-template-columns: auto minmax(0, 1fr)');
     expect(state).toContain('touchActiveChatSession');
     expect(state).toContain('state.chatSessions = sortChatSessions');
-    expect(state).toContain('.sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))');
-    expect(state).not.toContain("if (a.id === state.activeChatId) return -1");
+    expect(state).toContain(
+      '.sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))',
+    );
+    expect(state).not.toContain('if (a.id === state.activeChatId) return -1');
   });
 
   test('separates provider reasoning tags and exposes reasoning output preferences', () => {
@@ -1241,7 +1296,9 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('HTTP fetch is limited to localhost or loopback URLs');
     expect(rust).toContain('config.api == "openai"');
     expect(rust).toContain('tool_arguments');
-    expect(utils).toContain('approved model tools may read/write files inside the selected workspace');
+    expect(utils).toContain(
+      'approved model tools may read/write files inside the selected workspace',
+    );
   });
 
   test('streams Telegram replies into channel sessions without leaking reasoning by default', () => {
@@ -1281,7 +1338,9 @@ describe('Argentum desktop shell', () => {
     const chat = read('src/ui/desktop/modules/chat.js');
 
     expect(rust).not.toContain('MiniMax Token Plan usage checked.');
-    expect(rust).not.toContain('Optional local weekly budget overlay can be configured in Settings.');
+    expect(rust).not.toContain(
+      'Optional local weekly budget overlay can be configured in Settings.',
+    );
     expect(rust).toContain('Provider usage unavailable');
     expect(rust).toContain('actual_usage_summary');
     expect(sections).not.toContain('Weekly local budget');
@@ -1306,7 +1365,9 @@ describe('Argentum desktop shell', () => {
     expect(read('src/channels/telegram.ts')).toContain('formatAgentResponse');
     expect(read('src/features/telegram/index.ts')).toContain('formatOutboundText');
     expect(cli).toContain('function loadWorkspaceEnv');
-    expect(cli).toContain('resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))');
+    expect(cli).toContain(
+      'resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))',
+    );
   });
 
   test('gateway start refuses missing config and verifies the spawned process stays alive', () => {

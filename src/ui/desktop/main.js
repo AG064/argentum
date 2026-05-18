@@ -93,7 +93,7 @@ const chatActions = {
   'test-provider': { label: 'Test Provider' },
   'gateway-start': { actionId: 'gateway-start', label: 'Start Gateway' },
   'gateway-status': { actionId: 'gateway-status', label: 'Check Gateway' },
-  settings: { section: 'settings', label: 'Open Settings' },
+  'settings': { section: 'settings', label: 'Open Settings' },
 };
 
 const onboardingKeyboardActivationEvents = new Set(['keyup']);
@@ -157,15 +157,19 @@ async function handleActivation(event) {
   const element = eventTargetElement(event);
   if (!element) return;
   if (window.location.search.includes('debugEvents=1')) {
-    console.debug('[Argentum activation]', JSON.stringify({
-      type: event.type,
-      target: element.tagName,
-      id: element.id,
-      classes: element.getAttribute('class'),
-      experienceLevel: element.closest('[data-experience-level]')?.getAttribute('data-experience-level') || '',
-      next: Boolean(element.closest('#next-button')),
-      text: element.textContent?.trim().slice(0, 80),
-    }));
+    console.debug(
+      '[Argentum activation]',
+      JSON.stringify({
+        type: event.type,
+        target: element.tagName,
+        id: element.id,
+        classes: element.getAttribute('class'),
+        experienceLevel:
+          element.closest('[data-experience-level]')?.getAttribute('data-experience-level') || '',
+        next: Boolean(element.closest('#next-button')),
+        text: element.textContent?.trim().slice(0, 80),
+      }),
+    );
   }
 
   if (onboardingKeyboardActivationEvents.has(event.type)) {
@@ -191,7 +195,10 @@ async function handleActivation(event) {
 }
 
 function activeSection() {
-  return sections.find((section) => section.id === state.activeSection && section.id !== 'onboarding') || sections[1];
+  return (
+    sections.find((section) => section.id === state.activeSection && section.id !== 'onboarding') ||
+    sections[1]
+  );
 }
 
 function render() {
@@ -222,6 +229,7 @@ function render() {
   }
   hydrateStaticIcons(document);
   wireRenderedControls();
+  syncSystemDashboardFrame();
   syncComposerSendState();
   scrollTerminalPanels();
   restoreChatTranscriptScroll(chatScroll);
@@ -269,22 +277,46 @@ function renderHelpPanel(section) {
 
   const tips = {
     chat: [
-      ['View modes', 'Chat only hides optional panels. Split view adds the inspector. Full workspace shows the widest context.'],
-      ['Context', 'The green ring near Send estimates how much model context the current session uses.'],
-      ['Reasoning', 'Reasoning blocks stay collapsed and hidden unless you enable them in Settings.'],
+      [
+        'View modes',
+        'Chat only hides optional panels. Split view adds the inspector. Full workspace shows the widest context.',
+      ],
+      [
+        'Context',
+        'The green ring near Send estimates how much model context the current session uses.',
+      ],
+      [
+        'Reasoning',
+        'Reasoning blocks stay collapsed and hidden unless you enable them in Settings.',
+      ],
     ],
     gateway: [
-      ['Gateway', 'The gateway is the local service entrance. Start, stop, status, and logs run fixed whitelisted commands.'],
+      [
+        'Gateway',
+        'The gateway is the local service entrance. Start, stop, status, and logs run fixed whitelisted commands.',
+      ],
       ['Logs', 'Gateway output is redacted before it is shown in the app.'],
     ],
     settings: [
-      ['Sections', 'Open one settings section at a time from the left. Advanced details stay tucked away.'],
-      ['Provider test', 'Testing validates the saved key or account flow before live chat uses it.'],
+      [
+        'Sections',
+        'Open one settings section at a time from the left. Advanced details stay tucked away.',
+      ],
+      [
+        'Provider test',
+        'Testing validates the saved key or account flow before live chat uses it.',
+      ],
     ],
   };
   const sectionTips = tips[section.id] || [
-    ['Current screen', 'Use the left rail for main areas and the top-right buttons for current-view help and status.'],
-    ['Safety', 'Argentum keeps privileged runtime actions behind fixed commands and workspace validation.'],
+    [
+      'Current screen',
+      'Use the left rail for main areas and the top-right buttons for current-view help and status.',
+    ],
+    [
+      'Safety',
+      'Argentum keeps privileged runtime actions behind fixed commands and workspace validation.',
+    ],
   ];
 
   return `
@@ -355,7 +387,11 @@ function advanceOnboarding() {
 
 function restartOnboarding() {
   restartOnboardingState();
-  notify('info', 'Onboarding opened', 'The setup dialog is back on top. Finish or cancel to return to the app.');
+  notify(
+    'info',
+    'Onboarding opened',
+    'The setup dialog is back on top. Finish or cancel to return to the app.',
+  );
   render();
 }
 
@@ -408,8 +444,16 @@ async function finishOnboarding() {
     const result = await saveSetup();
     completeOnboarding(result);
     resetIntroChat();
-    addTerminalEntry('argentum setup save', `Configuration saved${state.savedConfigPath ? ` to ${state.savedConfigPath}` : ' in the selected workspace'}.`, 'success');
-    notify('success', 'Setup complete', 'Onboarding is hidden. Chat is ready for the introductory phase.');
+    addTerminalEntry(
+      'argentum setup save',
+      `Configuration saved${state.savedConfigPath ? ` to ${state.savedConfigPath}` : ' in the selected workspace'}.`,
+      'success',
+    );
+    notify(
+      'success',
+      'Setup complete',
+      'Onboarding is hidden. Chat is ready for the introductory phase.',
+    );
     await refreshDesktopState();
   } catch (error) {
     state.setupStatus = 'setup-error';
@@ -431,7 +475,11 @@ async function runAction(actionId) {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) {
     state.actionStatus = `Preview mode: ${command} needs the installed desktop app.`;
-    addTerminalEntry(command, 'Preview mode: the installed Tauri app is required to execute gateway actions.', 'warning');
+    addTerminalEntry(
+      command,
+      'Preview mode: the installed Tauri app is required to execute gateway actions.',
+      'warning',
+    );
     notify('warning', 'Desktop bridge unavailable', state.actionStatus);
     state.runningAction = '';
     render();
@@ -447,7 +495,11 @@ async function runAction(actionId) {
     const actualCommand = result?.command || command;
     state.actionStatus = result?.message || `${action?.title || actionId} completed.`;
     addTerminalEntry(actualCommand, output, status === 'error' ? 'error' : 'success');
-    notify(status === 'stopped' ? 'info' : 'success', action?.title || 'Desktop action', state.actionStatus);
+    notify(
+      status === 'stopped' ? 'info' : 'success',
+      action?.title || 'Desktop action',
+      state.actionStatus,
+    );
     await refreshDesktopState();
   } catch (error) {
     const message = normalizeError(error);
@@ -641,6 +693,27 @@ function wireRenderedControls() {
       control.addEventListener('click', handleActivation);
     });
   }
+
+  const dashboardFrame = document.querySelector('[data-system-dashboard-frame]');
+  if (
+    dashboardFrame instanceof HTMLIFrameElement &&
+    dashboardFrame.dataset.argentumFrameWired !== 'true'
+  ) {
+    dashboardFrame.dataset.argentumFrameWired = 'true';
+    dashboardFrame.addEventListener('load', syncSystemDashboardFrame);
+  }
+}
+
+function syncSystemDashboardFrame() {
+  const dashboardFrame = document.querySelector('[data-system-dashboard-frame]');
+  if (!(dashboardFrame instanceof HTMLIFrameElement) || !dashboardFrame.contentWindow) return;
+  dashboardFrame.contentWindow.postMessage(
+    {
+      type: 'argentum-system-stats',
+      stats: state.desktopState?.systemStats || null,
+    },
+    '*',
+  );
 }
 
 function scrollTerminalPanels() {
@@ -691,14 +764,22 @@ async function chooseChatAttachment() {
       previewSrc: kind === 'image' ? filePreviewUrl(path) : '',
     },
   ].slice(-6);
-  notify('success', kind === 'image' ? 'Image attached' : 'File attached', 'The selected attachment will be sent with the next chat message.');
+  notify(
+    'success',
+    kind === 'image' ? 'Image attached' : 'File attached',
+    'The selected attachment will be sent with the next chat message.',
+  );
 }
 
 function startVoiceInput() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
     state.voiceInputStatus = 'unsupported';
-    notify('error', 'Microphone unavailable', 'Voice dictation is not available in this desktop webview yet.');
+    notify(
+      'error',
+      'Microphone unavailable',
+      'Voice dictation is not available in this desktop webview yet.',
+    );
     return;
   }
 
@@ -711,7 +792,8 @@ function startVoiceInput() {
 
   recognition.onresult = (event) => {
     const transcript = event.results?.[0]?.[0]?.transcript || '';
-    state.draftMessage = `${state.draftMessage}${state.draftMessage ? ' ' : ''}${transcript}`.trim();
+    state.draftMessage =
+      `${state.draftMessage}${state.draftMessage ? ' ' : ''}${transcript}`.trim();
     state.voiceInputStatus = 'idle';
     render();
   };
@@ -734,7 +816,8 @@ async function saveSettingsFromInputs() {
   const keyInput = document.querySelector('#settings-provider-api-key');
 
   if (userInput instanceof HTMLInputElement) state.userName = userInput.value.trim();
-  if (agentInput instanceof HTMLInputElement) state.agentName = agentInput.value.trim() || 'Argentum';
+  if (agentInput instanceof HTMLInputElement)
+    state.agentName = agentInput.value.trim() || 'Argentum';
   if (purposeInput instanceof HTMLTextAreaElement) state.systemPrompt = purposeInput.value.trim();
   if (keyInput instanceof HTMLInputElement) state.providerApiKey = keyInput.value.trim();
 
@@ -830,10 +913,15 @@ async function streamAssistantMessage(text, options = {}) {
         rawBody: `${rawBody.trim()}\n\n[stopped]`,
         status: 'stopped',
       });
-      recordUiEvent('chat.response_cancelled', 'stopped', 'Assistant response was stopped by the user.', {
-        chatId: state.activeChatId,
-        messageId: block.id,
-      });
+      recordUiEvent(
+        'chat.response_cancelled',
+        'stopped',
+        'Assistant response was stopped by the user.',
+        {
+          chatId: state.activeChatId,
+          messageId: block.id,
+        },
+      );
       break;
     }
     rawBody += chunk;
@@ -876,7 +964,11 @@ async function regenerateAssistantResponse(messageId) {
     .reverse()
     .find((block) => block.type === 'message' && block.role === 'user');
   if (!target || !lastUserMessage?.body) {
-    notify('info', 'Nothing to regenerate', 'Regenerate needs an assistant message with a user message before it.');
+    notify(
+      'info',
+      'Nothing to regenerate',
+      'Regenerate needs an assistant message with a user message before it.',
+    );
     render();
     return;
   }
@@ -897,22 +989,34 @@ async function regenerateAssistantResponse(messageId) {
   try {
     if (!state.setupComplete || !window.__TAURI__?.core?.invoke) {
       await streamAssistantMessage(buildLocalReply(outgoingMessage), { targetId: messageId });
-      recordUiEvent('chat.regenerate_completed', 'ok', 'Regeneration completed in local guided mode.', {
-        chatId: state.activeChatId,
-        messageId,
-      });
+      recordUiEvent(
+        'chat.regenerate_completed',
+        'ok',
+        'Regeneration completed in local guided mode.',
+        {
+          chatId: state.activeChatId,
+          messageId,
+        },
+      );
       return;
     }
 
     const result = await sendChatMessage(outgoingMessage, attachments);
     if (result?.usage) state.usageSnapshot = result.usage;
-    await streamAssistantMessage(result?.message || buildLocalReply(outgoingMessage), { targetId: messageId });
-    recordUiEvent('chat.regenerate_completed', 'ok', 'Regeneration completed with the configured provider.', {
-      chatId: state.activeChatId,
-      messageId,
-      provider: result?.provider || state.llmProvider,
-      model: result?.model || state.providerModel,
+    await streamAssistantMessage(result?.message || buildLocalReply(outgoingMessage), {
+      targetId: messageId,
     });
+    recordUiEvent(
+      'chat.regenerate_completed',
+      'ok',
+      'Regeneration completed with the configured provider.',
+      {
+        chatId: state.activeChatId,
+        messageId,
+        provider: result?.provider || state.llmProvider,
+        model: result?.model || state.providerModel,
+      },
+    );
   } catch (error) {
     const message = normalizeError(error);
     updateChatMessage(messageId, {
@@ -946,10 +1050,19 @@ async function sendChatDraft() {
   });
 
   if (state.chatStreaming) {
-    recordUiEvent('chat.send_failed', 'blocked', 'Send blocked because a response is already streaming.', {
-      chatId: state.activeChatId,
-    });
-    notify('info', 'Generation in progress', 'Stop the current response before sending another message.');
+    recordUiEvent(
+      'chat.send_failed',
+      'blocked',
+      'Send blocked because a response is already streaming.',
+      {
+        chatId: state.activeChatId,
+      },
+    );
+    notify(
+      'info',
+      'Generation in progress',
+      'Stop the current response before sending another message.',
+    );
     return;
   }
 
@@ -963,12 +1076,19 @@ async function sendChatDraft() {
   }
 
   const attachments = state.chatAttachments.map(attachmentToPayload);
-  const hasImageAttachment = attachments.some((file) => file.kind === 'image' || String(file.mime || '').startsWith('image/'));
+  const hasImageAttachment = attachments.some(
+    (file) => file.kind === 'image' || String(file.mime || '').startsWith('image/'),
+  );
   if (hasImageAttachment && !modelSupportsVision(state.providerModel, modelMetadata)) {
-    recordUiEvent('chat.send_failed', 'blocked', 'Send blocked because the selected model cannot receive image attachments.', {
-      chatId: state.activeChatId,
-      model: state.providerModel,
-    });
+    recordUiEvent(
+      'chat.send_failed',
+      'blocked',
+      'Send blocked because the selected model cannot receive image attachments.',
+      {
+        chatId: state.activeChatId,
+        model: state.providerModel,
+      },
+    );
     notify(
       'error',
       'Model cannot see images',
@@ -980,7 +1100,10 @@ async function sendChatDraft() {
 
   const outgoingMessage = draft || 'Please analyze the attached file.';
   const metadata = modelMetadataFor(state.providerModel, modelMetadata);
-  const estimatedContextPercent = contextUsagePercent(estimateRuntimeContextTokens(state, outgoingMessage), metadata);
+  const estimatedContextPercent = contextUsagePercent(
+    estimateRuntimeContextTokens(state, outgoingMessage),
+    metadata,
+  );
   if (estimatedContextPercent >= 85 && compactActiveChatSession({ automatic: true })) {
     notify(
       'info',
@@ -1029,14 +1152,22 @@ async function sendChatDraft() {
     if (result?.usage) state.usageSnapshot = result.usage;
 
     await streamAssistantMessage(result?.message || buildLocalReply(draft));
-    recordUiEvent('chat.send_success', result?.offline ? 'offline' : 'ok', 'Chat message answered.', {
-      chatId: state.activeChatId,
-      provider: result?.provider || state.llmProvider,
-      model: result?.model || state.providerModel,
-    });
+    recordUiEvent(
+      'chat.send_success',
+      result?.offline ? 'offline' : 'ok',
+      'Chat message answered.',
+      {
+        chatId: state.activeChatId,
+        provider: result?.provider || state.llmProvider,
+        model: result?.model || state.providerModel,
+      },
+    );
   } catch (error) {
     const message = normalizeError(error);
-    appendChatMessage('argentum', `Live chat failed: ${message}`, { status: 'error', error: message });
+    appendChatMessage('argentum', `Live chat failed: ${message}`, {
+      status: 'error',
+      error: message,
+    });
     recordUiEvent('chat.send_failed', 'error', message, {
       chatId: state.activeChatId,
     });
@@ -1216,7 +1347,15 @@ async function handleKeyDown(event) {
   const target = event.target;
   if (!(target instanceof HTMLTextAreaElement)) return;
   if (target.id !== 'chat-draft') return;
-  if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
+  if (
+    event.key !== 'Enter' ||
+    event.shiftKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.metaKey ||
+    event.isComposing
+  )
+    return;
 
   event.preventDefault();
   state.draftMessage = target.value;
@@ -1228,19 +1367,24 @@ async function handleClick(event, activationElement = null) {
   const element = activationElement || eventTargetElement(event);
   if (!element) return;
   if (window.location.search.includes('debugEvents=1')) {
-    console.debug('[Argentum handleClick]', JSON.stringify({
-      target: element.tagName,
-      id: element.id,
-      external: Boolean(element.closest('[data-open-external]')),
-      notifications: Boolean(element.closest('#notifications-button')),
-      help: Boolean(element.closest('#help-button')),
-      viewMode: element.closest('button[data-view-mode]')?.getAttribute('data-view-mode') || '',
-      workspace: Boolean(element.closest('#workspace-button')),
-      nav: element.closest('[data-section]')?.getAttribute('data-section') || '',
-      onboardingStep: element.closest('[data-onboarding-step]')?.getAttribute('data-onboarding-step') || '',
-      experience: element.closest('[data-experience-level]')?.getAttribute('data-experience-level') || '',
-      next: Boolean(element.closest('#next-button')),
-    }));
+    console.debug(
+      '[Argentum handleClick]',
+      JSON.stringify({
+        target: element.tagName,
+        id: element.id,
+        external: Boolean(element.closest('[data-open-external]')),
+        notifications: Boolean(element.closest('#notifications-button')),
+        help: Boolean(element.closest('#help-button')),
+        viewMode: element.closest('button[data-view-mode]')?.getAttribute('data-view-mode') || '',
+        workspace: Boolean(element.closest('#workspace-button')),
+        nav: element.closest('[data-section]')?.getAttribute('data-section') || '',
+        onboardingStep:
+          element.closest('[data-onboarding-step]')?.getAttribute('data-onboarding-step') || '',
+        experience:
+          element.closest('[data-experience-level]')?.getAttribute('data-experience-level') || '',
+        next: Boolean(element.closest('#next-button')),
+      }),
+    );
   }
 
   const externalLink = element.closest('[data-open-external]');
@@ -1360,7 +1504,10 @@ async function handleClick(event, activationElement = null) {
   const experienceButton = element.closest('[data-experience-level]');
   if (experienceButton) {
     if (window.location.search.includes('debugEvents=1')) {
-      console.debug('[Argentum action] selectExperienceLevel', experienceButton.dataset.experienceLevel);
+      console.debug(
+        '[Argentum action] selectExperienceLevel',
+        experienceButton.dataset.experienceLevel,
+      );
     }
     const result = selectExperienceLevel(experienceButton.dataset.experienceLevel);
     if (!result.ok) notify('error', 'Setup needs a fix', result.message);
@@ -1404,7 +1551,9 @@ async function handleClick(event, activationElement = null) {
 
   const providerStageButton = element.closest('[data-provider-setup-stage]');
   if (providerStageButton) {
-    const result = setProviderSetupStage(providerStageButton.dataset.providerSetupStage || 'provider');
+    const result = setProviderSetupStage(
+      providerStageButton.dataset.providerSetupStage || 'provider',
+    );
     if (!result.ok) notify('error', 'Setup needs a fix', result.message);
     render();
     return;
@@ -1450,7 +1599,9 @@ async function handleClick(event, activationElement = null) {
 
   const removeAttachment = element.closest('[data-remove-attachment]');
   if (removeAttachment) {
-    state.chatAttachments = state.chatAttachments.filter((file) => file.id !== removeAttachment.dataset.removeAttachment);
+    state.chatAttachments = state.chatAttachments.filter(
+      (file) => file.id !== removeAttachment.dataset.removeAttachment,
+    );
     render();
     return;
   }
@@ -1610,7 +1761,9 @@ async function handleClick(event, activationElement = null) {
 
   const copyMessageButton = element.closest('[data-copy-message]');
   if (copyMessageButton) {
-    const block = state.chatBlocks.find((item) => item.id === copyMessageButton.dataset.copyMessage);
+    const block = state.chatBlocks.find(
+      (item) => item.id === copyMessageButton.dataset.copyMessage,
+    );
     if (block?.body) {
       try {
         await navigator.clipboard?.writeText(block.body);
@@ -1654,7 +1807,11 @@ async function handleClick(event, activationElement = null) {
   const approvalButton = element.closest('[data-approval]');
   if (approvalButton) {
     state.actionStatus = `Review opened for ${approvalButton.dataset.approval}.`;
-    notify('info', 'Approval review', 'Detailed approval editing will open here when the broker is wired.');
+    notify(
+      'info',
+      'Approval review',
+      'Detailed approval editing will open here when the broker is wired.',
+    );
     render();
     return;
   }
@@ -1685,7 +1842,11 @@ async function handleClick(event, activationElement = null) {
       return;
     }
     if (optionId === 'profile') {
-      notify('info', 'Profile panel', 'Use the profile fields on the right side of Chat to set your name and the agent name.');
+      notify(
+        'info',
+        'Profile panel',
+        'Use the profile fields on the right side of Chat to set your name and the agent name.',
+      );
       render();
       return;
     }
@@ -1717,13 +1878,17 @@ addActivationListeners(overlayRoot);
 document.addEventListener('input', handleInput);
 document.addEventListener('change', handleChange);
 document.addEventListener('keydown', handleKeyDown);
-document.addEventListener('toggle', (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLDetailsElement)) return;
-  const disclosure = target.closest('details.setup-disclosure[data-disclosure-id]');
-  if (!(disclosure instanceof HTMLDetailsElement)) return;
-  setOnboardingDisclosure(disclosure.dataset.disclosureId, disclosure.open);
-}, true);
+document.addEventListener(
+  'toggle',
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLDetailsElement)) return;
+    const disclosure = target.closest('details.setup-disclosure[data-disclosure-id]');
+    if (!(disclosure instanceof HTMLDetailsElement)) return;
+    setOnboardingDisclosure(disclosure.dataset.disclosureId, disclosure.open);
+  },
+  true,
+);
 window.addEventListener('argentum:state-change', render);
 
 hydrateStaticIcons(document);

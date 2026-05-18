@@ -1,13 +1,43 @@
 export const APP_VERSION = '0.0.6';
 
 export const sections = [
-  { id: 'onboarding', icon: 'spark', title: 'Onboarding', eyebrow: 'First run', requiresSetup: false },
+  {
+    id: 'onboarding',
+    icon: 'spark',
+    title: 'Onboarding',
+    eyebrow: 'First run',
+    requiresSetup: false,
+  },
   { id: 'chat', icon: 'chat', title: 'Chat', eyebrow: 'Workspace', requiresSetup: false },
   { id: 'gateway', icon: 'gateway', title: 'Gateway', eyebrow: 'Runtime', requiresSetup: true },
-  { id: 'security', icon: 'shield', title: 'Security & Permissions', eyebrow: 'Control', requiresSetup: false },
-  { id: 'pc-stats', icon: 'cpu', title: 'PC Statistics', eyebrow: 'System', requiresSetup: false },
-  { id: 'settings', icon: 'settings', title: 'Settings', eyebrow: 'Configuration', requiresSetup: false },
-  { id: 'diagnostics', icon: 'pulse', title: 'Diagnostics', eyebrow: 'Doctor', requiresSetup: false },
+  {
+    id: 'security',
+    icon: 'shield',
+    title: 'Security & Permissions',
+    eyebrow: 'Control',
+    requiresSetup: false,
+  },
+  {
+    id: 'pc-stats',
+    icon: 'cpu',
+    title: 'Argentum System Dashboard',
+    eyebrow: 'System',
+    requiresSetup: false,
+  },
+  {
+    id: 'settings',
+    icon: 'settings',
+    title: 'Settings',
+    eyebrow: 'Configuration',
+    requiresSetup: false,
+  },
+  {
+    id: 'diagnostics',
+    icon: 'pulse',
+    title: 'Diagnostics',
+    eyebrow: 'Doctor',
+    requiresSetup: false,
+  },
   { id: 'logs', icon: 'logs', title: 'Activity Logs', eyebrow: 'Timeline', requiresSetup: true },
 ];
 
@@ -104,25 +134,29 @@ export const contextAccessOptions = [
     id: 'workspace-summary',
     label: 'Workspace summary',
     status: 'Recommended',
-    detail: 'Argentum may see the selected workspace path, config health, gateway state, and high-level project status.',
+    detail:
+      'Argentum may see the selected workspace path, config health, gateway state, and high-level project status.',
   },
   {
     id: 'profile',
     label: 'Profile details',
     status: 'Personal',
-    detail: 'Argentum may use your name, the agent name, and the system prompt you write during setup.',
+    detail:
+      'Argentum may use your name, the agent name, and the system prompt you write during setup.',
   },
   {
     id: 'logs',
     label: 'Logs and diagnostics',
     status: 'Review first',
-    detail: 'Argentum may summarize redacted gateway logs, diagnostics, and audit status. Secrets stay hidden.',
+    detail:
+      'Argentum may summarize redacted gateway logs, diagnostics, and audit status. Secrets stay hidden.',
   },
   {
     id: 'tool-state',
     label: 'Tool and permission state',
     status: 'Security',
-    detail: 'Argentum may see which local capabilities are allowed, blocked, or waiting for approval.',
+    detail:
+      'Argentum may see which local capabilities are allowed, blocked, or waiting for approval.',
   },
 ];
 
@@ -141,7 +175,8 @@ export const modelMetadata = {
     maxContextWindow: 'Plan/account dependent',
     currentContextLabel: 'Confirm availability with provider test',
     capabilities: ['frontier reasoning', 'long tasks', 'tools'],
-    detail: 'High-end OpenAI option. Availability and limits depend on the selected authorization method.',
+    detail:
+      'High-end OpenAI option. Availability and limits depend on the selected authorization method.',
   },
   'gpt-5.4': {
     maxContextTokens: 272000,
@@ -191,7 +226,7 @@ export const modelMetadata = {
     capabilities: ['very fast chat', 'classification'],
     detail: 'Smallest GPT-5-style profile when exposed by the provider.',
   },
-  gpt5: {
+  'gpt5': {
     maxContextTokens: 128000,
     contextWindow: 'Provider alias',
     maxContextWindow: 'Provider alias',
@@ -228,7 +263,13 @@ export const modelMetadata = {
     contextWindow: '200k practical target',
     maxContextWindow: 'Provider controlled',
     currentContextLabel: 'MiniMax Token Plan: M2.7 requests reset on a rolling 5-hour window.',
-    capabilities: ['agentic coding', 'tool use', 'vision', 'long task state tracking', 'multimodal token plan'],
+    capabilities: [
+      'agentic coding',
+      'tool use',
+      'vision',
+      'long task state tracking',
+      'multimodal token plan',
+    ],
     detail:
       'MiniMax M2.7 works best with clear intent, concrete examples, phased long tasks, and state tracking.',
   },
@@ -267,7 +308,8 @@ export const experienceLevels = [
     id: 'expert',
     label: 'Expert',
     headline: 'Show the controls',
-    detail: 'Argentum keeps the explanations compact and puts advanced options closer to the surface.',
+    detail:
+      'Argentum keeps the explanations compact and puts advanced options closer to the surface.',
   },
 ];
 
@@ -276,8 +318,10 @@ export const runtimeModes = [
     id: 'desktop',
     label: 'Desktop app',
     headline: 'GUI first, CLI included',
-    detail: 'Best for Windows users. You get onboarding, chat, settings, approvals, logs, and diagnostics in the app.',
-    preview: 'A native desktop workspace opens after setup. Terminal tools remain available for automation.',
+    detail:
+      'Best for Windows users. You get onboarding, chat, settings, approvals, logs, and diagnostics in the app.',
+    preview:
+      'A native desktop workspace opens after setup. Terminal tools remain available for automation.',
     examples: [
       'Ask Argentum to read a workspace file.',
       'Approve the scoped file request.',
@@ -290,7 +334,8 @@ export const runtimeModes = [
     label: 'CLI tools',
     headline: 'Terminal-first workflow',
     detail: 'Best for Linux users, scripts, and people who prefer command-line control.',
-    preview: 'The app keeps the same setup values, but daily work happens through argentum commands.',
+    preview:
+      'The app keeps the same setup values, but daily work happens through argentum commands.',
     examples: [
       'Run argentum doctor to verify config.',
       'Use argentum gateway status before exposing a channel.',
@@ -317,12 +362,14 @@ export const providerCatalogTabs = [
   {
     id: 'stable',
     label: 'Stable',
-    detail: 'ChatGPT/OpenAI and MiniMax routes wired for live chat, provider tests, and usage reporting.',
+    detail:
+      'ChatGPT/OpenAI and MiniMax routes wired for live chat, provider tests, and usage reporting.',
   },
   {
     id: 'testing',
     label: 'Testing',
-    detail: 'Other providers remain selectable for testing, but they must pass Test Provider before live use.',
+    detail:
+      'Other providers remain selectable for testing, but they must pass Test Provider before live use.',
   },
 ];
 
@@ -358,7 +405,8 @@ export const providerPresets = [
       { id: 'gpt-4.1', label: 'GPT-4.1' },
     ],
     requiresKey: true,
-    detail: 'ChatGPT browser-account authorization and OpenAI Platform API routes with strong tool and chat support.',
+    detail:
+      'ChatGPT browser-account authorization and OpenAI Platform API routes with strong tool and chat support.',
   },
   {
     id: 'anthropic',
@@ -469,7 +517,8 @@ export const providerPresets = [
       { id: 'MiniMax-Text-01', label: 'MiniMax Text 01' },
     ],
     requiresKey: true,
-    detail: 'MiniMax hosted models through an OpenAI-style API, with Token Plan usage checks in Argentum.',
+    detail:
+      'MiniMax hosted models through an OpenAI-style API, with Token Plan usage checks in Argentum.',
   },
   {
     id: 'ollama',
@@ -517,13 +566,15 @@ export const providerAuthMethods = [
     id: 'api-key',
     label: 'API key / Platform API',
     status: 'Available',
-    detail: 'Direct live model calls use the provider API with a key stored in the selected workspace secrets file.',
+    detail:
+      'Direct live model calls use the provider API with a key stored in the selected workspace secrets file.',
   },
   {
     id: 'browser-account',
     label: 'Browser account authorization',
     status: 'OpenAI/Codex OAuth',
-    detail: 'Use the official Codex device authorization flow. Argentum stores the resulting credentials inside the selected workspace and never scrapes browser sessions.',
+    detail:
+      'Use the official Codex device authorization flow. Argentum stores the resulting credentials inside the selected workspace and never scrapes browser sessions.',
   },
 ];
 
@@ -533,7 +584,8 @@ export const channelOptions = [
     label: 'Local app',
     locked: true,
     status: 'Always on',
-    detail: 'The desktop app can work inside the selected workspace folder even when every outside channel is off.',
+    detail:
+      'The desktop app can work inside the selected workspace folder even when every outside channel is off.',
   },
   {
     id: 'webchat',
@@ -551,7 +603,8 @@ export const channelOptions = [
     id: 'whatsapp',
     label: 'WhatsApp',
     status: 'Advanced',
-    detail: 'Selectable as a channel choice, but full Business API webhook setup may still be required.',
+    detail:
+      'Selectable as a channel choice, but full Business API webhook setup may still be required.',
   },
 ];
 
@@ -559,7 +612,8 @@ export const securityProfiles = [
   {
     id: 'restricted',
     label: 'Restricted workspace',
-    detail: 'Argentum can read and write only inside the selected workspace folder unless you approve more.',
+    detail:
+      'Argentum can read and write only inside the selected workspace folder unless you approve more.',
   },
   {
     id: 'ask',
@@ -574,7 +628,8 @@ export const securityProfiles = [
   {
     id: 'trusted',
     label: 'Trusted mode',
-    detail: 'Fewer prompts for power users. Still audited, but not recommended as the first profile.',
+    detail:
+      'Fewer prompts for power users. Still audited, but not recommended as the first profile.',
   },
 ];
 

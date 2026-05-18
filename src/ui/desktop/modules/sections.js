@@ -36,15 +36,15 @@ function terminalPreview(state, filter = '') {
   const actionOutput =
     entries.length === 0
       ? ''
-      : entries
-          .map((entry) => `$ ${entry.command}\n${entry.output}`)
-          .join('\n\n');
+      : entries.map((entry) => `$ ${entry.command}\n${entry.output}`).join('\n\n');
   const logOutput = filter === 'gateway' ? state.desktopState?.gatewayLogPreview || '' : '';
 
-  return [actionOutput, logOutput]
-    .filter((part) => part && part !== 'No entries yet.')
-    .join('\n\n')
-    .trim() || 'No action output yet.';
+  return (
+    [actionOutput, logOutput]
+      .filter((part) => part && part !== 'No entries yet.')
+      .join('\n\n')
+      .trim() || 'No action output yet.'
+  );
 }
 
 function renderActivityEventLog(state) {
@@ -114,7 +114,15 @@ function renderUsageWindows(usage) {
   `;
 }
 
-function renderProductHero({ kicker, title, detail, stats = [], actions = '', tone = '', statsClass = '' }) {
+function renderProductHero({
+  kicker,
+  title,
+  detail,
+  stats = [],
+  actions = '',
+  tone = '',
+  statsClass = '',
+}) {
   return `
     <section class="product-hero ${escapeAttribute(tone)}">
       <div class="product-hero-copy">
@@ -279,7 +287,9 @@ const logsModule = {
   validate: () => '',
   healthCheck: (state) => ({
     status: state.desktopState?.logsExists ? 'ok' : 'pending',
-    message: state.desktopState?.logsExists ? 'Logs directory exists.' : 'Logs appear after setup or runtime activity.',
+    message: state.desktopState?.logsExists
+      ? 'Logs directory exists.'
+      : 'Logs appear after setup or runtime activity.',
   }),
   render: (state) => `
     ${renderNotifications()}
@@ -293,7 +303,12 @@ const logsModule = {
             'Logs, audit entries, and command output stay readable from the app while sensitive lines are redacted and high-signal events remain searchable.',
           tone: 'logs',
           stats: [
-            { label: 'Gateway', value: state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped' },
+            {
+              label: 'Gateway',
+              value: state.desktopState?.gatewayPid
+                ? `PID ${state.desktopState.gatewayPid}`
+                : 'Stopped',
+            },
             { label: 'Audit', value: 'On' },
             { label: 'Secrets', value: 'Redacted' },
           ],
@@ -426,13 +441,13 @@ const securityModule = {
 
 const pcStatsModule = {
   id: 'pc-stats',
-  label: 'PC Statistics',
+  label: 'Argentum System Dashboard',
   validate: () => '',
   healthCheck: (state) => ({
     status: state.desktopState?.systemStats ? 'ok' : 'pending',
     message: state.desktopState?.systemStats
-      ? 'System statistics are available from the desktop bridge.'
-      : 'System statistics need the installed desktop app.',
+      ? 'Argentum System Dashboard is receiving desktop bridge statistics.'
+      : 'Argentum System Dashboard needs the installed desktop app for live data.',
   }),
   render: (state) => {
     const stats = state.desktopState?.systemStats || {};
@@ -440,7 +455,8 @@ const pcStatsModule = {
     const memoryUsed = Number(stats.memoryUsedBytes || 0);
     const memoryTotal = Number(stats.memoryTotalBytes || 0);
     const diskUsed = Number(stats.diskTotalBytes || 0) - Number(stats.diskAvailableBytes || 0);
-    const networkTotal = Number(stats.networkReceivedBytes || 0) + Number(stats.networkTransmittedBytes || 0);
+    const networkTotal =
+      Number(stats.networkReceivedBytes || 0) + Number(stats.networkTransmittedBytes || 0);
     const collectedAt = stats.collectedAt
       ? new Date(Number(stats.collectedAt) * 1000).toLocaleString()
       : 'Refresh to collect';
@@ -452,17 +468,51 @@ const pcStatsModule = {
         `
           ${renderProductHero({
             kicker: 'System dashboard',
-            title: 'PC statistics',
+            title: 'Argentum System Dashboard',
             detail:
-              'Local CPU, memory, disk, network, uptime, and temperature snapshots are read from the desktop bridge. No provider or external API is required.',
+              'The committed AGX-style system dashboard is embedded here and paired with the desktop bridge snapshot below. No provider or external API is required.',
             tone: 'diagnostics',
             stats: [
-              { label: 'CPU', value: formatPercent(stats.cpuUsagePercent), detail: `${stats.cpuCores || 0} logical cores` },
-              { label: 'Memory', value: formatPercent(stats.memoryUsedPercent), detail: `${formatBytes(memoryUsed)} / ${formatBytes(memoryTotal)}` },
-              { label: 'Disk', value: formatPercent(stats.diskUsedPercent), detail: `${formatBytes(diskUsed)} used` },
+              {
+                label: 'CPU',
+                value: formatPercent(stats.cpuUsagePercent),
+                detail: `${stats.cpuCores || 0} logical cores`,
+              },
+              {
+                label: 'Memory',
+                value: formatPercent(stats.memoryUsedPercent),
+                detail: `${formatBytes(memoryUsed)} / ${formatBytes(memoryTotal)}`,
+              },
+              {
+                label: 'Disk',
+                value: formatPercent(stats.diskUsedPercent),
+                detail: `${formatBytes(diskUsed)} used`,
+              },
             ],
-            actions: renderCommandDock([{ label: 'Refresh statistics', refresh: true, primary: true }]),
+            actions: renderCommandDock([
+              { label: 'Refresh statistics', refresh: true, primary: true },
+            ]),
           })}
+          <section class="panel glass-panel system-dashboard-frame-panel">
+            <div class="panel-header split-header">
+              <div>
+                <span class="pill">Embedded dashboard</span>
+                <h3>Live system view</h3>
+                <p>The dashboard committed in <code>src/ui/dashboard</code> is bundled into the desktop shell for this tab.</p>
+              </div>
+              <button class="button" data-refresh-state="true">Refresh data</button>
+            </div>
+            <div class="system-dashboard-frame-shell">
+              <iframe
+                class="system-dashboard-frame"
+                title="Argentum System Dashboard"
+                src="./dashboard/index.html"
+                data-system-dashboard-frame="true"
+                loading="lazy"
+                sandbox="allow-scripts allow-same-origin"
+              ></iframe>
+            </div>
+          </section>
           <div class="pc-stats-layout">
             <section class="panel glass-panel pc-stat-overview">
               <div class="panel-header split-header">
@@ -955,21 +1005,47 @@ const diagnosticsModule = {
   validate: () => '',
   healthCheck: (state) => ({
     status: state.desktopState?.configExists ? 'ok' : 'pending',
-    message: state.desktopState?.configExists ? 'Configuration exists.' : 'Configuration has not been saved yet.',
+    message: state.desktopState?.configExists
+      ? 'Configuration exists.'
+      : 'Configuration has not been saved yet.',
   }),
   render: (state) => {
     const checks = [
-      ['Config', state.desktopState?.configExists ? state.desktopState.configPath || state.savedConfigPath : 'Missing until setup is saved', state.desktopState?.configExists],
-      ['Data directory', formatFound(state.desktopState?.dataExists), state.desktopState?.dataExists],
-      ['Logs directory', formatFound(state.desktopState?.logsExists), state.desktopState?.logsExists],
-      ['Gateway', state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped', true],
-      ['Workspace boundary', `${state.workspacePath} (${formatWorkspaceHealth()})`, Boolean(state.workspacePath)],
+      [
+        'Config',
+        state.desktopState?.configExists
+          ? state.desktopState.configPath || state.savedConfigPath
+          : 'Missing until setup is saved',
+        state.desktopState?.configExists,
+      ],
+      [
+        'Data directory',
+        formatFound(state.desktopState?.dataExists),
+        state.desktopState?.dataExists,
+      ],
+      [
+        'Logs directory',
+        formatFound(state.desktopState?.logsExists),
+        state.desktopState?.logsExists,
+      ],
+      [
+        'Gateway',
+        state.desktopState?.gatewayPid ? `PID ${state.desktopState.gatewayPid}` : 'Stopped',
+        true,
+      ],
+      [
+        'Workspace boundary',
+        `${state.workspacePath} (${formatWorkspaceHealth()})`,
+        Boolean(state.workspacePath),
+      ],
       ['Tauri bridge', window.__TAURI__ ? 'Connected' : 'Preview mode', true],
       ['Provider', state.apiTest.message, state.apiTest.status !== 'error'],
       [
         'Telegram',
         state.desktopState?.telegramDiagnostics?.lastResponseStatus ||
-          (state.selectedChannels.includes('telegram') ? 'Configured, waiting for bot status' : 'Not selected'),
+          (state.selectedChannels.includes('telegram')
+            ? 'Configured, waiting for bot status'
+            : 'Not selected'),
         !state.desktopState?.telegramDiagnostics?.lastError,
       ],
       ['Capability broker', labelFor(securityProfiles, state.securityProfile), true],
@@ -980,8 +1056,8 @@ const diagnosticsModule = {
     const providerUsage = usage?.summary
       ? usage.summary
       : usage
-      ? `${usage.requestRemaining || '?'} requests / ${usage.tokenRemaining || '?'} tokens left`
-      : 'Not reported yet';
+        ? `${usage.requestRemaining || '?'} requests / ${usage.tokenRemaining || '?'} tokens left`
+        : 'Not reported yet';
     const resetCadence =
       usage?.requestResetCadence ||
       usage?.tokenResetCadence ||
@@ -1073,12 +1149,12 @@ function renderContextAccessCards(state) {
 }
 
 export const modules = {
-  onboarding: onboardingModule,
-  chat: chatModule,
-  gateway: gatewayModule(),
-  logs: logsModule,
-  security: securityModule,
+  'onboarding': onboardingModule,
+  'chat': chatModule,
+  'gateway': gatewayModule(),
+  'logs': logsModule,
+  'security': securityModule,
   'pc-stats': pcStatsModule,
-  settings: settingsModule,
-  diagnostics: diagnosticsModule,
+  'settings': settingsModule,
+  'diagnostics': diagnosticsModule,
 };
