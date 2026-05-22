@@ -691,7 +691,7 @@ argentum backup restore backup-2026-03-18T18-58-44
 ```json
 {
   "name": "Argentum",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "server": {
     "port": 18789,
     "host": "0.0.0.0",

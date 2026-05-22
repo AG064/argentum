@@ -55,7 +55,7 @@ const grammy_1 = require("grammy");
 class TelegramFeature {
     meta = {
         name: 'telegram',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Telegram bot integration via Grammy',
         dependencies: ['allowlists'],
     };

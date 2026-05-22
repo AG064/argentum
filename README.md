@@ -6,7 +6,7 @@
 
 Argentum is a local-first AI workspace. It gives you a desktop chat app, a TypeScript agent runtime, provider routing, memory, channels, logs, and security controls in one project you can run and inspect yourself.
 
-[![Version](https://img.shields.io/badge/version-v0.0.6-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.7-blue.svg?style=flat-square)](https://github.com/AG064/ag-claw/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/ag-claw/ci.yml?style=flat-square)](https://github.com/AG064/ag-claw/actions)
@@ -18,7 +18,7 @@ Argentum is a local-first AI workspace. It gives you a desktop chat app, a TypeS
 
 For most people on Windows, use the desktop installer:
 
-[Argentum_0.0.6_x64-setup.exe](https://github.com/AG064/ag-claw/releases/latest)
+[Argentum_0.0.7_x64-setup.exe](https://github.com/AG064/ag-claw/releases/latest)
 
 The setup wizard behaves like a normal Windows installer:
 
@@ -31,9 +31,9 @@ The setup wizard behaves like a normal Windows installer:
 
 After setup, launch Argentum from the Start Menu. First launch opens onboarding. After that, Argentum opens directly into the desktop app.
 
-### What Changed In v0.0.6
+### What Changed In v0.0.7
 
-v0.0.6 is a desktop-focused release. It cleans up the chat surface, makes onboarding harder to get stuck in, adds the Monaspace Krypton font, keeps reasoning output separate from normal replies, and improves Telegram session handling. It also keeps the recent security cleanup from `development`.
+v0.0.7 is a desktop-focused release. It cleans up the chat surface, makes onboarding harder to get stuck in, adds the Monaspace Krypton font, keeps reasoning output separate from normal replies, and improves Telegram session handling. It also keeps the recent security cleanup from `development`.
 
 ## Provider Status
 
@@ -52,7 +52,7 @@ Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, Ollama/local, and Cus
 
 | Platform | Current support | Assets | Runtime notes |
 | --- | --- | --- | --- |
-| Windows | Windows 10/11 x64 | `Argentum_0.0.6_x64-setup.exe`, `Argentum_0.0.6_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing. |
+| Windows | Windows 10/11 x64 | `Argentum_0.0.7_x64-setup.exe`, `Argentum_0.0.7_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing. |
 | Linux | Source-supported target | Linux desktop packages are planned for release automation | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu 22.04+ and similar Debian/Fedora/Arch/openSUSE desktops are the intended targets. |
 | macOS | Source-supported target | macOS DMGs are planned for release automation | Uses the system WKWebView. The intended targets are macOS 10.15+ on Intel and Apple Silicon. |
 

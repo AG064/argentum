@@ -24,7 +24,7 @@ function firstNonEmptySecret(...values) {
 class ImageGenerationFeature {
     meta = {
         name: 'image-generation',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'AI image generation via Gemini 3 Pro Image with SiliconFlow FLUX.1-dev fallback',
         dependencies: [],
     };
