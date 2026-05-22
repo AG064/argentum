@@ -1,6 +1,6 @@
 {
   "name": "argentum",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,8 +42,9 @@
     "package:win:exe": "npm run package:win:cli",
     "desktop:dev": "cd src/desktop && tauri dev",
     "desktop:build": "cd src/desktop && tauri build",
-    "predesktop:build": "npm run build && npm run build:desktop-sidecar",
+    "predesktop:build": "npm run build && npm run build:desktop-sidecar && npm run prepare:llama-server",
     "build:desktop-sidecar": "node scripts/build-desktop-sidecar.js",
+    "prepare:llama-server": "node scripts/prepare-llama-server.js",
     "version:sync": "node scripts/sync-version.js",
     "version:check": "node scripts/sync-version.js --check",
     "prebuild": "npm run clean",

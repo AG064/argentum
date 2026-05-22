@@ -4,6 +4,8 @@
   var R = 3000;
   var HIST = 72;
   var cpuHist = new Array(HIST).fill(0);
+  var memHist = new Array(HIST).fill(0);
+  var vramHist = new Array(HIST).fill(0);
 
   var C_CYAN = '#78d6df';
   var C_BLUE = '#6fa4d8';
@@ -127,10 +129,52 @@
 
   function tempWord(v) {
     if (v == null) return 'no sensor';
+    if (v >= 95) return 'critical';
     if (v >= 80) return 'critical';
     if (v >= 65) return 'hot';
     if (v >= 50) return 'warm';
     return 'stable';
+  }
+
+  function tempText(v) {
+    return v == null ? 'OFF' : Math.round(Number(v) || 0) + ' Celsius';
+  }
+
+  function tempFill(v) {
+    return v == null ? 0 : clamp(Number(v) || 0, 0, 100);
+  }
+
+  function processKind(name) {
+    var lower = String(name || '').toLowerCase();
+    if (lower.indexOf('code') !== -1 || lower.indexOf('codex') !== -1) return 'dev';
+    if (
+      lower.indexOf('edge') !== -1 ||
+      lower.indexOf('chrome') !== -1 ||
+      lower.indexOf('firefox') !== -1
+    )
+      return 'web';
+    if (
+      lower.indexOf('system') !== -1 ||
+      lower.indexOf('service') !== -1 ||
+      lower.indexOf('svchost') !== -1
+    )
+      return 'sys';
+    return 'app';
+  }
+
+  function processCell(name) {
+    var label = String(name || 'process');
+    var kind = processKind(label);
+    var glyph = label.trim().slice(0, 1).toUpperCase() || 'P';
+    return (
+      '<span class="proc-name"><span class="proc-icon ' +
+      kind +
+      '" aria-hidden="true">' +
+      esc(glyph) +
+      '</span><span>' +
+      esc(label) +
+      '</span></span>'
+    );
   }
 
   function buildSegments(id, count) {
@@ -213,6 +257,120 @@
   }
   window.switchProcTab = switchProcTab;
 
+  var DASHBOARD_CONFIG_KEY = 'argentum-dashboard-config-v1';
+  var dashboardConfig = loadDashboardConfig();
+
+  function loadDashboardConfig() {
+    var fallback = {
+      locked: true,
+      order: ['overview', 'live', 'details'],
+      modules: {
+        overview: true,
+        live: true,
+        details: true,
+      },
+    };
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(DASHBOARD_CONFIG_KEY);
+      if (!raw) return fallback;
+      var parsed = JSON.parse(raw);
+      var order = Array.isArray(parsed.order) ? parsed.order.filter(Boolean) : fallback.order;
+      fallback.order.forEach(function (id) {
+        if (order.indexOf(id) === -1) order.push(id);
+      });
+      return {
+        locked: parsed.locked !== false,
+        order: order,
+        modules: Object.assign({}, fallback.modules, parsed.modules || {}),
+      };
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  function saveDashboardConfig() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(DASHBOARD_CONFIG_KEY, JSON.stringify(dashboardConfig));
+      }
+    } catch (error) {
+      console.warn('dashboard config save failed:', error);
+    }
+  }
+
+  function applyDashboardConfig() {
+    document.body.classList.toggle('dashboard-locked', dashboardConfig.locked);
+    var lock = document.getElementById('dash-lock');
+    if (lock) {
+      lock.setAttribute('aria-pressed', dashboardConfig.locked ? 'true' : 'false');
+      lock.textContent = dashboardConfig.locked ? 'LOCKED' : 'UNLOCKED';
+      lock.title = dashboardConfig.locked
+        ? 'Dashboard layout locked'
+        : 'Dashboard layout unlocked. Dragging is planned after metrics stabilize.';
+    }
+    document.querySelectorAll('[data-dashboard-module]').forEach(function (node) {
+      var id = node.getAttribute('data-dashboard-module') || '';
+      node.classList.toggle('module-hidden', dashboardConfig.modules[id] === false);
+      var index = dashboardConfig.order.indexOf(id);
+      node.style.order = String(index === -1 ? 99 : index + 1);
+    });
+    document.querySelectorAll('[data-module-toggle]').forEach(function (node) {
+      var id = node.getAttribute('data-module-toggle') || '';
+      node.checked = dashboardConfig.modules[id] !== false;
+    });
+    document.querySelectorAll('[data-module-order]').forEach(function (node) {
+      var id = node.getAttribute('data-module-order') || '';
+      var index = dashboardConfig.order.indexOf(id);
+      node.value = String(index === -1 ? 1 : index + 1);
+    });
+  }
+
+  function wireDashboardSettings() {
+    var panel = document.getElementById('dashboard-settings-panel');
+    var open = document.getElementById('dash-settings');
+    var close = document.getElementById('dash-settings-close');
+    var lock = document.getElementById('dash-lock');
+    if (open && panel) {
+      open.addEventListener('click', function () {
+        panel.hidden = !panel.hidden;
+      });
+    }
+    if (close && panel) {
+      close.addEventListener('click', function () {
+        panel.hidden = true;
+      });
+    }
+    if (lock) {
+      lock.addEventListener('click', function () {
+        dashboardConfig.locked = !dashboardConfig.locked;
+        saveDashboardConfig();
+        applyDashboardConfig();
+      });
+    }
+    document.querySelectorAll('[data-module-toggle]').forEach(function (node) {
+      node.addEventListener('change', function () {
+        var id = node.getAttribute('data-module-toggle') || '';
+        dashboardConfig.modules[id] = Boolean(node.checked);
+        saveDashboardConfig();
+        applyDashboardConfig();
+      });
+    });
+    document.querySelectorAll('[data-module-order]').forEach(function (node) {
+      node.addEventListener('change', function () {
+        var id = node.getAttribute('data-module-order') || '';
+        var targetIndex = clamp(Number(node.value || 1) - 1, 0, 2);
+        var order = dashboardConfig.order.filter(function (item) {
+          return item !== id;
+        });
+        order.splice(targetIndex, 0, id);
+        dashboardConfig.order = order;
+        saveDashboardConfig();
+        applyDashboardConfig();
+      });
+    });
+    applyDashboardConfig();
+  }
+
   function update(d) {
     if (!d || !d.cpu || !d.memory) return;
 
@@ -220,10 +378,13 @@
     setText('hostname', d.hostname || '-');
 
     var cores = parseInt(d.cpu.cores, 10) || 1;
+    var directCpuPct = Number(d.cpu.usage_pct);
     var l1 = parseFloat(d.cpu.load_1) || 0;
     var l5 = parseFloat(d.cpu.load_5) || 0;
     var l15 = parseFloat(d.cpu.load_15) || 0;
-    var cpuPct = clamp((l1 / cores) * 100, 0, 100);
+    var cpuPct = Number.isFinite(directCpuPct)
+      ? clamp(directCpuPct, 0, 100)
+      : clamp((l1 / cores) * 100, 0, 100);
 
     var memTot = d.memory.total_bytes || 1;
     var memUsd = d.memory.used_bytes || 0;
@@ -240,6 +401,8 @@
 
     cpuHist.push(cpuPct);
     if (cpuHist.length > HIST) cpuHist.shift();
+    memHist.push(memPct);
+    if (memHist.length > HIST) memHist.shift();
 
     var alertItems = [];
     if (cpuPct > 90)
@@ -255,7 +418,7 @@
         alertItems.push({
           sev: 'crit',
           txt: 'High temperature',
-          sub: (t.type || 'sensor') + ' ' + temp.toFixed(0) + 'C',
+          sub: (t.type || 'sensor') + ' ' + tempText(temp),
         });
     });
 
@@ -284,8 +447,8 @@
     setText('uptime-val', up(d.uptime_sec || 0));
     setText('status-load', cpuPct.toFixed(0) + '%');
     setText('status-memory', memPct.toFixed(0) + '%');
-    setText('side-cpu-temp', ct == null ? '-' : ct.toFixed(0) + 'C');
-    setText('side-gpu-temp', gt == null ? '-' : gt.toFixed(0) + 'C');
+    setText('side-cpu-temp', tempText(ct));
+    setText('side-gpu-temp', tempText(gt));
     setText('side-proc', d.processes_count || 0);
 
     var sbf = document.getElementById('state-bar-fill');
@@ -298,7 +461,7 @@
     var heatTag = [];
     if (ct != null) heatTag.push('CPU ' + tempWord(ct));
     if (gt != null) heatTag.push('GPU ' + tempWord(gt));
-    setText('heat-tag', heatTag.join(' / ') || 'no sensors');
+    setText('heat-tag', heatTag.join(' / ') || 'temperature sensors OFF');
 
     var heatEl = document.getElementById('heat-list');
     if (heatEl) {
@@ -328,13 +491,13 @@
                 '<div class="heat-temp" style="color:' +
                 c +
                 '">' +
-                temp.toFixed(0) +
-                'C</div>' +
+                tempText(temp) +
+                '</div>' +
                 '</div>'
               );
             })
             .join('')
-        : '<div class="ok-line">No temperature sensors</div>';
+        : '<div class="ok-line">Temperature sensors OFF</div>';
     }
 
     setText('alert-count', alertItems.length ? alertItems.length + ' active' : 'clear');
@@ -361,12 +524,25 @@
     }
 
     setText('cpu-title', 'Load');
-    setText('cpu-info', cores + ' cores · ' + ((d.cpu.freq_avg_hz || 0) / 1e6).toFixed(0) + ' MHz');
+    setText('cpu-info', cores + ' cores - ' + ((d.cpu.freq_avg_hz || 0) / 1e6).toFixed(0) + ' MHz');
 
     var cpuVal = document.getElementById('cpu-load-val');
     if (cpuVal) {
       cpuVal.textContent = cpuPct.toFixed(1) + '%';
       cpuVal.style.color = cpuColor;
+    }
+    setText('cpu-temp-inline', 'CPU temp ' + tempText(ct));
+    var cpuTempVal = document.getElementById('cpu-temp-val');
+    var cpuTempFill = document.getElementById('cpu-temp-fill');
+    if (cpuTempVal) {
+      cpuTempVal.textContent = tempText(ct);
+      cpuTempVal.style.color = ct == null ? C_GREEN : heat(ct, 35, 100);
+    }
+    if (cpuTempFill) {
+      var cpuTempColor = ct == null ? C_GREEN : heat(ct, 35, 100);
+      cpuTempFill.style.width = tempFill(ct) + '%';
+      cpuTempFill.style.setProperty('--fill', cpuTempColor);
+      cpuTempFill.style.background = cpuTempColor;
     }
 
     setSegments('cpu-meter', cpuPct);
@@ -382,18 +558,29 @@
       maxF = maxF || 3000;
 
       coreEl.innerHTML = freqs
-        .slice(0, 8)
+        .slice(0, 32)
         .map(function (f) {
-          var pct = clamp(((Number(f.cur_mhz) || 0) / maxF) * 100, 0, 100);
+          var hasUsage = typeof f.usage_pct === 'number';
+          var pct = hasUsage
+            ? clamp(f.usage_pct, 0, 100)
+            : clamp(((Number(f.cur_mhz) || 0) / maxF) * 100, 0, 100);
           var c = heat(pct, 0, 100);
+          var mhz = Number(f.cur_mhz || 0) || 0;
+          var frequency = mhz >= 1000 ? (mhz / 1000).toFixed(1) + 'G' : mhz.toFixed(0) + 'M';
+          var detail = hasUsage ? pct.toFixed(0) + '% / ' + frequency : frequency;
+          var title = hasUsage
+            ? pct.toFixed(1) + '% at ' + mhz.toFixed(0) + ' MHz'
+            : mhz.toFixed(0) + ' MHz';
           return (
             '<div class="core-lane">' +
             '<label>C' +
             esc(f.core) +
             '</label>' +
-            '<strong>' +
-            esc(f.cur_mhz) +
-            ' MHz</strong>' +
+            '<strong title="' +
+            esc(title) +
+            '">' +
+            esc(detail) +
+            '</strong>' +
             '<div class="core-fill"><span style="width:' +
             pct +
             '%;--fill:' +
@@ -408,12 +595,25 @@
     }
 
     setText('mem-info', fmt(memUsd) + ' / ' + fmt(memTot));
+    var memVal = document.getElementById('mem-load-val');
+    if (memVal) {
+      memVal.textContent = memPct.toFixed(1) + '%';
+      memVal.style.color = memColor;
+    }
+    drawChart('mem-chart', memHist, memColor);
     var used = document.getElementById('slab-used');
     var cache = document.getElementById('slab-cache');
     var free = document.getElementById('slab-free');
 
     var cachePct = clamp(((d.memory.cached_bytes || 0) / memTot) * 100, 0, 100);
-    var freePct = Math.max(0, 100 - memPct - cachePct);
+    var freePct = clamp(((d.memory.free_bytes || 0) / memTot) * 100, 0, 100);
+    var memorySum = memPct + cachePct + freePct;
+    if (memorySum > 100) {
+      var spare = Math.max(0, 100 - memPct);
+      var nonUsed = cachePct + freePct || 1;
+      cachePct = (cachePct / nonUsed) * spare;
+      freePct = (freePct / nonUsed) * spare;
+    }
 
     if (used) {
       used.style.width = memPct + '%';
@@ -427,8 +627,9 @@
     if (memList) {
       var items = [
         ['Used', fmt(memUsd)],
-        ['Avail', fmt(d.memory.avail_bytes || 0)],
+        ['Free', fmt(d.memory.free_bytes || 0)],
         ['Cached', fmt(d.memory.cached_bytes || 0)],
+        ['Avail', fmt(d.memory.avail_bytes || 0)],
         ['Swap', swapPct.toFixed(0) + '%'],
       ];
       memList.innerHTML = items
@@ -471,7 +672,7 @@
             '<td title="' +
             esc(p.name || '') +
             '">' +
-            esc(p.name || '') +
+            processCell(p.name || '') +
             '</td>' +
             '<td style="text-align:right;color:' +
             cc +
@@ -491,7 +692,6 @@
 
     if (allBody) {
       allBody.innerHTML = procs
-        .slice(0, 50)
         .map(function (p) {
           var cc = heat(p.cpu_pct || 0, 0, 100);
           var rc = heat(p.mem_pct || 0, 0, 100);
@@ -500,7 +700,7 @@
             '<td title="' +
             esc(p.name || '') +
             '">' +
-            esc(p.name || '') +
+            processCell(p.name || '') +
             '</td>' +
             '<td style="text-align:right;color:' +
             cc +
@@ -530,8 +730,9 @@
         if (n.name === 'lo') return;
         var rx = (n.rx_rate || 0) / 1e6;
         var tx = (n.tx_rate || 0) / 1e6;
-        var rxPct = clamp(rx * 20, 0, 100);
-        var txPct = clamp(tx * 20, 0, 100);
+        var networkScale = Number(dashboardConfig.networkScaleMbps || 125) || 125;
+        var rxPct = clamp((rx / networkScale) * 100, 0, 100);
+        var txPct = clamp((tx / networkScale) * 100, 0, 100);
 
         rows +=
           '<div class="net-row">' +
@@ -539,9 +740,9 @@
           esc(n.name || '') +
           '</div><div class="net-ip">' +
           esc(n.ip4 || '') +
-          '</div></div><div class="net-ip">↓ ' +
+          '</div></div><div class="net-ip">down ' +
           rx.toFixed(2) +
-          ' / ↑ ' +
+          ' / up ' +
           tx.toFixed(2) +
           '</div></div>' +
           '<div class="signal ' +
@@ -572,7 +773,7 @@
       var disks = '';
       var count = 0;
       (d.mounts || []).forEach(function (m) {
-        if (!(m.fs || '').startsWith('/dev')) return;
+        if (!m.total) return;
         count++;
         var pct = clamp(m.pct || 0, 0, 100);
         var c = heat(pct, 0, 100);
@@ -585,7 +786,7 @@
           esc(m.mount || '') +
           '</div><div class="disk-sub">' +
           fmt(m.used || 0) +
-          ' used · ' +
+          ' used / ' +
           fmt(m.total || 0) +
           ' total</div></div><div class="disk-sub" style="color:' +
           c +
@@ -611,25 +812,45 @@
       var hasNv = nv && Object.keys(nv).length > 0;
       var gpus = d.gpu || [];
       setText('gpu-tag', gpus.length ? gpus.length + ' device(s)' : '-');
+      var aggregateVramPct = 0;
+      var aggregateVramCount = 0;
 
       gpuEl.innerHTML = gpus.length
         ? gpus
             .map(function (g) {
               var name = (g.name || '').split('controller: ')[1] || g.name || 'GPU';
-              var util = hasNv && name.indexOf('NVIDIA') !== -1 ? nv.util || 0 : 0;
+              var util =
+                g.util != null
+                  ? Number(g.util || 0)
+                  : hasNv && name.indexOf('NVIDIA') !== -1
+                    ? nv.util || 0
+                    : 0;
               var c = heat(util, 0, 100);
-              var details =
-                hasNv && name.indexOf('NVIDIA') !== -1
-                  ? 'VRAM ' +
-                    (nv.mem_used || 0) +
-                    '/' +
-                    (nv.mem_total || 0) +
-                    ' · ' +
-                    (nv.temp || 0) +
-                    'C · ' +
-                    (nv.power_w || 0) +
-                    'W'
-                  : esc(g.pci || '');
+              var details = [];
+              if (g.mem_total != null) {
+                details.push('VRAM ' + (g.mem_used || 0) + '/' + g.mem_total + ' MB');
+              }
+              if (g.temp != null) {
+                details.push(tempText(Number(g.temp)));
+              }
+              if (hasNv && name.indexOf('NVIDIA') !== -1 && nv.power_w != null) {
+                details.push((nv.power_w || 0) + 'W');
+              }
+              if (!details.length && g.pci) {
+                details.push(esc(g.pci));
+              }
+              var tempPct =
+                g.temp == null ? 0 : clamp((((Number(g.temp) || 0) - 30) / 65) * 100, 0, 100);
+              var vramPct =
+                g.mem_total == null || !Number(g.mem_total)
+                  ? 0
+                  : clamp(((Number(g.mem_used || 0) || 0) / Number(g.mem_total)) * 100, 0, 100);
+              if (g.mem_total != null && Number(g.mem_total)) {
+                aggregateVramPct += vramPct;
+                aggregateVramCount += 1;
+              }
+              var tempColor = heat(Number(g.temp || 0), 35, 90);
+              var vramColor = heat(vramPct, 0, 100);
 
               return (
                 '<div class="gpu-row">' +
@@ -639,20 +860,43 @@
                 esc(name) +
                 '</div>' +
                 '<div class="gpu-sub">' +
-                details +
+                (Array.isArray(details) ? details.join(' / ') : details) +
+                (util ? ' / ' + util.toFixed(0) + '%' : '') +
                 '</div>' +
-                '<div class="signal"><span style="width:' +
+                '<div class="signal"><span title="GPU usage" style="width:' +
                 util +
                 '%;--fill:' +
                 c +
                 ';background:' +
                 c +
                 '"></span></div>' +
+                (g.temp == null
+                  ? '<div class="signal off" title="GPU temperature OFF"><span style="width:0%"></span></div>'
+                  : '<div class="signal"><span title="GPU temperature" style="width:' +
+                    tempPct +
+                    '%;--fill:' +
+                    tempColor +
+                    ';background:' +
+                    tempColor +
+                    '"></span></div>') +
+                (g.mem_total == null
+                  ? '<div class="signal off" title="VRAM telemetry OFF"><span style="width:0%"></span></div>'
+                  : '<div class="signal"><span title="VRAM usage" style="width:' +
+                    vramPct +
+                    '%;--fill:' +
+                    vramColor +
+                    ';background:' +
+                    vramColor +
+                    '"></span></div>') +
                 '</div>'
               );
             })
             .join('')
-        : '<div class="ok-line">No GPU</div>';
+        : '<div class="ok-line">Graphics telemetry OFF</div>';
+      var vramPct = aggregateVramCount ? aggregateVramPct / aggregateVramCount : 0;
+      vramHist.push(vramPct);
+      if (vramHist.length > HIST) vramHist.shift();
+      drawChart('vram-chart', vramHist, heat(vramPct, 0, 100));
     }
 
     var powerEl = document.getElementById('power-list');
@@ -682,8 +926,9 @@
           '</div>';
         setText('power-tag', bat.status || '-');
       } else {
-        powerEl.innerHTML = '<div class="ok-line">No battery</div>';
-        setText('power-tag', 'wall');
+        powerEl.innerHTML =
+          '<div class="ok-line">Power telemetry OFF</div><div class="sys-sub">Component wattage appears only when the OS or vendor tools expose it. Wattage calculator is planned.</div>';
+        setText('power-tag', 'wall / unavailable');
       }
     }
 
@@ -718,6 +963,7 @@
   }
 
   buildSegments('cpu-meter', 26);
+  wireDashboardSettings();
 
   function desktopBridgeShape(stats) {
     if (!stats) return null;
@@ -727,32 +973,63 @@
     var memoryUsed = Number(stats.memoryUsedBytes || 0) || 0;
     var networkReceived = Number(stats.networkReceivedBytes || 0) || 0;
     var networkTransmitted = Number(stats.networkTransmittedBytes || 0) || 0;
+    var cpuCoreDetails = Array.isArray(stats.cpuCoresDetail) ? stats.cpuCoresDetail : [];
+    var processList = Array.isArray(stats.processes) ? stats.processes : [];
+    var networkList = Array.isArray(stats.networks) ? stats.networks : [];
+    var sensorList = Array.isArray(stats.temperatureSensors) ? stats.temperatureSensors : [];
+    var gpuList = Array.isArray(stats.gpus) ? stats.gpus : [];
+    var averageFrequency =
+      cpuCoreDetails.reduce(function (total, core) {
+        return total + (Number(core.frequencyMhz || 0) || 0);
+      }, 0) / Math.max(cpuCoreDetails.length, 1);
     return {
       hostname: stats.hostName || '-',
       os: [stats.osName, stats.osVersion].filter(Boolean).join(' ') || 'Desktop bridge',
       kernel: stats.kernelVersion || '-',
       arch: stats.arch || '-',
       uptime_sec: Number(stats.uptimeSeconds || 0) || 0,
-      processes_count: Number(stats.processCount || 0) || 0,
       cpu: {
         cores: cores,
+        usage_pct: cpuPct,
         threads_per_core: 1,
         load_1: (cpuPct / 100) * cores,
         load_5: (cpuPct / 100) * cores,
         load_15: (cpuPct / 100) * cores,
-        freq_avg_hz: Number(stats.cpuFrequencyHz || 0) || 0,
-        per_core_freqs: [],
+        freq_avg_hz: averageFrequency * 1000000,
+        per_core_freqs: cpuCoreDetails.length
+          ? cpuCoreDetails.map(function (core) {
+              return {
+                core: core.core,
+                cur_mhz: Number(core.frequencyMhz || 0) || 0,
+                usage_pct: Number(core.usagePercent || 0) || 0,
+              };
+            })
+          : Array.from({ length: cores }, function (_, index) {
+              return {
+                core: index,
+                cur_mhz: 0,
+                usage_pct: cpuPct,
+              };
+            }),
       },
       memory: {
         total_bytes: memoryTotal,
         used_bytes: memoryUsed,
-        avail_bytes: Math.max(memoryTotal - memoryUsed, 0),
-        cached_bytes: 0,
+        avail_bytes:
+          Number(stats.memoryAvailableBytes || Math.max(memoryTotal - memoryUsed, 0)) || 0,
+        free_bytes: Number(stats.memoryFreeBytes || Math.max(memoryTotal - memoryUsed, 0)) || 0,
+        cached_bytes: Number(stats.memoryCachedBytes || 0) || 0,
         swap_total_bytes: Number(stats.swapTotalBytes || 0) || 0,
         swap_used_bytes: Number(stats.swapUsedBytes || 0) || 0,
       },
-      temperatures:
-        stats.temperatureCelsius == null
+      temperatures: sensorList.length
+        ? sensorList.map(function (sensor) {
+            return {
+              type: sensor.label || 'sensor',
+              temp_mc: Number(sensor.temperatureCelsius || 0) * 1000,
+            };
+          })
+        : stats.temperatureCelsius == null
           ? []
           : [{ type: 'cpu', temp_mc: Number(stats.temperatureCelsius) * 1000 }],
       mounts: (stats.disks || []).map(function (disk) {
@@ -766,15 +1043,44 @@
           pct: Number(disk.usedPercent || 0) || 0,
         };
       }),
-      network: [
-        {
-          name: 'desktop',
-          ip4: 'local',
-          rx_rate: networkReceived,
-          tx_rate: networkTransmitted,
-        },
-      ],
-      processes: [],
+      network: networkList.length
+        ? networkList.map(function (network) {
+            return {
+              name: network.name || 'network',
+              ip4: 'local',
+              rx_rate: Number(network.receivedRateBytes || network.receivedBytes || 0) || 0,
+              tx_rate: Number(network.transmittedRateBytes || network.transmittedBytes || 0) || 0,
+            };
+          })
+        : [
+            {
+              name: 'desktop',
+              ip4: 'local',
+              rx_rate: networkReceived,
+              tx_rate: networkTransmitted,
+            },
+          ],
+      gpu: gpuList.map(function (gpu) {
+        return {
+          name: gpu.name || 'GPU',
+          pci: gpu.vendor || 'desktop bridge',
+          util: Number(gpu.utilizationPercent || 0) || 0,
+          temp: gpu.temperatureCelsius,
+          mem_total: gpu.memoryTotalMb,
+          mem_used: gpu.memoryUsedMb,
+        };
+      }),
+      processes_count:
+        Number(stats.processesCount || stats.processCount || processList.length || 0) || 0,
+      processes: processList.map(function (process) {
+        return {
+          name: process.name || 'process',
+          pid: process.pid,
+          cpu_pct: Number(process.cpuPercent || 0) || 0,
+          ram_mb: Math.round((Number(process.memoryBytes || 0) || 0) / 1024 / 1024),
+          mem_pct: Number(process.memoryPercent || 0) || 0,
+        };
+      }),
     };
   }
 
@@ -796,8 +1102,10 @@
     }
   }
 
-  tick();
-  setInterval(tick, R);
+  if (window.parent === window) {
+    tick();
+    setInterval(tick, R);
+  }
 
   window.addEventListener('resize', function () {
     drawChart('cpu-chart', cpuHist, C_GREEN);

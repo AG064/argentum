@@ -17,7 +17,7 @@ describe('Argentum desktop shell', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.6');
+    expect(config.version).toBe('0.0.7');
     expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
@@ -99,6 +99,7 @@ describe('Argentum desktop shell', () => {
     for (const title of [
       "title: 'Chat'",
       "title: 'Gateway'",
+      "title: 'Local Server'",
       "title: 'Activity Logs'",
       "title: 'Security & Permissions'",
       "title: 'Settings'",
@@ -113,11 +114,16 @@ describe('Argentum desktop shell', () => {
       "id: 'gateway-status'",
       "id: 'gateway-stop'",
       "id: 'gateway-logs'",
+      "id: 'llama-server-start'",
+      "id: 'llama-server-status'",
+      "id: 'llama-server-stop'",
+      "id: 'llama-server-logs'",
     ]) {
       expect(constants).toContain(actionId);
     }
 
     expect(sections).toContain('function gatewayModule');
+    expect(sections).toContain('function localServerModule');
     expect(shell).toContain('action.buttonLabel');
     expect(shell).not.toContain('Prepared</button>');
   });
@@ -135,21 +141,73 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain("id: 'pc-stats'");
     expect(constants).toContain("icon: 'cpu'");
     expect(constants).toContain("title: 'Argentum System Dashboard'");
+    expect(constants).toContain("id: 'system-dashboard'");
     expect(sections).toContain('const pcStatsModule');
     expect(sections).toContain("label: 'Argentum System Dashboard'");
+    expect(sections).toContain("state.selectedContextAccess.includes('system-dashboard')");
     expect(sections).toContain('src="./dashboard/index.html"');
     expect(sections).toContain('data-system-dashboard-frame="true"');
+    expect(sections).not.toContain(
+      'Run the installed desktop app to stream local system statistics',
+    );
     expect(sections).toContain('state.desktopState?.systemStats');
-    expect(sections).toContain('data-refresh-state="true"');
+    expect(sections).not.toContain('pc-stats-layout');
     expect(main).toContain('function syncSystemDashboardFrame');
+    expect(main).toContain('function syncSystemDashboardPolling');
+    expect(main).toContain("state.selectedContextAccess.includes('system-dashboard')");
+    expect(main).toContain('refreshSystemDashboardState({ silentErrors: true })');
+    expect(main).toContain('10_000');
+    expect(main).toContain('function captureOnboardingStepScroll');
+    expect(main).toContain('function restoreOnboardingStepScroll');
     expect(main).toContain("type: 'argentum-system-stats'");
     expect(dashboard).toContain('<title>Argentum System Dashboard</title>');
     expect(packagedDashboard).toContain('<title>Argentum System Dashboard</title>');
     expect(packagedDashboard).toContain('<script src="./dashboard.js"></script>');
+    expect(packagedDashboard).toContain('monaspace-krypton-latin-400-normal.woff2');
+    expect(packagedDashboard).toContain('dashboard-settings-panel');
+    expect(packagedDashboard).toContain('data-dashboard-module="overview"');
+    expect(packagedDashboard).toContain('data-dashboard-module="live"');
+    expect(packagedDashboard).toContain('data-dashboard-module="details"');
+    expect(packagedDashboard).toContain('data-module-order="overview"');
+    expect(packagedDashboard).toContain('id="cpu-temp-inline"');
     expect(packagedDashboardScript).toContain('desktopBridgeShape');
+    expect(packagedDashboardScript).toContain('DASHBOARD_CONFIG_KEY');
+    expect(packagedDashboardScript).toContain("order: ['overview', 'live', 'details']");
+    expect(packagedDashboardScript).toContain('applyDashboardConfig');
+    expect(packagedDashboardScript).toContain('wireDashboardSettings');
+    expect(packagedDashboardScript).toContain('cpuCoresDetail');
+    expect(packagedDashboardScript).toContain('usage_pct');
+    expect(packagedDashboardScript).toContain('slice(0, 32)');
+    expect(packagedDashboardScript).toContain('memoryAvailableBytes');
+    expect(packagedDashboardScript).toContain('memoryCachedBytes');
+    expect(packagedDashboardScript).toContain('memoryUsedMb');
+    expect(packagedDashboardScript).toContain('temperatureSensors');
+    expect(packagedDashboardScript).toContain('GPU temperature');
+    expect(packagedDashboardScript).toContain('VRAM usage');
+    expect(packagedDashboardScript).toContain('if (!m.total) return;');
+    expect(packagedDashboardScript).not.toContain("startsWith('/dev')");
+    expect(packagedDashboardScript).toContain('window.parent === window');
     expect(setup).toContain('systemStats: previewSystemStats()');
+    expect(setup).toContain('cpuCoresDetail');
     expect(rust).toContain('struct PcStatsSnapshot');
-    expect(rust).toContain('system_stats: PcStatsSnapshot');
+    expect(rust).toContain('struct PcProcessSnapshot');
+    expect(rust).toContain('struct PcNetworkSnapshot');
+    expect(rust).toContain('struct PcGpuSnapshot');
+    expect(rust).toContain('cpu_cores_detail: Vec<PcCpuCoreSnapshot>');
+    expect(rust).toContain('processes_count: usize');
+    expect(rust).toContain('system_stats: Option<PcStatsSnapshot>');
+    expect(rust).toContain('desktop_system_stats');
+    expect(rust).toContain('CREATE_NO_WINDOW');
+    expect(rust).toContain('PcStatsSampler');
+    expect(rust).toContain('nvidia-smi');
+    expect(rust).toContain('GPU Engine(*)');
+    expect(rust).toContain('GPU Adapter Memory(*)');
+    expect(rust).toContain('memory_cached_bytes: u64');
+    expect(rust).toContain('process.cpu_usage() / cpu_count');
+    expect(rust).toContain('Get-CimInstance Win32_VideoController');
+    expect(rust).toContain('MSAcpi_ThermalZoneTemperature');
+    expect(rust).toContain('system_profiler');
+    expect(rust).toContain('/sys/class/drm');
     expect(rust).toContain('fn collect_pc_stats() -> PcStatsSnapshot');
   });
 
@@ -243,7 +301,7 @@ describe('Argentum desktop shell', () => {
     expect(css).toContain('.onboarding-validation');
     expect(main).toContain('selectProvider(providerId)');
     expect(main).toContain('selectModel(target.value)');
-    expect(main).toContain('goToStep(5)');
+    expect(main).toContain('advanceOnboarding');
     expect(main).toContain('completeOnboarding(result)');
     expect(main).toContain('hydrateOnboardingProgress()');
     expect(controller).toContain('ONBOARDING_PROGRESS_STORAGE_KEY');
@@ -318,6 +376,8 @@ describe('Argentum desktop shell', () => {
       'OpenRouter',
       'NVIDIA',
       'Groq',
+      'LM Studio / local',
+      'Argentum llama.cpp',
       'MiniMax',
       'Ollama / local',
       'Custom endpoint',
@@ -341,8 +401,22 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).not.toContain("state.providerSetupStage === 'provider'");
     expect(onboarding).not.toContain('data-provider-setup-stage="auth"');
     expect(onboarding).not.toContain('data-provider-setup-stage="model"');
-    expect(onboarding).toContain('id="continue-provider-model"');
-    expect(main).toContain('goToStep(5)');
+    expect(onboarding).not.toContain('id="continue-provider-model"');
+    expect(onboarding).not.toContain('Continue to model');
+    expect(onboarding).toContain('provider-operational-details');
+    expect(onboarding).toContain('provider-key-status');
+    expect(onboarding).toContain('provider.requiresKey && state.providerApiKey.trim()');
+    expect(constants).toContain('highlights:');
+    expect(constants).toContain('dataRegion:');
+    expect(constants).toContain('dataRoute:');
+    expect(constants).toContain('privacyUrl:');
+    expect(constants).toContain('termsUrl:');
+    expect(constants).toContain('usageNotes:');
+    expect(constants).toContain('accountUsageUrl:');
+    expect(constants).toContain('modelSearchUrl:');
+    expect(constants).toContain('API key optional for localhost');
+    expect(main).toContain('function updateProviderKeyStatus');
+    expect(main).toContain('advanceOnboarding');
     expect(onboarding).toContain('id="provider-base-url"');
     expect(onboarding).toContain('<select id="provider-model"');
     expect(onboarding).not.toContain('<input id="provider-model"');
@@ -393,6 +467,8 @@ describe('Argentum desktop shell', () => {
     expect(rust).not.toContain('OpenAI/Codex API key exchange');
     expect(rust).toContain('"OPENAI_API_KEY": serde_json::Value::Null');
     expect(onboarding).toContain('id="provider-api-key"');
+    expect(onboarding).toContain('Optional for LM Studio/local/custom endpoints');
+    expect(onboarding).toContain('id="provider-custom-model"');
     expect(onboarding).toContain('id="test-provider"');
     expect(setup).toContain("invokeTauri('test_provider'");
     expect(setup).toContain('persistRuntimeSettings');
@@ -612,7 +688,7 @@ describe('Argentum desktop shell', () => {
       'data-send-chat-button="true"',
       'id="chat-draft"',
       'data-recent-chat',
-      'data-chat-filter="recent"',
+      'data-chat-filter="all"',
       'data-conversation-menu',
       'data-regenerate-message',
       'data-copy-message',
@@ -664,7 +740,7 @@ describe('Argentum desktop shell', () => {
 
     const transcript = chat.slice(
       chat.indexOf('<div class="chat-transcript arg-message-canvas"'),
-      chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'),
+      chat.indexOf('</div>\n        ${renderNewTransmissionBar(state)}'),
     );
     const typing = chat.slice(
       chat.indexOf('function renderTypingIndicator'),
@@ -672,9 +748,11 @@ describe('Argentum desktop shell', () => {
     );
 
     expect(transcript).not.toContain('${renderTypingIndicator(state)}');
+    expect(transcript).not.toContain('${renderNewTransmissionBar(state)}');
     expect(chat.indexOf('${renderTypingIndicator(state)}')).toBeGreaterThan(
-      chat.indexOf('</div>\n        ${renderTypingIndicator(state)}'),
+      chat.indexOf('</div>\n        ${renderNewTransmissionBar(state)}'),
     );
+    expect(chat).toContain('data-new-transmission="true"');
     expect(typing).toContain('arg-typing-status');
     expect(typing).not.toContain('message-row');
     expect(typing).not.toContain('arg-msg');
@@ -696,6 +774,15 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('health_url: Option<String>');
     expect(rust).toContain('log_path: Option<String>');
     expect(rust).toContain('fn run_gateway_action');
+    expect(rust).toContain('fn run_llama_server_action');
+    expect(rust).toContain('resolve_llama_server_path');
+    expect(rust).toContain('fn configured_llama_model_launch');
+    expect(rust).toContain('fn resolve_llama_gguf_model_path');
+    expect(rust).toContain('LLAMA_SERVER_DEFAULT_HF_REPO');
+    expect(rust).toContain('"--hf-repo"');
+    expect(rust).toContain('"--hf-file"');
+    expect(rust).toContain('LLAMA_SERVER_BIN');
+    expect(rust).toContain('llama-server-start');
     expect(rust).toContain('fn resolve_sidecar_path');
     expect(rust).toContain('fn sidecar_file_names');
     expect(rust).toContain('argentum-cli.exe');
@@ -706,7 +793,10 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('rate or quota limit');
     expect(setup).toContain("invokeTauri('send_chat_message'");
     expect(main).toContain("actionId: 'gateway-start'");
+    expect(main).toContain('llamaServer: actionId.startsWith');
+    expect(main).toContain("setLlamaServerConfig('modelSource', 'file')");
     expect(packageJson).toContain('build:desktop-sidecar');
+    expect(packageJson).toContain('prepare:llama-server');
     expect(packageJson).toContain('predesktop:build');
     expect(packageJson).toContain('npm run build && npm run build:desktop-sidecar');
     expect(workflow).toContain('Build desktop CLI sidecar');
@@ -893,7 +983,7 @@ describe('Argentum desktop shell', () => {
     expect(utils).toContain('compactConversationForProvider');
     expect(utils).toContain('conversationSummary');
     expect(setup).toContain('conversationHistory');
-    expect(setup).toContain('compactConversationForProvider(state.chatBlocks, message)');
+    expect(setup).toMatch(/compactConversationForProvider\(\s*state\.chatBlocks,\s*message,?\s*\)/);
     expect(rust).toContain('conversation_history');
     expect(rust).toContain('conversation_summary');
     expect(rust).toContain('fn openai_chat_messages_from_history');
@@ -951,33 +1041,42 @@ describe('Argentum desktop shell', () => {
     expect(index).toContain('this.agent.handleMessage(text, history)');
   });
 
-  test('polishes non-chat tabs with the visual product shell', () => {
+  test('declutters non-chat tabs with compact product primitives', () => {
     const sections = read('src/ui/desktop/modules/sections.js');
     const css = read('src/ui/desktop/styles.css');
 
-    expect(sections).toContain('function renderProductHero');
+    expect(sections).toContain('function renderCompactPageHeader');
     expect(sections).toContain('function renderProductTabShell');
     expect(sections).toContain("renderProductTabShell(\n          'gateway'");
     expect(sections).toContain("renderProductTabShell(\n      'security'");
     expect(sections).toContain("renderProductTabShell(\n        'settings'");
     expect(sections).toContain("renderProductTabShell(\n        'diagnostics'");
     expect(sections).toContain("renderProductTabShell(\n      'logs'");
-    expect(sections).toContain('section-command-dock');
+    expect(sections).toContain('compact-toolbar');
+    expect(sections).toContain('compact-status-strip');
+    expect(sections).toContain('compact-detail');
     expect(sections).toContain('settings-workbench');
     expect(sections).toContain('security-map-grid');
     expect(sections).toContain('diagnostics-matrix');
     expect(sections).toContain('log-console-grid');
+    expect(sections).not.toContain('product-hero');
+    expect(sections).not.toContain('section-command-dock');
 
     expect(css).toContain('.product-tab-shell');
-    expect(css).toContain('.product-hero');
-    expect(css).toContain('.section-command-dock');
+    expect(css).toContain('.compact-page-header');
+    expect(css).toContain('.compact-status-strip');
+    expect(css).toContain('.compact-toolbar');
+    expect(css).toContain('.compact-detail');
     expect(css).toContain('.glass-panel');
     expect(css).toContain('.settings-workbench');
     expect(css).toContain('.security-map-grid');
     expect(css).toContain('.diagnostics-matrix');
     expect(css).toContain('.log-console-grid');
     expect(css).toContain('.product-tab-shell .panel');
-    expect(css).toContain('box-shadow: 0 24px 70px');
+    expect(css).toContain('--text-base: 13px');
+    expect(css).toContain('grid-template-columns: 248px minmax(0, 1fr)');
+    expect(css).not.toContain('.product-hero');
+    expect(css).not.toContain('.section-command-dock');
   });
 
   test('keeps gateway terminal chronological and scrolls terminal panels to the latest output', () => {
@@ -1019,16 +1118,12 @@ describe('Argentum desktop shell', () => {
     const state = read('src/ui/desktop/modules/state.js');
     const css = read('src/ui/desktop/styles.css');
 
-    for (const mode of [
-      'data-view-mode="chat"',
-      'data-view-mode="split"',
-      'data-view-mode="full"',
-    ]) {
-      expect(html).toContain(mode);
-    }
+    expect(html).toContain('data-view-mode="chat"');
+    expect(html).not.toContain('data-view-mode="split"');
+    expect(html).not.toContain('data-view-mode="full"');
     expect(html).toContain('id="help-button"');
     expect(html).toContain('id="workspace-button"');
-    expect(chat).toContain('data-chat-filter="recent"');
+    expect(chat).not.toContain('data-chat-filter="recent"');
     expect(chat).toContain('data-chat-filter="pinned"');
     expect(chat).toContain('data-chat-filter="all"');
     expect(chat).toContain('filteredChatSessions');
@@ -1036,7 +1131,8 @@ describe('Argentum desktop shell', () => {
     expect(chat).toContain('data-pin-chat');
     expect(chat).toContain('data-clear-chat');
     expect(chat).toContain('data-rename-chat');
-    expect(chat).toContain('data-view-mode="chat" title="Hide inspector"');
+    expect(chat).toContain('data-toggle-chat-panel="inspector"');
+    expect(chat).toContain('data-toggle-chat-panel="conversations"');
     expect(state).toContain('viewMode:');
     expect(state).toContain('chatFilter:');
     expect(state).toContain('lastMessageAt');
@@ -1044,6 +1140,7 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('unreadCount');
     expect(state).toContain('setViewMode');
     expect(state).toContain('setChatFilter');
+    expect(state).toContain('toggleChatPanel');
     expect(state).toContain('toggleChatPinned');
     expect(state).toContain('toggleWorkspaceMenu');
     expect(state).toContain('toggleHelp');
@@ -1052,12 +1149,14 @@ describe('Argentum desktop shell', () => {
     expect(main).toContain('regenerateAssistantResponse');
     expect(main).toContain('chat.regenerate_state_reset');
     expect(css).toContain('.chat-product-shell.view-mode-chat');
-    expect(css).toContain('.chat-product-shell.view-mode-split');
+    expect(css).toContain('.chat-product-shell.arg-chat-shell.view-mode-chat');
+    expect(css).toContain('.chat-product-shell.arg-chat-shell.conversation-collapsed');
+    expect(css).toContain('.chat-product-shell.arg-chat-shell.inspector-collapsed');
     expect(css).toContain('.conversation-action-menu');
     expect(css).toContain('.floating-panel');
   });
 
-  test('keeps ChatGPT/OpenAI and MiniMax stable while other providers are testing', () => {
+  test('keeps ChatGPT/OpenAI, MiniMax, LM Studio, and llama.cpp stable while other providers are testing', () => {
     const constants = read('src/ui/desktop/modules/constants.js');
     const onboarding = read('src/ui/desktop/modules/onboarding.js');
     const sections = read('src/ui/desktop/modules/sections.js');
@@ -1068,11 +1167,26 @@ describe('Argentum desktop shell', () => {
     expect(constants).toContain("access: 'testing'");
     expect(constants).toContain("label: 'ChatGPT / OpenAI'");
     expect(constants).toContain("id: 'minimax'");
+    expect(constants).toContain("id: 'local'");
+    expect(constants).toContain("label: 'LM Studio / local'");
+    expect(constants).toContain("id: 'llama-cpp'");
+    expect(constants).toContain("label: 'Argentum llama.cpp'");
+    expect(constants).toContain("defaultBaseUrl: 'http://127.0.0.1:8080/v1'");
+    expect(constants).toContain("modelSearchUrl: 'https://huggingface.co/models?search=gguf'");
+    expect(constants).toContain('llamaDownloadPresets');
+    expect(constants).toContain("label: 'Qwen3 0.6B'");
+    expect(constants).toContain("label: 'Qwen3.5 0.8B Instruct FT'");
+    expect(constants).toContain("label: 'Gemma 3 1B IT'");
+    expect(constants).toContain("label: 'LFM2.5 1.2B Instruct'");
     expect(onboarding).toContain('provider-access-tabs');
     expect(onboarding).toContain('data-provider-catalog-tab');
     expect(onboarding).toContain('visibleProviders');
     expect(sections).toContain('data-provider-access');
     expect(sections).toContain('Testing access');
+    expect(sections).toContain('settings-llama-model-source');
+    expect(sections).toContain('settings-llama-model-preset');
+    expect(sections).toContain('settings-llama-hf-repo');
+    expect(sections).toContain('settings-llama-hf-file');
     expect(main).toContain(
       'state.providerCatalogTab = providerCatalogButton.dataset.providerCatalogTab',
     );
@@ -1091,7 +1205,10 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('touchActiveChatSession');
     expect(state).toContain('state.chatSessions = sortChatSessions');
     expect(state).toContain(
-      '.sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))',
+      'if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1',
+    );
+    expect(state).toContain(
+      'return (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0)',
     );
     expect(state).not.toContain('if (a.id === state.activeChatId) return -1');
   });
@@ -1145,7 +1262,7 @@ describe('Argentum desktop shell', () => {
     expect(state).toContain('chatAbortRequested');
 
     for (const name of ['plus', 'x', 'trash', 'send', 'stop', 'copy', 'image', 'file', 'refresh']) {
-      expect(icons).toContain(`${name}:`);
+      expect(icons).toMatch(new RegExp(`['"]?${name}['"]?:`));
     }
 
     expect(chat).toContain('function renderMessageComponent');
@@ -1192,14 +1309,15 @@ describe('Argentum desktop shell', () => {
     expect(main).toContain("recordUiEvent('chat.send_success'");
   });
 
-  test('removes diagonal placeholder artifact while preserving product hero structure', () => {
+  test('removes diagonal placeholder artifact and old product hero structure', () => {
     const sections = read('src/ui/desktop/modules/sections.js');
     const css = read('src/ui/desktop/styles.css');
 
     expect(sections).not.toContain('product-hero-signal');
     expect(css).not.toContain('.product-hero-signal');
     expect(css).not.toContain('linear-gradient(135deg, transparent 42%');
-    expect(css).toContain('.product-hero-status');
+    expect(css).not.toContain('.product-hero-status');
+    expect(css).toContain('.compact-page-header');
   });
 
   test('renders a distinct fresh chat state and calmer onboarding wizard', () => {
@@ -1243,7 +1361,7 @@ describe('Argentum desktop shell', () => {
     expect(onboarding).toContain('capability-chip-row');
     expect(state).toContain('onboardingOpenDisclosures');
     expect(state).toContain('setOnboardingDisclosure');
-    expect(main).toContain("document.addEventListener('toggle'");
+    expect(main).toMatch(/document\.addEventListener\(\s*'toggle'/);
     expect(main).toContain("target.id === 'onboarding-provider-select'");
   });
 
@@ -1365,8 +1483,8 @@ describe('Argentum desktop shell', () => {
     expect(read('src/channels/telegram.ts')).toContain('formatAgentResponse');
     expect(read('src/features/telegram/index.ts')).toContain('formatOutboundText');
     expect(cli).toContain('function loadWorkspaceEnv');
-    expect(cli).toContain(
-      'resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir))',
+    expect(cli).toMatch(
+      /resolveGatewayChildEnvironment\(\s*process\.env,\s*workDir,\s*loadWorkspaceEnv\(workDir\),?\s*\)/,
     );
   });
 
@@ -1434,6 +1552,7 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('agent_name: String');
     expect(rust).toContain('system_prompt: String');
     expect(rust).toContain('selected_context_access: Vec<String>');
+    expect(rust).toContain('"system-dashboard"');
     expect(rust).toContain('thinking_level: String');
     expect(rust).toContain('show_thinking_in_chat: bool');
     expect(rust).toContain('show_thinking_in_telegram: bool');
@@ -1441,6 +1560,11 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('selected_channels: Vec<String>');
     expect(rust).toContain('fn build_system_prompt');
     expect(rust).toContain('fn build_runtime_context');
+    expect(rust).toContain('CORE_CONTEXT_FILE_NAME');
+    expect(rust).toContain('fn default_core_template');
+    expect(rust).toContain('fn ensure_core_file');
+    expect(rust).toContain('fn read_core_context');
+    expect(rust).toContain('CORE update policy');
     expect(rust).toContain('fn argentum_tool_definitions');
     expect(rust).toContain('fn execute_argentum_tool');
     expect(rust).toContain('tool_calls');
@@ -1448,6 +1572,8 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('Provider keys are added by the desktop credential flow');
     expect(rust).toContain('fn render_config');
     expect(rust).toContain('workspaceRoot');
+    expect(rust).toContain('account_usage_status');
+    expect(rust).toContain('MiniMax account page browser profile');
   });
 
   test('documents current support matrix and stable provider state', () => {
@@ -1487,6 +1613,9 @@ describe('Argentum desktop shell', () => {
     expect(utils).toContain('Argentum app knowledge');
     expect(utils).toContain('Current page:');
     expect(utils).toContain('Active session:');
+    expect(utils).toContain('estimateCachedTextTokens');
+    expect(utils).toContain('defaultCoreContextText');
+    expect(utils).toContain('Provider usage:');
     expect(rust).toContain('Available app actions in the desktop MVP');
   });
 });

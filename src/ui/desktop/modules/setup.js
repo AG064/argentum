@@ -1,6 +1,19 @@
 import { APP_VERSION, providerPresets } from './constants.js';
-import { ensureProviderModelAllowed, mergeChannelChatSessions, notify, recordUiEvent, state } from './state.js';
-import { compactConversationForProvider, currentProvider, invokeTauri, normalizeError, openFolder } from './utils.js';
+import {
+  ensureProviderModelAllowed,
+  mergeChannelChatSessions,
+  notify,
+  recordUiEvent,
+  setUiPreference,
+  state,
+} from './state.js';
+import {
+  compactConversationForProvider,
+  currentProvider,
+  invokeTauri,
+  normalizeError,
+  openFolder,
+} from './utils.js';
 
 export function buildSetupPayload() {
   const provider = currentProvider(providerPresets, state);
@@ -51,14 +64,20 @@ export function providerUsageLine(usage) {
     : usage.requestRemaining
       ? `Requests remaining: ${usage.requestRemaining}`
       : '';
-  const weeklyLine = usage.weeklyRequestBudget ? `Weekly budget overlay: ${usage.weeklyRequestBudget}` : '';
-  const summary = usage.summary || [requestLine, weeklyLine, windowLine].filter(Boolean).join(' | ');
+  const weeklyLine = usage.weeklyRequestBudget
+    ? `Weekly budget overlay: ${usage.weeklyRequestBudget}`
+    : '';
+  const accountLine = usage.accountUsageStatus ? `Account page: ${usage.accountUsageStatus}` : '';
+  const summary =
+    usage.summary || [requestLine, weeklyLine, accountLine, windowLine].filter(Boolean).join(' | ');
 
   return summary || 'Usage unavailable from provider';
 }
 
 function previewSystemStats() {
-  const memory = window.navigator?.deviceMemory ? Number(window.navigator.deviceMemory) * 1024 ** 3 : 0;
+  const memory = window.navigator?.deviceMemory
+    ? Number(window.navigator.deviceMemory) * 1024 ** 3
+    : 0;
   const cores = Number(window.navigator?.hardwareConcurrency || 0);
   return {
     collectedAt: String(Math.floor(Date.now() / 1000)),
@@ -66,8 +85,17 @@ function previewSystemStats() {
     osName: 'Desktop preview',
     osVersion: 'Unavailable until the installed app runs',
     kernelVersion: 'Unavailable',
-    cpuBrand: cores ? `${cores} logical cores reported by browser` : 'Unavailable in browser preview',
+    arch: window.navigator?.platform || 'Browser preview',
+    cpuBrand: cores
+      ? `${cores} logical cores reported by browser`
+      : 'Unavailable in browser preview',
     cpuCores: cores,
+    cpuCoresDetail: Array.from({ length: Math.max(cores, 0) }, (_, index) => ({
+      core: index,
+      name: `Browser core ${index + 1}`,
+      frequencyMhz: 0,
+      usagePercent: 0,
+    })),
     cpuUsagePercent: 0,
     memoryTotalBytes: memory,
     memoryUsedBytes: 0,
@@ -81,6 +109,11 @@ function previewSystemStats() {
     networkTransmittedBytes: 0,
     uptimeSeconds: 0,
     temperatureCelsius: null,
+    processesCount: 0,
+    processes: [],
+    networks: [],
+    temperatureSensors: [],
+    gpus: [],
     disks: [],
   };
 }
@@ -162,14 +195,19 @@ export async function testProvider() {
 
   const promise = invokeTauri('test_provider', { request });
   if (!promise) {
-    const localPreview = request.baseUrl.includes('127.0.0.1') || request.baseUrl.includes('localhost');
+    const localPreview =
+      request.baseUrl.includes('127.0.0.1') || request.baseUrl.includes('localhost');
     state.apiTest = {
       status: localPreview || request.apiKey ? 'ok' : 'warning',
       message: localPreview
         ? 'Preview mode: local endpoint shape looks ready.'
         : 'Preview mode: add an API key in the installed app to run a live test.',
     };
-    notify(state.apiTest.status === 'ok' ? 'success' : 'warning', 'Provider test', state.apiTest.message);
+    notify(
+      state.apiTest.status === 'ok' ? 'success' : 'warning',
+      'Provider test',
+      state.apiTest.message,
+    );
     recordUiEvent('provider.test', state.apiTest.status, providerUsageLine(state.usageSnapshot), {
       provider: provider.id,
       preview: true,
@@ -184,7 +222,11 @@ export async function testProvider() {
       message: result.message || 'Provider test completed.',
     };
     if (result.usage) state.usageSnapshot = result.usage;
-    notify(state.apiTest.status === 'ok' ? 'success' : 'warning', 'Provider test', state.apiTest.message);
+    notify(
+      state.apiTest.status === 'ok' ? 'success' : 'warning',
+      'Provider test',
+      state.apiTest.message,
+    );
     recordUiEvent('provider.test', state.apiTest.status, providerUsageLine(result.usage), {
       provider: provider.id,
       model: request.model,
@@ -265,7 +307,8 @@ export async function completeCodexOAuth() {
     state.codexOAuth = {
       ...state.codexOAuth,
       status: 'error',
-      message: 'Start OpenAI/Codex authorization first, then complete it after approving in the browser.',
+      message:
+        'Start OpenAI/Codex authorization first, then complete it after approving in the browser.',
     };
     notify('error', 'Authorization needs a code', state.codexOAuth.message);
     return state.codexOAuth;
@@ -313,11 +356,13 @@ export async function completeCodexOAuth() {
       state.providerSelectionConfirmed = true;
       state.apiTest = {
         status: 'idle',
-        message: 'OpenAI/Codex authorization is saved. Run Test Provider to verify the saved browser-account credentials.',
+        message:
+          'OpenAI/Codex authorization is saved. Run Test Provider to verify the saved browser-account credentials.',
       };
       try {
         const saveResult = await saveSetup();
-        state.savedConfigPath = saveResult.configPath || saveResult.config_path || state.savedConfigPath;
+        state.savedConfigPath =
+          saveResult.configPath || saveResult.config_path || state.savedConfigPath;
       } catch (error) {
         notify('warning', 'Authorization saved, config not updated', normalizeError(error));
       }
@@ -362,35 +407,48 @@ export async function openExternalUrl(url) {
   }
 }
 
-export async function sendChatMessage(message, attachments = []) {
+export async function buildChatRequestPayload(message, attachments = []) {
   await persistRuntimeSettings('chat');
-  const { conversationHistory, conversationSummary } = compactConversationForProvider(state.chatBlocks, message);
+  const { conversationHistory, conversationSummary } = compactConversationForProvider(
+    state.chatBlocks,
+    message,
+  );
+  return {
+    workspacePath: state.workspacePath,
+    message,
+    agentName: state.agentName,
+    userName: state.userName,
+    systemPrompt: state.systemPrompt,
+    selectedContextAccess: state.selectedContextAccess,
+    thinkingLevel: state.thinkingLevel,
+    securityProfile: state.securityProfile,
+    selectedChannels: state.selectedChannels,
+    conversationHistory,
+    conversationSummary,
+    attachments,
+  };
+}
+
+export async function sendChatMessage(message, attachments = []) {
+  const request = await buildChatRequestPayload(message, attachments);
   recordUiEvent('chat.send', 'running', 'Sending chat message to the configured provider.', {
     provider: state.llmProvider,
     model: state.providerModel,
-    historyMessages: conversationHistory.length,
+    historyMessages: request.conversationHistory.length,
   });
   const promise = invokeTauri('send_chat_message', {
-    request: {
-      workspacePath: state.workspacePath,
-      message,
-      agentName: state.agentName,
-      userName: state.userName,
-      systemPrompt: state.systemPrompt,
-      selectedContextAccess: state.selectedContextAccess,
-      thinkingLevel: state.thinkingLevel,
-      securityProfile: state.securityProfile,
-      selectedChannels: state.selectedChannels,
-      conversationHistory,
-      conversationSummary,
-      attachments,
-    },
+    request,
   });
 
   if (!promise) {
-    recordUiEvent('chat.send', 'offline', 'Desktop bridge unavailable; chat stayed in preview mode.', {
-      provider: 'Preview',
-    });
+    recordUiEvent(
+      'chat.send',
+      'offline',
+      'Desktop bridge unavailable; chat stayed in preview mode.',
+      {
+        provider: 'Preview',
+      },
+    );
     return {
       status: 'offline',
       message:
@@ -403,11 +461,16 @@ export async function sendChatMessage(message, attachments = []) {
 
   const result = await promise;
   if (result.usage) state.usageSnapshot = result.usage;
-  recordUiEvent('chat.send', result.offline ? 'offline' : result.status || 'ok', result.message || 'Chat response received.', {
-    provider: result.provider,
-    model: result.model,
-    usage: providerUsageLine(result.usage),
-  });
+  recordUiEvent(
+    'chat.send',
+    result.offline ? 'offline' : result.status || 'ok',
+    result.message || 'Chat response received.',
+    {
+      provider: result.provider,
+      model: result.model,
+      usage: providerUsageLine(result.usage),
+    },
+  );
   return result;
 }
 
@@ -419,6 +482,7 @@ export async function chooseWorkspaceFolder() {
   }
 
   state.workspacePath = Array.isArray(selected) ? selected[0] : selected;
+  setUiPreference('workspacePath', state.workspacePath);
   notify(
     'success',
     'Workspace selected',
@@ -433,8 +497,14 @@ export async function hydrateDesktopDefaults() {
 
   try {
     const defaults = await promise;
+    if (defaults?.savedWorkspacePath) {
+      state.workspacePath = defaults.savedWorkspacePath;
+      setUiPreference('workspacePath', state.workspacePath);
+      return;
+    }
     if (defaults?.defaultWorkspacePath && state.workspacePath.includes('%LOCALAPPDATA%')) {
       state.workspacePath = defaults.defaultWorkspacePath;
+      setUiPreference('workspacePath', state.workspacePath);
     }
   } catch (error) {
     notify('warning', 'Default workspace unavailable', normalizeError(error));
@@ -442,9 +512,12 @@ export async function hydrateDesktopDefaults() {
 }
 
 export async function refreshDesktopState(options = {}) {
-  const { announce = false } = options;
+  const { announce = false, silentErrors = false } = options;
   const promise = invokeTauri('desktop_state', {
-    request: { workspacePath: state.workspacePath },
+    request: {
+      workspacePath: state.workspacePath,
+      llamaServer: state.llamaServerConfig,
+    },
   });
 
   if (!promise) {
@@ -456,13 +529,21 @@ export async function refreshDesktopState(options = {}) {
       dataExists: Boolean(state.setupComplete),
       logsExists: Boolean(state.setupComplete),
       gatewayPid: null,
+      llamaServerInstalled: false,
+      llamaServerPid: null,
+      llamaServerEndpoint: `http://${state.llamaServerConfig.host || '127.0.0.1'}:${state.llamaServerConfig.port || 8080}/v1`,
+      llamaServerLogPreview:
+        'Desktop preview mode. Run the installed app to read local server logs.',
       gatewayLogPreview: 'Desktop preview mode. Run the installed app to read local logs.',
       auditLogPreview: 'Desktop preview mode. Run the installed app to read audit history.',
-      appLogPreview: 'Desktop preview mode. Run the installed app to read structured activity logs.',
+      appLogPreview:
+        'Desktop preview mode. Run the installed app to read structured activity logs.',
       systemStats: previewSystemStats(),
       telegramDiagnostics: {
         configured: state.selectedChannels.includes('telegram'),
-        lastResponseStatus: state.selectedChannels.includes('telegram') ? 'preview-mode' : 'not-selected',
+        lastResponseStatus: state.selectedChannels.includes('telegram')
+          ? 'preview-mode'
+          : 'not-selected',
       },
     };
     if (announce) notify('success', 'Workspace state refreshed', 'Preview state was refreshed.');
@@ -473,8 +554,34 @@ export async function refreshDesktopState(options = {}) {
     const result = await promise;
     state.desktopState = result;
     mergeChannelChatSessions(result.channelSessions || []);
-    if (announce) notify('success', 'Workspace state refreshed', 'Local workspace state was refreshed.');
+    if (announce)
+      notify('success', 'Workspace state refreshed', 'Local workspace state was refreshed.');
   } catch (error) {
-    notify('error', 'Workspace state failed', normalizeError(error));
+    if (!silentErrors) notify('error', 'Workspace state failed', normalizeError(error));
+  }
+}
+
+export async function refreshSystemDashboardState(options = {}) {
+  const { silentErrors = false } = options;
+  const promise = invokeTauri('desktop_system_stats');
+
+  if (!promise) {
+    state.desktopState = {
+      ...state.desktopState,
+      systemStats: previewSystemStats(),
+    };
+    return state.desktopState.systemStats;
+  }
+
+  try {
+    const result = await promise;
+    state.desktopState = {
+      ...state.desktopState,
+      systemStats: result,
+    };
+    return result;
+  } catch (error) {
+    if (!silentErrors) notify('error', 'System dashboard failed', normalizeError(error));
+    return null;
   }
 }

@@ -37,6 +37,9 @@ export function modelOptionsFor(provider, currentModel = '', authMethod = 'api-k
       ? provider.codexModels
       : provider.models || [{ id: provider.defaultModel, label: provider.defaultModel }];
   const options = [...source];
+  if (!options.some((option) => option.id === 'custom-model')) {
+    options.push({ id: 'custom-model', label: 'Other / custom model ID' });
+  }
   const current = String(currentModel || '').trim();
   if (current && !options.some((option) => option.id === current)) {
     options.push({ id: current, label: `Current saved: ${current}` });
@@ -53,7 +56,10 @@ export function defaultModelForAuth(provider, authMethod = 'api-key') {
 }
 
 export function modelAllowedForAuth(provider, model, authMethod = 'api-key') {
-  return modelOptionsFor(provider, '', authMethod).some((option) => option.id === model);
+  const cleanModel = String(model || '').trim();
+  if (!cleanModel) return false;
+  if (cleanModel !== '__custom__') return true;
+  return modelOptionsFor(provider, '', authMethod).some((option) => option.id === cleanModel);
 }
 
 export function modelMetadataFor(modelId, metadata = {}) {
@@ -66,6 +72,18 @@ export function modelMetadataFor(modelId, metadata = {}) {
       detail: 'No baked-in metadata yet. Argentum will still test the endpoint before live use.',
     }
   );
+}
+
+export function displayModelName(modelId = '') {
+  const raw = String(modelId || '').trim();
+  if (!raw) return 'Model unavailable';
+
+  const clean = raw
+    .replace(/^Argentum llama\.cpp\//i, '')
+    .replace(/^llama\.cpp\//i, '')
+    .replace(/^local\//i, '');
+  const parts = clean.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || clean || raw;
 }
 
 export function inferMimeType(path = '') {
@@ -115,6 +133,58 @@ export function estimateContextTokens(blocks = [], draft = '') {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
+function hashText(value = '') {
+  let hash = 2166136261;
+  const text = String(value);
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+export function estimateCachedTextTokens(cacheKey, text = '') {
+  const source = String(text || '');
+  const key = `${cacheKey}:${hashText(source)}`;
+  try {
+    const storage = typeof window === 'undefined' ? null : window.localStorage;
+    const cache = storage
+      ? JSON.parse(storage.getItem('argentum.contextTokenCache.v1') || '{}')
+      : {};
+    if (Number.isFinite(cache[key])) return cache[key];
+    const tokens = Math.max(1, Math.ceil(source.length / 4));
+    if (storage) {
+      storage.setItem(
+        'argentum.contextTokenCache.v1',
+        JSON.stringify({
+          ...cache,
+          [key]: tokens,
+        }),
+      );
+    }
+    return tokens;
+  } catch (_error) {
+    return Math.max(1, Math.ceil(source.length / 4));
+  }
+}
+
+export function defaultCoreContextText(state = {}) {
+  const model = String(state.providerModel || '').toLowerCase();
+  const contextLimit =
+    model.includes('minimax-m2.7') || model.includes('gpt-5.5') || model.includes('gpt-5.4')
+      ? 200000
+      : model.includes('gemini-2.5')
+        ? 1000000
+        : 32000;
+  const profile = contextLimit >= 1000000 ? 'full' : contextLimit >= 200000 ? 'compact' : 'minimal';
+  return [
+    `CORE profile: ${profile}`,
+    'Local-first desktop AI workspace.',
+    'Workspace boundary, approved capabilities, provider usage, gateway state, and user-approved memory guide the agent.',
+    'CORE updates require user approval before writes.',
+  ].join('\n');
+}
+
 export function buildApprovedRuntimeContextText(state) {
   const access = new Set(state.selectedContextAccess || []);
   const lines = [
@@ -136,9 +206,13 @@ export function buildApprovedRuntimeContextText(state) {
   }
 
   if (access.has('tool-state')) {
-    lines.push(`Provider status: ${state.apiTest?.status || 'idle'} - ${state.apiTest?.message || ''}`);
+    lines.push(
+      `Provider status: ${state.apiTest?.status || 'idle'} - ${state.apiTest?.message || ''}`,
+    );
     lines.push(`Channels: ${(state.selectedChannels || ['local']).join(', ')}`);
-    lines.push(`Telegram status: ${state.desktopState?.telegramDiagnostics?.lastResponseStatus || 'not reported'}`);
+    lines.push(
+      `Telegram status: ${state.desktopState?.telegramDiagnostics?.lastResponseStatus || 'not reported'}`,
+    );
     if (state.desktopState?.telegramDiagnostics?.lastError) {
       lines.push(`Telegram last error: ${state.desktopState.telegramDiagnostics.lastError}`);
     }
@@ -158,10 +232,17 @@ export function buildApprovedRuntimeContextText(state) {
     const usageParts = [];
     if (usage.summary) usageParts.push(usage.summary);
     if (usage.requestRemaining) {
-      usageParts.push(`requests remaining ${usage.requestRemaining}${usage.requestLimit ? ` of ${usage.requestLimit}` : ''}`);
+      usageParts.push(
+        `requests remaining ${usage.requestRemaining}${usage.requestLimit ? ` of ${usage.requestLimit}` : ''}`,
+      );
     }
     if (usage.tokenRemaining) {
-      usageParts.push(`tokens remaining ${usage.tokenRemaining}${usage.tokenLimit ? ` of ${usage.tokenLimit}` : ''}`);
+      usageParts.push(
+        `tokens remaining ${usage.tokenRemaining}${usage.tokenLimit ? ` of ${usage.tokenLimit}` : ''}`,
+      );
+    }
+    if (usage.accountUsageStatus) {
+      usageParts.push(`account-page usage ${usage.accountUsageStatus}`);
     }
     if (usageParts.length > 0) {
       lines.push(`Provider usage: ${usageParts.join('; ')}`);
@@ -179,8 +260,12 @@ export function buildApprovedRuntimeContextText(state) {
 
 export function estimateRuntimeContextTokens(state, draft = state?.draftMessage || '') {
   const chatTokens = estimateContextTokens(state?.chatBlocks || [], draft);
-  const approvedContextTokens = Math.ceil(buildApprovedRuntimeContextText(state || {}).length / 4);
-  return Math.max(1, chatTokens + approvedContextTokens);
+  const approvedContextTokens = estimateCachedTextTokens(
+    'approved-runtime-context',
+    buildApprovedRuntimeContextText(state || {}),
+  );
+  const coreTokens = estimateCachedTextTokens('core-context', defaultCoreContextText(state || {}));
+  return Math.max(1, chatTokens + approvedContextTokens + coreTokens);
 }
 
 export function compactConversationForProvider(blocks = [], currentMessage = '', options = {}) {
@@ -300,7 +385,7 @@ export async function openFolder(defaultPath) {
   });
 }
 
-export async function openFile(defaultPath) {
+export async function openFile(defaultPath, options = {}) {
   const open = window.__TAURI__?.dialog?.open;
   if (!open) return null;
 
@@ -308,6 +393,7 @@ export async function openFile(defaultPath) {
     directory: false,
     multiple: false,
     defaultPath,
+    ...(options.filters ? { filters: options.filters } : {}),
   });
 }
 
@@ -317,7 +403,9 @@ export function isProbablyAbsolutePath(path) {
 }
 
 export function explainPath(path) {
-  return path && !path.includes('%LOCALAPPDATA%') ? path : 'the workspace folder you choose in the next step';
+  return path && !path.includes('%LOCALAPPDATA%')
+    ? path
+    : 'the workspace folder you choose in the next step';
 }
 
 export function normalizeError(error) {

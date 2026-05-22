@@ -11,6 +11,13 @@ export const sections = [
   { id: 'chat', icon: 'chat', title: 'Chat', eyebrow: 'Workspace', requiresSetup: false },
   { id: 'gateway', icon: 'gateway', title: 'Gateway', eyebrow: 'Runtime', requiresSetup: true },
   {
+    id: 'local-server',
+    icon: 'cpu',
+    title: 'Local Server',
+    eyebrow: 'llama.cpp',
+    requiresSetup: true,
+  },
+  {
     id: 'security',
     icon: 'shield',
     title: 'Security & Permissions',
@@ -158,6 +165,20 @@ export const contextAccessOptions = [
     detail:
       'Argentum may see which local capabilities are allowed, blocked, or waiting for approval.',
   },
+  {
+    id: 'system-dashboard',
+    label: 'Live system dashboard',
+    status: 'Optional',
+    detail:
+      'Argentum may collect local CPU, memory, process, disk, network, temperature, and GPU telemetry while the dashboard tab is open.',
+  },
+  {
+    id: 'local-server',
+    label: 'Local llama.cpp server',
+    status: 'Optional',
+    detail:
+      'Argentum may see and control the bundled or workspace-provided llama.cpp server process, endpoint, model path, and redacted logs.',
+  },
 ];
 
 export const modelMetadata = {
@@ -289,6 +310,205 @@ export const modelMetadata = {
     capabilities: ['chat', 'text generation'],
     detail: 'MiniMax text model kept as a testing model until the provider test confirms support.',
   },
+  'lmstudio-auto': {
+    maxContextTokens: 32768,
+    contextWindow: 'Endpoint reported when available',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'Local endpoint. Argentum checks LM Studio /v1/models or REST model metadata when available.',
+    capabilities: ['local chat', 'tools when model/server supports them'],
+    detail:
+      'Use the model currently loaded by LM Studio. API key can stay blank for local endpoints unless you configured one.',
+  },
+  'argentum-llama-default': {
+    maxContextTokens: 8192,
+    contextWindow: 'Configured in Local Server',
+    maxContextWindow: 'GGUF/model dependent',
+    currentContextLabel:
+      'Argentum llama.cpp local server. Context depends on the selected GGUF and server flags.',
+    capabilities: ['local chat', 'tools through Argentum', 'reasoning when model supports it'],
+    detail:
+      'Runs through the Argentum-managed llama.cpp server. Put GGUF models in workspace/models and tune flags in Local Server settings.',
+  },
+  'qwen/qwen2.5-0.5b-instruct': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'Tiny local Qwen profile. Confirm the loaded context through the local endpoint.',
+    capabilities: ['local chat', 'tools when enabled'],
+    detail: 'Very small Qwen2.5 instruction model for CPU-only or low-memory machines.',
+  },
+  'qwen/qwen3-0.6b': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'Tiny local Qwen3 profile. Confirm the loaded context through the local endpoint.',
+    capabilities: ['local chat', 'reasoning', 'tools when enabled'],
+    detail: '0.6B Qwen3 GGUF option for low-resource local inference.',
+  },
+  'qwen/qwen3.5-0.8b-instruct-ft': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'Community 0.8B local profile. Confirm actual support through endpoint test.',
+    capabilities: ['local chat'],
+    detail: 'Community 0.8B Qwen-family GGUF option for very small local setups.',
+  },
+  'google/gemma-3-1b-it': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Gemma 1B local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat'],
+    detail: 'Compact Gemma 3 instruction model for lightweight local chat.',
+  },
+  'tinyllama/tinyllama-1.1b-chat': {
+    maxContextTokens: 4096,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'TinyLlama local profile. Context depends on quantization and server flags.',
+    capabilities: ['local chat'],
+    detail: 'Classic 1.1B lightweight chat model for older or CPU-only machines.',
+  },
+  'liquidai/lfm2.5-1.2b-instruct': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'LFM 1.2B local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat'],
+    detail: 'Small LiquidAI instruction model for local chat with modest hardware.',
+  },
+  'huggingfacetb/smollm2-360m-instruct': {
+    maxContextTokens: 8192,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Ultra-small SmolLM2 profile for minimum-resource devices.',
+    capabilities: ['local chat'],
+    detail: 'Ultra-small fallback when even 1B-class models are too heavy.',
+  },
+  'qwen/qwen3-1.7b': {
+    maxContextTokens: 32768,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Small Qwen3 profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'reasoning', 'tools when enabled'],
+    detail: 'Stronger small local reasoning option when RAM allows 1.7B-class models.',
+  },
+  'openai/gpt-oss-20b': {
+    maxContextTokens: 131000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Local GPT-OSS profile. Confirm loaded model context through LM Studio.',
+    capabilities: ['local chat', 'reasoning', 'tools when enabled'],
+    detail: 'Common LM Studio local model. Best limits depend on quantization and hardware.',
+  },
+  'google/gemma-3-27b-it': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Gemma local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'vision on VLM variants'],
+    detail: 'Gemma family option for local or OpenAI-compatible routes.',
+  },
+  'google/gemma-3-12b-it': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Gemma local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'vision on VLM variants'],
+    detail: 'Smaller Gemma family option for local or OpenAI-compatible routes.',
+  },
+  'qwen/qwen3-14b': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Qwen local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'reasoning', 'tools when enabled'],
+    detail: 'Qwen family option for local reasoning and coding tasks.',
+  },
+  'qwen/qwen2.5-vl-7b-instruct': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'Qwen VL local profile. Confirm actual context and image support through endpoint test.',
+    capabilities: ['local chat', 'vision', 'tools when enabled'],
+    detail:
+      'Vision-capable Qwen family option when loaded in LM Studio or a compatible local server.',
+  },
+  'qwen2.5-coder-32b-instruct': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Qwen Coder local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local coding', 'tools when enabled'],
+    detail: 'Common local coding model option.',
+  },
+  'deepseek-r1-distill-qwen-14b': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'DeepSeek reasoning profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'reasoning'],
+    detail:
+      'Reasoning-oriented local model option. Reasoning output may appear in separated blocks.',
+  },
+  'deepseek-coder-v2-lite-instruct': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'DeepSeek Coder local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local coding', 'tools when enabled'],
+    detail: 'Compact DeepSeek coding model commonly used through local OpenAI-compatible servers.',
+  },
+  'meta-llama-3.1-8b-instruct': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Llama local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'tools when enabled'],
+    detail: 'General local instruction model option.',
+  },
+  'mistral-nemo-instruct-2407': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Mistral local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat'],
+    detail: 'Compact general-purpose local model option.',
+  },
+  'llava-v1.6-mistral-7b': {
+    maxContextTokens: 32000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel:
+      'LLaVA local vision profile. Confirm actual image support through endpoint test.',
+    capabilities: ['local chat', 'vision'],
+    detail: 'Common local vision model option for image analysis through compatible servers.',
+  },
+  'phi-4-mini-instruct': {
+    maxContextTokens: 128000,
+    contextWindow: 'Model dependent',
+    maxContextWindow: 'Model dependent',
+    currentContextLabel: 'Phi local profile. Confirm actual context through endpoint test.',
+    capabilities: ['local chat', 'tools when enabled'],
+    detail: 'Compact local instruction model option for lower VRAM systems.',
+  },
+  'custom-local-model': {
+    maxContextTokens: 32000,
+    contextWindow: 'Custom / endpoint reported',
+    maxContextWindow: 'Custom / endpoint reported',
+    currentContextLabel:
+      'Custom model ID. Test provider to confirm context, tools, vision, and reasoning support.',
+    capabilities: ['custom'],
+    detail: 'Enter the exact model ID exposed by your local server or provider endpoint.',
+  },
 };
 
 export const experienceLevels = [
@@ -363,13 +583,88 @@ export const providerCatalogTabs = [
     id: 'stable',
     label: 'Stable',
     detail:
-      'ChatGPT/OpenAI and MiniMax routes wired for live chat, provider tests, and usage reporting.',
+      'ChatGPT/OpenAI, MiniMax, LM Studio/local, and Argentum llama.cpp routes wired for live chat and provider tests.',
   },
   {
     id: 'testing',
     label: 'Testing',
     detail:
       'Other providers remain selectable for testing, but they must pass Test Provider before live use.',
+  },
+];
+
+export const llamaDownloadPresets = [
+  {
+    id: 'qwen2.5-0.5b-instruct-q4',
+    modelId: 'qwen/qwen2.5-0.5b-instruct',
+    label: 'Qwen2.5 0.5B Instruct',
+    size: '0.5B',
+    repo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M',
+    file: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    detail: 'Smallest default download for weak CPUs and quick smoke tests.',
+  },
+  {
+    id: 'qwen3-0.6b-q4',
+    modelId: 'qwen/qwen3-0.6b',
+    label: 'Qwen3 0.6B',
+    size: '0.6B',
+    repo: 'unsloth/Qwen3-0.6B-GGUF:Q4_K_M',
+    file: 'Qwen3-0.6B-Q4_K_M.gguf',
+    detail: 'Tiny reasoning-capable local model for low-resource machines.',
+  },
+  {
+    id: 'qwen3.5-0.8b-community',
+    modelId: 'qwen/qwen3.5-0.8b-instruct-ft',
+    label: 'Qwen3.5 0.8B Instruct FT',
+    size: '0.8B',
+    repo: 'yamap59/Qwen3.5-0.8B-Instruct-FT-GGUF',
+    file: 'qwen3.5-0.8b-instruct.gguf',
+    detail: 'Community 0.8B GGUF option for very small local setups.',
+  },
+  {
+    id: 'gemma-3-1b-it-q4',
+    modelId: 'google/gemma-3-1b-it',
+    label: 'Gemma 3 1B IT',
+    size: '1B',
+    repo: 'ggml-org/gemma-3-1b-it-GGUF:Q4_K_M',
+    file: 'gemma-3-1b-it-Q4_K_M.gguf',
+    detail: 'Google Gemma 3 instruction model in a compact Q4 profile.',
+  },
+  {
+    id: 'tinyllama-1.1b-chat-q4',
+    modelId: 'tinyllama/tinyllama-1.1b-chat',
+    label: 'TinyLlama 1.1B Chat',
+    size: '1.1B',
+    repo: 'TinyLlama/TinyLlama-1.1B-Chat-v0.2-GGUF',
+    file: 'ggml-model-q4_0.gguf',
+    detail: 'Classic lightweight chat model for old laptops and CPU-only tests.',
+  },
+  {
+    id: 'lfm2.5-1.2b-instruct-q4',
+    modelId: 'liquidai/lfm2.5-1.2b-instruct',
+    label: 'LFM2.5 1.2B Instruct',
+    size: '1.2B',
+    repo: 'LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M',
+    file: 'LFM2.5-1.2B-Instruct-Q4_K_M.gguf',
+    detail: 'Small LiquidAI instruction model with a modern GGUF profile.',
+  },
+  {
+    id: 'smollm2-360m-instruct-q4',
+    modelId: 'huggingfacetb/smollm2-360m-instruct',
+    label: 'SmolLM2 360M Instruct',
+    size: '0.36B',
+    repo: 'bartowski/SmolLM2-360M-Instruct-GGUF:Q4_K_M',
+    file: 'SmolLM2-360M-Instruct-Q4_K_M.gguf',
+    detail: 'Ultra-small fallback for systems that cannot comfortably run 1B-class models.',
+  },
+  {
+    id: 'qwen3-1.7b-q4',
+    modelId: 'qwen/qwen3-1.7b',
+    label: 'Qwen3 1.7B',
+    size: '1.7B',
+    repo: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
+    file: 'Qwen3-1.7B-Q4_K_M.gguf',
+    detail: 'Still small, but stronger than the sub-1B presets if RAM allows it.',
   },
 ];
 
@@ -407,6 +702,19 @@ export const providerPresets = [
     requiresKey: true,
     detail:
       'ChatGPT browser-account authorization and OpenAI Platform API routes with strong tool and chat support.',
+    highlights: [
+      'Stable desktop chat route',
+      'API key or Codex browser-account auth',
+      'Vision/tool-capable model options',
+    ],
+    dataRegion: 'Varies by account, product, and provider configuration.',
+    dataRoute:
+      'API-key traffic goes to OpenAI Platform endpoints. Browser-account auth uses the official OpenAI/Codex authorization flow.',
+    docsUrl: 'https://platform.openai.com/docs',
+    termsUrl: 'https://openai.com/policies/terms-of-use',
+    privacyUrl: 'https://openai.com/policies/privacy-policy',
+    usageNotes:
+      'Rate-limit headers are shown when OpenAI exposes them. ChatGPT/Codex account counters are shown only when the account route exposes them.',
   },
   {
     id: 'anthropic',
@@ -425,6 +733,18 @@ export const providerPresets = [
     ],
     requiresKey: true,
     detail: 'Hosted Claude models. Good for long, careful reasoning.',
+    highlights: [
+      'Long-context reasoning',
+      'API-key auth only in this MVP',
+      'Testing route until provider test passes',
+    ],
+    dataRegion: 'Varies by Anthropic account and service configuration.',
+    dataRoute: 'Requests go to Anthropic API endpoints configured for the selected key.',
+    docsUrl: 'https://docs.anthropic.com',
+    termsUrl: 'https://www.anthropic.com/legal/consumer-terms',
+    privacyUrl: 'https://www.anthropic.com/legal/privacy',
+    usageNotes:
+      'Usage counters are unavailable unless Anthropic response headers/body expose them.',
   },
   {
     id: 'google',
@@ -443,6 +763,19 @@ export const providerPresets = [
     ],
     requiresKey: true,
     detail: 'Gemini through the OpenAI-compatible endpoint.',
+    highlights: [
+      'Google AI Studio keys',
+      'OpenAI-compatible route',
+      'Testing route until provider test passes',
+    ],
+    dataRegion: 'Varies by Google account, project, and model availability.',
+    dataRoute:
+      'Requests go to Google Generative Language API endpoints through the configured base URL.',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs',
+    termsUrl: 'https://ai.google.dev/gemini-api/terms',
+    privacyUrl: 'https://policies.google.com/privacy',
+    usageNotes:
+      'Usage and quota details are shown only if Google exposes them to the API response.',
   },
   {
     id: 'openrouter',
@@ -463,6 +796,18 @@ export const providerPresets = [
     ],
     requiresKey: true,
     detail: 'One endpoint for many hosted model providers.',
+    highlights: [
+      'Multi-provider routing',
+      'Provider-dependent data route',
+      'Testing route until model/key are verified',
+    ],
+    dataRegion: 'Depends on the downstream model provider selected in OpenRouter.',
+    dataRoute: 'Requests go to OpenRouter first, then to the selected downstream provider.',
+    docsUrl: 'https://openrouter.ai/docs',
+    termsUrl: 'https://openrouter.ai/terms',
+    privacyUrl: 'https://openrouter.ai/privacy',
+    usageNotes:
+      'OpenRouter usage is provider/model dependent; Argentum reports only exposed counters.',
   },
   {
     id: 'nvidia',
@@ -481,6 +826,17 @@ export const providerPresets = [
     ],
     requiresKey: true,
     detail: 'NVIDIA-hosted OpenAI-compatible models.',
+    highlights: [
+      'GPU-hosted inference',
+      'OpenAI-compatible API',
+      'Testing route until provider test passes',
+    ],
+    dataRegion: 'Varies by NVIDIA deployment and account configuration.',
+    dataRoute: 'Requests go to NVIDIA-hosted model endpoints for the selected model.',
+    docsUrl: 'https://docs.api.nvidia.com',
+    termsUrl: 'https://www.nvidia.com/en-us/about-nvidia/legal-info',
+    privacyUrl: 'https://www.nvidia.com/en-us/about-nvidia/privacy-policy',
+    usageNotes: 'Usage counters are shown only if NVIDIA response headers/body expose them.',
   },
   {
     id: 'groq',
@@ -500,6 +856,17 @@ export const providerPresets = [
     ],
     requiresKey: true,
     detail: 'Fast hosted OpenAI-compatible inference.',
+    highlights: [
+      'Low-latency inference',
+      'OpenAI-compatible API',
+      'Testing route until provider test passes',
+    ],
+    dataRegion: 'Varies by Groq account and service configuration.',
+    dataRoute: 'Requests go to Groq API endpoints for the selected model.',
+    docsUrl: 'https://console.groq.com/docs',
+    termsUrl: 'https://groq.com/terms-of-use',
+    privacyUrl: 'https://groq.com/privacy-policy',
+    usageNotes: 'Usage counters are shown only if Groq response headers/body expose them.',
   },
   {
     id: 'minimax',
@@ -519,6 +886,113 @@ export const providerPresets = [
     requiresKey: true,
     detail:
       'MiniMax hosted models through an OpenAI-style API, with Token Plan usage checks in Argentum.',
+    highlights: [
+      'Stable MiniMax M2.7 route',
+      'Token Plan usage API',
+      'Good for long practical agent tasks',
+    ],
+    dataRegion:
+      'MiniMax account and endpoint dependent. Global platform traffic uses minimax.io endpoints; China-region service uses separate MiniMax endpoints.',
+    dataRoute:
+      'API-key traffic goes to the configured MiniMax API base URL. Account-page usage requires a dedicated permission-gated browser profile.',
+    docsUrl: 'https://platform.minimax.io/docs',
+    termsUrl: 'https://www.minimax.io/terms-of-service',
+    privacyUrl: 'https://www.minimax.io/privacy-policy',
+    usageNotes:
+      'Official Token Plan API is the trusted source. Browser-profile account-page counters are unavailable until that integration is configured.',
+    accountUsageUrl: 'https://platform.minimax.io/user-center/payment/token-plan',
+  },
+  {
+    id: 'local',
+    access: 'stable',
+    label: 'LM Studio / local',
+    api: 'openai',
+    apiKeyEnv: 'LOCAL_LLM_API_KEY',
+    websiteUrl: 'https://lmstudio.ai',
+    authMethods: ['api-key'],
+    defaultBaseUrl: 'http://127.0.0.1:1234/v1',
+    defaultModel: 'lmstudio-auto',
+    models: [
+      { id: 'lmstudio-auto', label: 'LM Studio loaded model' },
+      { id: 'qwen/qwen2.5-0.5b-instruct', label: 'Qwen2.5 0.5B Instruct' },
+      { id: 'qwen/qwen3-0.6b', label: 'Qwen3 0.6B' },
+      { id: 'qwen/qwen3.5-0.8b-instruct-ft', label: 'Qwen3.5 0.8B Instruct FT' },
+      { id: 'google/gemma-3-1b-it', label: 'Gemma 3 1B IT' },
+      { id: 'tinyllama/tinyllama-1.1b-chat', label: 'TinyLlama 1.1B Chat' },
+      { id: 'liquidai/lfm2.5-1.2b-instruct', label: 'LFM2.5 1.2B Instruct' },
+      { id: 'huggingfacetb/smollm2-360m-instruct', label: 'SmolLM2 360M Instruct' },
+      { id: 'qwen/qwen3-1.7b', label: 'Qwen3 1.7B' },
+      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+      { id: 'google/gemma-3-27b-it', label: 'Gemma 3 27B IT' },
+      { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B IT' },
+      { id: 'qwen/qwen3-14b', label: 'Qwen3 14B' },
+      { id: 'qwen/qwen2.5-vl-7b-instruct', label: 'Qwen2.5 VL 7B' },
+      { id: 'qwen2.5-coder-32b-instruct', label: 'Qwen2.5 Coder 32B' },
+      { id: 'deepseek-r1-distill-qwen-14b', label: 'DeepSeek R1 Distill Qwen 14B' },
+      { id: 'deepseek-coder-v2-lite-instruct', label: 'DeepSeek Coder V2 Lite' },
+      { id: 'meta-llama-3.1-8b-instruct', label: 'Llama 3.1 8B Instruct' },
+      { id: 'mistral-nemo-instruct-2407', label: 'Mistral Nemo Instruct' },
+      { id: 'llava-v1.6-mistral-7b', label: 'LLaVA 1.6 Mistral 7B' },
+      { id: 'phi-4-mini-instruct', label: 'Phi 4 mini instruct' },
+      { id: 'custom-local-model', label: 'Other / custom local model' },
+    ],
+    requiresKey: false,
+    detail:
+      'Stable local route for LM Studio or another OpenAI-compatible local server. Endpoint is required; API key can stay blank for local-only servers.',
+    highlights: [
+      'Stable local route',
+      'LM Studio OpenAI-compatible API',
+      'API key optional for localhost',
+    ],
+    dataRegion: 'Local machine unless you point the endpoint at another host.',
+    dataRoute:
+      'Requests go only to the endpoint you enter. Default is LM Studio on http://127.0.0.1:1234/v1.',
+    docsUrl: 'https://lmstudio.ai/docs/developer',
+    termsUrl: 'https://lmstudio.ai/terms',
+    privacyUrl: 'https://lmstudio.ai/privacy',
+    usageNotes:
+      'Local usage is hardware-bound: RAM, VRAM, loaded model context, and server throughput. Argentum reports provider usage only when the local endpoint exposes it.',
+    modelSearchUrl: 'https://huggingface.co/models',
+  },
+  {
+    id: 'llama-cpp',
+    access: 'stable',
+    label: 'Argentum llama.cpp',
+    api: 'openai',
+    apiKeyEnv: 'LLAMA_CPP_API_KEY',
+    websiteUrl: 'https://github.com/ggml-org/llama.cpp',
+    authMethods: ['api-key'],
+    defaultBaseUrl: 'http://127.0.0.1:8080/v1',
+    defaultModel: 'argentum-llama-default',
+    models: [
+      { id: 'argentum-llama-default', label: 'Argentum workspace GGUF' },
+      ...llamaDownloadPresets.map((preset) => ({
+        id: preset.modelId,
+        label: `${preset.label} GGUF`,
+      })),
+      { id: 'qwen/qwen3-14b', label: 'Qwen3 14B GGUF' },
+      { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B GGUF' },
+      { id: 'deepseek-r1-distill-qwen-14b', label: 'DeepSeek R1 Distill GGUF' },
+      { id: 'mistral-nemo-instruct-2407', label: 'Mistral Nemo GGUF' },
+      { id: 'custom-local-model', label: 'Other / custom GGUF model' },
+    ],
+    requiresKey: false,
+    detail:
+      'Stable Argentum-managed llama.cpp route. The desktop app controls a localhost llama-server process when the binary and a GGUF model are installed.',
+    highlights: [
+      'Bundled/local server control layer',
+      'OpenAI-compatible /v1 endpoint',
+      'Runs only on localhost by default',
+    ],
+    dataRegion: 'Local machine. No provider receives data unless you point the endpoint elsewhere.',
+    dataRoute:
+      'Requests go to the Argentum-managed llama.cpp endpoint on 127.0.0.1. Models can live under the selected workspace, be explicitly selected as an external GGUF file, or be downloaded by llama.cpp from a Hugging Face preset.',
+    docsUrl: 'https://github.com/ggml-org/llama.cpp/tree/master/tools/server',
+    termsUrl: 'https://github.com/ggml-org/llama.cpp/blob/master/LICENSE',
+    privacyUrl: 'https://github.com/ggml-org/llama.cpp',
+    usageNotes:
+      'Usage is local hardware pressure: RAM, VRAM, context size, GPU layers, threads, and model throughput. No API quota exists.',
+    modelSearchUrl: 'https://huggingface.co/models?search=gguf',
   },
   {
     id: 'ollama',
@@ -538,7 +1012,19 @@ export const providerPresets = [
       { id: 'codellama', label: 'Code Llama' },
     ],
     requiresKey: false,
-    detail: 'Local models on your machine. Usually no API key is needed.',
+    detail: 'Ollama or another OpenAI-compatible local server. Usually no API key is needed.',
+    highlights: [
+      'Local endpoint',
+      'No cloud provider by default',
+      'Testing route until local server responds',
+    ],
+    dataRegion: 'Local machine unless your Ollama server is remote.',
+    dataRoute: 'Requests go to the configured Ollama-compatible endpoint.',
+    docsUrl: 'https://ollama.com/library',
+    termsUrl: 'https://ollama.com/terms',
+    privacyUrl: 'https://ollama.com/privacy',
+    usageNotes: 'Provider account usage is not available for local endpoints.',
+    modelSearchUrl: 'https://huggingface.co/models',
   },
   {
     id: 'custom',
@@ -558,6 +1044,18 @@ export const providerPresets = [
     ],
     requiresKey: false,
     detail: 'Use your own OpenAI-compatible or Anthropic-compatible endpoint.',
+    highlights: [
+      'Bring your own endpoint',
+      'OpenAI or Anthropic-compatible shape',
+      'Testing route until endpoint responds',
+    ],
+    dataRegion: 'Depends on the custom endpoint you configure.',
+    dataRoute: 'Requests go only to the base URL you enter.',
+    docsUrl: 'https://github.com/openai/openai-openapi',
+    termsUrl: 'https://github.com/openai/openai-openapi',
+    privacyUrl: 'https://github.com/openai/openai-openapi',
+    usageNotes:
+      'Usage is available only when the endpoint returns compatible headers or body fields.',
   },
 ];
 
@@ -668,6 +1166,42 @@ export const commandCatalog = [
     command: 'argentum gateway logs -n 100',
     buttonLabel: 'Logs',
     summary: 'Print recent gateway output with sensitive lines redacted.',
+    risk: 'Read-only',
+  },
+  {
+    id: 'llama-server-start',
+    section: 'local-server',
+    title: 'Start llama.cpp',
+    command: 'argentum llama-server start',
+    buttonLabel: 'Start',
+    summary: 'Start the Argentum-managed llama.cpp server for the selected workspace model.',
+    risk: 'Local runtime',
+  },
+  {
+    id: 'llama-server-status',
+    section: 'local-server',
+    title: 'llama.cpp Status',
+    command: 'argentum llama-server status',
+    buttonLabel: 'Check',
+    summary: 'Check whether the local llama.cpp server binary is installed and running.',
+    risk: 'Read-only',
+  },
+  {
+    id: 'llama-server-stop',
+    section: 'local-server',
+    title: 'Stop llama.cpp',
+    command: 'argentum llama-server stop',
+    buttonLabel: 'Stop',
+    summary: 'Stop the tracked llama.cpp server process for this workspace.',
+    risk: 'Runtime control',
+  },
+  {
+    id: 'llama-server-logs',
+    section: 'local-server',
+    title: 'llama.cpp Logs',
+    command: 'argentum llama-server logs -n 100',
+    buttonLabel: 'Logs',
+    summary: 'Show recent llama.cpp server output with sensitive lines redacted.',
     risk: 'Read-only',
   },
   {

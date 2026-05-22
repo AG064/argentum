@@ -1,6 +1,7 @@
 import {
   contextAccessOptions,
   fontOptions,
+  llamaDownloadPresets,
   modelMetadata,
   providerAuthMethods,
   providerCatalogTabs,
@@ -21,6 +22,7 @@ import {
 import {
   checked,
   currentProvider,
+  displayModelName,
   escapeAttribute,
   escapeHtml,
   estimateRuntimeContextTokens,
@@ -110,11 +112,25 @@ function renderUsageWindows(usage) {
           `,
         )
         .join('')}
+      ${
+        usage?.accountUsageStatus
+          ? `<div>
+              <span>Account page</span>
+              <strong>${escapeHtml(usage.accountUsageStatus)}</strong>
+              <small>${escapeHtml(usage.accountUsageSource || 'Browser-profile usage source unavailable')}</small>
+              ${
+                usage.accountUsageUrl
+                  ? `<a class="provider-website-link" href="${escapeAttribute(usage.accountUsageUrl)}" data-open-external="${escapeAttribute(usage.accountUsageUrl)}">Open usage page <span data-icon="externalLink"></span></a>`
+                  : ''
+              }
+            </div>`
+          : ''
+      }
     </div>
   `;
 }
 
-function renderProductHero({
+function renderCompactPageHeader({
   kicker,
   title,
   detail,
@@ -124,30 +140,30 @@ function renderProductHero({
   statsClass = '',
 }) {
   return `
-    <section class="product-hero ${escapeAttribute(tone)}">
-      <div class="product-hero-copy">
+    <section class="compact-page-header ${escapeAttribute(tone)}">
+      <div class="compact-page-title">
         <span class="eyebrow">${escapeHtml(kicker)}</span>
         <h2>${escapeHtml(title)}</h2>
         <p>${escapeHtml(detail)}</p>
       </div>
-      <div class="product-hero-status" aria-hidden="true">
-        <span></span>
-        <small>${escapeHtml(tone === 'online' ? 'Healthy' : tone === 'security' ? 'Guarded' : 'Ready')}</small>
-      </div>
-      <div class="product-hero-stats ${escapeAttribute(statsClass)}">
-        ${stats
-          .map(
-            (stat) => `
-              <div class="glass-panel stat-tile">
-                <span>${escapeHtml(stat.label)}</span>
-                <strong>${escapeHtml(stat.value)}</strong>
-                ${stat.detail ? `<small>${escapeHtml(stat.detail)}</small>` : ''}
-              </div>
-            `,
-          )
-          .join('')}
-      </div>
-      ${actions ? `<div class="section-command-dock">${actions}</div>` : ''}
+      ${
+        stats.length
+          ? `<div class="compact-status-strip ${escapeAttribute(statsClass)}">
+              ${stats
+                .map(
+                  (stat) => `
+                    <div class="compact-stat">
+                      <span>${escapeHtml(stat.label)}</span>
+                      <strong>${escapeHtml(stat.value)}</strong>
+                      ${stat.detail ? `<small>${escapeHtml(stat.detail)}</small>` : ''}
+                    </div>
+                  `,
+                )
+                .join('')}
+            </div>`
+          : ''
+      }
+      ${actions ? `<div class="compact-toolbar">${actions}</div>` : ''}
     </section>
   `;
 }
@@ -231,7 +247,7 @@ function gatewayModule() {
         ${renderProductTabShell(
           'gateway',
           `
-            ${renderProductHero({
+            ${renderCompactPageHeader({
               kicker: 'Runtime gateway',
               title: running ? 'Local gateway is running' : 'Local gateway is stopped',
               detail:
@@ -250,29 +266,155 @@ function gatewayModule() {
                 { label: 'View Logs', actionId: 'gateway-logs' },
               ]),
             })}
-            <div class="product-content-grid gateway-grid">
-              <section class="panel gateway-actions-panel glass-panel">
-                <div class="panel-header">
-                  <span class="pill">Whitelisted</span>
-                  <h3>Allowed gateway commands</h3>
-                  <p>These are the only gateway commands exposed to the GUI. Output, PID, health URL, and failures appear in the terminal panel.</p>
-                </div>
-                ${renderActionCards('gateway')}
-              </section>
-              <section class="panel terminal-panel gateway-terminal-shell glass-panel">
-                <div class="panel-header split-header">
-                  <div>
-                    <span class="pill">Terminal</span>
-                    <h3>Gateway Output</h3>
-                  </div>
-                  <button class="button" data-run-action="gateway-status">Refresh</button>
+            <div class="product-content-grid gateway-grid terminal-first">
+              <details class="panel terminal-panel gateway-terminal-shell compact-detail" open>
+                <summary>
+                  <span>
+                    <em>Terminal</em>
+                    <strong>Gateway Output</strong>
+                  </span>
+                  <small>Collapse</small>
+                </summary>
+                <div class="terminal-toolbar">
+                  <button class="button compact" type="button" data-run-action="gateway-status">Refresh</button>
                 </div>
                 <div class="terminal-body">
                   <article class="terminal-entry info">
                     <pre>${escapeHtml(terminalPreview(state, 'gateway'))}</pre>
                   </article>
                 </div>
-              </section>
+              </details>
+              <details class="panel gateway-actions-panel compact-detail">
+                <summary>
+                  <span>
+                    <em>Options</em>
+                    <strong>Gateway commands</strong>
+                  </span>
+                  <small>Expand</small>
+                </summary>
+                <div class="panel-header">
+                  <span class="pill">Whitelisted</span>
+                  <h3>Commands</h3>
+                </div>
+                ${renderActionCards('gateway')}
+              </details>
+            </div>
+          `,
+        )}
+      `;
+    },
+  };
+}
+
+function localServerModule() {
+  return {
+    id: 'local-server',
+    label: 'Local Server',
+    validate: () => '',
+    healthCheck: (state) => ({
+      status: state.desktopState?.llamaServerPid
+        ? 'ok'
+        : state.desktopState?.llamaServerInstalled
+          ? 'stopped'
+          : 'missing',
+      message: state.desktopState?.llamaServerPid
+        ? `Argentum llama.cpp is running as PID ${state.desktopState.llamaServerPid}.`
+        : state.desktopState?.llamaServerInstalled
+          ? 'Argentum llama.cpp is installed but stopped.'
+          : 'Argentum llama.cpp binary is not installed in this build.',
+    }),
+    render: (state) => {
+      const running = Boolean(state.desktopState?.llamaServerPid);
+      const installed = Boolean(state.desktopState?.llamaServerInstalled);
+      const endpoint = state.desktopState?.llamaServerEndpoint || 'http://127.0.0.1:8080/v1';
+      const progress = state.llamaServerProgress;
+
+      return `
+        ${renderNotifications()}
+        ${renderProductTabShell(
+          'local-server',
+          `
+              ${renderCompactPageHeader({
+                kicker: 'Local model runtime',
+                title: running
+                  ? 'Argentum llama.cpp is running'
+                  : installed
+                    ? 'Argentum llama.cpp is installed'
+                    : 'Argentum llama.cpp is not installed',
+                detail:
+                  'Argentum can run a localhost llama.cpp server from a selected GGUF file or a vetted Hugging Face download preset. The GUI translates safe settings into fixed llama-server flags.',
+                tone: running ? 'online' : installed ? 'standby' : 'warning',
+                stats: [
+                  {
+                    label: 'State',
+                    value: running ? 'Running' : installed ? 'Stopped' : 'Missing',
+                  },
+                  { label: 'PID', value: state.desktopState?.llamaServerPid || 'None' },
+                  { label: 'Endpoint', value: endpoint },
+                ],
+                statsClass: 'gateway-status-grid',
+                actions: renderCommandDock([
+                  { label: 'Start Server', actionId: 'llama-server-start', primary: true },
+                  { label: 'Check Status', actionId: 'llama-server-status' },
+                  { label: 'Stop Server', actionId: 'llama-server-stop' },
+                  { label: 'View Logs', actionId: 'llama-server-logs' },
+                ]),
+              })}
+              ${
+                progress
+                  ? `
+                    <section class="panel compact-panel llama-progress-panel">
+                      <div class="split-header">
+                        <div>
+                          <span class="eyebrow">Model setup</span>
+                          <h3>${escapeHtml(progress.phase || 'Preparing llama.cpp')}</h3>
+                        </div>
+                        <strong>${Math.max(0, Math.min(100, Math.round(progress.percent || 0)))}%</strong>
+                      </div>
+                      <div class="llama-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, Math.round(progress.percent || 0)))}">
+                        <span style="width:${Math.max(0, Math.min(100, Number(progress.percent || 0)))}%"></span>
+                      </div>
+                      <p>${escapeHtml(progress.detail || 'Waiting for llama.cpp output.')}</p>
+                    </section>
+                  `
+                  : ''
+              }
+              <div class="product-content-grid gateway-grid terminal-first">
+              <details class="panel terminal-panel gateway-terminal-shell compact-detail" open>
+                <summary>
+                  <span>
+                    <em>Terminal</em>
+                    <strong>llama.cpp Output</strong>
+                  </span>
+                  <small>Collapse</small>
+                </summary>
+                <div class="terminal-toolbar">
+                  <button class="button compact" type="button" data-run-action="llama-server-status">Refresh</button>
+                </div>
+                <div class="terminal-body">
+                  <article class="terminal-entry info">
+                    <pre>${escapeHtml(terminalPreview(state, 'llama-server') || state.desktopState?.llamaServerLogPreview || 'No entries yet.')}</pre>
+                  </article>
+                </div>
+              </details>
+              <details class="panel gateway-actions-panel compact-detail">
+                <summary>
+                  <span>
+                    <em>Options</em>
+                    <strong>Server controls</strong>
+                  </span>
+                  <small>Expand</small>
+                </summary>
+                <div class="panel-header">
+                  <span class="pill">Stable local</span>
+                  <h3>Server controls</h3>
+                </div>
+                ${renderActionCards('local-server')}
+                <div class="settings-inline-note">
+                  <strong>Bundled binary</strong>
+                  <p>The v0.0.7 installer bundles the vetted CPU llama.cpp server when release build download is enabled. Custom builds can still set LLAMA_SERVER_BIN or place llama-server in workspace/bin.</p>
+                </div>
+              </details>
             </div>
           `,
         )}
@@ -296,7 +438,7 @@ const logsModule = {
     ${renderProductTabShell(
       'logs',
       `
-        ${renderProductHero({
+        ${renderCompactPageHeader({
           kicker: 'Activity logs',
           title: 'Trace actions without exposing secrets',
           detail:
@@ -355,7 +497,7 @@ const securityModule = {
     ${renderProductTabShell(
       'security',
       `
-        ${renderProductHero({
+        ${renderCompactPageHeader({
           kicker: 'Security broker',
           title: 'Default-deny until you approve scope',
           detail:
@@ -450,58 +592,41 @@ const pcStatsModule = {
       : 'Argentum System Dashboard needs the installed desktop app for live data.',
   }),
   render: (state) => {
-    const stats = state.desktopState?.systemStats || {};
-    const disks = Array.isArray(stats.disks) ? stats.disks : [];
-    const memoryUsed = Number(stats.memoryUsedBytes || 0);
-    const memoryTotal = Number(stats.memoryTotalBytes || 0);
-    const diskUsed = Number(stats.diskTotalBytes || 0) - Number(stats.diskAvailableBytes || 0);
-    const networkTotal =
-      Number(stats.networkReceivedBytes || 0) + Number(stats.networkTransmittedBytes || 0);
-    const collectedAt = stats.collectedAt
-      ? new Date(Number(stats.collectedAt) * 1000).toLocaleString()
-      : 'Refresh to collect';
+    const dashboardEnabled = state.selectedContextAccess.includes('system-dashboard');
+
+    if (!dashboardEnabled) {
+      return `
+        ${renderNotifications()}
+        ${renderProductTabShell(
+          'pc-stats',
+          `
+            <section class="panel glass-panel dashboard-permission-panel">
+              <div class="panel-header split-header">
+                <div>
+                  <span class="pill">Permission required</span>
+                  <h3>Enable live system dashboard</h3>
+                  <p>Argentum collects local telemetry only while this tab is open. Slow sensor helpers run hidden and only when the OS needs them.</p>
+                </div>
+              </div>
+              <label class="setting-row toggle-row">
+                <span>
+                  <strong>Allow local system telemetry</strong>
+                  <small>CPU, memory, processes, disks, network, temperatures, and GPU inventory for this dashboard.</small>
+                </span>
+                <input type="checkbox" data-context-access="system-dashboard" />
+              </label>
+            </section>
+          `,
+        )}
+      `;
+    }
 
     return `
       ${renderNotifications()}
       ${renderProductTabShell(
         'pc-stats',
         `
-          ${renderProductHero({
-            kicker: 'System dashboard',
-            title: 'Argentum System Dashboard',
-            detail:
-              'The committed AGX-style system dashboard is embedded here and paired with the desktop bridge snapshot below. No provider or external API is required.',
-            tone: 'diagnostics',
-            stats: [
-              {
-                label: 'CPU',
-                value: formatPercent(stats.cpuUsagePercent),
-                detail: `${stats.cpuCores || 0} logical cores`,
-              },
-              {
-                label: 'Memory',
-                value: formatPercent(stats.memoryUsedPercent),
-                detail: `${formatBytes(memoryUsed)} / ${formatBytes(memoryTotal)}`,
-              },
-              {
-                label: 'Disk',
-                value: formatPercent(stats.diskUsedPercent),
-                detail: `${formatBytes(diskUsed)} used`,
-              },
-            ],
-            actions: renderCommandDock([
-              { label: 'Refresh statistics', refresh: true, primary: true },
-            ]),
-          })}
           <section class="panel glass-panel system-dashboard-frame-panel">
-            <div class="panel-header split-header">
-              <div>
-                <span class="pill">Embedded dashboard</span>
-                <h3>Live system view</h3>
-                <p>The dashboard committed in <code>src/ui/dashboard</code> is bundled into the desktop shell for this tab.</p>
-              </div>
-              <button class="button" data-refresh-state="true">Refresh data</button>
-            </div>
             <div class="system-dashboard-frame-shell">
               <iframe
                 class="system-dashboard-frame"
@@ -513,96 +638,6 @@ const pcStatsModule = {
               ></iframe>
             </div>
           </section>
-          <div class="pc-stats-layout">
-            <section class="panel glass-panel pc-stat-overview">
-              <div class="panel-header split-header">
-                <div>
-                  <span class="pill">Live snapshot</span>
-                  <h3>Resource usage</h3>
-                </div>
-                <button class="button" data-refresh-state="true">Refresh</button>
-              </div>
-              <div class="pc-stat-grid">
-                <article class="pc-stat-card">
-                  <span>CPU load</span>
-                  <strong>${formatPercent(stats.cpuUsagePercent)}</strong>
-                  ${renderStatBar(stats.cpuUsagePercent, 'CPU load')}
-                  <small>${escapeHtml(stats.cpuBrand || 'CPU unavailable')}</small>
-                </article>
-                <article class="pc-stat-card">
-                  <span>Memory</span>
-                  <strong>${formatBytes(memoryUsed)} / ${formatBytes(memoryTotal)}</strong>
-                  ${renderStatBar(stats.memoryUsedPercent, 'Memory usage')}
-                  <small>${formatPercent(stats.memoryUsedPercent)} used</small>
-                </article>
-                <article class="pc-stat-card">
-                  <span>Disk</span>
-                  <strong>${formatBytes(diskUsed)} / ${formatBytes(stats.diskTotalBytes)}</strong>
-                  ${renderStatBar(stats.diskUsedPercent, 'Disk usage')}
-                  <small>${formatBytes(stats.diskAvailableBytes)} available</small>
-                </article>
-                <article class="pc-stat-card">
-                  <span>Network total</span>
-                  <strong>${formatBytes(networkTotal)}</strong>
-                  <small>Down ${formatBytes(stats.networkReceivedBytes)} · Up ${formatBytes(stats.networkTransmittedBytes)}</small>
-                </article>
-                <article class="pc-stat-card">
-                  <span>Uptime</span>
-                  <strong>${escapeHtml(formatDuration(stats.uptimeSeconds))}</strong>
-                  <small>System uptime reported by OS</small>
-                </article>
-                <article class="pc-stat-card">
-                  <span>Temperature</span>
-                  <strong>${stats.temperatureCelsius == null ? 'Unavailable' : `${Number(stats.temperatureCelsius).toFixed(0)}°C`}</strong>
-                  <small>Highest reported sensor</small>
-                </article>
-              </div>
-            </section>
-            <section class="panel glass-panel pc-system-panel">
-              <div class="panel-header">
-                <span class="pill">Machine</span>
-                <h3>System identity</h3>
-                <p>High-level local machine metadata for diagnostics. This stays on-device.</p>
-              </div>
-              <div class="panel-body status-stack">
-                <div><span>Host</span><strong>${escapeHtml(stats.hostName || 'Unavailable')}</strong></div>
-                <div><span>OS</span><strong>${escapeHtml([stats.osName, stats.osVersion].filter(Boolean).join(' ') || 'Unavailable')}</strong></div>
-                <div><span>Kernel</span><strong>${escapeHtml(stats.kernelVersion || 'Unavailable')}</strong></div>
-                <div><span>CPU</span><strong>${escapeHtml(stats.cpuBrand || 'Unavailable')}</strong></div>
-                <div><span>Last refresh</span><strong>${escapeHtml(collectedAt)}</strong></div>
-              </div>
-            </section>
-            <section class="panel glass-panel pc-disk-panel">
-              <div class="panel-header">
-                <span class="pill">${disks.length} volumes</span>
-                <h3>Disks</h3>
-              </div>
-              <div class="pc-disk-list">
-                ${
-                  disks.length === 0
-                    ? '<article class="empty-state compact"><strong>No disk details available</strong><p>Run the installed desktop app and refresh this tab.</p></article>'
-                    : disks
-                        .slice(0, 8)
-                        .map(
-                          (disk) => `
-                            <article>
-                              <div>
-                                <strong>${escapeHtml(disk.name || disk.mountPoint || 'Disk')}</strong>
-                                <span>${escapeHtml(disk.mountPoint || 'Unknown mount point')}</span>
-                              </div>
-                              <div>
-                                <strong>${formatPercent(disk.usedPercent)}</strong>
-                                <span>${formatBytes(Number(disk.totalBytes || 0) - Number(disk.availableBytes || 0))} used of ${formatBytes(disk.totalBytes)}</span>
-                              </div>
-                              ${renderStatBar(disk.usedPercent, `${disk.name || 'Disk'} usage`)}
-                            </article>
-                          `,
-                        )
-                        .join('')
-                }
-              </div>
-            </section>
-          </div>
         `,
       )}
     `;
@@ -632,7 +667,7 @@ const settingsModule = {
               </div>
               <div class="settings-status-strip">
                 <div><span>Provider</span><strong>${escapeHtml(provider.label)}</strong></div>
-                <div><span>Model</span><strong>${escapeHtml(state.providerModel)}</strong></div>
+                <div><span>Model</span><strong>${escapeHtml(displayModelName(state.providerModel))}</strong></div>
                 <div><span>Config</span><strong>${state.desktopState?.configExists ? 'Saved' : 'Pending'}</strong></div>
               </div>
             </div>
@@ -661,6 +696,7 @@ const settingsSections = [
   ['workspace', 'Workspace'],
   ['provider', 'Provider'],
   ['model', 'Model'],
+  ['local-server', 'Local server'],
   ['context', 'Context and thinking'],
   ['chat', 'Chat display'],
   ['telegram', 'Telegram'],
@@ -718,14 +754,19 @@ function renderSettingsContent(state, activeSection, provider, metadata) {
 
 function settingsSectionSummary(id, state, provider, metadata) {
   const summaries = {
-    workspace: `Current path: ${state.workspacePath}`,
-    provider: `${provider.label}; auth ${state.providerAuthMethod}`,
-    model: `${state.providerModel}; ${metadata.contextWindow}`,
-    context: `${state.thinkingLevel} thinking; ${state.selectedContextAccess.length} context sources`,
-    chat: state.showThinkingInChat ? 'Reasoning visible in chat' : 'Reasoning hidden in chat',
-    telegram: state.selectedChannels.includes('telegram') ? 'Telegram selected' : 'Telegram off',
-    security: labelFor(securityProfiles, state.securityProfile),
-    advanced: `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
+    'workspace': `Current path: ${state.workspacePath}`,
+    'provider': `${provider.label}; auth ${state.providerAuthMethod}`,
+    'model': `${displayModelName(state.providerModel)}; ${metadata.contextWindow}`,
+    'local-server': state.desktopState?.llamaServerPid
+      ? `Running at ${state.desktopState.llamaServerEndpoint || 'localhost'}`
+      : state.desktopState?.llamaServerInstalled
+        ? 'Installed, stopped'
+        : 'Binary not installed',
+    'context': `${state.thinkingLevel} thinking; ${state.selectedContextAccess.length} context sources`,
+    'chat': state.showThinkingInChat ? 'Reasoning visible in chat' : 'Reasoning hidden in chat',
+    'telegram': state.selectedChannels.includes('telegram') ? 'Telegram selected' : 'Telegram off',
+    'security': labelFor(securityProfiles, state.securityProfile),
+    'advanced': `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
   };
   return summaries[id] || 'Open a settings section.';
 }
@@ -793,7 +834,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
       <label>
         API key
         <input id="settings-provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="Paste a new key, or leave blank to keep saved key." autocomplete="new-password" />
-        <small>Stored in workspace secrets, not YAML.</small>
+        <small>${escapeHtml(provider.requiresKey ? 'Stored in workspace secrets, not YAML.' : 'Optional for LM Studio/local/custom endpoints unless that server requires authorization.')}</small>
       </label>
       ${renderSettingsOAuthPanel(state)}
     `;
@@ -807,11 +848,16 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           ${modelOptionsFor(provider, state.providerModel, state.providerAuthMethod)
             .map(
               (model) => `
-                <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || model.id)}</option>
+                <option value="${escapeAttribute(model.id)}" ${selected(state.providerModel, model.id)}>${escapeHtml(model.label || displayModelName(model.id))}</option>
               `,
             )
             .join('')}
         </select>
+      </label>
+      <label>
+        Other / custom model ID
+        <input id="settings-provider-custom-model" value="${escapeAttribute(state.providerModel)}" placeholder="Exact model ID from the selected endpoint" />
+        <small>Use this for local models exposed by LM Studio, HuggingFace downloads, or custom provider IDs.</small>
       </label>
       <div class="settings-inline-note">
         <strong>${escapeHtml(metadata.contextWindow)}</strong>
@@ -824,6 +870,157 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           <option value="anthropic" ${selected(state.providerApi, 'anthropic')}>Anthropic-compatible</option>
         </select>
       </label>
+    `;
+  }
+
+  if (activeSection === 'local-server') {
+    const config = state.llamaServerConfig || {};
+    const modelSource = config.modelSource || 'huggingface';
+    const selectedPreset =
+      llamaDownloadPresets.find((preset) => preset.id === config.modelPreset) ||
+      llamaDownloadPresets[0];
+    const presetOptions = llamaDownloadPresets
+      .map(
+        (preset) => `
+          <option value="${escapeAttribute(preset.id)}" ${selected(config.modelPreset || selectedPreset.id, preset.id)}>
+            ${escapeHtml(`${preset.label} (${preset.size})`)}
+          </option>
+        `,
+      )
+      .join('');
+    return `
+      <label>
+        Model source
+        <select id="settings-llama-model-source">
+          <option value="huggingface" ${selected(modelSource === 'huggingface')}>Download from Hugging Face</option>
+          <option value="file" ${selected(modelSource === 'file')}>Local GGUF file</option>
+        </select>
+        <small>Hugging Face uses llama.cpp's native <code>--hf-repo</code>/<code>--hf-file</code> download path. Local files may be selected outside the workspace only when they are explicit GGUF model files.</small>
+      </label>
+      ${
+        modelSource === 'huggingface'
+          ? `
+            <label>
+              Download preset
+              <select id="settings-llama-model-preset">
+                ${presetOptions}
+                <option value="custom" ${selected(config.modelPreset === 'custom')}>Other / custom Hugging Face GGUF</option>
+              </select>
+              <small>${escapeHtml(selectedPreset.detail || 'Choose a GGUF preset that matches the machine.')}</small>
+            </label>
+            <label>
+              Hugging Face repo
+              <input id="settings-llama-hf-repo" value="${escapeAttribute(config.hfRepo || selectedPreset.repo)}" />
+              <small>Format: <code>owner/model-GGUF[:quant]</code>. Example: <code>ggml-org/gemma-3-1b-it-GGUF:Q4_K_M</code>.</small>
+            </label>
+            <label>
+              Hugging Face file
+              <input id="settings-llama-hf-file" value="${escapeAttribute(config.hfFile || selectedPreset.file || '')}" />
+              <small>Optional when the repo quant suffix is enough. Use an exact <code>.gguf</code> filename for deterministic downloads.</small>
+            </label>
+          `
+          : `
+            <label>
+              Model path
+              <div class="input-with-action">
+                <input id="settings-llama-model-path" value="${escapeAttribute(config.modelPath || '')}" />
+                <button class="button compact" id="choose-llama-model" type="button">Browse</button>
+              </div>
+              <small>Use a GGUF file. Workspace models still work, and explicit external GGUF files are allowed for llama.cpp only.</small>
+            </label>
+          `
+      }
+      <label>
+        Endpoint host
+        <input id="settings-llama-host" value="${escapeAttribute(config.host || '127.0.0.1')}" />
+        <small>Restricted to localhost by the desktop bridge.</small>
+      </label>
+      <label>
+        Port
+        <input id="settings-llama-port" type="number" min="1" max="65535" value="${escapeAttribute(config.port || 8080)}" />
+      </label>
+      <label>
+        Context size
+        <input id="settings-llama-context-size" type="number" min="512" step="512" value="${escapeAttribute(config.contextSize || 8192)}" />
+      </label>
+      <label>
+        GPU layers
+        <input id="settings-llama-gpu-layers" type="number" min="0" step="1" value="${escapeAttribute(config.gpuLayers ?? 0)}" />
+      </label>
+      <label>
+        Threads
+        <input id="settings-llama-threads" type="number" min="0" step="1" value="${escapeAttribute(config.threads ?? 0)}" />
+        <small>Use 0 to let llama.cpp choose.</small>
+      </label>
+      <label>
+        Temperature
+        <input id="settings-llama-temperature" type="number" min="0" max="2" step="0.05" value="${escapeAttribute(config.temperature ?? 0.7)}" />
+      </label>
+      <label>
+        Top-p
+        <input id="settings-llama-top-p" type="number" min="0" max="1" step="0.01" value="${escapeAttribute(config.topP ?? 0.95)}" />
+      </label>
+      <label>
+        Repeat penalty
+        <input id="settings-llama-repeat-penalty" type="number" min="0" max="2" step="0.01" value="${escapeAttribute(config.repeatPenalty ?? 1.1)}" />
+      </label>
+      <label>
+        Batch size
+        <input id="settings-llama-batch-size" type="number" min="1" step="1" value="${escapeAttribute(config.batchSize ?? 1024)}" />
+      </label>
+      <label>
+        Micro batch
+        <input id="settings-llama-ubatch-size" type="number" min="1" step="1" value="${escapeAttribute(config.ubatchSize ?? 256)}" />
+      </label>
+      <label>
+        Parallel slots
+        <input id="settings-llama-parallel-slots" type="number" min="1" step="1" value="${escapeAttribute(config.parallelSlots ?? 1)}" />
+      </label>
+      <label>
+        CPU MoE layers
+        <input id="settings-llama-cpu-moe" type="number" min="0" step="1" value="${escapeAttribute(config.cpuMoe ?? 22)}" />
+      </label>
+      <label>
+        Idle timeout
+        <input id="settings-llama-timeout" type="number" min="0" step="1" value="${escapeAttribute(config.timeout ?? 0)}" />
+        <small>0 disables llama.cpp idle timeout for slow local generations.</small>
+      </label>
+      <label>
+        KV cache K
+        <input id="settings-llama-cache-type-k" value="${escapeAttribute(config.cacheTypeK || 'f16')}" />
+      </label>
+      <label>
+        KV cache V
+        <input id="settings-llama-cache-type-v" value="${escapeAttribute(config.cacheTypeV || 'f16')}" />
+      </label>
+      <label class="check-card compact-toggle ${config.flashAttention !== false ? 'active' : ''}">
+        <span class="check-card-head">
+          <input type="checkbox" data-llama-boolean="flashAttention" ${checked([config.flashAttention === false ? '' : 'flashAttention'], 'flashAttention')} />
+          <span><em>GPU</em><strong>Flash attention</strong></span>
+        </span>
+      </label>
+      <label class="check-card compact-toggle ${config.noMmap !== false ? 'active' : ''}">
+        <span class="check-card-head">
+          <input type="checkbox" data-llama-boolean="noMmap" ${checked([config.noMmap === false ? '' : 'noMmap'], 'noMmap')} />
+          <span><em>Memory</em><strong>No mmap</strong></span>
+        </span>
+      </label>
+      <label class="check-card compact-toggle ${config.mlock !== false ? 'active' : ''}">
+        <span class="check-card-head">
+          <input type="checkbox" data-llama-boolean="mlock" ${checked([config.mlock === false ? '' : 'mlock'], 'mlock')} />
+          <span><em>Memory</em><strong>Lock model in RAM</strong></span>
+        </span>
+      </label>
+      <label class="check-card compact-toggle ${config.jinja !== false ? 'active' : ''}">
+        <span class="check-card-head">
+          <input type="checkbox" data-llama-boolean="jinja" ${checked([config.jinja === false ? '' : 'jinja'], 'jinja')} />
+          <span><em>Prompting</em><strong>Jinja templates</strong></span>
+        </span>
+      </label>
+      <div class="settings-inline-note">
+        <strong>${state.desktopState?.llamaServerInstalled ? 'Binary found' : 'Binary not installed'}</strong>
+        <p>${escapeHtml(state.desktopState?.llamaServerInstalled ? `Endpoint: ${state.desktopState?.llamaServerEndpoint || 'http://127.0.0.1:8080/v1'}` : 'The v0.0.7 installer bundles the CPU llama.cpp server when release build download is enabled. You can also place llama-server in workspace/bin or set LLAMA_SERVER_BIN for a custom build.')}</p>
+      </div>
     `;
   }
 
@@ -877,6 +1074,15 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
             )
             .join('')}
         </select>
+      </label>
+      <label>
+        User avatar
+        <div class="input-with-action">
+          <input value="${escapeAttribute(state.userAvatarPath || '')}" readonly placeholder="No image selected" />
+          <button class="button compact" id="choose-user-avatar" type="button">Choose</button>
+          <button class="button ghost compact" id="clear-user-avatar" type="button" ${state.userAvatarPath ? '' : 'disabled'}>Clear</button>
+        </div>
+        <small>Optional local image used for your chat avatar. The path stays in desktop UI preferences.</small>
       </label>
     `;
   }
@@ -1070,7 +1276,7 @@ const diagnosticsModule = {
       ${renderProductTabShell(
         'diagnostics',
         `
-          ${renderProductHero({
+          ${renderCompactPageHeader({
             kicker: 'Diagnostics',
             title: 'Health checks and repair suggestions',
             detail:
@@ -1152,6 +1358,7 @@ export const modules = {
   'onboarding': onboardingModule,
   'chat': chatModule,
   'gateway': gatewayModule(),
+  'local-server': localServerModule(),
   'logs': logsModule,
   'security': securityModule,
   'pc-stats': pcStatsModule,

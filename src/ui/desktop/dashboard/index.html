@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Argentum System Dashboard</title>
 <style>
+@font-face{font-family:"Monaspace Krypton";src:url("../assets/fonts/monaspace-krypton-latin-400-normal.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Monaspace Krypton";src:url("../assets/fonts/monaspace-krypton-latin-500-normal.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"Monaspace Krypton";src:url("../assets/fonts/monaspace-krypton-latin-600-normal.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}
+@font-face{font-family:"Monaspace Krypton";src:url("../assets/fonts/monaspace-krypton-latin-700-normal.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
 :root{
   --bg:#050508;
   --deck:#0b0d13;
@@ -30,7 +34,7 @@
 html,body{min-height:100%}
 body{
   color:var(--ink);
-  font-family:Inter,"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  font-family:"Monaspace Krypton","Cascadia Code","Segoe UI",ui-sans-serif,system-ui,sans-serif;
   font-size:12px;
   letter-spacing:.01em;
   background:
@@ -169,13 +173,99 @@ body::after{
   white-space:nowrap;
 }
 .time{
-  margin-left:auto;
+  margin-left:0;
   color:var(--muted);
   font-size:11px;
   font-variant-numeric:tabular-nums;
   letter-spacing:.8px;
   white-space:nowrap;
 }
+.dashboard-tools{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-left:auto;
+}
+.dash-tool{
+  border:1px solid rgba(214,218,228,.16);
+  background:rgba(214,218,228,.045);
+  color:var(--muted);
+  padding:6px 9px;
+  min-height:28px;
+  font:inherit;
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.8px;
+  cursor:pointer;
+  transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease;
+}
+.dash-tool:hover{
+  background:rgba(120,214,223,.08);
+  border-color:rgba(120,214,223,.34);
+  color:var(--ink);
+}
+.dash-tool:active{transform:translateY(1px)}
+.dash-tool[aria-pressed="true"]{
+  border-color:rgba(63,159,105,.38);
+  color:#91d8aa;
+}
+.dashboard-settings{
+  position:fixed;
+  top:76px;
+  right:18px;
+  z-index:30;
+  width:min(340px,calc(100vw - 36px));
+  padding:12px;
+  border:1px solid rgba(214,218,228,.16);
+  background:rgba(9,12,18,.96);
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+  clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+.dashboard-settings[hidden]{display:none}
+.settings-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding-bottom:10px;
+  margin-bottom:10px;
+  border-bottom:1px solid rgba(214,218,228,.10);
+}
+.settings-head strong{
+  font-size:11px;
+  color:var(--ink);
+}
+.dashboard-module-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 72px;
+  gap:10px;
+  align-items:center;
+}
+.dashboard-settings label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 2px;
+  color:var(--muted);
+  cursor:pointer;
+}
+.dashboard-settings select{
+  min-height:28px;
+  border:1px solid rgba(214,218,228,.14);
+  background:rgba(5,6,10,.56);
+  color:var(--ink);
+  font:inherit;
+  font-size:9px;
+  padding:4px 6px;
+}
+.dashboard-settings input{accent-color:var(--green)}
+.dashboard-settings p{
+  margin-top:8px;
+  color:var(--dim);
+  font-size:9px;
+  line-height:1.45;
+}
+.module-hidden{display:none!important}
 
 /* ─── Layout ──────────────────────────────────────────────── */
 .dashboard{
@@ -586,6 +676,61 @@ body::after{
   letter-spacing:1.3px;
   font-weight:850;
 }
+.status-strip.status-strip-wide{
+  grid-template-columns:repeat(6,minmax(0,1fr));
+}
+.load-number small{
+  color:var(--muted);
+  line-height:1.35;
+}
+.temp-readout{
+  display:grid;
+  gap:5px;
+  margin:2px 0 4px;
+}
+.temp-readout label{
+  color:var(--dim);
+  font-size:8px;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  font-weight:850;
+}
+.temp-readout strong{
+  font-size:22px;
+  line-height:1;
+  font-weight:950;
+  font-variant-numeric:tabular-nums;
+}
+.memory-main{
+  display:grid;
+  gap:10px;
+}
+.memory-hero{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+}
+.memory-hero span{
+  color:var(--dim);
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:1.2px;
+  font-weight:850;
+}
+.memory-hero strong{
+  font-size:34px;
+  line-height:1;
+  font-weight:950;
+  font-variant-numeric:tabular-nums;
+}
+.compact-chart{
+  height:84px;
+  min-height:84px;
+}
+  font-size:9px;
+  line-height:1.2;
+}
 .chart-wrap{
   position:relative;
   height:122px;
@@ -612,13 +757,14 @@ body::after{
 }
 .core-lanes{
   display:grid;
-  grid-template-columns:repeat(8,minmax(0,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(96px,1fr));
   gap:0;
   margin-top:11px;
   border-top:1px solid rgba(214,218,228,.08);
   border-left:1px solid rgba(214,218,228,.08);
 }
 .core-lane{
+  min-width:0;
   min-height:48px;
   padding:8px 6px;
   display:flex;
@@ -636,7 +782,7 @@ body::after{
   letter-spacing:.8px;
 }
 .core-lane strong{
-  font-size:13px;
+  font-size:clamp(10px,.72vw,12px);
   font-weight:950;
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
@@ -813,6 +959,52 @@ th:first-child,td:first-child{width:52%}
   border-bottom:1px solid rgba(214,218,228,.075);
   min-width:0;
 }
+.signal.off{
+  opacity:.45;
+}
+.signal.off::after{
+  content:"OFF";
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  color:var(--dim);
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:1px;
+}
+.proc-name{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.proc-name > span:last-child{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.proc-icon{
+  flex:0 0 18px;
+  width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(214,218,228,.14);
+  background:rgba(214,218,228,.06);
+  color:var(--muted);
+  font-size:10px;
+  font-weight:900;
+  line-height:1;
+}
+.proc-icon::before{
+  content:"";
+  display:none;
+}
+.proc-icon.dev{color:var(--cyan);background:rgba(120,214,223,.08)}
+.proc-icon.web{color:var(--yellow);background:rgba(215,189,85,.08)}
+.proc-icon.sys{color:var(--blue);background:rgba(111,164,216,.08)}
+.proc-icon.app{color:var(--silver)}
 .net-top,.disk-top{
   display:flex;
   align-items:center;
@@ -902,7 +1094,7 @@ th:first-child,td:first-child{width:52%}
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Responsive — TABLET 1280px
+   Responsive - TABLET 1280px
    ═══════════════════════════════════════════════════════════ */
 @media(max-width:1280px){
   .surface-overview,
@@ -912,12 +1104,12 @@ th:first-child,td:first-child{width:52%}
   .zone-pair{grid-template-columns:1fr}
   .zone-pair .zone + .zone{border-left:none;border-top:1px solid rgba(214,218,228,.085)}
   .status-main,.load-grid,.mem-layout{grid-template-columns:1fr}
-  .core-lanes{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .core-lanes{grid-template-columns:repeat(auto-fit,minmax(88px,1fr))}
   .sys-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Responsive — MOBILE 720px and below
+   Responsive - MOBILE 720px and below
    Optimized for vertical phone screens 360px+
    ═══════════════════════════════════════════════════════════ */
 @media(max-width:720px){
@@ -1080,7 +1272,7 @@ th:first-child,td:first-child{width:52%}
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Responsive — SMALL PHONE 380px and below
+   Responsive - SMALL PHONE 380px and below
    ═══════════════════════════════════════════════════════════ */
 @media(max-width:380px){
   /* Even more compact */
@@ -1133,12 +1325,36 @@ th:first-child,td:first-child{width:52%}
   <div class="divider"></div>
   <div class="live"><div class="live-dot"></div><span>LIVE</span></div>
   <div class="node"><div class="node-name" id="hostname">-</div></div>
+  <div class="dashboard-tools">
+    <button class="dash-tool" id="dash-lock" type="button" aria-pressed="true" title="Dashboard layout locked">LOCK</button>
+    <button class="dash-tool" id="dash-settings" type="button" title="Dashboard settings">SETTINGS</button>
+  </div>
   <div class="time" id="ts">-</div>
 </header>
 
+<aside class="dashboard-settings" id="dashboard-settings-panel" aria-label="Dashboard settings" hidden>
+  <div class="settings-head">
+    <strong>Dashboard modules</strong>
+    <button class="dash-tool" id="dash-settings-close" type="button">CLOSE</button>
+  </div>
+  <div class="dashboard-module-row">
+    <label><input type="checkbox" data-module-toggle="overview" checked> Overview</label>
+    <select data-module-order="overview" aria-label="Overview order"><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option></select>
+  </div>
+  <div class="dashboard-module-row">
+    <label><input type="checkbox" data-module-toggle="live" checked> CPU and memory</label>
+    <select data-module-order="live" aria-label="CPU and memory order"><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option></select>
+  </div>
+  <div class="dashboard-module-row">
+    <label><input type="checkbox" data-module-toggle="details" checked> Processes, network, storage, GPU</label>
+    <select data-module-order="details" aria-label="Processes and devices order"><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option></select>
+  </div>
+  <p>Order and lock state are saved locally. Dragging comes after metric accuracy is stable.</p>
+</aside>
+
 <main class="dashboard">
   <!-- Overview -->
-  <section class="surface surface-overview">
+  <section class="surface surface-overview" data-dashboard-module="overview">
     <div class="zone">
       <div class="zone-head">
         <div class="zone-title">Status</div>
@@ -1164,16 +1380,17 @@ th:first-child,td:first-child{width:52%}
             </div>
           </div>
 
-          <div class="status-strip">
+          <div class="status-strip status-strip-wide">
             <div class="status-cell"><label>Uptime</label><strong id="uptime-val">-</strong></div>
             <div class="status-cell"><label>Load</label><strong id="status-load">-</strong></div>
             <div class="status-cell"><label>Memory</label><strong id="status-memory">-</strong></div>
+            <div class="status-cell"><label>1m</label><strong id="load-1">-</strong></div>
+            <div class="status-cell"><label>5m</label><strong id="load-5">-</strong></div>
+            <div class="status-cell"><label>15m</label><strong id="load-15">-</strong></div>
           </div>
         </div>
 
         <div class="side-readouts">
-          <div class="readout"><label>CPU temp</label><strong id="side-cpu-temp">-</strong></div>
-          <div class="readout"><label>GPU temp</label><strong id="side-gpu-temp">-</strong></div>
           <div class="readout"><label>Processes</label><strong id="side-proc">-</strong></div>
         </div>
       </div>
@@ -1199,7 +1416,7 @@ th:first-child,td:first-child{width:52%}
   </section>
 
   <!-- Live -->
-  <section class="surface surface-live">
+  <section class="surface surface-live" data-dashboard-module="live">
     <div class="zone">
       <div class="zone-head">
         <div class="zone-title" id="cpu-title">Load</div>
@@ -1210,6 +1427,12 @@ th:first-child,td:first-child{width:52%}
         <div class="load-number">
           <span>CPU load</span>
           <strong id="cpu-load-val">-</strong>
+          <small id="cpu-temp-inline">CPU temp OFF</small>
+          <div class="temp-readout">
+            <label>CPU temperature</label>
+            <strong id="cpu-temp-val">OFF</strong>
+            <div class="heat-meter"><div class="heat-fill" id="cpu-temp-fill"></div></div>
+          </div>
           <div class="meter big" id="cpu-meter"></div>
         </div>
 
@@ -1227,7 +1450,12 @@ th:first-child,td:first-child{width:52%}
       </div>
 
       <div class="mem-layout">
-        <div>
+        <div class="memory-main">
+          <div class="memory-hero">
+            <span>RAM usage</span>
+            <strong id="mem-load-val">-</strong>
+          </div>
+          <div class="chart-wrap compact-chart"><canvas class="chart" id="mem-chart"></canvas></div>
           <div class="slab">
             <div class="slab-part" id="slab-used" style="--part:var(--green);width:0%"></div>
             <div class="slab-part" id="slab-cache" style="--part:rgba(215,189,85,.55);width:0%"></div>
@@ -1242,18 +1470,12 @@ th:first-child,td:first-child{width:52%}
 
           <div class="mem-list" id="mem-list"></div>
         </div>
-
-        <div class="load-small">
-          <div class="readout"><label>1m</label><strong id="load-1">-</strong></div>
-          <div class="readout"><label>5m</label><strong id="load-5">-</strong></div>
-          <div class="readout"><label>15m</label><strong id="load-15">-</strong></div>
-        </div>
       </div>
     </div>
   </section>
 
   <!-- Details -->
-  <section class="surface surface-details">
+  <section class="surface surface-details" data-dashboard-module="details">
     <div class="zone">
       <div class="zone-head">
         <div class="zone-title">Processes</div>
@@ -1299,6 +1521,7 @@ th:first-child,td:first-child{width:52%}
             <div class="zone-title">Graphics</div>
             <div class="zone-meta" id="gpu-tag">-</div>
           </div>
+          <div class="chart-wrap compact-chart"><canvas class="chart" id="vram-chart"></canvas></div>
           <div class="gpu-list" id="gpu-list"></div>
         </div>
 
