@@ -34,10 +34,12 @@ function run(command, args) {
   const commandName = basename(command).toLowerCase();
   const isWindowsCmd =
     process.platform === 'win32' && (commandName.endsWith('.cmd') || commandName.endsWith('.bat'));
-  const result = spawnSync(command, args, {
+  const actualCommand = isWindowsCmd ? 'cmd.exe' : command;
+  const actualArgs = isWindowsCmd ? ['/d', '/s', '/c', command, ...args] : args;
+  const result = spawnSync(actualCommand, actualArgs, {
     cwd: root,
     stdio: 'inherit',
-    shell: isWindowsCmd ? 'cmd.exe' : false,
+    shell: false,
   });
 
   if (result.error) {

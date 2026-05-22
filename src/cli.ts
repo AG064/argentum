@@ -40,10 +40,10 @@ import {
   type ProviderPreset,
 } from './core/onboarding';
 import { PluginLoader } from './core/plugin-loader';
-import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 import { startDashboardServer, stopDashboardServer } from './ui/server/index.js';
+import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.0.6';
+const VERSION = '0.0.7';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -109,9 +109,7 @@ interface MemoryNamespaceRow {
   namespace: string;
 }
 
-type CronSchedule =
-  | { kind: 'every'; everyMs: number }
-  | { kind: 'cron'; expr: string };
+type CronSchedule = { kind: 'every'; everyMs: number } | { kind: 'cron'; expr: string };
 
 interface CronJob {
   id: string;
@@ -238,7 +236,9 @@ function loadSelfImprovingFeature(): SelfImprovingFeature | null {
     const loaded = require(featurePath) as { default?: SelfImprovingFeature };
     return loaded.default ?? null;
   } catch (err) {
-    warn(`Could not load self-improving feature: ${err instanceof Error ? err.message : String(err)}`);
+    warn(
+      `Could not load self-improving feature: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -420,7 +420,10 @@ function appendEnvEntries(workDir: string, entries: Record<string, string>): voi
   const lines = existing ? [existing.replace(/\s*$/, '')] : [];
 
   for (const [key, value] of Object.entries(entries)) {
-    if (!value || new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=`, 'm').test(existing)) {
+    if (
+      !value ||
+      new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=`, 'm').test(existing)
+    ) {
       continue;
     }
     lines.push(`${key}=${/[\s"'#=]/.test(value) ? JSON.stringify(value) : value}`);
@@ -553,7 +556,12 @@ function cmdImage(): void {
   // argentum image "prompt" [--resolution 1K|2K|4K] [--edit input.png] [--output name.png]
   const subArgs = args.slice(1);
 
-  if (subArgs.length === 0 || subArgs[0] === 'help' || subArgs[0] === '--help' || subArgs[0] === '-h') {
+  if (
+    subArgs.length === 0 ||
+    subArgs[0] === 'help' ||
+    subArgs[0] === '--help' ||
+    subArgs[0] === '-h'
+  ) {
     banner();
     print('  \x1b[1mImage Generation\x1b[0m');
     print('');
@@ -765,7 +773,7 @@ function cmdInit(): void {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
       name: 'My ARGENTUM Instance',
-      version: '0.0.6',
+      version: '0.0.7',
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -825,13 +833,19 @@ async function cmdStart(): Promise<void> {
   // First-run check: if no config exists, prompt to onboard
   if (!projectConfigExists(workDir)) {
     banner();
-    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.');
-    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print(
+      '  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.',
+    );
+    print(
+      '  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m',
+    );
     print('');
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
-    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: '))
+      .trim()
+      .toLowerCase();
     rl.close();
     if (answer !== 'n') {
       await cmdOnboard();
@@ -847,13 +861,19 @@ async function cmdStart(): Promise<void> {
   const argentumConfigPath = path.join(process.cwd(), 'argentum.json');
   if (!fs.existsSync(configPath) && !fs.existsSync(argentumConfigPath)) {
     banner();
-    print('  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.');
-    print('  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m');
+    print(
+      '  \x1b[1m\x1b[33m⚠\x1b[0m  No configuration found. Run \x1b[1margentum onboard\x1b[0m first to set up your instance.',
+    );
+    print(
+      '  \x1b[90m   This wizard will configure your instance name, LLM provider, and features.\x1b[0m',
+    );
     print('');
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
-    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: ')).trim().toLowerCase();
+    const answer = (await ask('  \x1b[33m▶\x1b[0m  Run onboard wizard now? [Y]: '))
+      .trim()
+      .toLowerCase();
     rl.close();
     if (answer !== 'n') {
       await cmdOnboard();
@@ -1147,7 +1167,7 @@ async function cmdDoctor(): Promise<void> {
       success(name);
       passed++;
     } else {
-      warn(`${name} — ${fix}`);
+      warn(`${name} - ${fix}`);
     }
   }
 
@@ -1560,7 +1580,10 @@ async function cmdGateway(): Promise<void> {
     return null;
   };
 
-  const verifySpawnedGateway = async (pid: number | undefined, logFile: string): Promise<boolean> => {
+  const verifySpawnedGateway = async (
+    pid: number | undefined,
+    logFile: string,
+  ): Promise<boolean> => {
     await new Promise((resolve) => setTimeout(resolve, 900));
     if (pid && getPid() === pid) {
       return true;
@@ -1592,7 +1615,9 @@ async function cmdGateway(): Promise<void> {
       }
       if (!projectConfigExists(workDir)) {
         process.exitCode = 1;
-        error('Gateway cannot start because config/default.yaml is missing. Finish onboarding first.');
+        error(
+          'Gateway cannot start because config/default.yaml is missing. Finish onboarding first.',
+        );
         return;
       }
       const port = args.includes('--port')
@@ -1617,15 +1642,15 @@ async function cmdGateway(): Promise<void> {
         logFile,
         `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
       );
-      const childEnv = resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir));
+      const childEnv = resolveGatewayChildEnvironment(
+        process.env,
+        workDir,
+        loadWorkspaceEnv(workDir),
+      );
       const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
         env: childEnv,
-        stdio: [
-          'ignore',
-          fs.openSync(logFile, 'a'),
-          fs.openSync(logFile, 'a'),
-        ],
+        stdio: ['ignore', fs.openSync(logFile, 'a'), fs.openSync(logFile, 'a')],
         cwd: workDir,
       });
       child.unref();
@@ -1665,7 +1690,9 @@ async function cmdGateway(): Promise<void> {
         try {
           process.kill(pid, 'SIGTERM');
         } catch (err) {
-          warn(`Gateway process was already stopped: ${err instanceof Error ? err.message : String(err)}`);
+          warn(
+            `Gateway process was already stopped: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
         // Wait a moment
         await new Promise((r) => setTimeout(r, 1000));
@@ -1675,7 +1702,9 @@ async function cmdGateway(): Promise<void> {
         : 3000;
       if (!projectConfigExists(workDir)) {
         process.exitCode = 1;
-        error('Gateway cannot start because config/default.yaml is missing. Finish onboarding first.');
+        error(
+          'Gateway cannot start because config/default.yaml is missing. Finish onboarding first.',
+        );
         return;
       }
       info(`Restarting Argentum gateway on port ${port}...`);
@@ -1696,15 +1725,15 @@ async function cmdGateway(): Promise<void> {
         logFile,
         `[gateway] spawning ${childProcess.command} ${childProcess.args.join(' ')}\n`,
       );
-      const childEnv = resolveGatewayChildEnvironment(process.env, workDir, loadWorkspaceEnv(workDir));
+      const childEnv = resolveGatewayChildEnvironment(
+        process.env,
+        workDir,
+        loadWorkspaceEnv(workDir),
+      );
       const child = spawn(childProcess.command, childProcess.args, {
         detached: true,
         env: childEnv,
-        stdio: [
-          'ignore',
-          fs.openSync(logFile, 'a'),
-          fs.openSync(logFile, 'a'),
-        ],
+        stdio: ['ignore', fs.openSync(logFile, 'a'), fs.openSync(logFile, 'a')],
         cwd: workDir,
       });
       child.unref();
@@ -1758,7 +1787,7 @@ async function cmdDashboard(): Promise<void> {
       break;
     }
     case 'stop': {
-      info('Dashboard server runs in foreground — press Ctrl+C to stop');
+      info('Dashboard server runs in foreground - press Ctrl+C to stop');
       break;
     }
     default:
@@ -2225,7 +2254,9 @@ async function cmdStatus(): Promise<void> {
         const size = fs.statSync(path.join(dataDir, db)).size;
         print(`    • ${db} (${(size / 1024).toFixed(1)} KB)`);
       } catch (err) {
-        warn(`Could not read database size for ${db}: ${err instanceof Error ? err.message : String(err)}`);
+        warn(
+          `Could not read database size for ${db}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   } else {
@@ -2557,8 +2588,8 @@ async function askSecretBasic(
   message: string,
   defaultValue = '',
 ): Promise<string> {
-  const input = ((rl as unknown as { input?: NodeJS.ReadStream }).input ?? process.stdin);
-  const output = ((rl as unknown as { output?: NodeJS.WriteStream }).output ?? process.stdout);
+  const input = (rl as unknown as { input?: NodeJS.ReadStream }).input ?? process.stdin;
+  const output = (rl as unknown as { output?: NodeJS.WriteStream }).output ?? process.stdout;
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== 'function') {
     return askBasic(rl, message, defaultValue);
   }
@@ -2629,7 +2660,15 @@ function resolveBasicProviderChoice(value: string): ProviderName {
 }
 
 function resolveBasicFeatureCategories(value: string): string[] {
-  const allowed = new Set(['core', 'comm', 'memory', 'productivity', 'automation', 'monitoring', 'skills']);
+  const allowed = new Set([
+    'core',
+    'comm',
+    'memory',
+    'productivity',
+    'automation',
+    'monitoring',
+    'skills',
+  ]);
   return value
     .split(',')
     .map((category) => category.trim().toLowerCase())
@@ -2677,7 +2716,9 @@ async function cmdOnboardBasic(): Promise<void> {
     }
 
     const name = await askBasic(rl, 'Instance name', 'My Argentum');
-    const provider = resolveBasicProviderChoice(await askBasic(rl, 'Provider name or number', 'nvidia'));
+    const provider = resolveBasicProviderChoice(
+      await askBasic(rl, 'Provider name or number', 'nvidia'),
+    );
     let customProvider: Partial<ProviderPreset> | undefined;
 
     if (provider === 'custom') {
@@ -2685,15 +2726,17 @@ async function cmdOnboardBasic(): Promise<void> {
         name: await askBasic(rl, 'Custom provider id', 'custom'),
         label: await askBasic(rl, 'Custom provider label', 'Custom'),
         base_url: await askBasic(rl, 'Custom provider base URL', 'https://example.invalid/v1'),
-        api_key_env: await askBasic(rl, 'Custom provider API key environment variable', 'MY_API_KEY'),
+        api_key_env: await askBasic(
+          rl,
+          'Custom provider API key environment variable',
+          'MY_API_KEY',
+        ),
         api: 'openai',
       };
     }
 
     const defaultModel =
-      provider === 'custom'
-        ? 'custom-model'
-        : PROVIDER_PRESETS[provider].defaultModel;
+      provider === 'custom' ? 'custom-model' : PROVIDER_PRESETS[provider].defaultModel;
     const model = await askBasic(rl, 'Default model', defaultModel);
     const apiKey = await askSecretBasic(rl, 'API key (optional)', '');
     const port = Number.parseInt(await askBasic(rl, 'Server port', '3000'), 10);
@@ -2802,7 +2845,7 @@ async function cmdOnboard(): Promise<void> {
   const config = createOnboardingProfile().config as OnboardingRuntimeConfig;
   const envEntries: Record<string, string> = {};
 
-    // Step 1: Instance name
+  // Step 1: Instance name
   const nameVal = await text({
     message: 'Instance name:',
     initialValue: 'My Argentum',
@@ -2810,70 +2853,288 @@ async function cmdOnboard(): Promise<void> {
   if (typeof nameVal === 'string' && nameVal.trim()) config.name = nameVal.trim();
 
   // Step 2: LLM Provider + Model selection
-  const MODEL_DB: Record<string, Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>> = {
+  const MODEL_DB: Record<
+    string,
+    Array<{ value: string; label: string; ctx: string; price: string; free?: boolean }>
+  > = {
     minimax: [
       { value: 'MiniMax-M2.7', label: 'MiniMax M2.7', ctx: '1M', price: '$0.10/M', free: false },
-      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax M2.7 Highspeed', ctx: '1M', price: '$0.30/M', free: false },
+      {
+        value: 'MiniMax-M2.7-highspeed',
+        label: 'MiniMax M2.7 Highspeed',
+        ctx: '1M',
+        price: '$0.30/M',
+        free: false,
+      },
     ],
     groq: [
-      { value: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', ctx: '128k', price: 'FREE', free: true },
-      { value: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick', ctx: '128k', price: '$0.20/M', free: false },
-      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: 'FREE', free: true },
-      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B', ctx: '128k', price: 'FREE', free: true },
-      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: 'FREE', free: true },
-      { value: 'deepseek-ai/deepseek-llm-70b-chat', label: 'DeepSeek LLM 70B', ctx: '128k', price: 'FREE', free: true },
-      { value: 'qwen/qwen3-30b-a3b-instruct', label: 'Qwen 3 30B', ctx: '32k', price: 'FREE', free: true },
+      {
+        value: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        label: 'Llama 4 Scout',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+        label: 'Llama 4 Maverick',
+        ctx: '128k',
+        price: '$0.20/M',
+        free: false,
+      },
+      {
+        value: 'mistralai/mistral-nemo-12b-instruct',
+        label: 'Mistral Nemo 12B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'mistralai/mistral-small-3.1-24b-instruct',
+        label: 'Mistral Small 3.1 24B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'google/gemma-3-27b-it',
+        label: 'Gemma 3 27B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'deepseek-ai/deepseek-llm-70b-chat',
+        label: 'DeepSeek LLM 70B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'qwen/qwen3-30b-a3b-instruct',
+        label: 'Qwen 3 30B',
+        ctx: '32k',
+        price: 'FREE',
+        free: true,
+      },
     ],
     nvidia: [
-      { value: 'deepseek-ai/deepseek-v3.2', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
-      { value: 'meta/llama-3.3-nemotron-70b-instruct', label: 'Llama 3.3 Nemotron 70B', ctx: '128k', price: '$0.16/M' },
+      {
+        value: 'deepseek-ai/deepseek-v3.2',
+        label: 'DeepSeek V3',
+        ctx: '128k',
+        price: '$0.50/M',
+        free: true,
+      },
+      {
+        value: 'meta/llama-3.3-nemotron-70b-instruct',
+        label: 'Llama 3.3 Nemotron 70B',
+        ctx: '128k',
+        price: '$0.16/M',
+      },
       { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M' },
-      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B', ctx: '128k', price: '$0.15/M' },
-      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M' },
+      {
+        value: 'mistralai/mistral-small-3.1-24b-instruct',
+        label: 'Mistral Small 3.1 24B',
+        ctx: '128k',
+        price: '$0.15/M',
+      },
+      {
+        value: 'mistralai/mistral-nemo-12b-instruct',
+        label: 'Mistral Nemo 12B',
+        ctx: '128k',
+        price: '$0.15/M',
+      },
       { value: 'qwen/qwen3-30b-a3b-instruct', label: 'Qwen 3 30B', ctx: '32k', price: '$0.10/M' },
-      { value: 'meta/llama-3.2-11b-vision-instruct', label: 'Llama 3.2 11B Vision', ctx: '128k', price: '$0.10/M' },
-      { value: 'meta/llama-3.2-3b-instruct', label: 'Llama 3.2 3B', ctx: '128k', price: 'FREE', free: true },
-      { value: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Nemotron 70B', ctx: '128k', price: '$0.16/M' },
-      { value: 'deepseek-ai/deepseek-coder-v2-16lite-instruct', label: 'DeepSeek Coder V2 16B', ctx: '128k', price: 'FREE', free: true },
+      {
+        value: 'meta/llama-3.2-11b-vision-instruct',
+        label: 'Llama 3.2 11B Vision',
+        ctx: '128k',
+        price: '$0.10/M',
+      },
+      {
+        value: 'meta/llama-3.2-3b-instruct',
+        label: 'Llama 3.2 3B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        label: 'Nemotron 70B',
+        ctx: '128k',
+        price: '$0.16/M',
+      },
+      {
+        value: 'deepseek-ai/deepseek-coder-v2-16lite-instruct',
+        label: 'DeepSeek Coder V2 16B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
       { value: 'google/gemma-2-27b-it', label: 'Gemma 2 27B', ctx: '8k', price: '$0.10/M' },
       { value: 'google/gemma-2-9b-it', label: 'Gemma 2 9B', ctx: '8k', price: 'FREE', free: true },
-      { value: 'snowfall/llama-3.3-70b-instruct-fp8', label: 'Llama 3.3 70B FP8', ctx: '128k', price: '$0.80/M' },
-      { value: 'allenai/llama-3.1-tulu-3-8b', label: 'Tulu 3 8B', ctx: '128k', price: 'FREE', free: true },
+      {
+        value: 'snowfall/llama-3.3-70b-instruct-fp8',
+        label: 'Llama 3.3 70B FP8',
+        ctx: '128k',
+        price: '$0.80/M',
+      },
+      {
+        value: 'allenai/llama-3.1-tulu-3-8b',
+        label: 'Tulu 3 8B',
+        ctx: '128k',
+        price: 'FREE',
+        free: true,
+      },
     ],
     openrouter: [
-      { value: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', ctx: '128k', price: '$0.10/M', free: true },
-      { value: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V3', ctx: '128k', price: '$0.50/M', free: true },
-      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', ctx: '128k', price: '$0.80/M', free: true },
-      { value: 'mistralai/mistral-nemo-12b-instruct', label: 'Mistral Nemo 12B', ctx: '128k', price: '$0.15/M', free: true },
-      { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
-      { value: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4', ctx: '200k', price: '$15.00/M' },
-      { value: 'anthropic/claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', ctx: '200k', price: '$0.80/M' },
+      {
+        value: 'google/gemma-3-27b-it',
+        label: 'Gemma 3 27B',
+        ctx: '128k',
+        price: '$0.10/M',
+        free: true,
+      },
+      {
+        value: 'deepseek/deepseek-chat-v3-0324',
+        label: 'DeepSeek V3',
+        ctx: '128k',
+        price: '$0.50/M',
+        free: true,
+      },
+      {
+        value: 'meta-llama/llama-3.3-70b-instruct',
+        label: 'Llama 3.3 70B',
+        ctx: '128k',
+        price: '$0.80/M',
+        free: true,
+      },
+      {
+        value: 'mistralai/mistral-nemo-12b-instruct',
+        label: 'Mistral Nemo 12B',
+        ctx: '128k',
+        price: '$0.15/M',
+        free: true,
+      },
+      {
+        value: 'anthropic/claude-sonnet-4-20250514',
+        label: 'Claude Sonnet 4',
+        ctx: '200k',
+        price: '$3.00/M',
+      },
+      {
+        value: 'anthropic/claude-opus-4-20250514',
+        label: 'Claude Opus 4',
+        ctx: '200k',
+        price: '$15.00/M',
+      },
+      {
+        value: 'anthropic/claude-3-5-haiku-20241022',
+        label: 'Claude 3.5 Haiku',
+        ctx: '200k',
+        price: '$0.80/M',
+      },
       { value: 'openai/gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
       { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini', ctx: '128k', price: '$0.15/M' },
       { value: 'openai/o3', label: 'GPT o3', ctx: '200k', price: '$10.00/M' },
       { value: 'openai/o4-mini', label: 'GPT o4-mini', ctx: '128k', price: '$1.10/M' },
-      { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
-      { value: 'mistralai/mistral-large-3-24b-instruct', label: 'Mistral Large 3 24B', ctx: '128k', price: '$1.00/M', free: true },
-      { value: 'qwen/qwen2.5-72b-instruct', label: 'Qwen 2.5 72B', ctx: '32k', price: '$0.70/M', free: true },
-      { value: 'deepseek-ai/deepseek-v2.5', label: 'DeepSeek V2.5', ctx: '128k', price: '$0.28/M', free: true },
+      {
+        value: 'google/gemini-2.5-flash',
+        label: 'Gemini 2.5 Flash',
+        ctx: '1M',
+        price: '$0.075/M',
+        free: true,
+      },
+      {
+        value: 'mistralai/mistral-large-3-24b-instruct',
+        label: 'Mistral Large 3 24B',
+        ctx: '128k',
+        price: '$1.00/M',
+        free: true,
+      },
+      {
+        value: 'qwen/qwen2.5-72b-instruct',
+        label: 'Qwen 2.5 72B',
+        ctx: '32k',
+        price: '$0.70/M',
+        free: true,
+      },
+      {
+        value: 'deepseek-ai/deepseek-v2.5',
+        label: 'DeepSeek V2.5',
+        ctx: '128k',
+        price: '$0.28/M',
+        free: true,
+      },
       { value: 'x-ai/grok-3', label: 'Grok 3', ctx: '131k', price: '$2.00/M' },
     ],
     google: [
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      {
+        value: 'gemini-2.5-flash',
+        label: 'Gemini 2.5 Flash',
+        ctx: '1M',
+        price: '$0.075/M',
+        free: true,
+      },
       { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', ctx: '1M', price: '$1.25/M' },
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', ctx: '1M', price: 'FREE', free: true },
-      { value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash Experimental', ctx: '1M', price: 'FREE', free: true },
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', ctx: '1M', price: '$0.075/M', free: true },
+      {
+        value: 'gemini-2.0-flash',
+        label: 'Gemini 2.0 Flash',
+        ctx: '1M',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'gemini-2.0-flash-exp',
+        label: 'Gemini 2.0 Flash Experimental',
+        ctx: '1M',
+        price: 'FREE',
+        free: true,
+      },
+      {
+        value: 'gemini-1.5-flash',
+        label: 'Gemini 1.5 Flash',
+        ctx: '1M',
+        price: '$0.075/M',
+        free: true,
+      },
       { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', ctx: '2M', price: '$1.25/M' },
-      { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B', ctx: '1M', price: '$0.038/M', free: true },
+      {
+        value: 'gemini-1.5-flash-8b',
+        label: 'Gemini 1.5 Flash 8B',
+        ctx: '1M',
+        price: '$0.038/M',
+        free: true,
+      },
     ],
     anthropic: [
-      { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', ctx: '200k', price: '$3.00/M' },
+      {
+        value: 'claude-sonnet-4-20250514',
+        label: 'Claude Sonnet 4',
+        ctx: '200k',
+        price: '$3.00/M',
+      },
       { value: 'claude-opus-4-20250514', label: 'Claude Opus 4', ctx: '200k', price: '$15.00/M' },
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', ctx: '200k', price: '$0.80/M' },
-      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet', ctx: '200k', price: '$3.00/M' },
+      {
+        value: 'claude-3-5-haiku-20241022',
+        label: 'Claude 3.5 Haiku',
+        ctx: '200k',
+        price: '$0.80/M',
+      },
+      {
+        value: 'claude-3-5-sonnet-20241022',
+        label: 'Claude 3.5 Sonnet',
+        ctx: '200k',
+        price: '$3.00/M',
+      },
       { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus', ctx: '200k', price: '$15.00/M' },
-      { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet', ctx: '200k', price: '$3.00/M' },
+      {
+        value: 'claude-3-sonnet-20240229',
+        label: 'Claude 3 Sonnet',
+        ctx: '200k',
+        price: '$3.00/M',
+      },
     ],
     openai: [
       { value: 'gpt-4o', label: 'GPT-4o', ctx: '128k', price: '$2.50/M' },
@@ -2891,7 +3152,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'minimax',
       label: 'MiniMax',
-      hint: 'api.minimax.io — M2.7 reasoning, cheap',
+      hint: 'api.minimax.io - M2.7 reasoning, cheap',
       base_url: 'https://api.minimax.io/v1',
       api_key_env: 'MINIMAX_API_KEY',
       api: 'openai' as const,
@@ -2899,7 +3160,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'groq',
       label: 'Groq',
-      hint: 'api.groq.com — fast inference, mostly free models',
+      hint: 'api.groq.com - fast inference, mostly free models',
       base_url: 'https://api.groq.com/openai/v1',
       api_key_env: 'GROQ_API_KEY',
       api: 'openai' as const,
@@ -2907,7 +3168,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'ollama',
       label: 'Ollama',
-      hint: 'localhost:11434 — run models locally (free)',
+      hint: 'localhost:11434 - run models locally (free)',
       base_url: 'http://127.0.0.1:11434/v1',
       api_key_env: 'OLLAMA_API_KEY',
       api: 'openai' as const,
@@ -2915,7 +3176,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'nvidia',
       label: 'NVIDIA',
-      hint: 'integrate.api.nvidia.com — deepseek free, fast',
+      hint: 'integrate.api.nvidia.com - deepseek free, fast',
       base_url: 'https://integrate.api.nvidia.com/v1',
       api_key_env: 'NVIDIA_API_KEY',
       api: 'openai' as const,
@@ -2923,7 +3184,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'openrouter',
       label: 'OpenRouter',
-      hint: 'openrouter.ai — many free models',
+      hint: 'openrouter.ai - many free models',
       base_url: 'https://openrouter.ai/api/v1',
       api_key_env: 'OPENROUTER_API_KEY',
       api: 'openai' as const,
@@ -2932,7 +3193,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'google',
       label: 'Google Gemini',
-      hint: 'generativelanguage.googleapis — 1M context free tier',
+      hint: 'generativelanguage.googleapis - 1M context free tier',
       base_url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
       api_key_env: 'GOOGLE_API_KEY',
       api: 'openai' as const,
@@ -2940,7 +3201,7 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'anthropic',
       label: 'Anthropic Claude',
-      hint: 'api.anthropic.com — best reasoning models',
+      hint: 'api.anthropic.com - best reasoning models',
       base_url: 'https://api.anthropic.com',
       api_key_env: 'ANTHROPIC_API_KEY',
       api: 'anthropic' as const,
@@ -2948,12 +3209,19 @@ async function cmdOnboard(): Promise<void> {
     {
       value: 'openai',
       label: 'OpenAI',
-      hint: 'api.openai.com — GPT-4o family',
+      hint: 'api.openai.com - GPT-4o family',
       base_url: 'https://api.openai.com/v1',
       api_key_env: 'OPENAI_API_KEY',
       api: 'openai' as const,
     },
-    { value: 'custom', label: 'Custom', hint: 'enter your own base URL', base_url: '', api_key_env: 'MY_API_KEY', api: 'openai' as const },
+    {
+      value: 'custom',
+      label: 'Custom',
+      hint: 'enter your own base URL',
+      base_url: '',
+      api_key_env: 'MY_API_KEY',
+      api: 'openai' as const,
+    },
   ];
 
   const providerChoice = await select({
@@ -2975,7 +3243,10 @@ async function cmdOnboard(): Promise<void> {
     const custName = (await text({ message: 'Provider name:', initialValue: 'custom' })) as string;
     const custUrl = (await text({ message: 'Base URL:', initialValue: 'https://' })) as string;
     const custModel = (await text({ message: 'Default model:', initialValue: '' })) as string;
-    const custKeyEnv = (await text({ message: 'API key env var name:', initialValue: 'MY_API_KEY' })) as string;
+    const custKeyEnv = (await text({
+      message: 'API key env var name:',
+      initialValue: 'MY_API_KEY',
+    })) as string;
     selectedPreset = {
       name: custName?.trim() || 'custom',
       base_url: custUrl?.trim() || '',
@@ -3006,7 +3277,7 @@ async function cmdOnboard(): Promise<void> {
       liveModels = await discoverModels(provider, '');
 
       if (liveModels.length === 0) {
-        // No results — ask for key and retry
+        // No results - ask for key and retry
         const discoveryKey = await password({
           message: `${provider.api_key_env} (required for this provider):`,
           mask: '*',
@@ -3016,14 +3287,16 @@ async function cmdOnboard(): Promise<void> {
         if (usedKey) {
           process.stdout.write(`  Querying ${provider.base_url}/models (with key)... `);
           liveModels = await discoverModels(provider, usedKey);
-          process.stdout.write(liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no models\n');
+          process.stdout.write(
+            liveModels.length > 0 ? `OK (${liveModels.length} models)\n` : 'no models\n',
+          );
         }
       } else {
         process.stdout.write(`OK (${liveModels.length} models)\n`);
       }
 
       if (liveModels.length > 0) {
-        log.success(`${liveModels.length} models discovered — pick one`);
+        log.success(`${liveModels.length} models discovered - pick one`);
         chosenModel = String(
           await select({
             message: `${provider.label} models (live):`,
@@ -3035,7 +3308,7 @@ async function cmdOnboard(): Promise<void> {
           }),
         );
       } else {
-        log.warn('Discovery failed — using curated list');
+        log.warn('Discovery failed - using curated list');
       }
     }
 
@@ -3160,7 +3433,11 @@ async function cmdOnboard(): Promise<void> {
       { value: 'comm', label: 'Communication', hint: 'telegram, webchat, discord-bot, slack' },
       { value: 'memory', label: 'Memory', hint: 'knowledge-graph, semantic-search' },
       { value: 'productivity', label: 'Productivity', hint: 'goals, life-domains, task-checkout' },
-      { value: 'automation', label: 'Automation', hint: 'browser-automation, webhooks, file-watcher' },
+      {
+        value: 'automation',
+        label: 'Automation',
+        hint: 'browser-automation, webhooks, file-watcher',
+      },
       { value: 'monitoring', label: 'Monitoring', hint: 'health-monitoring, budget, email' },
       { value: 'skills', label: 'Skills', hint: 'skills-library, skill-loader, skill-evolution' },
     ],
@@ -3209,13 +3486,15 @@ async function cmdOnboard(): Promise<void> {
 
     (config.features as Record<string, unknown>)[f] = { enabled: true };
   }
-  log.info(allSelectedFeatures.length > 0
-    ? `Enabled ${allSelectedFeatures.length} features`
-    : 'Minimal install - no extra features selected');
+  log.info(
+    allSelectedFeatures.length > 0
+      ? `Enabled ${allSelectedFeatures.length} features`
+      : 'Minimal install - no extra features selected',
+  );
 
   // Server port
   const portVal = await text({ message: 'Server port:', initialValue: '3000' });
-  const portNum = parseInt(portVal as string ?? '3000');
+  const portNum = parseInt((portVal as string) ?? '3000');
   if (!isNaN(portNum)) {
     config.server.port = portNum;
     config.server.cors = {
@@ -3557,7 +3836,7 @@ async function cmdSkill(): Promise<void> {
     }
 
     default: {
-      // Treat as "run" — execute a script from an installed skill
+      // Treat as "run" - execute a script from an installed skill
       const skillName = subcommand;
       const skillsDir = path.join(clawhubWorkDir, 'skills');
       // Validate skillName to prevent path traversal. Resolve and ensure it stays within skillsDir
@@ -4088,7 +4367,9 @@ async function cmdSecurity(): Promise<void> {
       print('  \x1b[1margentum security status\x1b[0m                Show security overview');
       print('  \x1b[1margentum security policies\x1b[0m [list|add|remove|enable|disable]');
       print('  \x1b[1margentum security approvals\x1b[0m [list|show|approve|deny]');
-      print('  \x1b[1margentum security audit\x1b[0m [--since <date>] [--actor <id>] [--limit <n>]');
+      print(
+        '  \x1b[1margentum security audit\x1b[0m [--since <date>] [--actor <id>] [--limit <n>]',
+      );
       print('  \x1b[1margentum security credentials\x1b[0m [list|rotate]');
       print('  \x1b[1margentum security sandbox\x1b[0m                   Show sandbox config');
       print('  \x1b[1margentum security blueprint\x1b[0m [init|show]');
@@ -4143,7 +4424,9 @@ async function cmdTelegram(): Promise<void> {
       }
       const config = readProjectConfig(configPath);
       const channels = isJsonObject(config.channels) ? config.channels : {};
-      const tg = isJsonObject(channels.telegram) ? (channels.telegram as TelegramConfig) : undefined;
+      const tg = isJsonObject(channels.telegram)
+        ? (channels.telegram as TelegramConfig)
+        : undefined;
       if (!tg) {
         warn('Telegram not configured');
         info('Run: argentum onboard');
@@ -4349,7 +4632,9 @@ function getImproveConfig(): Record<string, unknown> {
     try {
       return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
     } catch (err) {
-      warn(`Could not read self-improving config: ${err instanceof Error ? err.message : String(err)}`);
+      warn(
+        `Could not read self-improving config: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -4695,10 +4980,7 @@ async function main(): Promise<void> {
 }
 
 async function pauseBeforeExitIfNeeded(): Promise<void> {
-  if (
-    !launch.pauseOnExit ||
-    process.env[SKIP_EXIT_PAUSE_ENV] === '1'
-  ) {
+  if (!launch.pauseOnExit || process.env[SKIP_EXIT_PAUSE_ENV] === '1') {
     return;
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) return;

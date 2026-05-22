@@ -1,7 +1,10 @@
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 const CLI = process.env.ARGENTUM_CLI ?? resolve(__dirname, '../dist/cli.js');
+const PACKAGE_VERSION = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8'))
+  .version as string;
 
 function run(args: string[], env?: Record<string, string>): string {
   return execSync(`node ${CLI} ${args.join(' ')}`, {
@@ -13,7 +16,7 @@ function run(args: string[], env?: Record<string, string>): string {
 describe('CLI smoke tests', () => {
   test('--version returns version', () => {
     const output = run(['--version']);
-    expect(output).toMatch(/0\.0\.6/);
+    expect(output).toContain(PACKAGE_VERSION);
   });
 
   test('--help works', () => {

@@ -1,4 +1,11 @@
-import { commandCatalog, modelMetadata, onboardingSteps, sections } from './modules/constants.js';
+import {
+  commandCatalog,
+  llamaDownloadPresets,
+  modelMetadata,
+  onboardingSteps,
+  providerPresets,
+  sections,
+} from './modules/constants.js';
 import { hydrateStaticIcons } from './modules/icons.js';
 import { modules } from './modules/sections.js';
 import {
@@ -39,12 +46,14 @@ import {
   setChatFilter,
   setOnboardingDisclosure,
   setSettingsSection,
+  setLlamaServerConfig,
   setUiPreference,
   setViewMode,
   state,
   syncActiveChatSession,
   requestDeleteChatSession,
   toggleChatPinned,
+  toggleChatPanel,
   toggleConversationMenu,
   toggleHelp,
   toggleNotificationsMenu,
@@ -57,9 +66,11 @@ import {
 import {
   chooseWorkspaceFolder,
   completeCodexOAuth,
+  buildChatRequestPayload,
   openExternalUrl,
   persistRuntimeSettings,
   refreshDesktopState,
+  refreshSystemDashboardState,
   saveSetup,
   sendChatMessage,
   startCodexOAuth,
@@ -73,6 +84,7 @@ import {
   inferMimeType,
   isProbablyAbsolutePath,
   contextUsagePercent,
+  currentProvider,
   estimateRuntimeContextTokens,
   modelMetadataFor,
   modelSupportsVision,
@@ -98,6 +110,7 @@ const chatActions = {
 
 const onboardingKeyboardActivationEvents = new Set(['keyup']);
 const ACTIVATION_HANDLED_FLAG = '__argentumActivationHandled';
+let dashboardRefreshTimer = null;
 
 function applyUiPreferences() {
   document.documentElement.style.setProperty('--font-ui', state.uiFontFamily);
@@ -134,7 +147,6 @@ function isOnboardingActivation(element) {
         '#next-button',
         '#back-button',
         '#choose-workspace',
-        '#continue-provider-model',
         '#test-provider',
         '#start-codex-oauth',
         '#complete-codex-oauth',
@@ -203,6 +215,7 @@ function activeSection() {
 
 function render() {
   const chatScroll = captureChatTranscriptScroll();
+  const onboardingScroll = captureOnboardingStepScroll();
   applyUiPreferences();
   const section = activeSection();
   const module = modules[section.id] || modules.chat;
@@ -230,13 +243,15 @@ function render() {
   hydrateStaticIcons(document);
   wireRenderedControls();
   syncSystemDashboardFrame();
+  syncSystemDashboardPolling();
   syncComposerSendState();
   scrollTerminalPanels();
   restoreChatTranscriptScroll(chatScroll);
+  restoreOnboardingStepScroll(onboardingScroll);
 }
 
 function renderFloatingPanels(section) {
-  return `${renderHelpPanel(section)}${renderNotificationMenu()}${renderQuickSecurityPanel()}${renderQuickSettingsPanel()}${renderWorkspacePanel()}`;
+  return `${renderHelpPanel(section)}${renderLocalServerGuidePanel()}${renderNotificationMenu()}${renderQuickSecurityPanel()}${renderQuickSettingsPanel()}${renderWorkspacePanel()}`;
 }
 
 function captureChatTranscriptScroll() {
@@ -245,8 +260,35 @@ function captureChatTranscriptScroll() {
   return {
     top: panel.scrollTop,
     height: panel.scrollHeight,
-    pinned: panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 96,
+    pinned: isChatTranscriptPinned(panel),
   };
+}
+
+function isChatTranscriptPinned(panel) {
+  if (!(panel instanceof HTMLElement)) return true;
+  return panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 96;
+}
+
+function scrollChatTranscriptToBottom(panel) {
+  if (!(panel instanceof HTMLElement)) return;
+  panel.scrollTop = panel.scrollHeight;
+  const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+  schedule(() => {
+    panel.scrollTop = panel.scrollHeight;
+    window.setTimeout(() => {
+      panel.scrollTop = panel.scrollHeight;
+    }, 40);
+  });
+}
+
+function requestChatScrollBottom(force = false) {
+  if (force || state.chatAutoFollow !== false) {
+    state.chatScrollIntent = 'bottom';
+    state.chatAutoFollow = true;
+    state.chatHasNewTransmission = false;
+    return;
+  }
+  state.chatHasNewTransmission = true;
 }
 
 function restoreChatTranscriptScroll(previous) {
@@ -256,19 +298,45 @@ function restoreChatTranscriptScroll(previous) {
     if (!(panel instanceof HTMLElement)) return;
 
     if (state.chatScrollIntent === 'bottom') {
-      panel.scrollTop = panel.scrollHeight;
+      scrollChatTranscriptToBottom(panel);
       state.chatScrollIntent = '';
+      state.chatAutoFollow = true;
+      state.chatHasNewTransmission = false;
       return;
     }
 
     if (!previous) return;
     if (previous.pinned) {
-      panel.scrollTop = panel.scrollHeight;
+      scrollChatTranscriptToBottom(panel);
+      state.chatAutoFollow = true;
       return;
     }
 
-    const heightDelta = panel.scrollHeight - previous.height;
-    panel.scrollTop = Math.max(0, previous.top + Math.max(0, heightDelta));
+    panel.scrollTop = Math.max(0, previous.top);
+    state.chatAutoFollow = isChatTranscriptPinned(panel);
+  });
+}
+
+function captureOnboardingStepScroll() {
+  const panel = document.querySelector('.onboarding-step-panel');
+  if (!(panel instanceof HTMLElement)) return null;
+  const activeStep = document.querySelector('.onboarding-step-list .step-chip.active');
+  const step = Number(activeStep?.getAttribute('data-onboarding-step') || state.onboardingStep);
+  return {
+    step,
+    top: panel.scrollTop,
+    left: panel.scrollLeft,
+  };
+}
+
+function restoreOnboardingStepScroll(previous) {
+  if (!previous || previous.step !== state.onboardingStep) return;
+  const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+  schedule(() => {
+    const panel = document.querySelector('.onboarding-step-panel');
+    if (!(panel instanceof HTMLElement)) return;
+    panel.scrollTop = previous.top;
+    panel.scrollLeft = previous.left;
   });
 }
 
@@ -278,8 +346,8 @@ function renderHelpPanel(section) {
   const tips = {
     chat: [
       [
-        'View modes',
-        'Chat only hides optional panels. Split view adds the inspector. Full workspace shows the widest context.',
+        'Chat view',
+        'CHAT is the active layout for now. Conversations stay on the left, chat stays centered, and the inspector stays on the right.',
       ],
       [
         'Context',
@@ -339,6 +407,40 @@ function renderHelpPanel(section) {
             `,
           )
           .join('')}
+      </div>
+    </aside>
+  `;
+}
+
+function renderLocalServerGuidePanel() {
+  if (!state.localServerGuideOpen) return '';
+
+  return `
+    <aside class="help-panel floating-panel local-server-guide" role="dialog" aria-label="Local server guide">
+      <div class="split-header">
+        <div>
+          <span class="pill ok">Local Server</span>
+          <h3>Finish local model setup</h3>
+        </div>
+        <button class="icon-button compact" data-close-local-server-guide="true" aria-label="Close local server guide"><span data-icon="x"></span></button>
+      </div>
+      <div class="help-callout-list">
+        <article>
+          <strong>1. Open Local Server</strong>
+          <p>Choose the llama.cpp tab and confirm the model source. Hugging Face presets download through llama.cpp automatically.</p>
+        </article>
+        <article>
+          <strong>2. Start llama.cpp</strong>
+          <p>Press Start Server. Argentum shows download/load progress while the server prepares the model.</p>
+        </article>
+        <article>
+          <strong>3. Test in Chat</strong>
+          <p>Once the endpoint is ready, use Test Provider or send a small message through the local model.</p>
+        </article>
+      </div>
+      <div class="button-row">
+        <button class="button primary" data-section="local-server" data-close-local-server-guide="true">Open Local Server</button>
+        <button class="button" data-close-local-server-guide="true">Later</button>
       </div>
     </aside>
   `;
@@ -443,6 +545,7 @@ async function finishOnboarding() {
   try {
     const result = await saveSetup();
     completeOnboarding(result);
+    setUiPreference('workspacePath', state.workspacePath);
     resetIntroChat();
     addTerminalEntry(
       'argentum setup save',
@@ -455,6 +558,15 @@ async function finishOnboarding() {
       'Onboarding is hidden. Chat is ready for the introductory phase.',
     );
     await refreshDesktopState();
+    if (state.llmProvider === 'llama-cpp' || state.selectedContextAccess.includes('local-server')) {
+      state.localServerGuideOpen = true;
+      state.activeSection = 'local-server';
+      notify(
+        'info',
+        'Local model setup',
+        'Open Local Server to download or start the selected llama.cpp model.',
+      );
+    }
   } catch (error) {
     state.setupStatus = 'setup-error';
     notify('error', 'Setup could not be saved', normalizeError(error));
@@ -477,7 +589,7 @@ async function runAction(actionId) {
     state.actionStatus = `Preview mode: ${command} needs the installed desktop app.`;
     addTerminalEntry(
       command,
-      'Preview mode: the installed Tauri app is required to execute gateway actions.',
+      'Preview mode: the installed Tauri app is required to execute desktop runtime actions.',
       'warning',
     );
     notify('warning', 'Desktop bridge unavailable', state.actionStatus);
@@ -488,7 +600,11 @@ async function runAction(actionId) {
 
   try {
     const result = await invoke('run_desktop_action', {
-      request: { actionId, workspacePath: state.workspacePath },
+      request: {
+        actionId,
+        workspacePath: state.workspacePath,
+        llamaServer: actionId.startsWith('llama-server-') ? state.llamaServerConfig : undefined,
+      },
     });
     const status = result?.status || 'ok';
     const output = result?.output || result?.message || 'Action completed without output.';
@@ -496,11 +612,14 @@ async function runAction(actionId) {
     state.actionStatus = result?.message || `${action?.title || actionId} completed.`;
     addTerminalEntry(actualCommand, output, status === 'error' ? 'error' : 'success');
     notify(
-      status === 'stopped' ? 'info' : 'success',
+      status === 'stopped' || status === 'starting' ? 'info' : 'success',
       action?.title || 'Desktop action',
       state.actionStatus,
     );
     await refreshDesktopState();
+    if (actionId === 'llama-server-start' && status === 'starting') {
+      startLlamaServerProgressPolling();
+    }
   } catch (error) {
     const message = normalizeError(error);
     addTerminalEntry(command, message, 'error');
@@ -508,6 +627,68 @@ async function runAction(actionId) {
   } finally {
     state.runningAction = '';
   }
+  render();
+}
+
+function progressFromLlamaLog(logPreview = '') {
+  const log = String(logPreview || '');
+  const percentMatch = [...log.matchAll(/(\d{1,3})(?:\.\d+)?\s*%/g)]
+    .map((match) => Number.parseInt(match[1], 10))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 100)
+    .pop();
+  if (Number.isFinite(percentMatch)) {
+    return { percent: percentMatch, phase: 'Downloading model' };
+  }
+  if (/server is listening|model loaded/i.test(log)) return { percent: 100, phase: 'Ready' };
+  if (/warming up/i.test(log)) return { percent: 92, phase: 'Warming model' };
+  if (/initializing slots|chat template/i.test(log))
+    return { percent: 84, phase: 'Preparing slots' };
+  if (/loading model/i.test(log)) return { percent: 70, phase: 'Loading model' };
+  if (/download|huggingface|cache|snapshot|resolve/i.test(log)) {
+    return { percent: 35, phase: 'Downloading or resolving model' };
+  }
+  return { percent: 12, phase: 'Starting llama.cpp' };
+}
+
+async function startLlamaServerProgressPolling() {
+  const startedAt = Date.now();
+  state.llamaServerProgress = {
+    active: true,
+    percent: 8,
+    phase: 'Starting llama.cpp',
+    detail: 'Waiting for model download or load logs.',
+    startedAt,
+  };
+  render();
+
+  const deadline = startedAt + 2 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await refreshDesktopState();
+    const pid = state.desktopState?.llamaServerPid;
+    const logPreview = state.desktopState?.llamaServerLogPreview || '';
+    const progress = progressFromLlamaLog(logPreview);
+    state.llamaServerProgress = {
+      active: Boolean(pid) && progress.percent < 100,
+      percent: progress.percent,
+      phase: progress.phase,
+      detail:
+        progress.percent >= 100
+          ? 'Local server is ready.'
+          : 'Downloads are handled by llama.cpp. Exact percent is shown when llama.cpp emits it; otherwise this follows startup phases.',
+      startedAt,
+    };
+    render();
+    if (!pid || progress.percent >= 100) return;
+  }
+
+  state.llamaServerProgress = {
+    active: false,
+    percent: state.llamaServerProgress?.percent || 0,
+    phase: 'Still starting',
+    detail: 'The server is still running. Open Local Server logs for current download/load output.',
+    startedAt,
+  };
   render();
 }
 
@@ -661,17 +842,31 @@ function syncComposerSendState() {
   const message = state.chatStreaming
     ? 'Generation in progress. Stop it before sending another message.'
     : disabled
-      ? 'Type a message or attach a file to send.'
+      ? ''
+      : 'Ready to send.';
+  const title = state.chatStreaming
+    ? 'Generation in progress. Stop it before sending another message.'
+    : disabled
+      ? 'Enter a message or attach a file.'
       : 'Ready to send.';
 
   if (sendButton instanceof HTMLButtonElement) {
     sendButton.disabled = disabled;
     sendButton.setAttribute('aria-disabled', String(disabled));
-    sendButton.title = message;
+    sendButton.title = title;
   }
   if (status instanceof HTMLElement) {
     status.textContent = message;
   }
+}
+
+function updateProviderKeyStatus() {
+  const status = document.querySelector('#provider-key-status');
+  if (!(status instanceof HTMLElement)) return;
+  const provider = currentProvider(providerPresets, state);
+  const keyPresent = state.providerApiKey.trim().length > 0;
+  status.classList.toggle('hidden', Boolean(provider.requiresKey && keyPresent));
+  status.textContent = provider.requiresKey ? 'Key required' : 'Key optional';
 }
 
 function addActivationListeners(target) {
@@ -702,18 +897,71 @@ function wireRenderedControls() {
     dashboardFrame.dataset.argentumFrameWired = 'true';
     dashboardFrame.addEventListener('load', syncSystemDashboardFrame);
   }
+
+  const chatTranscript = document.querySelector('.chat-transcript');
+  if (
+    chatTranscript instanceof HTMLElement &&
+    chatTranscript.dataset.argentumScrollWired !== 'true'
+  ) {
+    chatTranscript.dataset.argentumScrollWired = 'true';
+    chatTranscript.addEventListener(
+      'scroll',
+      () => {
+        const pinned = isChatTranscriptPinned(chatTranscript);
+        state.chatAutoFollow = pinned;
+        if (pinned && state.chatHasNewTransmission) {
+          state.chatHasNewTransmission = false;
+          render();
+        }
+      },
+      { passive: true },
+    );
+  }
 }
 
 function syncSystemDashboardFrame() {
   const dashboardFrame = document.querySelector('[data-system-dashboard-frame]');
   if (!(dashboardFrame instanceof HTMLIFrameElement) || !dashboardFrame.contentWindow) return;
+  const dashboardEnabled = state.selectedContextAccess.includes('system-dashboard');
   dashboardFrame.contentWindow.postMessage(
     {
       type: 'argentum-system-stats',
-      stats: state.desktopState?.systemStats || null,
+      stats: dashboardEnabled ? state.desktopState?.systemStats || null : null,
     },
     '*',
   );
+}
+
+function syncSystemDashboardPolling() {
+  const dashboardEnabled = state.selectedContextAccess.includes('system-dashboard');
+  const dashboardVisible =
+    dashboardEnabled &&
+    state.activeSection === 'pc-stats' &&
+    document.querySelector('[data-system-dashboard-frame]') instanceof HTMLIFrameElement;
+
+  if (!dashboardVisible) {
+    if (dashboardRefreshTimer) {
+      window.clearInterval(dashboardRefreshTimer);
+      dashboardRefreshTimer = null;
+    }
+    return;
+  }
+
+  if (dashboardRefreshTimer) return;
+  const refreshDashboardFrame = async () => {
+    if (state.activeSection !== 'pc-stats') {
+      syncSystemDashboardPolling();
+      return;
+    }
+    try {
+      await refreshSystemDashboardState({ silentErrors: true });
+      syncSystemDashboardFrame();
+    } catch (error) {
+      console.warn('[Argentum dashboard refresh failed]', normalizeError(error));
+    }
+  };
+  dashboardRefreshTimer = window.setInterval(refreshDashboardFrame, 10_000);
+  void refreshDashboardFrame();
 }
 
 function scrollTerminalPanels() {
@@ -768,6 +1016,71 @@ async function chooseChatAttachment() {
     'success',
     kind === 'image' ? 'Image attached' : 'File attached',
     'The selected attachment will be sent with the next chat message.',
+  );
+}
+
+async function chooseLlamaModelFile() {
+  const selected = await openFile(state.workspacePath, {
+    filters: [{ name: 'GGUF models', extensions: ['gguf'] }],
+  });
+  if (!selected) {
+    notify('info', 'Model path unchanged', 'No GGUF model was selected.');
+    return;
+  }
+
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  setLlamaServerConfig('modelSource', 'file');
+  setLlamaServerConfig('modelPath', path);
+  notify(
+    'success',
+    'Local model selected',
+    'The llama.cpp server will use the selected GGUF model path.',
+  );
+  await promptLlamaServerRestart('Local model path changed');
+}
+
+async function chooseUserAvatarFile() {
+  const selected = await openFile(state.workspacePath, {
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+  });
+  if (!selected) {
+    notify('info', 'Avatar unchanged', 'No image was selected.');
+    return;
+  }
+
+  const path = Array.isArray(selected) ? selected[0] : selected;
+  setUiPreference('userAvatarPath', path);
+  notify('success', 'Avatar updated', 'Your chat avatar now uses the selected image.');
+}
+
+function clearUserAvatarFile() {
+  setUiPreference('userAvatarPath', '');
+  notify('info', 'Avatar cleared', 'Your chat avatar will use initials again.');
+}
+
+async function promptLlamaServerRestart(reason) {
+  if (!state.setupComplete || state.llmProvider !== 'llama-cpp') return;
+  await refreshDesktopState({ silentErrors: true });
+  if (!state.desktopState?.llamaServerPid) return;
+
+  const shouldRestart = window.confirm(
+    `${reason}. Restart the Argentum llama.cpp server now to apply this change?`,
+  );
+  if (shouldRestart) {
+    notify(
+      'info',
+      'Restarting local server',
+      'Stopping and starting llama.cpp with the updated model settings.',
+    );
+    await runAction('llama-server-stop');
+    await runAction('llama-server-start');
+    return;
+  }
+
+  notify(
+    'warning',
+    'Restart required',
+    'The running llama.cpp server will keep the old model/settings until you restart it.',
   );
 }
 
@@ -901,7 +1214,7 @@ async function streamAssistantMessage(text, options = {}) {
     chatId: state.activeChatId,
     messageId: block.id,
   });
-  state.chatScrollIntent = 'bottom';
+  requestChatScrollBottom();
   render();
 
   const source = String(text || '').trim() || 'I did not receive a usable response.';
@@ -929,7 +1242,7 @@ async function streamAssistantMessage(text, options = {}) {
       rawBody,
       status: 'streaming',
     });
-    state.chatScrollIntent = 'bottom';
+    requestChatScrollBottom();
     render();
     await sleep(options.delay || 18);
   }
@@ -947,9 +1260,140 @@ async function streamAssistantMessage(text, options = {}) {
   state.chatStreaming = false;
   state.activeAssistantMessageId = '';
   state.chatAbortRequested = false;
-  state.chatScrollIntent = 'bottom';
+  requestChatScrollBottom();
   render();
   return block;
+}
+
+async function streamProviderAssistantMessage(outgoingMessage, attachments, options = {}) {
+  const invoke = window.__TAURI__?.core?.invoke;
+  const listen = window.__TAURI__?.event?.listen;
+  if (!invoke || typeof listen !== 'function') {
+    const result = await sendChatMessage(outgoingMessage, attachments);
+    await streamAssistantMessage(result?.message || buildLocalReply(outgoingMessage), options);
+    return result;
+  }
+
+  const requestId = `stream-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const request = await buildChatRequestPayload(outgoingMessage, attachments);
+  request.streamRequestId = requestId;
+
+  const block = options.targetId
+    ? updateChatMessage(options.targetId, { rawBody: '', status: 'streaming', error: '' })
+    : appendChatMessage('argentum', '', { status: 'streaming', id: options.id });
+  if (!block) {
+    return sendChatMessage(outgoingMessage, attachments);
+  }
+
+  let rawBody = '';
+  let receivedDelta = false;
+  let unlisten = null;
+  state.activeAssistantMessageId = block.id;
+  state.chatStreaming = true;
+  state.chatAbortRequested = false;
+  recordUiEvent('chat.response_started', 'running', 'Assistant provider stream started.', {
+    chatId: state.activeChatId,
+    messageId: block.id,
+    requestId,
+  });
+  requestChatScrollBottom();
+  render();
+
+  try {
+    unlisten = await listen('argentum-chat-stream', (event) => {
+      const payload = event?.payload || {};
+      if (payload.requestId !== requestId) return;
+
+      if (payload.event === 'delta') {
+        if (state.chatAbortRequested) return;
+        const delta = String(payload.delta || '');
+        if (!delta) return;
+        receivedDelta = true;
+        rawBody += delta;
+        updateChatMessage(block.id, { rawBody, status: 'streaming' });
+        requestChatScrollBottom();
+        render();
+        return;
+      }
+
+      if (payload.event === 'error') {
+        const message = normalizeError(payload.message || 'Provider stream failed.');
+        updateChatMessage(block.id, {
+          rawBody: `Live chat failed: ${message}`,
+          status: 'error',
+          error: message,
+        });
+        notify('error', 'Chat failed', message);
+        render();
+      }
+    });
+
+    const result = await invoke('stream_chat_message', { request });
+    if (result?.usage) state.usageSnapshot = result.usage;
+    const finalMessage = result?.message || rawBody || buildLocalReply(outgoingMessage);
+    if (state.chatAbortRequested) {
+      updateChatMessage(block.id, {
+        rawBody: rawBody || 'Generation stopped.',
+        status: 'cancelled',
+      });
+      recordUiEvent(
+        'chat.response_cancelled',
+        'cancelled',
+        'Assistant provider stream was stopped in the UI.',
+        {
+          chatId: state.activeChatId,
+          messageId: block.id,
+          requestId,
+        },
+      );
+      requestChatScrollBottom();
+      render();
+      return {
+        status: 'cancelled',
+        message: rawBody || 'Generation stopped.',
+        provider: result?.provider || state.llmProvider,
+        model: result?.model || state.providerModel,
+        offline: false,
+        usage: result?.usage,
+      };
+    }
+    if (!receivedDelta) {
+      await streamAssistantMessage(finalMessage, { targetId: block.id, delay: 12 });
+    } else {
+      updateChatMessage(block.id, { rawBody: finalMessage, status: result?.status || 'sent' });
+      requestChatScrollBottom();
+      render();
+    }
+    recordUiEvent('chat.response_completed', 'ok', 'Assistant provider stream completed.', {
+      chatId: state.activeChatId,
+      messageId: block.id,
+      requestId,
+      provider: result?.provider || state.llmProvider,
+      model: result?.model || state.providerModel,
+    });
+    return result;
+  } catch (error) {
+    const message = normalizeError(error);
+    updateChatMessage(block.id, {
+      rawBody: `Live chat failed: ${message}`,
+      status: 'error',
+      error: message,
+    });
+    recordUiEvent('chat.response_failed', 'error', message, {
+      chatId: state.activeChatId,
+      messageId: block.id,
+      requestId,
+    });
+    notify('error', 'Chat failed', message);
+    throw error;
+  } finally {
+    if (typeof unlisten === 'function') unlisten();
+    state.chatStreaming = false;
+    state.activeAssistantMessageId = '';
+    state.chatAbortRequested = false;
+    requestChatScrollBottom();
+    render();
+  }
 }
 
 async function regenerateAssistantResponse(messageId) {
@@ -1001,11 +1445,10 @@ async function regenerateAssistantResponse(messageId) {
       return;
     }
 
-    const result = await sendChatMessage(outgoingMessage, attachments);
-    if (result?.usage) state.usageSnapshot = result.usage;
-    await streamAssistantMessage(result?.message || buildLocalReply(outgoingMessage), {
+    const result = await streamProviderAssistantMessage(outgoingMessage, attachments, {
       targetId: messageId,
     });
+    if (result?.usage) state.usageSnapshot = result.usage;
     recordUiEvent(
       'chat.regenerate_completed',
       'ok',
@@ -1119,7 +1562,7 @@ async function sendChatDraft() {
   });
   state.draftMessage = '';
   state.chatAttachments = [];
-  state.chatScrollIntent = 'bottom';
+  requestChatScrollBottom(true);
   render();
 
   if (!state.setupComplete || !window.__TAURI__?.core?.invoke) {
@@ -1132,12 +1575,11 @@ async function sendChatDraft() {
   }
 
   state.actionStatus = 'Sending chat message...';
-  state.chatStreaming = true;
-  state.chatScrollIntent = 'bottom';
+  requestChatScrollBottom(true);
   render();
 
   try {
-    const result = await sendChatMessage(outgoingMessage, attachments);
+    const result = await streamProviderAssistantMessage(outgoingMessage, attachments);
     if (result?.offline) {
       state.apiTest = {
         status: 'warning',
@@ -1151,7 +1593,6 @@ async function sendChatDraft() {
     }
     if (result?.usage) state.usageSnapshot = result.usage;
 
-    await streamAssistantMessage(result?.message || buildLocalReply(draft));
     recordUiEvent(
       'chat.send_success',
       result?.offline ? 'offline' : 'ok',
@@ -1164,10 +1605,15 @@ async function sendChatDraft() {
     );
   } catch (error) {
     const message = normalizeError(error);
-    appendChatMessage('argentum', `Live chat failed: ${message}`, {
-      status: 'error',
-      error: message,
-    });
+    const existingError = state.chatBlocks.some(
+      (block) => block.role !== 'user' && block.status === 'error' && block.error === message,
+    );
+    if (!existingError) {
+      appendChatMessage('argentum', `Live chat failed: ${message}`, {
+        status: 'error',
+        error: message,
+      });
+    }
     recordUiEvent('chat.send_failed', 'error', message, {
       chatId: state.activeChatId,
     });
@@ -1194,6 +1640,68 @@ function handleInput(event) {
   }
   if (target.id === 'provider-api-key' || target.id === 'settings-provider-api-key') {
     state.providerApiKey = target.value;
+    updateProviderKeyStatus();
+  }
+  if (target.id === 'provider-custom-model' || target.id === 'settings-provider-custom-model') {
+    state.providerModel = target.value.trim();
+    state.apiTest = {
+      status: 'idle',
+      message: 'Model changed. Test the provider before using live chat.',
+    };
+    return;
+  }
+  if (target.id === 'settings-llama-model-source') {
+    setLlamaServerConfig('modelSource', target.value === 'file' ? 'file' : 'huggingface');
+    return;
+  }
+  if (target.id === 'settings-llama-model-preset') {
+    const preset = llamaDownloadPresets.find((candidate) => candidate.id === target.value);
+    setLlamaServerConfig('modelPreset', target.value);
+    setLlamaServerConfig('modelSource', 'huggingface');
+    if (preset) {
+      setLlamaServerConfig('hfRepo', preset.repo);
+      setLlamaServerConfig('hfFile', preset.file || '');
+      if (state.llmProvider === 'llama-cpp') {
+        state.providerModel = preset.modelId;
+      }
+    }
+    return;
+  }
+  const llamaInputMap = {
+    'settings-llama-model-path': ['modelPath', 'string'],
+    'settings-llama-hf-repo': ['hfRepo', 'string'],
+    'settings-llama-hf-file': ['hfFile', 'string'],
+    'settings-llama-host': ['host', 'string'],
+    'settings-llama-port': ['port', 'number'],
+    'settings-llama-context-size': ['contextSize', 'number'],
+    'settings-llama-gpu-layers': ['gpuLayers', 'number'],
+    'settings-llama-threads': ['threads', 'number'],
+    'settings-llama-temperature': ['temperature', 'float'],
+    'settings-llama-top-p': ['topP', 'float'],
+    'settings-llama-repeat-penalty': ['repeatPenalty', 'float'],
+    'settings-llama-batch-size': ['batchSize', 'number'],
+    'settings-llama-ubatch-size': ['ubatchSize', 'number'],
+    'settings-llama-parallel-slots': ['parallelSlots', 'number'],
+    'settings-llama-cpu-moe': ['cpuMoe', 'number'],
+    'settings-llama-timeout': ['timeout', 'number'],
+    'settings-llama-cache-type-k': ['cacheTypeK', 'string'],
+    'settings-llama-cache-type-v': ['cacheTypeV', 'string'],
+  };
+  if (Object.prototype.hasOwnProperty.call(llamaInputMap, target.id)) {
+    const [key, kind] = llamaInputMap[target.id];
+    const raw = target.value;
+    const parsed =
+      kind === 'string'
+        ? raw
+        : kind === 'float'
+          ? Number.parseFloat(raw)
+          : Number.parseInt(raw, 10);
+    setLlamaServerConfig(key, Number.isFinite(parsed) ? parsed : raw);
+    if (key === 'hfRepo' || key === 'hfFile') {
+      setLlamaServerConfig('modelPreset', 'custom');
+      setLlamaServerConfig('modelSource', 'huggingface');
+    }
+    return;
   }
   if (target.id === 'custom-provider-name') state.customProviderName = target.value;
   if (target.id === 'custom-api-key-env') state.customApiKeyEnv = target.value;
@@ -1229,6 +1737,19 @@ async function handleChange(event) {
     if (target.checked) access.add(target.dataset.contextAccess);
     else access.delete(target.dataset.contextAccess);
     state.selectedContextAccess = [...access];
+    if (target.dataset.contextAccess === 'system-dashboard') {
+      if (!target.checked) {
+        state.desktopState = { ...state.desktopState, systemStats: null };
+      } else if (state.activeSection === 'pc-stats') {
+        await refreshSystemDashboardState();
+      }
+    }
+    render();
+    return;
+  }
+
+  if (target.dataset.llamaBoolean) {
+    setLlamaServerConfig(target.dataset.llamaBoolean, target.checked);
     render();
     return;
   }
@@ -1246,6 +1767,7 @@ async function handleChange(event) {
   }
 
   if (target.id === 'provider-model' || target.id === 'settings-provider-model') {
+    const previousModel = state.providerModel;
     if (target.id === 'provider-model') {
       selectModel(target.value);
     } else {
@@ -1254,6 +1776,22 @@ async function handleChange(event) {
         status: 'idle',
         message: 'Model changed. Test the provider before using live chat.',
       };
+    }
+    if (state.llmProvider === 'llama-cpp') {
+      const preset = llamaDownloadPresets.find((candidate) => candidate.modelId === target.value);
+      if (preset) {
+        setLlamaServerConfig('modelSource', 'huggingface');
+        setLlamaServerConfig('modelPreset', preset.id);
+        setLlamaServerConfig('hfRepo', preset.repo);
+        setLlamaServerConfig('hfFile', preset.file || '');
+      }
+    }
+    if (
+      target.id === 'settings-provider-model' &&
+      state.llmProvider === 'llama-cpp' &&
+      previousModel !== state.providerModel
+    ) {
+      await promptLlamaServerRestart('Local model changed');
     }
     render();
     return;
@@ -1326,6 +1864,31 @@ async function handleChange(event) {
 
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-llama-model-source') {
+    setLlamaServerConfig('modelSource', target.value === 'file' ? 'file' : 'huggingface');
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-llama-model-preset') {
+    const previousPreset = state.llamaServerConfig?.modelPreset;
+    const preset = llamaDownloadPresets.find((candidate) => candidate.id === target.value);
+    setLlamaServerConfig('modelPreset', target.value);
+    setLlamaServerConfig('modelSource', 'huggingface');
+    if (preset) {
+      setLlamaServerConfig('hfRepo', preset.repo);
+      setLlamaServerConfig('hfFile', preset.file || '');
+      if (state.llmProvider === 'llama-cpp') {
+        state.providerModel = preset.modelId;
+      }
+    }
+    if (previousPreset !== target.value) {
+      await promptLlamaServerRestart('Local download preset changed');
+    }
     render();
     return;
   }
@@ -1419,6 +1982,12 @@ async function handleClick(event, activationElement = null) {
     return;
   }
 
+  if (element.closest('[data-close-local-server-guide]')) {
+    state.localServerGuideOpen = false;
+    render();
+    return;
+  }
+
   if (element.closest('#audit-button')) {
     toggleQuickSecurityMenu();
     render();
@@ -1442,6 +2011,19 @@ async function handleClick(event, activationElement = null) {
   const viewModeButton = element.closest('button[data-view-mode]');
   if (viewModeButton) {
     setViewMode(viewModeButton.dataset.viewMode);
+    render();
+    return;
+  }
+
+  const chatPanelButton = element.closest('[data-toggle-chat-panel]');
+  if (chatPanelButton) {
+    toggleChatPanel(chatPanelButton.dataset.toggleChatPanel);
+    render();
+    return;
+  }
+
+  if (element.closest('[data-new-transmission]')) {
+    requestChatScrollBottom(true);
     render();
     return;
   }
@@ -1572,21 +2154,26 @@ async function handleClick(event, activationElement = null) {
     return;
   }
 
-  if (element.closest('#test-provider')) {
-    await testProvider();
+  if (element.closest('#choose-llama-model')) {
+    await chooseLlamaModelFile();
     render();
     return;
   }
 
-  if (element.closest('#continue-provider-model')) {
-    const stageResult = setProviderSetupStage('model');
-    if (!stageResult.ok) {
-      notify('error', 'Setup needs a fix', stageResult.message);
-      render();
-      return;
-    }
-    const result = goToStep(5);
-    if (!result.ok) notify('error', 'Setup needs a fix', result.message);
+  if (element.closest('#choose-user-avatar')) {
+    await chooseUserAvatarFile();
+    render();
+    return;
+  }
+
+  if (element.closest('#clear-user-avatar')) {
+    clearUserAvatarFile();
+    render();
+    return;
+  }
+
+  if (element.closest('#test-provider')) {
+    await testProvider();
     render();
     return;
   }
@@ -1715,6 +2302,7 @@ async function handleClick(event, activationElement = null) {
 
   if (element.closest('#new-chat')) {
     createChatSession();
+    requestChatScrollBottom(true);
     render();
     return;
   }
@@ -1799,7 +2387,7 @@ async function handleClick(event, activationElement = null) {
         ? 'Older messages were summarized into a compact context block.'
         : 'This chat is short enough that no compaction was needed.',
     );
-    state.chatScrollIntent = 'bottom';
+    requestChatScrollBottom(true);
     render();
     return;
   }
@@ -1871,6 +2459,15 @@ async function handleClick(event, activationElement = null) {
   }
 }
 
+function handleContextMenu(event) {
+  const card =
+    event.target instanceof Element ? event.target.closest('[data-conversation-card]') : null;
+  if (!card) return;
+  event.preventDefault();
+  toggleConversationMenu(card.dataset.conversationCard);
+  render();
+}
+
 addActivationListeners(document);
 addActivationListeners(document.body);
 addActivationListeners(viewRoot);
@@ -1878,6 +2475,7 @@ addActivationListeners(overlayRoot);
 document.addEventListener('input', handleInput);
 document.addEventListener('change', handleChange);
 document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('contextmenu', handleContextMenu);
 document.addEventListener(
   'toggle',
   (event) => {

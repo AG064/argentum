@@ -16,6 +16,7 @@ import {
   buttonDisabled,
   checked,
   currentProvider,
+  displayModelName,
   escapeAttribute,
   escapeHtml,
   explainPath,
@@ -132,7 +133,8 @@ function renderWelcomeStep() {
       ${experienceLevels
         .map(
           (level) => `
-            <button type="button" class="interface-card ${state.experienceLevel === level.id ? 'active' : ''}" data-experience-level="${level.id}">
+            <button type="button" class="interface-card selectable-card ${state.experienceLevel === level.id ? 'active' : ''}" data-experience-level="${level.id}" aria-pressed="${state.experienceLevel === level.id ? 'true' : 'false'}">
+              <em>${state.experienceLevel === level.id ? 'Selected' : 'Select'}</em>
               <span>${escapeHtml(level.label)}</span>
               <strong>${escapeHtml(level.headline)}</strong>
               <p>${escapeHtml(experienceShortHint(level.id))}</p>
@@ -154,7 +156,8 @@ function experienceShortHint(levelId) {
 }
 
 function renderWorkspaceStep() {
-  const hasNativeFolderPicker = typeof window !== 'undefined' && Boolean(window.__TAURI__?.dialog?.open);
+  const hasNativeFolderPicker =
+    typeof window !== 'undefined' && Boolean(window.__TAURI__?.dialog?.open);
   return `
     <div class="workspace-picker onboarding-compact-stack">
       <label>
@@ -252,9 +255,15 @@ function renderContextAccessChoices() {
     <div class="capability-chip-row">
       ${[
         ['Workspace files', `Allowed by default only inside ${state.workspacePath}.`],
-        ['Shell commands', 'Ask before execution. The request should show command, folder, and reason.'],
+        [
+          'Shell commands',
+          'Ask before execution. The request should show command, folder, and reason.',
+        ],
         ['Network access', 'Ask before contacting external APIs, websites, or integrations.'],
-        ['Self-repair', 'May suggest fixes, but repair actions need approval and stay inside approved folders.'],
+        [
+          'Self-repair',
+          'May suggest fixes, but repair actions need approval and stay inside approved folders.',
+        ],
         ['Secrets', 'API keys are kept outside YAML and hidden after entry.'],
         ['Audit trail', 'Permission decisions and sensitive actions are written to the audit log.'],
       ]
@@ -299,6 +308,7 @@ function renderProviderChoiceStep() {
             (item) => `
               <article class="provider-card compact-provider-card ${state.providerSelectionConfirmed && state.llmProvider === item.id ? 'active' : ''}" data-tooltip="${escapeAttribute(item.detail || item.label)}" title="${escapeAttribute(item.detail || item.label)}">
                 <button type="button" class="provider-select-button" data-provider-id="${item.id}">
+                  <em>${state.providerSelectionConfirmed && state.llmProvider === item.id ? 'Selected' : 'Select provider'}</em>
                   <strong>${escapeHtml(item.label)}</strong>
                   <span>${item.access === 'stable' ? 'Stable route' : 'Testing access'}</span>
                 </button>
@@ -317,7 +327,11 @@ function renderProviderChoiceStep() {
 
 function renderProviderCredentialStep(provider = currentProvider(providerPresets, state)) {
   if (!state.providerSelectionConfirmed) {
-    return renderStepGuard('Choose a provider first', 'Provider access appears after you pick ChatGPT/OpenAI, MiniMax, local, or another provider.', 3);
+    return renderStepGuard(
+      'Choose a provider first',
+      'Provider access appears after you pick ChatGPT/OpenAI, MiniMax, local, or another provider.',
+      3,
+    );
   }
 
   const availableAuthMethods = providerAuthMethods.filter((method) =>
@@ -354,6 +368,7 @@ function renderProviderCredentialStep(provider = currentProvider(providerPresets
           <label class="full-span">
             API key
             <input id="provider-api-key" type="password" value="${escapeAttribute(state.providerApiKey)}" placeholder="${provider.requiresKey ? 'Required for this provider' : 'Optional for local/custom'}" autocomplete="new-password" />
+            <small>${escapeHtml(provider.requiresKey ? 'Required for this provider. Secrets stay outside YAML.' : 'Optional for LM Studio/local/custom endpoints. Leave blank unless that server requires authorization.')}</small>
           </label>
           <label class="full-span">
             Endpoint
@@ -363,6 +378,7 @@ function renderProviderCredentialStep(provider = currentProvider(providerPresets
             'provider-advanced',
             'Advanced provider details',
             `
+              ${renderProviderOperationalDetails(provider)}
               <div class="form-grid two">
                 <label>
                   API style
@@ -389,11 +405,59 @@ function renderProviderCredentialStep(provider = currentProvider(providerPresets
               ${renderProviderAuthGuidance(provider)}
             `,
           )}
-          <div class="button-row split">
-            <span class="pill ${provider.requiresKey ? 'warn' : 'ok'}">${provider.requiresKey ? 'Key required' : 'Key optional'}</span>
-            <button type="button" class="button primary" id="continue-provider-model">Continue to model</button>
+          <div class="provider-key-status-row">
+            <span id="provider-key-status" class="pill centered ${provider.requiresKey ? 'warn' : 'ok'} ${provider.requiresKey && state.providerApiKey.trim() ? 'hidden' : ''}">${provider.requiresKey ? 'Key required' : 'Key optional'}</span>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProviderOperationalDetails(provider) {
+  const links = [
+    ['Docs', provider.docsUrl],
+    ['Terms', provider.termsUrl],
+    ['Privacy', provider.privacyUrl],
+    ['Model search', provider.modelSearchUrl],
+  ].filter(([, url]) => Boolean(url));
+
+  return `
+    <div class="provider-operational-details">
+      <div class="provider-highlight-grid">
+        ${(provider.highlights || [provider.detail || 'Provider route'])
+          .map(
+            (highlight) => `
+              <span>${escapeHtml(highlight)}</span>
+            `,
+          )
+          .join('')}
+      </div>
+      <div class="provider-route-grid">
+        <div>
+          <strong>Data route</strong>
+          <p>${escapeHtml(provider.dataRoute || 'Requests go to the configured provider endpoint.')}</p>
+        </div>
+        <div>
+          <strong>Region</strong>
+          <p>${escapeHtml(provider.dataRegion || 'Varies by provider account and endpoint configuration.')}</p>
+        </div>
+        <div>
+          <strong>Usage</strong>
+          <p>${escapeHtml(provider.usageNotes || 'Usage is shown only when the provider exposes counters.')}</p>
+        </div>
+      </div>
+      <div class="provider-link-row">
+        ${links
+          .map(
+            ([label, url]) => `
+              <a class="provider-website-link" href="${escapeAttribute(url)}" data-open-external="${escapeAttribute(url)}">
+                ${escapeHtml(label)}
+                <span data-icon="externalLink"></span>
+              </a>
+            `,
+          )
+          .join('')}
       </div>
     </div>
   `;
@@ -418,7 +482,11 @@ function renderAuthMethodPicker(availableAuthMethods) {
 
 function renderProviderModelStep(provider = currentProvider(providerPresets, state)) {
   if (!state.providerSelectionConfirmed) {
-    return renderStepGuard('Choose a provider first', 'Model choices depend on the selected provider and authorization method.', 3);
+    return renderStepGuard(
+      'Choose a provider first',
+      'Model choices depend on the selected provider and authorization method.',
+      3,
+    );
   }
 
   const metadata = modelMetadataFor(state.providerModel, modelMetadata);
@@ -443,6 +511,15 @@ function renderProviderModelStep(provider = currentProvider(providerPresets, sta
                 .join('')}
             </select>
           </label>
+          <label>
+            Other / custom model ID
+            <input id="provider-custom-model" value="${escapeAttribute(state.providerModel)}" placeholder="Exact model ID from LM Studio, HuggingFace, or provider docs" />
+            <small>Use this when the picker does not include the model exposed by your endpoint.</small>
+          </label>
+        </div>
+        <div class="button-row compact model-test-row">
+          <button type="button" class="button" id="test-provider">Test selected model</button>
+          ${provider.modelSearchUrl ? `<a class="provider-website-link" href="${escapeAttribute(provider.modelSearchUrl)}" data-open-external="${escapeAttribute(provider.modelSearchUrl)}">Search models <span data-icon="externalLink"></span></a>` : ''}
         </div>
         <div class="model-detail-panel compact-model-detail">
           <div>
@@ -565,7 +642,9 @@ function renderCodexOAuthPanel() {
   const oauth = state.codexOAuth || {};
   const isBrowserAuth = state.providerAuthMethod === 'browser-account';
   const verificationUrl = oauth.verificationUrl || 'https://auth.openai.com/codex/device';
-  const canUseOAuth = (currentProvider(providerPresets, state).authMethods || []).includes('browser-account');
+  const canUseOAuth = (currentProvider(providerPresets, state).authMethods || []).includes(
+    'browser-account',
+  );
 
   if (!canUseOAuth) return '';
 
@@ -724,7 +803,7 @@ function renderReviewRows() {
       <div class="status-row"><strong>Workspace</strong><span>${escapeHtml(state.workspacePath)}</span><span class="pill ok">Scoped</span></div>
       <div class="status-row"><strong>Experience</strong><span>${escapeHtml(labelFor(experienceLevels, state.experienceLevel))}</span><span class="pill ok">Set</span></div>
       <div class="status-row"><strong>Runtime</strong><span>${escapeHtml(labelFor(runtimeModes, state.runtimeMode))}</span><span class="pill ok">Set</span></div>
-      <div class="status-row"><strong>Provider</strong><span>${escapeHtml(provider.label)} - ${escapeHtml(state.providerModel)}</span><span class="pill ${providerTestClass()}">${escapeHtml(providerTestLabel())}</span></div>
+      <div class="status-row"><strong>Provider</strong><span>${escapeHtml(provider.label)} - ${escapeHtml(displayModelName(state.providerModel))}</span><span class="pill ${providerTestClass()}">${escapeHtml(providerTestLabel())}</span></div>
       <div class="status-row"><strong>Channels</strong><span>${escapeHtml(channels)}</span><span class="pill ok">Selected</span></div>
       <div class="status-row"><strong>Security</strong><span>${escapeHtml(labelFor(securityProfiles, state.securityProfile))}</span><span class="pill ok">Audited</span></div>
       <div class="status-row"><strong>Config</strong><span>Saved to config/default.yaml. Secrets saved separately.</span><span class="pill warn">Pending save</span></div>

@@ -20,9 +20,7 @@ function cloneBlocks(blocks) {
 }
 
 function summarizeChat(blocks) {
-  const lastMessage = [...blocks]
-    .reverse()
-    .find((block) => block.type === 'message' && block.body);
+  const lastMessage = [...blocks].reverse().find((block) => block.type === 'message' && block.body);
   if (!lastMessage) return 'No messages yet';
 
   const text = String(lastMessage.body).replace(/\s+/g, ' ').trim();
@@ -30,7 +28,9 @@ function summarizeChat(blocks) {
 }
 
 function titleFromChat(blocks, fallback) {
-  const firstUserMessage = blocks.find((block) => block.type === 'message' && block.role === 'user');
+  const firstUserMessage = blocks.find(
+    (block) => block.type === 'message' && block.role === 'user',
+  );
   if (!firstUserMessage?.body) return fallback;
 
   const text = String(firstUserMessage.body).replace(/\s+/g, ' ').trim();
@@ -54,7 +54,10 @@ function redactPrivateText(text) {
   ]) {
     const current = String(value || '').trim();
     if (!current) continue;
-    output = output.replace(new RegExp(`(${label}\\s*[:=]\\s*)${escapeRegExp(current)}`, 'gi'), `$1${replacement}`);
+    output = output.replace(
+      new RegExp(`(${label}\\s*[:=]\\s*)${escapeRegExp(current)}`, 'gi'),
+      `$1${replacement}`,
+    );
   }
 
   return output;
@@ -69,7 +72,10 @@ function splitReasoningFromMessage(body) {
 
   return {
     rawBody: parsed.rawBody,
-    body: redactPrivateText(visible || 'I completed the reasoning, but the provider did not return a separate visible answer.'),
+    body: redactPrivateText(
+      visible ||
+        'I completed the reasoning, but the provider did not return a separate visible answer.',
+    ),
     reasoning: redactPrivateText(parsed.reasoning),
   };
 }
@@ -126,6 +132,32 @@ export const state = {
   customProviderName: 'custom',
   customApiKeyEnv: 'CUSTOM_API_KEY',
   selectedChannels: ['local'],
+  llamaServerConfig: {
+    modelSource: 'huggingface',
+    modelPreset: 'qwen2.5-0.5b-instruct-q4',
+    modelPath: '',
+    hfRepo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M',
+    hfFile: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    host: '127.0.0.1',
+    port: 8080,
+    contextSize: 16384,
+    gpuLayers: 999,
+    threads: 10,
+    temperature: 0.7,
+    topP: 0.95,
+    repeatPenalty: 1.1,
+    batchSize: 1024,
+    ubatchSize: 256,
+    parallelSlots: 1,
+    cpuMoe: 22,
+    timeout: 0,
+    cacheTypeK: 'f16',
+    cacheTypeV: 'f16',
+    flashAttention: true,
+    noMmap: true,
+    mlock: true,
+    jinja: true,
+  },
   webchatToken: '',
   telegramToken: '',
   telegramAllowlist: '',
@@ -141,7 +173,8 @@ export const state = {
       id: 'welcome',
       type: 'info',
       title: 'Welcome',
-      message: 'Choose a workspace folder first. Argentum will keep default access inside that folder.',
+      message:
+        'Choose a workspace folder first. Argentum will keep default access inside that folder.',
     },
   ],
   notificationHistory: [
@@ -149,7 +182,8 @@ export const state = {
       id: 'welcome',
       type: 'info',
       title: 'Welcome',
-      message: 'Choose a workspace folder first. Argentum will keep default access inside that folder.',
+      message:
+        'Choose a workspace folder first. Argentum will keep default access inside that folder.',
     },
   ],
   appLogEntries: [],
@@ -160,19 +194,26 @@ export const state = {
   helpOpen: false,
   workspaceMenuOpen: false,
   viewMode: 'chat',
-  chatFilter: 'recent',
+  chatFilter: 'all',
+  conversationsCollapsed: false,
+  inspectorCollapsed: false,
   conversationMenuChatId: '',
+  chatAutoFollow: true,
+  chatHasNewTransmission: false,
   settingsSection: 'overview',
   uiFontFamily: fontOptions.ui[0].css,
   codeFontFamily: fontOptions.mono[0].css,
   savedConfigPath: '',
   actionStatus: 'No GUI action has run in this session.',
   runningAction: '',
+  llamaServerProgress: null,
+  localServerGuideOpen: false,
   copiedCommand: '',
   userName: '',
+  userAvatarPath: '',
   agentName: 'Argentum',
   systemPrompt:
-    'You are Argentum, a secure desktop AI agent. Be direct, practical, and stay within the selected workspace and approved capabilities.',
+    'You are Argentum: a local-first developer agent. Be precise, useful, and honest about uncertainty. Work only within approved workspace permissions, prefer small verifiable steps, surface errors plainly, and propose durable CORE or skill-memory updates when they would help future work.',
   agentPurpose: '',
   thinkingLevel: 'balanced',
   showThinkingInChat: false,
@@ -226,32 +267,14 @@ export const state = {
     dataExists: false,
     logsExists: false,
     gatewayPid: null,
+    llamaServerInstalled: false,
+    llamaServerPid: null,
+    llamaServerEndpoint: 'http://127.0.0.1:8080/v1',
+    llamaServerLogPreview: 'No entries yet.',
     gatewayLogPreview: 'No entries yet.',
     auditLogPreview: 'No entries yet.',
     appLogPreview: 'No entries yet.',
-    systemStats: {
-      collectedAt: '',
-      hostName: 'Unavailable',
-      osName: 'Unavailable',
-      osVersion: 'Unavailable',
-      kernelVersion: 'Unavailable',
-      cpuBrand: 'Unavailable',
-      cpuCores: 0,
-      cpuUsagePercent: 0,
-      memoryTotalBytes: 0,
-      memoryUsedBytes: 0,
-      memoryUsedPercent: 0,
-      swapTotalBytes: 0,
-      swapUsedBytes: 0,
-      diskTotalBytes: 0,
-      diskAvailableBytes: 0,
-      diskUsedPercent: 0,
-      networkReceivedBytes: 0,
-      networkTransmittedBytes: 0,
-      uptimeSeconds: 0,
-      temperatureCelsius: null,
-      disks: [],
-    },
+    systemStats: null,
   },
   chatBlocks: cloneBlocks(openingChatBlocks),
   draftMessage: '',
@@ -260,7 +283,8 @@ export const state = {
       id: 'terminal-boot',
       status: 'info',
       command: 'argentum desktop',
-      output: 'Desktop shell loaded. Gateway, chat, diagnostics, and setup output will appear here when actions run.',
+      output:
+        'Desktop shell loaded. Gateway, chat, diagnostics, and setup output will appear here when actions run.',
     },
   ],
   pendingApprovals: [
@@ -326,15 +350,38 @@ export function setViewMode(mode) {
   const nextMode = ['chat', 'split', 'full'].includes(mode) ? mode : 'chat';
   if (state.viewMode === nextMode) return;
   state.viewMode = nextMode;
-  recordUiEvent('view.mode_changed', 'ok', `View mode changed to ${nextMode}.`, { viewMode: nextMode });
+  recordUiEvent('view.mode_changed', 'ok', `View mode changed to ${nextMode}.`, {
+    viewMode: nextMode,
+  });
+  persistUiPreferences();
+}
+
+export function toggleChatPanel(panel, open) {
+  const key =
+    panel === 'conversations'
+      ? 'conversationsCollapsed'
+      : panel === 'inspector'
+        ? 'inspectorCollapsed'
+        : '';
+  if (!key) return;
+  const nextCollapsed = typeof open === 'boolean' ? !open : !state[key];
+  state[key] = nextCollapsed;
+  recordUiEvent(
+    'chat.panel_visibility_changed',
+    'ok',
+    `${panel} panel ${nextCollapsed ? 'hidden' : 'shown'}.`,
+    { panel, collapsed: nextCollapsed },
+  );
   persistUiPreferences();
 }
 
 export function setChatFilter(filter) {
-  const nextFilter = ['recent', 'pinned', 'all'].includes(filter) ? filter : 'recent';
+  const nextFilter = ['pinned', 'all'].includes(filter) ? filter : 'all';
   state.chatFilter = nextFilter;
   state.conversationMenuChatId = '';
-  recordUiEvent('chat.filter_changed', 'ok', `Conversation filter changed to ${nextFilter}.`, { filter: nextFilter });
+  recordUiEvent('chat.filter_changed', 'ok', `Conversation filter changed to ${nextFilter}.`, {
+    filter: nextFilter,
+  });
 }
 
 export function toggleConversationMenu(chatId) {
@@ -347,10 +394,15 @@ export function toggleChatPinned(chatId) {
   chat.pinned = !chat.pinned;
   chat.updatedAt = Date.now();
   state.conversationMenuChatId = '';
-  recordUiEvent('chat.pin_changed', 'ok', `${chat.pinned ? 'Pinned' : 'Unpinned'} ${chat.title || chat.id}.`, {
-    chatId,
-    pinned: chat.pinned,
-  });
+  recordUiEvent(
+    'chat.pin_changed',
+    'ok',
+    `${chat.pinned ? 'Pinned' : 'Unpinned'} ${chat.title || chat.id}.`,
+    {
+      chatId,
+      pinned: chat.pinned,
+    },
+  );
   persistChatHistory();
 }
 
@@ -386,21 +438,38 @@ export function renameChatSession(chatId, title) {
 export function toggleHelp(open) {
   state.helpOpen = typeof open === 'boolean' ? open : !state.helpOpen;
   if (state.helpOpen) {
-    recordUiEvent('help.opened', 'ok', `Opened help for ${state.activeSection}.`, { section: state.activeSection });
+    recordUiEvent('help.opened', 'ok', `Opened help for ${state.activeSection}.`, {
+      section: state.activeSection,
+    });
   }
 }
 
 export function toggleWorkspaceMenu(open) {
   state.workspaceMenuOpen = typeof open === 'boolean' ? open : !state.workspaceMenuOpen;
   if (state.workspaceMenuOpen) {
-    recordUiEvent('workspace.menu_opened', 'ok', 'Opened workspace menu.', { workspacePath: state.workspacePath });
+    recordUiEvent('workspace.menu_opened', 'ok', 'Opened workspace menu.', {
+      workspacePath: state.workspacePath,
+    });
   }
 }
 
 export function setSettingsSection(sectionId) {
-  const allowed = ['overview', 'workspace', 'provider', 'model', 'context', 'chat', 'telegram', 'security', 'advanced'];
+  const allowed = [
+    'overview',
+    'workspace',
+    'provider',
+    'model',
+    'local-server',
+    'context',
+    'chat',
+    'telegram',
+    'security',
+    'advanced',
+  ];
   state.settingsSection = allowed.includes(sectionId) ? sectionId : 'overview';
-  recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, { section: state.settingsSection });
+  recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, {
+    section: state.settingsSection,
+  });
 }
 
 export function recordUiEvent(event, status, message, details = {}) {
@@ -496,7 +565,10 @@ export function terminalEntriesForDisplay(filter = '') {
 
 function sortChatSessions(sessions) {
   return [...sessions]
-    .sort((a, b) => (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0))
+    .sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+      return (b.lastMessageAt || b.updatedAt || 0) - (a.lastMessageAt || a.updatedAt || 0);
+    })
     .slice(0, 24);
 }
 
@@ -506,11 +578,24 @@ function normalizeChatBlocks(blocks, channel = '') {
     .filter((block) => block && typeof block === 'object' && block.body)
     .map((block) => {
       const role = block.role === 'user' ? 'user' : 'argentum';
-      const parsed = role === 'user' ? { body: block.body, reasoning: block.reasoning || '', rawBody: block.rawBody || block.body } : splitReasoningFromMessage(block.rawBody || block.body);
+      const parsed =
+        role === 'user'
+          ? {
+              body: block.body,
+              reasoning: block.reasoning || '',
+              rawBody: block.rawBody || block.body,
+            }
+          : splitReasoningFromMessage(block.rawBody || block.body);
       return {
         type: block.type || 'message',
         role,
-        title: block.title || (role === 'user' ? 'You' : channel === 'telegram' ? 'Telegram' : state.agentName || 'Argentum'),
+        title:
+          block.title ||
+          (role === 'user'
+            ? 'You'
+            : channel === 'telegram'
+              ? 'Telegram'
+              : state.agentName || 'Argentum'),
         body: role === 'user' ? redactPrivateText(block.body) : parsed.body,
         reasoning: role === 'user' ? redactPrivateText(block.reasoning || '') : parsed.reasoning,
         rawBody: parsed.rawBody,
@@ -530,7 +615,13 @@ export function mergeChannelChatSessions(channelSessions = []) {
     const channel = raw.channel === 'telegram' ? 'telegram' : String(raw.channel || 'external');
     const blocks = normalizeChatBlocks(raw.blocks, channel);
     const existing = byId.get(raw.id);
-    const lastMessageAt = Number(raw.lastMessageAt || raw.updatedAt || existing?.lastMessageAt || existing?.updatedAt || Date.now());
+    const lastMessageAt = Number(
+      raw.lastMessageAt ||
+        raw.updatedAt ||
+        existing?.lastMessageAt ||
+        existing?.updatedAt ||
+        Date.now(),
+    );
     const lastOpenedAt = Number(existing?.lastOpenedAt || 0);
     const unreadCount =
       raw.id === state.activeChatId
@@ -542,8 +633,15 @@ export function mergeChannelChatSessions(channelSessions = []) {
       ...existing,
       id: raw.id,
       channel,
-      title: raw.title || existing?.title || (channel === 'telegram' ? 'Telegram chat' : 'External chat'),
-      subtitle: raw.subtitle || summarizeChat(blocks) || existing?.subtitle || 'Imported channel conversation',
+      title:
+        raw.title ||
+        existing?.title ||
+        (channel === 'telegram' ? 'Telegram chat' : 'External chat'),
+      subtitle:
+        raw.subtitle ||
+        summarizeChat(blocks) ||
+        existing?.subtitle ||
+        'Imported channel conversation',
       blocks: blocks.length > 0 ? blocks : existing?.blocks || cloneBlocks(openingChatBlocks),
       updatedAt: Number(raw.updatedAt || existing?.updatedAt || Date.now()),
       lastMessageAt,
@@ -585,11 +683,16 @@ export function syncActiveChatSession(options = {}) {
   const fallbackTitle = current.title || 'New chat';
   state.chatSessions[index] = {
     ...current,
-    title: titleFromChat(state.chatBlocks, fallbackTitle === 'New chat' ? 'New chat' : fallbackTitle),
+    title: titleFromChat(
+      state.chatBlocks,
+      fallbackTitle === 'New chat' ? 'New chat' : fallbackTitle,
+    ),
     subtitle: summarizeChat(state.chatBlocks),
     blocks: cloneBlocks(state.chatBlocks),
     updatedAt: now,
-    lastMessageAt: options.messageActivity ? now : current.lastMessageAt || current.updatedAt || now,
+    lastMessageAt: options.messageActivity
+      ? now
+      : current.lastMessageAt || current.updatedAt || now,
   };
   state.chatSessions = sortChatSessions(state.chatSessions);
   persistChatHistory();
@@ -605,10 +708,14 @@ export function setActiveChatSession(chatId) {
   session.selectedAt = now;
   session.lastOpenedAt = now;
   session.unreadCount = 0;
+  state.chatAutoFollow = true;
+  state.chatHasNewTransmission = false;
   state.chatBlocks = cloneBlocks(session.blocks?.length ? session.blocks : openingChatBlocks);
   state.draftMessage = '';
   state.chatAttachments = [];
-  recordUiEvent('chat.selected', 'ok', `Selected chat ${session.title || session.id}.`, { chatId: session.id });
+  recordUiEvent('chat.selected', 'ok', `Selected chat ${session.title || session.id}.`, {
+    chatId: session.id,
+  });
   persistChatHistory();
 }
 
@@ -640,6 +747,8 @@ export function createChatSession() {
   state.chatBlocks = cloneBlocks(session.blocks);
   state.draftMessage = '';
   state.chatAttachments = [];
+  state.chatAutoFollow = true;
+  state.chatHasNewTransmission = false;
   persistChatHistory();
   return session;
 }
@@ -677,7 +786,9 @@ export function confirmDeleteChatSession(chatId) {
   state.pendingDeleteChatId = '';
   if (!state.chatSessions.some((chat) => chat.id === state.activeChatId)) {
     state.activeChatId = state.chatSessions[0].id;
-    state.chatBlocks = cloneBlocks(state.chatSessions[0].blocks?.length ? state.chatSessions[0].blocks : openingChatBlocks);
+    state.chatBlocks = cloneBlocks(
+      state.chatSessions[0].blocks?.length ? state.chatSessions[0].blocks : openingChatBlocks,
+    );
   }
 
   state.chatSessions = sortChatSessions(state.chatSessions);
@@ -693,7 +804,8 @@ export function hydrateChatHistory() {
     const storage = typeof window === 'undefined' ? null : window.localStorage;
     if (!storage) return false;
     const saved = JSON.parse(storage.getItem(CHAT_HISTORY_STORAGE_KEY) || 'null');
-    if (!saved || !Array.isArray(saved.chatSessions) || saved.chatSessions.length === 0) return false;
+    if (!saved || !Array.isArray(saved.chatSessions) || saved.chatSessions.length === 0)
+      return false;
 
     state.chatSessions = saved.chatSessions
       .filter((session) => session?.id && Array.isArray(session.blocks))
@@ -744,11 +856,49 @@ export function hydrateUiPreferences() {
     if (fontOptions.mono.some((option) => option.css === saved.codeFontFamily)) {
       state.codeFontFamily = saved.codeFontFamily;
     }
+    if (typeof saved.workspacePath === 'string' && saved.workspacePath.trim()) {
+      state.workspacePath = saved.workspacePath;
+    }
     if (['chat', 'split', 'full'].includes(saved.viewMode)) {
       state.viewMode = saved.viewMode;
     }
-    if (['recent', 'pinned', 'all'].includes(saved.chatFilter)) {
+    if (['pinned', 'all'].includes(saved.chatFilter)) {
       state.chatFilter = saved.chatFilter;
+    }
+    if (typeof saved.conversationsCollapsed === 'boolean') {
+      state.conversationsCollapsed = saved.conversationsCollapsed;
+    }
+    if (typeof saved.inspectorCollapsed === 'boolean') {
+      state.inspectorCollapsed = saved.inspectorCollapsed;
+    }
+    if (typeof saved.userAvatarPath === 'string') {
+      state.userAvatarPath = saved.userAvatarPath;
+    }
+    if (typeof saved.setupComplete === 'boolean') {
+      state.setupComplete = saved.setupComplete;
+      state.onboardingOpen = !saved.setupComplete;
+    }
+    if (typeof saved.savedConfigPath === 'string') {
+      state.savedConfigPath = saved.savedConfigPath;
+    }
+    if (saved.llamaServerConfig && typeof saved.llamaServerConfig === 'object') {
+      state.llamaServerConfig = {
+        ...state.llamaServerConfig,
+        ...saved.llamaServerConfig,
+      };
+      if (
+        !saved.llamaServerConfig.modelSource &&
+        state.llamaServerConfig.modelPath === 'models/argentum-default.gguf'
+      ) {
+        state.llamaServerConfig = {
+          ...state.llamaServerConfig,
+          modelSource: 'huggingface',
+          modelPreset: 'qwen2.5-0.5b-instruct-q4',
+          modelPath: '',
+          hfRepo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M',
+          hfFile: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+        };
+      }
     }
   } catch (_error) {
     // UI preference persistence is optional.
@@ -764,8 +914,15 @@ function persistUiPreferences() {
       JSON.stringify({
         uiFontFamily: state.uiFontFamily,
         codeFontFamily: state.codeFontFamily,
+        workspacePath: state.workspacePath,
         viewMode: state.viewMode,
         chatFilter: state.chatFilter,
+        conversationsCollapsed: state.conversationsCollapsed,
+        inspectorCollapsed: state.inspectorCollapsed,
+        userAvatarPath: state.userAvatarPath,
+        setupComplete: state.setupComplete,
+        savedConfigPath: state.savedConfigPath,
+        llamaServerConfig: state.llamaServerConfig,
       }),
     );
   } catch (_error) {
@@ -782,6 +939,22 @@ export function setUiPreference(key, value) {
     state.codeFontFamily = value;
   }
 
+  if (key === 'workspacePath' && typeof value === 'string' && value.trim()) {
+    state.workspacePath = value.trim();
+  }
+
+  if (key === 'userAvatarPath' && typeof value === 'string') {
+    state.userAvatarPath = value.trim();
+  }
+
+  persistUiPreferences();
+}
+
+export function setLlamaServerConfig(key, value) {
+  state.llamaServerConfig = {
+    ...state.llamaServerConfig,
+    [key]: value,
+  };
   persistUiPreferences();
 }
 
@@ -802,7 +975,8 @@ export function setProvider(provider) {
 }
 
 export function ensureProviderModelAllowed() {
-  const provider = providerPresets.find((item) => item.id === state.llmProvider) || providerPresets[0];
+  const provider =
+    providerPresets.find((item) => item.id === state.llmProvider) || providerPresets[0];
   if (!modelAllowedForAuth(provider, state.providerModel, state.providerAuthMethod)) {
     state.providerModel = defaultModelForAuth(provider, state.providerAuthMethod);
   }
@@ -837,7 +1011,9 @@ export function compactActiveChatSession(options = {}) {
   const summary = older
     .map((block) => {
       const speaker = block.role === 'user' ? 'User' : state.agentName || 'Argentum';
-      return `${speaker}: ${String(block.body || '').replace(/\s+/g, ' ').trim()}`;
+      return `${speaker}: ${String(block.body || '')
+        .replace(/\s+/g, ' ')
+        .trim()}`;
     })
     .join('\n')
     .slice(-1800);
@@ -856,7 +1032,9 @@ export function compactActiveChatSession(options = {}) {
   recordUiEvent(
     options.automatic ? 'chat.context_auto_compacted' : 'chat.context_compacted',
     'ok',
-    options.automatic ? 'Conversation context was auto-compacted.' : 'Conversation context was compacted by the user.',
+    options.automatic
+      ? 'Conversation context was auto-compacted.'
+      : 'Conversation context was compacted by the user.',
     {
       chatId: state.activeChatId,
       compactedMessages: older.length,
@@ -866,8 +1044,13 @@ export function compactActiveChatSession(options = {}) {
 }
 
 export function appendChatMessage(role, body, options = {}) {
-  const sourceBody = Object.prototype.hasOwnProperty.call(options, 'rawBody') ? options.rawBody : body;
-  const parsed = role === 'user' ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' } : splitReasoningFromMessage(sourceBody);
+  const sourceBody = Object.prototype.hasOwnProperty.call(options, 'rawBody')
+    ? options.rawBody
+    : body;
+  const parsed =
+    role === 'user'
+      ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' }
+      : splitReasoningFromMessage(sourceBody);
   const block = {
     id: options.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     type: 'message',
@@ -875,7 +1058,9 @@ export function appendChatMessage(role, body, options = {}) {
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',
     rawBody: parsed.rawBody,
     body: parsed.body,
-    reasoning: Object.prototype.hasOwnProperty.call(options, 'reasoning') ? options.reasoning : parsed.reasoning,
+    reasoning: Object.prototype.hasOwnProperty.call(options, 'reasoning')
+      ? options.reasoning
+      : parsed.reasoning,
     status: options.status || 'sent',
     createdAt: options.createdAt || Date.now(),
     attachments: Array.isArray(options.attachments) ? options.attachments : [],
@@ -897,15 +1082,24 @@ export function updateChatMessage(messageId, patch = {}) {
       : current.rawBody || current.body;
   const parsed =
     current.role === 'user'
-      ? { rawBody: String(rawBody || ''), body: redactPrivateText(rawBody), reasoning: current.reasoning || '' }
+      ? {
+          rawBody: String(rawBody || ''),
+          body: redactPrivateText(rawBody),
+          reasoning: current.reasoning || '',
+        }
       : splitReasoningFromMessage(rawBody);
   state.chatBlocks[index] = {
     ...current,
     ...patch,
     rawBody: parsed.rawBody,
     body: parsed.body,
-    reasoning: Object.prototype.hasOwnProperty.call(patch, 'reasoning') ? patch.reasoning : parsed.reasoning,
+    reasoning: Object.prototype.hasOwnProperty.call(patch, 'reasoning')
+      ? patch.reasoning
+      : parsed.reasoning,
   };
-  syncActiveChatSession({ messageActivity: patch.status === 'sent' || patch.status === 'stopped' || patch.messageActivity === true });
+  syncActiveChatSession({
+    messageActivity:
+      patch.status === 'sent' || patch.status === 'stopped' || patch.messageActivity === true,
+  });
   return state.chatBlocks[index];
 }

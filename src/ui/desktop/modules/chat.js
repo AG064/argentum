@@ -7,6 +7,8 @@ import {
   escapeAttribute,
   escapeHtml,
   estimateRuntimeContextTokens,
+  filePreviewUrl,
+  displayModelName,
   modelMetadataFor,
   renderMarkdown,
   selected,
@@ -32,28 +34,43 @@ function renderChatSection(state) {
   const localContextTokens = estimateRuntimeContextTokens(state, state.draftMessage);
   const providerContextTokens = numericUsageValue(state.usageSnapshot?.contextTokens);
   const providerContextLimit = numericUsageValue(state.usageSnapshot?.contextTokenLimit);
-  const effectiveMetadata = providerContextLimit > 0
-    ? {
-        ...metadata,
-        maxContextTokens: providerContextLimit,
-        contextWindow: `${providerContextLimit.toLocaleString()} tokens reported`,
-        currentContextLabel: state.usageSnapshot?.contextSource || metadata.currentContextLabel,
-      }
-    : metadata;
-  const estimatedTokens = Number.isFinite(providerContextTokens) && providerContextTokens > 0
-    ? Math.max(localContextTokens, providerContextTokens)
-    : localContextTokens;
+  const effectiveMetadata =
+    providerContextLimit > 0
+      ? {
+          ...metadata,
+          maxContextTokens: providerContextLimit,
+          contextWindow: `${providerContextLimit.toLocaleString()} tokens reported`,
+          currentContextLabel: state.usageSnapshot?.contextSource || metadata.currentContextLabel,
+        }
+      : metadata;
+  const estimatedTokens =
+    Number.isFinite(providerContextTokens) && providerContextTokens > 0
+      ? Math.max(localContextTokens, providerContextTokens)
+      : localContextTokens;
   const contextPercent = contextUsagePercent(estimatedTokens, effectiveMetadata);
   const providerReady = state.apiTest.status === 'ok';
+  const modelDisplay = displayModelName(state.providerModel);
+  const shellClasses = [
+    'chat-product-shell',
+    'arg-chat-shell',
+    `view-mode-${escapeAttribute(state.viewMode || 'chat')}`,
+    state.conversationsCollapsed ? 'conversation-collapsed' : '',
+    state.inspectorCollapsed ? 'inspector-collapsed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return `
     ${renderNotifications()}
-    <div class="chat-product-shell arg-chat-shell view-mode-${escapeAttribute(state.viewMode || 'chat')}">
+    <div class="${shellClasses}">
       <aside class="conversation-column arg-conversation-rail panel recent-chat-list">
         <div class="conversation-column-header">
           <div class="split-header">
             <h3>Conversations</h3>
-            <button class="icon-button" data-conversation-settings="true" title="Conversation settings" aria-label="Conversation settings"><span data-icon="list"></span></button>
+            <div class="button-row tight">
+              <button class="icon-button" data-conversation-settings="true" title="Conversation settings" aria-label="Conversation settings"><span data-icon="list"></span></button>
+              <button class="icon-button" data-toggle-chat-panel="conversations" title="Hide conversations" aria-label="Hide conversations"><span data-icon="chevrons-left"></span></button>
+            </div>
           </div>
           <label class="search-box">
             <span data-icon="search"></span>
@@ -62,9 +79,8 @@ function renderChatSection(state) {
           </label>
           <button class="button primary wide button-icon-label" id="new-chat"><span data-icon="plus"></span><span>New chat</span></button>
           <div class="conversation-tabs" role="tablist" aria-label="Conversation filters">
-            <button class="${state.chatFilter === 'recent' ? 'active' : ''}" data-chat-filter="recent" type="button">Recent</button>
-            <button class="${state.chatFilter === 'pinned' ? 'active' : ''}" data-chat-filter="pinned" type="button">Pinned</button>
             <button class="${state.chatFilter === 'all' ? 'active' : ''}" data-chat-filter="all" type="button">All</button>
+            <button class="${state.chatFilter === 'pinned' ? 'active' : ''}" data-chat-filter="pinned" type="button">Pinned</button>
           </div>
         </div>
         <div class="recent-chat-items conversation-history">
@@ -80,7 +96,8 @@ function renderChatSection(state) {
           </div>
           <div class="model-context-summary">
             <span class="pill ${providerReady ? 'ok' : 'warn'}">${providerReady ? 'Provider ready' : 'Offline mode'}</span>
-            <strong>${escapeHtml(provider.label)} / ${escapeHtml(state.providerModel)}</strong>
+            <strong>${escapeHtml(modelDisplay)}</strong>
+            <small>${escapeHtml(provider.label)}</small>
             <small>${escapeHtml(metadata.currentContextLabel)}</small>
           </div>
         </div>
@@ -89,13 +106,30 @@ function renderChatSection(state) {
           ${renderChatDayDivider(state)}
           ${state.chatBlocks.map((block) => renderMessageComponent(block, state)).join('')}
         </div>
+        ${renderNewTransmissionBar(state)}
         ${renderTypingIndicator(state)}
         ${renderComposer(state, effectiveMetadata, estimatedTokens, contextPercent)}
       </section>
-      ${state.viewMode === 'chat' ? '' : renderInspector(state, provider)}
+      ${renderInspector(state, provider)}
       ${renderChatTelemetry(state, provider, effectiveMetadata, estimatedTokens, contextPercent)}
+      <button class="chat-panel-restore chat-panel-restore-left" data-toggle-chat-panel="conversations" type="button" title="Show conversations" aria-label="Show conversations">
+        <span data-icon="panelLeft"></span>
+        <span>Chats</span>
+      </button>
+      <button class="chat-panel-restore chat-panel-restore-right" data-toggle-chat-panel="inspector" type="button" title="Show inspector" aria-label="Show inspector">
+        <span>Inspector</span>
+        <span data-icon="panelRight"></span>
+      </button>
     </div>
   `;
+}
+
+function modelSupportsThinking(metadata) {
+  return (metadata.capabilities || []).some((capability) => {
+    const value = String(capability).toLowerCase();
+    if (value.includes('when model supports')) return false;
+    return value.includes('reasoning') || value.includes('thinking');
+  });
 }
 
 function renderConversationList(state) {
@@ -122,14 +156,14 @@ function renderConversationList(state) {
 
       return `
         ${groupMarkup}
-        <article class="recent-chat-item arg-conversation-card ${state.activeChatId === chat.id ? 'active' : ''} ${chat.unreadCount ? 'unread' : ''}">
+        <article class="recent-chat-item arg-conversation-card ${state.activeChatId === chat.id ? 'active' : ''} ${chat.unreadCount ? 'unread' : ''} ${state.conversationMenuChatId === chat.id ? 'menu-open' : ''}" data-conversation-card="${escapeAttribute(chat.id)}">
           <button class="recent-chat-main" data-recent-chat="${escapeAttribute(chat.id)}">
             <strong>${chat.pinned ? '<span data-icon="pin"></span>' : ''}${escapeHtml(chat.title)}</strong>
             <span>${escapeHtml(chat.subtitle)}</span>
           </button>
           <time>${escapeHtml(formatChatTime(chat.lastMessageAt || chat.updatedAt))}</time>
           ${chat.unreadCount ? `<span class="unread-dot" aria-label="New messages"></span>` : ''}
-          <button class="icon-button compact recent-chat-delete" data-delete-chat="${escapeAttribute(chat.id)}" title="Delete chat" aria-label="Delete chat"><span data-icon="trash"></span></button>
+          <button class="icon-button compact recent-chat-delete danger-x" data-delete-chat="${escapeAttribute(chat.id)}" title="Delete chat" aria-label="Delete chat"><span data-icon="x"></span></button>
           <button class="icon-button compact recent-chat-more" data-conversation-menu="${escapeAttribute(chat.id)}" title="Conversation actions" aria-label="Conversation actions"><span data-icon="moreVertical"></span></button>
           ${renderConversationMenu(chat, state)}
           ${
@@ -286,12 +320,13 @@ function renderInspector(state, provider) {
   const usageLine = formatUsageLine(state.usageSnapshot);
   const activeSession = state.chatSessions.find((chat) => chat.id === state.activeChatId);
   const messageCount = state.chatBlocks.filter((block) => block.type === 'message').length;
+  const modelDisplay = displayModelName(state.providerModel);
 
   return `
     <aside class="inspector-panel arg-chat-inspector panel">
       <div class="panel-header split-header">
         <h3>Inspector</h3>
-        <button class="icon-button compact" data-view-mode="chat" title="Hide inspector" aria-label="Hide inspector"><span data-icon="chevrons-right"></span></button>
+        <button class="icon-button compact" data-toggle-chat-panel="inspector" title="Hide inspector" aria-label="Hide inspector"><span data-icon="chevrons-right"></span></button>
       </div>
       <div class="inspector-tabs" role="tablist">
         <button class="active" type="button">Session</button>
@@ -304,7 +339,7 @@ function renderInspector(state, provider) {
           <div><dt>Messages</dt><dd>${messageCount.toLocaleString()}</dd></div>
           <div><dt>Updated</dt><dd>${escapeHtml(activeSession?.lastMessageAt ? formatChatTime(activeSession.lastMessageAt) : 'Now')}</dd></div>
           <div><dt>Provider</dt><dd>${escapeHtml(provider.label)}</dd></div>
-          <div><dt>Model</dt><dd>${escapeHtml(state.providerModel)}</dd></div>
+          <div><dt>Model</dt><dd>${escapeHtml(modelDisplay)}</dd></div>
           <div><dt>Usage</dt><dd>${escapeHtml(usageLine)}</dd></div>
         </dl>
       </section>
@@ -327,25 +362,39 @@ function renderInspector(state, provider) {
 
 function renderChatTelemetry(state, provider, metadata, estimatedTokens, contextPercent) {
   const stats = state.desktopState?.systemStats || {};
-  const gateway = state.desktopState?.gatewayPid ? `Gateway PID ${state.desktopState.gatewayPid}` : 'Gateway stopped';
-  const memory = Number.isFinite(stats.memoryUsedPercent) && stats.memoryUsedPercent > 0
-    ? `${Math.round(stats.memoryUsedPercent)}%`
-    : 'Unavailable';
-  const cpu = Number.isFinite(stats.cpuUsagePercent) && stats.cpuUsagePercent > 0
-    ? `${Math.round(stats.cpuUsagePercent)}%`
-    : 'Unavailable';
+  const gateway = state.desktopState?.gatewayPid
+    ? `Gateway PID ${state.desktopState.gatewayPid}`
+    : 'Gateway stopped';
+  const memory =
+    Number.isFinite(stats.memoryUsedPercent) && stats.memoryUsedPercent > 0
+      ? `${Math.round(stats.memoryUsedPercent)}%`
+      : 'Unavailable';
+  const cpu =
+    Number.isFinite(stats.cpuUsagePercent) && stats.cpuUsagePercent > 0
+      ? `${Math.round(stats.cpuUsagePercent)}%`
+      : 'Unavailable';
   const session = state.activeChatId || 'No session';
   const usageLine = formatUsageLine(state.usageSnapshot);
 
   return `
     <footer class="arg-telemetry-strip" aria-label="Chat telemetry">
       <div><span class="status-dot ${state.apiTest.status === 'ok' ? 'ok' : 'warn'}"></span><strong>${escapeHtml(provider.label)}</strong><small>${escapeHtml(state.apiTest.status === 'ok' ? 'Ready' : 'Offline')}</small></div>
-      <div><span>Context</span><strong>${contextPercent}%</strong><small>${estimatedTokens.toLocaleString()} / ${contextTokenLimit(metadata).toLocaleString()}</small></div>
       <div><span>Session</span><strong>${escapeHtml(session)}</strong><small>${state.chatBlocks.length.toLocaleString()} blocks</small></div>
       <div><span>Runtime</span><strong>${escapeHtml(gateway)}</strong><small>${escapeHtml(state.desktopState?.workspaceReady ? 'Workspace ready' : 'Workspace pending')}</small></div>
       <div><span>System</span><strong>CPU ${escapeHtml(cpu)} · RAM ${escapeHtml(memory)}</strong><small>${escapeHtml(stats.hostName || 'Host unavailable')}</small></div>
       <div><span>Usage</span><strong>${escapeHtml(usageLine)}</strong><small>${escapeHtml(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</small></div>
     </footer>
+  `;
+}
+
+function renderNewTransmissionBar(state) {
+  if (!state.chatHasNewTransmission) return '';
+
+  return `
+    <button type="button" class="chat-new-transmission" data-new-transmission="true">
+      NEW TRANSMISSION
+      <span data-icon="chevronDown"></span>
+    </button>
   `;
 }
 
@@ -380,10 +429,14 @@ function formatUsageLine(usageSnapshot) {
     'cadence not reported';
   const pieces = [];
   if (usageSnapshot.requestRemaining || usageSnapshot.requestLimit) {
-    pieces.push(`Requests ${usageSnapshot.requestRemaining || '?'} / ${usageSnapshot.requestLimit || '?'}`);
+    pieces.push(
+      `Requests ${usageSnapshot.requestRemaining || '?'} / ${usageSnapshot.requestLimit || '?'}`,
+    );
   }
   if (usageSnapshot.tokenRemaining || usageSnapshot.tokenLimit) {
-    pieces.push(`Tokens ${usageSnapshot.tokenRemaining || '?'} / ${usageSnapshot.tokenLimit || '?'}`);
+    pieces.push(
+      `Tokens ${usageSnapshot.tokenRemaining || '?'} / ${usageSnapshot.tokenLimit || '?'}`,
+    );
   }
   if (usageSnapshot.requestReset || usageSnapshot.tokenReset) {
     pieces.push(`Reset ${usageSnapshot.requestReset || usageSnapshot.tokenReset} (${cadence})`);
@@ -437,41 +490,56 @@ function renderAttachmentPreview(file) {
 }
 
 function renderComposer(state, metadata, estimatedTokens, contextPercent) {
-  const sendDisabled = state.chatStreaming || (!state.draftMessage.trim() && state.chatAttachments.length === 0);
+  const sendDisabled =
+    state.chatStreaming || (!state.draftMessage.trim() && state.chatAttachments.length === 0);
+  const supportsThinking = modelSupportsThinking(metadata);
   const sendStatus = state.chatStreaming
     ? 'Generation in progress. Stop it before sending another message.'
     : sendDisabled
-      ? 'Type a message or attach a file to send.'
+      ? ''
+      : 'Ready to send.';
+  const sendTitle = state.chatStreaming
+    ? 'Generation in progress. Stop it before sending another message.'
+    : sendDisabled
+      ? 'Enter a message or attach a file.'
       : 'Ready to send.';
   return `
     <div class="arg-composer-shell">
       <div class="conversation-composer composer">
-        <div class="composer-inline">
-          <button class="icon-button" id="attach-file" title="Attach file or image" aria-label="Attach file or image"><span data-icon="paperclip"></span></button>
-          <button class="icon-button" id="voice-input" title="Use microphone" aria-label="Use microphone">${
-            state.voiceInputStatus === 'listening' ? '<span class="typing-dots">...</span>' : '<span data-icon="mic"></span>'
-          }</button>
-          <label class="compact-field">
-            <span>Thinking</span>
-            <select id="thinking-level" aria-label="Thinking level">
-              ${thinkingLevels
-                .map(
-                  (level) => `
-                    <option value="${escapeAttribute(level.id)}" ${selected(state.thinkingLevel, level.id)}>${escapeHtml(level.label)}</option>
-                  `,
-                )
-                .join('')}
-            </select>
-          </label>
-          <textarea id="chat-draft" placeholder="Tell Argentum what to do. Attach files when useful.">${escapeHtml(state.draftMessage)}</textarea>
-          ${renderContextRing(estimatedTokens, metadata, contextPercent, state.usageSnapshot)}
-          ${
-            state.chatStreaming
-              ? `<button class="button danger button-icon-label" data-stop-generation="true" id="stop-chat"><span data-icon="stop"></span><span>Stop</span></button>`
-              : `<button class="button primary button-icon-label" id="send-chat" data-send-chat-button="true" aria-describedby="send-chat-status" title="${escapeAttribute(sendStatus)}" ${sendDisabled ? 'disabled' : ''}><span data-icon="send"></span><span>Send</span></button>`
-          }
-        </div>
         <div class="composer-status-line" id="send-chat-status">${escapeHtml(sendStatus)}</div>
+        <div class="composer-layout" data-thinking="${supportsThinking ? 'true' : 'false'}">
+          <div class="composer-inline">
+            <button class="icon-button" id="attach-file" title="Attach file or image" aria-label="Attach file or image"><span data-icon="paperclip"></span></button>
+            <button class="icon-button" id="voice-input" title="Use microphone" aria-label="Use microphone">${
+              state.voiceInputStatus === 'listening'
+                ? '<span class="typing-dots">...</span>'
+                : '<span data-icon="mic"></span>'
+            }</button>
+            ${
+              supportsThinking
+                ? `<label class="compact-field">
+                    <span>Thinking</span>
+                    <select id="thinking-level" aria-label="Thinking level">
+                      ${thinkingLevels
+                        .map(
+                          (level) => `
+                            <option value="${escapeAttribute(level.id)}" ${selected(state.thinkingLevel, level.id)}>${escapeHtml(level.label)}</option>
+                          `,
+                        )
+                        .join('')}
+                    </select>
+                  </label>`
+                : ''
+            }
+            <textarea id="chat-draft" placeholder="Tell Argentum what to do. Attach files when useful.">${escapeHtml(state.draftMessage)}</textarea>
+            ${renderContextRing(estimatedTokens, metadata, contextPercent, state.usageSnapshot)}
+            ${
+              state.chatStreaming
+                ? `<button class="button danger button-icon-label" data-stop-generation="true" id="stop-chat"><span data-icon="stop"></span><span>Stop</span></button>`
+                : `<button class="button primary button-icon-label" id="send-chat" data-send-chat-button="true" aria-describedby="send-chat-status" title="${escapeAttribute(sendTitle)}" ${sendDisabled ? 'disabled' : ''}><span data-icon="send"></span><span>Send</span></button>`
+            }
+          </div>
+        </div>
         ${renderAttachmentTray(state)}
       </div>
     </div>
@@ -529,7 +597,8 @@ function renderMessageComponent(block, state) {
     `;
   }
 
-  const roleClass = block.role === 'user' ? 'user' : block.role === 'system' ? 'system' : 'assistant';
+  const roleClass =
+    block.role === 'user' ? 'user' : block.role === 'system' ? 'system' : 'assistant';
   const messageId = escapeAttribute(block.id || '');
   const title = block.title || (block.role === 'user' ? 'You' : state.agentName || 'Argentum');
   const rowClass =
@@ -539,11 +608,17 @@ function renderMessageComponent(block, state) {
         ? 'arg-chat-line-system'
         : 'arg-chat-line-assistant';
   const initials = roleClass === 'user' ? userInitials(state.userName || title) : 'A';
+  const userAvatarSrc =
+    roleClass === 'user' && state.userAvatarPath ? filePreviewUrl(state.userAvatarPath) : '';
+  const assistantAvatar = `<img src="./assets/argentum.png" alt="" loading="lazy" />`;
+  const userAvatar = userAvatarSrc
+    ? `<img src="${escapeAttribute(userAvatarSrc)}" alt="" loading="lazy" />`
+    : escapeHtml(initials);
   const time = formatChatTime(block.createdAt || Date.now());
 
   return `
     <div class="message-row arg-chat-line ${rowClass} ${roleClass}">
-      ${roleClass === 'assistant' ? `<div class="arg-chat-avatar arg-chat-avatar-assistant" aria-hidden="true">${initials}</div>` : ''}
+      ${roleClass === 'assistant' ? `<div class="arg-chat-avatar arg-chat-avatar-assistant" aria-hidden="true">${assistantAvatar}</div>` : ''}
       <article class="message ${roleClass} arg-chat-content ${escapeAttribute(block.status || '')}" data-message-id="${messageId}">
         <div class="message-meta arg-chat-meta">
           <strong class="arg-chat-author">${escapeHtml(title)}</strong>
@@ -554,7 +629,7 @@ function renderMessageComponent(block, state) {
         <div class="markdown-body">${renderMarkdown(block.body)}</div>
         ${renderReasoningPanel(block, state)}
       </article>
-      ${roleClass === 'user' ? `<div class="arg-chat-avatar arg-chat-avatar-user" aria-hidden="true">${escapeHtml(initials)}</div>` : ''}
+      ${roleClass === 'user' ? `<div class="arg-chat-avatar arg-chat-avatar-user" aria-hidden="true">${userAvatar}</div>` : ''}
     </div>
   `;
 }

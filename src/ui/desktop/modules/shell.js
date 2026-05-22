@@ -1,7 +1,13 @@
 import { commandCatalog, providerPresets, securityProfiles, sections } from './constants.js';
 import { icon } from './icons.js';
 import { state } from './state.js';
-import { currentProvider, escapeAttribute, escapeHtml, labelFor } from './utils.js';
+import {
+  currentProvider,
+  displayModelName,
+  escapeAttribute,
+  escapeHtml,
+  labelFor,
+} from './utils.js';
 
 export function renderNavigation() {
   return sections
@@ -52,7 +58,7 @@ export function renderProviderStatusPill() {
     <button class="provider-status-pill ${className}" type="button" data-section="settings" title="${escapeAttribute(state.apiTest.message || status)}">
       <span aria-hidden="true"></span>
       ${escapeHtml(status)}
-      <small>${escapeHtml(provider.label)}</small>
+      <small>${escapeHtml(displayModelName(state.providerModel))}</small>
     </button>
   `;
 }
