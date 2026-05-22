@@ -143,7 +143,7 @@ function createOnboardingProfile(options = {}) {
     const config = {
         $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
         name: nonEmptyTrimmed(options.name, 'My Argentum Instance'),
-        version: '0.0.6',
+        version: '0.0.7',
         server: {
             port,
             host: '127.0.0.1',

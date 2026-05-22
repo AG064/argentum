@@ -60,7 +60,7 @@ curl http://localhost:3000/health
 Ожидаемый ответ:
 
 ```json
-{ "status": "ok", "version": "0.0.6", "features": "12/59 active" }
+{ "status": "ok", "version": "0.0.7", "features": "12/59 active" }
 ```
 
 ---

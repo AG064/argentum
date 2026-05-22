@@ -10,7 +10,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class MultiAgentCoordinationFeature {
     meta = {
         name: 'multi-agent-coordination',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Coordination between multiple agents with task assignment and broadcasting',
         dependencies: [],
     };

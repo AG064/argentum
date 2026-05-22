@@ -123,7 +123,7 @@ function evaluateCondition(condition, vars = {}) {
 class MeshWorkflowsFeature {
     meta = {
         name: 'mesh-workflows',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Goal decomposition, dependency graph, checkpoint/resume workflows',
         dependencies: ['checkpoint'],
     };
@@ -301,7 +301,7 @@ class MeshWorkflowsFeature {
             name: `Goal: ${decomposed.goal.slice(0, 50)}`,
             description: decomposed.goal,
             goal: decomposed.goal,
-            version: '0.0.6',
+            version: '0.0.7',
             steps,
             entryStep: decomposed.executionPlan[0] ?? '',
             variables: {},

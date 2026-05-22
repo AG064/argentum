@@ -28,7 +28,7 @@ const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 class SttEngineFeature {
     meta = {
         name: 'stt-engine',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Speech-to-text engine with provider abstraction and history logging',
         dependencies: [],
     };

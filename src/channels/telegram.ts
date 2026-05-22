@@ -38,7 +38,7 @@ export interface TelegramChannelConfig {
 class TelegramChannel implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'telegram',
-    version: '0.0.6',
+    version: '0.0.7',
     description: 'Telegram channel integration via grammY',
     dependencies: [],
   };

@@ -52,7 +52,7 @@ interface CapturePattern {
 class AutoCaptureFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-capture',
-    version: '0.0.6',
+    version: '0.0.7',
     description: 'Automatic capture of decisions, lessons, errors, and preferences',
     dependencies: [],
   };

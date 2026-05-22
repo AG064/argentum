@@ -102,7 +102,7 @@ const SUGGESTION_RULES = [
 class SmartRecommendationsFeature {
     meta = {
         name: 'smart-recommendations',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Proactive recommendations with behavior learning and briefings',
         dependencies: [],
     };

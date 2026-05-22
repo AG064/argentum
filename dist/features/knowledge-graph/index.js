@@ -318,7 +318,7 @@ class MemoryGraphBackend {
 class KnowledgeGraphFeature {
     meta = {
         name: 'knowledge-graph',
-        version: '0.0.6',
+        version: '0.0.7',
         description: 'Knowledge graph with Markdown/JSON import, export, pathfinding',
         dependencies: [],
     };
