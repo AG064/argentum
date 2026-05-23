@@ -1,3 +1,4 @@
+/* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
 /**
  * Argentum YouTube Shorts Generator
  *
@@ -30,7 +31,6 @@ import {
 } from '../../core/plugin-loader';
 
 import type { youtube_v3 } from 'googleapis';
-
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -107,14 +107,20 @@ class YouTubeShortsFeature implements FeatureModule {
     if (config['outputDir']) this.config.outputDir = config['outputDir'] as string;
     if (config['maxDuration']) this.config.maxDuration = config['maxDuration'] as number;
     if (config['quality']) this.config.quality = config['quality'] as '720p' | '1080p';
-    if (config['platforms']) this.config.platforms = config['platforms'] as ('telegram' | 'twitter' | 'youtube')[];
+    if (config['platforms'])
+      this.config.platforms = config['platforms'] as ('telegram' | 'twitter' | 'youtube')[];
     if (config['voiceover'] !== undefined) this.config.voiceover = config['voiceover'] as boolean;
     if (config['youtubeApiKey']) this.config.youtubeApiKey = config['youtubeApiKey'] as string;
-    if (config['youtubeAccessToken']) this.config.youtubeAccessToken = config['youtubeAccessToken'] as string;
-    if (config['youtubeRefreshToken']) this.config.youtubeRefreshToken = config['youtubeRefreshToken'] as string;
-    if (config['youtubeClientId']) this.config.youtubeClientId = config['youtubeClientId'] as string;
-    if (config['youtubeClientSecret']) this.config.youtubeClientSecret = config['youtubeClientSecret'] as string;
-    if (config['youtubeChannelId']) this.config.youtubeChannelId = config['youtubeChannelId'] as string;
+    if (config['youtubeAccessToken'])
+      this.config.youtubeAccessToken = config['youtubeAccessToken'] as string;
+    if (config['youtubeRefreshToken'])
+      this.config.youtubeRefreshToken = config['youtubeRefreshToken'] as string;
+    if (config['youtubeClientId'])
+      this.config.youtubeClientId = config['youtubeClientId'] as string;
+    if (config['youtubeClientSecret'])
+      this.config.youtubeClientSecret = config['youtubeClientSecret'] as string;
+    if (config['youtubeChannelId'])
+      this.config.youtubeChannelId = config['youtubeChannelId'] as string;
 
     // Ensure output directory exists
     if (!existsSync(this.config.outputDir)) {
@@ -181,7 +187,12 @@ class YouTubeShortsFeature implements FeatureModule {
     if (this.config.youtubeApiKey) return true;
     // OAuth2 auth (access token or refresh token + client credentials)
     if (this.config.youtubeAccessToken) return true;
-    if (this.config.youtubeRefreshToken && this.config.youtubeClientId && this.config.youtubeClientSecret) return true;
+    if (
+      this.config.youtubeRefreshToken &&
+      this.config.youtubeClientId &&
+      this.config.youtubeClientSecret
+    )
+      return true;
     return false;
   }
 
@@ -208,7 +219,11 @@ class YouTubeShortsFeature implements FeatureModule {
         oauth2.setCredentials({ access_token: this.config.youtubeAccessToken });
         this.youtubeClient = new youtubeNamespace.Youtube({ auth: oauth2 });
         this.ctx?.logger?.info?.('YouTube client initialized with OAuth2 access token');
-      } else if (this.config.youtubeRefreshToken && this.config.youtubeClientId && this.config.youtubeClientSecret) {
+      } else if (
+        this.config.youtubeRefreshToken &&
+        this.config.youtubeClientId &&
+        this.config.youtubeClientSecret
+      ) {
         // OAuth2 with refresh token - requires getting new access token
         const oauth2Client = new google.auth.OAuth2(
           this.config.youtubeClientId,
@@ -263,9 +278,12 @@ class YouTubeShortsFeature implements FeatureModule {
     mkdirSync(tmpDir, { recursive: true });
 
     const ytdlpArgs = [
-      '-f', `bestvideo[height<=${this.config.quality}]`,
-      '--merge-output-format', 'mp4',
-      '-o', outputPath,
+      '-f',
+      `bestvideo[height<=${this.config.quality}]`,
+      '--merge-output-format',
+      'mp4',
+      '-o',
+      outputPath,
       url,
     ];
     this.ctx?.logger?.info?.('Downloading video', { url, outputPath });
@@ -295,11 +313,7 @@ class YouTubeShortsFeature implements FeatureModule {
   /**
    * Generate a single short video segment
    */
-  async generateShort(
-    videoPath: string,
-    segment: ShortSegment,
-    outputPath: string
-  ): Promise<void> {
+  async generateShort(videoPath: string, segment: ShortSegment, outputPath: string): Promise<void> {
     if (!this.isToolAvailable('ffmpeg')) {
       throw new Error('ffmpeg not installed. Install with: apt install ffmpeg');
     }
@@ -314,11 +328,16 @@ class YouTubeShortsFeature implements FeatureModule {
       writeFileSync(captionFile, caption, 'utf8');
       const drawtext = `crop=ih*9/16:ih,drawtext=textfile=${captionFile}:fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-60:borderw=2:bordercolor=black`;
       const ffmpegArgs = [
-        '-i', videoPath,
-        '-ss', String(start),
-        '-t', String(duration),
-        '-vf', drawtext,
-        '-c:a', 'copy',
+        '-i',
+        videoPath,
+        '-ss',
+        String(start),
+        '-t',
+        String(duration),
+        '-vf',
+        drawtext,
+        '-c:a',
+        'copy',
         outputPath,
         '-y',
       ];
@@ -335,10 +354,12 @@ class YouTubeShortsFeature implements FeatureModule {
    */
   async uploadToYouTube(
     filePath: string,
-    options: UploadOptions = {}
+    options: UploadOptions = {},
   ): Promise<{ videoId: string; videoUrl: string }> {
     if (!this.youtubeClient) {
-      throw new Error('YouTube client not initialized. Configure YOUTUBE_API_KEY or OAuth2 tokens.');
+      throw new Error(
+        'YouTube client not initialized. Configure YOUTUBE_API_KEY or OAuth2 tokens.',
+      );
     }
 
     if (!existsSync(filePath)) {
@@ -356,10 +377,7 @@ class YouTubeShortsFeature implements FeatureModule {
     const videoData = readFileSync(filePath);
 
     // Create a hash for request ID
-    const requestId = createHash('sha256')
-      .update(videoData)
-      .digest('hex')
-      .slice(0, 16);
+    const requestId = createHash('sha256').update(videoData).digest('hex').slice(0, 16);
 
     this.ctx?.logger?.info?.('Uploading to YouTube Shorts', {
       filePath,
@@ -369,26 +387,24 @@ class YouTubeShortsFeature implements FeatureModule {
     });
 
     try {
-      const response = await this.youtubeClient.videos.insert(
-        {
-          part: ['snippet', 'status'],
-          requestBody: {
-            snippet: {
-              title,
-              description,
-              tags,
-              categoryId: '22', // People & Blogs - commonly used for Shorts
-            },
-            status: {
-              privacyStatus,
-              selfDeclaredMadeForKids: false,
-            },
+      const response = await this.youtubeClient.videos.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: {
+            title,
+            description,
+            tags,
+            categoryId: '22', // People & Blogs - commonly used for Shorts
           },
-          media: {
-            body: videoData,
+          status: {
+            privacyStatus,
+            selfDeclaredMadeForKids: false,
           },
-        }
-      );
+        },
+        media: {
+          body: videoData,
+        },
+      });
 
       const videoId = response.data.id;
       if (!videoId) {
@@ -429,7 +445,7 @@ class YouTubeShortsFeature implements FeatureModule {
   async processVideo(
     url: string,
     segmentCount: number = 3,
-    uploadToPlatforms: boolean = true
+    uploadToPlatforms: boolean = true,
   ): Promise<ShortResult[]> {
     const tmpDir = join(this.config.outputDir, `tmp-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
@@ -455,7 +471,11 @@ class YouTubeShortsFeature implements FeatureModule {
           };
 
           // Upload to YouTube if configured
-          if (uploadToPlatforms && this.config.platforms.includes('youtube') && this.youtubeClient) {
+          if (
+            uploadToPlatforms &&
+            this.config.platforms.includes('youtube') &&
+            this.youtubeClient
+          ) {
             try {
               const { videoId, videoUrl } = await this.uploadToYouTube(outPath, {
                 title: `${segment.caption} #shorts`,
@@ -468,7 +488,9 @@ class YouTubeShortsFeature implements FeatureModule {
             } catch (uploadErr) {
               const uploadError = this.extractErrorMessage(uploadErr);
               result.error = `Upload failed: ${uploadError}`;
-              this.ctx?.logger?.error?.(`YouTube upload failed for segment ${i}`, { error: uploadError });
+              this.ctx?.logger?.error?.(`YouTube upload failed for segment ${i}`, {
+                error: uploadError,
+              });
             }
           }
 

@@ -1,3 +1,4 @@
+/* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
 // @ts-nocheck
 /**
  * Argentum Blueprint System

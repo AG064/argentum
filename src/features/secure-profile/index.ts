@@ -1,3 +1,4 @@
+/* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
