@@ -118,6 +118,9 @@ log_ok "Working in: $(pwd)"
 # ============================================
 log_step "Installing dependencies"
 
+# NOTE: PinnedDependencies alert for npm install is a known limitation.
+# npm commands in the install script cannot be pinned to Git commit SHAs.
+# This is not a GitHub Action; the Scorecard tool flags this for visibility.
 if [ -f "package-lock.json" ]; then
   npm ci --ignore-scripts 2>/dev/null || npm install
 else

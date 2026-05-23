@@ -33,6 +33,9 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # NOTE: PinnedDependencies alert for npm packages is a known limitation.
+      # npm packages cannot be pinned to Git commit SHAs like GitHub Actions can.
+      # The version is pinned (6.6.0) but there's no SHA URL mechanism for npm.
       - name: Install executable packager
         run: npm install -g @yao-pkg/pkg@6.6.0
 
