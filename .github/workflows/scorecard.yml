@@ -8,12 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
-  checks: read
   contents: read
-  id-token: write
-  issues: read
-  pull-requests: read
   security-events: write
 
 jobs:
