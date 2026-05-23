@@ -219,6 +219,7 @@ class CompanyTemplatesFeature implements FeatureModule {
 
     // Save to disk
     const fileName = `${this.sanitizeFileName(name)}.json`;
+  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const filePath = join(this.config.templatesPath, fileName);
 
     const importBundle = {

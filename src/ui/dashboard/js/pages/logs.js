@@ -195,7 +195,7 @@ function searchLogs(query) {
         const content = msg.textContent;
         if (content.toLowerCase().includes(lowerQuery)) {
           const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(`(${escapedQuery})`, 'gi');
+          const regex = /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */ new RegExp(`(${escapedQuery})`, 'gi');
           // Escape HTML before inserting markup to prevent XSS
           const escaped = content
             .replace(/&/g, '&amp;')

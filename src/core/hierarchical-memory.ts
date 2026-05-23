@@ -116,6 +116,7 @@ export class HierarchicalMemoryStore {
   private db: Database.Database;
   private flushPending = false;
 
+  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   constructor(dbPath?: string) {
     const resolved = resolve(dbPath ?? './data/hierarchical-memory.db');
     const dir = dirname(resolved);

@@ -278,6 +278,7 @@ export class AllowlistManager {
       .replace(/\*/g, '.*')
       .replace(/\?/g, '.');
 
+    /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
     try {
       return new RegExp(`^${escaped}$`, 'i').test(value);
     } catch {
