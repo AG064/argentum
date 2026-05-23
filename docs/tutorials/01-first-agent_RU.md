@@ -43,6 +43,7 @@ argentum init
 ```
 
 Это создаёт:
+
 - `argentum.json` — ваш файл конфигурации
 - `data/` — каталог для SQLite-баз данных и данных сессий
 - `backups/` — каталог для автоматических резервных копий
@@ -175,6 +176,7 @@ argentum gateway restart
   "channels": {
     "telegram": {
       "enabled": true,
+      <!-- nosemgrep: generic.secrets.security.detected-telegram-bot-api-key.detected-telegram-bot-api-key -->
       "token": "7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "allowedUsers": []
     }
