@@ -182,12 +182,6 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 </div>
 <script>
 const MAX_MSG_LEN = 10000;
-import { randomBytes } from 'crypto';
-
-function secureId(length = 8): string {
-  return randomBytes(length).toString('hex');
-}
-
 let ws, userId = 'user_' + secureId();
 let roomId = new URLSearchParams(location.search).get('room') || 'default';
 let token = new URLSearchParams(location.search).get('token') || '';

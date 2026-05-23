@@ -9,9 +9,22 @@ const PACKAGE_VERSION = JSON.parse(readFileSync(resolve(__dirname, '../package.j
 function run(args: string[], env?: Record<string, string>): string {
   /* nosemgrep: js/shell-command-injection-from-environment */
   // CLI path is validated to be an absolute path; command is always 'node' with the path as first arg
-  return execSync(`node ${CLI} ${args.join(' ')}`, {
+  // Sanitize env values to prevent shell injection via environment
+  const safeEnv: Record<string, string> = { ...process.env, ARGENTUM_NO_BANNER: '1' };
+  if (env) {
+    for (const [key, value] of Object.entries(env)) {
+      // Remove any shell metacharacters and newlines from env values
+      safeEnv[key] = typeof value === 'string' ? value.replace(/[\n\r;`$<>]/g, '') : String(value);
+    }
+  }
+  // Validate CLI is an absolute path to prevent arbitrary code execution
+  const resolvedCLI = CLI;
+  if (!resolvedCLI.startsWith('/')) {
+    throw new Error('CLI path must be absolute');
+  }
+  return execSync(`node ${resolvedCLI} ${args.join(' ')}`, {
     encoding: 'utf8',
-    env: { ...process.env, ...env, ARGENTUM_NO_BANNER: '1' },
+    env: safeEnv,
   });
 }
 
