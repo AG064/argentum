@@ -30,8 +30,23 @@ const targets = {
   },
 };
 
+const ALLOWED_COMMANDS = ['npm', 'npm.cmd', 'npx', 'npx.cmd'];
+
 function run(command, args) {
+  // Validate command against allowlist to prevent command injection
   const commandName = basename(command).toLowerCase();
+  if (!ALLOWED_COMMANDS.includes(commandName)) {
+    throw new Error(`Blocked unsafe command: ${command}`);
+  }
+
+  // Sanitize args to prevent injection via path/argument values
+  const shellMetaChars = /[;&|`$<>{}[:space:]]/;
+  for (const arg of args) {
+    if (typeof arg !== 'string' || shellMetaChars.test(arg)) {
+      throw new Error(`Blocked potentially dangerous argument: ${arg}`);
+    }
+  }
+
   const isWindowsCmd =
     process.platform === 'win32' && (commandName.endsWith('.cmd') || commandName.endsWith('.bat'));
   const actualCommand = isWindowsCmd ? 'cmd.exe' : command;

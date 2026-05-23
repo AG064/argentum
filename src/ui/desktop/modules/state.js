@@ -309,8 +309,17 @@ export const state = {
   ],
 };
 
+// Secure random ID generator (replaces Math.random() for security-sensitive IDs)
+function generateSecureId(length = 16) {
+  const array = new Uint8Array(length);
+  require('crypto').getRandomValues(array);
+  return Array.from(array, (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, length);
+}
+
 export function notify(type, title, message) {
-  const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = `${Date.now()}-${generateSecureId()}`;
   const notification = { id, type, title, message };
   state.notificationHistory = [notification, ...state.notificationHistory].slice(0, 40);
 
