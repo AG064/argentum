@@ -23,6 +23,8 @@ The release workflow also produces optional terminal-first CLI binaries:
 
 The Windows setup executable and MSI are GUI desktop installers. They create normal Windows app entries and should launch the Argentum interface, not the terminal CLI. CLI assets are deliberately named with `argentum-cli-`.
 
+The NSIS setup executable may show an optional local-server page. If the user enables it, setup installs the prepared Argentum llama.cpp server binaries under the app directory. If the checkbox is left off, no llama.cpp binaries are installed and the same server can be installed later from the Local Server capability inside Argentum. The MSI does not show this optional page.
+
 ## Creating a GitHub release
 
 1. Make sure `package.json` is at the intended version.
