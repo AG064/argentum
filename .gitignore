@@ -32,3 +32,4 @@ OpenSpace/
 src/desktop/gen/
 src/desktop/target/
 src/desktop/binaries/argentum-cli-*
+coverage/
