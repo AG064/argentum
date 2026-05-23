@@ -2,7 +2,7 @@
 /**
  * Browser Automation CLI
  * Usage: browser <command> [args...]
- * 
+ *
  * Commands:
  *   install          - Install Playwright and Chromium
  *   navigate <url>  - Go to URL
@@ -48,7 +48,7 @@ async function runCommand(args) {
     case 'navigate': {
       const url = rest[0];
       if (!url) throw new Error('Usage: browser navigate <url>');
-    /* nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection */
+      /* nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection */
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(2000);
       console.log('OK:', url);
@@ -59,7 +59,9 @@ async function runCommand(args) {
       const selector = rest[0];
       if (!selector) throw new Error('Usage: browser click <selector>');
       await page.waitForSelector(selector, { timeout: 10000 }).catch(() => {});
-      await page.click(selector).catch(e => console.log('Click warning:', e.message.split('\n')[0]));
+      await page
+        .click(selector)
+        .catch((e) => console.log('Click warning:', e.message.split('\n')[0]));
       await page.waitForTimeout(1000);
       console.log('OK: clicked', selector);
       break;
@@ -70,7 +72,9 @@ async function runCommand(args) {
       const text = rest.slice(1).join(' ');
       if (!selector || text === undefined) throw new Error('Usage: browser fill <selector> <text>');
       await page.waitForSelector(selector, { timeout: 10000 }).catch(() => {});
-      await page.fill(selector, text).catch(e => console.log('Fill warning:', e.message.split('\n')[0]));
+      await page
+        .fill(selector, text)
+        .catch((e) => console.log('Fill warning:', e.message.split('\n')[0]));
       console.log('OK: filled', selector);
       break;
     }
@@ -80,7 +84,9 @@ async function runCommand(args) {
       const text = rest.slice(1).join(' ');
       if (!selector || text === undefined) throw new Error('Usage: browser type <selector> <text>');
       await page.waitForSelector(selector, { timeout: 10000 }).catch(() => {});
-      await page.type(selector, text).catch(e => console.log('Type warning:', e.message.split('\n')[0]));
+      await page
+        .type(selector, text)
+        .catch((e) => console.log('Type warning:', e.message.split('\n')[0]));
       console.log('OK: typed into', selector);
       break;
     }
@@ -104,8 +110,8 @@ async function runCommand(args) {
     case 'eval': {
       const js = rest.join(' ');
       if (!js) throw new Error('Usage: browser eval <javascript>');
-    /* nosemgrep: javascript.playwright.security.audit.playwright-evaluate-code-injection.playwright-evaluate-code-injection */
-      const result = await page.evaluate(js).catch(e => ({ error: e.message }));
+      /* nosemgrep: javascript.playwright.security.audit.playwright-evaluate-code-injection.playwright-evaluate-code-injection */
+      const result = await page.evaluate(js).catch((e) => ({ error: e.message }));
       console.log(JSON.stringify(result, null, 2));
       return result;
     }
@@ -114,7 +120,9 @@ async function runCommand(args) {
       const selector = rest[0];
       const timeout = parseInt(rest[1]) || 10000;
       if (!selector) throw new Error('Usage: browser wait <selector> [timeout_ms]');
-      await page.waitForSelector(selector, { timeout }).catch(e => console.log('Wait timeout:', e.message.split('\n')[0]));
+      await page
+        .waitForSelector(selector, { timeout })
+        .catch((e) => console.log('Wait timeout:', e.message.split('\n')[0]));
       console.log('OK: found', selector);
       break;
     }
@@ -152,7 +160,7 @@ async function runCommand(args) {
 // CLI
 if (require.main === module) {
   const args = process.argv.slice(2);
-  
+
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     console.log('Browser Automation CLI');
     console.log('');
@@ -183,7 +191,7 @@ if (require.main === module) {
 
   runCommand(args)
     .then(() => process.exit(0))
-    .catch(err => {
+    .catch((err) => {
       console.error('ERROR:', err.message);
       process.exit(1);
     });

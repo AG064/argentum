@@ -33,7 +33,7 @@ async function runCommand(args) {
     case 'navigate': {
       const url = rest[0];
       if (!url) throw new Error('Usage: browser navigate <url>');
-    /* nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection */
+      /* nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection */
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(2000); // Wait for full render
       console.log('OK:', url);
@@ -89,7 +89,7 @@ async function runCommand(args) {
     case 'eval': {
       const js = rest.join(' ');
       if (!js) throw new Error('Usage: browser eval <javascript>');
-    /* nosemgrep: javascript.playwright.security.audit.playwright-evaluate-code-injection.playwright-evaluate-code-injection */
+      /* nosemgrep: javascript.playwright.security.audit.playwright-evaluate-code-injection.playwright-evaluate-code-injection */
       const result = await page.evaluate(js);
       console.log(JSON.stringify(result));
       return result;
@@ -135,13 +135,15 @@ async function runCommand(args) {
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.log('Browser CLI: navigate, click, fill, type, text, screenshot, eval, wait, url, title, close, sleep');
+    console.log(
+      'Browser CLI: navigate, click, fill, type, text, screenshot, eval, wait, url, title, close, sleep',
+    );
     process.exit(1);
   }
 
   runCommand(args)
     .then(() => process.exit(0))
-    .catch(err => {
+    .catch((err) => {
       console.error('ERROR:', err.message);
       process.exit(1);
     });

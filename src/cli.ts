@@ -548,9 +548,9 @@ function cmdACP(): void {
         error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
       });
   } catch (err) {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   }
 }
 

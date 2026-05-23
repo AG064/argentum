@@ -428,6 +428,7 @@ class WebchatFeature implements FeatureModule {
   async start(): Promise<void> {
     this.assertSecureConfig();
 
+    /* nosemgrep: problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server */
     this.httpServer = new HttpServer((req: IncomingMessage, res: ServerResponse) => {
       if (!this.isAuthorizedHttpRequest(req)) {
         res.writeHead(401);
