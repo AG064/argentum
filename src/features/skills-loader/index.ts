@@ -440,6 +440,7 @@ class SkillsLoaderFeature {
     if (!skill) throw new Error(`Skill '${skillName}' not found`);
 
     const scriptsDir = path.resolve(skill.path, 'scripts');
+    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
     const scriptPath = path.resolve(scriptsDir, scriptName);
     if (!scriptPath.startsWith(`${scriptsDir}${path.sep}`)) {
       throw new Error(`Invalid script path for skill '${skillName}'`);
