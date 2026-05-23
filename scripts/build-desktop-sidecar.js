@@ -57,9 +57,19 @@ if (!existsSync(distCli)) {
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
 }
 
-const target = targets[`${process.platform}-${process.arch}`];
+const allowedPlatforms = ['win32', 'linux', 'darwin'];
+const allowedArchs = ['x64', 'arm64'];
+
+const platform = process.platform;
+const arch = process.arch;
+
+if (!allowedPlatforms.includes(platform) || !allowedArchs.includes(arch)) {
+  throw new Error(`Unsupported desktop sidecar host: ${platform}-${arch}`);
+}
+
+const target = targets[`${platform}-${arch}`];
 if (!target) {
-  throw new Error(`Unsupported desktop sidecar host: ${process.platform}-${process.arch}`);
+  throw new Error(`Unsupported desktop sidecar target: ${platform}-${arch}`);
 }
 
 mkdirSync(binariesDir, { recursive: true });
