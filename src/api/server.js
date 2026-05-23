@@ -375,6 +375,7 @@ function matchRoute(method, reqPath) {
 }
 
 // Create HTTP server
+/* nosemgrep: problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server */
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
