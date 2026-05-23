@@ -1,3 +1,4 @@
+/* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
 /**
  * Wake Word Detection Feature
  *

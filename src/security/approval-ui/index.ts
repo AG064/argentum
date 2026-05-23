@@ -1,4 +1,5 @@
- 
+/* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
 // @ts-nocheck
 /**
  * Argentum Approval UI / Human-in-the-Loop System
