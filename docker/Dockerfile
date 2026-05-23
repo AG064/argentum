@@ -11,6 +11,7 @@ RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Copy source and build
 COPY tsconfig.json ./
+COPY scripts/ ./scripts/
 COPY src/ ./src/
 RUN npm run build
 

@@ -354,6 +354,15 @@ function localServerModule() {
                 ],
                 statsClass: 'gateway-status-grid',
                 actions: renderCommandDock([
+                  ...(installed
+                    ? []
+                    : [
+                        {
+                          label: 'Install Server',
+                          actionId: 'llama-server-install',
+                          primary: true,
+                        },
+                      ]),
                   { label: 'Start Server', actionId: 'llama-server-start', primary: true },
                   { label: 'Check Status', actionId: 'llama-server-status' },
                   { label: 'Stop Server', actionId: 'llama-server-stop' },
@@ -411,8 +420,8 @@ function localServerModule() {
                 </div>
                 ${renderActionCards('local-server')}
                 <div class="settings-inline-note">
-                  <strong>Bundled binary</strong>
-                  <p>The v0.0.7 installer bundles the vetted CPU llama.cpp server when release build download is enabled. Custom builds can still set LLAMA_SERVER_BIN or place llama-server in workspace/bin.</p>
+                  <strong>Optional binary</strong>
+                  <p>The Windows setup can install llama.cpp only when its optional checkbox is selected. If skipped, use Install Server here, set LLAMA_SERVER_BIN, or place llama-server in workspace/bin.</p>
                 </div>
               </details>
             </div>
@@ -1019,7 +1028,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
       </label>
       <div class="settings-inline-note">
         <strong>${state.desktopState?.llamaServerInstalled ? 'Binary found' : 'Binary not installed'}</strong>
-        <p>${escapeHtml(state.desktopState?.llamaServerInstalled ? `Endpoint: ${state.desktopState?.llamaServerEndpoint || 'http://127.0.0.1:8080/v1'}` : 'The v0.0.7 installer bundles the CPU llama.cpp server when release build download is enabled. You can also place llama-server in workspace/bin or set LLAMA_SERVER_BIN for a custom build.')}</p>
+        <p>${escapeHtml(state.desktopState?.llamaServerInstalled ? `Endpoint: ${state.desktopState?.llamaServerEndpoint || 'http://127.0.0.1:8080/v1'}` : 'Install from the Local Server page, select the optional llama.cpp checkbox in setup.exe, set LLAMA_SERVER_BIN, or place llama-server in workspace/bin.')}</p>
       </div>
     `;
   }

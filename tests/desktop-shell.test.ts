@@ -31,6 +31,9 @@ describe('Argentum desktop shell', () => {
       ]),
     );
     expect(config.bundle?.externalBin).toEqual(['binaries/argentum-cli']);
+    const configText = read('src/desktop/tauri.conf.json');
+    expect(configText).toContain('"installerHooks": "generated/optional-llama.nsh"');
+    expect(configText).not.toContain('"resources": ["../ui/desktop/llama.cpp"]');
 
     const html = read('src/ui/desktop/index.html');
     expect(html).toContain('<title>Argentum</title>');
@@ -114,6 +117,7 @@ describe('Argentum desktop shell', () => {
       "id: 'gateway-status'",
       "id: 'gateway-stop'",
       "id: 'gateway-logs'",
+      "id: 'llama-server-install'",
       "id: 'llama-server-start'",
       "id: 'llama-server-status'",
       "id: 'llama-server-stop'",
@@ -782,6 +786,8 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('"--hf-repo"');
     expect(rust).toContain('"--hf-file"');
     expect(rust).toContain('LLAMA_SERVER_BIN');
+    expect(rust).toContain('llama-server-install');
+    expect(rust).toContain('latest_llama_release_asset');
     expect(rust).toContain('llama-server-start');
     expect(rust).toContain('fn resolve_sidecar_path');
     expect(rust).toContain('fn sidecar_file_names');
@@ -799,7 +805,20 @@ describe('Argentum desktop shell', () => {
     expect(packageJson).toContain('prepare:llama-server');
     expect(packageJson).toContain('predesktop:build');
     expect(packageJson).toContain('npm run build && npm run build:desktop-sidecar');
+    const prepareLlama = read('scripts/prepare-llama-server.js');
+    expect(prepareLlama).toContain('optional-llama.nsh');
+    expect(prepareLlama).toContain('Install Argentum llama.cpp local server binaries');
     expect(workflow).toContain('Build desktop CLI sidecar');
+  });
+
+  test('docker images copy build helper scripts before running npm build', () => {
+    for (const dockerfile of ['Dockerfile', 'docker/Dockerfile']) {
+      const contents = read(dockerfile);
+      expect(contents).toContain('COPY scripts/ ./scripts/');
+      expect(contents.indexOf('COPY scripts/ ./scripts/')).toBeLessThan(
+        contents.indexOf('RUN npm run build'),
+      );
+    }
   });
 
   test('cleans gateway terminal output and keeps gateway layout inside the viewport', () => {

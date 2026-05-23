@@ -1169,6 +1169,15 @@ export const commandCatalog = [
     risk: 'Read-only',
   },
   {
+    id: 'llama-server-install',
+    section: 'local-server',
+    title: 'Install llama.cpp',
+    command: 'argentum llama-server install',
+    buttonLabel: 'Install',
+    summary: 'Download and install the vetted llama.cpp server into the selected workspace.',
+    risk: 'Network download',
+  },
+  {
     id: 'llama-server-start',
     section: 'local-server',
     title: 'Start llama.cpp',

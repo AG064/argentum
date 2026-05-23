@@ -36,9 +36,11 @@
       "../../installer/macos/argentum.icns",
       "../../installer/wix/argentum.ico"
     ],
-    "resources": ["../ui/desktop/llama.cpp"],
     "externalBin": ["binaries/argentum-cli"],
     "windows": {
+      "nsis": {
+        "installerHooks": "generated/optional-llama.nsh"
+      },
       "wix": {
         "language": "en-US"
       }

@@ -109,6 +109,17 @@ struct LlamaServerActionConfig {
 }
 
 #[derive(Debug, Deserialize)]
+struct GitHubReleaseResponse {
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OpenExternalUrlRequest {
     url: String,
@@ -2179,6 +2190,53 @@ fn llama_server_bundle_dir_names() -> Vec<&'static str> {
     names
 }
 
+fn current_llama_server_bundle_dir_name() -> Result<&'static str, String> {
+    llama_server_bundle_dir_names()
+        .into_iter()
+        .next()
+        .ok_or_else(|| {
+            format!(
+                "Argentum llama.cpp install is not available for {}-{}.",
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            )
+        })
+}
+
+fn preferred_llama_server_file_name() -> String {
+    llama_server_file_names()
+        .into_iter()
+        .next()
+        .unwrap_or_else(llama_server_file_name)
+}
+
+fn llama_release_asset_marker() -> Result<&'static str, String> {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    return Ok("-bin-win-cpu-x64");
+
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    return Ok("-bin-win-cpu-arm64");
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    return Ok("-bin-ubuntu-x64");
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    return Ok("-bin-ubuntu-arm64");
+
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    return Ok("-bin-macos-x64");
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    return Ok("-bin-macos-arm64");
+
+    #[allow(unreachable_code)]
+    Err(format!(
+        "No vetted llama.cpp release asset is configured for {}-{}.",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ))
+}
+
 fn resolve_llama_server_path(app: &tauri::AppHandle, workspace: &Path) -> Option<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(path) = std::env::var("ARGENTUM_LLAMA_SERVER_BIN") {
@@ -2299,6 +2357,290 @@ fn resolve_llama_server_path(app: &tauri::AppHandle, workspace: &Path) -> Option
     }
 
     candidates.into_iter().find(|candidate| candidate.exists())
+}
+
+async fn latest_llama_release_asset() -> Result<GitHubReleaseAsset, String> {
+    let marker = llama_release_asset_marker()?;
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|error| format!("Failed to create llama.cpp download client: {error}"))?;
+    let release = client
+        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest")
+        .header(USER_AGENT, "ArgentumDesktop")
+        .send()
+        .await
+        .map_err(|error| format!("llama.cpp release lookup failed: {error}"))?;
+    if !release.status().is_success() {
+        return Err(format!(
+            "llama.cpp release lookup failed with HTTP {}.",
+            release.status()
+        ));
+    }
+    let payload: GitHubReleaseResponse = release
+        .json()
+        .await
+        .map_err(|error| format!("llama.cpp release response could not be read: {error}"))?;
+    payload
+        .assets
+        .into_iter()
+        .find(|asset| {
+            let name = asset.name.to_ascii_lowercase();
+            name.starts_with("llama-")
+                && name.contains(marker)
+                && (name.ends_with(".zip") || name.ends_with(".tar.gz"))
+        })
+        .ok_or_else(|| {
+            format!(
+                "No llama.cpp release asset matched {marker} for this system. Set LLAMA_SERVER_BIN or install llama-server manually."
+            )
+        })
+}
+
+async fn download_llama_release_asset(
+    asset: &GitHubReleaseAsset,
+    destination: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create llama.cpp cache directory: {error}"))?;
+    }
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|error| format!("Failed to create llama.cpp download client: {error}"))?;
+    let response = client
+        .get(&asset.browser_download_url)
+        .header(USER_AGENT, "ArgentumDesktop")
+        .send()
+        .await
+        .map_err(|error| format!("llama.cpp download failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "llama.cpp download failed with HTTP {}.",
+            response.status()
+        ));
+    }
+
+    let mut file = std::fs::File::create(destination)
+        .map_err(|error| format!("Failed to create llama.cpp archive: {error}"))?;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("llama.cpp download stream failed: {error}"))?;
+        file.write_all(&chunk)
+            .map_err(|error| format!("Failed to write llama.cpp archive: {error}"))?;
+    }
+    Ok(())
+}
+
+fn run_hidden_command(program: &str, args: &[&str]) -> Result<(), String> {
+    let mut command = Command::new(program);
+    command.args(args);
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
+        .output()
+        .map_err(|error| format!("Failed to run {program}: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        format!("{program} exited with status {}.", output.status)
+    } else {
+        format!("{program} failed: {stderr}")
+    })
+}
+
+fn powershell_single_quoted(value: &Path) -> String {
+    value.display().to_string().replace('\'', "''")
+}
+
+fn extract_llama_archive(archive: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists() {
+        std::fs::remove_dir_all(destination)
+            .map_err(|error| format!("Failed to clear llama.cpp extract directory: {error}"))?;
+    }
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("Failed to create llama.cpp extract directory: {error}"))?;
+
+    let archive_text = archive.display().to_string();
+    if archive_text.ends_with(".zip") {
+        #[cfg(target_os = "windows")]
+        {
+            let script = format!(
+                "Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force",
+                powershell_single_quoted(archive),
+                powershell_single_quoted(destination)
+            );
+            return run_hidden_command(
+                "powershell",
+                &[
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    &script,
+                ],
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            return run_hidden_command(
+                "unzip",
+                &[
+                    "-q",
+                    archive
+                        .to_str()
+                        .ok_or_else(|| "Archive path is not valid UTF-8.".to_string())?,
+                    "-d",
+                    destination
+                        .to_str()
+                        .ok_or_else(|| "Extract path is not valid UTF-8.".to_string())?,
+                ],
+            );
+        }
+    }
+
+    if archive_text.ends_with(".tar.gz") {
+        return run_hidden_command(
+            "tar",
+            &[
+                "-xzf",
+                archive
+                    .to_str()
+                    .ok_or_else(|| "Archive path is not valid UTF-8.".to_string())?,
+                "-C",
+                destination
+                    .to_str()
+                    .ok_or_else(|| "Extract path is not valid UTF-8.".to_string())?,
+            ],
+        );
+    }
+
+    Err(format!(
+        "Unsupported llama.cpp archive format: {}",
+        archive.display()
+    ))
+}
+
+fn find_llama_server_binary(directory: &Path) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(directory).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_llama_server_binary(&path) {
+                return Some(found);
+            }
+            continue;
+        }
+        let file_name = path.file_name().and_then(|name| name.to_str())?;
+        if llama_server_file_names()
+            .iter()
+            .any(|candidate| candidate == file_name)
+        {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("Failed to create install directory: {error}"))?;
+    let entries = std::fs::read_dir(source)
+        .map_err(|error| format!("Failed to read extracted llama.cpp files: {error}"))?;
+    for entry in entries.flatten() {
+        let source_path = entry.path();
+        let target_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_directory_recursive(&source_path, &target_path)?;
+            continue;
+        }
+        if source_path.is_file() {
+            std::fs::copy(&source_path, &target_path).map_err(|error| {
+                format!(
+                    "Failed to install llama.cpp file {}: {error}",
+                    source_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn install_llama_server_binary(workspace: &Path) -> Result<RunDesktopActionResponse, String> {
+    let bundle_dir = current_llama_server_bundle_dir_name()?;
+    let cache_dir = workspace.join("data").join("llama.cpp");
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|error| format!("Failed to create llama.cpp cache directory: {error}"))?;
+
+    let asset = tauri::async_runtime::block_on(latest_llama_release_asset())?;
+    let archive = cache_dir.join(&asset.name);
+    if !archive.exists() {
+        tauri::async_runtime::block_on(download_llama_release_asset(&asset, &archive))?;
+    }
+
+    let extract_dir = cache_dir.join(format!(
+        "extract-{}",
+        asset
+            .name
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                    character
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>()
+    ));
+    extract_llama_archive(&archive, &extract_dir)?;
+
+    let server = find_llama_server_binary(&extract_dir).ok_or_else(|| {
+        format!(
+            "Downloaded {}, but no llama-server binary was found inside it.",
+            asset.name
+        )
+    })?;
+    let source_dir = server
+        .parent()
+        .ok_or_else(|| "Downloaded llama-server path has no parent directory.".to_string())?;
+    let install_dir = workspace.join("bin").join("llama.cpp").join(bundle_dir);
+    if install_dir.exists() {
+        std::fs::remove_dir_all(&install_dir)
+            .map_err(|error| format!("Failed to replace existing llama.cpp install: {error}"))?;
+    }
+    copy_directory_recursive(source_dir, &install_dir)?;
+    let branded_path = install_dir.join(preferred_llama_server_file_name());
+    std::fs::copy(&server, &branded_path)
+        .map_err(|error| format!("Failed to install Argentum llama.cpp launcher: {error}"))?;
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&branded_path)
+            .map_err(|error| format!("Failed to read llama.cpp launcher permissions: {error}"))?
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&branded_path, permissions)
+            .map_err(|error| format!("Failed to mark llama.cpp launcher executable: {error}"))?;
+    }
+
+    Ok(RunDesktopActionResponse {
+        status: "ok".to_string(),
+        message: "Argentum llama.cpp server installed for this workspace.".to_string(),
+        command: "argentum llama-server install".to_string(),
+        output: [
+            format!("Release asset: {}", asset.name),
+            format!("Archive: {}", archive.display()),
+            format!("Install directory: {}", install_dir.display()),
+            format!("Binary: {}", branded_path.display()),
+        ]
+        .join("\n"),
+        pid: None,
+        health_url: None,
+        log_path: None,
+    })
 }
 
 enum LlamaModelLaunch {
@@ -2627,6 +2969,10 @@ fn run_llama_server_action(
     std::fs::create_dir_all(workspace.join("data"))
         .map_err(|error| format!("Failed to create local server data directory: {error}"))?;
 
+    if action_id == "llama-server-install" {
+        return install_llama_server_binary(workspace);
+    }
+
     let port = llama_server_port(config);
     let host = llama_server_host(config);
     validate_llama_server_host(&host)?;
@@ -2652,7 +2998,7 @@ fn run_llama_server_action(
                 } else if installed_path.is_some() {
                     "Argentum llama.cpp server is installed but stopped.".to_string()
                 } else {
-                    "Argentum llama.cpp server is not installed in this build.".to_string()
+                    "Argentum llama.cpp server is not installed. Use Install Server, select the setup.exe optional checkbox, set LLAMA_SERVER_BIN, or place llama-server in workspace/bin.".to_string()
                 },
                 command: "argentum llama-server status".to_string(),
                 output: [
@@ -2687,7 +3033,7 @@ fn run_llama_server_action(
                 format!("Argentum llama.cpp server failed to start because port {port} is already in use.")
             })?;
             let binary = installed_path.ok_or_else(|| {
-                "Argentum llama.cpp server binary is not installed. Rebuild the desktop app with the bundled llama.cpp release asset, set LLAMA_SERVER_BIN to a vetted llama-server binary, or place llama-server in workspace/bin.".to_string()
+                "Argentum llama.cpp server binary is not installed. Use Install Server, select the setup.exe optional checkbox, set LLAMA_SERVER_BIN to a vetted llama-server binary, or place llama-server in workspace/bin.".to_string()
             })?;
             let model_launch = configured_llama_model_launch(workspace, config)?;
             let model_label = model_launch.display_label();
