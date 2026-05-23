@@ -43,6 +43,7 @@ argentum init
 ```
 
 This creates:
+
 - `argentum.json` — your configuration file
 - `data/` — directory for SQLite databases and session data
 - `backups/` — directory for automated backups
@@ -175,6 +176,7 @@ To connect your agent to a Telegram bot:
   "channels": {
     "telegram": {
       "enabled": true,
+      <!-- nosemgrep: generic.secrets.security.detected-telegram-bot-api-key.detected-telegram-bot-api-key -->
       "token": "7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "allowedUsers": []
     }
