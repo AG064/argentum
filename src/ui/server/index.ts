@@ -342,8 +342,11 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
   // CORS preflight
   if (req.method === 'OPTIONS' && config.cors.enabled) {
+    const origin = req.headers.origin;
+    const allowedOrigin =
+      origin && config.cors.allowedOrigins.includes(origin) ? origin : undefined;
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin ?? '',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
