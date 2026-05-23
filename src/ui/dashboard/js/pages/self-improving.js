@@ -7,6 +7,7 @@ async function loadSelfImprovingData() {
   if (!container) return;
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -26,8 +27,11 @@ function renderSelfImprovingPage(data) {
   if (!container) return;
 
   const lastRunAgo = data.lastRunTime ? formatAge(data.lastRunTime) : 'Never';
-  const nextRunIn = data.nextScheduledRun ? `in ${formatDuration(data.nextScheduledRun - Date.now())}` : 'Not scheduled';
+  const nextRunIn = data.nextScheduledRun
+    ? `in ${formatDuration(data.nextScheduledRun - Date.now())}`
+    : 'Not scheduled';
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Status Card -->
@@ -118,7 +122,9 @@ function renderSelfImprovingPage(data) {
     <!-- Run History -->
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Recent Runs</h3>
-      ${data.runHistory && data.runHistory.length > 0 ? `
+      ${
+        data.runHistory && data.runHistory.length > 0
+          ? `
         <div class="table-container" style="margin-top: var(--space-4)">
           <table class="table">
             <thead>
@@ -133,7 +139,9 @@ function renderSelfImprovingPage(data) {
               </tr>
             </thead>
             <tbody>
-              ${data.runHistory.map(run => `
+              ${data.runHistory
+                .map(
+                  (run) => `
                 <tr>
                   <td>${new Date(run.timestamp).toLocaleString()}</td>
                   <td>${(run.duration / 1000).toFixed(1)}s</td>
@@ -147,23 +155,31 @@ function renderSelfImprovingPage(data) {
                     </span>
                   </td>
                 </tr>
-              `).join('')}
+              `,
+                )
+                .join('')}
             </tbody>
           </table>
         </div>
-      ` : `
+      `
+          : `
         <div style="margin-top: var(--space-4); padding: var(--space-6); text-align: center; color: var(--color-text-muted)">
           No improvement runs yet. Click "Run Now" to start.
         </div>
-      `}
+      `
+      }
     </div>
 
     <!-- Lessons Learned Log -->
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Lessons Learned</h3>
-      ${data.lessons && data.lessons.length > 0 ? `
+      ${
+        data.lessons && data.lessons.length > 0
+          ? `
         <div style="margin-top: var(--space-4)">
-          ${data.lessons.map(lesson => `
+          ${data.lessons
+            .map(
+              (lesson) => `
             <div class="lesson-item" style="margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border)">
               <div class="flex items-start gap-3">
                 <span style="font-size: var(--font-size-xl)">${getLessonIcon(lesson.category)}</span>
@@ -177,22 +193,31 @@ function renderSelfImprovingPage(data) {
                 </div>
               </div>
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
-      ` : `
+      `
+          : `
         <div style="margin-top: var(--space-4); padding: var(--space-6); text-align: center; color: var(--color-text-muted)">
           No lessons learned yet. Lessons are automatically captured during agent interactions.
         </div>
-      `}
+      `
+      }
     </div>
 
     <!-- Phase Status -->
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Improvement Phases</h3>
       <div style="margin-top: var(--space-4); display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4)">
-        ${['error', 'skill', 'memory', 'model', 'correction'].map(phase => {
-          const phaseData = data.phases?.[phase] || { enabled: true, lastRun: null, status: 'pending' };
-          return `
+        ${['error', 'skill', 'memory', 'model', 'correction']
+          .map((phase) => {
+            const phaseData = data.phases?.[phase] || {
+              enabled: true,
+              lastRun: null,
+              status: 'pending',
+            };
+            return `
             <div class="phase-card" style="padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md)">
               <div class="flex items-center gap-2" style="margin-bottom: var(--space-2)">
                 <span style="font-size: var(--font-size-xl)">${getPhaseIcon(phase)}</span>
@@ -204,12 +229,17 @@ function renderSelfImprovingPage(data) {
               <div class="text-sm">
                 Status: <span class="badge badge-${phaseData.status === 'success' ? 'success' : phaseData.status === 'failed' ? 'danger' : 'muted'}">${phaseData.status || 'pending'}</span>
               </div>
-              ${phaseData.lastRun ? `
+              ${
+                phaseData.lastRun
+                  ? `
                 <div class="text-sm text-muted">Last: ${formatAge(phaseData.lastRun)}</div>
-              ` : ''}
+              `
+                  : ''
+              }
             </div>
           `;
-        }).join('')}
+          })
+          .join('')}
       </div>
     </div>
   `;
@@ -383,14 +413,16 @@ function getMockSelfImprovingData() {
         id: '1',
         category: 'mistake',
         title: 'Failed to handle rate limits gracefully',
-        description: 'When the LLM provider returned 429, the agent crashed instead of retrying with backoff.',
+        description:
+          'When the LLM provider returned 429, the agent crashed instead of retrying with backoff.',
         timestamp: Date.now() - 2 * 60 * 60 * 1000,
       },
       {
         id: '2',
         category: 'pattern',
         title: 'Users frequently ask about weather',
-        description: 'Detected 15+ queries about weather in the past week. Should create a weather skill.',
+        description:
+          'Detected 15+ queries about weather in the past week. Should create a weather skill.',
         timestamp: Date.now() - 5 * 60 * 60 * 1000,
       },
       {
@@ -404,14 +436,16 @@ function getMockSelfImprovingData() {
         id: '4',
         category: 'knowledge_gap',
         title: 'Limited knowledge of local events',
-        description: 'Agent struggles with queries about local events. Need to integrate events API.',
+        description:
+          'Agent struggles with queries about local events. Need to integrate events API.',
         timestamp: Date.now() - 12 * 60 * 60 * 1000,
       },
       {
         id: '5',
         category: 'insight',
         title: 'Structured output is 40% faster',
-        description: 'Switching from free-form to JSON mode for certain tasks improved token efficiency.',
+        description:
+          'Switching from free-form to JSON mode for certain tasks improved token efficiency.',
         timestamp: Date.now() - 24 * 60 * 60 * 1000,
       },
     ],

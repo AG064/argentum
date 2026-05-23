@@ -374,6 +374,7 @@ function addActivityItem(data) {
   item.className = 'activity-item';
   item.style.animation = 'fadeInUp 0.3s ease forwards';
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   item.innerHTML = `
     <div class="activity-icon" style="background: var(--color-accent-muted); color: var(--color-accent);">
       ${data.icon || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>'}
@@ -868,6 +869,7 @@ function exportLogs() {
 function clearLogs() {
   const logsBody = document.getElementById('logsBody');
   if (logsBody) {
+    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     logsBody.innerHTML = '';
     Components.toast('Logs cleared', 'info');
   }

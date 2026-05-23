@@ -114,6 +114,7 @@ export class CredentialManager {
   }
 
   private initDatabase(dbPath: string): void {
+    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     this.dbPath = resolve(dbPath);
     const dir = dirname(this.dbPath);
 

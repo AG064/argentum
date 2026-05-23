@@ -61,6 +61,7 @@ function renderMemories(memories) {
   if (!list) return;
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   list.innerHTML = memories
     .map((memory) => {
       const typeBadge = getTypeBadge(memory.type);

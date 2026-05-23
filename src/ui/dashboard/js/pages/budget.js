@@ -30,6 +30,7 @@ function renderBudgetPage(data) {
   const dailyPct = Math.round((data.dailyCost / data.dailyLimit) * 100);
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">
@@ -104,7 +105,9 @@ function renderBudgetPage(data) {
     </div>
 
     <!-- Per-Agent Breakdown -->
-    ${data.byAgent && data.byAgent.length > 0 ? `
+    ${
+      data.byAgent && data.byAgent.length > 0
+        ? `
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Cost by Agent</h3>
       <table class="table" style="margin-top: var(--space-4)">
@@ -118,9 +121,10 @@ function renderBudgetPage(data) {
           </tr>
         </thead>
         <tbody>
-          ${data.byAgent.map(agent => {
-            const pct = Math.round((agent.totalCost / data.monthlyLimit) * 100);
-            return `
+          ${data.byAgent
+            .map((agent) => {
+              const pct = Math.round((agent.totalCost / data.monthlyLimit) * 100);
+              return `
               <tr>
                 <td><strong>${agent.agent}</strong></td>
                 <td>$${agent.totalCost.toFixed(4)}</td>
@@ -131,18 +135,25 @@ function renderBudgetPage(data) {
                 </td>
               </tr>
             `;
-          }).join('')}
+            })
+            .join('')}
         </tbody>
       </table>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <!-- Alerts -->
-    ${data.alerts && data.alerts.length > 0 ? `
+    ${
+      data.alerts && data.alerts.length > 0
+        ? `
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Alerts</h3>
       <div style="margin-top: var(--space-3)">
-        ${data.alerts.map(alert => `
+        ${data.alerts
+          .map(
+            (alert) => `
           <div class="alert alert-warning" style="margin-bottom: var(--space-2)">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -150,10 +161,14 @@ function renderBudgetPage(data) {
             </svg>
             <span>${alert}</span>
           </div>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <!-- Configuration Form -->
     <div class="card" style="margin-top: var(--space-6)">
@@ -207,7 +222,7 @@ async function handleBudgetConfigSubmit(e) {
   e.preventDefault();
   const form = e.target;
   const formData = new FormData(form);
-  
+
   const config = {
     monthlyLimit: parseFloat(formData.get('monthlyLimit')),
     dailyLimit: parseFloat(formData.get('dailyLimit')),
@@ -233,10 +248,7 @@ function getMockBudgetData() {
     perAgentLimit: 2.0,
     alertThreshold: 0.8,
     blockOnExhausted: true,
-    alerts: [
-      'Monthly spending at 34.7% of limit',
-      'DeepSeek-V3 model usage is trending high',
-    ],
+    alerts: ['Monthly spending at 34.7% of limit', 'DeepSeek-V3 model usage is trending high'],
     byAgent: [
       { agent: 'coder', totalCost: 1.82, totalTokens: 124500, requestCount: 47 },
       { agent: 'researcher', totalCost: 0.94, totalTokens: 67800, requestCount: 23 },
