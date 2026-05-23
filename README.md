@@ -172,4 +172,4 @@ This builds the Windows desktop app installers through Tauri. For the optional p
 
 ## License
 
-MIT. Copyright 2024-2026 AG064. Based on OpenClaw by nickarora.
+MIT. Copyright 2024-2026 AG064
