@@ -483,7 +483,7 @@ export function setSettingsSection(sectionId) {
 
 export function recordUiEvent(event, status, message, details = {}) {
   const entry = {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: generateSecureId(),
     event,
     status,
     message,
@@ -555,7 +555,7 @@ export function toggleQuickSettingsMenu(open) {
 export function addTerminalEntry(command, output, status = 'info') {
   state.terminalEntries = [
     {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: generateSecureId(),
       status,
       command,
       output,
@@ -730,7 +730,7 @@ export function setActiveChatSession(chatId) {
 
 export function createChatSession() {
   syncActiveChatSession();
-  const id = `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = `chat-${Date.now()}-${generateSecureId()}`;
   const session = {
     id,
     title: 'New chat',
@@ -1028,7 +1028,7 @@ export function compactActiveChatSession(options = {}) {
     .slice(-1800);
 
   const compactedBlock = {
-    id: `compact-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: `compact-${Date.now()}-${generateSecureId()}
     type: 'summary',
     title: options.automatic ? 'Auto-compacted context' : 'Compacted context',
     body: `Earlier conversation was compacted locally to keep this session responsive.\n\n${summary}`,
@@ -1061,7 +1061,7 @@ export function appendChatMessage(role, body, options = {}) {
       ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' }
       : splitReasoningFromMessage(sourceBody);
   const block = {
-    id: options.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: options.id || `${Date.now()}-${generateSecureId()}
     type: 'message',
     role,
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',

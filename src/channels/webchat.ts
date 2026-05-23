@@ -12,6 +12,12 @@ import {
   type HealthStatus,
 } from '../core/plugin-loader';
 
+import { randomBytes } from 'crypto';
+
+function secureId(length = 8): string {
+  return randomBytes(length).toString('hex');
+}
+
 /** Webchat channel configuration */
 export interface WebchatChannelConfig {
   enabled: boolean;
@@ -87,7 +93,7 @@ class WebchatChannel implements FeatureModule {
 
   /** Create a new chat session */
   createSession(userId: string): ChatSession {
-    const id = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = `ws_${Date.now()}_${secureId()}`;
     const session: ChatSession = {
       id,
       userId,
