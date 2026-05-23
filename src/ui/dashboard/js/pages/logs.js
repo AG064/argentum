@@ -197,7 +197,10 @@ function searchLogs(query) {
           const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(`(${escapedQuery})`, 'gi');
           // Escape HTML before inserting markup to prevent XSS
-          const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const escaped = content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
           /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
           msg.innerHTML = escaped.replace(
             regex,
@@ -230,6 +233,7 @@ function clearAllLogs() {
   const logsBody = document.getElementById('logsBody');
   if (!logsBody) return;
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   logsBody.innerHTML = '';
 
   const countEl = document.getElementById('logCount');

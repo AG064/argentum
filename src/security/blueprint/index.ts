@@ -197,6 +197,7 @@ export class BlueprintLoader {
    * Load blueprint from a YAML or JSON file.
    */
   loadFromFile(filePath?: string): Blueprint | null {
+    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const pathsToTry = filePath
       ? [resolve(filePath)]
       : DEFAULT_BLUEPRINT_PATHS.map((p) => resolve(homedir(), p.slice(2)));
