@@ -60,7 +60,6 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
   const threats = stats.threatsDetected || 0;
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">

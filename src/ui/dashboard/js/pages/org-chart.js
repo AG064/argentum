@@ -26,7 +26,6 @@ function renderOrgChart(data) {
   if (!container) return;
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="card">
       <div class="card-header">

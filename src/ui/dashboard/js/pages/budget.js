@@ -30,7 +30,6 @@ function renderBudgetPage(data) {
   const dailyPct = Math.round((data.dailyCost / data.dailyLimit) * 100);
 
   /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">
