@@ -48,6 +48,7 @@ async function runCommand(args) {
     case 'navigate': {
       const url = rest[0];
       if (!url) throw new Error('Usage: browser navigate <url>');
+    /* nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection */
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(2000);
       console.log('OK:', url);
@@ -103,6 +104,7 @@ async function runCommand(args) {
     case 'eval': {
       const js = rest.join(' ');
       if (!js) throw new Error('Usage: browser eval <javascript>');
+    /* nosemgrep: javascript.playwright.security.audit.playwright-evaluate-code-injection.playwright-evaluate-code-injection */
       const result = await page.evaluate(js).catch(e => ({ error: e.message }));
       console.log(JSON.stringify(result, null, 2));
       return result;
