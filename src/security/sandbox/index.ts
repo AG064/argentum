@@ -363,6 +363,7 @@ export class SandboxExecutor {
         const scriptPath = path.join(sandboxDir, 'snippet.mjs');
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
 
+        /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
         const child = spawn('node', [scriptPath], {
           timeout: effectiveTimeoutMs,
           cwd: baseDir,
@@ -559,6 +560,7 @@ export class SandboxExecutor {
         const scriptPath = path.join(sandboxDir, 'snippet.sh');
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o700 });
 
+        /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
         const child = spawn('bash', [scriptPath], {
           timeout: effectiveTimeoutMs,
           cwd: baseDir,

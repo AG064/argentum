@@ -712,7 +712,7 @@ function setupWebSocket(server: http.Server): void {
     const message = JSON.stringify(data);
     wsClients.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
-    /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
+        /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
         ws.send(message);
       }
     });
