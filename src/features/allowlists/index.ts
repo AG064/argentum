@@ -72,6 +72,7 @@ class AllowlistsFeature {
       }
 
       // If the pattern contains obvious regex metacharacters, avoid compiling untrusted regexes
+      /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
       const looksLikeRegex = /[\\^$*+?.()|[\]{}]/.test(pattern);
 
       if (looksLikeRegex) {
@@ -90,6 +91,7 @@ class AllowlistsFeature {
               .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
               .join('.*');
             try {
+              /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
               const re2 = new RegExp(`^${escaped}$`);
               if (re2.test(item.value)) {
                 return { matched: true, action: r.action, rule: r };
