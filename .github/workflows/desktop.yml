@@ -42,15 +42,15 @@ jobs:
             rust-targets: "x86_64-apple-darwin"
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: "20"
           cache: npm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
         with:
           targets: ${{ matrix.rust-targets }}
 
@@ -76,7 +76,7 @@ jobs:
         run: npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
 
       - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.artifact }}
           if-no-files-found: error
@@ -97,12 +97,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317
         with:
           path: artifacts/desktop
 
       - name: Remove non-installer release assets
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const owner = context.repo.owner;
@@ -134,7 +134,7 @@ jobs:
               });
             }
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@403a5240f3837fa857f642062e05aad6bb3391ca
         with:
           overwrite_files: true
           files: |

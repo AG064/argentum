@@ -23,9 +23,9 @@ jobs:
       vulnerabilities: ${{ steps.audit.outputs.vulnerabilities }}
       has_vulnerabilities: ${{ steps.audit.outputs.has_vulnerabilities }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -84,9 +84,9 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'

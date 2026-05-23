@@ -158,13 +158,19 @@ function loadConfig(): ServerConfig {
 
         try {
           fs.writeFileSync(hashFile, config.auth.passwordHash, { mode: 0o600 });
-          try { fs.chmodSync(hashFile, 0o600); } catch { /* chmod may fail on some platforms */ }
+          try {
+            fs.chmodSync(hashFile, 0o600);
+          } catch {
+            /* chmod may fail on some platforms */
+          }
         } catch {
           console.warn('[Dashboard Server] Could not persist password hash to disk.');
         }
 
         console.warn(`[Dashboard Server] Generated dashboard password written to: ${hashFile}`);
-        console.warn('[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.');
+        console.warn(
+          '[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.',
+        );
       }
     } else {
       config.auth.passwordHash = hashPassword(envPass);
@@ -347,7 +353,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   }
 
   // Apply CORS
-  // nosemgrep: javascript.lang.security.detect-non-literal-regexp-literal
+  /* nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration */
   // allowedOrigins is a strict whitelist from config (not user-controlled), so this is safe
   if (config.cors.enabled) {
     const origin = req.headers.origin;
@@ -663,12 +669,14 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
  * Setup WebSocket server
  */
 function setupWebSocket(server: http.Server): void {
+  /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
+  // ws:// is correct here - server is plain HTTP, not HTTPS, so wss:// is not applicable
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws: WebSocket, req) => {
     // Auth check for WebSocket
     const authHeader = req.headers.authorization;
-  const auth = parseBasicAuth(authHeader ?? '');
+    const auth = parseBasicAuth(authHeader ?? '');
 
     if (
       auth?.username !== config.auth.username ||

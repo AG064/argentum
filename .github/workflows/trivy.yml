@@ -31,13 +31,13 @@ jobs:
       TRIVY_HIGH_ISSUE_THRESHOLD: '20'
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
       - name: Build Docker image
         run: docker build -t argentum:${{ github.sha }} -f docker/Dockerfile .
 
       - name: Run Trivy (CRITICAL only)
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@314ff8b43182423b84c50b1670b0e10f858f2d98
         with:
           image-ref: argentum:${{ github.sha }}
           format: sarif
@@ -45,7 +45,7 @@ jobs:
           severity: CRITICAL
 
       - name: Run Trivy (full report)
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@314ff8b43182423b84c50b1670b0e10f858f2d98
         continue-on-error: true
         with:
           image-ref: argentum:${{ github.sha }}
@@ -54,7 +54,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Upload to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@0e150e40762c1253b364a04b0fc9f2cc14effff2
         with:
           sarif_file: trivy-results.sarif
           category: trivy

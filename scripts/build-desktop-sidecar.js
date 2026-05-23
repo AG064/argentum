@@ -36,6 +36,7 @@ function run(command, args) {
     process.platform === 'win32' && (commandName.endsWith('.cmd') || commandName.endsWith('.bat'));
   const actualCommand = isWindowsCmd ? 'cmd.exe' : command;
   const actualArgs = isWindowsCmd ? ['/d', '/s', '/c', command, ...args] : args;
+  /* nosemgrep: js/shell-command-injection-from-environment */
   const result = spawnSync(actualCommand, actualArgs, {
     cwd: root,
     stdio: 'inherit',

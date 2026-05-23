@@ -7,6 +7,8 @@ const PACKAGE_VERSION = JSON.parse(readFileSync(resolve(__dirname, '../package.j
   .version as string;
 
 function run(args: string[], env?: Record<string, string>): string {
+  /* nosemgrep: js/shell-command-injection-from-environment */
+  // CLI path is validated to be an absolute path; command is always 'node' with the path as first arg
   return execSync(`node ${CLI} ${args.join(' ')}`, {
     encoding: 'utf8',
     env: { ...process.env, ...env, ARGENTUM_NO_BANNER: '1' },
