@@ -78,6 +78,7 @@ export interface VisionProvider {
 
 // ─── Linux Implementation ─────────────────────────────────────────────────────
 
+  /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
 function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args);

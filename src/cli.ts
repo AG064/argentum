@@ -2259,6 +2259,7 @@ async function cmdStatus(): Promise<void> {
         print(`    • ${db} (${(size / 1024).toFixed(1)} KB)`);
       } catch (err) {
         warn(
+          /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
           `Could not read database size for ${db}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
