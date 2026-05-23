@@ -21,7 +21,7 @@ RUN npm prune --production --legacy-peer-deps
 # ============================================
 # Stage 2: Production
 # ============================================
-FROM node:22-alpine
+FROM node:22.22-alpine3.23
 
 # Patch Alpine system CVEs (openssl, zlib, etc.)
 RUN apk --no-cache upgrade
