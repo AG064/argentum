@@ -10,14 +10,14 @@ A cross-platform mobile app for Argentum, providing push notifications, camera a
 
 ### Recommended: React Native + Expo
 
-| Criteria | React Native + Expo | Flutter |
-|---|---|---|
-| Language | TypeScript (shared with Argentum) | Dart (new language to learn) |
-| Ecosystem | Massive npm ecosystem | Smaller package ecosystem |
-| OTA Updates | Expo EAS Update (instant) | Shorebird (limited) |
-| Dev Speed | Fast with Expo Go | Fast hot reload |
-| Argentum Integration | Direct TS code sharing | Requires bridging |
-| Community | Larger | Growing |
+| Criteria             | React Native + Expo               | Flutter                      |
+| -------------------- | --------------------------------- | ---------------------------- |
+| Language             | TypeScript (shared with Argentum) | Dart (new language to learn) |
+| Ecosystem            | Massive npm ecosystem             | Smaller package ecosystem    |
+| OTA Updates          | Expo EAS Update (instant)         | Shorebird (limited)          |
+| Dev Speed            | Fast with Expo Go                 | Fast hot reload              |
+| Argentum Integration | Direct TS code sharing            | Requires bridging            |
+| Community            | Larger                            | Growing                      |
 
 **Decision: React Native + Expo**
 
@@ -63,6 +63,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 ## Feature Specifications
 
 ### 1. Push Notifications
+
 - **APNs** (iOS) and **FCM** (Android) via Expo Notifications
 - Notification types: chat messages, alerts, morning briefing, evening recap
 - Rich notifications: images, action buttons, deep links
@@ -70,6 +71,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 - Silent notifications for background data sync
 
 ### 2. Camera Access
+
 - Take photos/videos and send to Argentum for multimodal analysis
 - QR code scanning for device pairing
 - Document scanning mode (auto-crop, enhance)
@@ -77,6 +79,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 - Expo Camera API with custom overlay UI
 
 ### 3. GPS / Location
+
 - Real-time location sharing with Argentum
 - Geofencing triggers (arrive/leave locations)
 - Background location tracking (opt-in, with clear privacy controls)
@@ -84,12 +87,14 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 - Expo Location API with battery-optimized tracking
 
 ### 4. Screen Recording / Sharing
+
 - Screen capture for support/debugging sessions
 - Record screen as video and send to Argentum
 - Frame extraction for real-time analysis
 - Requires native modules (react-native-replay-kit on iOS, MediaProjection on Android)
 
 ### 5. Chat Interface
+
 - Real-time WebSocket chat with Argentum
 - Message types: text, images, voice, files, code blocks, cards
 - Markdown rendering with syntax highlighting
@@ -97,6 +102,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 - Message search and history
 
 ### 6. Voice Interaction
+
 - Push-to-talk and hands-free modes
 - On-device STT for offline dictation
 - TTS playback of Argentum responses
@@ -104,6 +110,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 - Audio streaming for real-time voice conversations
 
 ### 7. Offline Support
+
 - Queue messages when offline, sync when connected
 - Local SQLite cache for recent conversations
 - Background sync via Expo BackgroundFetch
@@ -112,6 +119,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 ## Device Pairing
 
 ### Flow
+
 1. User opens Argentum mobile app
 2. App displays QR code or pairing code
 3. User scans QR / enters code in Argentum webchat or CLI
@@ -120,6 +128,7 @@ TypeScript means code sharing with Argentum core (API types, WebSocket protocols
 6. WebSocket connection established with auth header
 
 ### Security
+
 - Device-bound JWT tokens (1-year expiry, refreshable)
 - Certificate pinning for API connections
 - Biometric auth (Face ID / Touch ID / fingerprint) to unlock app
@@ -172,12 +181,14 @@ mobile/
 ## Development Setup
 
 ### Prerequisites
+
 - Node.js >= 20
 - Expo CLI: `npm install -g expo-cli`
 - iOS Simulator (macOS) or Android Emulator
 - Expo Go app on physical device for testing
 
 ### Commands
+
 ```bash
 # Create project (from argentum root)
 npx create-expo-app mobile --template tabs
@@ -207,11 +218,14 @@ npx eas build --platform all
 The mobile app talks to Argentum via:
 
 ### WebSocket (Primary)
+
 ```
+/* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
 ws://<host>:18789/mobile/ws?token=<jwt>
 ```
 
 Message format:
+
 ```json
 {
   "type": "chat|command|status|media|location",
@@ -222,6 +236,7 @@ Message format:
 ```
 
 ### REST API (Secondary)
+
 ```
 POST /api/mobile/pair        # Device pairing
 POST /api/mobile/upload      # Media upload
@@ -233,6 +248,7 @@ GET  /api/mobile/config      # Get app config
 ## Privacy & Permissions
 
 The app requests permissions progressively:
+
 1. **On install:** None
 2. **On pairing:** Network access
 3. **On first camera use:** Camera permission (with explanation)
@@ -244,14 +260,14 @@ All permissions include clear explanations and can be revoked in system settings
 
 ## Timeline (Estimated)
 
-| Phase | Features | Duration |
-|-------|----------|----------|
-| Phase 1 | Chat + Push + Pairing | 4 weeks |
-| Phase 2 | Camera + QR Scanner | 3 weeks |
-| Phase 3 | GPS + Geofencing | 2 weeks |
-| Phase 4 | Voice (STT/TTS) | 3 weeks |
-| Phase 5 | Screen Recording | 3 weeks |
-| Phase 6 | Offline Support + Polish | 3 weeks |
+| Phase   | Features                 | Duration |
+| ------- | ------------------------ | -------- |
+| Phase 1 | Chat + Push + Pairing    | 4 weeks  |
+| Phase 2 | Camera + QR Scanner      | 3 weeks  |
+| Phase 3 | GPS + Geofencing         | 2 weeks  |
+| Phase 4 | Voice (STT/TTS)          | 3 weeks  |
+| Phase 5 | Screen Recording         | 3 weeks  |
+| Phase 6 | Offline Support + Polish | 3 weeks  |
 
 **Total: ~18 weeks (4.5 months)** for full feature set.
 

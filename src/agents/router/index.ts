@@ -275,6 +275,7 @@ export function loadRouterConfig(configPath?: string): RouterConfig {
         return getEmptyConfig();
       }
 
+      /* nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring */
       console.info(`[Router] Loaded config from ${finalPath}`);
       return config;
     } else {

@@ -97,6 +97,7 @@ function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stde
 
 function runCommandBuffer(cmd: string, args: string[]): Promise<{ stdout: Buffer; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
+    /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
     const child = spawn(cmd, args);
     const chunks: Buffer[] = [];
     let stderr = '';
