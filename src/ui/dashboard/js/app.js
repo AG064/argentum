@@ -760,6 +760,7 @@ function generateMockLogs() {
     'Scheduled job executed',
   ];
 
+  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   logsBody.innerHTML = '';
 
   for (let i = 0; i < 50; i++) {
