@@ -6,13 +6,20 @@ import {
   setProviderCatalogTab,
   state,
 } from './state.js';
-import { currentProvider, defaultModelForAuth, isProbablyAbsolutePath, modelOptionsFor } from './utils.js';
+import {
+  currentProvider,
+  defaultModelForAuth,
+  isProbablyAbsolutePath,
+  modelOptionsFor,
+} from './utils.js';
 
 const ONBOARDING_PROGRESS_STORAGE_KEY = 'argentum.onboardingProgress.v1';
 
 function isDebugEnabled() {
   if (typeof window === 'undefined') return false;
-  return window.location.hostname === 'localhost' || window.location.search.includes('debugOnboarding=1');
+  return (
+    window.location.hostname === 'localhost' || window.location.search.includes('debugOnboarding=1')
+  );
 }
 
 function clampStep(step) {
@@ -49,8 +56,10 @@ function persistableProgress() {
 
 export function persistOnboardingProgress() {
   if (typeof window === 'undefined') return;
+  // Only persist while setup is in progress; once complete, onboarding state is no longer needed
+  if (state.setupComplete) return;
   try {
-    window.localStorage?.setItem(
+    window.sessionStorage?.setItem(
       ONBOARDING_PROGRESS_STORAGE_KEY,
       JSON.stringify({
         version: state.version,
@@ -59,16 +68,16 @@ export function persistOnboardingProgress() {
       }),
     );
   } catch (_error) {
-    // Onboarding still works without optional local progress persistence.
+    // Onboarding still works without optional session progress persistence.
   }
 }
 
 export function clearOnboardingProgress() {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage?.removeItem(ONBOARDING_PROGRESS_STORAGE_KEY);
+    window.sessionStorage?.removeItem(ONBOARDING_PROGRESS_STORAGE_KEY);
   } catch (_error) {
-    // Optional local progress cleanup should not block the app.
+    // Optional session progress cleanup should not block the app.
   }
 }
 
@@ -76,7 +85,7 @@ export function hydrateOnboardingProgress() {
   if (typeof window === 'undefined' || state.setupComplete) return false;
 
   try {
-    const raw = window.localStorage?.getItem(ONBOARDING_PROGRESS_STORAGE_KEY);
+    const raw = window.sessionStorage?.getItem(ONBOARDING_PROGRESS_STORAGE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     const progress = parsed?.progress;
@@ -183,7 +192,13 @@ export function validateCurrentStep(step = state.onboardingStep) {
     }
   }
 
-  if ((currentStep === 3 || currentStep === 4 || currentStep === 5 || currentStep === onboardingSteps.length) && !state.providerSelectionConfirmed) {
+  if (
+    (currentStep === 3 ||
+      currentStep === 4 ||
+      currentStep === 5 ||
+      currentStep === onboardingSteps.length) &&
+    !state.providerSelectionConfirmed
+  ) {
     errors.push('Choose an AI provider before continuing.');
   }
 
@@ -193,16 +208,32 @@ export function validateCurrentStep(step = state.onboardingStep) {
       errors.push('Add the provider endpoint before continuing.');
     }
 
-    if (state.providerAuthMethod === 'api-key' && provider.requiresKey && !state.providerApiKey.trim() && !state.setupComplete) {
-      errors.push('Add an API key, choose a local provider, or use browser account authorization before continuing.');
+    if (
+      state.providerAuthMethod === 'api-key' &&
+      provider.requiresKey &&
+      !state.providerApiKey.trim() &&
+      !state.setupComplete
+    ) {
+      errors.push(
+        'Add an API key, choose a local provider, or use browser account authorization before continuing.',
+      );
     }
 
-    if (state.providerAuthMethod === 'browser-account' && state.codexOAuth.status !== 'ok' && !state.setupComplete) {
-      errors.push('Complete OpenAI/Codex authorization before continuing with browser account auth.');
+    if (
+      state.providerAuthMethod === 'browser-account' &&
+      state.codexOAuth.status !== 'ok' &&
+      !state.setupComplete
+    ) {
+      errors.push(
+        'Complete OpenAI/Codex authorization before continuing with browser account auth.',
+      );
     }
   }
 
-  if ((currentStep === 5 || currentStep === onboardingSteps.length) && !state.providerModel.trim()) {
+  if (
+    (currentStep === 5 || currentStep === onboardingSteps.length) &&
+    !state.providerModel.trim()
+  ) {
     errors.push('Choose a model before continuing.');
   }
 
@@ -218,7 +249,9 @@ export function selectExperienceLevel(levelId) {
   const beforeStep = state.onboardingStep;
   const level = experienceLevels.find((item) => item.id === levelId);
   if (!level) {
-    return blockNavigation('selectExperienceLevel', beforeStep, ['Choose Beginner, Intermediate, or Expert before continuing.']);
+    return blockNavigation('selectExperienceLevel', beforeStep, [
+      'Choose Beginner, Intermediate, or Expert before continuing.',
+    ]);
   }
 
   state.experienceLevel = level.id;
@@ -227,14 +260,18 @@ export function selectExperienceLevel(levelId) {
   recordUiEvent('onboarding.experience_selected', 'ok', `Experience set to ${level.label}.`, {
     experienceLevel: level.id,
   });
-  return allowNavigation('selectExperienceLevel', beforeStep, beforeStep, { navigationAttempted: false });
+  return allowNavigation('selectExperienceLevel', beforeStep, beforeStep, {
+    navigationAttempted: false,
+  });
 }
 
 export function selectProvider(providerId) {
   const beforeStep = state.onboardingStep;
   const provider = providerPresets.find((item) => item.id === providerId);
   if (!provider) {
-    return blockNavigation('selectProvider', beforeStep, ['Choose a valid AI provider before continuing.']);
+    return blockNavigation('selectProvider', beforeStep, [
+      'Choose a valid AI provider before continuing.',
+    ]);
   }
 
   setProvider(provider);
@@ -256,7 +293,9 @@ export function selectAuthMethod(authMethod) {
   const provider = currentProvider(providerPresets, state);
   const allowedAuthMethods = provider.authMethods || ['api-key'];
   if (!allowedAuthMethods.includes(authMethod)) {
-    return blockNavigation('selectAuthMethod', beforeStep, [`${provider.label} does not support that authorization method.`]);
+    return blockNavigation('selectAuthMethod', beforeStep, [
+      `${provider.label} does not support that authorization method.`,
+    ]);
   }
 
   state.providerAuthMethod = authMethod;
@@ -271,11 +310,18 @@ export function selectAuthMethod(authMethod) {
   };
   clearOnboardingError();
   persistOnboardingProgress();
-  recordUiEvent('onboarding.auth_method_selected', 'ok', `Authorization method set to ${authMethod}.`, {
-    provider: provider.id,
-    authMethod,
+  recordUiEvent(
+    'onboarding.auth_method_selected',
+    'ok',
+    `Authorization method set to ${authMethod}.`,
+    {
+      provider: provider.id,
+      authMethod,
+    },
+  );
+  return allowNavigation('selectAuthMethod', beforeStep, beforeStep, {
+    navigationAttempted: false,
   });
-  return allowNavigation('selectAuthMethod', beforeStep, beforeStep, { navigationAttempted: false });
 }
 
 export function setProviderSetupStage(stage) {
@@ -283,7 +329,9 @@ export function setProviderSetupStage(stage) {
   const nextStage = stage || 'provider';
   const allowedStages = ['provider', 'auth', 'credentials', 'model'];
   if (!allowedStages.includes(nextStage)) {
-    return blockNavigation('setProviderSetupStage', beforeStep, ['Choose a valid provider setup step.']);
+    return blockNavigation('setProviderSetupStage', beforeStep, [
+      'Choose a valid provider setup step.',
+    ]);
   }
 
   if (nextStage === 'provider') {
@@ -294,22 +342,35 @@ export function setProviderSetupStage(stage) {
     recordUiEvent('onboarding.provider_stage_changed', 'ok', 'Provider selection reopened.', {
       providerSetupStage: state.providerSetupStage,
     });
-    return allowNavigation('setProviderSetupStage', beforeStep, beforeStep, { navigationAttempted: false });
+    return allowNavigation('setProviderSetupStage', beforeStep, beforeStep, {
+      navigationAttempted: false,
+    });
   }
 
   if (!state.providerSelectionConfirmed) {
-    return blockNavigation('setProviderSetupStage', beforeStep, ['Choose an AI provider before continuing.']);
+    return blockNavigation('setProviderSetupStage', beforeStep, [
+      'Choose an AI provider before continuing.',
+    ]);
   }
 
   if (nextStage === 'model') {
     const provider = currentProvider(providerPresets, state);
-    if (state.providerAuthMethod === 'api-key' && provider.requiresKey && !state.providerApiKey.trim() && !state.setupComplete) {
+    if (
+      state.providerAuthMethod === 'api-key' &&
+      provider.requiresKey &&
+      !state.providerApiKey.trim() &&
+      !state.setupComplete
+    ) {
       return blockNavigation('setProviderSetupStage', beforeStep, [
         'Add the API key first, or go back and choose browser account authorization.',
       ]);
     }
 
-    if (state.providerAuthMethod === 'browser-account' && state.codexOAuth.status !== 'ok' && !state.setupComplete) {
+    if (
+      state.providerAuthMethod === 'browser-account' &&
+      state.codexOAuth.status !== 'ok' &&
+      !state.setupComplete
+    ) {
       return blockNavigation('setProviderSetupStage', beforeStep, [
         'Complete OpenAI/Codex authorization before choosing a model.',
       ]);
@@ -321,18 +382,29 @@ export function setProviderSetupStage(stage) {
   state.providerSetupStage = nextStage;
   clearOnboardingError();
   persistOnboardingProgress();
-  recordUiEvent('onboarding.provider_stage_changed', 'ok', `Provider setup moved to ${nextStage}.`, {
-    providerSetupStage: state.providerSetupStage,
+  recordUiEvent(
+    'onboarding.provider_stage_changed',
+    'ok',
+    `Provider setup moved to ${nextStage}.`,
+    {
+      providerSetupStage: state.providerSetupStage,
+    },
+  );
+  return allowNavigation('setProviderSetupStage', beforeStep, beforeStep, {
+    navigationAttempted: false,
   });
-  return allowNavigation('setProviderSetupStage', beforeStep, beforeStep, { navigationAttempted: false });
 }
 
 export function selectModel(modelId) {
   const beforeStep = state.onboardingStep;
   const provider = currentProvider(providerPresets, state);
-  const model = modelOptionsFor(provider, state.providerModel, state.providerAuthMethod).find((item) => item.id === modelId);
+  const model = modelOptionsFor(provider, state.providerModel, state.providerAuthMethod).find(
+    (item) => item.id === modelId,
+  );
   if (!model) {
-    return blockNavigation('selectModel', beforeStep, [`Choose a supported ${provider.label} model before continuing.`]);
+    return blockNavigation('selectModel', beforeStep, [
+      `Choose a supported ${provider.label} model before continuing.`,
+    ]);
   }
 
   state.providerModel = model.id;
@@ -353,7 +425,12 @@ export function goToStep(targetStep) {
   const beforeStep = state.onboardingStep;
   const nextStep = clampStep(targetStep);
   if (nextStep > beforeStep + 1) {
-    return blockNavigation('goToStep', beforeStep, ['Finish the current setup step before jumping ahead.'], nextStep);
+    return blockNavigation(
+      'goToStep',
+      beforeStep,
+      ['Finish the current setup step before jumping ahead.'],
+      nextStep,
+    );
   }
 
   if (nextStep > beforeStep) {
@@ -410,12 +487,18 @@ export function completeOnboarding(saveResult = {}) {
   const beforeStep = state.onboardingStep;
   const validation = validateCurrentStep(beforeStep);
   if (!validation.valid) {
-    return blockNavigation('completeOnboarding', beforeStep, validation.errors, onboardingSteps.length);
+    return blockNavigation(
+      'completeOnboarding',
+      beforeStep,
+      validation.errors,
+      onboardingSteps.length,
+    );
   }
 
   state.setupComplete = true;
   state.setupStatus = 'setup_saved';
-  state.savedConfigPath = saveResult.configPath || saveResult.config_path || state.savedConfigPath || '';
+  state.savedConfigPath =
+    saveResult.configPath || saveResult.config_path || state.savedConfigPath || '';
   state.providerApiKey = '';
   state.webchatToken = '';
   state.telegramToken = '';

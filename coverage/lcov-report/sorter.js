@@ -28,6 +28,15 @@ var addSorting = (function() {
         const searchValue = document.getElementById('fileSearch').value;
         const rows = document.getElementsByTagName('tbody')[0].children;
 
+        function escapeHtmlMeta(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         // Try to create a RegExp from the searchValue. If it fails (invalid regex),
         // it will be treated as a plain text search
         let searchRegex;
@@ -48,7 +57,7 @@ var addSorting = (function() {
                 // Otherwise, fall back to the original plain text search
                 isMatch = row.textContent
                     .toLowerCase()
-                    .includes(searchValue.toLowerCase());
+                    .includes(escapeHtmlMeta(searchValue).toLowerCase());
             }
 
             row.style.display = isMatch ? '' : 'none';

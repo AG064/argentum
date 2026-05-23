@@ -1004,7 +1004,11 @@ async function chooseChatAttachment() {
   state.chatAttachments = [
     ...state.chatAttachments,
     {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: `${Date.now()}-${(() => {
+        const rand = new Uint8Array(8);
+        crypto.getRandomValues(rand);
+        return [...rand].map((b) => b.toString(16).padStart(2, '0')).join('');
+      })()}`,
       path,
       name: String(path).split(/[\\/]/).pop() || String(path),
       mime,
@@ -1274,7 +1278,11 @@ async function streamProviderAssistantMessage(outgoingMessage, attachments, opti
     return result;
   }
 
-  const requestId = `stream-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const requestId = `stream-${Date.now()}-${(() => {
+    const rand = new Uint8Array(8);
+    crypto.getRandomValues(rand);
+    return [...rand].map((b) => b.toString(16).padStart(2, '0')).join('');
+  })()}`;
   const request = await buildChatRequestPayload(outgoingMessage, attachments);
   request.streamRequestId = requestId;
 
