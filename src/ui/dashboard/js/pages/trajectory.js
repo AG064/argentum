@@ -296,6 +296,7 @@ async function handleExportTrajectory(e) {
   } finally {
     if (btn) {
       btn.disabled = false;
+      /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
       btn.innerHTML = 'Export';
     }
   }
