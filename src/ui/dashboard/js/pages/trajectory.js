@@ -6,8 +6,6 @@ async function loadTrajectoryData() {
   const container = document.getElementById('trajectoryContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -26,8 +24,6 @@ function renderTrajectoryPage(data) {
   const container = document.getElementById('trajectoryContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Stats Row -->
     <div class="stats-grid stagger-children">
@@ -270,7 +266,7 @@ async function handleExportTrajectory(e) {
   const btn = document.getElementById('exportBtn');
   if (btn) {
     btn.disabled = true;
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
     btn.innerHTML = Components.spinner() + ' Exporting...';
   }
 
@@ -297,7 +293,7 @@ async function handleExportTrajectory(e) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
       btn.innerHTML = 'Export';
     }
   }

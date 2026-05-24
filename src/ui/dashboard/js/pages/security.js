@@ -14,7 +14,6 @@ async function loadSecurityData() {
   const grid = document.getElementById('securityGrid');
   if (!grid) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -59,7 +58,6 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
   const expiringCreds = stats.credentialsExpiringSoon || 0;
   const threats = stats.threatsDetected || 0;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">
@@ -716,7 +714,7 @@ function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
   return div.innerHTML;
 }
 

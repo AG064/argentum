@@ -78,14 +78,20 @@ export interface VisionProvider {
 
 // ─── Linux Implementation ─────────────────────────────────────────────────────
 
-  /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+function runCommand(
+  cmd: string,
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args);
     let stdout = '';
     let stderr = '';
-    child.stdout?.on('data', (d) => { stdout += d.toString(); });
-    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.stdout?.on('data', (d) => {
+      stdout += d.toString();
+    });
+    child.stderr?.on('data', (d) => {
+      stderr += d.toString();
+    });
     child.on('close', (code) => {
       resolve({ stdout, stderr, exitCode: code ?? 0 });
     });
@@ -95,14 +101,20 @@ function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stde
   });
 }
 
-function runCommandBuffer(cmd: string, args: string[]): Promise<{ stdout: Buffer; stderr: string; exitCode: number }> {
+function runCommandBuffer(
+  cmd: string,
+  args: string[],
+): Promise<{ stdout: Buffer; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
-    /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
     const child = spawn(cmd, args);
     const chunks: Buffer[] = [];
     let stderr = '';
-    child.stdout?.on('data', (d: Buffer) => { chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)); });
-    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.stdout?.on('data', (d: Buffer) => {
+      chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d));
+    });
+    child.stderr?.on('data', (d) => {
+      stderr += d.toString();
+    });
     child.on('close', (code) => {
       resolve({ stdout: Buffer.concat(chunks), stderr, exitCode: code ?? 0 });
     });
@@ -151,7 +163,9 @@ class LinuxComputerControl implements ComputerControl {
     throw new Error(`All screenshot tools failed. Last error: ${lastError}`);
   }
 
-  private async getScreenshotDimensions(imageData: Buffer): Promise<{ width: number; height: number }> {
+  private async getScreenshotDimensions(
+    imageData: Buffer,
+  ): Promise<{ width: number; height: number }> {
     // Write temp file to get dimensions
     const tmpFile = join(tmpdir(), `ag-claw-screenshot-${Date.now()}.png`);
     const fs = await import('fs');
@@ -180,7 +194,8 @@ class LinuxComputerControl implements ComputerControl {
     // Fallback to xdotool (X11)
     const out = await runCommand('xdotool', ['mousemove', 'getmouselocation', '--shell']);
     const lines = out.stdout.split('\n');
-    let x = 0, y = 0;
+    let x = 0,
+      y = 0;
     for (const line of lines) {
       if (line.startsWith('X=')) x = parseInt(line.slice(2), 10);
       if (line.startsWith('Y=')) y = parseInt(line.slice(2), 10);
@@ -192,7 +207,11 @@ class LinuxComputerControl implements ComputerControl {
     await runCommand('ydotool', ['mousemove', '--x', String(x), '--y', String(y)]);
   }
 
-  async mouseClick(x: number, y: number, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
+  async mouseClick(
+    x: number,
+    y: number,
+    button: 'left' | 'right' | 'middle' = 'left',
+  ): Promise<void> {
     const btnMap: Record<string, string> = {
       left: '0xC0',
       right: '0xC1',
@@ -224,9 +243,15 @@ class LinuxComputerControl implements ComputerControl {
   async keyPress(key: string): Promise<void> {
     // Map common key names to ydotool KEY_* format
     const keyMap: Record<string, string> = {
-      Enter: 'KEY_ENTER', Escape: 'KEY_ESC', Tab: 'KEY_TAB',
-      Backspace: 'KEY_BACKSPACE', Delete: 'KEY_DELETE',
-      ArrowUp: 'KEY_UP', ArrowDown: 'KEY_DOWN', ArrowLeft: 'KEY_LEFT', ArrowRight: 'KEY_RIGHT',
+      Enter: 'KEY_ENTER',
+      Escape: 'KEY_ESC',
+      Tab: 'KEY_TAB',
+      Backspace: 'KEY_BACKSPACE',
+      Delete: 'KEY_DELETE',
+      ArrowUp: 'KEY_UP',
+      ArrowDown: 'KEY_DOWN',
+      ArrowLeft: 'KEY_LEFT',
+      ArrowRight: 'KEY_RIGHT',
       Space: 'KEY_SPACE',
     };
     const ykey = keyMap[key] ?? `KEY_${key.toUpperCase().replace(/ /g, '_')}`;
@@ -280,7 +305,8 @@ class MacOSComputerControl implements ComputerControl {
 
   private async getPngDimensions(file: string): Promise<{ width: number; height: number }> {
     const result = await runCommand('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file]);
-    let w = 1920, h = 1080;
+    let w = 1920,
+      h = 1080;
     for (const line of result.stdout.split('\n')) {
       if (line.includes('pixelWidth')) w = parseInt(line.replace(/\D/g, ''), 10);
       if (line.includes('pixelHeight')) h = parseInt(line.replace(/\D/g, ''), 10);
@@ -298,7 +324,11 @@ class MacOSComputerControl implements ComputerControl {
     await runCommand('cliclick', [`m:${x},${y}`]);
   }
 
-  async mouseClick(x: number, y: number, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
+  async mouseClick(
+    x: number,
+    y: number,
+    button: 'left' | 'right' | 'middle' = 'left',
+  ): Promise<void> {
     const btn: Record<string, string> = { left: 'left', right: 'right', middle: 'mid' };
     await runCommand('cliclick', [`${btn[button]}:${x},${y}`]);
   }
@@ -332,7 +362,11 @@ class MacOSComputerControl implements ComputerControl {
   }
 
   async isScreenLocked(): Promise<boolean> {
-    const result = await runCommand('pmset', ['-g', 'powerstate', 'IOPMAssertionTypeIsPreventingIdleSystemSleep']);
+    const result = await runCommand('pmset', [
+      '-g',
+      'powerstate',
+      'IOPMAssertionTypeIsPreventingIdleSystemSleep',
+    ]);
     return result.exitCode === 0 && result.stdout.includes('No');
   }
 }
@@ -369,7 +403,8 @@ class WindowsComputerControl implements ComputerControl {
 
   async getMousePosition(): Promise<MousePosition> {
     const result = await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       '[System.Windows.Forms.Cursor]::Position.X;[System.Windows.Forms.Cursor]::Position.Y',
     ]);
     const [x, y] = result.stdout.trim().split('\n').map(Number);
@@ -378,22 +413,29 @@ class WindowsComputerControl implements ComputerControl {
 
   async mouseMove(x: number, y: number): Promise<void> {
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       `[System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new(${x}, ${y})`,
     ]);
   }
 
-  async mouseClick(x: number, y: number, button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
+  async mouseClick(
+    x: number,
+    y: number,
+    button: 'left' | 'right' | 'middle' = 'left',
+  ): Promise<void> {
     await this.mouseMove(x, y);
     const btn: Record<string, string> = { left: 'left', right: 'right', middle: 'middle' };
     const code: Record<string, string> = { left: '0x2', right: '0x8', middle: '0x20' };
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MouseButtons]::${btn[button]}`,
     ]);
     // Use SendKeys approach for click
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       `[System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new(${x}, ${y}); Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('@{CLICK}')`,
     ]);
   }
@@ -401,7 +443,8 @@ class WindowsComputerControl implements ComputerControl {
   async mouseDrag(fromX: number, fromY: number, toX: number, toY: number): Promise<void> {
     await this.mouseMove(fromX, fromY);
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("+{CLICK}")',
     ]);
     await new Promise((r) => setTimeout(r, 100));
@@ -410,7 +453,8 @@ class WindowsComputerControl implements ComputerControl {
 
   async mouseScroll(amount: number): Promise<void> {
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{LEFT ${amount}})")`,
     ]);
   }
@@ -418,13 +462,20 @@ class WindowsComputerControl implements ComputerControl {
   async keyPress(key: string): Promise<void> {
     // Use SendKeys for basic keys
     const keyMap: Record<string, string> = {
-      Enter: '{ENTER}', Escape: '{ESC}', Tab: '{TAB}',
-      Backspace: '{BACKSPACE}', Delete: '{DELETE}',
-      ArrowUp: '{UP}', ArrowDown: '{DOWN}', ArrowLeft: '{LEFT}', ArrowRight: '{RIGHT}',
+      Enter: '{ENTER}',
+      Escape: '{ESC}',
+      Tab: '{TAB}',
+      Backspace: '{BACKSPACE}',
+      Delete: '{DELETE}',
+      ArrowUp: '{UP}',
+      ArrowDown: '{DOWN}',
+      ArrowLeft: '{LEFT}',
+      ArrowRight: '{RIGHT}',
     };
     const k = keyMap[key] ?? key;
     await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${k}")`,
     ]);
   }
@@ -432,7 +483,8 @@ class WindowsComputerControl implements ComputerControl {
   async keyCombo(keys: string[]): Promise<void> {
     for (const key of keys) {
       await runCommand('powershell', [
-        '-NoProfile', '-Command',
+        '-NoProfile',
+        '-Command',
         `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^${key}')`,
       ]);
     }
@@ -440,7 +492,8 @@ class WindowsComputerControl implements ComputerControl {
 
   async getActiveWindow(): Promise<string> {
     const result = await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       'Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::AppActivate([Microsoft.VisualBasic.Interaction]::GetActiveWindowTitle())',
     ]);
     return result.stdout.trim() || 'Unknown';
@@ -448,7 +501,8 @@ class WindowsComputerControl implements ComputerControl {
 
   async isScreenLocked(): Promise<boolean> {
     const result = await runCommand('powershell', [
-      '-NoProfile', '-Command',
+      '-NoProfile',
+      '-Command',
       '(Add-Type -MemberDefinition "[DllImport(\\"user32.dll\\")]public static extern bool LockWorkStation();" -Name Win32Functions -PassThru)::LockWorkStation()',
     ]);
     // If it locks, it wasn't locked before — check state instead
@@ -482,9 +536,8 @@ class ComputerControlFeature implements FeatureModule {
     this.ctx = context;
     this.config = { ...this.config, ...config } as ComputerControlConfig;
 
-    const platform: Platform = this.config.platform === 'auto'
-      ? detectPlatform()
-      : this.config.platform;
+    const platform: Platform =
+      this.config.platform === 'auto' ? detectPlatform() : this.config.platform;
 
     this.log.info(`Initializing computer control for platform: ${platform}`);
 
@@ -516,7 +569,11 @@ class ComputerControlFeature implements FeatureModule {
       // Quick screenshot test if enabled
       if (this.config.enabled) {
         await this.computer.screenshot();
-        return { healthy: true, message: 'Computer control active', details: { platform: this.config.platform } };
+        return {
+          healthy: true,
+          message: 'Computer control active',
+          details: { platform: this.config.platform },
+        };
       }
       return { healthy: true, message: 'Computer control available (disabled)' };
     } catch (err) {

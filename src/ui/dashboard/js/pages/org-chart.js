@@ -6,7 +6,6 @@ async function loadOrgChartData() {
   const container = document.getElementById('orgChartContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -25,7 +24,6 @@ function renderOrgChart(data) {
   const container = document.getElementById('orgChartContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="card">
       <div class="card-header">

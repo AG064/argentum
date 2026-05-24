@@ -286,7 +286,6 @@ async function initKnowledgeGraph3D(containerId) {
   updateKGStats(graphData);
 
   if (graphData.nodes.length === 0) {
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--color-text-muted);">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 16px;">
@@ -301,7 +300,7 @@ async function initKnowledgeGraph3D(containerId) {
   }
 
   // Clear container
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
   container.innerHTML = '';
 
   // Create 3D graph
@@ -513,7 +512,6 @@ function showHoverInfo(node) {
       </div>`
       : '';
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   hoverEl.innerHTML = `
     <div style="font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
       <span style="width: 10px; height: 10px; border-radius: 50%; background: ${node.color}; display: inline-block;"></span>
@@ -554,7 +552,6 @@ function showLinkInfo(link, source, target) {
     document.body.appendChild(hoverEl);
   }
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   hoverEl.innerHTML = `
     <div style="font-weight: 600; margin-bottom: 4px; color: var(--color-accent);">
       ${link.type}
@@ -646,7 +643,6 @@ function showNodeDetails(node) {
        </div>`
       : '';
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   panel.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
       <div style="display: flex; align-items: center; gap: 12px;">

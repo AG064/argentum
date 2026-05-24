@@ -50,16 +50,14 @@ const DEFAULT_CONFIG: SandboxConfig = {
 // ─── Path Expansion & Checking ─────────────────────────────────────────────────
 
 function expandPath(p: string): string {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   if (p.startsWith('~/') || p === '~') {
     return resolve(homedir(), p.slice(2));
   }
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
   return resolve(p);
 }
 
 function normalizePath(p: string): string {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   return p.replace(/\\/g, '/').replace(/\/+/g, '/');
 }
 
@@ -363,7 +361,6 @@ export class SandboxExecutor {
         const scriptPath = path.join(sandboxDir, 'snippet.mjs');
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
 
-        /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
         const child = spawn('node', [scriptPath], {
           timeout: effectiveTimeoutMs,
           cwd: baseDir,
@@ -457,7 +454,6 @@ export class SandboxExecutor {
         const scriptPath = path.join(sandboxDir, 'snippet.py');
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o600 });
 
-        /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
         const child = spawn('python3', [scriptPath], {
           timeout: effectiveTimeoutMs,
           cwd: baseDir,
@@ -560,7 +556,6 @@ export class SandboxExecutor {
         const scriptPath = path.join(sandboxDir, 'snippet.sh');
         await fs.writeFile(scriptPath, code, { encoding: 'utf8', mode: 0o700 });
 
-        /* nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell */
         const child = spawn('bash', [scriptPath], {
           timeout: effectiveTimeoutMs,
           cwd: baseDir,

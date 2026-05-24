@@ -1,4 +1,3 @@
-/* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
 /**
  * Argentum YouTube Shorts Generator
  *
@@ -242,7 +241,7 @@ class YouTubeShortsFeature implements FeatureModule {
   /**
    * Check if required tools are available
    */
-    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
+
   private checkDependencies(): void {
     const ytDlp = this.isToolAvailable('yt-dlp');
     const ffmpeg = this.isToolAvailable('ffmpeg');
@@ -267,7 +266,6 @@ class YouTubeShortsFeature implements FeatureModule {
     }
   }
 
-    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
   /**
    * Download a YouTube video
    */
@@ -317,8 +315,7 @@ class YouTubeShortsFeature implements FeatureModule {
    */
   async generateShort(videoPath: string, segment: ShortSegment, outputPath: string): Promise<void> {
     if (!this.isToolAvailable('ffmpeg')) {
-      /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
-    throw new Error('ffmpeg not installed. Install with: apt install ffmpeg');
+      throw new Error('ffmpeg not installed. Install with: apt install ffmpeg');
     }
 
     const { start, end, caption } = segment;

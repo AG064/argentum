@@ -548,9 +548,7 @@ function cmdACP(): void {
         error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
       });
   } catch (err) {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     error(`Execution error: ${err instanceof Error ? err.message : String(err)}`);
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   }
 }
 
@@ -635,7 +633,7 @@ function cmdImage(): void {
 
   const { spawn } = require('child_process');
   const { existsSync: fsExistsSync } = require('fs');
-  /* nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop */
+
   const homeDir = process.env.HOME ?? '/home/ag064';
   const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
 
@@ -661,7 +659,6 @@ function cmdImage(): void {
     scriptArgs.push('--input-image', inputImage);
   }
 
-  /* nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop */
   const env = {
     ...process.env,
     ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
@@ -757,7 +754,7 @@ async function cmdLaunch(): Promise<void> {
   banner();
   success('Argentum is configured.');
   info(`Workspace: ${workDir}`);
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
   info(`Use "${PRIMARY_COMMAND} gateway start" to start the server.`);
   info(`Use "${PRIMARY_COMMAND} help" to see all commands.`);
   print('');
@@ -1254,7 +1251,7 @@ async function cmdSessions(): Promise<void> {
           id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New Session',
           created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
           model TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active',
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
           tags TEXT DEFAULT '[]', metadata TEXT DEFAULT '{}'
         );
         CREATE TABLE IF NOT EXISTS messages (
@@ -2261,7 +2258,6 @@ async function cmdStatus(): Promise<void> {
         print(`    • ${db} (${(size / 1024).toFixed(1)} KB)`);
       } catch (err) {
         warn(
-          /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
           `Could not read database size for ${db}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }

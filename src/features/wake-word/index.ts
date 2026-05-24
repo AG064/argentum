@@ -1,4 +1,3 @@
-/* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
 /**
  * Wake Word Detection Feature
  *
@@ -312,7 +311,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     // For text-based pattern matching, we could allow partial matches based on sensitivity.
     // Here we just use the full word.
     const flags = caseSensitive ? '' : 'i';
-    /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
+
     return new RegExp(escaped, flags);
   }
 

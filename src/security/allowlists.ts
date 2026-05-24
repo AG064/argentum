@@ -1,4 +1,3 @@
-/* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
 /**
  * Argentum Allowlists
  *
@@ -73,7 +72,6 @@ export class AllowlistManager {
    *   blockedHosts: [...]
    */
   loadFromFile(filePath: string): void {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const fullPath = resolve(filePath);
     if (!existsSync(fullPath)) {
       this.logger.warn(`Allowlist file not found: ${fullPath}, using defaults`);
@@ -278,7 +276,6 @@ export class AllowlistManager {
       .replace(/\*/g, '.*')
       .replace(/\?/g, '.');
 
-    /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
     try {
       return new RegExp(`^${escaped}$`, 'i').test(value);
     } catch {

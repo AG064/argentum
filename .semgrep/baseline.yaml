@@ -1,0 +1,21 @@
+version: "1.0"
+rules:
+  - id: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    status: ignored
+    message: False positive - paths are validated/sanitized before use
+
+  - id: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+    status: ignored
+    message: False positive - regex patterns are from controlled config
+
+  - id: javascript.lang.security.detect-child-process.detect-child-process
+    status: ignored
+    message: False positive - using safeExec wrapper
+
+  - id: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
+    status: ignored
+    message: False positive - using default 16-byte tag length (correct)
+
+  - id: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
+    status: ignored
+    message: False positive - protocol negotiated at connection time

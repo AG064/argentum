@@ -32,7 +32,6 @@ export class SkillCreator {
     const eligible = complexTasks.filter((t) => t.frequency >= this.threshold || t.complexity >= 7);
 
     for (const template of eligible) {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
       const skillPath = path.join(this.skillsDir, template.name);
 
       if (existsSync(skillPath)) {
@@ -52,7 +51,6 @@ export class SkillCreator {
    * Create a new skill from template
    */
   private createNewSkill(template: SkillTemplate): void {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const skillPath = path.join(this.skillsDir, template.name);
 
     if (!existsSync(skillPath)) {
@@ -61,15 +59,15 @@ export class SkillCreator {
 
     // Create SKILL.md
     const skillContent = this.buildSkillMd(template);
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
     fs.writeFileSync(path.join(skillPath, 'SKILL.md'), skillContent, 'utf8');
 
     // Create references directory if needed
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
     mkdirSync(path.join(skillPath, 'references'), { recursive: true });
 
     // Create scripts directory
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
     mkdirSync(path.join(skillPath, 'scripts'), { recursive: true });
   }
 
@@ -77,7 +75,6 @@ export class SkillCreator {
    * Update an existing skill
    */
   private updateExistingSkill(skillPath: string, template: SkillTemplate): void {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const skillMdPath = path.join(skillPath, 'SKILL.md');
 
     if (existsSync(skillMdPath)) {
@@ -260,7 +257,7 @@ ${template.triggers.map((t) => `- ${t}`).join('\n')}
       return fs
         .readdirSync(this.skillsDir, { encoding: 'utf8' })
         .filter((f) => f.startsWith('auto-'))
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
         .filter((f) => fs.existsSync(path.join(this.skillsDir, f, 'SKILL.md')));
     } catch {
       return [];

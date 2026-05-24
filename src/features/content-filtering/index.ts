@@ -283,7 +283,6 @@ class ContentFilteringFeature implements FeatureModule {
     const id = `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = Date.now();
 
-    /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
     try {
       // Validate regex
       const _validatedPattern = new RegExp(pattern);

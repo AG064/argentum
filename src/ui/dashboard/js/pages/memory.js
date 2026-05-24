@@ -60,7 +60,6 @@ function renderMemories(memories) {
   const list = document.getElementById('memoryList');
   if (!list) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   list.innerHTML = memories
     .map((memory) => {
       const typeBadge = getTypeBadge(memory.type);
