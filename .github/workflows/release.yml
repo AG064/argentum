@@ -52,6 +52,32 @@ jobs:
       - name: Smoke test Linux binary
         run: ./artifacts/release/argentum-v${{ steps.package.outputs.version }}-linux-x64 --version
 
+      - name: Run Trivy vulnerability scanner on artifacts
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'artifacts/release'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Check Trivy results
+        run: |
+          if [ -f trivy-results.sarif ] && grep -q '"level":"error"' trivy-results.sarif; then
+            echo "Critical/High vulnerabilities found!"
+            echo "Please fix vulnerabilities before releasing."
+            cat trivy-results.sarif | jq '.runs[0].results | length'
+            exit 1
+          fi
+          echo "No critical/high vulnerabilities found in release artifacts."
+
       - name: Prepare release notes
         shell: bash
         run: |
