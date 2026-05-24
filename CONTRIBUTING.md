@@ -93,6 +93,51 @@ fix/X         — bug fixes
 docs/X        — documentation only
 ```
 
+## Testing
+
+### How to Run Tests Locally
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:unit        # Unit tests only
+npm run test:integration # Integration tests only
+npm run test:e2e         # End-to-end tests only
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### What the Tests Cover
+
+| Test Suite | Purpose |
+|------------|---------|
+| Unit tests | Individual functions and modules (config, memory, security, tools) |
+| Integration tests | Channel integrations (Telegram, etc.), API interactions |
+| E2E tests | Full workflow from user input to response |
+| CLI smoke tests | Binary execution and basic commands |
+| GitHub workflow tests | Security configuration validation |
+
+### Interpreting Results
+
+```
+Test Suites: 5 passed, 5 total
+Tests:       65 passed, 65 total
+```
+
+- All tests passing: code changes don't break existing functionality
+- Test failures: check error message, fix failing test or code
+- Coverage: higher is better, focus on testing critical paths
+
+### CI/CD Pipeline
+
+Tests run automatically on every push to `development` and `main` branches, and on every Pull Request. Results visible in GitHub Actions. CI must pass before merging.
+
 ## Commit Messages
 
 This project uses Conventional Commits (but not strictly enforced):
