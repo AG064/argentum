@@ -1,0 +1,8 @@
+# Trivy ignore file
+# These CVEs are in npm CLI bundled packages (usr/local/lib/node_modules/npm/)
+# not in the project's application dependencies.
+# They require GitHub Actions to update their npm version.
+
+CVE-2026-42338
+CVE-2026-33672
+CVE-2026-33750
