@@ -4,6 +4,10 @@
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
 </p>
 
+<p align="center">
+  <a href="https://www.bestpractices.dev/projects/12957"><img src="https://www.bestpractices.dev/projects/12957/badge" alt="OpenSSF Best Practices" width="180"></a>
+</p>
+
 Argentum is a local-first AI workspace. It gives you a desktop chat app, a TypeScript agent runtime, provider routing, memory, channels, logs, and security controls in one project you can run and inspect yourself.
 
 [![Version](https://img.shields.io/badge/version-v0.0.7-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
