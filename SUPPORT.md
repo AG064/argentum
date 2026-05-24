@@ -36,7 +36,7 @@
 
 ## Unsupported Versions
 
-Versions older than v0.0.6 are no longer supported. Users are encouraged to upgrade to the latest stable release for security updates and bug fixes.
+Versions older than v0.0.7 are no longer supported. They may still function, but likely contain unpatched security vulnerabilities. Users are strongly encouraged to upgrade to the latest stable release as soon as possible for security and bug fixes.
 
 ## Release Lifecycle
 
