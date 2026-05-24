@@ -170,7 +170,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   ];
 
   // Network isolation
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
   if (!config.networkAccess) {
     args.push('--network', 'none');
   }

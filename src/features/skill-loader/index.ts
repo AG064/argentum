@@ -38,7 +38,8 @@ class SkillLoaderFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skill-loader',
     version: '0.0.7',
-    description: 'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
+    description:
+      'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
     dependencies: [],
   };
 
@@ -100,7 +101,7 @@ class SkillLoaderFeature implements FeatureModule {
   /**
    * Load SKILL.md from a feature directory
    */
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
   loadSkillFromFeature(featureDir: string): SkillContext | null {
     const skillPath = join(featureDir, 'SKILL.md');
     if (!existsSync(skillPath)) return null;
@@ -120,7 +121,7 @@ class SkillLoaderFeature implements FeatureModule {
    */
   injectSkillsIntoContext(
     featureDirs: string[],
-    context: Record<string, unknown>
+    context: Record<string, unknown>,
   ): Record<string, unknown> {
     const skills: SkillContext[] = [];
 
@@ -131,7 +132,7 @@ class SkillLoaderFeature implements FeatureModule {
 
     return {
       ...context,
-      skills: skills.map(s => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n'),
+      skills: skills.map((s) => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n'),
       _skills: skills,
     };
   }
@@ -147,9 +148,7 @@ class SkillLoaderFeature implements FeatureModule {
    * Get skills formatted as markdown string (for context injection)
    */
   getSkillsAsText(): string {
-    return this.loadedSkills
-      .map(s => `# ${s.skillName}\n\n${s.content}`)
-      .join('\n\n---\n\n');
+    return this.loadedSkills.map((s) => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n');
   }
 }
 

@@ -19,7 +19,6 @@ interface SessionMessageRow {
   role: string;
   content: string | null;
   timestamp: number;
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
 }
 
 export class ErrorAnalyzer {

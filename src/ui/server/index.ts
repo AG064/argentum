@@ -356,7 +356,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   }
 
   // Apply CORS
-  /* nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration */
+
   // allowedOrigins is a strict whitelist from config (not user-controlled), so this is safe
   if (config.cors.enabled) {
     const origin = req.headers.origin;
@@ -419,7 +419,6 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(config.staticDir, 'index.html');
   } else {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     // Path traversal is prevented by normalization + startsWith check below
     filePath = path.join(config.staticDir, pathname);
   }
@@ -672,7 +671,6 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
  * Setup WebSocket server
  */
 function setupWebSocket(server: http.Server): void {
-  /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
   // ws:// is correct here - server is plain HTTP, not HTTPS, so wss:// is not applicable
   const wss = new WebSocketServer({ server, path: '/ws' });
 
@@ -703,7 +701,7 @@ function setupWebSocket(server: http.Server): void {
     });
 
     // Send welcome message
-    /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
+
     ws.send(JSON.stringify({ type: 'connected', message: 'Argentum Dashboard connected' }));
   });
 
@@ -712,7 +710,6 @@ function setupWebSocket(server: http.Server): void {
     const message = JSON.stringify(data);
     wsClients.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
-        /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
         ws.send(message);
       }
     });
@@ -774,7 +771,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.info('  ╠══════════════════════════════════════════════════════════╣');
       console.info(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.info(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
-      /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
+
       console.info(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
       console.info('  ╠══════════════════════════════════════════════════════════╣');
       console.info('  ║  Remote Access:                                        ║');

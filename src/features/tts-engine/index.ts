@@ -332,7 +332,7 @@ class TtsEngineFeature implements FeatureModule {
     // Generate filename
     const ext = request.format ?? this.config.defaultFormat;
     const filename = `${crypto.randomBytes(16).toString('hex')}.${ext}`;
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
     const filepath = join(this.cacheDir, filename);
 
     // Ensure cache directory exists

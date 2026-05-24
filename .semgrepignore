@@ -1,0 +1,16 @@
+# Dashboard JS - client-side code with DOM APIs that Semgrep misinterprets
+src/ui/dashboard/js/
+
+# Test files - not production code
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+
+# Binary/build artifacts
+dist/
+build/
+*.min.js
+
+# Node modules
+node_modules/

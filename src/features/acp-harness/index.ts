@@ -173,7 +173,7 @@ class ACPHarnessFeature implements FeatureModule {
 
   private writeExecutionError(res: ServerResponse, err: unknown): void {
     res.statusCode = 500;
-    /* nosemgrep: javascript.lang.security.detect-child-process.detect-child-process */
+
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
     const escapedError = errorMsg
       .replace(/&/g, '&amp;')

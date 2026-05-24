@@ -1,4 +1,3 @@
-/* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -104,9 +103,9 @@ class SecureProfileFeature implements FeatureModule {
     const iv = blob.slice(0, 12);
     const tag = blob.slice(12, 28);
     const enc = blob.slice(28);
-    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
+
     const decipher = crypto.createDecipheriv('aes-256-gcm', this.key.slice(0, 32), iv);
-    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
+
     decipher.setAuthTag(tag);
     const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
     return dec;

@@ -1,6 +1,6 @@
 /**
  * Git-Based Memory Sync for Argentum
- * 
+ *
  * Exports memories as compressed chunks, commits to git for cross-machine sync.
  * Uses checksums for deduplication.
  */
@@ -46,9 +46,9 @@ export class MemoryGitSync {
       enabled: config.enabled ?? false,
       repoPath: config.repoPath,
       branch,
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
       commitMessage: config.commitMessage ?? 'chore(memory): sync memories',
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
+
       compress: config.compress ?? true,
       maxChunkSize: config.maxChunkSize ?? 1024 * 1024, // 1MB
       autoSyncInterval: config.autoSyncInterval ?? 3600000, // 1 hour
@@ -96,7 +96,6 @@ export class MemoryGitSync {
     let exported = 0;
 
     for (const chunk of chunks) {
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
       // Generate checksum if not present
       if (!chunk.checksum) {
         chunk.checksum = this.checksum(chunk.content);

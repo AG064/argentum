@@ -1,5 +1,3 @@
-/* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
-
 // @ts-nocheck
 /**
  * Argentum Approval UI / Human-in-the-Loop System
@@ -59,7 +57,6 @@ export class ApprovalUI {
    * Initialize with database path for persistence.
    */
   init(dbPath: string): void {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     this.dbPath = resolve(dbPath);
     const dir = dirname(this.dbPath);
     if (!existsSync(dir)) {

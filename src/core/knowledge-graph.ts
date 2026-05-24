@@ -61,7 +61,6 @@ export class KnowledgeGraphMemory {
   private scope: Scope = 'global';
   private scopeId: string | null = null;
 
-  /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
   constructor(dbPath?: string) {
     const resolved = resolve(dbPath ?? './data/knowledge-graph.db');
     const dir = dirname(resolved);
@@ -146,9 +145,7 @@ export class KnowledgeGraphMemory {
   // addEntity
   // -------------------------------------------------------------------------
 
-  addEntity(
-    entity: Omit<Entity, 'id' | 'createdAt' | 'updatedAt'>,
-  ): string {
+  addEntity(entity: Omit<Entity, 'id' | 'createdAt' | 'updatedAt'>): string {
     const now = Date.now();
     const id = generateId();
 
@@ -200,7 +197,12 @@ export class KnowledgeGraphMemory {
       scopeId: this.scopeId,
     });
 
-    log.debug('Relation added', { id, type: relation.type, source: relation.source, target: relation.target });
+    log.debug('Relation added', {
+      id,
+      type: relation.type,
+      source: relation.source,
+      target: relation.target,
+    });
     return id;
   }
 
@@ -223,11 +225,9 @@ export class KnowledgeGraphMemory {
     const observations: string[] = JSON.parse(row.observations);
     observations.push(observation);
 
-    this.db.prepare(`UPDATE entities SET observations = ?, updated_at = ? WHERE id = ?`).run(
-      JSON.stringify(observations),
-      now,
-      entityId,
-    );
+    this.db
+      .prepare(`UPDATE entities SET observations = ?, updated_at = ? WHERE id = ?`)
+      .run(JSON.stringify(observations), now, entityId);
 
     // Record a new version for this observation
     const entity = this.getEntity(entityId);
@@ -247,22 +247,30 @@ export class KnowledgeGraphMemory {
 
     if (entities && entities.length > 0) {
       const placeholders = entities.map(() => '?').join(', ');
-      const rows = this.db.prepare(`
+      const rows = this.db
+        .prepare(
+          `
         SELECT * FROM entities
         WHERE type IN (${placeholders})
           AND (scope = 'global' OR scope = ?)
           AND (scope != 'global' OR scope_id IS NULL OR scope_id = ?)
         ORDER BY created_at DESC
-      `).all(...entities, this.scope, this.scopeId ?? '') as DbEntityRow[];
+      `,
+        )
+        .all(...entities, this.scope, this.scopeId ?? '') as DbEntityRow[];
 
       return rows.map(this.rowToEntity);
     }
 
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM entities
       WHERE scope = 'global' OR scope = ?
       ORDER BY created_at DESC
-    `).all(this.scope) as DbEntityRow[];
+    `,
+      )
+      .all(this.scope) as DbEntityRow[];
 
     return rows.map(this.rowToEntity);
   }
@@ -272,7 +280,9 @@ export class KnowledgeGraphMemory {
   // -------------------------------------------------------------------------
 
   getEntity(id: string): Entity | null {
-    const row = this.db.prepare(`SELECT * FROM entities WHERE id = ?`).get(id) as DbEntityRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM entities WHERE id = ?`).get(id) as
+      | DbEntityRow
+      | undefined;
     return row ? this.rowToEntity(row) : null;
   }
 
@@ -290,10 +300,14 @@ export class KnowledgeGraphMemory {
       const current = queue.shift()!;
 
       // Get all connected entities (outgoing and incoming relations)
-      const neighbors = this.db.prepare(`
+      const neighbors = this.db
+        .prepare(
+          `
         SELECT source, target FROM relations
         WHERE source = ? OR target = ?
-      `).all(current.id) as { source: string; target: string }[];
+      `,
+        )
+        .all(current.id) as { source: string; target: string }[];
 
       for (const { source, target } of neighbors) {
         const neighbor = source === current.id ? target : source;
@@ -324,11 +338,15 @@ export class KnowledgeGraphMemory {
   search(text: string): Entity[] {
     const pattern = `%${text.toLowerCase()}%`;
 
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM entities
       WHERE scope = 'global' OR scope = ?
       ORDER BY updated_at DESC
-    `).all(this.scope) as DbEntityRow[];
+    `,
+      )
+      .all(this.scope) as DbEntityRow[];
 
     return rows
       .map((row) => this.rowToEntity(row))
@@ -352,7 +370,9 @@ export class KnowledgeGraphMemory {
 
   getVersion(entityId: string, asOf: number): Entity | null {
     // Find the version that was current at `asOf` in both valid time and transaction time
-    const row = this.db.prepare(`
+    const row = this.db
+      .prepare(
+        `
       SELECT snapshot FROM entity_versions
       WHERE entity_id = ?
         AND valid_start <= ?
@@ -361,7 +381,9 @@ export class KnowledgeGraphMemory {
         AND (transaction_end IS NULL OR transaction_end > ?)
       ORDER BY transaction_start DESC
       LIMIT 1
-    `).get(entityId, asOf, asOf, asOf, asOf) as { snapshot: string } | undefined;
+    `,
+      )
+      .get(entityId, asOf, asOf, asOf, asOf) as { snapshot: string } | undefined;
 
     if (!row) {
       return null;
@@ -375,7 +397,9 @@ export class KnowledgeGraphMemory {
   // -------------------------------------------------------------------------
 
   getRelation(id: string): Relation | null {
-    const row = this.db.prepare(`SELECT * FROM relations WHERE id = ?`).get(id) as DbRelationRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM relations WHERE id = ?`).get(id) as
+      | DbRelationRow
+      | undefined;
     return row ? this.rowToRelation(row) : null;
   }
 
@@ -384,10 +408,14 @@ export class KnowledgeGraphMemory {
   // -------------------------------------------------------------------------
 
   getRelations(entityId: string): Relation[] {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT * FROM relations
       WHERE source = ? OR target = ?
-    `).all(entityId, entityId) as DbRelationRow[];
+    `,
+      )
+      .all(entityId, entityId) as DbRelationRow[];
 
     return rows.map(this.rowToRelation);
   }
@@ -399,11 +427,15 @@ export class KnowledgeGraphMemory {
   deleteEntity(id: string): void {
     // Close out versions
     const now = Date.now();
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE entity_versions
       SET valid_end = ?, transaction_end = ?
       WHERE entity_id = ? AND valid_end IS NULL AND transaction_end IS NULL
-    `).run(now, now, id);
+    `,
+      )
+      .run(now, now, id);
 
     this.db.prepare(`DELETE FROM entities WHERE id = ?`).run(id);
     log.debug('Entity deleted', { id });
@@ -413,10 +445,15 @@ export class KnowledgeGraphMemory {
   // updateEntity — update entity properties, records a new version
   // -------------------------------------------------------------------------
 
-  updateEntity(id: string, updates: Partial<Pick<Entity, 'name' | 'properties' | 'observations'>>): void {
+  updateEntity(
+    id: string,
+    updates: Partial<Pick<Entity, 'name' | 'properties' | 'observations'>>,
+  ): void {
     const now = Date.now();
 
-    const row = this.db.prepare(`SELECT * FROM entities WHERE id = ?`).get(id) as DbEntityRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM entities WHERE id = ?`).get(id) as
+      | DbEntityRow
+      | undefined;
     if (!row) {
       log.warn('updateEntity: entity not found', { id });
       return;
@@ -431,18 +468,32 @@ export class KnowledgeGraphMemory {
       updatedAt: now,
     };
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE entities
       SET name = ?, properties = ?, observations = ?, updated_at = ?
       WHERE id = ?
-    `).run(updated.name, JSON.stringify(updated.properties), JSON.stringify(updated.observations), now, id);
+    `,
+      )
+      .run(
+        updated.name,
+        JSON.stringify(updated.properties),
+        JSON.stringify(updated.observations),
+        now,
+        id,
+      );
 
     // Close previous version's valid time
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE entity_versions
       SET valid_end = ?
       WHERE entity_id = ? AND valid_end IS NULL
-    `).run(now, id);
+    `,
+      )
+      .run(now, id);
 
     // Record new version
     this.recordVersion(id, updated, now, now);
@@ -454,13 +505,22 @@ export class KnowledgeGraphMemory {
   // Internal helpers
   // -------------------------------------------------------------------------
 
-  private recordVersion(entityId: string, entity: Entity, validStart: number, txStart: number): void {
+  private recordVersion(
+    entityId: string,
+    entity: Entity,
+    validStart: number,
+    txStart: number,
+  ): void {
     const id = generateId();
 
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO entity_versions (id, entity_id, valid_start, transaction_start, snapshot)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, entityId, validStart, txStart, JSON.stringify(entity));
+    `,
+      )
+      .run(id, entityId, validStart, txStart, JSON.stringify(entity));
   }
 
   private rowToEntity(row: DbEntityRow): Entity {
@@ -492,9 +552,15 @@ export class KnowledgeGraphMemory {
 
   /** Get stats */
   stats(): { entities: number; relations: number; versions: number } {
-    const entities = (this.db.prepare(`SELECT COUNT(*) as count FROM entities`).get() as { count: number }).count;
-    const relations = (this.db.prepare(`SELECT COUNT(*) as count FROM relations`).get() as { count: number }).count;
-    const versions = (this.db.prepare(`SELECT COUNT(*) as count FROM entity_versions`).get() as { count: number }).count;
+    const entities = (
+      this.db.prepare(`SELECT COUNT(*) as count FROM entities`).get() as { count: number }
+    ).count;
+    const relations = (
+      this.db.prepare(`SELECT COUNT(*) as count FROM relations`).get() as { count: number }
+    ).count;
+    const versions = (
+      this.db.prepare(`SELECT COUNT(*) as count FROM entity_versions`).get() as { count: number }
+    ).count;
 
     return { entities, relations, versions };
   }

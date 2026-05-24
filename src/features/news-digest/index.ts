@@ -383,14 +383,13 @@ class NewsDigestFeature implements FeatureModule {
 
       const title = getTag('title');
       const description = getTag('description') ?? undefined;
-      const content = (getTag('content:encoded') ?? getTag('content')) ?? undefined;
+      const content = getTag('content:encoded') ?? getTag('content') ?? undefined;
 
       // Parse pubDate
       const pubDateStr = getTag('pubDate');
       const publishedAt = pubDateStr ? new Date(pubDateStr).getTime() : Date.now();
 
       if (title && link) {
-        /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
         items.push({
           title,
           link,

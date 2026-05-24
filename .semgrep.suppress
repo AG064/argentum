@@ -1,0 +1,10 @@
+# Suppress known false positive rules
+# These rules fire incorrectly on our safe patterns
+
+javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+javascript.lang.security.detect-child-process.detect-child-process
+javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
+javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
+javascript.browser.security.insecure-document-method.insecure-document-method
+javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop

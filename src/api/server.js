@@ -375,7 +375,6 @@ function matchRoute(method, reqPath) {
 
     const routeParts = routePath.split('/');
     const pathParts = reqPath.split('/');
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
 
     if (routeParts.length !== pathParts.length) continue;
 
@@ -400,7 +399,7 @@ function matchRoute(method, reqPath) {
 }
 
 // Create HTTP server
-/* nosemgrep: problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server */
+
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;

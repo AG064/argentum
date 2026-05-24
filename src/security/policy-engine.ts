@@ -106,7 +106,6 @@ export class PolicyEngine {
    *       keyField: user
    */
   loadFromFile(filePath: string): void {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     const fullPath = resolve(filePath);
     if (!existsSync(fullPath)) {
       this.logger.warn(`Policy file not found: ${fullPath}`);
@@ -232,7 +231,6 @@ export class PolicyEngine {
    * Enable file-based audit logging.
    */
   enableAuditFile(filePath: string): void {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     this.auditFilePath = resolve(filePath);
     const dir = dirname(this.auditFilePath);
     if (!existsSync(dir)) {
@@ -305,7 +303,7 @@ export class PolicyEngine {
 
         case 'matches':
           if (typeof value !== 'string') return false;
-          /* nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp */
+
           try {
             return new RegExp(String(cond.value)).test(value);
           } catch {

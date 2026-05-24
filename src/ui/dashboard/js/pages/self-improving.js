@@ -6,7 +6,6 @@ async function loadSelfImprovingData() {
   const container = document.getElementById('selfImprovingContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -30,7 +29,6 @@ function renderSelfImprovingPage(data) {
     ? `in ${formatDuration(data.nextScheduledRun - Date.now())}`
     : 'Not scheduled';
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Status Card -->
     <div class="card">

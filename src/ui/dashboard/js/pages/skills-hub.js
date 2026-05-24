@@ -6,7 +6,6 @@ async function loadSkillsHubData() {
   const container = document.getElementById('skillsHubContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -44,7 +43,6 @@ function renderSkillsHubPage(data) {
     utility: '🛠️',
   };
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Search and Actions -->
     <div class="card">
@@ -275,7 +273,6 @@ function filterByCategory(category) {
         ? window.marketplaceSkills
         : window.marketplaceSkills.filter((s) => s.category === category);
 
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     marketplaceGrid.innerHTML = filtered.map((skill) => renderMarketplaceSkillCard(skill)).join('');
   }
 }
@@ -283,7 +280,6 @@ function filterByCategory(category) {
 function showAllMarketplace() {
   const marketplaceGrid = document.getElementById('marketplaceSkills');
   if (marketplaceGrid && window.marketplaceSkills) {
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
     marketplaceGrid.innerHTML = window.marketplaceSkills
       .map((skill) => renderMarketplaceSkillCard(skill))
       .join('');
@@ -429,7 +425,7 @@ function showCreateSkillWizard() {
     const entries = document.getElementById('scriptEntries');
     if (entries) {
       const idx = entries.children.length;
-      /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
       entries.innerHTML += `
         <div style="margin-bottom: var(--space-2)">
           <input type="text" class="input" name="script-${idx}" placeholder="script-name.sh" style="margin-right: var(--space-2)">
