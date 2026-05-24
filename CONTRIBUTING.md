@@ -53,12 +53,38 @@ npm run test:integration
 ### Build
 
 ```bash
-npm run build        # production build
-npm run dev          # watch mode with tsx
-npm run docker:build # Docker image
+# Install dependencies
+npm install
+
+# Production build (TypeScript compilation + CLI)
+npm run build
+
+# Development with watch mode
+npm run dev
+
+# Build Docker image
+npm run docker:build
+
+# Clean rebuild
+npm run rebuild
 ```
 
-## Branch Strategy
+### Desktop App (Optional)
+
+For local llama.cpp server + desktop GUI:
+
+```bash
+# Prepare desktop sidecar binaries (llama.cpp server)
+npm run prepare:llama-server
+
+# Desktop development
+npm run desktop:dev
+
+# Desktop production build
+npm run desktop:build
+```
+
+### Day-to-Day Commands
 
 ```
 main          — stable, always releasable
@@ -89,7 +115,7 @@ Before requesting review:
 - [ ] `npm run lint` passes (warnings are OK for existing code, not for new)
 - [ ] Tests added/updated if applicable
 - [ ] Commit messages are clean
-- [ ] PR description explains *what* and *why*, not just *what changed*
+- [ ] PR description explains _what_ and _why_, not just _what changed_
 
 ## Things That Won't Get Merged
 
@@ -120,7 +146,7 @@ If you're adding a feature, look at `src/features/` for the pattern.
 ## Questions?
 
 - Open an issue for bugs or feature requests
-- Telegram: [[REMOVED]]
+- GitHub Discussions: https://github.com/AG064/argentum/discussions
 - Check the [docs/](docs/) directory first — there's more detail there than in this file
 
 ## License
