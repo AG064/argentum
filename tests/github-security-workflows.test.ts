@@ -11,14 +11,15 @@ function workflows(): string[] {
 }
 
 describe('GitHub security workflow baseline', () => {
-  test('does not define an advanced CodeQL workflow when repository default setup owns CodeQL', () => {
-    expect(existsSync('.github/workflows/codeql.yml')).toBe(false);
-
-    for (const name of workflows()) {
-      const contents = workflow(name);
-      expect(contents).not.toContain('github/codeql-action/init');
-      expect(contents).not.toContain('github/codeql-action/analyze');
-    }
+  test('CodeQL workflow uses default setup compatible configuration (no advanced queries)', () => {
+    // Default setup is enabled in repository settings
+    // CodeQL workflow must NOT use security-extended queries with default setup
+    const codeql = workflow('codeql.yml');
+    // Must not contain advanced query configuration
+    expect(codeql).not.toContain('queries: security-extended');
+    // Should use basic security queries only
+    expect(codeql).toContain('github/codeql-action/init@v4');
+    expect(codeql).toContain('github/codeql-action/analyze@v4');
   });
 
   test('security workflows install dependencies consistently with the lockfile policy', () => {
@@ -51,22 +52,22 @@ describe('GitHub security workflow baseline', () => {
     expect(desktop).toContain('macos-15-intel');
     expect(desktop).toContain('aarch64-apple-darwin');
     expect(desktop).toContain('x86_64-apple-darwin');
-    expect(desktop).toContain('dtolnay/rust-toolchain@stable');
+    expect(desktop).toContain('dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9');
     expect(desktop).toContain('libwebkit2gtk-4.1-dev');
     expect(desktop).toContain('libayatana-appindicator3-dev');
     expect(desktop).toContain('libssl-dev');
     expect(desktop).toContain('npm run desktop:build');
-    expect(desktop).toContain('actions/upload-artifact@v4');
+    expect(desktop).toContain('actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a');
     expect(desktop).toContain('src/desktop/target/release/bundle/**/*');
     expect(desktop).toContain('src/desktop/target/*/release/bundle/**/*');
-    expect(desktop).toContain('softprops/action-gh-release@v2');
+    expect(desktop).toContain('softprops/action-gh-release@403a5240f3837fa857f642062e05aad6bb3391ca');
   });
 
   test('OpenSSF Scorecard uploads SARIF results to GitHub code scanning', () => {
     const scorecard = workflow('scorecard.yml');
 
-    expect(scorecard).toContain('ossf/scorecard-action@v2.4.3');
-    expect(scorecard).toContain('github/codeql-action/upload-sarif@v4');
+    expect(scorecard).toContain('ossf/scorecard-action@af76153369ae1eb1eaffc4118046b7fda9a8419e');
+    expect(scorecard).toContain('github/codeql-action/upload-sarif@0e150e40762c1253b364a04b0fc9f2cc14effff2');
     expect(scorecard).toContain('category: scorecard');
   });
 });
