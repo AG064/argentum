@@ -138,6 +138,26 @@ Tests:       65 passed, 65 total
 
 Tests run automatically on every push to `development` and `main` branches, and on every Pull Request. Results visible in GitHub Actions. CI must pass before merging.
 
+### Test Policy for Major Changes
+
+**What constitutes a major change:**
+- New features or capabilities
+- Changes to public APIs
+- Bug fixes that alter expected behavior
+- Security-related changes
+- Changes to build or release process
+
+**What tests to add or update:**
+- New functionality MUST include unit tests
+- Bug fixes MUST include a test that reproduces the bug (regression test)
+- API changes MUST update existing tests
+- Security changes MUST include relevant security tests
+
+**Policy:**
+- PRs with new features that don't add tests will be asked to add them
+- Bug fixes without regression tests may be accepted if adding tests is impractical (e.g., one-line fixes)
+- Current test coverage is acknowledged as thin — real-world bug reports with reproduction steps are valuable
+
 ## Commit Messages
 
 This project uses Conventional Commits (but not strictly enforced):
