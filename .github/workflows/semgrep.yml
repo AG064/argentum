@@ -17,12 +17,14 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   semgrep-scan:
     name: Semgrep Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
@@ -55,7 +57,7 @@ jobs:
           eval $CMD || true
 
       - name: Upload Semgrep results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57
         if: always()
         with:
           sarif_file: semgrep-results.json
