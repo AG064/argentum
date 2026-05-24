@@ -26,9 +26,10 @@ FROM node:22.22-alpine3.23@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479
 # Patch Alpine system CVEs (openssl, zlib, etc.)
 RUN apk --no-cache upgrade
 
-# Update npm to latest to fix bundled package vulnerabilities
-# The npm CLI bundles ip-address, picomatch, brace-expansion which have CVEs
-RUN npm install -g npm@latest
+# Update npm to fix bundled package vulnerabilities
+# Pinned to specific version (not @latest) for PinnedDependencies compliance.
+# A scheduled workflow (npm-version-check.yml) alerts when a new version is available.
+RUN npm install -g npm@11.15.0
 
 # Install wget for health checks (smaller than curl)
 RUN apk add --no-cache wget
