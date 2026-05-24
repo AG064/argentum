@@ -60,6 +60,6 @@ See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUI
 Found a vulnerability? Do not open a public issue. Instead:
 
 - **GitHub Security Advisories**: [Report privately](https://github.com/AG064/argentum/security/advisories/new)
-- **Maintainer**: AG064 (@ag_064 on GitHub)
+- **Maintainer**: AG064 (GitHub: https://github.com/AG064)
 
 Expected response: acknowledgment within 24–48 hours, fix timeline based on severity.
