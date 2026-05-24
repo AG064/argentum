@@ -180,6 +180,36 @@ This threat model MUST be updated during release preparation for any new feature
 
 Current version covers v0.0.7. Next review: before v0.0.8 release.
 
+## SAST Remediation Policy
+
+### Severity Threshold for SAST Findings
+
+| Severity | Remediation Timeline | Notes |
+|-----------|---------------------|-------|
+| Critical | Within 24 hours | Emergency fix or suppression with justification |
+| High | Within 7 days | Fix or documented exception required |
+| Medium | Within 30 days | Fix or risk acceptance with justification |
+| Low | Best effort | Fix when feasible, document if not |
+| Info/False Positive | No action | Suppress via CodeQL or Semgrep config |
+
+### Process for SAST Findings
+
+1. **Identify:** CodeQL runs on every push to development/main (from .github/workflows/codeql.yml)
+2. **Prioritize:** Severity level determines remediation timeline
+3. **Remediate:** Fix the code issue, or add suppression if false positive
+4. **Suppress:** Use `/* eslint-disable */` for false positive ESLint, or CodeQL/Semgrep suppressions for security findings
+5. **Verify:** CodeQL scan must pass after fix or suppression
+
+### Suppression Guidelines
+
+False positives MUST be suppressed inline or via config, not ignored. Each suppression must include a comment explaining why.
+
+Example suppression (ESLint):
+```javascript
+// eslint-disable-next-line security/xss -- intentionally renders markdown
+const html = marked(content);
+```
+
 ## Reporting Security Issues
 
 Found a vulnerability? Do not open a public issue. Instead:
