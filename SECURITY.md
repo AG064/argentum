@@ -6,16 +6,16 @@ Argentum is the only AI agent framework with defense-in-depth security from the 
 
 ## Security Features
 
-| Feature | What it does | Why it matters |
-|---------|-------------|-----------------|
-| AES-256 encryption | Encrypts credentials at rest | Your API keys are never stored in plaintext |
-| Audit logging | Logs every sensitive operation | Know exactly what your agent did and when |
-| Rate limiting | Limits API calls per endpoint | Prevents accidental or malicious resource exhaustion |
-| Allowlist mode | Default-deny, explicit allow | Only approved commands/tools can run |
-| Policy engine | Configurable permission rules | Define what agents can and cannot do |
-| Container sandbox | Isolate untrusted agent code | Agent code runs in isolation |
-| SSRF protection | Blocks webhook DNS rebinding | Prevents webhook-based internal access |
-| Credential manager | Short-lived key rotation | API keys expire and rotate automatically |
+| Feature            | What it does                   | Why it matters                                       |
+| ------------------ | ------------------------------ | ---------------------------------------------------- |
+| AES-256 encryption | Encrypts credentials at rest   | Your API keys are never stored in plaintext          |
+| Audit logging      | Logs every sensitive operation | Know exactly what your agent did and when            |
+| Rate limiting      | Limits API calls per endpoint  | Prevents accidental or malicious resource exhaustion |
+| Allowlist mode     | Default-deny, explicit allow   | Only approved commands/tools can run                 |
+| Policy engine      | Configurable permission rules  | Define what agents can and cannot do                 |
+| Container sandbox  | Isolate untrusted agent code   | Agent code runs in isolation                         |
+| SSRF protection    | Blocks webhook DNS rebinding   | Prevents webhook-based internal access               |
+| Credential manager | Short-lived key rotation       | API keys expire and rotate automatically             |
 
 ---
 
@@ -37,15 +37,15 @@ Default-deny allowlists mean nothing runs unless you explicitly permit it. The p
 
 ## Comparison
 
-| | Argentum | OpenClaw | LangChain | CrewAI |
-|--|---------|----------|-----------|--------|
-| Encrypted secrets | ✅ AES-256 | ❌ | ❌ | ❌ |
-| Audit logging | ✅ Full | ⚠️ Token only | ❌ | ❌ |
-| Rate limiting | ✅ Configurable | ❌ | ❌ | ❌ |
-| Allowlists | ✅ Default-deny | ❌ | ❌ | ❌ |
-| Policy engine | ✅ YAML rules | ❌ | ❌ | ❌ |
-| Container sandbox | ✅ | ❌ | ❌ | ❌ |
-| SSRF protection | ✅ | ❌ | ❌ | ❌ |
+|                   | Argentum        | OpenClaw      | LangChain | CrewAI |
+| ----------------- | --------------- | ------------- | --------- | ------ |
+| Encrypted secrets | ✅ AES-256      | ❌            | ❌        | ❌     |
+| Audit logging     | ✅ Full         | ⚠️ Token only | ❌        | ❌     |
+| Rate limiting     | ✅ Configurable | ❌            | ❌        | ❌     |
+| Allowlists        | ✅ Default-deny | ❌            | ❌        | ❌     |
+| Policy engine     | ✅ YAML rules   | ❌            | ❌        | ❌     |
+| Container sandbox | ✅              | ❌            | ❌        | ❌     |
+| SSRF protection   | ✅              | ❌            | ❌        | ❌     |
 
 ---
 
@@ -60,6 +60,6 @@ See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUI
 Found a vulnerability? Do not open a public issue. Instead:
 
 - **GitHub Security Advisories**: [Report privately](https://github.com/AG064/argentum/security/advisories/new)
-- **Telegram**: [REMOVED]
+- **Maintainer**: AG064 (@ag_064 on GitHub)
 
 Expected response: acknowledgment within 24–48 hours, fix timeline based on severity.
