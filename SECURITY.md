@@ -57,6 +57,8 @@ See [SECURITY.md](./SECURITY.md) (this file) or the [User Guide](./docs/USER_GUI
 
 ## Security Risks & Threat Model
 
+> **📝 Note:** This threat model must be reviewed and updated when new features or breaking changes are introduced. When preparing a release, check if new attack paths have been introduced and update this document accordingly.
+
 Understanding potential threats helps manage risk effectively. Below is our assessment of the most likely and impactful security problems in Argentum.
 
 ### Credential & Secret Risks
@@ -165,6 +167,18 @@ Understanding potential threats helps manage risk effectively. Below is our asse
 | Automated bots/scrapers | Web access                          | Resource exhaustion, data scraping             |
 
 ---
+
+## Threat Model Maintenance
+
+This threat model MUST be updated during release preparation for any new features or breaking changes:
+
+1. Review new features in the release
+2. Identify new attack paths or expanded attack surface
+3. Add new threats to the relevant category table
+4. Update mitigations if existing controls no longer apply
+5. Remove outdated threats if functionality was removed
+
+Current version covers v0.0.7. Next review: before v0.0.8 release.
 
 ## Reporting Security Issues
 
