@@ -1,5 +1,7 @@
 # Security Vulnerability Notes
 
+> **⚠️ VEX (Vulnerability Exploitability eXchange):** This document serves as a VEX for Argentum, providing exploitability assessments for known vulnerabilities. It augments vulnerability reports with non-exploitability details and mitigations.
+
 ## Overview
 
 Trivy scans of the Docker image may report vulnerabilities in bundled npm internal modules. These are not direct project vulnerabilities and are documented here for tracking.
