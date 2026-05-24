@@ -93,6 +93,14 @@ jobs:
         env:
           COSIGN_YES: "true"
 
+      - name: Generate SBOM for portable binaries
+        uses: anchore/sbom-action@4d65c3fbb11dc9bfbef5c5d2d90e24dfa3e2eb64
+        with:
+          image: artifacts/release/argentum-v${{ steps.package.outputs.version }}-linux-x64
+          format: cyclonedx-json
+          output-file: artifacts/release/argentum-${{ steps.package.outputs.version }}-sbom.json
+          attest: false
+
       - name: Upload portable artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -115,6 +123,7 @@ jobs:
             artifacts/release/argentum-v*-macos-x64
             artifacts/release/SHA256SUMS-portable.txt
             artifacts/release/*.cosign-bundle
+            artifacts/release/*-sbom.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
