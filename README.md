@@ -2,17 +2,15 @@
 
 <p align="center">
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
+  <br>
+  <a href="https://www.bestpractices.dev/projects/12957"><img src="https://www.bestpractices.dev/projects/12957/badge" alt="OpenSSF Baseline-1" width="180"></a>
 </p>
 
-<p align="center">
-<!-- Badges -->
 [![Version](https://img.shields.io/badge/version-v0.0.7-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
-[![OpenSSF Baseline-1](https://www.bestpractices.dev/projects/12957/badge)](https://www.bestpractices.dev/projects/12957)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
-</p>
 
 Argentum is a local-first AI workspace. It gives you a desktop chat app, a TypeScript agent runtime, provider routing, memory, channels, logs, and security controls in one project you can run and inspect yourself.
 
