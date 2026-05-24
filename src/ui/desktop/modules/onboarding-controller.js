@@ -44,7 +44,8 @@ function persistableProgress() {
     providerSetupStage: state.providerSetupStage,
     providerSelectionConfirmed: state.providerSelectionConfirmed,
     customProviderName: state.customProviderName,
-    customApiKeyEnv: state.customApiKeyEnv,
+    // Deliberately excluded: customApiKeyEnv stores sensitive credential info.
+    // Persisting it to sessionStorage would be cleartext storage (CWE-312).
     selectedChannels: state.selectedChannels,
     selectedContextAccess: state.selectedContextAccess,
     securityProfile: state.securityProfile,
