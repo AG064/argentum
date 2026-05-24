@@ -11,13 +11,12 @@ function workflows(): string[] {
 }
 
 describe('GitHub security workflow baseline', () => {
-  test('CodeQL workflow uses default setup compatible configuration (no advanced queries)', () => {
-    // Default setup is enabled in repository settings
-    // CodeQL workflow must NOT use security-extended queries with default setup
+  test('CodeQL workflow uses security-extended queries (advanced mode enabled in settings)', () => {
+    // Advanced mode is enabled in repository settings (Code scanning → Edit → Advanced)
+    // Workflow should use security-extended queries for comprehensive security scanning
     const codeql = workflow('codeql.yml');
-    // Must not contain advanced query configuration
-    expect(codeql).not.toContain('queries: security-extended');
-    // Should use basic security queries only
+    // Must contain advanced query configuration
+    expect(codeql).toContain('queries: security-extended');
     expect(codeql).toContain('github/codeql-action/init@v4');
     expect(codeql).toContain('github/codeql-action/analyze@v4');
   });
