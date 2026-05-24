@@ -5,14 +5,13 @@
 | Version | Status | Support Type | End of Support |
 |---------|--------|--------------|----------------|
 | v0.0.7 | ✅ Current stable | Bug fixes + Security updates | Until next stable release |
-| v0.0.6 | 🔒 Security only | Critical security fixes only | No longer actively maintained |
-| < v0.0.6 | ❌ Unsupported | No support | End of life |
+| < v0.0.7 | ❌ Unsupported | No support | End of life |
 
 ## Support Scope
 
-**Bug fixes:** Available for the current stable release (v0.0.7).
+**Bug fixes:** Available for the current stable release (v0.0.7) only.
 
-**Security updates:** Critical security fixes provided for the latest stable release and the previous one (v0.0.6) for a reasonable transition period.
+**Security updates:** Critical security fixes provided for the current stable release (v0.0.7) only. Older versions are not supported.
 
 **Types of support provided:**
 - Bug reports via GitHub Issues
