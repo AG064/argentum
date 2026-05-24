@@ -1,0 +1,65 @@
+name: Security Changelog
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.0.8)'
+        required: true
+
+jobs:
+  generate-security-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        with:
+          node-version: '20'
+
+      - name: Generate security changelog
+        id: security
+        run: |
+          VERSION=${{ github.event.inputs.version || github.event.release.tag_name }}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          
+          # Run security changelog generator
+          CHANGELOG=$(node scripts/generate-security-changelog.js "$VERSION")
+          
+          # Create security fixes file for release
+          echo "$CHANGELOG" > security-fixes.md
+          
+          echo "changelog_length=${#CHANGELOG}" >> "$GITHUB_OUTPUT"
+          
+          if [ ${#CHANGELOG} -gt 10 ]; then
+            echo "has_content=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_content=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Display security changelog
+        if: steps.security.outputs.has_content == 'true'
+        run: |
+          echo "## Security Fixes"
+          cat security-fixes.md
+
+      - name: No security fixes
+        if: steps.security.outputs.has_content == 'false'
+        run: echo "No security-related commits found for this release."
+
+      - name: Create GitHub Security Advisory
+        if: steps.security.outputs.has_content == 'true'
+        uses: actions/github-script@60a0d83039c8f280d1c18e2f4a8d6f2e7e6d7e8c
+        with:
+          script: |
+            // This is informational - Security Advisories should be created manually
+            // or via GitHub's vulnerability detection
+            console.log('Security fixes found - consider creating a GitHub Security Advisory');
+            console.log('Run: gh adivsory create --repo AG064/argentum');
