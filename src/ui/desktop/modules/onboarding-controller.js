@@ -36,6 +36,8 @@ function persistableProgress() {
     llmProvider: state.llmProvider,
     providerApi: state.providerApi,
     providerBaseUrl: state.providerBaseUrl,
+    // Deliberately excluded: providerApiKey is held only in memory and not persisted.
+    // Storing it in sessionStorage would expose the key in cleartext (CWE-312).
     providerModel: state.providerModel,
     providerAuthMethod: state.providerAuthMethod,
     providerCatalogTab: state.providerCatalogTab,
