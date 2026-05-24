@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   portable-binaries:
@@ -15,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
@@ -72,6 +74,25 @@ jobs:
           cd artifacts/release
           sha256sum argentum-v${{ steps.package.outputs.version }}-linux-x64 argentum-cli-v${{ steps.package.outputs.version }}-win-x64.exe argentum-v${{ steps.package.outputs.version }}-macos-x64 > SHA256SUMS-portable.txt
 
+      - name: Install cosign for signing
+        uses: sigstore/cosign-installer@9e9e0b19f5d9a6c3a8a5a2f5a5e6b5c3a8a5a2f5
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Sign portable binaries with Sigstore
+        shell: bash
+        run: |
+          for f in artifacts/release/argentum-v*${{ steps.package.outputs.version }}-linux-x64 \
+                   artifacts/release/argentum-cli-v*${{ steps.package.outputs.version }}-win-x64.exe \
+                   artifacts/release/argentum-v*${{ steps.package.outputs.version }}-macos-x64; do
+            cosign sign-blob \
+              --yes \
+              --bundle "${f}.cosign-bundle" \
+              "file://${f}"
+          done
+        env:
+          COSIGN_YES: "true"
+
       - name: Upload portable artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -93,6 +114,7 @@ jobs:
             artifacts/release/argentum-cli-v*-win-x64.exe
             artifacts/release/argentum-v*-macos-x64
             artifacts/release/SHA256SUMS-portable.txt
+            artifacts/release/*.cosign-bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
