@@ -52,6 +52,15 @@ npm run lint
 # Format code
 npm run format
 
+### Coding Standards
+
+The project uses:
+- [Prettier](https://prettier.io/) for code formatting (run `npm run format`)
+- [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) as the named reference for TypeScript conventions
+- [typescript-eslint](https://typescript-eslint.io/) for linting (run `npm run lint`)
+
+All contributions must pass `npm run lint` (warnings are acceptable for existing code, not for new) and `npm run format` before submitting.
+
 # Run tests
 npm test
 
