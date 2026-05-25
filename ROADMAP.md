@@ -1,16 +1,37 @@
 # Roadmap
 
-## v0.1.0
+## Current Status
 
-### Planned
+Argentum v0.0.7 is released and functional. The project is actively maintained.
 
-- In-app feedback system (bug reports, feature requests directly from the desktop app)
+## What We Will Do
+
+### v0.1.0 (Next 3-6 months)
+
+- In-app feedback system — bug reports and feature requests from within the desktop app
 - Russian language UI and documentation
 - Estonian language UI and documentation
 - Test suite fixes (Jest/ESM configuration)
-- Improved test coverage (expand coverage to more code branches and functionality)
+- Improved test coverage (expand to more code branches)
 
-### Notes
+### Future (6-12 months)
+
+- Tauri v3.0 upgrade when stable (resolves glib vulnerability)
+- Additional messaging channels as demand warrants
+- Performance improvements and memory optimization
+
+## What We Will NOT Do
+
+- Cloud hosting or managed service (project remains self-hosted only)
+- Collecting user data or analytics
+- Mobile-native app (desktop focus only)
+- Windows/Mac exclusive features (cross-platform remains a goal)
+
+## How Roadmap Is Updated
+
+The roadmap is reviewed monthly and updated as priorities shift. Major changes are discussed in GitHub issues.
+
+## v0.1.0 Notes
 
 Feedback mechanism in-code: users should be able to submit bug reports and feature requests from within the running application, not just through GitHub.
 
