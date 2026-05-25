@@ -14,7 +14,7 @@ Use `git commit -s` to sign your commits automatically.
 
 ## What Can I Help With?
 
-**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path.
+**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path. When fixing a bug, include a regression test if possible. Bug fix PRs must have the `fix:` commit prefix.
 
 **Features** — Open an issue first to discuss before writing code. Big features might need a redesign, and it's better to find that out before you've written 500 lines.
 
