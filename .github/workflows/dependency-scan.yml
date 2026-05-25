@@ -2,9 +2,9 @@ name: Dependency Security Scan
 
 on:
   push:
-    branches: [development, main]
+    branches: [development, main, AGX]
   pull_request:
-    branches: [development, main]
+    branches: [development, main, AGX]
 
 permissions:
   contents: read
