@@ -61,7 +61,7 @@ jobs:
         run: |
           RESULT=$(npm audit --audit-level=high 2>&1)
           echo "$RESULT"
-          if echo "$RESULT" | grep -qP '\\d+(?=\s+vulnerabilit)'; then
+          if echo "$RESULT" | grep -qP '[1-9]\d*(?=\s+vulnerabilit)'; then
             echo "npm audit found high/critical issues"
             exit 1
           fi
