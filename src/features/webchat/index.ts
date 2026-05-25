@@ -422,7 +422,7 @@ class WebchatFeature implements FeatureModule {
       maxMessageHistory:
         partial.maxMessageHistory ?? partial.messageHistory ?? this.config.maxMessageHistory,
     };
-    this.authToken = partial.authToken ?? process.env.AGCLAW_WEBCHAT_AUTH_TOKEN ?? null;
+    this.authToken = partial.authToken ?? process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN ?? null;
   }
 
   async start(): Promise<void> {

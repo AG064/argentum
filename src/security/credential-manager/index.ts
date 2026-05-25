@@ -136,10 +136,10 @@ export class CredentialManager {
   private getMasterKey(): Buffer {
     if (this.masterKey) return this.masterKey;
 
-    const keyEnv = process.env.AGCLAW_MASTER_KEY;
+    const keyEnv = process.env.ARGENTUM_MASTER_KEY;
     if (!keyEnv) {
       throw new Error(
-        'AGCLAW_MASTER_KEY environment variable is required for credential management',
+        'ARGENTUM_MASTER_KEY environment variable is required for credential management',
       );
     }
 
