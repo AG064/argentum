@@ -17,7 +17,7 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
 - **Russian language UI and documentation**
 - **Estonian language UI and documentation**
 - Test suite fixes (Jest/ESM configuration)
-- Improved test coverage (expand to more code branches)
+- Improved test coverage to 80% statement/branch/function/line coverage
 
 ### Accessibility Improvements (v0.1.0)
 
