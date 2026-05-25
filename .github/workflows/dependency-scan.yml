@@ -47,10 +47,16 @@ jobs:
 
       - name: Check for critical vulnerabilities
         run: |
-          if [ -f trivy-dependencies.sarif ]; then
-            echo "=== Trivy SARIF contents ==="
-            cat trivy-dependencies.sarif | head -100
-            echo "=== End SARIF ==="
+          echo "=== File size ==="
+          wc -c trivy-dependencies.sarif 2>/dev/null || echo "File not found"
+          echo "=== First 500 chars ==="
+          head -c 500 trivy-dependencies.sarif 2>/dev/null || echo "Cannot read file"
+          echo ""
+          echo "=== Last 200 chars ==="
+          tail -c 200 trivy-dependencies.sarif 2>/dev/null || echo "Cannot read file"
+          echo ""
+          echo "=== End debug ==="
+          if [ -f trivy-dependencies.sarif ] && [ $(wc -c < trivy-dependencies.sarif) -gt 10 ]; then
             COUNT=$(jq '.runs[0].results | length' trivy-dependencies.sarif 2>/dev/null || echo "0")
             echo "Trivy found $COUNT vulnerabilities"
             if [ "$COUNT" -gt 0 ]; then
@@ -58,7 +64,7 @@ jobs:
               exit 1
             fi
           else
-            echo "No trivy results file found - skipping"
+            echo "Trivy file empty or not found - skipping"
           fi
           echo "PASS: No critical/high vulnerabilities found"
 
