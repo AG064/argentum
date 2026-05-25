@@ -48,6 +48,9 @@ jobs:
       - name: Check for critical vulnerabilities
         run: |
           if [ -f trivy-dependencies.sarif ]; then
+            echo "=== Trivy SARIF contents ==="
+            cat trivy-dependencies.sarif | head -100
+            echo "=== End SARIF ==="
             COUNT=$(jq '.runs[0].results | length' trivy-dependencies.sarif 2>/dev/null || echo "0")
             echo "Trivy found $COUNT vulnerabilities"
             if [ "$COUNT" -gt 0 ]; then
