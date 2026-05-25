@@ -8,6 +8,7 @@
 - Russian language UI and documentation
 - Estonian language UI and documentation
 - Test suite fixes (Jest/ESM configuration)
+- Improved test coverage (expand coverage to more code branches and functionality)
 
 ### Notes
 
