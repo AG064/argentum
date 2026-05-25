@@ -67,12 +67,12 @@ function firstEnvOrDefault(names: string[], fallback: string): string {
 
 // Default configuration
 const DEFAULT_CONFIG: ServerConfig = {
-  port: parseInt(envOrDefault('AGCLAW_DASHBOARD_PORT', '3000'), 10),
-  host: envOrDefault('AGCLAW_DASHBOARD_HOST', '127.0.0.1'),
+  port: parseInt(envOrDefault('ARGENTUM_DASHBOARD_PORT', '3000'), 10),
+  host: envOrDefault('ARGENTUM_DASHBOARD_HOST', '127.0.0.1'),
   staticDir: path.join(__dirname, '..', 'dashboard'),
   auth: {
-    username: envOrDefault('AGCLAW_DASHBOARD_USER', 'admin'),
-    passwordHash: process.env.AGCLAW_DASHBOARD_PASS_HASH ?? '', // Will be generated if empty
+    username: envOrDefault('ARGENTUM_DASHBOARD_USER', 'admin'),
+    passwordHash: process.env.ARGENTUM_DASHBOARD_PASS_HASH ?? '', // Will be generated if empty
   },
   rateLimit: {
     windowMs: 60 * 1000, // 1 minute
@@ -91,7 +91,7 @@ function loadConfig(): ServerConfig {
   const config = { ...DEFAULT_CONFIG };
 
   // Try the new Argentum config first, then the legacy config file name.
-  const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
+  const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'ARGENTUM_WORKDIR'], process.cwd());
   const preferredConfigPath = path.join(workDir, 'argentum.json');
   const legacyConfigPath = path.join(workDir, 'agclaw.json');
   const configPath = fs.existsSync(preferredConfigPath) ? preferredConfigPath : legacyConfigPath;
@@ -130,10 +130,10 @@ function loadConfig(): ServerConfig {
 
   // Generate password hash if not set
   if (!config.auth.passwordHash) {
-    const envPass = process.env.AGCLAW_DASHBOARD_PASS;
+    const envPass = process.env.ARGENTUM_DASHBOARD_PASS;
     if (!envPass) {
       // Try to load a previously persisted hash
-      const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
+      const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'ARGENTUM_WORKDIR'], process.cwd());
       const preferredHashFile = path.join(workDir, '.argentum-dashboard-pass-hash');
       const legacyHashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
       const hashFile = fs.existsSync(preferredHashFile) ? preferredHashFile : legacyHashFile;
@@ -169,7 +169,7 @@ function loadConfig(): ServerConfig {
 
         console.warn(`[Dashboard Server] Generated dashboard password written to: ${hashFile}`);
         console.warn(
-          '[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.',
+          '[Dashboard Server] Set ARGENTUM_DASHBOARD_PASS or ARGENTUM_DASHBOARD_PASS_HASH to use your own.',
         );
       }
     } else {

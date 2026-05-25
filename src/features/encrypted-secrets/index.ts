@@ -8,15 +8,15 @@ class EncryptedSecretsFeature {
   masterKey: Buffer;
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env.ARGENTUM_DB_PATH ?? path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
-    const mk = process.env.AGCLAW_MASTER_KEY;
+    const mk = process.env.ARGENTUM_MASTER_KEY;
     if (!mk) {
-      throw new Error('AGCLAW_MASTER_KEY not set');
+      throw new Error('ARGENTUM_MASTER_KEY not set');
     }
     this.masterKey = Buffer.from(mk, 'hex');
     if (this.masterKey.length !== 32) {
-      throw new Error('AGCLAW_MASTER_KEY must be 32 bytes (hex)');
+      throw new Error('ARGENTUM_MASTER_KEY must be 32 bytes (hex)');
     }
     this.init();
   }

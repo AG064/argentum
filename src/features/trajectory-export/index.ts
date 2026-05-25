@@ -53,7 +53,7 @@ class TrajectoryExportFeature implements FeatureModule {
 
   constructor() {
     // Auto-init for CLI usage (singleton bypasses plugin loader)
-    const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
     this.dbPath = resolve(join(workDir, 'data', 'trajectory.db'));
     this.config.dbPath = this.dbPath;
     this.initDatabase();

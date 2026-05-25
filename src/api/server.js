@@ -15,7 +15,7 @@ const path = require('path');
 const PORT = process.env.DASHBOARD_PORT || 3002;
 const STATIC_DIR = path.resolve(path.join(__dirname, '../ui/dashboard'));
 const ALLOWED_ORIGINS = (
-  process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002'
+  process.env.ARGENTUM_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002'
 )
   .split(',')
   .map((o) => o.trim());
