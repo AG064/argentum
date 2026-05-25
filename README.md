@@ -11,7 +11,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
 
-Argentum is a local-first AI workspace. Like OpenClaw but with a built-in agent harness: route between local and cloud AI providers, keep persistent memory, and chat through Telegram, Discord, or other channels — all while your data stays on your own machine.
+Argentum is a local-first AI workspace. It runs on your own machine, routes between local and cloud AI providers, keeps persistent memory, and connects to Telegram, Discord, and other chat channels.
 
 ## Install
 
