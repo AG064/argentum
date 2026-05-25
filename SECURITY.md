@@ -1,5 +1,31 @@
 # Security Policy
 
+## Security Requirements
+
+Argentum is designed with the following security properties:
+
+**What Argentum provides:**
+
+- Local-first: data stays on your machine by default
+- Encrypted secrets at rest (AES-256-GCM + PBKDF2)
+- Policy engine with default-deny allowlist enforcement
+- Sandbox execution for untrusted code
+- No external data collection or telemetry
+
+**What Argentum does NOT provide:**
+
+- Full process isolation (sandbox is not a security boundary against local users)
+- Protection against a compromised user account
+- Network security beyond TLS (handled by OS)
+- Guarantee against all possible vulnerabilities in dependencies
+
+**User responsibilities:**
+
+- Keep the master password secure
+- Review allowlist policies before running commands
+- Report security issues to agdroke064@gmail.com
+- Keep the application updated
+
 ## Reporting Vulnerabilities
 
 To report a security vulnerability, contact the maintainer directly:
