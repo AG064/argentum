@@ -60,10 +60,9 @@ jobs:
             echo "PASS: No valid trivy results"
             exit 0
           fi
-          echo "=== SARIF excerpt ==="
-          head -c 300 trivy-dependencies.sarif
-          echo ""
-          echo "=== End excerpt ==="
+          echo "=== Vulnerability details ==="
+          jq -r '.runs[0].results[0] | "Rule: \(.ruleId)\nSeverity: \(.ruleIndex)\nMessage: \(.message.text)"' trivy-dependencies.sarif 2>/dev/null
+          echo "=== End details ==="
           COUNT=$(jq '.runs[0].results | length' trivy-dependencies.sarif 2>&1)
           echo "jq exit code: $?"
           echo "Trivy found $COUNT vulnerabilities"
