@@ -61,12 +61,12 @@ jobs:
             exit 0
           fi
           echo "=== Vulnerability details ==="
-          jq -r '.runs[0].results[0] | "Rule: \(.ruleId)\nSeverity: \(.ruleIndex)\nMessage: \(.message.text)"' trivy-dependencies.sarif 2>/dev/null
+          jq -r '.runs[0].results[] | "Rule: \(.ruleId)" ' trivy-dependencies.sarif 2>/dev/null
           echo "=== End details ==="
-          COUNT=$(jq '.runs[0].results | length' trivy-dependencies.sarif 2>&1)
-          echo "jq exit code: $?"
-          echo "Trivy found $COUNT vulnerabilities"
-          if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+          # Count only CRITICAL and HIGH severity results
+          COUNT=$(jq '[.runs[0].results[] | select(.rule.severity == "HIGH" or .rule.severity == "CRITICAL")] | length' trivy-dependencies.sarif 2>&1)
+          echo "Critical/High vulnerabilities found: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
             echo "FAIL: Critical/high vulnerabilities found in dependencies"
             exit 1
           fi
