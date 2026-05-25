@@ -2,6 +2,16 @@
 
 Here's the honest truth upfront: this project is maintained by one person (AG064) in their free time. Contributions are welcome, but response times may vary. That said, every PR gets read and every issue gets considered.
 
+## Sign-off Requirement
+
+All contributions must include a sign-off line certifying the [Developer Certificate of Origin (DCO)](DCO.md):
+
+```
+Signed-off-by: Name <email@example.com>
+```
+
+Use `git commit -s` to sign your commits automatically.
+
 ## What Can I Help With?
 
 **Bugs** — If something breaks and you know why, a PR with a fix is the fastest path.
@@ -115,13 +125,13 @@ npm run test:watch
 
 ### What the Tests Cover
 
-| Test Suite | Purpose |
-|------------|---------|
-| Unit tests | Individual functions and modules (config, memory, security, tools) |
-| Integration tests | Channel integrations (Telegram, etc.), API interactions |
-| E2E tests | Full workflow from user input to response |
-| CLI smoke tests | Binary execution and basic commands |
-| GitHub workflow tests | Security configuration validation |
+| Test Suite            | Purpose                                                            |
+| --------------------- | ------------------------------------------------------------------ |
+| Unit tests            | Individual functions and modules (config, memory, security, tools) |
+| Integration tests     | Channel integrations (Telegram, etc.), API interactions            |
+| E2E tests             | Full workflow from user input to response                          |
+| CLI smoke tests       | Binary execution and basic commands                                |
+| GitHub workflow tests | Security configuration validation                                  |
 
 ### Interpreting Results
 
@@ -141,6 +151,7 @@ Tests run automatically on every push to `development` and `main` branches, and 
 ### Test Policy for Major Changes
 
 **What constitutes a major change:**
+
 - New features or capabilities
 - Changes to public APIs
 - Bug fixes that alter expected behavior
@@ -148,12 +159,14 @@ Tests run automatically on every push to `development` and `main` branches, and 
 - Changes to build or release process
 
 **What tests to add or update:**
+
 - New functionality MUST include unit tests
 - Bug fixes MUST include a test that reproduces the bug (regression test)
 - API changes MUST update existing tests
 - Security changes MUST include relevant security tests
 
 **Policy:**
+
 - PRs with new features that don't add tests will be asked to add them
 - Bug fixes without regression tests may be accepted if adding tests is impractical (e.g., one-line fixes)
 - Current test coverage is acknowledged as thin — real-world bug reports with reproduction steps are valuable
