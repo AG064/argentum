@@ -1,4 +1,14 @@
-# Security Vulnerabilities — Known Issues
+# Security Policy
+
+## Reporting Vulnerabilities
+
+To report a security vulnerability, contact the maintainer directly:
+
+- Email: agdroke064@gmail.com
+- Include a description of the issue and steps to reproduce if possible
+- Allow time for assessment and patch development before public disclosure
+
+## Known Issues
 
 ## Active
 
