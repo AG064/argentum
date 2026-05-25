@@ -59,7 +59,9 @@ jobs:
 
       - name: Check npm audit results
         run: |
-          if npm audit --audit-level=high 2>&1 | grep -q "found"; then
+          RESULT=$(npm audit --audit-level=high 2>&1)
+          echo "$RESULT"
+          if echo "$RESULT" | grep -qP '\\d+(?=\s+vulnerabilit)'; then
             echo "npm audit found high/critical issues"
             exit 1
           fi
