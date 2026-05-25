@@ -1,47 +1,48 @@
-# Code of Conduct
+# Contributor Covenant Code of Conduct
 
-## The Short Version
+## Our Pledge
 
-Be decent. Don't be a jerk. Disagreements are fine, personal attacks are not.
+We as members, contributors, and leaders pledge to make participation in our
+community a harassment-free experience for everyone, regardless of age, body
+size, visible or invisible disability, ethnicity, sex characteristics, gender
+identity and expression, level of experience, education, socio-economic status,
+nationality, personal appearance, race, religion, or sexual identity
+and orientation.
 
-## What This Means in Practice
+## Our Standards
 
-**OK:**
-- Disagreeing with ideas
-- Criticizing code, not people
-- Asking dumb questions (there are no dumb questions)
-- Reporting bugs honestly
-- Suggesting improvements
+Examples of behavior that contributes to a positive environment for our
+community include:
 
-**Not OK:**
-- Name-calling or insults
-- Doxxing anyone
-- Harassment of any kind
-- Sustained disruption of discussions
-- Anything that makes the community hostile
+- Demonstrating empathy and kindness toward other people
+- Being respectful of differing opinions, viewpoints, and experiences
+- Giving and gracefully accepting constructive feedback
+- Accepting responsibility and apologizing to those affected by our mistakes
+- Focusing on what is best not just for us as individuals, but for the
+  overall community
 
-## How It Works
+Examples of unacceptable behavior include:
 
-If someone violates this, the response depends on the severity:
+- The use of sexualized language or imagery, and sexual attention or
+  advances of any kind
+- Trolling, insulting or derogatory comments, and personal or political attacks
+- Public or private harassment
+- Publishing others' private information, such as a physical or email
+  address, without their explicit permission
+- Other conduct which could reasonably be considered inappropriate in a
+  professional setting
 
-- **Minor** — a private note explaining what's up
-- **Repeated or serious** — temporary or permanent exclusion
+## Enforcement
 
-This applies to GitHub issues, pull requests, Telegram channels, and anywhere else the project community exists.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the project maintainer at agdroke064@gmail.com.
+All complaints will be reviewed and investigated promptly and fairly.
 
-## Why This Exists
-
-This project is used by people of all skill levels — from students to professionals. The goal is to keep it a place where people actually want to participate, not one where beginners get shot down for asking obvious questions.
-
-## Reporting
-
-If something happens and you want to report it:
-
-- GitHub Issues — tag [[REMOVED]](https://github.com/AG064)
-- Telegram — [[REMOVED]]
-
-Reports can be anonymous if you prefer.
+The maintainer is obligated to respect the privacy and security of the
+reporter of any incident.
 
 ## Attribution
 
-This document is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.
+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/),
+version 2.0, available at
+https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
