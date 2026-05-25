@@ -301,19 +301,3 @@ export const RequestMethods = {
   PromptsList: 'prompts/list',
   PromptsGet: 'prompts/get',
 } as const;
-
-// ─── Legacy Type Aliases (for compatibility) ────────────────────────────────────
-
-/** @deprecated Use MCPTool instead */
-export type Tool = MCPTool;
-
-/** @deprecated Use ToolsCallRequest instead */
-export type ToolCall = ToolsCallRequest;
-
-/** @deprecated Use ToolsCallResponse or ToolResultContent instead */
-export interface ToolResult {
-  tool: string;
-  success: boolean;
-  result?: unknown;
-  error?: string;
-}
