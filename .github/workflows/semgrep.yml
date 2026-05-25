@@ -1,6 +1,6 @@
 name: Semgrep Security Scan
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       scan_path:
@@ -11,9 +11,6 @@ on:
         description: 'Rules to exclude (comma-separated rule IDs)'
         required: false
         default: ''
-  schedule:
-    # Empty - no automatic scan. Run manually when needed.
-    # Лёша: скажи "проверь код" и я запущу этот скан через workflow_dispatch
 
 permissions:
   contents: read
