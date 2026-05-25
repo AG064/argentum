@@ -16,6 +16,22 @@ Argentum is a local-first AI workspace. It runs on your own machine so your data
 
 ## Install
 
+### Quick Start
+
+**Download and run (Windows):**
+
+1. Download `Argentum_0.0.7_x64-setup.exe` from [releases](https://github.com/AG064/argentum/releases/latest)
+2. Run the installer, launch from Start Menu
+3. Follow onboarding, connect a messaging channel, start chatting
+
+**Build from source (any platform):**
+
+```bash
+git clone https://github.com/AG064/argentum.git
+cd argentum
+npm install && npm run build:tauri
+```
+
 ### Windows Setup
 
 For most people on Windows, use the desktop installer:
