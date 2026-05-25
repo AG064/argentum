@@ -6,9 +6,7 @@
 
 [![Version](https://img.shields.io/badge/version-v0.0.7-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12957/badge)](https://www.bestpractices.dev/projects/12957)
-[![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/12957/badges/1)](https://www.bestpractices.dev/projects/12957/baseline)
-[![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/12957/badges/2)](https://www.bestpractices.dev/projects/12957/baseline)
-[![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/12957/badges/3)](https://www.bestpractices.dev/projects/12957/baseline)
+[![OpenSSF Baseline](https://www.bestpractices.dev/projects/12957/baseline)](https://www.bestpractices.dev/projects/12957)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=flat-square)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
