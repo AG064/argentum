@@ -6,6 +6,7 @@
 
 - In-app feedback system (bug reports, feature requests directly from the desktop app)
 - Russian language UI and documentation
+- Estonian language UI and documentation
 - Test suite fixes (Jest/ESM configuration)
 
 ### Notes
