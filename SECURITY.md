@@ -11,6 +11,28 @@
 
 **Impact:** `VariantStrIter::impl_get` passes an immutable reference to a C function that mutates it in-place. On modern Rust compilers with optimizations, this is UB and causes NULL pointer dereference crashes.
 
+**Technical details:**
+
+- The C function `glib_sys::g_variant_get_child` is variadic and writes to an out-parameter via `&p` (immutable borrow)
+- The Rust compiler, seeing an immutable borrow, may optimize away the write entirely
+- Result: `p` remains NULL → `CStr::from_ptr(NULL)` → panic/crash
+
+**Real-world risk for Argentum:**
+| Scenario | Likelihood |
+|---|---|
+| Remote code execution | ❌ Impossible — not a remote exploit vector |
+| Local privilege escalation | ❌ None |
+| Data exfiltration | ❌ No data access beyond current process |
+| Crash via malicious GLib variant | ⚠️ Only if processing attacker-controlled GLib variant data |
+| Crash via WebView input | ❌ WebView-to-Rust IPC doesn't pass GLib variants; Tauri commands use JSON/primitives |
+
+**Conclusion:** This is internal Rust undefined behavior (UB), not an exploitable vulnerability. A crash requires:
+
+1. Parsing a specially-crafted GLib variant string
+2. From a source that already has code execution (WebView already runs untrusted JS)
+
+**In practice:** If an attacker can execute JavaScript in the WebView, they already have full code execution in an untrusted sandbox. This UB cannot escalate privileges beyond what the WebView already provides.
+
 **Upstream fix:** Tauri v3.0 will migrate from GTK3 (`gtk 0.18`) to GTK4 (`gtk4`/`gdk4`), which depends on `glib ≥ 0.20`.
 
 **Status:** ⏳ Waiting for Tauri v3.0  
