@@ -34,11 +34,11 @@ npm start
 
 #### Зависимости
 
-| Компонент | Минимальная версия | Проверка |
-|---|---|---|
-| Node.js | >= 20.0 | `node -v` |
-| npm | >= 9.0 | `npm -v` |
-| Docker (опционально) | >= 24.0 | `docker --version` |
+| Компонент            | Минимальная версия | Проверка           |
+| -------------------- | ------------------ | ------------------ |
+| Node.js              | >= 20.0            | `node -v`          |
+| npm                  | >= 9.0             | `npm -v`           |
+| Docker (опционально) | >= 24.0            | `docker --version` |
 
 ### 1.2 Конфигурация
 
@@ -50,10 +50,10 @@ npm start
 # Сервер Gateway
 server:
   port: 18789
-  host: "0.0.0.0"
+  host: '0.0.0.0'
   cors:
     enabled: true
-    origins: ["*"]
+    origins: ['*']
   rateLimit:
     enabled: true
     windowMs: 60000
@@ -61,14 +61,14 @@ server:
 
 # Логирование
 logging:
-  level: info          # debug | info | warn | error
-  format: pretty       # json | pretty
+  level: info # debug | info | warn | error
+  format: pretty # json | pretty
 
 # Модель LLM
 model:
   provider: openrouter
-  defaultModel: "anthropic/claude-sonnet-4-20250514"
-  fallbackModel: "openai/gpt-4o"
+  defaultModel: 'anthropic/claude-sonnet-4-20250514'
+  fallbackModel: 'openai/gpt-4o'
   maxTokens: 8192
   temperature: 0.7
 
@@ -81,11 +81,11 @@ features:
   voice:
     enabled: false
   container-sandbox:
-    enabled: true   # После исправлений безопасности
+    enabled: true # После исправлений безопасности
 
 # Память
 memory:
-  primary: sqlite    # sqlite | supabase | markdown
+  primary: sqlite # sqlite | supabase | markdown
   path: ./data/memory.db
   selfEvolving: true
   compressionThreshold: 10000
@@ -95,7 +95,7 @@ security:
   policy: config/security-policy.yaml
   secrets: encrypted
   auditLog: true
-  allowlistMode: permissive   # permissive | strict
+  allowlistMode: permissive # permissive | strict
 
 # Каналы коммуникации
 channels:
@@ -209,10 +209,10 @@ Argentum расширяет OpenClaw модульной плагин-систе�
 
 ```typescript
 interface FeatureModule {
-  readonly meta: FeatureMeta;           // name, version, description, dependencies
+  readonly meta: FeatureMeta; // name, version, description, dependencies
   init(config, context): Promise<void>; // Вызывается при загрузке
-  start?(): Promise<void>;             // Вызывается при включении
-  stop?(): Promise<void>;              // Вызывается при выключении (очистка)
+  start?(): Promise<void>; // Вызывается при включении
+  stop?(): Promise<void>; // Вызывается при выключении (очистка)
   healthCheck?(): Promise<HealthStatus>; // Периодическая проверка здоровья
 }
 ```
@@ -238,10 +238,10 @@ unloaded -> loading -> active -> disabled
 
 ```typescript
 interface FeatureContext {
-  logger: Logger;                              // Логгер области видимости фичи
-  config: ArgentumConfig;                        // Полный конфиг
-  registerHook(event, handler): void;          // Подписка на события
-  emit(event, data): Promise<void>;            // Отправка событий другим фичам
+  logger: Logger; // Логгер области видимости фичи
+  config: ArgentumConfig; // Полный конфиг
+  registerHook(event, handler): void; // Подписка на события
+  emit(event, data): Promise<void>; // Отправка событий другим фичам
 }
 ```
 
@@ -266,34 +266,34 @@ interface FeatureContext {
 
 ### Таблица всех фич (26 реализованных)
 
-| # | Название | Описание | Статус | Зависимости |
-|---|----------|----------|--------|---|
-| 1 | `air-gapped` | Офлайн-режим с локальными моделями | ✅ | — |
-| 2 | `auto-capture` | Автоматический захват решений/ошибок из сообщений | ✅ | — |
-| 3 | `browser-automation` | Управление браузерами для скрапинга и автоматизации | ✅ | — |
-| 4 | `budget` | Трекинг бюджета и лимитов | ✅ | — |
-| 5 | `checkpoint` | Сейфы и восстановление задач | ✅ | — |
-| 6 | `company-templates` | Шаблоны для бизнес-процессов | ✅ | — |
-| 7 | `consolidation` | Консолидация памяти (слияние похожих записей) | ✅ | self-evolving |
-| 8 | **`container-sandbox`** | Запуск кода в изолированных Docker-контейнерах | ✅ | — |
-| 9 | `evening-recap` | Вечерние сводки дня | ✅ | — |
-| 10 | `goal-decomposition` | Декомпозиция целей на подзадачи | ✅ | — |
-| 11 | `goals` | Управление целями и трекинг прогресса | ✅ | — |
-| 12 | `governance` | Управление изменениями и approval workflow | ✅ | — |
-| 13 | `group-management` | Управление групповыми чатами | ✅ | — |
-| 14 | `knowledge-graph` | Граф знаний с связями сущностей | ✅ | — |
-| 15 | `life-domains` | Классификация жизненных сфер (работа, здоровье) | ✅ | — |
-| 16 | `live-canvas` | Интерактивная доска для совместной работы | ✅ | — |
-| 17 | **`mesh-workflows`** | Цепочки workflow с ветвлением и параллельностью | ✅ | checkpoint |
-| 18 | `morning-briefing` | Утренние брифинги (календарь, погода, новости) | ✅ | — |
-| 19 | `multimodal-memory` | Память для изображений, аудио, документов | ✅ | — |
-| 20 | `skills-library` | Библиотека загружаемых навыков | ✅ | — |
-| 21 | `smart-recommendations` | Контекстные рекомендации на основе паттернов | ✅ | — |
-| 22 | `task-checkout` | Система checkout для задач | ✅ | — |
-| 23 | `voice` | TTS/STT через ElevenLabs и Whisper | ✅ | — |
-| 24 | **`webchat`** | Веб-чат с WebSocket, Markdown, загрузкой файлов | ✅ | — |
-| 25 | **`webhooks`** | Приём и отправка webhook-событий | ✅ | — |
-| 26 | `self-evolving` | Саморазвивающаяся память (консолидация, паттерны) | ✅ | — |
+| #   | Название                | Описание                                            | Статус | Зависимости   |
+| --- | ----------------------- | --------------------------------------------------- | ------ | ------------- |
+| 1   | `air-gapped`            | Офлайн-режим с локальными моделями                  | ✅     | —             |
+| 2   | `auto-capture`          | Автоматический захват решений/ошибок из сообщений   | ✅     | —             |
+| 3   | `browser-automation`    | Управление браузерами для скрапинга и автоматизации | ✅     | —             |
+| 4   | `budget`                | Трекинг бюджета и лимитов                           | ✅     | —             |
+| 5   | `checkpoint`            | Сейфы и восстановление задач                        | ✅     | —             |
+| 6   | `company-templates`     | Шаблоны для бизнес-процессов                        | ✅     | —             |
+| 7   | `consolidation`         | Консолидация памяти (слияние похожих записей)       | ✅     | self-evolving |
+| 8   | **`container-sandbox`** | Запуск кода в изолированных Docker-контейнерах      | ✅     | —             |
+| 9   | `evening-recap`         | Вечерние сводки дня                                 | ✅     | —             |
+| 10  | `goal-decomposition`    | Декомпозиция целей на подзадачи                     | ✅     | —             |
+| 11  | `goals`                 | Управление целями и трекинг прогресса               | ✅     | —             |
+| 12  | `governance`            | Управление изменениями и approval workflow          | ✅     | —             |
+| 13  | `group-management`      | Управление групповыми чатами                        | ✅     | —             |
+| 14  | `knowledge-graph`       | Граф знаний с связями сущностей                     | ✅     | —             |
+| 15  | `life-domains`          | Классификация жизненных сфер (работа, здоровье)     | ✅     | —             |
+| 16  | `live-canvas`           | Интерактивная доска для совместной работы           | ✅     | —             |
+| 17  | **`mesh-workflows`**    | Цепочки workflow с ветвлением и параллельностью     | ✅     | checkpoint    |
+| 18  | `morning-briefing`      | Утренние брифинги (календарь, погода, новости)      | ✅     | —             |
+| 19  | `multimodal-memory`     | Память для изображений, аудио, документов           | ✅     | —             |
+| 20  | `skills-library`        | Библиотека загружаемых навыков                      | ✅     | —             |
+| 21  | `smart-recommendations` | Контекстные рекомендации на основе паттернов        | ✅     | —             |
+| 22  | `task-checkout`         | Система checkout для задач                          | ✅     | —             |
+| 23  | `voice`                 | TTS/STT через ElevenLabs и Whisper                  | ✅     | —             |
+| 24  | **`webchat`**           | Веб-чат с WebSocket, Markdown, загрузкой файлов     | ✅     | —             |
+| 25  | **`webhooks`**          | Приём и отправка webhook-событий                    | ✅     | —             |
+| 26  | `self-evolving`         | Саморазвивающаяся память (консолидация, паттерны)   | ✅     | —             |
 
 > **Примечание:** 4 выделенных фичи (`mesh-workflows`, `container-sandbox`, `webchat`, `webhooks`) были недавно исправлены с точки зрения безопасности.
 
@@ -302,6 +302,7 @@ interface FeatureContext {
 #### Webchat (веб-чат)
 
 **Конфигурация:**
+
 ```yaml
 features:
   webchat:
@@ -309,17 +310,19 @@ features:
     port: 3001
     maxConnections: 1000
     maxMessageHistory: 500
-    maxFileSize: 10485760  # 10 MB
-    allowedFileTypes: ["image/*", "text/*", "application/pdf"]
+    maxFileSize: 10485760 # 10 MB
+    allowedFileTypes: ['image/*', 'text/*', 'application/pdf']
     uploadDir: ./uploads
 ```
 
 **API:**
+
 - `GET /` — HTML-интерфейс чата
 - `GET /files/:id` — загрузка файла
 - `WS /ws?room=default&user=user123&token=xxx` — WebSocket соединение
 
 **WebSocket события:**
+
 - `client → server`: `{type: "chat", content: "текст"}`
 - `client → server`: `{type: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: "base64..."}`
 - `client → server`: `{type: "typing"}` — индикатор набора
@@ -330,6 +333,7 @@ features:
 #### Container Sandbox (песочница)
 
 **Конфигурация:**
+
 ```yaml
 features:
   container-sandbox:
@@ -338,15 +342,16 @@ features:
 sandbox:
   enabled: true
   image: node:20-alpine
-  memoryLimit: "512m"
-  cpuLimit: "1.0"
+  memoryLimit: '512m'
+  cpuLimit: '1.0'
   timeoutMs: 30000
-  networkAccess: false      # без сети
-  readOnlyRoot: true        # только чтение
-  tmpfsSize: "64m"
+  networkAccess: false # без сети
+  readOnlyRoot: true # только чтение
+  tmpfsSize: '64m'
 ```
 
 **Публичный API (для других фич):**
+
 ```typescript
 import containerSandbox from './features/container-sandbox';
 
@@ -355,12 +360,13 @@ const result = await containerSandbox.execute('ls -la', {
   memoryLimit: '256m',
 });
 
-console.log(result.stdout);  // вывод
+console.log(result.stdout); // вывод
 console.log(result.exitCode); // код выхода
 console.log(result.timedOut); // таймаут?
 ```
 
 **Безопасность:**
+
 - Команды проходят через белый список разрешённых (`ls`, `cat`, `grep`, `node`, `python3` и др.)
 - Нет shell-интерпретации (`sh -c`), аргументы передаются напрямую в `docker run`
 - Изоляция сети, только tmpfs, read-only корень
@@ -368,22 +374,24 @@ console.log(result.timedOut); // таймаут?
 #### Mesh Workflows (воркфлоу)
 
 **Конфигурация:**
+
 ```yaml
 features:
   mesh-workflows:
     enabled: true
     maxConcurrent: 10
-    defaultTimeout: 300000  # 5 минут
+    defaultTimeout: 300000 # 5 минут
     persistState: true
     checkpointDir: ./data/checkpoints
 ```
 
 **API:**
+
 ```typescript
 import meshWorkflows from './features/mesh-workflows';
 
 // 1. Декомпозиция цели
-const goal = "Создать MVP e-commerce магазина";
+const goal = 'Создать MVP e-commerce магазина';
 const decomposed = await meshWorkflows.decomposeGoal(goal);
 // Результат:
 // {
@@ -402,7 +410,7 @@ const workflow = meshWorkflows.createWorkflowFromGoal('goal-123', decomposed);
 
 // 3. Запуск выполнения
 const execution = await meshWorkflows.execute('goal-123', {
-  extraVar: 'value'
+  extraVar: 'value',
 });
 
 // 4. Мониторинг прогресса
@@ -416,6 +424,7 @@ console.log(status.status); // running | completed | failed | paused
 ```
 
 **Безопасность:**
+
 - Условия в шагах `condition` оцениваются через `jsep` — безопасный парсер выражений без `eval`
 - Никакого `new Function` или `eval`
 - Шаги `agent` выполняются через безопасные хендлеры
@@ -423,18 +432,20 @@ console.log(status.status); // running | completed | failed | paused
 #### Webhooks (входящие/исходящие)
 
 **Конфигурация:**
+
 ```yaml
 features:
   webhooks:
     enabled: true
     port: 3002
     path: /webhooks
-    secret: ""          # секрет для подписи исходящих
+    secret: '' # секрет для подписи исходящих
     maxRetries: 3
     retryDelayMs: 1000
 ```
 
 **API:**
+
 ```typescript
 import webhooks from './features/webhooks';
 
@@ -452,7 +463,7 @@ webhooks.on('user.created', async (event) => {
 const sub = webhooks.subscribe(
   'https://my.api/webhook',
   ['user.created', 'order.paid'],
-  'shared-secret-key'
+  'shared-secret-key',
 );
 
 // Ручная отправка события
@@ -467,6 +478,7 @@ await webhooks.dispatch({
 ```
 
 **Безопасность (SSRF защита):**
+
 ```typescript
 // Проверка на внутренние хосты
 private isInternalHostname(host: string): boolean {
@@ -493,12 +505,12 @@ private validateUrl(u: string): boolean {
 
 Недавно были устранены критические уязвимости в четырёх фичах:
 
-| Фича | Проблема | Исправление |
-|---|---|---|
-| `mesh-workflows` | `new Function` для условий → RCE | Заменён на `jsep` + безопасный интерпретатор |
-| `container-sandbox` | Shell injection, отсутствие белого списка | Белый список команд, прямое выполнение без `sh -c` |
-| `webchat` | Отсутствие аутентификации, XSS | Bearer token в заголовках, ограничение по сети |
-| `webhooks` | SSRF при отправке на внутренние адреса | Блокировка localhost, 169.254.169.254, приватных IP |
+| Фича                | Проблема                                  | Исправление                                         |
+| ------------------- | ----------------------------------------- | --------------------------------------------------- |
+| `mesh-workflows`    | `new Function` для условий → RCE          | Заменён на `jsep` + безопасный интерпретатор        |
+| `container-sandbox` | Shell injection, отсутствие белого списка | Белый список команд, прямое выполнение без `sh -c`  |
+| `webchat`           | Отсутствие аутентификации, XSS            | Bearer token в заголовках, ограничение по сети      |
+| `webhooks`          | SSRF при отправке на внутренние адреса    | Блокировка localhost, 169.254.169.254, приватных IP |
 
 ### 4.2 Как работает jsep парсер в mesh-workflows
 
@@ -507,9 +519,12 @@ private validateUrl(u: string): boolean {
 ```typescript
 import jsep from 'jsep';
 
-function evaluateCondition(condition: string, vars: Record<string, unknown>): boolean {
+function evaluateCondition(
+  condition: string,
+  vars: Record<string, unknown>,
+): boolean {
   if (!condition || typeof condition !== 'string') return false;
-  const ast = jsep(condition);  // Парсим выражение в AST
+  const ast = jsep(condition); // Парсим выражение в AST
   const val = evalNode(ast, vars); // Безопасная оценка (только бинарные операции, идентификаторы, литералы)
   return !!val;
 }
@@ -523,8 +538,27 @@ function evaluateCondition(condition: string, vars: Record<string, unknown>): bo
 
 ```typescript
 const whitelist = new Set([
-  'ls','cat','echo','grep','find','node','python','npm','curl','wget',
-  'stat','du','df','ps','whoami','id','head','tail','jq','sed','awk',
+  'ls',
+  'cat',
+  'echo',
+  'grep',
+  'find',
+  'node',
+  'python',
+  'npm',
+  'curl',
+  'wget',
+  'stat',
+  'du',
+  'df',
+  'ps',
+  'whoami',
+  'id',
+  'head',
+  'tail',
+  'jq',
+  'sed',
+  'awk',
 ]);
 
 // Проверка базового имени команды
@@ -533,9 +567,9 @@ if (!whitelist.has(base)) {
 }
 
 // Docker args собираются без shell, и строки не передаются через sh -c
-const args = ['run', '--rm', '--name', containerName, /* ... */];
+const args = ['run', '--rm', '--name', containerName /* ... */];
 args.push(config.image);
-for (const p of parts) args.push(p);  // argv напрямую
+for (const p of parts) args.push(p); // argv напрямую
 ```
 
 Запрещённые команды (например, `rm`, `sudo`, `mkfs`) — не в белом списке.
@@ -568,11 +602,13 @@ if (this.authToken && token !== this.authToken) {
 ```
 
 **Использование:**
+
 ```yaml
 features:
   webchat:
-    authToken: "your-secret-token-here"
+    authToken: 'your-secret-token-here'
 ```
+
 Теперь клиент должен подключаться с `?token=your-secret-token-here`.
 
 ### 4.5 SSRF защита в webhooks
@@ -616,23 +652,24 @@ private validateUrl(u: string): boolean {
 
 Argentum предоставляет несколько HTTP-эндпоинтов (в основном от фичей):
 
-| Метод | Путь | Описание | Фича |
-|---|---|---|---|
-| `GET` | `/` | HTML-интерфейс webchat | webchat |
-| `GET` | `/files/:id` | Загрузка файла по ID | webchat |
-| `GET` | `/health` | Health check всех активных фич | core |
-| `POST` | `/webhooks` | Приём входящих webhook-событий | webhooks |
-| `GET` | `/api/status` | Статус агента (требуется аутентификация) | core |
+| Метод  | Путь          | Описание                                 | Фича     |
+| ------ | ------------- | ---------------------------------------- | -------- |
+| `GET`  | `/`           | HTML-интерфейс webchat                   | webchat  |
+| `GET`  | `/files/:id`  | Загрузка файла по ID                     | webchat  |
+| `GET`  | `/health`     | Health check всех активных фич           | core     |
+| `POST` | `/webhooks`   | Приём входящих webhook-событий           | webhooks |
+| `GET`  | `/api/status` | Статус агента (требуется аутентификация) | core     |
 
 `/health` ответ:
+
 ```json
 {
   "status": "ok",
   "timestamp": 1742301234567,
   "features": {
-    "webchat": {"healthy": true, "details": {"clients": 2}},
-    "container-sandbox": {"healthy": true},
-    "mesh-workflows": {"healthy": true}
+    "webchat": { "healthy": true, "details": { "clients": 2 } },
+    "container-sandbox": { "healthy": true },
+    "mesh-workflows": { "healthy": true }
   }
 }
 ```
@@ -642,6 +679,7 @@ Argentum предоставляет несколько HTTP-эндпоинтов
 **WebSocket сервер** запускается фичей `webchat` на порту `3001` (по умолчанию).
 
 **Подключение:**
+
 ```
 ws://localhost:3001/ws?room=default&user=user123
 # Или с токеном (если включена аутентификация)
@@ -650,22 +688,23 @@ ws://localhost:3001/ws?room=default&user=user123&token=xxx
 
 **События от клиента:**
 
-| Событие | Формат | Описание |
-|---|---|---|
-| `chat` | `{type: "chat", content: "текст"}` | Отправка текстового сообщения |
-| `file` | `{type: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: "base64"}` | Загрузка файла |
-| `typing` | `{type: "typing"}` | Индикатор набора |
+| Событие  | Формат                                                                          | Описание                      |
+| -------- | ------------------------------------------------------------------------------- | ----------------------------- |
+| `chat`   | `{type: "chat", content: "текст"}`                                              | Отправка текстового сообщения |
+| `file`   | `{type: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: "base64"}` | Загрузка файла                |
+| `typing` | `{type: "typing"}`                                                              | Индикатор набора              |
 
 **События от сервера:**
 
-| Событие | Формат | Описание |
-|---|---|---|
-| `message` | `{type: "message", message: {id, userId, roomId, content, role, timestamp}}` | Новое сообщение |
-| `typing` | `{type: "typing", userId: "user123"}` | Кто-то печатает |
-| `history` | `{type: "history", messages: [...]}` | История чата при подключении |
-| `error` | `{type: "error", message: "текст"}` | Ошибка |
+| Событие   | Формат                                                                       | Описание                     |
+| --------- | ---------------------------------------------------------------------------- | ---------------------------- |
+| `message` | `{type: "message", message: {id, userId, roomId, content, role, timestamp}}` | Новое сообщение              |
+| `typing`  | `{type: "typing", userId: "user123"}`                                        | Кто-то печатает              |
+| `history` | `{type: "history", messages: [...]}`                                         | История чата при подключении |
+| `error`   | `{type: "error", message: "текст"}`                                          | Ошибка                       |
 
 **Пример обработки на клиенте:**
+
 ```javascript
 const ws = new WebSocket('ws://localhost:3001/ws?room=default&user=me');
 
@@ -701,30 +740,35 @@ ws.send(JSON.stringify({ type: 'chat', content: 'Привет!' }));
     "user-agent": "Argentum/0.0.7"
   },
   "timestamp": 1742301234567,
-  "signature": "sha256=abc123def456..."  // HMAC-SHA256 от тела JSON с secret подписчика
+  "signature": "sha256=abc123def456..." // HMAC-SHA256 от тела JSON с secret подписчика
 }
 ```
 
 **Заголовки при отправке:**
+
 - `Content-Type: application/json`
 - `X-Webhook-Signature: sha256=<digest>` — для верификации на стороне получателя
 - `X-Webhook-Event: user.created` — тип события
 - `X-Webhook-Id: evt_1234567890` — уникальный ID
 
 **Подпись (на стороне отправителя):**
+
 ```typescript
 const crypto = require('crypto');
-const signature = crypto.createHmac('sha256', subscriberSecret)
-                        .update(JSON.stringify(event))
-                        .digest('hex');
+const signature = crypto
+  .createHmac('sha256', subscriberSecret)
+  .update(JSON.stringify(event))
+  .digest('hex');
 // Отправляем: `X-Webhook-Signature: sha256=${signature}`
 ```
 
 **Проверка на стороне получателя:**
+
 ```typescript
-const expected = crypto.createHmac('sha256', secret)
-                       .update(payload)
-                       .digest('hex');
+const expected = crypto
+  .createHmac('sha256', secret)
+  .update(payload)
+  .digest('hex');
 const provided = signature.replace('sha256=', '');
 if (expected !== provided) throw new Error('Invalid signature');
 ```
@@ -828,6 +872,7 @@ Log-level контролируется через `logging.level` в YAML или
 6. Создайте Pull Request с описанием изменений
 
 **Правила:**
+
 - Никогда не используйте `eval`, `new Function`, `child_process.exec` без санитайзера
 - Все пользовательские входы должны валидироваться через Zod схемы
 - Чувствительные данные (API keys) — только через `.env`, никогда не коммитьте
@@ -841,6 +886,7 @@ Log-level контролируется через `logging.level` в YAML или
 ### 8.1 Air-Gapped (офлайн-режим)
 
 **Конфиг:**
+
 ```yaml
 features:
   air-gapped:
@@ -857,8 +903,8 @@ features:
 import autoCapture from './features/auto-capture';
 
 const captures = autoCapture.detectCaptures(
-  "Сегодня я learn that нужно коммитить чаще. Ошибка: забыл запушить код.",
-  "telegram:12345"
+  'Сегодня я learn that нужно коммитить чаще. Ошибка: забыл запушить код.',
+  'telegram:12345',
 );
 // captures = [
 //   { type: 'lesson', content: 'нужно коммитить чаще', confidence: 0.9 },
@@ -877,7 +923,7 @@ import knowledgeGraph from './features/knowledge-graph';
 await knowledgeGraph.addNode({
   id: 'person:alice',
   type: 'person',
-  properties: { name: 'Alice', role: 'developer' }
+  properties: { name: 'Alice', role: 'developer' },
 });
 
 // Добавить связь
@@ -893,4 +939,4 @@ const results = await knowledgeGraph.query(`
 
 ---
 
-*Argentum v0.0.7 — Documentation last updated: 2026-03-17*
+_Argentum v0.0.7 — Documentation last updated: 2026-03-17_
