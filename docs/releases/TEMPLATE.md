@@ -14,7 +14,8 @@
 
 ### Security Updates
 
-- [ ] (list security fixes)
+- [ ] (list security fixes with CVE IDs if applicable)
+- [ ] List any publicly known vulnerabilities fixed in this release (CVE assignment or similar)
 - [ ] Verify `SECURITY.md` threat model reflects new features/attack paths
 
 ### Known Issues
