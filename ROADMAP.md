@@ -8,9 +8,14 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
 
 ### v0.1.0 (Next 3-6 months)
 
-- In-app feedback system — bug reports and feature requests from within the desktop app
-- Russian language UI and documentation
-- Estonian language UI and documentation
+- **Internationalization (i18n) infrastructure** — enable localization for any language
+  - Extract all user-facing strings to locale files (en.json as base)
+  - Implement t('key') translation function used throughout codebase
+  - Support text direction (LTR/RTL) via CSS logical properties
+  - Number/date formatting via Intl API (not hardcoded formats)
+  - Language picker in settings and onboarding
+- **Russian language UI and documentation**
+- **Estonian language UI and documentation**
 - Test suite fixes (Jest/ESM configuration)
 - Improved test coverage (expand to more code branches)
 
