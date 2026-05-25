@@ -14,7 +14,7 @@ Use `git commit -s` to sign your commits automatically.
 
 ## What Can I Help With?
 
-**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path.
+**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path. When fixing a bug, include a regression test if possible. Bug fix PRs must have the `fix:` commit prefix.
 
 **Features** — Open an issue first to discuss before writing code. Big features might need a redesign, and it's better to find that out before you've written 500 lines.
 
@@ -51,6 +51,15 @@ npm run lint
 
 # Format code
 npm run format
+
+### Coding Standards
+
+The project uses:
+- [Prettier](https://prettier.io/) for code formatting (run `npm run format`)
+- [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) as the named reference for TypeScript conventions
+- [typescript-eslint](https://typescript-eslint.io/) for linting (run `npm run lint`)
+
+All contributions must pass `npm run lint` (warnings are acceptable for existing code, not for new) and `npm run format` before submitting.
 
 # Run tests
 npm test

@@ -2,7 +2,7 @@
  * Argentum Encrypted Secrets
  *
  * AES-256-GCM encryption for sensitive values.
- * Master key from AGCLAW_MASTER_KEY env var (or passed explicitly).
+ * Master key from ARGENTUM_MASTER_KEY env var (or passed explicitly).
  * Secrets stored in a JSON file on disk, encrypted at rest.
  */
 
@@ -60,13 +60,13 @@ function deriveKey(masterKey: Buffer, salt: Buffer): Buffer {
 
 /**
  * Resolve the master key buffer.
- * Priority: explicit arg → AGCLAW_MASTER_KEY env → error.
+ * Priority: explicit arg → ARGENTUM_MASTER_KEY env → error.
  */
 function resolveMasterKey(explicit?: string): Buffer {
-  const raw = explicit ?? process.env.AGCLAW_MASTER_KEY;
+  const raw = explicit ?? process.env.ARGENTUM_MASTER_KEY;
   if (!raw || raw.length === 0) {
     throw new Error(
-      'Master key not provided. Set AGCLAW_MASTER_KEY env var or pass key to init().',
+      'Master key not provided. Set ARGENTUM_MASTER_KEY env var or pass key to init().',
     );
   }
   // Derive a stable 32-byte key from whatever passphrase the user provides

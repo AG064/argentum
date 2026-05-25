@@ -104,7 +104,7 @@ class UserModelingFeature implements FeatureModule {
     const workDir =
       typeof configuredWorkDir === 'string'
         ? configuredWorkDir
-        : (process.env.AGCLAW_WORKDIR ??
+        : (process.env.ARGENTUM_WORKDIR ??
           path.join(process.env.HOME ?? '~', '.openclaw', 'workspace'));
 
     const memoryDir = path.join(workDir, 'memory');

@@ -3,11 +3,7 @@ module.exports = {
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   roots: ['<rootDir>/tests', '<rootDir>/src'],
-  testMatch: [
-    '**/__tests__/**/*.ts',
-    '**/*.test.ts',
-    '**/*.spec.ts',
-  ],
+  testMatch: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
@@ -36,18 +32,15 @@ module.exports = {
   ],
   coverageThreshold: {
     global: {
-      branches: 0,
-      functions: 0,
-      lines: 0,
-      statements: 0,
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
     },
   },
   coverageReporters: ['text', 'text-summary', 'lcov', 'html', 'json'],
   coverageDirectory: 'coverage',
-  coveragePathIgnorePatterns: [
-    '/node_modules/',
-    '/dist/',
-  ],
+  coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
   setupFilesAfterEnv: [],
   globalSetup: undefined,
   globalTeardown: undefined,

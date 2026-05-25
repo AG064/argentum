@@ -1,6 +1,6 @@
-# 🛠️ Pull Request Template
+# Pull Request Template
 
-## 📋 Checklist
+## Checklist
 
 - [ ] I have read the [CONTRIBUTING.md](./CONTRIBUTING.md) guidelines
 - [ ] My code follows the project's coding style
@@ -8,44 +8,41 @@
 - [ ] I have added tests that prove my fix/feature works
 - [ ] All existing tests pass
 - [ ] I have updated documentation if needed
+- [ ] My commits follow [Conventional Commits](https://www.conventionalcommits.org/)
 
-## 📝 Description
+## Description
 
 [Describe your changes in detail]
 
-## 🔄 Type of Change
+## Type of Change
 
-What type of change does this PR introduce? (Check at least one)
+- [ ] Bug fix (fix: prefix)
+- [ ] New feature (feat: prefix)
+- [ ] Documentation update (docs: prefix)
+- [ ] Code style update (style: prefix)
+- [ ] Configuration change (chore: prefix)
+- [ ] Security improvement
+- [ ] Performance improvement
+- [ ] Test addition (test: prefix)
+- [ ] Refactoring (refactor: prefix)
 
-- [ ] 🐛 Bug fix
-- [ ] ✨ New feature
-- [ ] 📚 Documentation update
-- [ ] 🎨 Code style update
-- [ ] 🔧 Configuration change
-- [ ] 🔒 Security improvement
-- [ ] ⚡ Performance improvement
-- [ ] 🧪 Test addition
-- [ ] 🔄 Refactoring
-
-## 🧪 Testing
+## Testing
 
 [Describe the testing you performed]
 
-## 📸 Screenshots (if applicable)
+## Screenshots (if applicable)
 
 [Add screenshots or recordings here]
 
-## 🔗 Related Issues
+## Related Issues
 
 [Link to related issues using #issue-number or close/fix #issue-number]
 
-## 📦 Breaking Changes
-
-Does this PR introduce breaking changes?
+## Breaking Changes
 
 - [ ] Yes (describe what breaks)
 - [ ] No
 
-## 🔍 Additional Review
+## Additional Review
 
 [Request specific reviewers or areas that need extra attention]

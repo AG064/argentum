@@ -64,7 +64,7 @@ class OrgChartFeature implements FeatureModule {
 
   constructor() {
     // Auto-init for CLI usage (singleton bypasses plugin loader)
-    const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
     this.config.dbPath = resolve(join(workDir, 'data', 'org-chart.db'));
     this.initDatabase();
     this.ensureCEO();

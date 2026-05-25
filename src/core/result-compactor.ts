@@ -48,7 +48,7 @@ export function compactResult(
   toolName: string,
   result: string,
   threshold: number = COMPACT_THRESHOLD,
-  outputDir: string = process.env.AGCLAW_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
+  outputDir: string = process.env.ARGENTUM_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
 ): CompactionResult {
   ensureOutputDir(outputDir);
 
@@ -91,7 +91,7 @@ export function compactResult(
 export function compactResults(
   results: Record<string, string>,
   threshold: number = COMPACT_THRESHOLD,
-  outputDir: string = process.env.AGCLAW_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
+  outputDir: string = process.env.ARGENTUM_RESULTS_DIR ?? DEFAULT_OUTPUT_DIR,
 ): Record<string, CompactionResult> {
   const compacted: Record<string, CompactionResult> = {};
 
