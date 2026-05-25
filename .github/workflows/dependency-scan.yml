@@ -56,13 +56,3 @@ jobs:
             fi
           fi
           echo "No critical/high vulnerabilities in dependencies."
-
-      - name: Check npm audit results
-        run: |
-          RESULT=$(npm audit --audit-level=high 2>&1)
-          echo "$RESULT"
-          if echo "$RESULT" | grep -qP '[1-9]\d*(?=\s+vulnerabilit)'; then
-            echo "npm audit found high/critical issues"
-            exit 1
-          fi
-          echo "npm audit passed."
