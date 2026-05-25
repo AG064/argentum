@@ -29,6 +29,10 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
   - Accent color picker (replace default red with any color; logo stays unchanged)
   - Error/warning text styling independent of color (icons + text, not color alone)
 - **In-app update mechanism** — check for and apply updates without manual reinstall
+- **Interactive help button (?)** — context-sensitive help tooltip linked to relevant docs section; appears on hover/focus near each major UI element
+  - Clicking ? opens relevant documentation page in browser
+  - Tooltip text explains what the element does and how to use it
+  - ? button visible in onboarding flow and settings
 - **Accessibility documentation updates** — new menus and features include keyboard shortcuts and ARIA attributes in each release
 
 ### Future (6-12 months)
