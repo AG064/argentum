@@ -5,14 +5,14 @@
  * real-time streaming responses.
  */
 
+import { randomBytes } from 'crypto';
+
 import {
   type FeatureModule,
   type FeatureContext,
   type FeatureMeta,
   type HealthStatus,
 } from '../core/plugin-loader';
-
-import { randomBytes } from 'crypto';
 
 function secureId(length = 8): string {
   return randomBytes(length).toString('hex');
