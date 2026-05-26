@@ -429,7 +429,7 @@ argentum memory import memories-backup-20260318.json
 Включите debug-логирование, чтобы видеть запросы к памяти:
 
 ```bash
-AGCLAW_LOG_LEVEL=debug argentum gateway start
+ARGENTUM_LOG_LEVEL=debug argentum gateway start
 ```
 
 Ищите строки:

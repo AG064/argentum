@@ -66,3 +66,5 @@ secrets/
 
 # Agent memory/workspace state
 MEMORY.md
+
+/.agclaw-dashboard-pass-hash

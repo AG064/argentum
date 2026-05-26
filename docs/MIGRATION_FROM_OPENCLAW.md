@@ -67,10 +67,10 @@ Specifically back up:
 
 | OpenClaw | Argentum |
 |---|---|
-| `OPENCLAW_PORT` | `AGCLAW_PORT` |
+| `OPENCLAW_PORT` | `ARGENTUM_PORT` |
 | `OPENCLAW_API_KEY` | `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` |
-| `TELEGRAM_BOT_TOKEN` | `AGCLAW_TELEGRAM_TOKEN` |
-| `LOG_LEVEL` | `AGCLAW_LOG_LEVEL` |
+| `TELEGRAM_BOT_TOKEN` | `ARGENTUM_TELEGRAM_TOKEN` |
+| `LOG_LEVEL` | `ARGENTUM_LOG_LEVEL` |
 
 ### CLI Commands
 
@@ -200,7 +200,7 @@ export OPENROUTER_API_KEY=sk-or-v1-...
 export TELEGRAM_BOT_TOKEN=...
 
 # New
-export AGCLAW_TELEGRAM_TOKEN=...
+export ARGENTUM_TELEGRAM_TOKEN=...
 ```
 
 ---
@@ -325,12 +325,12 @@ argentum gateway restart
 
 ```bash
 # Verify token is set correctly
-echo $AGCLAW_TELEGRAM_TOKEN
+echo $ARGENTUM_TELEGRAM_TOKEN
 
 # Test the token
-curl -s "https://api.telegram.org/bot$AGCLAW_TELEGRAM_TOKEN/getMe"
+curl -s "https://api.telegram.org/bot$ARGENTUM_TELEGRAM_TOKEN/getMe"
 
-# If OpenClaw used TELEGRAM_BOT_TOKEN, update to AGCLAW_TELEGRAM_TOKEN
+# If OpenClaw used TELEGRAM_BOT_TOKEN, update to ARGENTUM_TELEGRAM_TOKEN
 ```
 
 ### "Memory search returns no results"

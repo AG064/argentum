@@ -29,7 +29,7 @@ Argentum is a local-first AI workspace. It runs on your own machine so your data
 ```bash
 git clone https://github.com/AG064/argentum.git
 cd argentum
-npm install && npm run build:tauri
+npm install && npm run build
 ```
 
 ### Windows Setup

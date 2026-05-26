@@ -455,7 +455,7 @@ This prevents unauthorized users from interacting with your agent even if they k
 Argentum encrypts secrets at rest using AES-256-GCM. Set a secret key:
 
 ```bash
-export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
+export ARGENTUM_SESSION_SECRET=$(openssl rand -hex 32)
 ```
 
 Never commit API keys to version control. Use environment variables or the encrypted secrets feature:
@@ -574,7 +574,7 @@ ExecStart=/home/ag064/argentum/bin/argentum.js gateway start
 Restart=always
 RestartSec=5
 Environment=OPENROUTER_API_KEY=sk-or-v1-...
-Environment=AGCLAW_PORT=18789
+Environment=ARGENTUM_PORT=18789
 
 [Install]
 WantedBy=multi-user.target
@@ -617,13 +617,13 @@ Use environment variables to override config for different environments:
 
 ```bash
 # Production
-AGCLAW_LOG_LEVEL=warn
-AGCLAW_PORT=18789
+ARGENTUM_LOG_LEVEL=warn
+ARGENTUM_PORT=18789
 NODE_ENV=production
 
 # Development
-AGCLAW_LOG_LEVEL=debug
-AGCLAW_PORT=3000
+ARGENTUM_LOG_LEVEL=debug
+ARGENTUM_PORT=3000
 NODE_ENV=development
 ```
 
@@ -633,22 +633,22 @@ NODE_ENV=development
 
 ### Log Levels
 
-Set via `AGCLAW_LOG_LEVEL` or `argentum.json`:
+Set via `ARGENTUM_LOG_LEVEL` or `argentum.json`:
 
 ```bash
-export AGCLAW_LOG_LEVEL=debug  # debug, info, warn, error
+export ARGENTUM_LOG_LEVEL=debug  # debug, info, warn, error
 ```
 
 In development, use `pretty` format for human-readable output:
 
 ```bash
-export AGCLAW_LOG_FORMAT=pretty
+export ARGENTUM_LOG_FORMAT=pretty
 ```
 
 In production, use `json` format for structured log aggregation:
 
 ```bash
-export AGCLAW_LOG_FORMAT=json
+export ARGENTUM_LOG_FORMAT=json
 ```
 
 ### Viewing Logs
@@ -826,7 +826,7 @@ Backups run on the schedule you specify. Old backups beyond `retentionDays` are 
 
 ### Migration Between Machines
 
-Copy the `data/` directory and `argentum.json` to the new machine. Ensure the same `AGCLAW_SESSION_SECRET` is set to decrypt any encrypted secrets. Then run `argentum gateway start`.
+Copy the `data/` directory and `argentum.json` to the new machine. Ensure the same `ARGENTUM_SESSION_SECRET` is set to decrypt any encrypted secrets. Then run `argentum gateway start`.
 
 ---
 
@@ -958,15 +958,15 @@ interface ArgentumConfig {
 | `OPENROUTER_API_KEY` | string | — | OpenRouter API key (required for most models) |
 | `ANTHROPIC_API_KEY` | string | — | Anthropic API key (direct Claude access) |
 | `OPENAI_API_KEY` | string | — | OpenAI key (Whisper STT, DALL-E) |
-| `AGCLAW_PORT` | number | `18789` | Gateway HTTP port |
-| `AGCLAW_HOST` | string | `0.0.0.0` | Gateway bind address |
-| `AGCLAW_DB_PATH` | string | `./data/argentum.db` | SQLite database path |
-| `AGCLAW_CONFIG_PATH` | string | `./argentum.json` | Config file path |
-| `AGCLAW_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `AGCLAW_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
-| `AGCLAW_TELEGRAM_TOKEN` | string | — | Telegram bot token |
-| `AGCLAW_FCM_KEY` | string | — | Firebase Cloud Messaging key |
-| `AGCLAW_SESSION_SECRET` | string | auto-generated | Secret for session encryption |
+| `ARGENTUM_PORT` | number | `18789` | Gateway HTTP port |
+| `ARGENTUM_HOST` | string | `0.0.0.0` | Gateway bind address |
+| `ARGENTUM_DB_PATH` | string | `./data/argentum.db` | SQLite database path |
+| `ARGENTUM_CONFIG_PATH` | string | `./argentum.json` | Config file path |
+| `ARGENTUM_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `ARGENTUM_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
+| `ARGENTUM_TELEGRAM_TOKEN` | string | — | Telegram bot token |
+| `ARGENTUM_FCM_KEY` | string | — | Firebase Cloud Messaging key |
+| `ARGENTUM_SESSION_SECRET` | string | auto-generated | Secret for session encryption |
 | `SUPABASE_URL` | string | — | Supabase project URL |
 | `SUPABASE_KEY` | string | — | Supabase anon key |
 | `NODE_ENV` | string | `development` | Environment mode |

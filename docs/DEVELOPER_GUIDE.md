@@ -143,14 +143,14 @@ cp .env.example .env
 
 Required for development:
 - `OPENROUTER_API_KEY` — or `ANTHROPIC_API_KEY`
-- `AGCLAW_PORT` — gateway port (default 18789)
+- `ARGENTUM_PORT` — gateway port (default 18789)
 
 ---
 
 ## 3. Coding Standards
 
 Argentum uses ESLint and Prettier to maintain consistent style. Configuration files:
-- ESLint: [`.eslintrc.js`](https://github.com/AG064/argentum/blob/main/.eslintrc.js)
+- ESLint: [`eslint.config.mjs`](https://github.com/AG064/argentum/blob/main/eslint.config.mjs)
 - Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/main/.prettierrc)
 - Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/main/.editorconfig)
 

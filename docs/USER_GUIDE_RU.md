@@ -424,7 +424,7 @@ Argentum включает несколько слоёв безопасности
 Argentum шифрует секреты при хранении с помощью AES-256-GCM. Задайте ключ:
 
 ```bash
-export AGCLAW_SESSION_SECRET=$(openssl rand -hex 32)
+export ARGENTUM_SESSION_SECRET=$(openssl rand -hex 32)
 ```
 
 Никогда не коммитьте API-ключи в систему контроля версий. Используйте переменные окружения:
@@ -528,7 +528,7 @@ ExecStart=/home/ag064/argentum/bin/argentum.js gateway start
 Restart=always
 RestartSec=5
 Environment=OPENROUTER_API_KEY=sk-or-v1-...
-Environment=AGCLAW_PORT=18789
+Environment=ARGENTUM_PORT=18789
 
 [Install]
 WantedBy=multi-user.target
@@ -569,19 +569,19 @@ server {
 ### Уровни логов
 
 ```bash
-export AGCLAW_LOG_LEVEL=debug  # debug, info, warn, error
+export ARGENTUM_LOG_LEVEL=debug  # debug, info, warn, error
 ```
 
 В разработке используйте `pretty` формат:
 
 ```bash
-export AGCLAW_LOG_FORMAT=pretty
+export ARGENTUM_LOG_FORMAT=pretty
 ```
 
 В продакшене — `json`:
 
 ```bash
-export AGCLAW_LOG_FORMAT=json
+export ARGENTUM_LOG_FORMAT=json
 ```
 
 ### Просмотр логов
@@ -745,13 +745,13 @@ argentum backup restore backup-2026-03-18T18-58-44
 | `OPENROUTER_API_KEY` | OpenRouter API ключ | Да |
 | `ANTHROPIC_API_KEY` | Anthropic API ключ | Нет |
 | `OPENAI_API_KEY` | OpenAI API ключ | Нет |
-| `AGCLAW_PORT` | Порт gateway (по умолчанию 18789) | Нет |
-| `AGCLAW_HOST` | Адрес привязки (по умолчанию 0.0.0.0) | Нет |
-| `AGCLAW_DB_PATH` | Путь к SQLite (по умолчанию ./data/argentum.db) | Нет |
-| `AGCLAW_LOG_LEVEL` | Уровень логирования | Нет |
-| `AGCLAW_LOG_FORMAT` | Формат логов (pretty/json) | Нет |
-| `AGCLAW_TELEGRAM_TOKEN` | Токен Telegram-бота | Нет |
-| `AGCLAW_SESSION_SECRET` | Ключ для шифрования сессий | Нет |
+| `ARGENTUM_PORT` | Порт gateway (по умолчанию 18789) | Нет |
+| `ARGENTUM_HOST` | Адрес привязки (по умолчанию 0.0.0.0) | Нет |
+| `ARGENTUM_DB_PATH` | Путь к SQLite (по умолчанию ./data/argentum.db) | Нет |
+| `ARGENTUM_LOG_LEVEL` | Уровень логирования | Нет |
+| `ARGENTUM_LOG_FORMAT` | Формат логов (pretty/json) | Нет |
+| `ARGENTUM_TELEGRAM_TOKEN` | Токен Telegram-бота | Нет |
+| `ARGENTUM_SESSION_SECRET` | Ключ для шифрования сессий | Нет |
 | `SUPABASE_URL` | URL проекта Supabase | Нет |
 | `SUPABASE_KEY` | Anon ключ Supabase | Нет |
 

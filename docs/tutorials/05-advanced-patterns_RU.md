@@ -446,7 +446,7 @@ argentum_workflow_duration_seconds{workflow="deploy-service"} 234.5
 Включите трассировку для отладки мультиагентных взаимодействий:
 
 ```bash
-AGCLAW_TRACE=agent,workflow npm start
+ARGENTUM_TRACE=agent,workflow npm start
 ```
 
 Это выводит детальные трассы передачи сообщений агентов и выполнения workflow.
