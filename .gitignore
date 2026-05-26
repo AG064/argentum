@@ -68,3 +68,4 @@ secrets/
 MEMORY.md
 
 /.agclaw-dashboard-pass-hash
+/.argentum-dashboard-pass-hash
