@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export interface CliLaunchEnvironment {
   execPath: string;
   isPackaged?: boolean;

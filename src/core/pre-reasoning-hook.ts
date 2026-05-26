@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Pre-Reasoning Hook (ReMe Pattern)
@@ -179,10 +180,7 @@ function compactProgress(toolResults: string[], maxTokens: number): string {
  * @param maxTokens - Maximum tokens for progress summary (default 500)
  * @returns ReasoningContext with goal, progress, decisions, next steps, critical context
  */
-export function preReasoningHook(
-  toolResults: string[],
-  maxTokens: number = 500,
-): ReasoningContext {
+export function preReasoningHook(toolResults: string[], maxTokens: number = 500): ReasoningContext {
   return {
     goal: extractGoal(toolResults),
     progress: compactProgress(toolResults, maxTokens),

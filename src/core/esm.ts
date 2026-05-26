@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Keep native dynamic import() in CommonJS output so packaged builds can load ESM-only dependencies.
 // eslint-disable-next-line no-new-func
 const nativeDynamicImport = new Function(

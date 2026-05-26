@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Router Agent — Central routing for multi-user Argentum

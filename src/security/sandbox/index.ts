@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // @ts-nocheck
 /**
  * Argentum Sandbox Executor

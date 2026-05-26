@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Skills Library Feature (SQLite)
@@ -133,9 +134,7 @@ class SkillsLibraryFeature implements FeatureModule {
   }
 
   getSkill(id: string): SkillRecord | null {
-    const row = this.db
-      .prepare<[string], SkillRow>('SELECT * FROM skills WHERE id = ?')
-      .get(id);
+    const row = this.db.prepare<[string], SkillRow>('SELECT * FROM skills WHERE id = ?').get(id);
     if (!row) return null;
     return this.rowToSkill(row);
   }

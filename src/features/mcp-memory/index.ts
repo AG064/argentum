@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { Logger } from '../../core/logger';
 
 export interface MCPConfig {

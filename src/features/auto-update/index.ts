@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, resolve, join } from 'path';
 

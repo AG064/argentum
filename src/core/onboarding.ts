@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { randomBytes } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';

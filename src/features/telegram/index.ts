@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Argentum Telegram Integration
@@ -427,9 +428,7 @@ class TelegramFeature {
   }
 
   listAllowedUsers(): string[] {
-    const rows = this.db
-      .prepare<[], AllowedUserRow>('SELECT user_id FROM allowed_users')
-      .all();
+    const rows = this.db.prepare<[], AllowedUserRow>('SELECT user_id FROM allowed_users').all();
     return rows.map((r) => r.user_id);
   }
 

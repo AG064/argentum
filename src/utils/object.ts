@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Object manipulation utilities — safe JSON parsing, deep operations, etc.
@@ -63,9 +64,10 @@ export function omit<T extends Record<string, unknown>, K extends keyof T>(
   keys: readonly K[],
 ): Omit<T, K> {
   const omittedKeys = new Set<keyof T>(keys);
-  return Object.fromEntries(
-    Object.entries(obj).filter(([key]) => !omittedKeys.has(key)),
-  ) as Omit<T, K>;
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !omittedKeys.has(key))) as Omit<
+    T,
+    K
+  >;
 }
 
 /**

@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * skill-evolution/index.ts
- * 
+ *
  * Bridge between Argentum and OpenSpace self-evolving skills engine.
  * OpenSpace: https://github.com/AG064/OpenSpace (AG064 fork)
- * 
+ *
  * Provides:
  * - AUTO-FIX: repair broken SKILL.md
- * - AUTO-IMPROVE: evolve successful skills  
+ * - AUTO-IMPROVE: evolve successful skills
  * - AUTO-LEARN: capture new skills from workflows
- * 
+ *
  * LLM: MiniMax (primary), OpenRouter (fallback), any OpenAI-compatible API
  */
 
@@ -63,7 +64,7 @@ export class SkillEvolution {
 
   constructor(config: SkillEvolutionConfig = {}) {
     const home = homedir();
-    
+
     this.openSpacePath = config.openSpacePath ?? join(home, 'OpenSpace');
     this.config = {
       openSpacePath: this.openSpacePath,
@@ -79,7 +80,7 @@ export class SkillEvolution {
    */
   async diagnose(skillName: string): Promise<DiagnoseResult> {
     const result = await this.runOpenSpace(['skill-diagnose', skillName]);
-    
+
     // Parse output - OpenSpace outputs JSON
     try {
       return JSON.parse(result);
@@ -87,7 +88,11 @@ export class SkillEvolution {
       // If not JSON, try text parsing
       return {
         skill: skillName,
-        health: result.includes('ERROR') ? 'broken' : result.includes('WARNING') ? 'needs-improvement' : 'healthy',
+        health: result.includes('ERROR')
+          ? 'broken'
+          : result.includes('WARNING')
+            ? 'needs-improvement'
+            : 'healthy',
         issues: result.includes('ERROR') ? [result] : [],
         suggestions: result.includes('WARNING') ? [result] : [],
       };
@@ -97,18 +102,22 @@ export class SkillEvolution {
   /**
    * AUTO-FIX: Repair a broken skill
    */
-  async fixSkill(skillPath: string): Promise<{ success: boolean; changes: string[]; error?: string }> {
+  async fixSkill(
+    skillPath: string,
+  ): Promise<{ success: boolean; changes: string[]; error?: string }> {
     console.info(`[SkillEvolution] AUTO-FIX: repairing ${skillPath}`);
-    
+
     const result = await this.runOpenSpace(['skill-fix', skillPath]);
-    
+
     if (result.includes('ERROR')) {
       return { success: false, changes: [], error: result };
     }
-    
+
     return {
       success: true,
-      changes: result.split('\n').filter(line => line.includes('FIXED') || line.includes('Changed')),
+      changes: result
+        .split('\n')
+        .filter((line) => line.includes('FIXED') || line.includes('Changed')),
     };
   }
 
@@ -117,7 +126,7 @@ export class SkillEvolution {
    */
   async evolveSkill(skillName: string, metrics?: Record<string, number>): Promise<EvolveResult> {
     console.info(`[SkillEvolution] AUTO-IMPROVE: evolving ${skillName}`);
-    
+
     let result: string;
     if (metrics) {
       const metricsFile = `/tmp/skill-metrics-${Date.now()}.json`;
@@ -127,7 +136,7 @@ export class SkillEvolution {
     } else {
       result = await this.runOpenSpace(['skill-evolve', skillName]);
     }
-    
+
     try {
       return JSON.parse(result);
     } catch {
@@ -144,19 +153,24 @@ export class SkillEvolution {
   /**
    * AUTO-LEARN: Capture a new skill from successful execution
    */
-  async learnFromWorkflow(executionLog: string, options?: { autoInstall?: boolean }): Promise<LearnResult> {
+  async learnFromWorkflow(
+    executionLog: string,
+    options?: { autoInstall?: boolean },
+  ): Promise<LearnResult> {
     console.info(`[SkillEvolution] AUTO-LEARN: capturing from workflow`);
-    
+
     const logFile = `/tmp/workflow-${Date.now()}.log`;
     const fs = await import('fs');
     fs.writeFileSync(logFile, executionLog);
-    
+
     const result = await this.runOpenSpace([
       'skill-learn',
-      '--from', logFile,
-      '--auto-install', options?.autoInstall ? 'true' : 'false'
+      '--from',
+      logFile,
+      '--auto-install',
+      options?.autoInstall ? 'true' : 'false',
     ]);
-    
+
     try {
       return JSON.parse(result);
     } catch {
@@ -197,8 +211,12 @@ export class SkillEvolution {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout.on('data', (data) => { stdout += data.toString(); });
-      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+      proc.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
 
       proc.on('close', (code) => {
         if (code === 0) {
@@ -222,9 +240,9 @@ export class SkillEvolution {
       await this.runOpenSpace(['--version']);
       return { available: true };
     } catch (err) {
-      return { 
-        available: false, 
-        error: 'OpenSpace not installed. Run: pip install -e ~/OpenSpace' 
+      return {
+        available: false,
+        error: 'OpenSpace not installed. Run: pip install -e ~/OpenSpace',
       };
     }
   }
@@ -237,7 +255,7 @@ export class SkillEvolution {
 export async function createSkillEvolution(): Promise<SkillEvolution> {
   const credsPath = join(homedir(), '.openclaw', 'credentials', 'telegram.json');
   let minimaxKey = '';
-  
+
   if (existsSync(credsPath)) {
     try {
       const creds = JSON.parse(readFileSync(credsPath, 'utf-8'));
@@ -250,7 +268,7 @@ export async function createSkillEvolution(): Promise<SkillEvolution> {
       );
     }
   }
-  
+
   return new SkillEvolution({
     llmProvider: 'minimax',
     apiKey: firstNonEmpty(minimaxKey, process.env.MINIMAX_API_KEY),

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * API Gateway Feature
@@ -501,11 +502,7 @@ class ApiGatewayFeature implements FeatureModule {
   }
 
   /** Rate limiting middleware */
-  private rateLimitMiddleware(
-    req: Request,
-    res: Response,
-    next: express.NextFunction,
-  ): void {
+  private rateLimitMiddleware(req: Request, res: Response, next: express.NextFunction): void {
     // Skip rate limiting for health check
     if (req.path.endsWith('/health')) {
       next();
@@ -617,98 +614,120 @@ class ApiGatewayFeature implements FeatureModule {
   /** Register some default endpoints */
   private registerDefaultEndpoints(): void {
     // GET /api/tokens - List tokens (admin)
-    this.registerEndpoint('/tokens', 'GET', (_req, res) => {
-      const tokens = this.listTokens().map((t) => ({
-        name: t.name,
-        keyPreview: t.keyPreview,
-        createdAt: t.createdAt,
-        lastUsed: t.lastUsed,
-        expiresAt: t.expiresAt,
-        scopes: t.scopes,
-        revokedAt: t.revokedAt,
-      }));
-      res.json({ tokens });
-    }, {
-      requiredScope: 'tokens:read',
-    });
+    this.registerEndpoint(
+      '/tokens',
+      'GET',
+      (_req, res) => {
+        const tokens = this.listTokens().map((t) => ({
+          name: t.name,
+          keyPreview: t.keyPreview,
+          createdAt: t.createdAt,
+          lastUsed: t.lastUsed,
+          expiresAt: t.expiresAt,
+          scopes: t.scopes,
+          revokedAt: t.revokedAt,
+        }));
+        res.json({ tokens });
+      },
+      {
+        requiredScope: 'tokens:read',
+      },
+    );
 
     // POST /api/tokens - Create new token
-    this.registerEndpoint('/tokens', 'POST', (req, res) => {
-      const { name, expiresInDays, scopes } = req.body;
-      if (!name) {
-        res.status(400).json({ error: 'Bad request', message: 'name is required' });
-        return;
-      }
-
-      // Restrict created token scopes to a subset of the caller's own scopes
-      // to prevent privilege escalation.
-      const callerToken = this.callerTokens.get(req);
-      if (!callerToken) {
-        // authMiddleware must have populated this; if it didn't, refuse to proceed.
-        res.status(403).json({ error: 'Forbidden', message: 'Caller identity could not be determined' });
-        return;
-      }
-      const callerScopes = callerToken.scopes;
-      const requestedScopes: string[] = Array.isArray(scopes) ? scopes : ['*'];
-      let grantedScopes: string[];
-      if (callerScopes.includes('*')) {
-        // Caller has wildcard — may grant any scope including '*'
-        grantedScopes = requestedScopes;
-      } else {
-        // Caller may only grant scopes they already hold (no '*' escalation)
-        grantedScopes = requestedScopes.filter((s) => s !== '*' && callerScopes.includes(s));
-        if (grantedScopes.length === 0) {
-          res.status(403).json({
-            error: 'Forbidden',
-            message: 'Requested scopes exceed caller privileges',
-          });
+    this.registerEndpoint(
+      '/tokens',
+      'POST',
+      (req, res) => {
+        const { name, expiresInDays, scopes } = req.body;
+        if (!name) {
+          res.status(400).json({ error: 'Bad request', message: 'name is required' });
           return;
         }
-      }
 
-      const token = this.createToken(
-        name,
-        typeof expiresInDays === 'number' ? expiresInDays : undefined,
-        grantedScopes,
-      );
-      res.status(201).json({
-        token: token.key,
-        keyPreview: token.keyPreview,
-        name: token.name,
-        createdAt: token.createdAt,
-        expiresAt: token.expiresAt,
-        scopes: token.scopes,
-      });
-    }, {
-      requiredScope: 'tokens:create',
-    });
+        // Restrict created token scopes to a subset of the caller's own scopes
+        // to prevent privilege escalation.
+        const callerToken = this.callerTokens.get(req);
+        if (!callerToken) {
+          // authMiddleware must have populated this; if it didn't, refuse to proceed.
+          res
+            .status(403)
+            .json({ error: 'Forbidden', message: 'Caller identity could not be determined' });
+          return;
+        }
+        const callerScopes = callerToken.scopes;
+        const requestedScopes: string[] = Array.isArray(scopes) ? scopes : ['*'];
+        let grantedScopes: string[];
+        if (callerScopes.includes('*')) {
+          // Caller has wildcard — may grant any scope including '*'
+          grantedScopes = requestedScopes;
+        } else {
+          // Caller may only grant scopes they already hold (no '*' escalation)
+          grantedScopes = requestedScopes.filter((s) => s !== '*' && callerScopes.includes(s));
+          if (grantedScopes.length === 0) {
+            res.status(403).json({
+              error: 'Forbidden',
+              message: 'Requested scopes exceed caller privileges',
+            });
+            return;
+          }
+        }
+
+        const token = this.createToken(
+          name,
+          typeof expiresInDays === 'number' ? expiresInDays : undefined,
+          grantedScopes,
+        );
+        res.status(201).json({
+          token: token.key,
+          keyPreview: token.keyPreview,
+          name: token.name,
+          createdAt: token.createdAt,
+          expiresAt: token.expiresAt,
+          scopes: token.scopes,
+        });
+      },
+      {
+        requiredScope: 'tokens:create',
+      },
+    );
 
     // DELETE /api/tokens/:key - Revoke token
-    this.registerEndpoint('/tokens/:key', 'DELETE', (req, res) => {
-      const { key } = req.params;
-      const removed = this.revokeToken(key ?? '');
-      if (!removed) {
-        res.status(404).json({ error: 'Not found', message: 'Token not found' });
-        return;
-      }
-      res.json({ success: true, message: 'Token revoked' });
-    }, {
-      requiredScope: 'tokens:revoke',
-    });
+    this.registerEndpoint(
+      '/tokens/:key',
+      'DELETE',
+      (req, res) => {
+        const { key } = req.params;
+        const removed = this.revokeToken(key ?? '');
+        if (!removed) {
+          res.status(404).json({ error: 'Not found', message: 'Token not found' });
+          return;
+        }
+        res.json({ success: true, message: 'Token revoked' });
+      },
+      {
+        requiredScope: 'tokens:revoke',
+      },
+    );
 
     // GET /api/endpoints - List all registered endpoints
-    this.registerEndpoint('/endpoints', 'GET', (_req, res) => {
-      const endpoints = this.listEndpoints().map((e) => ({
-        method: e.method,
-        path: e.path,
-        description: e.description,
-        requiresAuth: e.requiresAuth,
-        rateLimited: e.rateLimited,
-      }));
-      res.json({ endpoints });
-    }, {
-      requiredScope: 'endpoints:read',
-    });
+    this.registerEndpoint(
+      '/endpoints',
+      'GET',
+      (_req, res) => {
+        const endpoints = this.listEndpoints().map((e) => ({
+          method: e.method,
+          path: e.path,
+          description: e.description,
+          requiresAuth: e.requiresAuth,
+          rateLimited: e.rateLimited,
+        }));
+        res.json({ endpoints });
+      },
+      {
+        requiredScope: 'endpoints:read',
+      },
+    );
   }
 }
 

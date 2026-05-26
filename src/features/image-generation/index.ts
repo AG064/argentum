@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Image Generation Feature
@@ -78,8 +79,7 @@ class ImageGenerationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'image-generation',
     version: '0.0.7',
-    description:
-      'AI image generation via Gemini 3 Pro Image with SiliconFlow FLUX.1-dev fallback',
+    description: 'AI image generation via Gemini 3 Pro Image with SiliconFlow FLUX.1-dev fallback',
     dependencies: [],
   };
 
@@ -132,10 +132,7 @@ class ImageGenerationFeature implements FeatureModule {
    *
    * Detects quota errors in stderr and reports them in result.
    */
-  async generateImage(
-    prompt: string,
-    options: GenerateImageOptions,
-  ): Promise<GenerateImageResult> {
+  async generateImage(prompt: string, options: GenerateImageOptions): Promise<GenerateImageResult> {
     return new Promise((resolve, reject) => {
       const {
         filename,

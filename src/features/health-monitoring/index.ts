@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { arch, cpus, freemem, loadavg, platform, totalmem } from 'os';
 
 import {

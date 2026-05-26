@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Mesh Workflows Feature
@@ -154,10 +155,14 @@ function evalNode(node: jsep.Expression, vars: Record<string, unknown>): unknown
     case 'LogicalExpression': {
       const logicalNode = node as jsep.BinaryExpression;
       if (logicalNode.operator === '&&') {
-        return Boolean(evalNode(logicalNode.left, vars)) && Boolean(evalNode(logicalNode.right, vars));
+        return (
+          Boolean(evalNode(logicalNode.left, vars)) && Boolean(evalNode(logicalNode.right, vars))
+        );
       }
       if (logicalNode.operator === '||') {
-        return Boolean(evalNode(logicalNode.left, vars)) || Boolean(evalNode(logicalNode.right, vars));
+        return (
+          Boolean(evalNode(logicalNode.left, vars)) || Boolean(evalNode(logicalNode.right, vars))
+        );
       }
       throw new Error(`Unsupported logical operator: ${logicalNode.operator}`);
     }
@@ -572,8 +577,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       } catch (listenerError) {
         this.ctx.logger.warn('Workflow progress listener failed', {
           executionId: exec.id,
-          error:
-            listenerError instanceof Error ? listenerError.message : String(listenerError),
+          error: listenerError instanceof Error ? listenerError.message : String(listenerError),
         });
       }
     }

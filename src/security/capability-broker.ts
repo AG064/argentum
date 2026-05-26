@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { randomUUID } from 'crypto';
 import { appendFileSync, mkdirSync } from 'fs';
 import { dirname, isAbsolute, resolve } from 'path';

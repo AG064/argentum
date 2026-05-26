@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export const ARGENTUM_BANNER = `
     AAAAA    RRRRR     GGGGG   EEEEEEE  N     N  TTTTTTT  U     U  M     M
    A     A   R    R   G        E        NN    N     T     U     U  MM   MM

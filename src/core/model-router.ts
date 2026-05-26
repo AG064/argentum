@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
  * Cost-Aware Model Router
@@ -80,17 +81,17 @@ export interface ModelRouterConfig {
 // ─── Default Weights (15 dimensions) ───────────────────────────────────────
 
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
-  costEfficiency: 1.2,       // Lower cost = higher score
-  latency: 1.0,              // Lower latency = higher score
-  capabilityMatch: 1.5,     // Match required capabilities strongly
-  contextLengthFit: 0.8,    // Don't over-provision context length
-  toolSupport: 1.3,         // Tool support is important
-  recentSuccessRate: 1.4,   // Track actual performance
-  tokenEfficiency: 0.7,      // Prefer efficient models
+  costEfficiency: 1.2, // Lower cost = higher score
+  latency: 1.0, // Lower latency = higher score
+  capabilityMatch: 1.5, // Match required capabilities strongly
+  contextLengthFit: 0.8, // Don't over-provision context length
+  toolSupport: 1.3, // Tool support is important
+  recentSuccessRate: 1.4, // Track actual performance
+  tokenEfficiency: 0.7, // Prefer efficient models
   specializationMatch: 1.1, // Domain-specific advantage
-  reliability: 1.3,         // Avoid flaky models
-  throughput: 0.6,          // Speed matters less if accuracy is fine
-  customWeight: 1.0,        // Extensible
+  reliability: 1.3, // Avoid flaky models
+  throughput: 0.6, // Speed matters less if accuracy is fine
+  customWeight: 1.0, // Extensible
 };
 
 // ─── Model Registry ─────────────────────────────────────────────────────────
@@ -201,15 +202,15 @@ export class ModelRouter {
 
     // If preferCheap, auto-select cheapest capable model
     if (criteria.preferCheap) {
-      const cheapest = candidates.reduce((a, b) =>
-        a.costPer1K <= b.costPer1K ? a : b
+      const cheapest = candidates.reduce((a, b) => (a.costPer1K <= b.costPer1K ? a : b));
+      logger.debug(
+        `[ModelRouter] Cheapest capable: ${cheapest.modelId} (${cheapest.costPer1K}/1K)`,
       );
-      logger.debug(`[ModelRouter] Cheapest capable: ${cheapest.modelId} (${cheapest.costPer1K}/1K)`);
       return cheapest.modelId;
     }
 
     // Score all candidates and pick the best
-    const scored = candidates.map(model => ({
+    const scored = candidates.map((model) => ({
       model,
       score: this.scoreModel(model, criteria),
     }));
@@ -245,10 +246,16 @@ export class ModelRouter {
     const capabilityScore = this.scoreCapabilityMatch(model.capabilities, criteria);
 
     // 4. Context Length Fit (don't over-provision)
-    const contextScore = this.scoreContextLengthFit(model.contextLength ?? 32000, criteria.minContextLength);
+    const contextScore = this.scoreContextLengthFit(
+      model.contextLength ?? 32000,
+      criteria.minContextLength,
+    );
 
     // 5. Tool Support
-    const toolScore = this.scoreToolSupport(model.toolSupport ?? false, criteria.requiredTools ?? false);
+    const toolScore = this.scoreToolSupport(
+      model.toolSupport ?? false,
+      criteria.requiredTools ?? false,
+    );
 
     // 6. Recent Success Rate (exponential moving average feel)
     const successScore = this.scoreSuccessRate(model);
@@ -259,7 +266,7 @@ export class ModelRouter {
     // 8. Specialization Match
     const specializationScore = this.scoreSpecializationMatch(
       model.specialization ?? [],
-      criteria.taskType
+      criteria.taskType,
     );
 
     // 9. Reliability Score
@@ -274,7 +281,7 @@ export class ModelRouter {
     // 12. Context Availability (how much headroom)
     const contextAvailabilityScore = this.scoreContextAvailability(
       model.contextLength ?? 32000,
-      criteria.minContextLength
+      criteria.minContextLength,
     );
 
     // 13. Priority Weighting (for preferFast, preferCheap flags)
@@ -325,25 +332,20 @@ export class ModelRouter {
     return Math.max(0, Math.min(1, 1 - latency / 5000));
   }
 
-  private scoreCapabilityMatch(
-    capabilities: string[],
-    criteria: RoutingCriteria
-  ): number {
+  private scoreCapabilityMatch(capabilities: string[], criteria: RoutingCriteria): number {
     let score = 0.5; // base
 
     // Check required capabilities (must have all)
     if (criteria.requiredCapabilities?.length) {
-      const hasAll = criteria.requiredCapabilities.every(cap =>
-        capabilities.includes(cap)
-      );
+      const hasAll = criteria.requiredCapabilities.every((cap) => capabilities.includes(cap));
       if (!hasAll) return 0;
       score += 0.3;
     }
 
     // Check preferred capabilities (bonus for matches)
     if (criteria.preferredCapabilities?.length) {
-      const matchCount = criteria.preferredCapabilities.filter(cap =>
-        capabilities.includes(cap)
+      const matchCount = criteria.preferredCapabilities.filter((cap) =>
+        capabilities.includes(cap),
       ).length;
       score += (matchCount / criteria.preferredCapabilities.length) * 0.2;
     }
@@ -437,7 +439,7 @@ export class ModelRouter {
   // ─── Helper Methods ───────────────────────────────────────────────────────
 
   private getEligibleModels(criteria: RoutingCriteria): ModelScore[] {
-    return Array.from(this.models.values()).filter(model => {
+    return Array.from(this.models.values()).filter((model) => {
       // Filter by max cost
       if (criteria.maxCost && model.costPer1K > criteria.maxCost) {
         return false;
@@ -450,8 +452,8 @@ export class ModelRouter {
 
       // Filter by required capabilities
       if (criteria.requiredCapabilities?.length) {
-        const hasAll = criteria.requiredCapabilities.every(cap =>
-          model.capabilities.includes(cap)
+        const hasAll = criteria.requiredCapabilities.every((cap) =>
+          model.capabilities.includes(cap),
         );
         if (!hasAll) return false;
       }
