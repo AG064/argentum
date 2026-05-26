@@ -297,10 +297,10 @@ Environment variables override YAML values:
 
 | Env Var | YAML Path |
 |---|---|
-| `AGCLAW_PORT` | `server.port` |
-| `AGCLAW_LOG_LEVEL` | `logging.level` |
-| `AGCLAW_TELEGRAM_TOKEN` | `channels.telegram.token` |
-| `AGCLAW_SUPABASE_URL` | `memory.supabaseUrl` |
+| `ARGENTUM_PORT` | `server.port` |
+| `ARGENTUM_LOG_LEVEL` | `logging.level` |
+| `ARGENTUM_TELEGRAM_TOKEN` | `channels.telegram.token` |
+| `ARGENTUM_SUPABASE_URL` | `memory.supabaseUrl` |
 
 ---
 

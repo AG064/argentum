@@ -19,7 +19,7 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
   - Support text direction (LTR/RTL) via CSS logical properties
   - Number/date formatting via Intl API (not hardcoded formats)
   - Language picker in settings and onboarding
-- **Russian language UI and documentation**
+- **In-app migration flow** — plan for v0.1.0; make it easy to migrate inside the app itself and keep interim guidance in onboarding/help text
 - **Estonian language UI and documentation**
 - **Crypto algorithm agility** — make encryption algorithm configurable (AES-256-GCM, ChaCha20-Poly1305); allow switching if one is broken
 - Test suite fixes (Jest/ESM configuration)
@@ -67,7 +67,7 @@ The roadmap is reviewed monthly and updated as priorities shift. Major changes a
 
 Feedback mechanism in-code: users should be able to submit bug reports and feature requests from within the running application, not just through GitHub.
 
-Russian language: UI strings, onboarding, and docs to support the Russian-speaking user base.
+Migration: provide an in-app path for users coming from OpenClaw so the standalone migration document is no longer needed.
 
 Accent color: the default red accent (#e23b3b) should be user-configurable in settings. Users who need different colors for visual comfort or branding can choose their own. The Argentum logo itself does not change.
 

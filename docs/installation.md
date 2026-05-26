@@ -16,7 +16,7 @@
 
 | Requirement    | Minimum Version    | Check                    |
 | -------------- | ------------------ | ------------------------ |
-| Node.js        | >= 20.0            | `node -v`                |
+| Node.js        | >= 18.0            | `node -v`                |
 | npm            | >= 9.0             | `npm -v`                 |
 | Git            | any                | `git --version`          |
 | Docker         | >= 24.0 (optional) | `docker --version`       |
@@ -46,7 +46,7 @@ winget install OpenJS.NodeJS.LTS
 **Verify:**
 
 ```bash
-node -v   # Should print v20.x.x or higher
+node -v   # Should print v18.x.x or higher
 npm -v    # Should print 9.x.x or higher
 ```
 
@@ -189,14 +189,14 @@ npm run dev
 
 | Variable                | Description                           | Required            |
 | ----------------------- | ------------------------------------- | ------------------- |
-| `AGCLAW_TELEGRAM_TOKEN` | Telegram bot token from @BotFather    | For Telegram        |
+| `ARGENTUM_TELEGRAM_TOKEN` | Telegram bot token from @BotFather    | For Telegram        |
 | `OPENROUTER_API_KEY`    | OpenRouter API key for model access   | Yes                 |
 | `ELEVENLABS_API_KEY`    | ElevenLabs key for voice features     | For voice           |
-| `AGCLAW_SUPABASE_URL`   | Supabase project URL                  | For Supabase memory |
-| `AGCLAW_SUPABASE_KEY`   | Supabase anon/service key             | For Supabase memory |
-| `AGCLAW_FCM_KEY`        | Firebase Cloud Messaging key          | For mobile push     |
-| `AGCLAW_LOG_LEVEL`      | Logging level (debug/info/warn/error) | No                  |
-| `AGCLAW_PORT`           | Override default port (18789)         | No                  |
+| `ARGENTUM_SUPABASE_URL`   | Supabase project URL                  | For Supabase memory |
+| `ARGENTUM_SUPABASE_KEY`   | Supabase anon/service key             | For Supabase memory |
+| `ARGENTUM_FCM_KEY`        | Firebase Cloud Messaging key          | For mobile push     |
+| `ARGENTUM_LOG_LEVEL`      | Logging level (debug/info/warn/error) | No                  |
+| `ARGENTUM_PORT`           | Override default port (18789)         | No                  |
 
 ### YAML Configuration (`config/default.yaml`)
 

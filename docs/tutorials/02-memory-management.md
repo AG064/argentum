@@ -429,7 +429,7 @@ argentum memory import memories-backup-20260318.json
 Enable debug logging to see memory queries:
 
 ```bash
-AGCLAW_LOG_LEVEL=debug argentum gateway start
+ARGENTUM_LOG_LEVEL=debug argentum gateway start
 ```
 
 Look for log lines like:
