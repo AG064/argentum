@@ -1,35 +1,51 @@
-node_modules/
+```
+# Build artifacts
 dist/
-*.js.map
-*.d.ts.map
-data/
-artifacts/
-.npm-cache/
-.pkg-cache/
-.dotnet-home/
-.nuget-packages/
-.appdata/
-.localappdata/
-.wix/
-memory/
-logs/
-.env
-*.enc.json
-.env
-agclaw-*
-argentum-*
+build/
+target/
 
-# Credentials (NEVER commit)
-credentials/
-*.kdbx
-secrets/
+# Coverage reports
+coverage/
+
+# TypeScript compiled files
+*.d.ts
+*.d.ts.map
+*.js
+*.js.map
+
+# Logs
+*.log
+
+# Environment variables
 .env
 .env.local
+*.env.*
 
-# OpenSpace fork
-OpenSpace/
-.tsbuildinfo
-src/desktop/gen/
-src/desktop/target/
-src/desktop/binaries/argentum-cli-*
+# Dependencies
+node_modules/
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+.nyc_output/
 coverage/
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+*.tar
+*.gz
+
+# Temporary files
+*.tmp
+*.temp
+```
