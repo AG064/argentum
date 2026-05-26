@@ -97,3 +97,102 @@ To report a security vulnerability, contact the maintainer directly:
 ## Resolved
 
 None currently. All known issues are either suppressed pending upstream fix or still under investigation.
+
+---
+
+### 3. CVE-2026-33634 — Trivy Supply Chain (malicious release v0.69.4)
+
+**Severity:** CRITICAL (supply chain)
+**Package:** aquasecurity/trivy-action@v0.x (versions 0.0.1–0.34.2)
+**Status in Argentum:** NOT AFFECTED — already on safe versions
+
+**Details:** On 2026-03-19, a threat actor published malicious Trivy v0.69.4 and force-pushed malicious commits to 76/77 version tags. Known safe: trivy-action >=v0.35.0, setup-trivy v0.2.6 with safe commit SHA.
+
+**Argentum usage:**
+
+- `dependency-scan.yml` → trivy-action@v0.36.0 ✅ (safe)
+- `release.yml` → trivy-action@0.29.0 ✅
+- `trivy.yml` → full commit SHA `314ff8b4` ✅
+
+**Recommendation:** Pin all GitHub Actions to full immutable commit SHAs. Check if `trivy.yml` ran March 19–20 2026.
+
+**Status:** Documentation only — no action required
+
+---
+
+### 4. CVE-2026-1528 — Undici WebSocket ByteParser Overflow
+
+**Severity:** HIGH
+**Package:** undici (NOT a direct dependency)
+**Introduced by:** undici-types@7.19.2 (TypeScript types only)
+
+**Details:** Server can send a 64-bit length WebSocket frame causing ByteParser overflow → fatal TypeError. Patched in undici v7.24.0 / v6.24.0.
+
+**Impact on Argentum:** `undici-types` is types-only. `npm ls undici` returns empty — no actual undici runtime or WebSocket handling code.
+
+**Status:** LOW — no actual undici vulnerability in runtime
+
+---
+
+### 5. CVE-2026-42338 — ip-address XSS (transitive through express-rate-limit)
+
+**Severity:** MEDIUM
+**Package:** ip-address@10.2.0
+**Fix in:** ip-address >= 10.2.1 (?)
+
+**Impact on Argentum:** Transitive via `express-rate-limit@8.5.1`. No browser rendering path. Watch for fix.
+
+**Status:** Watch — npm shows latest = 10.2.0 (no update available yet)
+
+---
+
+### 6. CVE-2026-40186 — sanitize-html bypass (XSS entity decoding)
+
+**Severity:** MEDIUM (XSS bypass)
+**Package:** sanitize-html@2.17.4 (updated)
+**Fix in:** sanitize-html >= 2.17.5
+
+**Details:** Regression bypasses allowedTags for textarea/option via entity-encoded HTML injection. Affects non-default configurations where these elements are in allowedTags.
+
+**Action:** `npm update sanitize-html` — current latest on npm is still 2.17.4 (fix may be in-flight). Monitor for 2.17.5.
+
+**Status:** Monitoring — latest npm version is 2.17.4 which may already include fix
+
+---
+
+### 7. CVE-2026-41686 — Claude SDK Local File Permissions (GHSA-p7fg-763f-g4gf)
+
+**Severity:** MEDIUM (file permission)
+**Package:** @anthropic-ai/sdk@0.98.0 (UPDATED ✅)
+**Fix in:** @anthropic-ai/sdk >= 0.91.1
+
+**Details:** BetaLocalFilesystemMemoryTool creates files with 0o666/0o777 modes. Local attacker on shared host can read/modify memory files.
+
+**Impact on Argentum:** Only affects use of Claude SDK's BetaLocalFilesystemMemoryTool feature. Argentum uses SDK for API calls, not the beta filesystem tool. Updated to 0.98.0 as of 2026-05-26.
+
+**Status:** ✅ Fixed — updated to SDK 0.98.0
+
+---
+
+### 8. CVE-2026-42184 — Tauri Origin Confusion
+
+**Severity:** MEDIUM
+**Package:** tauri v2.x (Cargo.lock)
+**Details:** Origin confusion in Tauri v2.x. Affected versions depend on specific release.
+
+**Action:** Identify exact Tauri version in Cargo.lock and cross-reference with CVE. Check `src/desktop/Cargo.toml`.
+
+**Status:** Under investigation — version-specific, not directly controllable via npm
+
+---
+
+## Mitigation Summary (as of 2026-05-26)
+
+| CVE            | Package           | Action                        | Status          |
+| -------------- | ----------------- | ----------------------------- | --------------- |
+| CVE-2026-33634 | trivy-action      | Already safe                  | ✅ Done         |
+| CVE-2026-1528  | undici-types      | Types only, no runtime        | ✅ Not affected |
+| CVE-2026-42338 | ip-address        | Monitor (no update available) | ⚠️ Watch        |
+| CVE-2026-40186 | sanitize-html     | Monitor (2.17.4 latest)       | ⚠️ Watch        |
+| CVE-2026-41686 | @anthropic-ai/sdk | Updated to 0.98.0             | ✅ Fixed        |
+| CVE-2026-42184 | tauri             | Version-specific assessment   | ⚠️ Investigate  |

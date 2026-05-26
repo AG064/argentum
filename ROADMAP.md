@@ -6,6 +6,11 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
 
 ## What We Will Do
 
+- **Router Agent — multi-user production integration** — wire `src/agents/router/` into main agent loop; workspace-per-user isolation; config/router.yaml with default rules; test with 2+ Telegram users
+- **Knowledge Graph consolidation** — three graph implementations exist (core, memory, features); design unified `GraphBackend` interface and merge duplication
+- **Policy Engine resolution** — investigate `policy-engine.ts` (orphaned, never imported) vs `policy-engine/index.ts` (active); delete or merge orphaned file
+- **Security hardening** — verify all 7 documented CVEs are patched; monitor sanitize-html and ip-address for updates; audit Tauri version
+
 ### v0.1.0 (Next 3-6 months)
 
 - **Internationalization (i18n) infrastructure** — enable localization for any language

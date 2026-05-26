@@ -59,3 +59,10 @@ secrets/
 # Temporary files
 *.tmp
 *.temp
+
+# SARIF reports (CI artifacts — large binary output)
+*.sarif
+.semgrep.sarif
+
+# Agent memory/workspace state
+MEMORY.md
