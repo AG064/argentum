@@ -18,7 +18,7 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
 - **Estonian language UI and documentation**
 - **Crypto algorithm agility** — make encryption algorithm configurable (AES-256-GCM, ChaCha20-Poly1305); allow switching if one is broken
 - Test suite fixes (Jest/ESM configuration)
-- Improved test coverage to 80% statement/branch/function/line coverage
+- Improved test coverage to 90% statement/branch/function/line coverage
 
 ### Accessibility Improvements (v0.1.0)
 
