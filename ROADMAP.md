@@ -19,7 +19,7 @@ Argentum v0.0.7 is released and functional. The project is actively maintained.
   - Support text direction (LTR/RTL) via CSS logical properties
   - Number/date formatting via Intl API (not hardcoded formats)
   - Language picker in settings and onboarding
-- **In-app migration flow** — make it easy to migrate inside the app itself; replace the standalone OpenClaw migration guide
+- **In-app migration flow** — plan for v0.1.0; make it easy to migrate inside the app itself and keep interim guidance in onboarding/help text
 - **Estonian language UI and documentation**
 - **Crypto algorithm agility** — make encryption algorithm configurable (AES-256-GCM, ChaCha20-Poly1305); allow switching if one is broken
 - Test suite fixes (Jest/ESM configuration)
