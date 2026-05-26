@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * Dynamic model discovery via /v1/models API.
  * Mirrors the approach used by OpenClaw's plugin system.

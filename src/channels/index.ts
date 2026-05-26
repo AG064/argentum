@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * Channels module — protocol adapters for external messaging platforms.
  *

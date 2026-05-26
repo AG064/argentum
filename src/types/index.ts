@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * Types module — shared TypeScript type definitions across the project.
  *

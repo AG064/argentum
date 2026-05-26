@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * Object manipulation utilities — safe JSON parsing, deep operations, etc.
  */

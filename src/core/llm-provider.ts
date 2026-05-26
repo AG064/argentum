@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum LLM Provider — Fully Configurable
  *

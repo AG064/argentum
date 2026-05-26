@@ -1,3 +1,4 @@
+// Copyright (c) 2024-2026 AG064
 /**
  * MCP (Model Context Protocol) Types and Interfaces
  * Based on MCP Specification 2025-06-18
