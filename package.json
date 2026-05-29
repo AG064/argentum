@@ -87,7 +87,7 @@
     "dotenv": "^17.4.1",
     "express": "^4.22.2",
     "express-rate-limit": "^8.5.1",
-    "googleapis": "^171.4.0",
+    "googleapis": "^173.0.0",
     "grammy": "^1.42.0",
     "jsep": "^1.4.0",
     "node-cron": "^4.2.1",
