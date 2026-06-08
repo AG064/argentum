@@ -12,6 +12,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/AG064/argentum/ci.yml?style=flat-square)](https://github.com/AG064/argentum/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/ag064/argentum)
 
+<img width="2559" height="1383" alt="image" src="https://github.com/user-attachments/assets/2085e372-4fae-4e11-8a83-471a0c6758a4" />
+
 Argentum is a local-first AI workspace. It runs on your own machine so your data stays with you. You can chat with AI providers you choose, route conversations through Telegram, Discord, or other channels, keep memory across sessions, and use a full desktop app instead of juggling browser tabs.
 
 ## Install
