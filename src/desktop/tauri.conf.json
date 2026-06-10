@@ -44,9 +44,9 @@
         "installerHooks": "generated/optional-llama.nsh"
       },
       "wix": {
-        "language": "en-US"
+        "language": "en-US",
+        "version": "0.0.8.1"
       }
     }
-  },
-  "productVersion": "0.0.8.1"
+  }
 }
