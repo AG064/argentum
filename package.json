@@ -13,7 +13,7 @@
     "start": "node dist/cli.js start",
     "onboard": "tsx src/cli.ts onboard",
     "cli": "node dist/cli.js",
-    "dev": "tsx watch src/index.ts & tsx src/cli.ts dashboard start --port 3000",
+    "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",
     "lint": "eslint src/ --max-warnings 999",

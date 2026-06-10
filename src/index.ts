@@ -27,10 +27,8 @@ import { createLogger, type Logger } from './core/logger';
 import { PluginLoader, type FeatureModule } from './core/plugin-loader';
 import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
-import {
-  createCapabilityBroker,
-  type CapabilityBroker,
-} from './security/capability-broker';
+import { createCapabilityBroker, type CapabilityBroker } from './security/capability-broker';
+import { startDashboardServer } from './ui/server/index.js';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 
@@ -199,7 +197,10 @@ function redactChannelText(value: string): string {
   return value
     .replace(/\b(?:sk|sk-proj|sk-ant|nvapi|gsk|or)-[A-Za-z0-9._-]{12,}\b/g, '[redacted secret]')
     .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/gi, 'Bearer [redacted secret]')
-    .replace(/\b(?:api[_-]?key|token|secret)\s*[:=]\s*['"]?[A-Za-z0-9._-]{12,}['"]?/gi, '$1=[redacted secret]');
+    .replace(
+      /\b(?:api[_-]?key|token|secret)\s*[:=]\s*['"]?[A-Za-z0-9._-]{12,}['"]?/gi,
+      '$1=[redacted secret]',
+    );
 }
 
 // ─── Agent Core ───────────────────────────────────────────────────────────────
@@ -450,86 +451,86 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
 
   if (options.enableFilesystemTools) {
     tools.push(
-    {
-      name: 'read_file',
-      description: 'Read the contents of a file. Only safe paths are allowed.',
-      parameters: {
-        path: { type: 'string', description: 'File path to read', required: true },
-      },
-      execute: async (params) => {
-        const { readFileSync, existsSync } = await import('fs');
-        const filePath = params['path'] as string;
+      {
+        name: 'read_file',
+        description: 'Read the contents of a file. Only safe paths are allowed.',
+        parameters: {
+          path: { type: 'string', description: 'File path to read', required: true },
+        },
+        execute: async (params) => {
+          const { readFileSync, existsSync } = await import('fs');
+          const filePath = params['path'] as string;
 
-        if (!filePath) return 'Error: path parameter is required';
+          if (!filePath) return 'Error: path parameter is required';
 
-        const decision = capabilityBroker.authorize({
-          action: 'file.read',
-          resource: filePath,
-          requester: 'builtin.read_file',
-        });
-        if (!decision.allowed) {
-          if (decision.reason === 'outside-workspace') {
-            return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          const decision = capabilityBroker.authorize({
+            action: 'file.read',
+            resource: filePath,
+            requester: 'builtin.read_file',
+          });
+          if (!decision.allowed) {
+            if (decision.reason === 'outside-workspace') {
+              return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+            }
+            return `Error: Access denied (${decision.reason}): ${filePath}`;
           }
-          return `Error: Access denied (${decision.reason}): ${filePath}`;
-        }
-        const safePath = decision.resolvedPath;
-        if (!safePath) {
-          return `Error: Path could not be resolved: ${filePath}`;
-        }
-        if (!existsSync(safePath)) {
-          return `Error: File not found: ${safePath}`;
-        }
-
-        try {
-          const content = readFileSync(safePath, 'utf-8');
-          return content.length > 5000 ? `${content.slice(0, 5000)}\n... (truncated)` : content;
-        } catch (err) {
-          return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
-        }
-      },
-    },
-    {
-      name: 'write_file',
-      description: 'Write content to a file. Creates directories as needed.',
-      parameters: {
-        path: { type: 'string', description: 'File path to write', required: true },
-        content: { type: 'string', description: 'Content to write', required: true },
-      },
-      execute: async (params) => {
-        const { writeFileSync, mkdirSync } = await import('fs');
-        const { dirname } = await import('path');
-        const filePath = params['path'] as string;
-        const content = params['content'] as string;
-
-        if (!filePath || content === undefined)
-          return 'Error: path and content parameters are required';
-
-        const decision = capabilityBroker.authorize({
-          action: 'file.write',
-          resource: filePath,
-          requester: 'builtin.write_file',
-        });
-        if (!decision.allowed) {
-          if (decision.reason === 'outside-workspace') {
-            return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+          const safePath = decision.resolvedPath;
+          if (!safePath) {
+            return `Error: Path could not be resolved: ${filePath}`;
           }
-          return `Error: Access denied (${decision.reason}): ${filePath}`;
-        }
-        const safePath = decision.resolvedPath;
-        if (!safePath) {
-          return `Error: Path could not be resolved: ${filePath}`;
-        }
+          if (!existsSync(safePath)) {
+            return `Error: File not found: ${safePath}`;
+          }
 
-        try {
-          mkdirSync(dirname(safePath), { recursive: true });
-          writeFileSync(safePath, content, 'utf-8');
-          return `File written successfully: ${safePath} (${content.length} chars)`;
-        } catch (err) {
-          return `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
-        }
+          try {
+            const content = readFileSync(safePath, 'utf-8');
+            return content.length > 5000 ? `${content.slice(0, 5000)}\n... (truncated)` : content;
+          } catch (err) {
+            return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        },
       },
-    },
+      {
+        name: 'write_file',
+        description: 'Write content to a file. Creates directories as needed.',
+        parameters: {
+          path: { type: 'string', description: 'File path to write', required: true },
+          content: { type: 'string', description: 'Content to write', required: true },
+        },
+        execute: async (params) => {
+          const { writeFileSync, mkdirSync } = await import('fs');
+          const { dirname } = await import('path');
+          const filePath = params['path'] as string;
+          const content = params['content'] as string;
+
+          if (!filePath || content === undefined)
+            return 'Error: path and content parameters are required';
+
+          const decision = capabilityBroker.authorize({
+            action: 'file.write',
+            resource: filePath,
+            requester: 'builtin.write_file',
+          });
+          if (!decision.allowed) {
+            if (decision.reason === 'outside-workspace') {
+              return `Error: Path is outside the configured workspace: ${capabilityBroker.workspaceRoot}`;
+            }
+            return `Error: Access denied (${decision.reason}): ${filePath}`;
+          }
+          const safePath = decision.resolvedPath;
+          if (!safePath) {
+            return `Error: Path could not be resolved: ${filePath}`;
+          }
+
+          try {
+            mkdirSync(dirname(safePath), { recursive: true });
+            writeFileSync(safePath, content, 'utf-8');
+            return `File written successfully: ${safePath} (${content.length} chars)`;
+          } catch (err) {
+            return `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        },
+      },
     );
   }
 
@@ -603,7 +604,8 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         },
         inputImage: {
           type: 'string',
-          description: 'Optional input image filename (simple filename only, no path separators) for editing',
+          description:
+            'Optional input image filename (simple filename only, no path separators) for editing',
           required: false,
         },
       },
@@ -646,15 +648,23 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
         if (pathBasename(filename) !== filename || hasParentTraversalSegment(filename)) {
           return 'Error: filename must be a simple filename without path separators or traversal sequences';
         }
-        if (inputImage && (pathBasename(inputImage) !== inputImage || hasParentTraversalSegment(inputImage))) {
+        if (
+          inputImage &&
+          (pathBasename(inputImage) !== inputImage || hasParentTraversalSegment(inputImage))
+        ) {
           return 'Error: inputImage must be a simple filename without path separators or traversal sequences';
         }
 
         const args = [
-          'run', 'python3', scriptPath,
-          '--prompt', prompt,
-          '--filename', filename,
-          '--resolution', resolution,
+          'run',
+          'python3',
+          scriptPath,
+          '--prompt',
+          prompt,
+          '--filename',
+          filename,
+          '--resolution',
+          resolution,
         ];
 
         if (inputImage) {
@@ -676,16 +686,24 @@ export function createBuiltinTools(options: BuiltinToolOptions = {}): Tool[] {
             resolve('Error: Image generation timed out after 180s');
           }, 180_000);
 
-          proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
-          proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+          proc.stdout?.on('data', (d: Buffer) => {
+            stdout += d.toString();
+          });
+          proc.stderr?.on('data', (d: Buffer) => {
+            stderr += d.toString();
+          });
 
           proc.on('close', (code) => {
             clearTimeout(timer);
             if (code === 0) {
               const usedFallback = stderr.includes('[SiliconFlow') || stderr.includes('fallback');
-              resolve(`Image generated successfully and saved to: ${filename}\nProvider: ${usedFallback ? 'SiliconFlow FLUX.1-dev (fallback)' : 'Gemini 3 Pro Image'}`);
+              resolve(
+                `Image generated successfully and saved to: ${filename}\nProvider: ${usedFallback ? 'SiliconFlow FLUX.1-dev (fallback)' : 'Gemini 3 Pro Image'}`,
+              );
             } else {
-              resolve(`Image generation failed (exit code ${code}). Check stderr: ${stderr.slice(0, 500)}`);
+              resolve(
+                `Image generation failed (exit code ${code}). Check stderr: ${stderr.slice(0, 500)}`,
+              );
             }
           });
 
@@ -800,9 +818,7 @@ class Argentum {
     fs.writeFileSync(
       sessionsPath,
       JSON.stringify(
-        sessions
-          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-          .slice(0, 24),
+        sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 24),
         null,
         2,
       ),
@@ -827,7 +843,11 @@ class Argentum {
       blocks: [],
     };
     this.writeChannelSessions([session, ...sessions]);
-    this.logger.info('Telegram channel session created', { sessionId, chatId: meta.chatId, userId: meta.userId });
+    this.logger.info('Telegram channel session created', {
+      sessionId,
+      chatId: meta.chatId,
+      userId: meta.userId,
+    });
     this.writeTelegramDiagnostics({
       configured: true,
       lastSessionId: sessionId,
@@ -845,10 +865,12 @@ class Argentum {
     const history: Message[] =
       session?.blocks
         ?.filter((block) => block.type === 'message' && block.body)
-        .map((block): Message => ({
-          role: block.role === 'user' ? 'user' : 'assistant',
-          content: block.body,
-        })) ?? [];
+        .map(
+          (block): Message => ({
+            role: block.role === 'user' ? 'user' : 'assistant',
+            content: block.body,
+          }),
+        ) ?? [];
     this.channelHistories.set(sessionId, history);
     return history.slice(-18);
   }
@@ -861,11 +883,11 @@ class Argentum {
     meta: { chatId?: number; userId?: number; reasoning?: string; rawBody?: string } = {},
   ): void {
     const sessions = this.readChannelSessions();
-    const existing = sessions.find((item) => item.id === sessionId) ?? this.ensureChannelSession(sessionId, channel, meta);
+    const existing =
+      sessions.find((item) => item.id === sessionId) ??
+      this.ensureChannelSession(sessionId, channel, meta);
     const blocks = existing?.blocks ?? [];
-    const title =
-      existing?.title ??
-      (meta.chatId ? `Telegram ${meta.chatId}` : 'Telegram chat');
+    const title = existing?.title ?? (meta.chatId ? `Telegram ${meta.chatId}` : 'Telegram chat');
     const safeBody = redactChannelText(body);
     const block: ChannelSessionBlock = {
       type: 'message',
@@ -881,7 +903,7 @@ class Argentum {
       id: sessionId,
       channel,
       title,
-      subtitle: subtitle.length > 0 ? subtitle : existing?.subtitle ?? 'Telegram conversation',
+      subtitle: subtitle.length > 0 ? subtitle : (existing?.subtitle ?? 'Telegram conversation'),
       updatedAt: Date.now(),
       blocks: updatedBlocks,
     };
@@ -944,7 +966,9 @@ class Argentum {
     const enableShellTool = isEnvEnabled('ARGENTUM_ENABLE_SHELL_TOOL');
     const enableImageTool = isEnvEnabled('ARGENTUM_ENABLE_IMAGE_TOOL');
     if (enableFilesystemTools || enableShellTool) {
-      this.logger.warn('Optional built-in filesystem or shell tools are enabled by environment override');
+      this.logger.warn(
+        'Optional built-in filesystem or shell tools are enabled by environment override',
+      );
     }
 
     // Register built-in tools
@@ -953,8 +977,7 @@ class Argentum {
       enableShellTool,
       enableImageTool,
       workspaceRoot:
-        process.env.ARGENTUM_TOOL_ROOT ??
-        this.config.security.capabilities.workspaceRoot,
+        process.env.ARGENTUM_TOOL_ROOT ?? this.config.security.capabilities.workspaceRoot,
       capabilityAuditPath: this.config.security.capabilities.auditPath,
     })) {
       this.agent.registerTool(tool);
@@ -969,14 +992,20 @@ class Argentum {
 
     // Register webchat message handler so messages reach the agent
     this.pluginLoader.registerHook('webchat:message', async (data: unknown) => {
-      const { content, userId, roomId } = data as { content: string; userId: string; roomId: string };
+      const { content, userId, roomId } = data as {
+        content: string;
+        userId: string;
+        roomId: string;
+      };
       this.logger.debug('Webchat message received', { userId, roomId });
       try {
         const response = await this.agent.handleMessage(content ?? '');
         const webchatFeature = this.pluginLoader.getFeature<WebchatFeature>('webchat');
         webchatFeature?.sendAssistantMessage(roomId, response);
       } catch (err) {
-        this.logger.error('Webchat agent error', { error: err instanceof Error ? err.message : String(err) });
+        this.logger.error('Webchat agent error', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     });
 
@@ -996,6 +1025,19 @@ class Argentum {
       tools: this.agent.getToolNames().length,
       port: this.config.server.port,
     });
+
+    // Start dashboard server
+    try {
+      const dashboardServer = await startDashboardServer({
+        port: this.config.server.port,
+        host: this.config.server.host,
+      });
+      this.logger.info(`Dashboard server started on port ${this.config.server.port}`);
+    } catch (err) {
+      this.logger.warn('Failed to start dashboard server', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     // Start health check interval
     this.startHealthChecks();
@@ -1144,7 +1186,9 @@ class Argentum {
       });
 
       bot.command('usage', async (ctx) => {
-        await ctx.reply('Provider usage is shown in the Argentum desktop Diagnostics view when the provider exposes counters.');
+        await ctx.reply(
+          'Provider usage is shown in the Argentum desktop Diagnostics view when the provider exposes counters.',
+        );
       });
 
       // Handle text messages
@@ -1310,12 +1354,18 @@ class Argentum {
               const agentResponse = await this.agent.handleMessage(text, history);
               const parsed = splitAgentReasoning(agentResponse);
               const formattedResponse = formatTelegramAgentResponse(agentResponse, sendReasoning);
-              this.appendChannelSessionMessage(sessionId, 'telegram', 'assistant', formattedResponse, {
-                chatId: ctx.chat?.id,
-                userId: ctx.from?.id,
-                reasoning: parsed.reasoning,
-                rawBody: parsed.rawBody,
-              });
+              this.appendChannelSessionMessage(
+                sessionId,
+                'telegram',
+                'assistant',
+                formattedResponse,
+                {
+                  chatId: ctx.chat?.id,
+                  userId: ctx.from?.id,
+                  reasoning: parsed.reasoning,
+                  rawBody: parsed.rawBody,
+                },
+              );
               await streamTelegramReply(
                 ctx,
                 `Transcription: ${text}\n\n${agentResponse}`,
