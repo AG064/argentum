@@ -77,13 +77,19 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-      
+
+      - name: Install Visual Studio Build Tools (Windows)
+        if: matrix.os == 'windows-2022'
+        run: |
+          choco install visualstudio2022buildtools -y --no-progress
+          choco install visualstudio2022-workload-vctools -y --no-progress
+
       - name: Install
         run: npm ci --legacy-peer-deps
-      
+
       - name: Build
         run: npm run build
-      
+
       - name: Verify build output
         run: node -e "const fs=require('fs');if(!fs.existsSync('dist/index.js'))throw new Error('dist/index.js not found');"
 
