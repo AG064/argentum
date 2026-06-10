@@ -80,30 +80,7 @@ jobs:
         run: npm run build:desktop-sidecar
 
       - name: Build desktop bundle
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]]; then
-            echo "Pre-release version detected, building without bundlers..."
-            case "${{ matrix.platform }}" in
-              windows-2022)
-                echo "Building Windows pre-release (exe only, no installer)..."
-                npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
-                ;;
-              ubuntu-22.04)
-                echo "Building Linux pre-release (deb,rpm)..."
-                npm run desktop:build --ignore-scripts -- ${{ matrix.args }} --bundles deb,rpm
-                ;;
-              macos-*)
-                echo "Building macOS pre-release (app bundle only, no dmg)..."
-                npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
-                ;;
-              *)
-                npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
-                ;;
-            esac
-          else
-            npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
-          fi
+        run: npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
         shell: bash
 
       - name: Upload desktop artifacts
@@ -119,8 +96,6 @@ jobs:
             src/desktop/target/release/bundle/**/*.msi
             src/desktop/target/release/bundle/**/*-setup.exe
             src/desktop/target/*/release/bundle/**/*.dmg
-            src/desktop/target/*/release/argentum-desktop.exe
-            src/desktop/target/*/release/argentum-desktop
 
   desktop-release:
     name: Attach desktop installers to release

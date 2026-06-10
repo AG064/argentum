@@ -36,7 +36,9 @@
       "../../installer/macos/argentum.icns",
       "../../installer/wix/argentum.ico"
     ],
-    "externalBin": ["binaries/argentum-cli"],
+    "externalBin": [
+      "binaries/argentum-cli"
+    ],
     "windows": {
       "nsis": {
         "installerHooks": "generated/optional-llama.nsh"
@@ -45,5 +47,6 @@
         "language": "en-US"
       }
     }
-  }
+  },
+  "productVersion": "0.0.8.1"
 }
