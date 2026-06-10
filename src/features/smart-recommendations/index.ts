@@ -177,7 +177,7 @@ const SUGGESTION_RULES: SuggestionRule[] = [
 class SmartRecommendationsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'smart-recommendations',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Proactive recommendations with behavior learning and briefings',
     dependencies: [],
   };

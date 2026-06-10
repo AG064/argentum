@@ -64,7 +64,7 @@ export interface WakeWordConfig {
 class WakeWordFeature extends EventEmitter implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'wake-word',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Pattern-based wake word detection with event notifications',
     dependencies: [],
   };

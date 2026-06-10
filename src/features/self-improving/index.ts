@@ -77,7 +77,7 @@ interface MessageRoleRow {
 class SelfImprovingLoop implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-improving',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Reflection engine that analyzes behavior and continuously improves Argentum',
     dependencies: ['sqlite-memory', 'user-modeling'],
   };

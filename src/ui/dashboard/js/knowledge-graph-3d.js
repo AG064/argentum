@@ -117,7 +117,7 @@ function generateMockGraphData() {
       name: 'Argentum',
       type: 'project',
       tags: ['ai', 'assistant'],
-      properties: { version: '0.0.7' },
+      properties: { version: '0.0.8-alpha-alpha' },
       val: 10,
       color: TYPE_COLORS.project,
     },

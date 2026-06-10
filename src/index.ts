@@ -924,7 +924,7 @@ class Argentum {
   /** Start the Argentum framework */
   async start(): Promise<void> {
     this.logger.info('Starting Argentum Framework', {
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       nodeVersion: process.version,
       platform: process.platform,
     });

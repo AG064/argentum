@@ -81,7 +81,7 @@ export interface SttEngineConfig {
 class SttEngineFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'stt-engine',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Speech-to-text engine with provider abstraction and history logging',
     dependencies: [],
   };

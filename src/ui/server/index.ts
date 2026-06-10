@@ -383,7 +383,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/health') {
     sendJSON(res, 200, {
       status: 'ok',
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       uptime: process.uptime(),
       wsClients: wsClients.size,
     });
@@ -644,13 +644,13 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
     installed: [
       {
         name: 'clawhub',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Install and manage skills.',
       },
       {
         name: 'weather',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Get weather forecasts.',
       },
@@ -659,7 +659,7 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
       {
         name: 'slack-bot',
         slug: 'slack-bot',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'community',
         description: 'Send messages to Slack.',

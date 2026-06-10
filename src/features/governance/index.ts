@@ -71,7 +71,7 @@ interface TicketRow {
 class GovernanceFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'governance',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Approval gates and governance for sensitive actions',
     dependencies: [],
   };

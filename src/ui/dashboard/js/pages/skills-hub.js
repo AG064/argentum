@@ -475,7 +475,7 @@ function getMockSkillsHubData() {
     installed: [
       {
         name: 'clawhub',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Install, update, and publish agent skills from ClawHub.',
         scripts: ['install.sh', 'update.sh'],
@@ -483,7 +483,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'weather',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Get current weather and forecasts via wttr.in or Open-Meteo.',
         scripts: [],
@@ -491,7 +491,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'deep-research-pro',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'research',
         description:
           'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
@@ -500,7 +500,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'writing-assistant',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'writing',
         description: 'Writing Team Lead managing specialized writers via MCP tools.',
         scripts: ['write.sh'],
@@ -508,7 +508,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'github',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         description: 'GitHub operations via gh CLI: issues, PRs, CI runs, code review.',
         scripts: [],
@@ -519,7 +519,7 @@ function getMockSkillsHubData() {
       {
         name: 'slack-bot',
         slug: 'slack-bot',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'ag-claw',
         description: 'Send messages and notifications to Slack channels.',
@@ -528,7 +528,7 @@ function getMockSkillsHubData() {
       {
         name: 'notion-sync',
         slug: 'notion-sync',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'community',
         description: 'Sync notes and tasks with Notion databases.',
@@ -537,7 +537,7 @@ function getMockSkillsHubData() {
       {
         name: 'code-review',
         slug: 'code-review',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'coding',
         author: 'ag-claw',
         description:
@@ -547,7 +547,7 @@ function getMockSkillsHubData() {
       {
         name: 'sql-helper',
         slug: 'sql-helper',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'coding',
         author: 'community',
         description: 'Generate SQL queries from natural language descriptions.',
@@ -556,7 +556,7 @@ function getMockSkillsHubData() {
       {
         name: 'meeting-notes',
         slug: 'meeting-notes',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'writing',
         author: 'ag-claw',
         description: 'Automatically generate meeting notes from transcripts.',
@@ -565,7 +565,7 @@ function getMockSkillsHubData() {
       {
         name: 'image-gen',
         slug: 'image-gen',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         author: 'community',
         description: 'Generate images using DALL-E, Stable Diffusion, or Midjourney.',
@@ -574,7 +574,7 @@ function getMockSkillsHubData() {
       {
         name: 'cron-manager',
         slug: 'cron-manager',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'automation',
         author: 'ag-claw',
         description: 'Manage and monitor cron jobs from a friendly interface.',
@@ -583,7 +583,7 @@ function getMockSkillsHubData() {
       {
         name: 'data-analyzer',
         slug: 'data-analyzer',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'research',
         author: 'community',
         description: 'Analyze CSV/JSON data files and generate insights.',

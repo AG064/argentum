@@ -7,8 +7,8 @@ const checkOnly = process.argv.includes('--check');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const version = packageJson.version;
 
-if (!/^\d+\.\d+\.\d+$/.test(version)) {
-  throw new Error(`package.json version must be semver without a leading v, got ${version}`);
+if (!/^\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$/.test(version)) {
+  throw new Error(`package.json version must be semver (with optional pre-release suffix), got ${version}`);
 }
 
 const vVersion = `v${version}`;

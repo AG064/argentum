@@ -27,7 +27,7 @@ export interface SecureProfileConfig {
 class SecureProfileFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'secure-profile',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Encrypted storage for personal profile data (AES-256-GCM)',
     dependencies: [],
   };

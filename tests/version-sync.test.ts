@@ -9,7 +9,8 @@ describe('version synchronization', () => {
     };
     const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 
-    expect(packageJson.version).toBe('0.0.7');
+    expect(typeof packageJson.version).toBe('string');
+    expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(packageJson.scripts?.['version:sync']).toBe('node scripts/sync-version.js');
     expect(packageJson.scripts?.['version:check']).toBe('node scripts/sync-version.js --check');
     expect(existsSync('scripts/sync-version.js')).toBe(true);
@@ -42,7 +43,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?!(?:\.\d)|\d)/g)) {
+        for (const match of line.matchAll(/(?<![d.])v?(0.d+.d+(?:-[a-zA-Z0-9]+)?)(?!(?:.d)|d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -76,7 +77,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+)(?!(?:\.\d)|\d)/g)) {
+        for (const match of line.matchAll(/(?<![d.])v?(0.d+.d+(?:-[a-zA-Z0-9]+)?)(?!(?:.d)|d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);

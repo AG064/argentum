@@ -48,7 +48,7 @@ const DEFAULT_CONFIG: GoalDecompositionConfig = {
 class GoalDecompositionFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'goal-decomposition',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Decompose goals into tasks and track dependencies (SQLite)',
     dependencies: [],
   };

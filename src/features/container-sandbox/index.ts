@@ -251,7 +251,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
 class ContainerSandboxFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'container-sandbox',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Docker-based command sandboxing with isolation',
     dependencies: [],
   };
