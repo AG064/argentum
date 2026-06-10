@@ -108,7 +108,7 @@ export const state = {
   setupStatus: 'setup_pending',
   setupAnimation: false,
   version: APP_VERSION,
-  workspacePath: '%LOCALAPPDATA%\\Programs\\Argentum\\workspace',
+  workspacePath: '',
   experienceLevel: '',
   runtimeMode: 'desktop',
   llmProvider: 'openai',
@@ -1028,7 +1028,7 @@ export function compactActiveChatSession(options = {}) {
     .slice(-1800);
 
   const compactedBlock = {
-    id: `compact-${Date.now()}-${generateSecureId()}
+    id: `compact-${Date.now()}-${generateSecureId()}`,
     type: 'summary',
     title: options.automatic ? 'Auto-compacted context' : 'Compacted context',
     body: `Earlier conversation was compacted locally to keep this session responsive.\n\n${summary}`,
@@ -1061,7 +1061,7 @@ export function appendChatMessage(role, body, options = {}) {
       ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' }
       : splitReasoningFromMessage(sourceBody);
   const block = {
-    id: options.id || `${Date.now()}-${generateSecureId()}
+    id: options.id || `${Date.now()}-${generateSecureId()}`,
     type: 'message',
     role,
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',

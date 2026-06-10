@@ -502,7 +502,10 @@ export async function hydrateDesktopDefaults() {
       setUiPreference('workspacePath', state.workspacePath);
       return;
     }
-    if (defaults?.defaultWorkspacePath && state.workspacePath.includes('%LOCALAPPDATA%')) {
+    if (
+      defaults?.defaultWorkspacePath &&
+      (!state.workspacePath || state.workspacePath.includes('%LOCALAPPDATA%'))
+    ) {
       state.workspacePath = defaults.defaultWorkspacePath;
       setUiPreference('workspacePath', state.workspacePath);
     }
