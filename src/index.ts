@@ -28,7 +28,7 @@ import { PluginLoader, type FeatureModule } from './core/plugin-loader';
 import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
 import { createCapabilityBroker, type CapabilityBroker } from './security/capability-broker';
-import { startDashboardServer } from './ui/server/index.js';
+import { startDashboardServer } from './ui/server/index';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 

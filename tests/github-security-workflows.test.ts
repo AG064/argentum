@@ -46,7 +46,7 @@ describe('GitHub security workflow baseline', () => {
     const desktop = workflow('desktop.yml');
 
     expect(desktop).toContain('ubuntu-22.04');
-    expect(desktop).toContain('windows-latest');
+    expect(desktop).toContain('windows-2022');
     expect(desktop).toContain('macos-latest');
     expect(desktop).toContain('macos-15-intel');
     expect(desktop).toContain('aarch64-apple-darwin');
