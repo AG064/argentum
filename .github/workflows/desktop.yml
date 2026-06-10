@@ -82,24 +82,16 @@ jobs:
       - name: Build desktop bundle
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          IS_PRE_RELEASE=false
           if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]]; then
-            IS_PRE_RELEASE=true
-          fi
-          
-          if [ "$IS_PRE_RELEASE" = true ]; then
-            echo "Pre-release version $VERSION detected"
+            echo "Pre-release version detected, building without MSI..."
             case "${{ matrix.platform }}" in
               windows-2022)
-                echo "Skipping MSI for Windows pre-release..."
                 npm run desktop:build --ignore-scripts -- ${{ matrix.args }} --bundles nsis
                 ;;
               ubuntu-22.04)
-                echo "Building deb and rpm for Linux pre-release..."
                 npm run desktop:build --ignore-scripts -- ${{ matrix.args }} --bundles deb,rpm
                 ;;
               macos-*)
-                echo "Building dmg for macOS pre-release..."
                 npm run desktop:build --ignore-scripts -- ${{ matrix.args }} --bundles dmg
                 ;;
               *)
@@ -109,6 +101,7 @@ jobs:
           else
             npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
           fi
+        shell: bash
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
