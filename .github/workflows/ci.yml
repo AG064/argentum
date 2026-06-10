@@ -200,7 +200,16 @@ jobs:
       - name: Docker install
         if: matrix.install_method == 'docker'
         run: |
-          docker build -t argentum:test -f docker/Dockerfile .
+          # Retry Docker build up to 3 times to handle transient network issues
+          for i in 1 2 3; do
+            echo "Docker build attempt $i..."
+            if docker build -t argentum:test -f docker/Dockerfile .; then
+              echo "Docker build succeeded on attempt $i"
+              break
+            fi
+            echo "Docker build failed, retrying in10 seconds..."
+            sleep 10
+          done
           docker run argentum:test --version || true
       
       - name: Binary install
