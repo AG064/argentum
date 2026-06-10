@@ -133,9 +133,9 @@ function rewriteVersionLines(source) {
       }
 
       return line
-        .replace(/(['"])v?0\.\d+\.\d+\1/g, (_match, quote) => `${quote}${version}${quote}`)
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?!(?:\.\d)|\d)/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?!(?:\.\d)|\d)/g, version);
+        .replace(/(['"])v?0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?\1/g, (_match, quote) => `${quote}${version}${quote}`)
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, version);
     })
     .join(newline);
 }
@@ -150,8 +150,8 @@ function rewriteDocumentationVersions(source) {
       }
 
       return line
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?!(?:\.\d)|\d)/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?!(?:\.\d)|\d)/g, version);
+        .replace(/(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, vVersion)
+        .replace(/(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, version);
     })
     .join(newline);
 }
