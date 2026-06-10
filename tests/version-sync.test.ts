@@ -43,7 +43,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![d.])v?(0.d+.d+(?:-[a-zA-Z0-9]+)?)(?!(?:.d)|d)/g)) {
+        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -77,7 +77,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![d.])v?(0.d+.d+(?:-[a-zA-Z0-9]+)?)(?!(?:.d)|d)/g)) {
+        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
