@@ -53,7 +53,7 @@ jobs:
         run: ./artifacts/release/argentum-v${{ steps.package.outputs.version }}-linux-x64 --version
 
       - name: Run Trivy vulnerability scanner on artifacts
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: 'fs'
           scan-ref: 'artifacts/release'
