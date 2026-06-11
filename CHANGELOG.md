@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Accessibility
 
+- **Accent Color Picker**: Choose from 8 preset colors or pick custom color in Appearance settings section
+- **High Contrast Mode**: Accessibility toggle for better visibility
+- **Chat Help Button**: Help button added to chat composer toolbar
+- **Keyboard Shortcuts Panel**: Help panel now shows all keyboard shortcuts
+
 - **Keyboard Navigation**: Full keyboard navigation support
   - Skip-to-content link for keyboard users
   - Ctrl+1-9 for quick section navigation
