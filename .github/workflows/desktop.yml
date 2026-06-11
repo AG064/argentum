@@ -45,6 +45,7 @@ jobs:
             artifact: argentum-desktop-android
             args: "--target aarch64-linux-android"
             rust-targets: "aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android"
+            is-android: true
 
     steps:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
@@ -73,7 +74,7 @@ jobs:
           sudo apt-get install -y build-essential curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Install Android SDK
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.is-android == true
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
