@@ -5207,3 +5207,121 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Accent Color Picker */
+.accent-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.accent-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.accent-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.accent-color-swatch:focus-visible {
+  outline: 2px solid rgba(69, 196, 134, 0.72);
+  outline-offset: 2px;
+}
+
+.accent-color-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px currentColor;
+}
+
+.accent-color-input {
+  width: 40px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+}
+
+.accent-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.accent-color-input::-webkit-color-swatch {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+/* High contrast mode */
+.high-contrast {
+  --text: #ffffff;
+  --muted: #d1d5db;
+  --line: rgba(255, 255, 255, 0.3);
+  --line-strong: rgba(255, 255, 255, 0.5);
+  --panel: #1a1a1a;
+  --panel-strong: #262626;
+}
+
+.high-contrast .nav-button,
+.high-contrast .button,
+.high-contrast .icon-button,
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea {
+  border-color: var(--line-strong);
+}
+
+
+
+/* Help panel keyboard shortcuts section */
+.help-shortcuts {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.help-shortcuts strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.help-shortcuts dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.help-shortcuts dt {
+  display: flex;
+  gap: 2px;
+}
+
+.help-shortcuts dd {
+  color: var(--muted);
+  margin: 0;
+}
+
+.help-shortcuts kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+}
+

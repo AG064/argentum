@@ -151,6 +151,18 @@ function trapFocus(container) {
 function applyUiPreferences() {
   document.documentElement.style.setProperty('--font-ui', state.uiFontFamily);
   document.documentElement.style.setProperty('--font-mono', state.codeFontFamily);
+  if (state.accentColor) {
+    document.documentElement.style.setProperty('--accent', state.accentColor);
+    // Derive soft variant from accent
+    const hex = state.accentColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    document.documentElement.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.15)`);
+  } else {
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--accent-soft');
+  }
 }
 
 function eventTargetElement(event) {
@@ -443,6 +455,19 @@ function renderHelpPanel(section) {
             `,
           )
           .join('')}
+      </div>
+      <div class="help-shortcuts">
+        <strong>Keyboard shortcuts</strong>
+        <dl>
+          <dt><kbd>?</kbd></dt><dd>Toggle this help panel</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close open panels</dd>
+          <dt><kbd>Ctrl+1</kbd> - <kbd>Ctrl+8</kbd></dt><dd>Navigate sections</dd>
+          <dt><kbd>Ctrl+,</kbd></dt><dd>Open Settings</dd>
+          <dt><kbd>Enter</kbd> (in chat)</dt><dd>Send message</dd>
+          <dt><kbd>Shift+Enter</kbd></dt><dd>New line in chat</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Move focus forward</dd>
+          <dt><kbd>Shift+Tab</kbd></dt><dd>Move focus back</dd>
+        </dl>
       </div>
     </aside>
   `;
@@ -1914,6 +1939,23 @@ async function handleChange(event) {
     return;
   }
 
+  if (target.id === 'settings-accent-custom') {
+    setUiPreference('accentColor', target.value.replace('#', ''));
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-high-contrast') {
+    state.highContrastMode = target.checked;
+    if (state.highContrastMode) {
+      document.documentElement.classList.add('high-contrast');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
+    }
+    render();
+    return;
+  }
+
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
     render();
@@ -2087,6 +2129,12 @@ async function handleClick(event, activationElement = null) {
   }
 
   if (element.closest('#help-button')) {
+    toggleHelp();
+    render();
+    return;
+  }
+
+  if (element.closest('#chat-help-button')) {
     toggleHelp();
     render();
     return;
@@ -2353,6 +2401,16 @@ async function handleClick(event, activationElement = null) {
   const settingsSectionButton = element.closest('[data-settings-section]');
   if (settingsSectionButton) {
     setSettingsSection(settingsSectionButton.dataset.settingsSection);
+    render();
+    return;
+  }
+
+  const accentSwatch = element.closest('[data-accent-color]');
+  if (accentSwatch) {
+    setUiPreference('accentColor', accentSwatch.dataset.accentColor);
+    // Sync the color input value
+    const colorInput = document.getElementById('settings-accent-custom');
+    if (colorInput) colorInput.value = '#' + accentSwatch.dataset.accentColor;
     render();
     return;
   }

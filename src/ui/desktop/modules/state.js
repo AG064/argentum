@@ -203,6 +203,8 @@ export const state = {
   settingsSection: 'overview',
   uiFontFamily: fontOptions.ui[0].css,
   codeFontFamily: fontOptions.mono[0].css,
+  accentColor: '',
+  highContrastMode: false,
   savedConfigPath: '',
   actionStatus: 'No GUI action has run in this session.',
   runningAction: '',
@@ -474,6 +476,7 @@ export function setSettingsSection(sectionId) {
     'telegram',
     'security',
     'advanced',
+    'appearance',
   ];
   state.settingsSection = allowed.includes(sectionId) ? sectionId : 'overview';
   recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, {
@@ -865,6 +868,9 @@ export function hydrateUiPreferences() {
     if (fontOptions.mono.some((option) => option.css === saved.codeFontFamily)) {
       state.codeFontFamily = saved.codeFontFamily;
     }
+    if (typeof saved.accentColor === 'string' && saved.accentColor.trim()) {
+      state.accentColor = saved.accentColor;
+    }
     if (typeof saved.workspacePath === 'string' && saved.workspacePath.trim()) {
       state.workspacePath = saved.workspacePath;
     }
@@ -923,6 +929,7 @@ function persistUiPreferences() {
       JSON.stringify({
         uiFontFamily: state.uiFontFamily,
         codeFontFamily: state.codeFontFamily,
+        accentColor: state.accentColor,
         workspacePath: state.workspacePath,
         viewMode: state.viewMode,
         chatFilter: state.chatFilter,
@@ -946,6 +953,10 @@ export function setUiPreference(key, value) {
 
   if (key === 'codeFontFamily' && fontOptions.mono.some((option) => option.css === value)) {
     state.codeFontFamily = value;
+  }
+
+  if (key === 'accentColor') {
+    state.accentColor = typeof value === 'string' ? value.trim() : '';
   }
 
   if (key === 'workspacePath' && typeof value === 'string' && value.trim()) {

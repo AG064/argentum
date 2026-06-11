@@ -510,6 +510,7 @@ function renderComposer(state, metadata, estimatedTokens, contextPercent) {
         <div class="composer-layout" data-thinking="${supportsThinking ? 'true' : 'false'}">
           <div class="composer-inline">
             <button class="icon-button" id="attach-file" title="Attach file or image" aria-label="Attach file or image"><span data-icon="paperclip"></span></button>
+            <button class="icon-button" id="chat-help-button" title="Chat help and keyboard shortcuts" aria-label="Chat help and keyboard shortcuts"><span data-icon="help"></span></button>
             <button class="icon-button" id="voice-input" title="Use microphone" aria-label="Use microphone">${
               state.voiceInputStatus === 'listening'
                 ? '<span class="typing-dots">...</span>'

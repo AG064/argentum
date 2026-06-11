@@ -708,6 +708,7 @@ const settingsSections = [
   ['local-server', 'Local server'],
   ['context', 'Context and thinking'],
   ['chat', 'Chat display'],
+  ['appearance', 'Appearance'],
   ['telegram', 'Telegram'],
   ['security', 'Security'],
   ['advanced', 'Advanced'],
@@ -773,6 +774,7 @@ function settingsSectionSummary(id, state, provider, metadata) {
         : 'Binary not installed',
     'context': `${state.thinkingLevel} thinking; ${state.selectedContextAccess.length} context sources`,
     'chat': state.showThinkingInChat ? 'Reasoning visible in chat' : 'Reasoning hidden in chat',
+    'appearance': state.accentColor ? `Accent color: ${state.accentColor}` : 'Default red accent',
     'telegram': state.selectedChannels.includes('telegram') ? 'Telegram selected' : 'Telegram off',
     'security': labelFor(securityProfiles, state.securityProfile),
     'advanced': `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
@@ -1092,6 +1094,55 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           <button class="button ghost compact" id="clear-user-avatar" type="button" ${state.userAvatarPath ? '' : 'disabled'}>Clear</button>
         </div>
         <small>Optional local image used for your chat avatar. The path stays in desktop UI preferences.</small>
+      </label>
+    `;
+  }
+
+  if (activeSection === 'appearance') {
+    const presetColors = [
+      { id: 'e23b3b', label: 'Default Red' },
+      { id: '3b82f6', label: 'Blue' },
+      { id: '22c55e', label: 'Green' },
+      { id: 'a855f7', label: 'Purple' },
+      { id: 'f59e0b', label: 'Amber' },
+      { id: 'ec4899', label: 'Pink' },
+      { id: '06b6d4', label: 'Cyan' },
+      { id: '6366f1', label: 'Indigo' },
+    ];
+    return `
+      <label>
+        Accent color
+        <div class="accent-color-picker">
+          ${presetColors
+            .map(
+              (color) => `
+                <button
+                  type="button"
+                  class="accent-color-swatch ${state.accentColor === color.id || (!state.accentColor && color.id === 'e23b3b') ? 'active' : ''}"
+                  data-accent-color="${color.id}"
+                  style="background:#${color.id}"
+                  aria-label="${escapeAttribute(color.label)}"
+                  title="${escapeAttribute(color.label)}"
+                ></button>
+              `,
+            )
+            .join('')}
+          <input
+            type="color"
+            id="settings-accent-custom"
+            value="${state.accentColor || '#e23b3b'}"
+            class="accent-color-input"
+            aria-label="Custom accent color"
+          />
+        </div>
+        <small>Choose a preset or pick any color. The Argentum logo stays red.</small>
+      </label>
+      <label class="check-card compact-toggle ${state.highContrastMode ? 'active' : ''}">
+        <span class="check-card-head">
+          <input id="settings-high-contrast" type="checkbox" ${state.highContrastMode ? 'checked' : ''} />
+          <span><em>Accessibility</em><strong>High contrast mode</strong></span>
+        </span>
+        <p>Increase contrast for better visibility. Affects text and UI borders.</p>
       </label>
     `;
   }
