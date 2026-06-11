@@ -1414,6 +1414,73 @@ function renderContextAccessCards(state) {
     .join('');
 }
 
+const updateModule = {
+  id: 'update',
+  title: 'Updates',
+  eyebrow: 'New version',
+  render(state) {
+    const currentVersion = APP_VERSION;
+    const newVersion = state.updateVersion || currentVersion;
+    const isUpdate =
+      state.updateAvailable && state.updateVersion && state.updateVersion !== currentVersion;
+
+    return `
+      <section class="settings-field-group">
+        <div class="settings-group-title">
+          <div>
+            <h3>Argentum Updates</h3>
+            <p>${isUpdate ? `Version ${escapeHtml(newVersion)} is available` : 'You are on the latest version'}</p>
+          </div>
+        </div>
+        <div class="panel-body form-grid two">
+          <label class="full-span">
+            <span class="pill ${isUpdate ? 'warn' : 'ok'}">${isUpdate ? 'Update available' : 'Up to date'}</span>
+            <p>Current version: <strong>${escapeHtml(currentVersion)}</strong></p>
+            ${
+              isUpdate
+                ? `<p>A newer version <strong>${escapeHtml(newVersion)}</strong> is available for download.</p>`
+                : '<p>You are running the latest Argentum version.</p>'
+            }
+          </label>
+          ${
+            isUpdate
+              ? `
+            <div class="full-span update-actions">
+              ${
+                state.updateDownloading
+                  ? `
+                <div class="update-progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:${state.updateProgress}%"></div>
+                  </div>
+                  <p>Downloading... ${state.updateProgress}%</p>
+                </div>
+              `
+                  : `
+                <button class="button primary" id="download-update" ${state.updateDownloading ? 'disabled' : ''}>
+                  Download ${escapeHtml(newVersion)}
+                </button>
+              `
+              }
+              ${state.updateError ? `<p class="update-error">${escapeHtml(state.updateError)}</p>` : ''}
+            </div>
+          `
+              : `
+            <div class="full-span">
+              <button class="button" id="check-for-updates">Check for updates</button>
+            </div>
+          `
+          }
+          <div class="full-span settings-inline-note">
+            <strong>Automatic updates</strong>
+            <p>Argentum checks for new versions on startup and displays this panel when an update is available.</p>
+          </div>
+        </div>
+      </section>
+    `;
+  },
+};
+
 export const modules = {
   'onboarding': onboardingModule,
   'chat': chatModule,
@@ -1424,4 +1491,5 @@ export const modules = {
   'pc-stats': pcStatsModule,
   'settings': settingsModule,
   'diagnostics': diagnosticsModule,
+  'update': updateModule,
 };

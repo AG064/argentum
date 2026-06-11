@@ -272,6 +272,11 @@ function render() {
   title.textContent = section.title;
   eyebrow.textContent = section.eyebrow;
   nav.innerHTML = renderNavigation();
+  // Add update indicator class if update is available
+  const updateNavButton = nav.querySelector('[data-section="update"]');
+  if (updateNavButton) {
+    updateNavButton.classList.toggle('has-update', Boolean(state.updateAvailable));
+  }
   providerStatusPill.innerHTML = renderProviderStatusPill();
   viewModeButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.viewMode === state.viewMode);
@@ -928,6 +933,69 @@ function updateProviderKeyStatus() {
   const keyPresent = state.providerApiKey.trim().length > 0;
   status.classList.toggle('hidden', Boolean(provider.requiresKey && keyPresent));
   status.textContent = provider.requiresKey ? 'Key required' : 'Key optional';
+}
+
+async function checkForUpdates() {
+  state.updateDownloading = true;
+  state.updateError = '';
+  render();
+
+  try {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      const result = await invoke('check_for_updates');
+      if (result?.updateAvailable) {
+        state.updateAvailable = true;
+        state.updateVersion = result.version || '';
+        notify('info', 'Update available', `Argentum ${state.updateVersion} is available.`);
+      } else {
+        state.updateAvailable = false;
+        state.updateVersion = '';
+        notify('info', 'Up to date', 'You are running the latest Argentum version.');
+      }
+    } else {
+      // Web preview mode - simulate no update
+      state.updateAvailable = false;
+      state.updateVersion = '';
+      notify('info', 'Up to date', 'Update check requires the desktop app.');
+    }
+  } catch (error) {
+    state.updateError = normalizeError(error);
+  } finally {
+    state.updateDownloading = false;
+    render();
+  }
+}
+
+async function downloadUpdate() {
+  if (!state.updateVersion) return;
+  state.updateDownloading = true;
+  state.updateProgress = 0;
+  state.updateError = '';
+  render();
+
+  try {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      // Simulate progress for demo - real implementation would use Tauri updater events
+      for (let i = 0; i <= 100; i += 10) {
+        await new Promise((r) => setTimeout(r, 200));
+        state.updateProgress = i;
+        render();
+      }
+      notify(
+        'success',
+        'Update ready',
+        `Argentum ${state.updateVersion} downloaded. Restart to apply.`,
+      );
+    }
+  } catch (error) {
+    state.updateError = normalizeError(error);
+    notify('error', 'Update failed', state.updateError);
+  } finally {
+    state.updateDownloading = false;
+    render();
+  }
 }
 
 function addActivationListeners(target) {
@@ -2505,6 +2573,16 @@ async function handleClick(event, activationElement = null) {
   const actionButton = element.closest('[data-run-action]');
   if (actionButton) {
     await runAction(actionButton.dataset.runAction);
+    return;
+  }
+
+  if (element.closest('#check-for-updates')) {
+    await checkForUpdates();
+    return;
+  }
+
+  if (element.closest('#download-update')) {
+    await downloadUpdate();
     return;
   }
 
