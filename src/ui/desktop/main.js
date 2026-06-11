@@ -112,6 +112,42 @@ const onboardingKeyboardActivationEvents = new Set(['keyup']);
 const ACTIVATION_HANDLED_FLAG = '__argentumActivationHandled';
 let dashboardRefreshTimer = null;
 
+// Focus trap for modal dialogs - keeps keyboard focus within open panels
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusableElements(container) {
+  return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (el) => el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden',
+  );
+}
+
+function trapFocus(container) {
+  const focusable = getFocusableElements(container);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  function handleTab(e) {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  container.addEventListener('keydown', handleTab);
+  first.focus();
+  return () => container.removeEventListener('keydown', handleTab);
+}
+
 function applyUiPreferences() {
   document.documentElement.style.setProperty('--font-ui', state.uiFontFamily);
   document.documentElement.style.setProperty('--font-mono', state.codeFontFamily);
@@ -887,6 +923,14 @@ function wireRenderedControls() {
       control.setAttribute('data-argentum-click-wired', 'true');
       control.addEventListener('click', handleActivation);
     });
+  }
+
+  // Apply focus trap to open modal dialogs
+  for (const panel of overlayRoot?.querySelectorAll('[role="dialog"]') || []) {
+    if (!(panel instanceof HTMLElement)) continue;
+    if (panel.dataset.argentumFocusTrapped === 'true') continue;
+    panel.dataset.argentumFocusTrapped = 'true';
+    trapFocus(panel);
   }
 
   const dashboardFrame = document.querySelector('[data-system-dashboard-frame]');
@@ -1916,22 +1960,86 @@ async function handleChange(event) {
 
 async function handleKeyDown(event) {
   const target = event.target;
-  if (!(target instanceof HTMLTextAreaElement)) return;
-  if (target.id !== 'chat-draft') return;
-  if (
-    event.key !== 'Enter' ||
-    event.shiftKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    event.metaKey ||
-    event.isComposing
-  )
-    return;
+  const isTextInput = target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
 
-  event.preventDefault();
-  state.draftMessage = target.value;
-  syncComposerSendState();
-  await sendChatDraft();
+  // Global keyboard shortcuts (only when not typing in a text field)
+  if (!isTextInput || target.id === 'chat-draft') {
+    const ctrl = event.ctrlKey || event.metaKey;
+    const key = event.key;
+
+    // Close open panels on Escape
+    if (key === 'Escape') {
+      const anyPanelOpen =
+        state.helpOpen ||
+        state.notificationsMenuOpen ||
+        state.quickSettingsMenuOpen ||
+        state.quickSecurityMenuOpen ||
+        state.workspaceMenuOpen;
+      if (anyPanelOpen) {
+        event.preventDefault();
+        if (state.helpOpen) toggleHelp(false);
+        if (state.notificationsMenuOpen) toggleNotificationsMenu(false);
+        if (state.quickSettingsMenuOpen) toggleQuickSettingsMenu(false);
+        if (state.quickSecurityMenuOpen) toggleQuickSecurityMenu(false);
+        if (state.workspaceMenuOpen) toggleWorkspaceMenu(false);
+        render();
+        return;
+      }
+    }
+
+    // Ctrl+, = Settings
+    if (ctrl && key === ',') {
+      event.preventDefault();
+      setActiveSection('settings');
+      return;
+    }
+
+    // ? = Help (when not in text input)
+    if (key === '?' && !isTextInput) {
+      event.preventDefault();
+      toggleHelp();
+      render();
+      return;
+    }
+
+    // Ctrl+1-9 = Quick navigation to sections
+    if (ctrl && key >= '1' && key <= '9') {
+      event.preventDefault();
+      const sectionOrder = [
+        'chat',
+        'gateway',
+        'local-server',
+        'security',
+        'pc-stats',
+        'settings',
+        'diagnostics',
+        'logs',
+      ];
+      const idx = parseInt(key, 10) - 1;
+      if (sectionOrder[idx]) {
+        setActiveSection(sectionOrder[idx]);
+      }
+      return;
+    }
+  }
+
+  // Chat composer: Enter to send (Shift+Enter for newline)
+  if (target instanceof HTMLTextAreaElement && target.id === 'chat-draft') {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      event.isComposing
+    )
+      return;
+
+    event.preventDefault();
+    state.draftMessage = target.value;
+    syncComposerSendState();
+    await sendChatDraft();
+  }
 }
 
 async function handleClick(event, activationElement = null) {

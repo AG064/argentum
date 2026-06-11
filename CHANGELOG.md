@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dashboard Server**: Starts together with agent on same port in dev mode
 - **Default Port Change**: Server port changed from 18789 to 3000, host 0.0.0.0
 
+### Accessibility
+
+- **Keyboard Navigation**: Full keyboard navigation support
+  - Skip-to-content link for keyboard users
+  - Ctrl+1-9 for quick section navigation
+  - Ctrl+, to open Settings
+  - ? key to open context-sensitive help
+  - Esc to close any open panel (help, notifications, settings, workspace menu)
+  - Focus trap for modal dialogs
+  - Visible focus indicators on all interactive elements
+  - ARIA labels on all icon-only buttons
+  - Proper focus management for keyboard users
+
 ### Changed
 
 - **Chat Workspace UI**: Updates to remove clutter
