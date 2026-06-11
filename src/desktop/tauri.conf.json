@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi", "appimage", "deb", "rpm", "dmg", "app"],
     "category": "Productivity",
     "shortDescription": "Local-first AI agent workspace",
     "longDescription": "Argentum is a local-first modular AI agent workspace with a secure permission model.",
@@ -36,9 +36,7 @@
       "../../installer/macos/argentum.icns",
       "../../installer/wix/argentum.ico"
     ],
-    "externalBin": [
-      "binaries/argentum-cli"
-    ],
+    "externalBin": ["binaries/argentum-cli"],
     "windows": {
       "nsis": {
         "installerHooks": "generated/optional-llama.nsh"
@@ -46,6 +44,21 @@
       "wix": {
         "language": "en-US",
         "version": "0.0.8.1"
+      }
+    },
+    "android": {
+      "app": {
+        "minSdk": 24,
+        "targetSdk": 34,
+        "versionCode": 8,
+        "versionName": "0.0.8-alpha",
+        "label": "Argentum",
+        "icon": ["../../assets/brand/argentum.png"]
+      },
+      "bundle": {
+        "shortDescription": "Local-first AI agent workspace",
+        "longDescription": "Argentum is a local-first modular AI agent workspace with a secure permission model.",
+        "category": "PRODUCTIVITY"
       }
     }
   }

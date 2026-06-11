@@ -5385,3 +5385,125 @@ body {
   50% { opacity: 0.7; }
 }
 
+
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .rail {
+    flex-direction: row;
+    height: 56px;
+    padding: 0 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .rail .brand-wordmark {
+    display: none;
+  }
+
+  .section-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .nav-button {
+    min-height: 44px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .nav-button span:last-child {
+    display: none;
+  }
+
+  .workspace-card {
+    display: none;
+  }
+
+  .brand-shard {
+    width: 32px;
+    height: 32px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .topbar-left {
+    flex: 1 1 100%;
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .view-root {
+    padding: 8px;
+  }
+
+  .form-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-field-group .panel-body {
+    padding: 12px;
+  }
+
+  .arg-composer-shell {
+    padding: 8px;
+  }
+
+  .composer-layout {
+    flex-direction: column;
+  }
+
+  .conversation-composer {
+    max-width: 100%;
+  }
+
+  .help-panel,
+  .notification-menu,
+  .quick-menu,
+  .workspace-menu {
+    width: 100%;
+    max-width: 100%;
+    left: 0;
+    right: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-left .breadcrumb-bar {
+    display: none;
+  }
+
+  .nav-button {
+    min-width: 44px;
+    padding: 0 8px;
+  }
+
+  .nav-button .nav-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .button {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+}
+
