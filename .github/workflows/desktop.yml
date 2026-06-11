@@ -75,7 +75,7 @@ jobs:
 
       - name: Install Android SDK
         if: matrix.is-android == true
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
