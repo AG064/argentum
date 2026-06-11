@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Accessibility
 
+- **Screen Reader Support**: Full ARIA labels, roles, and live regions throughout the UI
+- **In-app Update Mechanism**: Updates section in navigation with version check and download
+- **Red Update Indicator**: Pulsing red dot on Updates nav button when update available
+- **Crypto Algorithm Agility**: AES-256-GCM and ChaCha20-Poly1305 support via ARGENTUM_ENCRYPTION_ALGORITHM
+
 - **Accent Color Picker**: Choose from 8 preset colors or pick custom color in Appearance settings section
 - **High Contrast Mode**: Accessibility toggle for better visibility
 - **Chat Help Button**: Help button added to chat composer toolbar
