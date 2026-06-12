@@ -139,11 +139,26 @@ jobs:
             echo "ANDROID_HOME: $ANDROID_HOME"
             echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
             
+            # Find NDK toolchain path
+            NDK_TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            echo "NDK toolchain: $NDK_TOOLCHAIN"
+            ls -la $NDK_TOOLCHAIN/aarch64-linux-android-* 2>/dev/null | head -5
+            
             # Install Rust target
             rustup target add aarch64-linux-android 2>&1
             
+            # Set environment variables for Android cross-compilation
+            export CC="$NDK_TOOLCHAIN/aarch64-linux-android-clang"
+            export CXX="$NDK_TOOLCHAIN/aarch64-linux-android-clang++"
+            export AR="$NDK_TOOLCHAIN/aarch64-linux-android-ar"
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_TOOLCHAIN/aarch64-linux-android-clang"
+            
+            echo "=== Environment ==="
+            echo "CC: $CC"
+            echo "CXX: $CXX"
+            
             # Build with cargo directly
-            cargo build --release --target aarch64-linux-android 2>&1 | tail -50
+            cargo build --release --target aarch64-linux-android 2>&1 | tail -100
             
             echo "=== Build output ==="
             ls -la target/aarch64-linux-android/release/ 2>/dev/null | head -20
