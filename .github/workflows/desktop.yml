@@ -135,16 +135,36 @@ jobs:
         run: |
           if [ "${{ matrix.name }}" == "android" ]; then
             cd src/desktop
+            echo "=== Android Build Setup ==="
             echo "ANDROID_HOME: $ANDROID_HOME"
             echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
-            echo "NDK contents:"
-            ls -la $ANDROID_NDK_ROOT/ 2>/dev/null | head -10
-            echo "Building for Android..."
-            export PATH="$ANDROID_NDK_ROOT:$PATH"
-            cargo build --release --target aarch64-linux-android -vv 2>&1 | tail -150
-            echo "Build finished, checking output..."
+            echo "NDK/toolchains:"
+            ls -la $ANDROID_NDK_ROOT/toolchains/ 2>/dev/null | head -5
+            ls -la $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/ 2>/dev/null | head -5
+            
+            # Install Rust target
+            rustup target add aarch64-linux-android 2>&1
+            
+            # Create .cargo config for Android
+            mkdir -p .cargo
+            cat > .cargo/config.toml << 'CARGOEOF'
+[target.aarch64-linux-android]
+ar = "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar"
+linker = "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang"
+CC = "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang"
+CXX = "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang++"
+CARGOEOF
+            
+            echo "=== .cargo/config.toml ==="
+            cat .cargo/config.toml
+            
+            echo "=== Building for Android ==="
+            cargo build --release --target aarch64-linux-android 2>&1 | tail -100
+            
+            echo "=== Build output ==="
             find target/aarch64-linux-android/release -name "*.apk" 2>/dev/null | head -5
             find target/aarch64-linux-android/release -name "*.so" 2>/dev/null | head -10
+            ls -la target/aarch64-linux-android/release/ 2>/dev/null | head -20
           else
             npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
           fi
