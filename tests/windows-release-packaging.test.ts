@@ -42,7 +42,7 @@ describe('Windows release packaging', () => {
     expect(desktopWorkflow).toContain('src/desktop/target/release/bundle/**/*-setup.exe');
     expect(desktopWorkflow).toContain('src/desktop/target/release/bundle/**/*.msi');
     expect(desktopWorkflow).toContain(
-      '/^Argentum[_-]\\d+\\.\\d+\\.\\d+.*\\.(?:AppImage|deb|rpm|dmg|msi|exe)$/',
+      '/^Argentum[_-]\\d+\\.\\d+\\.\\d+.*\\.(?:AppImage|deb|rpm|dmg|msi|exe|apk)$/',
     );
     expect(desktopWorkflow).not.toContain('/^argentum-v\\d+\\.\\d+\\.\\d+-win-x64');
   });
