@@ -142,12 +142,12 @@ jobs:
             # Install Rust target
             rustup target add aarch64-linux-android 2>&1
             
-            # Build with tauri but no bundling
-            npx tauri build --no-bundle --target aarch64-linux-android 2>&1 | tail -100
+            # Build with cargo directly
+            cargo build --release --target aarch64-linux-android 2>&1 | tail -50
             
             echo "=== Build output ==="
-            find target -name "*.apk" 2>/dev/null | head -10
             ls -la target/aarch64-linux-android/release/ 2>/dev/null | head -20
+            find target/aarch64-linux-android/release -name "*.so" 2>/dev/null | head -10
           else
             npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
           fi
