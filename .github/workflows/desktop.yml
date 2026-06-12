@@ -132,7 +132,16 @@ jobs:
         run: npm run build:desktop-sidecar
 
       - name: Build desktop bundle
-        run: npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
+        run: |
+          if [ "${{ matrix.name }}" == "android" ]; then
+            cd src/desktop
+            cargo build --release --target aarch64-linux-android
+            echo "Checking for APK..."
+            find target/aarch64-linux-android/release -name "*.apk" 2>/dev/null | head -5
+            ls -la target/aarch64-linux-android/release/bundle/ 2>/dev/null || echo "No bundle dir yet"
+          else
+            npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
+          fi
         shell: bash
 
       - name: Upload desktop artifacts
