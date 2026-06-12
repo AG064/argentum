@@ -1,0 +1,54 @@
+name: Update badges
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - 'package.json'
+      - '.github/workflows/badges.yml'
+      - 'README.md'
+
+permissions:
+  contents: write
+
+jobs:
+  update-version-badge:
+    name: Update version badge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sparse-checkout: |
+            package.json
+            README.md
+
+      - name: Get current version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Update README badge
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          ESCAPED_VERSION=$(echo "$VERSION" | sed 's/[\.\-]/_/g')
+          
+          # Update version badge - match either old pattern or new pattern
+          if grep -q 'shields.io/badge/version' README.md; then
+            # Update existing dynamic badge
+            sed -i "s|shields.io/badge/version-v\[.*\]-blue|shields.io/badge/version-v$VERSION-blue|" README.md
+          else
+            # Replace static badge with dynamic
+            sed -i "s|\[!\[Version\](https://img.shields.io/badge/version-v\[.*\]-blue\.svg?style=flat-square)\](https://github.com/AG064/argentum/releases)|[![Version](https://img.shields.io/badge/version-v$VERSION-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)|" README.md
+          fi
+          
+          cat README.md | head -15
+
+      - name: Commit and push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update version badge to v${{ steps.version.outputs.version }}"
+          file_pattern: README.md
