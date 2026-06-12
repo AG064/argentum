@@ -88,7 +88,22 @@ jobs:
           packages: |-
             platforms;android-34
             build-tools;34.0.0
-            ndk;26.1.10909175
+
+      - name: Install NDK
+        if: matrix.is-android == true
+        run: |
+          retry_count=0
+          max_retries=3
+          while [ $retry_count -lt $max_retries ]; do
+            if sdkmanager --install "ndk;26.1.10909175" 2>&1; then
+              echo "NDK installed successfully"
+              break
+            fi
+            retry_count=$((retry_count + 1))
+            echo "NDK install failed, retry $retry_count/$max_retries"
+            sleep 10
+          done
+          sdkmanager --list_installed 2>/dev/null | grep -E "ndk|platform|build" | head -10
 
       - name: Set Android environment
         if: matrix.is-android == true
