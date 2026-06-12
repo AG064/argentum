@@ -89,11 +89,14 @@ jobs:
       - name: Install required Android packages
         if: matrix.is-android == true
         run: |
+          echo "Installing Android packages..."
+          sdkmanager --list 2>/dev/null | grep -E "ndk;|platforms;|build-tools;" | head -20
+          
           retry_count=0
           max_retries=3
           while [ $retry_count -lt $max_retries ]; do
             echo "Attempt $((retry_count + 1))/$max_retries to install Android packages..."
-            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909175" 2>&1; then
+            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.50012163" 2>&1; then
               echo "Android packages installed successfully"
               break
             fi
@@ -101,7 +104,12 @@ jobs:
             echo "Failed, retrying in 15 seconds..."
             sleep 15
           done
-          sdkmanager --list_installed 2>/dev/null | head -15
+          
+          echo "Listing installed packages:"
+          sdkmanager --list_installed 2>/dev/null | head -20
+          
+          echo "Checking NDK:"
+          ls -la $ANDROID_HOME/ndk/ 2>/dev/null | head -10 || echo "NDK not found at $ANDROID_HOME/ndk/"
 
       - name: Set Android environment
         if: matrix.is-android == true
