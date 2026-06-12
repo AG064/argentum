@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "appimage", "deb", "rpm", "dmg", "app"],
+    "targets": ["nsis", "msi", "appimage", "deb", "rpm", "dmg", "app", "apk", "aab"],
     "category": "Productivity",
     "shortDescription": "Local-first AI agent workspace",
     "longDescription": "Argentum is a local-first modular AI agent workspace with a secure permission model.",
