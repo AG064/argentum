@@ -84,26 +84,24 @@ jobs:
         if: matrix.is-android == true
         uses: android-actions/setup-android@v4
         with:
-          cmdline-tools-version: '11076708'
-          packages: |-
-            platforms;android-34
-            build-tools;34.0.0
+          packages: ''
 
-      - name: Install NDK
+      - name: Install required Android packages
         if: matrix.is-android == true
         run: |
           retry_count=0
           max_retries=3
           while [ $retry_count -lt $max_retries ]; do
-            if sdkmanager --install "ndk;26.1.10909175" 2>&1; then
-              echo "NDK installed successfully"
+            echo "Attempt $((retry_count + 1))/$max_retries to install Android packages..."
+            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909175" 2>&1; then
+              echo "Android packages installed successfully"
               break
             fi
             retry_count=$((retry_count + 1))
-            echo "NDK install failed, retry $retry_count/$max_retries"
-            sleep 10
+            echo "Failed, retrying in 15 seconds..."
+            sleep 15
           done
-          sdkmanager --list_installed 2>/dev/null | grep -E "ndk|platform|build" | head -10
+          sdkmanager --list_installed 2>/dev/null | head -15
 
       - name: Set Android environment
         if: matrix.is-android == true
@@ -111,7 +109,7 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          sdkmanager --list_installed 2>/dev/null | head -20
+          sdkmanager --list_installed 2>/dev/null | head -15
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
