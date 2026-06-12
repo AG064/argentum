@@ -135,10 +135,16 @@ jobs:
         run: |
           if [ "${{ matrix.name }}" == "android" ]; then
             cd src/desktop
-            cargo build --release --target aarch64-linux-android
-            echo "Checking for APK..."
+            echo "ANDROID_HOME: $ANDROID_HOME"
+            echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
+            echo "NDK contents:"
+            ls -la $ANDROID_NDK_ROOT/ 2>/dev/null | head -10
+            echo "Building for Android..."
+            export PATH="$ANDROID_NDK_ROOT:$PATH"
+            cargo build --release --target aarch64-linux-android -vv 2>&1 | tail -150
+            echo "Build finished, checking output..."
             find target/aarch64-linux-android/release -name "*.apk" 2>/dev/null | head -5
-            ls -la target/aarch64-linux-android/release/bundle/ 2>/dev/null || echo "No bundle dir yet"
+            find target/aarch64-linux-android/release -name "*.so" 2>/dev/null | head -10
           else
             npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
           fi
