@@ -20,7 +20,7 @@ jobs:
       - name: Get current pinned npm version
         id: current
         run: |
-          CURRENT=$(grep 'npm@[0-9]' docker/Dockerfile | sed 's/.*npm@\([0-9.]*\).*/\1/')
+          CURRENT=$(grep -E 'npm@[0-9.]+' docker/Dockerfile | sed 's/.*npm@\([0-9.]*\).*/\1/')
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
           echo "Current npm version: $CURRENT"
 
@@ -52,16 +52,28 @@ Update in \`docker/Dockerfile\`:
 This update may include security patches for bundled packages (ip-address, picomatch, brace-expansion)."
 
           # Check if issue already exists
-          EXISTING=$(curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=npm-update" \
-            | python3 -c "import json,sys; issues=json.load(sys.stdin); print(any('npm@$LATEST' in i['title'] for i in issues) if isinstance(issues, list) else 'false')")
+          RESPONSE=$(curl -sL -w "\n%{http_code}" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=npm-update")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            EXISTING=$(echo "$BODY" | python3 -c "import json,sys; issues=json.load(sys.stdin); print('true' if any('npm@$LATEST' in i.get('title','') for i in (issues if isinstance(issues, list) else [])) else 'false')")
+          else
+            EXISTING='false'
+          fi
           
           if [ "$EXISTING" = "false" ]; then
-            curl -sL -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            CREATE_RESP=$(curl -sL -w "\n%{http_code}" -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/issues" \
-              -d "{\"title\":\"$ISSUE_TITLE\",\"body\":\"$ISSUE_BODY\",\"labels\":[\"npm-update\",\"dependencies\"]}"
-            echo "Created issue for npm $LATEST"
+              -d "{\"title\":\"$ISSUE_TITLE\",\"body\":\"$ISSUE_BODY\",\"labels\":[\"npm-update\",\"dependencies\"]}")
+            CREATE_CODE=$(echo "$CREATE_RESP" | tail -1)
+            if [ "$CREATE_CODE" = "201" ]; then
+              echo "Created issue for npm $LATEST"
+            else
+              echo "Failed to create issue (HTTP $CREATE_CODE)"
+            fi
           else
             echo "Issue for npm $LATEST already exists"
           fi
