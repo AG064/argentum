@@ -129,7 +129,7 @@
     "prettier": "^3.8.1",
     "rcedit": "4.0.1",
     "ts-node": "^10.9.2",
-    "tsx": "^4.7.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.58.1"
   },
@@ -152,6 +152,20 @@
     },
     "ip-address": "^10.2.0",
     "postcss": "^8.5.10"
+  },
+  "overrides": {
+    "minimatch": "9.0.9",
+    "undici": "~6.21.0",
+    "cross-spawn": "^7.0.6",
+    "glob": "^11.0.1",
+    "brace-expansion": "^2.0.2",
+    "picomatch": "^4.0.4",
+    "anymatch": {
+      "picomatch": "^2.3.1"
+    },
+    "ip-address": "^10.2.0",
+    "postcss": "^8.5.10",
+    "esbuild": "^0.28.1"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
