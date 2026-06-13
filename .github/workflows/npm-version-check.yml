@@ -38,19 +38,12 @@ jobs:
           LATEST="${{ steps.latest.outputs.latest }}"
           
           ISSUE_TITLE="Update npm to $LATEST"
-          ISSUE_BODY="## npm Update Available
-
-Current pinned version: **$CURRENT**
-Latest available: **$LATEST**
-
-Update in \`docker/Dockerfile\`:
-\`\`\`dockerfile
-- RUN npm install -g npm@$CURRENT
-+ RUN npm install -g npm@$LATEST
-\`\`\`
-
-This update may include security patches for bundled packages (ip-address, picomatch, brace-expansion)."
-
+          
+          # Use printf to create the body without YAML parsing issues
+          printf '%s\n' "## npm Update Available" "" "Current pinned version: $CURRENT" "Latest available: $LATEST" "" "Update in docker/Dockerfile:" "- RUN npm install -g npm@$CURRENT" "  RUN npm install -g npm@$LATEST" "" "This update may include security patches." > /tmp/issue_body.txt
+          
+          ISSUE_BODY=$(cat /tmp/issue_body.txt)
+          
           # Check if issue already exists
           RESPONSE=$(curl -sL -w "\n%{http_code}" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=npm-update")
