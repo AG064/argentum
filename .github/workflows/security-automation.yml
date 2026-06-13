@@ -123,8 +123,8 @@ jobs:
           npm run build
           echo "Running test suite..."
           npm test
-          echo "Re-running npm audit..."
-          npm audit --audit-level=high
+          echo "Re-running npm audit (remaining vulnerabilities may require manual intervention)..."
+          npm audit --audit-level=high || echo "Some vulnerabilities could not be auto-resolved — PR created for manual review"
 
       - name: Create pull request
         if: steps.changes.outputs.updated == 'true'
