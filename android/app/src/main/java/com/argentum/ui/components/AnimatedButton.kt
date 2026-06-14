@@ -60,7 +60,6 @@ fun AnimatedButton(
         contentAlignment = Alignment.Center
     ) {
         Button(
-            onClick = onClick,
             enabled = enabled,
             interactionSource = interactionSource,
             colors = ButtonDefaults.buttonColors(

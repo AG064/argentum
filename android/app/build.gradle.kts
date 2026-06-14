@@ -77,6 +77,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    // DataStore Preferences
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // OkHttp (no Retrofit as per requirements)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
@@ -86,4 +89,10 @@ dependencies {
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("io.mockk:mockk:1.13.8")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.1")
 }

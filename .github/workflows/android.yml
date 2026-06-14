@@ -3,10 +3,13 @@ name: Android CI
 on:
   push:
     branches:
-      - feature/android
+      - main
+      - develop
+      - feature/**
   pull_request:
     branches:
-      - feature/android
+      - main
+      - develop
 
 jobs:
   build:
@@ -24,6 +27,27 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+
+      - name: Cache Android build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/.gradle/
+            android/app/build/
+          key: ${{ runner.os }}-android-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-android-build-
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
