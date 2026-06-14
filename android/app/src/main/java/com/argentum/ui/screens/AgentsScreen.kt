@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.argentum.ui.theme.AgentStatus
+import com.argentum.viewmodel.AgentStatus
 import com.argentum.viewmodel.Agent
 import com.argentum.viewmodel.AgentsViewModel
 
