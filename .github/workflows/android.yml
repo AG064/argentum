@@ -27,32 +27,24 @@ jobs:
           java-version: "17"
 
       - name: Setup Android SDK
+        id: android-sdk
         uses: android-actions/setup-android@v3
 
-      - name: Debug Environment
+      - name: Debug SDK Location
         run: |
-          echo "=== Environment vars ==="
-          printenv | grep -i android || echo "No ANDROID vars found"
-          echo "=== Check common SDK paths ==="
-          for p in "$ANDROID_HOME" "$ANDROID_SDK_ROOT" "/opt/android-sdk" "$HOME/android-sdk" "/usr/local/android-sdk"; do
-            if [ -n "$p" ] && [ -d "$p" ]; then
-              echo "Found SDK at: $p"
-              ls "$p"
+          echo "Step outputs: ${{ steps.android-sdk.outputs.* }}"
+          echo "ANDROID_HOME='$ANDROID_HOME'"
+          echo "ANDROID_SDK_ROOT='$ANDROID_SDK_ROOT'"
+          for dir in "$ANDROID_HOME" "$ANDROID_SDK_ROOT" "/opt/android-sdk" "$HOME/android-sdk"; do
+            if [ -n "$dir" ] && [ -d "$dir" ]; then
+              echo "SDK found at: $dir"
+              ls "$dir"
+              echo "sdk.dir=$dir" > android/local.properties
+              exit 0
             fi
           done
-
-      - name: Create local.properties
-        run: |
-          if [ -n "$ANDROID_HOME" ]; then
-            echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          elif [ -n "$ANDROID_SDK_ROOT" ]; then
-            echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-          elif [ -d "/opt/android-sdk" ]; then
-            echo "sdk.dir=/opt/android-sdk" > android/local.properties
-          else
-            echo "sdk.dir=$HOME/android-sdk" > android/local.properties
-          fi
-          cat android/local.properties
+          echo "ERROR: No SDK found"
+          find / -name "platforms" -type d 2>/dev/null | head -5
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
