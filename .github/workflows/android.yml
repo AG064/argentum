@@ -63,8 +63,10 @@ jobs:
         run: |
           echo "=== Gradle version ==="
           cd android && ./gradlew --version
-          echo "=== Building ==="
-          ./gradlew assembleDebug --stacktrace 2>&1 | tail -150
+          echo "=== Running unit tests ==="
+          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tail -100
+          echo "=== Building debug APK ==="
+          ./gradlew assembleDebug --stacktrace 2>&1 | tail -100
 
       - name: Upload APK artifact
         if: success()
