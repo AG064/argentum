@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,11 +44,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.argentum.ui.components.AnimatedButton
+import com.argentum.ui.theme.CrimsonRed
+import com.argentum.ui.theme.GlassSilver
+import com.argentum.ui.theme.NearBlack
+import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.Message
 
@@ -72,33 +79,75 @@ fun ChatScreen(
             .imePadding()
             .padding(16.dp)
     ) {
-        // Messages list
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Header with clear button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(uiState.messages, key = { it.id }) { message ->
-                MessageItem(
-                    message = message,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = 1f
+            Text(
+                text = "Argentum Chat",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            
+            if (uiState.messages.isNotEmpty()) {
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.clearChat()
                     }
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Clear chat",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
             }
+        }
 
-            if (uiState.isLoading) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.tertiary
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Messages list with glass background
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
                         )
+                    )
+                )
+                .padding(8.dp)
+        ) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.messages, key = { it.id }) { message ->
+                    MessageItem(
+                        message = message
+                    )
+                }
+
+                if (uiState.isLoading) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = CrimsonRed
+                            )
+                        }
                     }
                 }
             }
@@ -106,21 +155,39 @@ fun ChatScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Input field
+        // Input field with glass effect
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                        )
+                    )
+                )
+                .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = uiState.inputText,
                 onValueChange = { viewModel.onInputChange(it) },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Type a message...") },
+                placeholder = { 
+                    Text(
+                        "Type a message...",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    ) 
+                },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    focusedBorderColor = Silver.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                 ),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
                 singleLine = false,
                 maxLines = 4
             )
@@ -137,7 +204,11 @@ fun ChatScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
+                    tint = if (uiState.inputText.isNotBlank() && !uiState.isLoading) 
+                        CrimsonRed 
+                    else 
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
             }
         }
@@ -160,13 +231,17 @@ private fun MessageItem(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary),
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(CrimsonRed, CrimsonRed.copy(alpha = 0.7f))
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.SmartToy,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondary,
+                    tint = Color.White,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -177,9 +252,11 @@ private fun MessageItem(
             modifier = Modifier.widthIn(max = 280.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (isUser)
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                else if (message.isError)
+                    CrimsonRed.copy(alpha = 0.3f)
                 else
-                    MaterialTheme.colorScheme.surfaceVariant
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
             ),
             shape = RoundedCornerShape(
                 topStart = 16.dp,
@@ -194,8 +271,12 @@ private fun MessageItem(
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isUser)
                         MaterialTheme.colorScheme.onPrimary
+                    else if (message.isError)
+                        CrimsonRed
                     else
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1000,
+                    overflow = TextOverflow.Clip
                 )
             }
         }
@@ -206,13 +287,17 @@ private fun MessageItem(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Silver, Silver.copy(alpha = 0.7f))
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = NearBlack,
                     modifier = Modifier.size(20.dp)
                 )
             }

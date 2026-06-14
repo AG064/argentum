@@ -17,11 +17,12 @@ data class SettingsUiState(
     val selectedModel: String = "MiniMax-M2.7",
     val availableModels: List<String> = listOf(
         "MiniMax-M2.7",
-        "MiniMax-M2",
+        "MiniMax-M3",
         "GPT-4o",
         "Claude-3.5"
     ),
     val apiEndpoint: String = "https://api.minimax.io",
+    val apiKey: String = "",
     val notificationsEnabled: Boolean = true
 )
 
@@ -38,12 +39,14 @@ class SettingsViewModel(
                 repository.darkModeFlow,
                 repository.selectedModelFlow,
                 repository.apiEndpointFlow,
+                repository.apiKeyFlow,
                 repository.notificationsEnabledFlow
-            ) { darkMode, model, endpoint, notifications ->
+            ) { darkMode, model, endpoint, apiKey, notifications ->
                 SettingsUiState(
                     isDarkMode = darkMode,
                     selectedModel = model,
                     apiEndpoint = endpoint,
+                    apiKey = apiKey,
                     notificationsEnabled = notifications
                 )
             }.collect { state ->
@@ -67,6 +70,12 @@ class SettingsViewModel(
     fun updateApiEndpoint(endpoint: String) {
         viewModelScope.launch {
             repository.setApiEndpoint(endpoint)
+        }
+    }
+
+    fun updateApiKey(apiKey: String) {
+        viewModelScope.launch {
+            repository.setApiKey(apiKey)
         }
     }
 

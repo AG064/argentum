@@ -28,17 +28,20 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.argentum.ui.screens.AgentsScreen
 import com.argentum.ui.screens.ChatScreen
 import com.argentum.ui.screens.SettingsScreen
 import com.argentum.ui.theme.ArgentumTheme
+import com.argentum.ui.theme.CrimsonRed
+import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.AgentsViewModel
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.SettingsViewModel
 import com.argentum.viewmodel.SettingsViewModelFactory
+import com.argentum.viewmodel.ChatViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,7 +79,8 @@ sealed class BottomNavItem(
 
 @Composable
 fun ArgentumApp() {
-    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory())
+    val context = LocalContext.current
+    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(context))
     val settingsState by settingsViewModel.uiState.collectAsState()
 
     ArgentumTheme(darkTheme = settingsState.isDarkMode) {
@@ -108,7 +112,7 @@ fun ArgentumApp() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     when (selectedTab) {
-                        0 -> ChatScreen(viewModel = ChatViewModel())
+                        0 -> ChatScreen(viewModel = viewModel(factory = ChatViewModelFactory(context)))
                         1 -> AgentsScreen(viewModel = AgentsViewModel())
                         2 -> SettingsScreen(viewModel = settingsViewModel)
                     }
@@ -127,7 +131,7 @@ private fun ArgentumBottomNavigation(
 ) {
     NavigationBar(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         items.forEachIndexed { index, item ->
@@ -135,7 +139,7 @@ private fun ArgentumBottomNavigation(
 
             val iconColor by animateColorAsState(
                 targetValue = if (selected)
-                    MaterialTheme.colorScheme.primary
+                    CrimsonRed
                 else
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 animationSpec = tween(durationMillis = 200),
@@ -160,11 +164,11 @@ private fun ArgentumBottomNavigation(
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    selectedIconColor = CrimsonRed,
+                    selectedTextColor = CrimsonRed,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
                 )
             )
         }

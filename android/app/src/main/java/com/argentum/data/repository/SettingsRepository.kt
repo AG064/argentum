@@ -18,6 +18,7 @@ class SettingsRepository(private val context: Context) {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
         val API_ENDPOINT = stringPreferencesKey("api_endpoint")
+        val API_KEY = stringPreferencesKey("api_key")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
     }
 
@@ -29,6 +30,9 @@ class SettingsRepository(private val context: Context) {
 
     val apiEndpointFlow: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[PreferencesKeys.API_ENDPOINT] ?: "https://api.minimax.io" }
+
+    val apiKeyFlow: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[PreferencesKeys.API_KEY] ?: "" }
 
     val notificationsEnabledFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences -> preferences[PreferencesKeys.NOTIFICATIONS_ENABLED] ?: true }
@@ -48,6 +52,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setApiEndpoint(endpoint: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.API_ENDPOINT] = endpoint
+        }
+    }
+
+    suspend fun setApiKey(apiKey: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.API_KEY] = apiKey
         }
     }
 

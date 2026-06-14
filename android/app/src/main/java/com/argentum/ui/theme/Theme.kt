@@ -14,27 +14,33 @@ import androidx.core.view.WindowCompat
 private val DarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
     onPrimary = DarkOnPrimary,
-    secondary = DarkSecondary,
+    secondary = CrimsonRed,
     background = DarkBackground,
     surface = DarkSurface,
     onSurface = DarkOnSurface,
     onBackground = DarkOnSurface,
-    tertiary = ArgentumGold,
-    primaryContainer = DarkerBlue,
-    onPrimaryContainer = Silver
+    tertiary = SilverLight,
+    primaryContainer = DarkSurfaceVariant,
+    onPrimaryContainer = SilverLight,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    error = ErrorRed
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = LightPrimary,
     onPrimary = LightOnPrimary,
-    secondary = LightSecondary,
+    secondary = CrimsonRed,
     background = LightBackground,
     surface = LightSurface,
     onSurface = LightOnSurface,
     onBackground = LightOnSurface,
-    tertiary = ArgentumGold,
+    tertiary = SilverDark,
     primaryContainer = SilverLight,
-    onPrimaryContainer = DarkBlue
+    onPrimaryContainer = LightPrimary,
+    surfaceVariant = SilverLight,
+    onSurfaceVariant = LightOnSurface,
+    error = ErrorRed
 )
 
 @Composable
@@ -49,7 +55,9 @@ fun ArgentumTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
