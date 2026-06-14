@@ -27,24 +27,13 @@ jobs:
           java-version: "17"
 
       - name: Setup Android SDK
-        id: android-sdk
         uses: android-actions/setup-android@v3
 
-      - name: Debug SDK Location
+      - name: Create local.properties
         run: |
-          echo "Step outputs: ${{ steps.android-sdk.outputs.* }}"
-          echo "ANDROID_HOME='$ANDROID_HOME'"
-          echo "ANDROID_SDK_ROOT='$ANDROID_SDK_ROOT'"
-          for dir in "$ANDROID_HOME" "$ANDROID_SDK_ROOT" "/opt/android-sdk" "$HOME/android-sdk"; do
-            if [ -n "$dir" ] && [ -d "$dir" ]; then
-              echo "SDK found at: $dir"
-              ls "$dir"
-              echo "sdk.dir=$dir" > android/local.properties
-              exit 0
-            fi
-          done
-          echo "ERROR: No SDK found"
-          find / -name "platforms" -type d 2>/dev/null | head -5
+          echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
+          cat android/local.properties
+          ls -la "${ANDROID_HOME}" 2>/dev/null || ls -la /opt/android-sdk 2>/dev/null || echo "SDK dir not found"
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -71,10 +60,14 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace 2>&1
-        working-directory: android
+        run: |
+          echo "=== Gradle version ==="
+          cd android && ./gradlew --version
+          echo "=== Building ==="
+          ./gradlew assembleDebug --stacktrace 2>&1 | tail -150
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: argentum-debug-apk
