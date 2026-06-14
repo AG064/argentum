@@ -96,7 +96,7 @@ jobs:
           max_retries=3
           while [ $retry_count -lt $max_retries ]; do
             echo "Attempt $((retry_count + 1))/$max_retries to install Android packages..."
-            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;28.2.13676358" 2>&1; then
+            if sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;27.3.13750724" 2>&1; then
               echo "Android packages installed successfully"
               break
             fi
