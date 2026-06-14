@@ -1,6 +1,6 @@
 /**
  * Argentum Dashboard - Knowledge Graph 3D Visualization
- * 
+ *
  * Interactive 3D force-directed graph visualization using 3d-force-graph.
  * Reads nodes/edges from Argentum's existing MemoryGraph API.
  */
@@ -91,16 +91,18 @@ function transformToGraphData(entities, relationships) {
     color: getTypeColor(entity.type),
   }));
 
-  const links = relationships.map((rel) => {
-    const sourceId = typeof rel.source === 'object' ? rel.source?.id : rel.sourceId;
-    const targetId = typeof rel.target === 'object' ? rel.target?.id : rel.targetId;
-    return {
-      source: sourceId || '',
-      target: targetId || '',
-      type: rel.type || 'related',
-      weight: rel.weight || 1.0,
-    };
-  }).filter(link => link.source && link.target);
+  const links = relationships
+    .map((rel) => {
+      const sourceId = typeof rel.source === 'object' ? rel.source?.id : rel.sourceId;
+      const targetId = typeof rel.target === 'object' ? rel.target?.id : rel.targetId;
+      return {
+        source: sourceId || '',
+        target: targetId || '',
+        type: rel.type || 'related',
+        weight: rel.weight || 1.0,
+      };
+    })
+    .filter((link) => link.source && link.target);
 
   return { nodes, links };
 }
@@ -110,20 +112,132 @@ function transformToGraphData(entities, relationships) {
  */
 function generateMockGraphData() {
   const nodes = [
-    { id: 'ag-claw', name: 'Argentum', type: 'project', tags: ['ai', 'assistant'], properties: { version: '0.0.7' }, val: 10, color: TYPE_COLORS.project },
-    { id: 'coder', name: 'Coder Agent', type: 'agent', tags: ['coding', 'development'], properties: { status: 'active' }, val: 5, color: TYPE_COLORS.agent },
-    { id: 'researcher', name: 'Researcher Agent', type: 'agent', tags: ['research'], properties: { status: 'active' }, val: 4, color: TYPE_COLORS.agent },
-    { id: 'foreman', name: 'Foreman Agent', type: 'agent', tags: ['orchestration'], properties: { status: 'active' }, val: 3, color: TYPE_COLORS.agent },
-    { id: 'memory-graph', name: 'Memory Graph', type: 'concept', tags: ['memory', 'graph'], properties: { edges: 156 }, val: 6, color: TYPE_COLORS.concept },
-    { id: 'knowledge-graph', name: 'Knowledge Graph', type: 'concept', tags: ['knowledge', 'entities'], properties: { entities: 89 }, val: 5, color: TYPE_COLORS.concept },
-    { id: 'skills', name: 'Skills System', type: 'concept', tags: ['extensibility'], properties: { count: 12 }, val: 4, color: TYPE_COLORS.concept },
-    { id: 'dashboard', name: 'Web Dashboard', type: 'project', tags: ['ui', 'monitoring'], properties: { pages: 11 }, val: 4, color: TYPE_COLORS.project },
-    { id: 'user', name: 'User', type: 'person', tags: ['creator', 'user'], properties: {}, val: 8, color: TYPE_COLORS.person },
-    { id: 'semantic-mem', name: 'Semantic Memory', type: 'memory', tags: ['semantic', 'embeddings'], properties: {}, val: 3, color: TYPE_COLORS.memory },
-    { id: 'episodic-mem', name: 'Episodic Memory', type: 'memory', tags: ['sessions'], properties: {}, val: 3, color: TYPE_COLORS.memory },
-    { id: 'openclaw', name: 'OpenClaw', type: 'organization', tags: ['platform', 'framework'], properties: {}, val: 7, color: TYPE_COLORS.organization },
-    { id: '3d-viz', name: '3D Visualization', type: 'skill', tags: ['visualization', '3d'], properties: {}, val: 2, color: TYPE_COLORS.skill },
-    { id: 'web-dashboard', name: 'Web Dashboard', type: 'skill', tags: ['ui', 'typescript'], properties: {}, val: 3, color: TYPE_COLORS.skill },
+    {
+      id: 'ag-claw',
+      name: 'Argentum',
+      type: 'project',
+      tags: ['ai', 'assistant'],
+      properties: { version: '0.0.8-alpha-alpha' },
+      val: 10,
+      color: TYPE_COLORS.project,
+    },
+    {
+      id: 'coder',
+      name: 'Coder Agent',
+      type: 'agent',
+      tags: ['coding', 'development'],
+      properties: { status: 'active' },
+      val: 5,
+      color: TYPE_COLORS.agent,
+    },
+    {
+      id: 'researcher',
+      name: 'Researcher Agent',
+      type: 'agent',
+      tags: ['research'],
+      properties: { status: 'active' },
+      val: 4,
+      color: TYPE_COLORS.agent,
+    },
+    {
+      id: 'foreman',
+      name: 'Foreman Agent',
+      type: 'agent',
+      tags: ['orchestration'],
+      properties: { status: 'active' },
+      val: 3,
+      color: TYPE_COLORS.agent,
+    },
+    {
+      id: 'memory-graph',
+      name: 'Memory Graph',
+      type: 'concept',
+      tags: ['memory', 'graph'],
+      properties: { edges: 156 },
+      val: 6,
+      color: TYPE_COLORS.concept,
+    },
+    {
+      id: 'knowledge-graph',
+      name: 'Knowledge Graph',
+      type: 'concept',
+      tags: ['knowledge', 'entities'],
+      properties: { entities: 89 },
+      val: 5,
+      color: TYPE_COLORS.concept,
+    },
+    {
+      id: 'skills',
+      name: 'Skills System',
+      type: 'concept',
+      tags: ['extensibility'],
+      properties: { count: 12 },
+      val: 4,
+      color: TYPE_COLORS.concept,
+    },
+    {
+      id: 'dashboard',
+      name: 'Web Dashboard',
+      type: 'project',
+      tags: ['ui', 'monitoring'],
+      properties: { pages: 11 },
+      val: 4,
+      color: TYPE_COLORS.project,
+    },
+    {
+      id: 'user',
+      name: 'User',
+      type: 'person',
+      tags: ['creator', 'user'],
+      properties: {},
+      val: 8,
+      color: TYPE_COLORS.person,
+    },
+    {
+      id: 'semantic-mem',
+      name: 'Semantic Memory',
+      type: 'memory',
+      tags: ['semantic', 'embeddings'],
+      properties: {},
+      val: 3,
+      color: TYPE_COLORS.memory,
+    },
+    {
+      id: 'episodic-mem',
+      name: 'Episodic Memory',
+      type: 'memory',
+      tags: ['sessions'],
+      properties: {},
+      val: 3,
+      color: TYPE_COLORS.memory,
+    },
+    {
+      id: 'openclaw',
+      name: 'OpenClaw',
+      type: 'organization',
+      tags: ['platform', 'framework'],
+      properties: {},
+      val: 7,
+      color: TYPE_COLORS.organization,
+    },
+    {
+      id: '3d-viz',
+      name: '3D Visualization',
+      type: 'skill',
+      tags: ['visualization', '3d'],
+      properties: {},
+      val: 2,
+      color: TYPE_COLORS.skill,
+    },
+    {
+      id: 'web-dashboard',
+      name: 'Web Dashboard',
+      type: 'skill',
+      tags: ['ui', 'typescript'],
+      properties: {},
+      val: 3,
+      color: TYPE_COLORS.skill,
+    },
   ];
 
   const links = [
@@ -186,10 +300,11 @@ async function initKnowledgeGraph3D(containerId) {
   }
 
   // Clear container
+
   container.innerHTML = '';
 
   // Create 3D graph
-  const Graph = window["3DForceGraph"];
+  const Graph = window['3DForceGraph'];
 
   graphInstance = Graph({
     containerId: containerId,
@@ -200,7 +315,7 @@ async function initKnowledgeGraph3D(containerId) {
     linkSource: 'source',
     linkTarget: 'target',
     linkLabel: 'type',
-    linkColor: function(link) {
+    linkColor: function (link) {
       if (highlightNodes.size > 0) {
         const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
         const targetId = typeof link.target === 'object' ? link.target.id : link.target;
@@ -210,12 +325,14 @@ async function initKnowledgeGraph3D(containerId) {
       }
       return 'rgba(99, 102, 241, 0.4)';
     },
-    linkWidth: function(link) {
+    linkWidth: function (link) {
       return Math.max(0.5, link.weight || 1) * 2;
     },
     linkDirectionalParticles: 2,
     linkDirectionalParticleWidth: 2,
-    linkDirectionalParticleColor: function() { return 'rgba(99, 102, 241, 0.6)'; },
+    linkDirectionalParticleColor: function () {
+      return 'rgba(99, 102, 241, 0.6)';
+    },
     linkDirectionalParticleSpeed: 0.005,
     onNodeClick: handleNodeClick,
     onNodeRightClick: handleNodeRightClick,
@@ -224,7 +341,9 @@ async function initKnowledgeGraph3D(containerId) {
     enableNodeDrag: true,
     enableNavigationControls: true,
     showNavInfo: true,
-    nodeThreeObject: function(node) { return createNode3DObject(node); },
+    nodeThreeObject: function (node) {
+      return createNode3DObject(node);
+    },
     nodeThreeObjectExtend: true,
   })(graphData);
 
@@ -233,7 +352,13 @@ async function initKnowledgeGraph3D(containerId) {
     graphInstance.camera().position({ x: 0, y: 0, z: 200 });
   }
 
-  console.log('[KG-3D] Initialized with', graphData.nodes.length, 'nodes and', graphData.links.length, 'edges');
+  console.log(
+    '[KG-3D] Initialized with',
+    graphData.nodes.length,
+    'nodes and',
+    graphData.links.length,
+    'edges',
+  );
 }
 
 /**
@@ -374,13 +499,19 @@ function showHoverInfo(node) {
     document.body.appendChild(hoverEl);
   }
 
-  const tagsHtml = node.tags.length > 0
-    ? `<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;">
-        ${node.tags.slice(0, 3).map(tag => `<span style="background: rgba(99, 102, 241, 0.2); color: var(--color-accent); padding: 2px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`).join('')}
+  const tagsHtml =
+    node.tags.length > 0
+      ? `<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;">
+        ${node.tags
+          .slice(0, 3)
+          .map(
+            (tag) =>
+              `<span style="background: rgba(99, 102, 241, 0.2); color: var(--color-accent); padding: 2px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`,
+          )
+          .join('')}
       </div>`
-    : '';
+      : '';
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   hoverEl.innerHTML = `
     <div style="font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
       <span style="width: 10px; height: 10px; border-radius: 50%; background: ${node.color}; display: inline-block;"></span>
@@ -421,7 +552,6 @@ function showLinkInfo(link, source, target) {
     document.body.appendChild(hoverEl);
   }
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   hoverEl.innerHTML = `
     <div style="font-weight: 600; margin-bottom: 4px; color: var(--color-accent);">
       ${link.type}
@@ -486,27 +616,33 @@ function showNodeDetails(node) {
     background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
   `;
-  overlay.onclick = function() {
+  overlay.onclick = function () {
     panel.remove();
     overlay.remove();
   };
 
-  const tagsHtml = node.tags.length > 0
-    ? `<div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
-        ${node.tags.map(tag => `<span style="background: rgba(99, 102, 241, 0.15); color: var(--color-accent); padding: 4px 10px; border-radius: 6px; font-size: 12px;">${tag}</span>`).join('')}
+  const tagsHtml =
+    node.tags.length > 0
+      ? `<div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
+        ${node.tags.map((tag) => `<span style="background: rgba(99, 102, 241, 0.15); color: var(--color-accent); padding: 4px 10px; border-radius: 6px; font-size: 12px;">${tag}</span>`).join('')}
        </div>`
-    : '';
+      : '';
 
-  const propsHtml = Object.keys(node.properties).length > 0
-    ? `<div style="margin-top: 16px;">
+  const propsHtml =
+    Object.keys(node.properties).length > 0
+      ? `<div style="margin-top: 16px;">
         <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); margin-bottom: 8px;">Properties</div>
         <div style="background: var(--color-bg); border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px;">
-          ${Object.entries(node.properties).map(([k, v]) => `<div><span style="color: var(--color-accent);">${k}:</span> ${JSON.stringify(v)}</div>`).join('')}
+          ${Object.entries(node.properties)
+            .map(
+              ([k, v]) =>
+                `<div><span style="color: var(--color-accent);">${k}:</span> ${JSON.stringify(v)}</div>`,
+            )
+            .join('')}
         </div>
        </div>`
-    : '';
+      : '';
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   panel.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
       <div style="display: flex; align-items: center; gap: 12px;">
@@ -542,12 +678,12 @@ function showNodeDetails(node) {
   document.body.appendChild(panel);
 
   // Event listeners
-  document.getElementById('kg3dDetailsClose').onclick = function() {
+  document.getElementById('kg3dDetailsClose').onclick = function () {
     panel.remove();
     overlay.remove();
   };
 
-  document.getElementById('kg3dCenterNode').onclick = function() {
+  document.getElementById('kg3dCenterNode').onclick = function () {
     if (graphInstance) {
       graphInstance.centerAt(node.id, 500);
       graphInstance.zoomToFit(500);
@@ -556,7 +692,7 @@ function showNodeDetails(node) {
     overlay.remove();
   };
 
-  document.getElementById('kg3dFocusNeighbors').onclick = function() {
+  document.getElementById('kg3dFocusNeighbors').onclick = function () {
     focusOnNeighbors(node);
     panel.remove();
     overlay.remove();
@@ -592,14 +728,16 @@ function focusOnNeighbors(node) {
  */
 async function ensure3DForceGraphLoaded() {
   // Check if already loaded
-  if (window["3DForceGraph"]) return Promise.resolve();
+  if (window['3DForceGraph']) return Promise.resolve();
 
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     // Load Three.js first
     if (!window.THREE) {
       const threeScript = document.createElement('script');
       threeScript.src = 'https://unpkg.com/three@0.160.0/build/three.min.js';
-      threeScript.onload = function() { load3DForceGraph(resolve, reject); };
+      threeScript.onload = function () {
+        load3DForceGraph(resolve, reject);
+      };
       threeScript.onerror = reject;
       document.head.appendChild(threeScript);
     } else {
@@ -683,14 +821,15 @@ function handleKGSearch(query) {
   }
 
   const queryLower = query.toLowerCase();
-  const filteredNodes = currentGraphData.nodes.filter(node =>
-    node.name.toLowerCase().includes(queryLower) ||
-    node.type.toLowerCase().includes(queryLower) ||
-    node.tags.some(tag => tag.toLowerCase().includes(queryLower))
+  const filteredNodes = currentGraphData.nodes.filter(
+    (node) =>
+      node.name.toLowerCase().includes(queryLower) ||
+      node.type.toLowerCase().includes(queryLower) ||
+      node.tags.some((tag) => tag.toLowerCase().includes(queryLower)),
   );
 
-  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-  const filteredLinks = currentGraphData.links.filter(link => {
+  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const filteredLinks = currentGraphData.links.filter((link) => {
     const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
     const targetId = typeof link.target === 'object' ? link.target.id : link.target;
     return filteredNodeIds.has(sourceId) && filteredNodeIds.has(targetId);
@@ -713,9 +852,9 @@ function handleKGTypeFilter(type) {
     return;
   }
 
-  const filteredNodes = currentGraphData.nodes.filter(node => node.type === type);
-  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-  const filteredLinks = currentGraphData.links.filter(link => {
+  const filteredNodes = currentGraphData.nodes.filter((node) => node.type === type);
+  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const filteredLinks = currentGraphData.links.filter((link) => {
     const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
     const targetId = typeof link.target === 'object' ? link.target.id : link.target;
     return filteredNodeIds.has(sourceId) && filteredNodeIds.has(targetId);
@@ -731,16 +870,11 @@ function handleKGTypeFilter(type) {
  */
 function showAddEntityModal() {
   if (typeof Components !== 'undefined' && Components.prompt) {
-    Components.prompt(
-      'Add Entity',
-      'Enter entity name:',
-      '',
-      function(name) {
-        if (name && name.trim()) {
-          Components.toast('Entity creation would connect to API here', 'info');
-        }
+    Components.prompt('Add Entity', 'Enter entity name:', '', function (name) {
+      if (name && name.trim()) {
+        Components.toast('Entity creation would connect to API here', 'info');
       }
-    );
+    });
   } else {
     alert('Entity creation: Connect to KnowledgeGraphFeature API to add entities');
   }

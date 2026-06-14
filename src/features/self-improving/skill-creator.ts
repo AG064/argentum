@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Skill Creator
  *
@@ -59,12 +61,15 @@ export class SkillCreator {
 
     // Create SKILL.md
     const skillContent = this.buildSkillMd(template);
+
     fs.writeFileSync(path.join(skillPath, 'SKILL.md'), skillContent, 'utf8');
 
     // Create references directory if needed
+
     mkdirSync(path.join(skillPath, 'references'), { recursive: true });
 
     // Create scripts directory
+
     mkdirSync(path.join(skillPath, 'scripts'), { recursive: true });
   }
 
@@ -254,6 +259,7 @@ ${template.triggers.map((t) => `- ${t}`).join('\n')}
       return fs
         .readdirSync(this.skillsDir, { encoding: 'utf8' })
         .filter((f) => f.startsWith('auto-'))
+
         .filter((f) => fs.existsSync(path.join(this.skillsDir, f, 'SKILL.md')));
     } catch {
       return [];

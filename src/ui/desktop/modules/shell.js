@@ -14,8 +14,8 @@ export function renderNavigation() {
     .filter((section) => section.id !== 'onboarding')
     .map(
       (section) => `
-        <button class="nav-button ${section.id === state.activeSection ? 'active' : ''}" data-section="${section.id}">
-          <span class="nav-icon">${icon(section.icon)}</span>
+        <button class="nav-button ${section.id === state.activeSection ? 'active' : ''}" data-section="${section.id}" aria-label="${escapeAttribute(section.title)}" aria-current="${section.id === state.activeSection ? 'page' : 'false'}">
+          <span class="nav-icon" aria-hidden="true">${icon(section.icon)}</span>
           <span>${escapeHtml(section.title)}</span>
         </button>
       `,

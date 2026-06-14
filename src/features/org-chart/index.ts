@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Org Chart Feature
  *
@@ -41,7 +43,7 @@ import {
 class OrgChartFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'org-chart',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Organizational chart with Argentum as CEO and subagents as team members',
     dependencies: [],
   };
@@ -64,7 +66,7 @@ class OrgChartFeature implements FeatureModule {
 
   constructor() {
     // Auto-init for CLI usage (singleton bypasses plugin loader)
-    const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
     this.config.dbPath = resolve(join(workDir, 'data', 'org-chart.db'));
     this.initDatabase();
     this.ensureCEO();
@@ -74,6 +76,7 @@ class OrgChartFeature implements FeatureModule {
     this.ctx = context;
     this.config = {
       enabled: true,
+
       dbPath: resolve((config['dbPath'] as string) ?? './data/org-chart.db'),
       ceoId: (config['ceoId'] as string) ?? 'ag-claw-ceo',
       defaultBudget: {

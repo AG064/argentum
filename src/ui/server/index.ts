@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Dashboard Server
  *
@@ -67,12 +69,12 @@ function firstEnvOrDefault(names: string[], fallback: string): string {
 
 // Default configuration
 const DEFAULT_CONFIG: ServerConfig = {
-  port: parseInt(envOrDefault('AGCLAW_DASHBOARD_PORT', '3000'), 10),
-  host: envOrDefault('AGCLAW_DASHBOARD_HOST', '127.0.0.1'),
+  port: parseInt(envOrDefault('ARGENTUM_DASHBOARD_PORT', '3000'), 10),
+  host: envOrDefault('ARGENTUM_DASHBOARD_HOST', '127.0.0.1'),
   staticDir: path.join(__dirname, '..', 'dashboard'),
   auth: {
-    username: envOrDefault('AGCLAW_DASHBOARD_USER', 'admin'),
-    passwordHash: process.env.AGCLAW_DASHBOARD_PASS_HASH ?? '', // Will be generated if empty
+    username: envOrDefault('ARGENTUM_DASHBOARD_USER', 'admin'),
+    passwordHash: process.env.ARGENTUM_DASHBOARD_PASS_HASH ?? '', // Will be generated if empty
   },
   rateLimit: {
     windowMs: 60 * 1000, // 1 minute
@@ -91,7 +93,7 @@ function loadConfig(): ServerConfig {
   const config = { ...DEFAULT_CONFIG };
 
   // Try the new Argentum config first, then the legacy config file name.
-  const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
+  const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'ARGENTUM_WORKDIR'], process.cwd());
   const preferredConfigPath = path.join(workDir, 'argentum.json');
   const legacyConfigPath = path.join(workDir, 'agclaw.json');
   const configPath = fs.existsSync(preferredConfigPath) ? preferredConfigPath : legacyConfigPath;
@@ -130,10 +132,10 @@ function loadConfig(): ServerConfig {
 
   // Generate password hash if not set
   if (!config.auth.passwordHash) {
-    const envPass = process.env.AGCLAW_DASHBOARD_PASS;
+    const envPass = process.env.ARGENTUM_DASHBOARD_PASS;
     if (!envPass) {
       // Try to load a previously persisted hash
-      const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'AGCLAW_WORKDIR'], process.cwd());
+      const workDir = firstEnvOrDefault(['ARGENTUM_WORKDIR', 'ARGENTUM_WORKDIR'], process.cwd());
       const preferredHashFile = path.join(workDir, '.argentum-dashboard-pass-hash');
       const legacyHashFile = path.join(workDir, '.agclaw-dashboard-pass-hash');
       const hashFile = fs.existsSync(preferredHashFile) ? preferredHashFile : legacyHashFile;
@@ -158,13 +160,19 @@ function loadConfig(): ServerConfig {
 
         try {
           fs.writeFileSync(hashFile, config.auth.passwordHash, { mode: 0o600 });
-          try { fs.chmodSync(hashFile, 0o600); } catch { /* chmod may fail on some platforms */ }
+          try {
+            fs.chmodSync(hashFile, 0o600);
+          } catch {
+            /* chmod may fail on some platforms */
+          }
         } catch {
           console.warn('[Dashboard Server] Could not persist password hash to disk.');
         }
 
         console.warn(`[Dashboard Server] Generated dashboard password written to: ${hashFile}`);
-        console.warn('[Dashboard Server] Set AGCLAW_DASHBOARD_PASS or AGCLAW_DASHBOARD_PASS_HASH to use your own.');
+        console.warn(
+          '[Dashboard Server] Set ARGENTUM_DASHBOARD_PASS or ARGENTUM_DASHBOARD_PASS_HASH to use your own.',
+        );
       }
     } else {
       config.auth.passwordHash = hashPassword(envPass);
@@ -336,8 +344,11 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
   // CORS preflight
   if (req.method === 'OPTIONS' && config.cors.enabled) {
+    const origin = req.headers.origin;
+    const allowedOrigin =
+      origin && config.cors.allowedOrigins.includes(origin) ? origin : undefined;
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin ?? '',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
@@ -347,7 +358,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   }
 
   // Apply CORS
-  // nosemgrep: javascript.lang.security.detect-non-literal-regexp-literal
+
   // allowedOrigins is a strict whitelist from config (not user-controlled), so this is safe
   if (config.cors.enabled) {
     const origin = req.headers.origin;
@@ -372,7 +383,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/health') {
     sendJSON(res, 200, {
       status: 'ok',
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       uptime: process.uptime(),
       wsClients: wsClients.size,
     });
@@ -410,7 +421,6 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/' || pathname === '/index.html') {
     filePath = path.join(config.staticDir, 'index.html');
   } else {
-    /* nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal */
     // Path traversal is prevented by normalization + startsWith check below
     filePath = path.join(config.staticDir, pathname);
   }
@@ -634,13 +644,13 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
     installed: [
       {
         name: 'clawhub',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Install and manage skills.',
       },
       {
         name: 'weather',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Get weather forecasts.',
       },
@@ -649,7 +659,7 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
       {
         name: 'slack-bot',
         slug: 'slack-bot',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'community',
         description: 'Send messages to Slack.',
@@ -663,12 +673,13 @@ function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, bo
  * Setup WebSocket server
  */
 function setupWebSocket(server: http.Server): void {
+  // ws:// is correct here - server is plain HTTP, not HTTPS, so wss:// is not applicable
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws: WebSocket, req) => {
     // Auth check for WebSocket
     const authHeader = req.headers.authorization;
-  const auth = parseBasicAuth(authHeader ?? '');
+    const auth = parseBasicAuth(authHeader ?? '');
 
     if (
       auth?.username !== config.auth.username ||
@@ -692,6 +703,7 @@ function setupWebSocket(server: http.Server): void {
     });
 
     // Send welcome message
+
     ws.send(JSON.stringify({ type: 'connected', message: 'Argentum Dashboard connected' }));
   });
 
@@ -761,7 +773,7 @@ export async function startDashboardServer(options?: Partial<ServerConfig>): Pro
       console.info('  ╠══════════════════════════════════════════════════════════╣');
       console.info(`  ║  URL:      http://${config.host}:${config.port}                 ║`);
       console.info(`  ║  Auth:     HTTP Basic Auth (user: ${config.auth.username})            ║`);
-      /* nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket */
+
       console.info(`  ║  WebSocket: ws://${config.host}:${config.port}/ws     ║`);
       console.info('  ╠══════════════════════════════════════════════════════════╣');
       console.info('  ║  Remote Access:                                        ║');

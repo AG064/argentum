@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * SMS Gateway Feature
  *
@@ -73,7 +75,7 @@ export interface SmsGatewayConfig {
 class SmsGatewayFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'sms-gateway',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Pluggable SMS gateway with provider abstraction and SQLite logging',
     dependencies: [],
   };

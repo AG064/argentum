@@ -1,4 +1,4 @@
- 
+// SPDX-License-Identifier: MIT
 // @ts-nocheck
 /**
  * Argentum Approval UI / Human-in-the-Loop System

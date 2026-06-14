@@ -14,7 +14,6 @@ async function loadSecurityData() {
   const grid = document.getElementById('securityGrid');
   if (!grid) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -23,16 +22,19 @@ async function loadSecurityData() {
 
   try {
     // Fetch security stats and audit data
-    const [statsResponse, auditResponse, policiesResponse, approvalsResponse] = await Promise.allSettled([
-      API.get('/api/security/stats'),
-      API.get('/api/security/audit?limit=20'),
-      API.get('/api/security/policies'),
-      API.get('/api/security/approvals'),
-    ]);
+    const [statsResponse, auditResponse, policiesResponse, approvalsResponse] =
+      await Promise.allSettled([
+        API.get('/api/security/stats'),
+        API.get('/api/security/audit?limit=20'),
+        API.get('/api/security/policies'),
+        API.get('/api/security/approvals'),
+      ]);
 
-    const stats = statsResponse.status === 'fulfilled' ? statsResponse.value : getMockSecurityStats();
+    const stats =
+      statsResponse.status === 'fulfilled' ? statsResponse.value : getMockSecurityStats();
     const auditLog = auditResponse.status === 'fulfilled' ? auditResponse.value : [];
-    const policies = policiesResponse.status === 'fulfilled' ? policiesResponse.value : getMockPolicies();
+    const policies =
+      policiesResponse.status === 'fulfilled' ? policiesResponse.value : getMockPolicies();
     const approvals = approvalsResponse.status === 'fulfilled' ? approvalsResponse.value : [];
 
     renderSecurityPage({ stats, auditLog, policies, approvals });
@@ -51,12 +53,11 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
   const grid = document.getElementById('securityGrid');
   if (!grid) return;
 
-  const activePolicies = policies.filter(p => p.enabled).length;
-  const pendingApprovals = approvals.filter(a => a.status === 'pending').length;
+  const activePolicies = policies.filter((p) => p.enabled).length;
+  const pendingApprovals = approvals.filter((a) => a.status === 'pending').length;
   const expiringCreds = stats.credentialsExpiringSoon || 0;
   const threats = stats.threatsDetected || 0;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   grid.innerHTML = `
     <!-- Summary Cards -->
     <div class="stats-grid stagger-children">
@@ -145,13 +146,18 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
             </tr>
           </thead>
           <tbody>
-            ${policies.length === 0 ? `
+            ${
+              policies.length === 0
+                ? `
               <tr>
                 <td colspan="8" class="text-center text-muted" style="padding: var(--space-6)">
                   No policies configured. Add one to get started.
                 </td>
               </tr>
-            ` : policies.map(policy => `
+            `
+                : policies
+                    .map(
+                      (policy) => `
               <tr>
                 <td><strong>${escapeHtml(policy.name)}</strong></td>
                 <td><code style="font-size: 11px">${escapeHtml(policy.resource)}</code></td>
@@ -176,7 +182,10 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
                   <button class="btn btn-sm btn-ghost" onclick="editPolicy('${policy.id}')">Edit</button>
                 </td>
               </tr>
-            `).join('')}
+            `,
+                    )
+                    .join('')
+            }
           </tbody>
         </table>
       </div>
@@ -184,16 +193,21 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
       <!-- Approvals Tab -->
       <div class="tab-content" id="tab-approvals">
         <h3 class="card-title">Pending Approvals</h3>
-        ${approvals.length === 0 ? `
+        ${
+          approvals.length === 0
+            ? `
           <div class="empty-state" style="padding: var(--space-6)">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; margin-bottom: var(--space-3); opacity: 0.3">
               <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
             <p>No pending approvals</p>
           </div>
-        ` : `
+        `
+            : `
           <div style="display: flex; flex-direction: column; gap: var(--space-3)">
-            ${approvals.map(approval => `
+            ${approvals
+              .map(
+                (approval) => `
               <div class="alert ${approval.risk === 'critical' ? 'alert-danger' : approval.risk === 'high' ? 'alert-warning' : 'alert-info'}" 
                    style="margin-bottom: 0">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start">
@@ -220,9 +234,12 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
                   </div>
                 </div>
               </div>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </div>
-        `}
+        `
+        }
       </div>
 
       <!-- Audit Log Tab -->
@@ -257,13 +274,18 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
             </tr>
           </thead>
           <tbody>
-            ${auditLog.length === 0 ? `
+            ${
+              auditLog.length === 0
+                ? `
               <tr>
                 <td colspan="6" class="text-center text-muted" style="padding: var(--space-6)">
                   No audit entries yet
                 </td>
               </tr>
-            ` : auditLog.map(entry => `
+            `
+                : auditLog
+                    .map(
+                      (entry) => `
               <tr class="${entry.severity === 'error' || entry.severity === 'critical' ? 'row-danger' : entry.severity === 'warning' ? 'row-warning' : ''}">
                 <td class="text-sm text-muted">${formatTime(entry.timestamp)}</td>
                 <td>
@@ -278,7 +300,10 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
                   ${entry.decision ? `<span class="badge ${entry.decision === 'allow' ? 'badge-success' : entry.decision === 'deny' || entry.decision === 'block' ? 'badge-danger' : 'badge-warning'}">${entry.decision}</span>` : '-'}
                 </td>
               </tr>
-            `).join('')}
+            `,
+                    )
+                    .join('')
+            }
           </tbody>
         </table>
       </div>
@@ -296,7 +321,9 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
           </button>
         </div>
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-3)">
-          ${getMockCredentials().map(cred => `
+          ${getMockCredentials()
+            .map(
+              (cred) => `
             <div class="card" style="padding: var(--space-3)">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2)">
                 <strong>${escapeHtml(cred.name)}</strong>
@@ -312,7 +339,9 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
                 <button class="btn btn-sm btn-ghost" onclick="deleteCredential('${cred.id}')">Delete</button>
               </div>
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>
 
@@ -404,10 +433,10 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
   `;
 
   // Attach tab handlers
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
       btn.classList.add('active');
       const tabId = btn.dataset.tab;
       document.getElementById(`tab-${tabId}`)?.classList.add('active');
@@ -423,7 +452,7 @@ function renderSecurityPage({ stats, auditLog, policies, approvals }) {
 
 // ─── Event Handlers ────────────────────────────────────────────────────────────
 
-window.togglePolicy = async function(id, enabled) {
+window.togglePolicy = async function (id, enabled) {
   try {
     await API.post(`/api/security/policies/${id}/toggle`, { enabled });
     Components.toast('Policy updated', 'success');
@@ -432,15 +461,15 @@ window.togglePolicy = async function(id, enabled) {
   }
 };
 
-window.editPolicy = async function(id) {
+window.editPolicy = async function (id) {
   Components.toast('Edit policy: ' + id + ' (not implemented in demo)', 'info');
 };
 
-window.openAddPolicyModal = function() {
+window.openAddPolicyModal = function () {
   Components.toast('Add policy modal (not implemented in demo)', 'info');
 };
 
-window.handleApproval = async function(id, decision) {
+window.handleApproval = async function (id, decision) {
   try {
     await API.post(`/api/security/approvals/${id}/${decision}`);
     Components.toast(`Request ${decision}ed`, 'success');
@@ -450,16 +479,16 @@ window.handleApproval = async function(id, decision) {
   }
 };
 
-window.filterAuditLog = function(field, value) {
+window.filterAuditLog = function (field, value) {
   console.log('Filter audit:', field, value);
   // Would re-fetch with filter
 };
 
-window.refreshAuditLog = function() {
+window.refreshAuditLog = function () {
   loadSecurityData();
 };
 
-window.rotateCredential = async function(id) {
+window.rotateCredential = async function (id) {
   try {
     await API.post(`/api/security/credentials/${id}/rotate`);
     Components.toast('Credential rotated', 'success');
@@ -468,7 +497,7 @@ window.rotateCredential = async function(id) {
   }
 };
 
-window.rotateAllCredentials = async function() {
+window.rotateAllCredentials = async function () {
   try {
     await API.post('/api/security/credentials/rotate-all');
     Components.toast('All credentials rotated', 'success');
@@ -477,7 +506,7 @@ window.rotateAllCredentials = async function() {
   }
 };
 
-window.deleteCredential = async function(id) {
+window.deleteCredential = async function (id) {
   if (!confirm('Delete this credential? This cannot be undone.')) return;
   try {
     await API.delete(`/api/security/credentials/${id}`);
@@ -535,22 +564,116 @@ function getMockSecurityStats() {
 
 function getMockPolicies() {
   return [
-    { id: '1', name: 'allow-read-ag-claw', resource: 'file://~/ag-claw/**', action: 'read', effect: 'allow', priority: 10, enabled: true, requiresApproval: false },
-    { id: '2', name: 'allow-write-data', resource: 'file://~/ag-claw/data/**', action: 'write', effect: 'allow', priority: 10, enabled: true, requiresApproval: false },
-    { id: '3', name: 'deny-system', resource: 'file:///etc/**', action: '*', effect: 'deny', priority: 100, enabled: true, requiresApproval: false },
-    { id: '4', name: 'deny-ssh', resource: 'file://**/.ssh/**', action: '*', effect: 'deny', priority: 100, enabled: true, requiresApproval: false },
-    { id: '5', name: 'require-approval-exec', resource: 'exec://**', action: 'exec', effect: 'approve', priority: 50, enabled: true, requiresApproval: true, approvalRisk: 'high' },
-    { id: '6', name: 'allow-https', resource: 'https://**', action: 'network', effect: 'allow', priority: 1, enabled: true, requiresApproval: false },
-    { id: '7', name: 'deny-private-network', resource: 'network://**', action: 'network', effect: 'deny', priority: 90, enabled: true, requiresApproval: false },
-    { id: '8', name: 'disabled-policy', resource: 'file://**/tmp/**', action: '*', effect: 'deny', priority: 1, enabled: false, requiresApproval: false },
+    {
+      id: '1',
+      name: 'allow-read-ag-claw',
+      resource: 'file://~/ag-claw/**',
+      action: 'read',
+      effect: 'allow',
+      priority: 10,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '2',
+      name: 'allow-write-data',
+      resource: 'file://~/ag-claw/data/**',
+      action: 'write',
+      effect: 'allow',
+      priority: 10,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '3',
+      name: 'deny-system',
+      resource: 'file:///etc/**',
+      action: '*',
+      effect: 'deny',
+      priority: 100,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '4',
+      name: 'deny-ssh',
+      resource: 'file://**/.ssh/**',
+      action: '*',
+      effect: 'deny',
+      priority: 100,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '5',
+      name: 'require-approval-exec',
+      resource: 'exec://**',
+      action: 'exec',
+      effect: 'approve',
+      priority: 50,
+      enabled: true,
+      requiresApproval: true,
+      approvalRisk: 'high',
+    },
+    {
+      id: '6',
+      name: 'allow-https',
+      resource: 'https://**',
+      action: 'network',
+      effect: 'allow',
+      priority: 1,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '7',
+      name: 'deny-private-network',
+      resource: 'network://**',
+      action: 'network',
+      effect: 'deny',
+      priority: 90,
+      enabled: true,
+      requiresApproval: false,
+    },
+    {
+      id: '8',
+      name: 'disabled-policy',
+      resource: 'file://**/tmp/**',
+      action: '*',
+      effect: 'deny',
+      priority: 1,
+      enabled: false,
+      requiresApproval: false,
+    },
   ];
 }
 
 function getMockCredentials() {
   return [
-    { id: '1', name: 'OpenAI API', provider: 'openai', type: 'api_key', expiresAt: Date.now() + 120000, expiresSoon: true },
-    { id: '2', name: 'GitHub Token', provider: 'github', type: 'oauth', expiresAt: Date.now() + 3600000, expiresSoon: false },
-    { id: '3', name: 'Supabase JWT', provider: 'supabase', type: 'jwt', expiresAt: Date.now() + 7200000, expiresSoon: false },
+    {
+      id: '1',
+      name: 'OpenAI API',
+      provider: 'openai',
+      type: 'api_key',
+      expiresAt: Date.now() + 120000,
+      expiresSoon: true,
+    },
+    {
+      id: '2',
+      name: 'GitHub Token',
+      provider: 'github',
+      type: 'oauth',
+      expiresAt: Date.now() + 3600000,
+      expiresSoon: false,
+    },
+    {
+      id: '3',
+      name: 'Supabase JWT',
+      provider: 'supabase',
+      type: 'jwt',
+      expiresAt: Date.now() + 7200000,
+      expiresSoon: false,
+    },
   ];
 }
 
@@ -591,6 +714,7 @@ function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
+
   return div.innerHTML;
 }
 
@@ -618,7 +742,12 @@ function formatExpiry(timestamp) {
 }
 
 function renderComplianceBar(score) {
-  const color = score >= 90 ? 'var(--color-success)' : score >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const color =
+    score >= 90
+      ? 'var(--color-success)'
+      : score >= 70
+        ? 'var(--color-warning)'
+        : 'var(--color-danger)';
   return `
     <div style="display: flex; align-items: center; gap: var(--space-3)">
       <div style="flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden">

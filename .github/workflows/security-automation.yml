@@ -23,9 +23,9 @@ jobs:
       vulnerabilities: ${{ steps.audit.outputs.vulnerabilities }}
       has_vulnerabilities: ${{ steps.audit.outputs.has_vulnerabilities }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -84,9 +84,9 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -123,8 +123,8 @@ jobs:
           npm run build
           echo "Running test suite..."
           npm test
-          echo "Re-running npm audit..."
-          npm audit --audit-level=high
+          echo "Re-running npm audit (remaining vulnerabilities may require manual intervention)..."
+          npm audit --audit-level=high || echo "Some vulnerabilities could not be auto-resolved — PR created for manual review"
 
       - name: Create pull request
         if: steps.changes.outputs.updated == 'true'

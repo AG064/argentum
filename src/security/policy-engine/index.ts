@@ -1,4 +1,5 @@
- 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Policy Engine
  *
@@ -156,6 +157,7 @@ function evaluateConditions(
         return typeof value === 'string' && String(value).includes(String(cond.value));
       case 'matches':
         if (typeof value !== 'string') return false;
+
         try {
           return new RegExp(String(cond.value)).test(value);
         } catch {

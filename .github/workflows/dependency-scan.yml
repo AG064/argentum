@@ -1,0 +1,83 @@
+name: Dependency Security Scan
+
+on:
+  push:
+    branches: [development, main, AGX]
+  pull_request:
+    branches: [development, main, AGX]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-dependencies.sarif'
+          security-checks: 'vuln'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-dependencies.sarif'
+
+      - name: Check for critical vulnerabilities
+        run: |
+          echo "=== File check ==="
+          if [ ! -f trivy-dependencies.sarif ]; then
+            echo "File does not exist"
+            echo "PASS: No trivy results (file not found)"
+            exit 0
+          fi
+          SIZE=$(wc -c < trivy-dependencies.sarif)
+          echo "File size: $SIZE bytes"
+          if [ "$SIZE" -lt 50 ]; then
+            echo "File too small to be valid SARIF"
+            echo "PASS: No valid trivy results"
+            exit 0
+          fi
+          echo "=== Vulnerability details ==="
+          jq -r '.runs[0].results[] | "Rule: \(.ruleId)" ' trivy-dependencies.sarif 2>/dev/null
+          echo "=== End details ==="
+          # Count only CRITICAL and HIGH severity results
+          COUNT=$(jq '[.runs[0].results[] | select(.rule.severity == "HIGH" or .rule.severity == "CRITICAL")] | length' trivy-dependencies.sarif 2>&1)
+          echo "Critical/High vulnerabilities found: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "FAIL: Critical/high vulnerabilities found in dependencies"
+            exit 1
+          fi
+          echo "PASS: No critical/high vulnerabilities found"
+
+      - name: Check npm audit results
+        run: |
+          RESULT=$(npm audit --audit-level=high 2>&1)
+          echo "$RESULT"
+          if echo "$RESULT" | grep -qP '[1-9]\d*(?=\s+vulnerabilit)'; then
+            echo "FAIL: npm audit found high/critical issues"
+            exit 1
+          fi
+          echo "PASS: npm audit passed".

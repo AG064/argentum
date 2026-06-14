@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Markdown Memory Feature
  *
@@ -27,7 +29,7 @@ export interface MarkdownMemoryConfig {
 class MarkdownMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'markdown-memory',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Markdown file-based memory store with frontmatter',
     dependencies: [],
   };

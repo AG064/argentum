@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { arch, cpus, freemem, loadavg, platform, totalmem } from 'os';
 
 import {
@@ -70,7 +71,7 @@ export interface HealthMonitoringConfig {
 class HealthMonitoringFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'health-monitoring',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'System health monitoring with metrics collection and alerts',
     dependencies: [],
   };

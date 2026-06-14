@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // @ts-nocheck
 /**
  * Argentum Blueprint System
@@ -6,7 +7,7 @@
  * Loads and validates blueprints from:
  * - ~/.ag-claw/blueprint.yaml
  * - ~/.ag-claw/blueprint.json
- * - AGCLAW_BLUEPRINT_PATH env var
+ * - ARGENTUM_BLUEPRINT_PATH env var
  * - Programmatic API
  *
  * Blueprint schema:
@@ -231,7 +232,7 @@ export class BlueprintLoader {
    * Load blueprint from environment variable (YAML or JSON string).
    */
   loadFromEnv(): Blueprint | null {
-    const envValue = process.env.AGCLAW_BLUEPRINT;
+    const envValue = process.env.ARGENTUM_BLUEPRINT;
     if (!envValue) return null;
 
     try {
@@ -240,12 +241,12 @@ export class BlueprintLoader {
 
       if (validated) {
         this.blueprint = validated;
-        this.loadedPath = 'AGCLAW_BLUEPRINT env var';
-        this.logger.info('Blueprint loaded from AGCLAW_BLUEPRINT env var');
+        this.loadedPath = 'ARGENTUM_BLUEPRINT env var';
+        this.logger.info('Blueprint loaded from ARGENTUM_BLUEPRINT env var');
         return this.blueprint;
       }
     } catch (err) {
-      this.logger.error('Failed to parse AGCLAW_BLUEPRINT env var', {
+      this.logger.error('Failed to parse ARGENTUM_BLUEPRINT env var', {
         error: err instanceof Error ? err.message : String(err),
       });
     }

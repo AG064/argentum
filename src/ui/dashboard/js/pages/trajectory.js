@@ -6,7 +6,6 @@ async function loadTrajectoryData() {
   const container = document.getElementById('trajectoryContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -25,7 +24,6 @@ function renderTrajectoryPage(data) {
   const container = document.getElementById('trajectoryContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Stats Row -->
     <div class="stats-grid stagger-children">
@@ -85,9 +83,13 @@ function renderTrajectoryPage(data) {
             <label class="form-label">Session</label>
             <select class="input select" name="sessionId" id="sessionSelect">
               <option value="">Select a session...</option>
-              ${data.sessions.map(s => `
+              ${data.sessions
+                .map(
+                  (s) => `
                 <option value="${s.id}">${s.title} (${s.messageCount} msgs)</option>
-              `).join('')}
+              `,
+                )
+                .join('')}
             </select>
           </div>
           <div class="form-group">
@@ -143,7 +145,9 @@ function renderTrajectoryPage(data) {
             </tr>
           </thead>
           <tbody>
-            ${data.sessions.map(s => `
+            ${data.sessions
+              .map(
+                (s) => `
               <tr>
                 <td>
                   <strong>${s.title}</strong>
@@ -158,14 +162,18 @@ function renderTrajectoryPage(data) {
                   <button class="btn btn-ghost btn-sm" onclick="exportSession('${s.id}')">Export</button>
                 </td>
               </tr>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </tbody>
         </table>
       </div>
     </div>
 
     <!-- Export History -->
-    ${data.exportHistory && data.exportHistory.length > 0 ? `
+    ${
+      data.exportHistory && data.exportHistory.length > 0
+        ? `
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Export History</h3>
       <div class="table-container" style="margin-top: var(--space-4)">
@@ -181,7 +189,9 @@ function renderTrajectoryPage(data) {
             </tr>
           </thead>
           <tbody>
-            ${data.exportHistory.map(exp => `
+            ${data.exportHistory
+              .map(
+                (exp) => `
               <tr>
                 <td>${formatAge(exp.timestamp)}</td>
                 <td><code class="code">${exp.filename}</code></td>
@@ -192,19 +202,27 @@ function renderTrajectoryPage(data) {
                   <button class="btn btn-ghost btn-sm" onclick="downloadExport('${exp.id}')">Download</button>
                 </td>
               </tr>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </tbody>
         </table>
       </div>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <!-- Token/Cost by Agent -->
-    ${Object.keys(data.stats.byAgent || {}).length > 0 ? `
+    ${
+      Object.keys(data.stats.byAgent || {}).length > 0
+        ? `
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Usage by Agent</h3>
       <div style="margin-top: var(--space-4)">
-        ${Object.entries(data.stats.byAgent).map(([agent, stats]) => `
+        ${Object.entries(data.stats.byAgent)
+          .map(
+            ([agent, stats]) => `
           <div style="margin-bottom: var(--space-4)">
             <div class="flex justify-between" style="margin-bottom: var(--space-1)">
               <strong>${agent}</strong>
@@ -214,10 +232,14 @@ function renderTrajectoryPage(data) {
               <div class="progress-fill success" style="width: ${Math.min(100, (stats.tokens / data.stats.totalTokens) * 100)}%"></div>
             </div>
           </div>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
   `;
 
   // Attach form handler
@@ -244,8 +266,7 @@ async function handleExportTrajectory(e) {
   const btn = document.getElementById('exportBtn');
   if (btn) {
     btn.disabled = true;
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-    // safe: Components.spinner() returns static trusted HTML, 'Exporting...' is a static string
+
     btn.innerHTML = Components.spinner() + ' Exporting...';
   }
 
@@ -260,7 +281,10 @@ async function handleExportTrajectory(e) {
 
     // Trigger download
     if (result.downloadUrl) {
-      downloadFile(result.downloadUrl, `trajectory-${sessionId.slice(0, 8)}.${format}${gzip ? '.gz' : ''}`);
+      downloadFile(
+        result.downloadUrl,
+        `trajectory-${sessionId.slice(0, 8)}.${format}${gzip ? '.gz' : ''}`,
+      );
     }
 
     loadTrajectoryData();
@@ -269,6 +293,7 @@ async function handleExportTrajectory(e) {
   } finally {
     if (btn) {
       btn.disabled = false;
+
       btn.innerHTML = 'Export';
     }
   }
@@ -420,9 +445,9 @@ function getMockTrajectoryData() {
       totalTokens: 45230000,
       totalCost: 89.34,
       byAgent: {
-        'coder': { messages: 12400, tokens: 19800000, cost: 39.60 },
-        'researcher': { messages: 8900, tokens: 14200000, cost: 28.40 },
-        'foreman': { messages: 7156, tokens: 11230000, cost: 22.46 },
+        coder: { messages: 12400, tokens: 19800000, cost: 39.6 },
+        researcher: { messages: 8900, tokens: 14200000, cost: 28.4 },
+        foreman: { messages: 7156, tokens: 11230000, cost: 22.46 },
       },
     },
     exportHistory: [

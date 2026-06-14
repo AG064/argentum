@@ -1,0 +1,72 @@
+name: Check npm version
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Daily at 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-npm:
+    name: Check npm version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+
+      - name: Get current pinned npm version
+        id: current
+        run: |
+          CURRENT=$(grep -E 'npm@[0-9.]+' docker/Dockerfile | sed 's/.*npm@\([0-9.]*\).*/\1/')
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current npm version: $CURRENT"
+
+      - name: Check latest npm version
+        id: latest
+        run: |
+          LATEST=$(curl -sL https://registry.npmjs.org/npm/latest | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest npm version: $LATEST"
+
+      - name: Create issue if update available
+        if: steps.current.outputs.current != steps.latest.outputs.latest
+        run: |
+          CURRENT="${{ steps.current.outputs.current }}"
+          LATEST="${{ steps.latest.outputs.latest }}"
+          
+          ISSUE_TITLE="Update npm to $LATEST"
+          
+          # Use printf to create the body without YAML parsing issues
+          printf '%s\n' "## npm Update Available" "" "Current pinned version: $CURRENT" "Latest available: $LATEST" "" "Update in docker/Dockerfile:" "- RUN npm install -g npm@$CURRENT" "  RUN npm install -g npm@$LATEST" "" "This update may include security patches." > /tmp/issue_body.txt
+          
+          ISSUE_BODY=$(cat /tmp/issue_body.txt)
+          
+          # Check if issue already exists
+          RESPONSE=$(curl -sL -w "\n%{http_code}" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=npm-update")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            EXISTING=$(echo "$BODY" | python3 -c "import json,sys; issues=json.load(sys.stdin); print('true' if any('npm@$LATEST' in i.get('title','') for i in (issues if isinstance(issues, list) else [])) else 'false')")
+          else
+            EXISTING='false'
+          fi
+          
+          if [ "$EXISTING" = "false" ]; then
+            CREATE_RESP=$(curl -sL -w "\n%{http_code}" -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues" \
+              -d "{\"title\":\"$ISSUE_TITLE\",\"body\":\"$ISSUE_BODY\",\"labels\":[\"npm-update\",\"dependencies\"]}")
+            CREATE_CODE=$(echo "$CREATE_RESP" | tail -1)
+            if [ "$CREATE_CODE" = "201" ]; then
+              echo "Created issue for npm $LATEST"
+            else
+              echo "Failed to create issue (HTTP $CREATE_CODE)"
+            fi
+          else
+            echo "Issue for npm $LATEST already exists"
+          fi

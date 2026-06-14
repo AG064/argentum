@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * News Digest Feature
  *
@@ -91,7 +93,7 @@ function isUniqueConstraintError(error: unknown): boolean {
 class NewsDigestFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'news-digest',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'RSS/Atom feed aggregation with caching',
     dependencies: [],
   };
@@ -383,7 +385,7 @@ class NewsDigestFeature implements FeatureModule {
 
       const title = getTag('title');
       const description = getTag('description') ?? undefined;
-      const content = (getTag('content:encoded') ?? getTag('content')) ?? undefined;
+      const content = getTag('content:encoded') ?? getTag('content') ?? undefined;
 
       // Parse pubDate
       const pubDateStr = getTag('pubDate');

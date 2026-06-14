@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * ACP Harness for Argentum
  *
@@ -70,7 +72,7 @@ const DEFAULT_CONFIG: ACPConfig = {
 class ACPHarnessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'acp',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Agent Control Protocol harness for code execution',
     dependencies: [],
   };
@@ -173,6 +175,7 @@ class ACPHarnessFeature implements FeatureModule {
 
   private writeExecutionError(res: ServerResponse, err: unknown): void {
     res.statusCode = 500;
+
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
     const escapedError = errorMsg
       .replace(/&/g, '&amp;')

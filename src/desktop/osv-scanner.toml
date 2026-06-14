@@ -1,0 +1,74 @@
+# OSV Scanner configuration
+# See: https://osv.dev/docs/understanding_osv
+#
+# These RUSTSEC vulnerabilities are in transitive dependencies of Tauri/Rust crates.
+# They require a newer Rust version (1.95+) to fix. Current toolchain: 1.94.1.
+# Tracking upstream fixes in https://github.com/tauri-apps/tauri
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0413"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0416"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0412"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0418"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0411"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0417"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0414"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+reason = "Transitive dependency of Tauri. GHSA-wrw7-89jp-8q8g. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0415"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0420"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0419"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+reason = "Transitive dependency of Tauri. Requires Rust 1.95+. Tracking fix in tauri-apps/tauri."

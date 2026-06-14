@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Skill Loader
  *
@@ -37,8 +39,9 @@ export interface SkillLoaderConfig {
 class SkillLoaderFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skill-loader',
-    version: '0.0.7',
-    description: 'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
+    version: '0.0.8-alpha-alpha',
+    description:
+      'Loads SKILL.md from feature directories into agent context (OpenFang Hand pattern)',
     dependencies: [],
   };
 
@@ -100,6 +103,7 @@ class SkillLoaderFeature implements FeatureModule {
   /**
    * Load SKILL.md from a feature directory
    */
+
   loadSkillFromFeature(featureDir: string): SkillContext | null {
     const skillPath = join(featureDir, 'SKILL.md');
     if (!existsSync(skillPath)) return null;
@@ -119,7 +123,7 @@ class SkillLoaderFeature implements FeatureModule {
    */
   injectSkillsIntoContext(
     featureDirs: string[],
-    context: Record<string, unknown>
+    context: Record<string, unknown>,
   ): Record<string, unknown> {
     const skills: SkillContext[] = [];
 
@@ -130,7 +134,7 @@ class SkillLoaderFeature implements FeatureModule {
 
     return {
       ...context,
-      skills: skills.map(s => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n'),
+      skills: skills.map((s) => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n'),
       _skills: skills,
     };
   }
@@ -146,9 +150,7 @@ class SkillLoaderFeature implements FeatureModule {
    * Get skills formatted as markdown string (for context injection)
    */
   getSkillsAsText(): string {
-    return this.loadedSkills
-      .map(s => `# ${s.skillName}\n\n${s.content}`)
-      .join('\n\n---\n\n');
+    return this.loadedSkills.map((s) => `# ${s.skillName}\n\n${s.content}`).join('\n\n---\n\n');
   }
 }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Router Agent — Central routing for multi-user Argentum
  *
@@ -78,10 +80,7 @@ export interface RouteResult {
  * Normalize an ID to numeric format
  * Accepts: numeric (123456789), with prefix (telegram:123456789), or mapped name (anneka)
  */
-export function normalizeId(
-  id: string,
-  config: RouterConfig
-): string {
+export function normalizeId(id: string, config: RouterConfig): string {
   // Already numeric
   if (/^\d+$/.test(id)) {
     return id;
@@ -105,11 +104,7 @@ export function normalizeId(
 /**
  * Check if an ID matches, handling normalization
  */
-export function idMatches(
-  ruleValue: string,
-  contextId: string,
-  config: RouterConfig
-): boolean {
+export function idMatches(ruleValue: string, contextId: string, config: RouterConfig): boolean {
   const normalizedRule = normalizeId(ruleValue, config);
   const normalizedContext = normalizeId(contextId, config);
   return normalizedRule === normalizedContext;
@@ -165,10 +160,7 @@ export class RouterAgent extends EventEmitter {
         const targetWorkspace = rule.targetWorkspace ?? this.agentWorkspaces.get(rule.targetAgent);
 
         // Get or create session for target agent
-        const sessionKey = await this.getOrCreateSession(
-          rule.targetAgent,
-          targetWorkspace
-        );
+        const sessionKey = await this.getOrCreateSession(rule.targetAgent, targetWorkspace);
 
         return {
           agent: rule.targetAgent,
@@ -214,9 +206,7 @@ export class RouterAgent extends EventEmitter {
 
       case 'keyword':
         if (Array.isArray(rule.value)) {
-          return rule.value.some(k =>
-            ctx.message.toLowerCase().includes(k.toLowerCase())
-          );
+          return rule.value.some((k) => ctx.message.toLowerCase().includes(k.toLowerCase()));
         }
         if (rule.value instanceof RegExp) {
           return rule.value.test(ctx.message);
@@ -236,7 +226,7 @@ export class RouterAgent extends EventEmitter {
    */
   private async getOrCreateSession(
     agentId: string,
-    workspace?: string
+    workspace?: string,
   ): Promise<string | undefined> {
     const cacheKey = `${agentId}:${workspace ?? 'default'}`;
 

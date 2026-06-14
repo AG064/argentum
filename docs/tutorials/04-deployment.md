@@ -44,9 +44,9 @@ Create a `.env` file in the project root:
 OPENROUTER_API_KEY=sk-or-v1-...
 
 # Optional
-AGCLAW_PORT=3000
-AGCLAW_LOG_LEVEL=info
-AGCLAW_DB_PATH=/app/data
+ARGENTUM_PORT=3000
+ARGENTUM_LOG_LEVEL=info
+ARGENTUM_DB_PATH=/app/data
 ```
 
 ### Start the Container
@@ -98,9 +98,9 @@ services:
       - "3001:3001"       # Webchat
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - AGCLAW_PORT=3000
-      - AGCLAW_LOG_LEVEL=info
-      - AGCLAW_API_TOKEN=${AGCLAW_API_TOKEN}
+      - ARGENTUM_PORT=3000
+      - ARGENTUM_LOG_LEVEL=info
+      - ARGENTUM_API_TOKEN=${ARGENTUM_API_TOKEN}
     volumes:
       - ./data:/app/data
       - ./argentum.json:/app/argentum.json:ro
@@ -168,9 +168,9 @@ cd argentum
 # Create .env
 cat > .env << 'EOF'
 OPENROUTER_API_KEY=sk-or-v1-...
-AGCLAW_PORT=3000
-AGCLAW_LOG_LEVEL=info
-AGCLAW_API_TOKEN=your-secure-random-token
+ARGENTUM_PORT=3000
+ARGENTUM_LOG_LEVEL=info
+ARGENTUM_API_TOKEN=your-secure-random-token
 EOF
 
 # Build and start
@@ -296,7 +296,7 @@ openssl rand -base64 32
 Add it to your `.env`:
 
 ```bash
-AGCLAW_API_TOKEN=your-generated-token-here
+ARGENTUM_API_TOKEN=your-generated-token-here
 ```
 
 ### 2. Configure Allowlists

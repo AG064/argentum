@@ -1,0 +1,33 @@
+name: CodeQL Security Analysis
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+    branches: [development, main]
+  schedule:
+    - cron: "0 9 * * *" # Daily at 09:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript
+
+      - name: Perform Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          queries: security-extended

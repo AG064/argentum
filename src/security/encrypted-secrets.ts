@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Encrypted Secrets
  *
- * AES-256-GCM encryption for sensitive values.
- * Master key from AGCLAW_MASTER_KEY env var (or passed explicitly).
+ * Configurable encryption for sensitive values.
+ * Supports AES-256-GCM and ChaCha20-Poly1305.
+ * Master key from ARGENTUM_MASTER_KEY env var (or passed explicitly).
  * Secrets stored in a JSON file on disk, encrypted at rest.
  */
 
@@ -14,18 +17,22 @@ import { createLogger, type Logger } from '../core/logger';
 
 // ─── Types ────────────────────────────────────────────────────
 
+export type EncryptionAlgorithm = 'aes-256-gcm' | 'chacha20-poly1305';
+
 interface SecretEntry {
   key: string;
+  algorithm: EncryptionAlgorithm;
   iv: string; // hex
   salt: string; // hex (per-secret salt for key derivation)
   ciphertext: string; // hex
-  tag: string; // GCM auth tag, hex
+  tag: string; // auth tag, hex (GCM tag or Poly1305 tag)
   createdAt: number;
   updatedAt: number;
 }
 
 interface SecretsFile {
   version: number;
+  algorithm: EncryptionAlgorithm;
   secrets: SecretEntry[];
 }
 
@@ -34,8 +41,10 @@ interface SecretsFile {
 const SALT_LENGTH = 16;
 const IV_LENGTH = 16;
 const KEY_LENGTH = 32;
+const CHACHA20_KEY_LENGTH = 32;
+const CHACHA20_IV_LENGTH = 12; // 96-bit nonce for ChaCha20
 const PBKDF2_ITERATIONS = 100_000;
-const FILE_VERSION = 1;
+const FILE_VERSION = 2; // Bump for algorithm field
 
 const DEFAULT_STORE_PATH = resolve(process.cwd(), 'data/secrets.enc.json');
 
@@ -60,13 +69,13 @@ function deriveKey(masterKey: Buffer, salt: Buffer): Buffer {
 
 /**
  * Resolve the master key buffer.
- * Priority: explicit arg → AGCLAW_MASTER_KEY env → error.
+ * Priority: explicit arg → ARGENTUM_MASTER_KEY env → error.
  */
 function resolveMasterKey(explicit?: string): Buffer {
-  const raw = explicit ?? process.env.AGCLAW_MASTER_KEY;
+  const raw = explicit ?? process.env.ARGENTUM_MASTER_KEY;
   if (!raw || raw.length === 0) {
     throw new Error(
-      'Master key not provided. Set AGCLAW_MASTER_KEY env var or pass key to init().',
+      'Master key not provided. Set ARGENTUM_MASTER_KEY env var or pass key to init().',
     );
   }
   // Derive a stable 32-byte key from whatever passphrase the user provides
@@ -76,24 +85,45 @@ function resolveMasterKey(explicit?: string): Buffer {
 // ─── Public API: standalone functions ─────────────────────────
 
 /**
- * Encrypt a plaintext value using AES-256-GCM.
+ * Encrypt a plaintext value using the specified algorithm.
  *
- * Returns a single string: `iv:salt:ciphertext:tag` (all hex).
+ * Returns a single string: `algorithm:iv:salt:ciphertext:tag` (all hex).
  *
  * @param masterKey - Master key passphrase or Buffer
  * @param value     - Plaintext to encrypt
+ * @param algorithm - Encryption algorithm to use
  */
-export function encrypt(masterKey: string | Buffer, value: string): string {
+export function encrypt(
+  masterKey: string | Buffer,
+  value: string,
+  algorithm: EncryptionAlgorithm = 'aes-256-gcm',
+): string {
   const keyBuf = typeof masterKey === 'string' ? resolveMasterKey(masterKey) : masterKey;
-  const iv = randomBytes(IV_LENGTH);
   const salt = randomBytes(SALT_LENGTH);
   const derivedKey = deriveKey(keyBuf, salt);
 
+  if (algorithm === 'chacha20-poly1305') {
+    const iv = randomBytes(CHACHA20_IV_LENGTH);
+    const cipher = createCipheriv('chacha20-poly1305', derivedKey, iv);
+    const encrypted = Buffer.concat([cipher.update(value, 'utf-8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return [
+      'chacha20-poly1305',
+      iv.toString('hex'),
+      salt.toString('hex'),
+      encrypted.toString('hex'),
+      tag.toString('hex'),
+    ].join(':');
+  }
+
+  // Default: AES-256-GCM
+  const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv('aes-256-gcm', derivedKey, iv);
   const encrypted = Buffer.concat([cipher.update(value, 'utf-8'), cipher.final()]);
   const tag = cipher.getAuthTag();
 
   return [
+    'aes-256-gcm',
     iv.toString('hex'),
     salt.toString('hex'),
     encrypted.toString('hex'),
@@ -103,30 +133,53 @@ export function encrypt(masterKey: string | Buffer, value: string): string {
 
 /**
  * Decrypt a value previously encrypted with encrypt().
+ * Automatically detects the algorithm from the encrypted string.
  *
  * @param masterKey  - Master key passphrase or Buffer
- * @param encrypted  - String in format `iv:salt:ciphertext:tag`
+ * @param encrypted  - String in format `algorithm:iv:salt:ciphertext:tag`
  */
 export function decrypt(masterKey: string | Buffer, encrypted: string): string {
   const keyBuf = typeof masterKey === 'string' ? resolveMasterKey(masterKey) : masterKey;
   const parts = encrypted.split(':');
-  if (parts.length !== 4) {
-    throw new Error('Invalid encrypted format. Expected iv:salt:ciphertext:tag');
+  if (parts.length !== 5) {
+    throw new Error('Invalid encrypted format. Expected algorithm:iv:salt:ciphertext:tag');
   }
 
-  const [ivHex, saltHex, ctHex, tagHex] = parts as [string, string, string, string];
+  const [algorithm, ivHex, saltHex, ctHex, tagHex] = parts as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   const iv = Buffer.from(ivHex, 'hex');
   const salt = Buffer.from(saltHex, 'hex');
   const derivedKey = deriveKey(keyBuf, salt);
 
-  // nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
-  // setAuthTag is called below, this is not a vulnerability
+  if (algorithm === 'chacha20-poly1305') {
+    const decipher = createDecipheriv('chacha20-poly1305', derivedKey, iv);
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(ctHex, 'hex')), decipher.final()]);
+    return decrypted.toString('utf-8');
+  }
+
+  // Default: AES-256-GCM
   const decipher = createDecipheriv('aes-256-gcm', derivedKey, iv);
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-
   const decrypted = Buffer.concat([decipher.update(Buffer.from(ctHex, 'hex')), decipher.final()]);
-
   return decrypted.toString('utf-8');
+}
+
+/**
+ * Get the current default encryption algorithm.
+ * Can be set via ARGENTUM_ENCRYPTION_ALGORITHM env var.
+ */
+export function getDefaultAlgorithm(): EncryptionAlgorithm {
+  const env = process.env.ARGENTUM_ENCRYPTION_ALGORITHM;
+  if (env === 'chacha20-poly1305' || env === 'aes-256-gcm') {
+    return env;
+  }
+  return 'aes-256-gcm';
 }
 
 // ─── Public API: file-backed vault ────────────────────────────
@@ -145,26 +198,26 @@ export function store(key: string, value: string, filePath?: string): void {
   const path = filePath ?? vaultPath;
   const masterKey = resolveMasterKey();
   const now = Date.now();
+  const algorithm = getDefaultAlgorithm();
 
   const vault = loadVault(path);
-
   const existing = vault.secrets.find((s) => s.key === key);
 
-  // Encrypt with a fresh IV + salt
-  const iv = randomBytes(IV_LENGTH);
-  const salt = randomBytes(SALT_LENGTH);
-  const derivedKey = deriveKey(masterKey, salt);
-
-  const cipher = createCipheriv('aes-256-gcm', derivedKey, iv);
-  const encrypted = Buffer.concat([cipher.update(value, 'utf-8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  // Encrypt with a fresh IV + salt using the configured algorithm
+  const encrypted = encrypt(masterKey, value, algorithm);
+  const parts = encrypted.split(':');
+  if (parts.length !== 5) {
+    throw new Error('Invalid encrypted format. Expected algorithm:iv:salt:ciphertext:tag');
+  }
+  const [alg, ivHex, saltHex, ctHex, tagHex] = parts as [string, string, string, string, string];
 
   const entry: SecretEntry = {
     key,
-    iv: iv.toString('hex'),
-    salt: salt.toString('hex'),
-    ciphertext: encrypted.toString('hex'),
-    tag: tag.toString('hex'),
+    algorithm: alg as EncryptionAlgorithm,
+    iv: ivHex,
+    salt: saltHex,
+    ciphertext: ctHex,
+    tag: tagHex,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -176,7 +229,7 @@ export function store(key: string, value: string, filePath?: string): void {
   }
 
   saveVault(path, vault);
-  getLogger().info(`Secret stored: ${key}`, { path });
+  getLogger().info(`Secret stored: ${key}`, { path, algorithm });
 }
 
 /**
@@ -199,17 +252,30 @@ export function retrieve(key: string, filePath?: string): string | null {
 
   try {
     const derivedKey = deriveKey(masterKey, Buffer.from(entry.salt, 'hex'));
-    // nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length
-    // setAuthTag is called below, this is not a vulnerability
-    const decipher = createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(entry.iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(entry.tag, 'hex'));
+    let decrypted: string;
 
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(entry.ciphertext, 'hex')),
-      decipher.final(),
-    ]);
+    if (entry.algorithm === 'chacha20-poly1305') {
+      const decipher = createDecipheriv(
+        'chacha20-poly1305',
+        derivedKey,
+        Buffer.from(entry.iv, 'hex'),
+      );
+      decipher.setAuthTag(Buffer.from(entry.tag, 'hex'));
+      decrypted = Buffer.concat([
+        decipher.update(Buffer.from(entry.ciphertext, 'hex')),
+        decipher.final(),
+      ]).toString('utf-8');
+    } else {
+      // AES-256-GCM
+      const decipher = createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(entry.iv, 'hex'));
+      decipher.setAuthTag(Buffer.from(entry.tag, 'hex'));
+      decrypted = Buffer.concat([
+        decipher.update(Buffer.from(entry.ciphertext, 'hex')),
+        decipher.final(),
+      ]).toString('utf-8');
+    }
 
-    return decrypted.toString('utf-8');
+    return decrypted;
   } catch (err) {
     getLogger().error(`Failed to decrypt secret: ${key}`, {
       error: err instanceof Error ? err.message : String(err),
@@ -265,20 +331,21 @@ function loadVault(path: string): SecretsFile {
   if (vaultCache) return vaultCache;
 
   if (!existsSync(resolved)) {
-    vaultCache = { version: FILE_VERSION, secrets: [] };
+    vaultCache = { version: FILE_VERSION, algorithm: getDefaultAlgorithm(), secrets: [] };
     return vaultCache;
   }
 
   try {
     const raw = readFileSync(resolved, 'utf-8');
     const parsed = JSON.parse(raw) as SecretsFile;
-    vaultCache =
-      parsed.version === FILE_VERSION
-        ? parsed
-        : { version: FILE_VERSION, secrets: parsed.secrets ?? [] };
+    vaultCache = {
+      version: parsed.version ?? FILE_VERSION,
+      algorithm: parsed.algorithm ?? getDefaultAlgorithm(),
+      secrets: parsed.secrets ?? [],
+    };
   } catch (err) {
     getLogger().warn(`Corrupt vault file, starting fresh: ${resolved}`);
-    vaultCache = { version: FILE_VERSION, secrets: [] };
+    vaultCache = { version: FILE_VERSION, algorithm: getDefaultAlgorithm(), secrets: [] };
   }
 
   return vaultCache;

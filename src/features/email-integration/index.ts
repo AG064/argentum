@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Email Integration Feature
  *
@@ -104,7 +106,7 @@ export interface EmailIntegrationConfig {
 class EmailIntegrationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'email-integration',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'IMAP/SMTP email integration with encrypted credential storage',
     dependencies: [],
   };
@@ -557,7 +559,7 @@ class EmailIntegrationFeature implements FeatureModule {
   /** Decrypt password (internal use) */
   private _decrypt(encrypted: string, ivHex: string): string {
     const iv = Buffer.from(ivHex, 'hex');
-    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
+
     const decipher = createDecipheriv(this.ALGORITHM, this.encryptionKey, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');

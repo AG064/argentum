@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Discord Bot Feature
  *
@@ -67,7 +69,7 @@ export interface DiscordBotFeatureConfig {
 class DiscordBotFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'discord-bot',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Discord bot integration with message sending and event handling',
     dependencies: [],
   };

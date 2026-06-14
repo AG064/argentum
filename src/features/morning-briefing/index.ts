@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Morning Briefing Feature
  *
@@ -67,7 +69,7 @@ export type BriefingHandler = (briefing: MorningBriefing) => Promise<void>;
 class MorningBriefingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'morning-briefing',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Daily personalized morning briefing generator',
     dependencies: [],
   };

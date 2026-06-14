@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Wake Word Detection Feature
  *
@@ -62,7 +64,7 @@ export interface WakeWordConfig {
 class WakeWordFeature extends EventEmitter implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'wake-word',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Pattern-based wake word detection with event notifications',
     dependencies: [],
   };
@@ -311,6 +313,7 @@ class WakeWordFeature extends EventEmitter implements FeatureModule {
     // For text-based pattern matching, we could allow partial matches based on sensitivity.
     // Here we just use the full word.
     const flags = caseSensitive ? '' : 'i';
+
     return new RegExp(escaped, flags);
   }
 

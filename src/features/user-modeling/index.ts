@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * User Modeling Feature (Honcho-style)
  *
@@ -85,7 +87,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 class UserModelingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'user-modeling',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Tracks user preferences and communication patterns (Honcho-style)',
     dependencies: [],
   };
@@ -104,8 +106,8 @@ class UserModelingFeature implements FeatureModule {
     const workDir =
       typeof configuredWorkDir === 'string'
         ? configuredWorkDir
-        : process.env.AGCLAW_WORKDIR ??
-          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
+        : (process.env.ARGENTUM_WORKDIR ??
+          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace'));
 
     const memoryDir = path.join(workDir, 'memory');
     if (!existsSync(memoryDir)) {

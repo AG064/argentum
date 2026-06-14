@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { mkdirSync } from 'fs';
 import path from 'path';
 
@@ -17,7 +18,7 @@ class AllowlistsFeature {
   constructor() {
     const dataDir = path.join(process.cwd(), 'data');
     mkdirSync(dataDir, { recursive: true });
-    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(dataDir, 'agclaw.db');
+    const dbPath = process.env.ARGENTUM_DB_PATH ?? path.join(dataDir, 'agclaw.db');
     this.db = new Database(dbPath);
     this.init();
   }
@@ -72,6 +73,7 @@ class AllowlistsFeature {
       }
 
       // If the pattern contains obvious regex metacharacters, avoid compiling untrusted regexes
+
       const looksLikeRegex = /[\\^$*+?.()|[\]{}]/.test(pattern);
 
       if (looksLikeRegex) {

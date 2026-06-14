@@ -1,13 +1,15 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Dynamic model discovery via /v1/models API.
  * Mirrors the approach used by OpenClaw's plugin system.
  */
 
 export interface DiscoveredModel {
-  value: string;      // model id as sent to API
-  label: string;      // human-readable name
-  ctx: string;        // context window (e.g. "128k", "1M")
-  price: string;      // price per 1M tokens, "FREE", or "?"
+  value: string; // model id as sent to API
+  label: string; // human-readable name
+  ctx: string; // context window (e.g. "128k", "1M")
+  price: string; // price per 1M tokens, "FREE", or "?"
   free?: boolean;
 }
 
@@ -25,7 +27,9 @@ export interface Provider {
 async function fetchModelList(
   baseUrl: string,
   apiKey: string,
-): Promise<{ id: string; context_window?: number; pricing?: { prompt?: number; completion?: number } }[]> {
+): Promise<
+  { id: string; context_window?: number; pricing?: { prompt?: number; completion?: number } }[]
+> {
   const url = `${baseUrl.replace(/\/$/, '')}/models`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -44,9 +48,13 @@ async function fetchModelList(
     throw new Error(`HTTP ${res.status}`);
   }
 
-  const json = await res.json() as {
+  const json = (await res.json()) as {
     object?: string;
-    data?: { id: string; context_window?: number; pricing?: { prompt?: number; completion?: number } }[];
+    data?: {
+      id: string;
+      context_window?: number;
+      pricing?: { prompt?: number; completion?: number };
+    }[];
     models?: { name: string; details?: { context_length?: number } }[]; // Ollama format
   };
 

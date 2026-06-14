@@ -17,10 +17,10 @@ jobs:
       matrix:
         node-version: ['20', '22']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -44,17 +44,20 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
       
       - name: Install
         run: npm ci --legacy-peer-deps
-      
+
+      - name: Build
+        run: npm run build
+
       - name: Run tests
         run: npm test
         env:
@@ -65,22 +68,28 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-2022]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
-      
+
+      - name: Install Visual Studio Build Tools (Windows)
+        if: matrix.os == 'windows-2022'
+        run: |
+          choco install visualstudio2022buildtools -y --no-progress
+          choco install visualstudio2022-workload-vctools -y --no-progress
+
       - name: Install
         run: npm ci --legacy-peer-deps
-      
+
       - name: Build
         run: npm run build
-      
+
       - name: Verify build output
         run: node -e "const fs=require('fs');if(!fs.existsSync('dist/index.js'))throw new Error('dist/index.js not found');"
 
@@ -88,10 +97,10 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -113,10 +122,10 @@ jobs:
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -135,10 +144,10 @@ jobs:
     name: Onboarding Smoke Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '22'
           cache: 'npm'
@@ -160,7 +169,7 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Build Docker image
         run: |
@@ -179,7 +188,7 @@ jobs:
       matrix:
         install_method: [npm, docker, binary]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: NPM install
         if: matrix.install_method == 'npm'
@@ -191,7 +200,16 @@ jobs:
       - name: Docker install
         if: matrix.install_method == 'docker'
         run: |
-          docker build -t argentum:test -f docker/Dockerfile .
+          # Retry Docker build up to 3 times to handle transient network issues
+          for i in 1 2 3; do
+            echo "Docker build attempt $i..."
+            if docker build -t argentum:test -f docker/Dockerfile .; then
+              echo "Docker build succeeded on attempt $i"
+              break
+            fi
+            echo "Docker build failed, retrying in10 seconds..."
+            sleep 10
+          done
           docker run argentum:test --version || true
       
       - name: Binary install
@@ -206,10 +224,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'

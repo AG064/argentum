@@ -10,9 +10,9 @@ jobs:
   portable-binaries:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with:
           node-version: '20'
           cache: 'npm'
@@ -27,6 +27,9 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # NOTE: PinnedDependencies alert for npm packages is a known limitation.
+      # npm packages cannot be pinned to Git commit SHAs like GitHub Actions can.
+      # The version is pinned (6.6.0) but there's no SHA URL mechanism for npm.
       - name: Install executable packager
         run: npm install -g @yao-pkg/pkg@6.6.0
 
@@ -48,7 +51,7 @@ jobs:
           sha256sum argentum-v${{ steps.package.outputs.version }}-linux-x64 argentum-cli-v${{ steps.package.outputs.version }}-win-x64.exe argentum-v${{ steps.package.outputs.version }}-macos-x64 > SHA256SUMS-portable.txt
 
       - name: Upload portable artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: argentum-portable-binaries
           path: |

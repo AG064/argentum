@@ -1,0 +1,21 @@
+# OSV Scanner - Ignore vulnerabilities in bundled npm packages
+#
+# These CVEs are in GitHub Actions' npm CLI bundled packages
+# (usr/local/lib/node_modules/npm/node_modules/), NOT in application dependencies.
+# They are flagged by Scorecard's Vulnerabilities check which scans the entire
+# Docker image including system packages.
+#
+# The npm version is controlled by GitHub Actions, not by this project.
+# These cannot be fixed without changing the base Docker image or npm version.
+
+[[IgnoredVulns]]
+id = "CVE-2026-42338"
+reason = "Bundled npm CLI package (ip-address). Requires GitHub Actions to update their npm version."
+
+[[IgnoredVulns]]
+id = "CVE-2026-33672"
+reason = "Bundled npm CLI package (picomatch). Requires GitHub Actions to update their npm version."
+
+[[IgnoredVulns]]
+id = "CVE-2026-33750"
+reason = "Bundled npm CLI package (brace-expansion). Requires GitHub Actions to update their npm version."

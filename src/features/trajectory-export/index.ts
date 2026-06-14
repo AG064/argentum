@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Trajectory Export Feature
  *
@@ -36,7 +38,7 @@ import {
 class TrajectoryExportFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'trajectory-export',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Export conversation trajectories as JSONL for RL fine-tuning',
     dependencies: [],
   };
@@ -53,7 +55,7 @@ class TrajectoryExportFeature implements FeatureModule {
 
   constructor() {
     // Auto-init for CLI usage (singleton bypasses plugin loader)
-    const workDir = process.env.AGCLAW_WORKDIR ?? process.cwd();
+    const workDir = process.env.ARGENTUM_WORKDIR ?? process.cwd();
     this.dbPath = resolve(join(workDir, 'data', 'trajectory.db'));
     this.config.dbPath = this.dbPath;
     this.initDatabase();
@@ -63,6 +65,7 @@ class TrajectoryExportFeature implements FeatureModule {
     this.ctx = context;
     this.config = {
       enabled: true,
+
       dbPath: resolve((config['dbPath'] as string) ?? './data/trajectory.db'),
       compressExports: (config['compressExports'] as boolean) ?? false,
       defaultFormat: (config['defaultFormat'] as 'jsonl' | 'json') ?? 'jsonl',

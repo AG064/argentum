@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Mesh Workflows Feature
  *
@@ -153,10 +155,14 @@ function evalNode(node: jsep.Expression, vars: Record<string, unknown>): unknown
     case 'LogicalExpression': {
       const logicalNode = node as jsep.BinaryExpression;
       if (logicalNode.operator === '&&') {
-        return Boolean(evalNode(logicalNode.left, vars)) && Boolean(evalNode(logicalNode.right, vars));
+        return (
+          Boolean(evalNode(logicalNode.left, vars)) && Boolean(evalNode(logicalNode.right, vars))
+        );
       }
       if (logicalNode.operator === '||') {
-        return Boolean(evalNode(logicalNode.left, vars)) || Boolean(evalNode(logicalNode.right, vars));
+        return (
+          Boolean(evalNode(logicalNode.left, vars)) || Boolean(evalNode(logicalNode.right, vars))
+        );
       }
       throw new Error(`Unsupported logical operator: ${logicalNode.operator}`);
     }
@@ -209,7 +215,7 @@ function evaluateCondition(condition: string, vars: Record<string, unknown> = {}
 class MeshWorkflowsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mesh-workflows',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Goal decomposition, dependency graph, checkpoint/resume workflows',
     dependencies: ['checkpoint'],
   };
@@ -415,7 +421,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       name: `Goal: ${decomposed.goal.slice(0, 50)}`,
       description: decomposed.goal,
       goal: decomposed.goal,
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       steps,
       entryStep: decomposed.executionPlan[0] ?? '',
       variables: {},
@@ -571,8 +577,7 @@ class MeshWorkflowsFeature implements FeatureModule {
       } catch (listenerError) {
         this.ctx.logger.warn('Workflow progress listener failed', {
           executionId: exec.id,
-          error:
-            listenerError instanceof Error ? listenerError.message : String(listenerError),
+          error: listenerError instanceof Error ? listenerError.message : String(listenerError),
         });
       }
     }

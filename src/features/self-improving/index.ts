@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Self-Improving Loop Feature
  *
@@ -75,7 +77,7 @@ interface MessageRoleRow {
 class SelfImprovingLoop implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-improving',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Reflection engine that analyzes behavior and continuously improves Argentum',
     dependencies: ['sqlite-memory', 'user-modeling'],
   };
@@ -103,8 +105,8 @@ class SelfImprovingLoop implements FeatureModule {
     this.workDir =
       typeof configuredWorkDir === 'string'
         ? configuredWorkDir
-        : process.env.AGCLAW_WORKDIR ??
-          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace');
+        : (process.env.ARGENTUM_WORKDIR ??
+          path.join(process.env.HOME ?? '~', '.openclaw', 'workspace'));
 
     this.memoryDir = path.join(this.workDir, 'memory');
     this.skillsDir = path.join(this.workDir, 'skills');
@@ -752,8 +754,7 @@ class SelfImprovingLoop implements FeatureModule {
       const userMessages = messages.filter((m) => m.role === 'user' && m.content);
       if (userMessages.length > 0) {
         const avgLength =
-          userMessages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) /
-          userMessages.length;
+          userMessages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) / userMessages.length;
 
         if (avgLength < 50) {
           patterns.push('User prefers brief messages (avg < 50 chars)');

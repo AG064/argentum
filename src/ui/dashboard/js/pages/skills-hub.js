@@ -24,7 +24,15 @@ function renderSkillsHubPage(data) {
   const container = document.getElementById('skillsHubContainer');
   if (!container) return;
 
-  const categories = ['all', 'writing', 'research', 'coding', 'automation', 'integration', 'utility'];
+  const categories = [
+    'all',
+    'writing',
+    'research',
+    'coding',
+    'automation',
+    'integration',
+    'utility',
+  ];
   const categoryIcons = {
     all: '🧩',
     writing: '✍️',
@@ -35,7 +43,6 @@ function renderSkillsHubPage(data) {
     utility: '🛠️',
   };
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <!-- Search and Actions -->
     <div class="card">
@@ -70,13 +77,17 @@ function renderSkillsHubPage(data) {
     <!-- Categories -->
     <div class="card" style="margin-top: var(--space-6)">
       <div style="display: flex; gap: var(--space-2); flex-wrap: wrap">
-        ${categories.map(cat => `
+        ${categories
+          .map(
+            (cat) => `
           <button class="btn btn-ghost category-btn ${cat === 'all' ? 'active' : ''}" 
                   data-category="${cat}" onclick="filterByCategory('${cat}')">
             <span style="margin-right: var(--space-1)">${categoryIcons[cat]}</span>
             ${cat.charAt(0).toUpperCase() + cat.slice(1)}
           </button>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     </div>
 
@@ -84,13 +95,17 @@ function renderSkillsHubPage(data) {
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Installed Skills</h3>
       <div class="skills-grid" style="margin-top: var(--space-4)">
-        ${data.installed.map(skill => renderInstalledSkillCard(skill)).join('')}
+        ${data.installed.map((skill) => renderInstalledSkillCard(skill)).join('')}
       </div>
-      ${data.installed.length === 0 ? `
+      ${
+        data.installed.length === 0
+          ? `
         <div style="padding: var(--space-6); text-align: center; color: var(--color-text-muted)">
           No skills installed yet. Browse the marketplace below or create your own.
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
 
     <!-- Community Skills (Marketplace) -->
@@ -100,15 +115,22 @@ function renderSkillsHubPage(data) {
         <span class="text-sm text-muted">Powered by ClawHub</span>
       </div>
       <div id="marketplaceSkills" style="margin-top: var(--space-4)">
-        ${data.marketplace.slice(0, 6).map(skill => renderMarketplaceSkillCard(skill)).join('')}
+        ${data.marketplace
+          .slice(0, 6)
+          .map((skill) => renderMarketplaceSkillCard(skill))
+          .join('')}
       </div>
-      ${data.marketplace.length > 6 ? `
+      ${
+        data.marketplace.length > 6
+          ? `
         <div style="margin-top: var(--space-4); text-align: center">
           <button class="btn btn-ghost" onclick="showAllMarketplace()">
             Show all ${data.marketplace.length} skills
           </button>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
   `;
 
@@ -206,12 +228,12 @@ function handleSkillsSearch(query) {
   if (!query || query.length < 2) {
     // Show all
     if (installedGrid) {
-      installedGrid.querySelectorAll('.skill-card').forEach(card => {
+      installedGrid.querySelectorAll('.skill-card').forEach((card) => {
         card.style.display = '';
       });
     }
     if (marketplaceGrid) {
-      marketplaceGrid.querySelectorAll('.skill-card.marketplace').forEach(card => {
+      marketplaceGrid.querySelectorAll('.skill-card.marketplace').forEach((card) => {
         card.style.display = '';
       });
     }
@@ -221,7 +243,7 @@ function handleSkillsSearch(query) {
   query = query.toLowerCase();
 
   if (installedGrid) {
-    installedGrid.querySelectorAll('.skill-card').forEach(card => {
+    installedGrid.querySelectorAll('.skill-card').forEach((card) => {
       const name = card.dataset.skillName?.toLowerCase() || '';
       const desc = card.querySelector('.skill-description')?.textContent.toLowerCase() || '';
       card.style.display = name.includes(query) || desc.includes(query) ? '' : 'none';
@@ -229,7 +251,7 @@ function handleSkillsSearch(query) {
   }
 
   if (marketplaceGrid) {
-    marketplaceGrid.querySelectorAll('.skill-card.marketplace').forEach(card => {
+    marketplaceGrid.querySelectorAll('.skill-card.marketplace').forEach((card) => {
       const name = card.dataset.skillName?.toLowerCase() || '';
       const desc = card.querySelector('.skill-description')?.textContent.toLowerCase() || '';
       card.style.display = name.includes(query) || desc.includes(query) ? '' : 'none';
@@ -239,27 +261,28 @@ function handleSkillsSearch(query) {
 
 function filterByCategory(category) {
   // Update active button
-  document.querySelectorAll('.category-btn').forEach(btn => {
+  document.querySelectorAll('.category-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.category === category);
   });
 
   // Filter marketplace
   const marketplaceGrid = document.getElementById('marketplaceSkills');
   if (marketplaceGrid && window.marketplaceSkills) {
-    const filtered = category === 'all' 
-      ? window.marketplaceSkills 
-      : window.marketplaceSkills.filter(s => s.category === category);
-    
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-    marketplaceGrid.innerHTML = filtered.map(skill => renderMarketplaceSkillCard(skill)).join('');
+    const filtered =
+      category === 'all'
+        ? window.marketplaceSkills
+        : window.marketplaceSkills.filter((s) => s.category === category);
+
+    marketplaceGrid.innerHTML = filtered.map((skill) => renderMarketplaceSkillCard(skill)).join('');
   }
 }
 
 function showAllMarketplace() {
   const marketplaceGrid = document.getElementById('marketplaceSkills');
   if (marketplaceGrid && window.marketplaceSkills) {
-    /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
-    marketplaceGrid.innerHTML = window.marketplaceSkills.map(skill => renderMarketplaceSkillCard(skill)).join('');
+    marketplaceGrid.innerHTML = window.marketplaceSkills
+      .map((skill) => renderMarketplaceSkillCard(skill))
+      .join('');
   }
 }
 
@@ -306,7 +329,7 @@ async function doUninstall(name) {
 
 function showSkillInfo(name) {
   // Get skill data and show detail modal
-  const skill = getMockSkillsHubData().installed.find(s => s.name === name);
+  const skill = getMockSkillsHubData().installed.find((s) => s.name === name);
   if (!skill) return;
 
   Components.modal({
@@ -317,22 +340,28 @@ function showSkillInfo(name) {
         <span class="text-muted" style="margin-left: var(--space-2)">v${skill.version}</span>
       </div>
       <p style="margin-bottom: var(--space-4)">${skill.description}</p>
-      ${skill.scripts && skill.scripts.length > 0 ? `
+      ${
+        skill.scripts && skill.scripts.length > 0
+          ? `
         <h4 style="margin-bottom: var(--space-2)">Scripts</h4>
         <ul style="margin-bottom: var(--space-4)">
-          ${skill.scripts.map(s => `<li><code class="code">${s}</code></li>`).join('')}
+          ${skill.scripts.map((s) => `<li><code class="code">${s}</code></li>`).join('')}
         </ul>
-      ` : ''}
-      ${skill.references && skill.references.length > 0 ? `
+      `
+          : ''
+      }
+      ${
+        skill.references && skill.references.length > 0
+          ? `
         <h4 style="margin-bottom: var(--space-2)">References</h4>
         <ul>
-          ${skill.references.map(r => `<li><code class="code">${r}</code></li>`).join('')}
+          ${skill.references.map((r) => `<li><code class="code">${r}</code></li>`).join('')}
         </ul>
-      ` : ''}
+      `
+          : ''
+      }
     `,
-    actions: [
-      { label: 'Close', class: 'btn-secondary', action: 'close' },
-    ],
+    actions: [{ label: 'Close', class: 'btn-secondary', action: 'close' }],
   });
 }
 
@@ -396,7 +425,7 @@ function showCreateSkillWizard() {
     const entries = document.getElementById('scriptEntries');
     if (entries) {
       const idx = entries.children.length;
-      /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
+
       entries.innerHTML += `
         <div style="margin-bottom: var(--space-2)">
           <input type="text" class="input" name="script-${idx}" placeholder="script-name.sh" style="margin-right: var(--space-2)">
@@ -419,7 +448,7 @@ function showCreateSkillWizard() {
       name: formData.get('name'),
       category: formData.get('category'),
       description: formData.get('description'),
-      triggers: (formData.get('triggers') || '').split('\n').filter(t => t.trim()),
+      triggers: (formData.get('triggers') || '').split('\n').filter((t) => t.trim()),
       hasScripts: formData.get('hasScripts') === 'on',
     };
 
@@ -446,7 +475,7 @@ function getMockSkillsHubData() {
     installed: [
       {
         name: 'clawhub',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Install, update, and publish agent skills from ClawHub.',
         scripts: ['install.sh', 'update.sh'],
@@ -454,7 +483,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'weather',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         description: 'Get current weather and forecasts via wttr.in or Open-Meteo.',
         scripts: [],
@@ -462,15 +491,16 @@ function getMockSkillsHubData() {
       },
       {
         name: 'deep-research-pro',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'research',
-        description: 'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
+        description:
+          'Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports.',
         scripts: ['research.sh'],
         references: ['SKILL.md'],
       },
       {
         name: 'writing-assistant',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'writing',
         description: 'Writing Team Lead managing specialized writers via MCP tools.',
         scripts: ['write.sh'],
@@ -478,7 +508,7 @@ function getMockSkillsHubData() {
       },
       {
         name: 'github',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         description: 'GitHub operations via gh CLI: issues, PRs, CI runs, code review.',
         scripts: [],
@@ -489,7 +519,7 @@ function getMockSkillsHubData() {
       {
         name: 'slack-bot',
         slug: 'slack-bot',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'ag-claw',
         description: 'Send messages and notifications to Slack channels.',
@@ -498,7 +528,7 @@ function getMockSkillsHubData() {
       {
         name: 'notion-sync',
         slug: 'notion-sync',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'integration',
         author: 'community',
         description: 'Sync notes and tasks with Notion databases.',
@@ -507,16 +537,17 @@ function getMockSkillsHubData() {
       {
         name: 'code-review',
         slug: 'code-review',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'coding',
         author: 'ag-claw',
-        description: 'Automated code review using AI. Detects bugs, style issues, and security vulnerabilities.',
+        description:
+          'Automated code review using AI. Detects bugs, style issues, and security vulnerabilities.',
         stars: 127,
       },
       {
         name: 'sql-helper',
         slug: 'sql-helper',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'coding',
         author: 'community',
         description: 'Generate SQL queries from natural language descriptions.',
@@ -525,7 +556,7 @@ function getMockSkillsHubData() {
       {
         name: 'meeting-notes',
         slug: 'meeting-notes',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'writing',
         author: 'ag-claw',
         description: 'Automatically generate meeting notes from transcripts.',
@@ -534,7 +565,7 @@ function getMockSkillsHubData() {
       {
         name: 'image-gen',
         slug: 'image-gen',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'utility',
         author: 'community',
         description: 'Generate images using DALL-E, Stable Diffusion, or Midjourney.',
@@ -543,7 +574,7 @@ function getMockSkillsHubData() {
       {
         name: 'cron-manager',
         slug: 'cron-manager',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'automation',
         author: 'ag-claw',
         description: 'Manage and monitor cron jobs from a friendly interface.',
@@ -552,7 +583,7 @@ function getMockSkillsHubData() {
       {
         name: 'data-analyzer',
         slug: 'data-analyzer',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
         category: 'research',
         author: 'community',
         description: 'Analyze CSV/JSON data files and generate insights.',

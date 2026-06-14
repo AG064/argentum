@@ -247,7 +247,7 @@ curl -X POST http://localhost:18789/memory/graph/entity \
     "name": "Argentum",
     "type": "project",
     "properties": {
-      "version": "0.0.7",
+      "version": "0.0.8-alpha",
       "language": "TypeScript"
     }
   }'
@@ -429,7 +429,7 @@ argentum memory import memories-backup-20260318.json
 Enable debug logging to see memory queries:
 
 ```bash
-AGCLAW_LOG_LEVEL=debug argentum gateway start
+ARGENTUM_LOG_LEVEL=debug argentum gateway start
 ```
 
 Look for log lines like:

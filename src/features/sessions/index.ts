@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Sessions
  *
@@ -82,7 +84,7 @@ interface ValueRow {
 class SessionsFeature {
   readonly meta = {
     name: 'sessions',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Session management for conversations and agent interactions',
     dependencies: ['sqlite-memory'],
   };
@@ -174,9 +176,9 @@ class SessionsFeature {
       metadata: {},
     };
     this.database
-      .prepare<[string, string, number, number, string, Session['status']]>(
-        'INSERT INTO sessions (id, title, created_at, updated_at, model, status) VALUES (?, ?, ?, ?, ?, ?)',
-      )
+      .prepare<
+        [string, string, number, number, string, Session['status']]
+      >('INSERT INTO sessions (id, title, created_at, updated_at, model, status) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, session.title, now, now, session.model, 'active');
     return session;
   }
@@ -274,9 +276,9 @@ class SessionsFeature {
     const now = Date.now();
 
     this.database
-      .prepare<[string, string, Message['role'], string, number, string | null]>(
-        'INSERT INTO messages (id, session_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?)',
-      )
+      .prepare<
+        [string, string, Message['role'], string, number, string | null]
+      >('INSERT INTO messages (id, session_id, role, content, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, sessionId, role, content, now, toolCalls ? JSON.stringify(toolCalls) : null);
 
     this.database
@@ -319,9 +321,7 @@ class SessionsFeature {
       role: row.role,
       content: row.content,
       timestamp: row.timestamp,
-      toolCalls: row.tool_calls
-        ? (JSON.parse(row.tool_calls) as Message['toolCalls'])
-        : undefined,
+      toolCalls: row.tool_calls ? (JSON.parse(row.tool_calls) as Message['toolCalls']) : undefined,
       metadata: JSON.parse(row.metadata ?? '{}') as Record<string, unknown>,
     }));
   }
@@ -337,9 +337,10 @@ class SessionsFeature {
     timestamp: number;
   }> {
     const rows = this.database
-      .prepare<[string, number], SearchRow>(
-        'SELECT m.id as message_id, m.session_id, m.content, m.role, m.timestamp FROM messages m WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT ?',
-      )
+      .prepare<
+        [string, number],
+        SearchRow
+      >('SELECT m.id as message_id, m.session_id, m.content, m.role, m.timestamp FROM messages m WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT ?')
       .all(`%${query}%`, limit);
 
     return rows.map((row) => ({
@@ -353,17 +354,18 @@ class SessionsFeature {
 
   setState(sessionId: string, key: string, value: string): void {
     this.database
-      .prepare<[string, string, string, number]>(
-        'INSERT OR REPLACE INTO session_state (session_id, key, value, updated_at) VALUES (?, ?, ?, ?)',
-      )
+      .prepare<
+        [string, string, string, number]
+      >('INSERT OR REPLACE INTO session_state (session_id, key, value, updated_at) VALUES (?, ?, ?, ?)')
       .run(sessionId, key, value, Date.now());
   }
 
   getState(sessionId: string, key: string): string | null {
     const row = this.database
-      .prepare<[string, string], ValueRow>(
-        'SELECT value FROM session_state WHERE session_id = ? AND key = ?',
-      )
+      .prepare<
+        [string, string],
+        ValueRow
+      >('SELECT value FROM session_state WHERE session_id = ? AND key = ?')
       .get(sessionId, key);
     return row?.value ?? null;
   }

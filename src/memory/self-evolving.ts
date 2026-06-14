@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Self-Evolving Memory Feature
  *
@@ -50,7 +52,7 @@ export interface MemoryPattern {
 class SelfEvolvingMemoryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'self-evolving-memory',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Memory consolidation, pattern discovery, and evolution',
     dependencies: [],
   };

@@ -2,9 +2,19 @@
 
 Here's the honest truth upfront: this project is maintained by one person (AG064) in their free time. Contributions are welcome, but response times may vary. That said, every PR gets read and every issue gets considered.
 
+## Sign-off Requirement
+
+All contributions must include a sign-off line certifying the [Developer Certificate of Origin (DCO)](DCO.md):
+
+```
+Signed-off-by: Name <email@example.com>
+```
+
+Use `git commit -s` to sign your commits automatically.
+
 ## What Can I Help With?
 
-**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path.
+**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path. When fixing a bug, include a regression test if possible. Bug fix PRs must have the `fix:` commit prefix.
 
 **Features** — Open an issue first to discuss before writing code. Big features might need a redesign, and it's better to find that out before you've written 500 lines.
 
@@ -42,6 +52,15 @@ npm run lint
 # Format code
 npm run format
 
+### Coding Standards
+
+The project uses:
+- [Prettier](https://prettier.io/) for code formatting (run `npm run format`)
+- [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) as the named reference for TypeScript conventions
+- [typescript-eslint](https://typescript-eslint.io/) for linting (run `npm run lint`)
+
+All contributions must pass `npm run lint` (warnings are acceptable for existing code, not for new) and `npm run format` before submitting.
+
 # Run tests
 npm test
 
@@ -53,12 +72,38 @@ npm run test:integration
 ### Build
 
 ```bash
-npm run build        # production build
-npm run dev          # watch mode with tsx
-npm run docker:build # Docker image
+# Install dependencies
+npm install
+
+# Production build (TypeScript compilation + CLI)
+npm run build
+
+# Development with watch mode
+npm run dev
+
+# Build Docker image
+npm run docker:build
+
+# Clean rebuild
+npm run rebuild
 ```
 
-## Branch Strategy
+### Desktop App (Optional)
+
+For local llama.cpp server + desktop GUI:
+
+```bash
+# Prepare desktop sidecar binaries (llama.cpp server)
+npm run prepare:llama-server
+
+# Desktop development
+npm run desktop:dev
+
+# Desktop production build
+npm run desktop:build
+```
+
+### Day-to-Day Commands
 
 ```
 main          — stable, always releasable
@@ -66,6 +111,74 @@ feat/X        — new features
 fix/X         — bug fixes
 docs/X        — documentation only
 ```
+
+## Testing
+
+### How to Run Tests Locally
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:unit        # Unit tests only
+npm run test:integration # Integration tests only
+npm run test:e2e         # End-to-end tests only
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### What the Tests Cover
+
+| Test Suite            | Purpose                                                            |
+| --------------------- | ------------------------------------------------------------------ |
+| Unit tests            | Individual functions and modules (config, memory, security, tools) |
+| Integration tests     | Channel integrations (Telegram, etc.), API interactions            |
+| E2E tests             | Full workflow from user input to response                          |
+| CLI smoke tests       | Binary execution and basic commands                                |
+| GitHub workflow tests | Security configuration validation                                  |
+
+### Interpreting Results
+
+```
+Test Suites: 5 passed, 5 total
+Tests:       65 passed, 65 total
+```
+
+- All tests passing: code changes don't break existing functionality
+- Test failures: check error message, fix failing test or code
+- Coverage: higher is better, focus on testing critical paths
+
+### CI/CD Pipeline
+
+Tests run automatically on every push to `development` and `main` branches, and on every Pull Request. Results visible in GitHub Actions. CI must pass before merging.
+
+### Test Policy for Major Changes
+
+**What constitutes a major change:**
+
+- New features or capabilities
+- Changes to public APIs
+- Bug fixes that alter expected behavior
+- Security-related changes
+- Changes to build or release process
+
+**What tests to add or update:**
+
+- New functionality MUST include unit tests
+- Bug fixes MUST include a test that reproduces the bug (regression test)
+- API changes MUST update existing tests
+- Security changes MUST include relevant security tests
+
+**Policy:**
+
+- PRs with new features that don't add tests will be asked to add them
+- Bug fixes without regression tests may be accepted if adding tests is impractical (e.g., one-line fixes)
+- Current test coverage is acknowledged as thin — real-world bug reports with reproduction steps are valuable
 
 ## Commit Messages
 
@@ -89,7 +202,7 @@ Before requesting review:
 - [ ] `npm run lint` passes (warnings are OK for existing code, not for new)
 - [ ] Tests added/updated if applicable
 - [ ] Commit messages are clean
-- [ ] PR description explains *what* and *why*, not just *what changed*
+- [ ] PR description explains _what_ and _why_, not just _what changed_
 
 ## Things That Won't Get Merged
 
@@ -120,7 +233,7 @@ If you're adding a feature, look at `src/features/` for the pattern.
 ## Questions?
 
 - Open an issue for bugs or feature requests
-- Telegram: [[REMOVED]]
+- GitHub Discussions: https://github.com/AG064/argentum/discussions
 - Check the [docs/](docs/) directory first — there's more detail there than in this file
 
 ## License

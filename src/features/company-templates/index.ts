@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Company Templates Feature
  *
@@ -134,7 +136,7 @@ function scrubSecrets(obj: unknown): unknown {
 class CompanyTemplatesFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'company-templates',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Portable company configuration templates with secret scrubbing',
     dependencies: [],
   };
@@ -182,7 +184,7 @@ class CompanyTemplatesFeature implements FeatureModule {
     const config = ctx.config;
 
     const bundle: TemplateBundle = {
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       name,
       exportedAt: new Date().toISOString(),
       organization: {
@@ -198,7 +200,7 @@ class CompanyTemplatesFeature implements FeatureModule {
       skills: this.extractSkills(config),
       workflows: [],
       metadata: {
-        agClawVersion: '0.0.7',
+        agClawVersion: '0.0.8-alpha-alpha',
         exportedBy: 'company-templates',
       },
     };
@@ -219,6 +221,7 @@ class CompanyTemplatesFeature implements FeatureModule {
 
     // Save to disk
     const fileName = `${this.sanitizeFileName(name)}.json`;
+
     const filePath = join(this.config.templatesPath, fileName);
 
     const importBundle = {
@@ -358,7 +361,7 @@ class CompanyTemplatesFeature implements FeatureModule {
 
     return Object.entries(features).map(([name, cfg]) => ({
       name,
-      version: (cfg['version'] as string) ?? '0.0.7',
+      version: (cfg['version'] as string) ?? '0.0.8-alpha-alpha',
       enabled: (cfg['enabled'] as boolean) ?? false,
       config: scrubSecrets(cfg) as Record<string, unknown>,
     }));

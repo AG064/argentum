@@ -1,5 +1,7 @@
 node_modules/
 dist/
+build/
+target/
 *.js.map
 *.d.ts.map
 data/
@@ -13,18 +15,11 @@ artifacts/
 .wix/
 memory/
 logs/
+*.log
 .env
-*.enc.json
-.env
+*.env.*
 agclaw-*
 argentum-*
-
-# Credentials (NEVER commit)
-credentials/
-*.kdbx
-secrets/
-.env
-.env.local
 
 # OpenSpace fork
 OpenSpace/
@@ -32,3 +27,45 @@ OpenSpace/
 src/desktop/gen/
 src/desktop/target/
 src/desktop/binaries/argentum-cli-*
+coverage/
+
+# Dependencies
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+.nyc_output/
+
+# Credentials (NEVER commit)
+credentials/
+*.kdbx
+secrets/
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+*.tar
+*.gz
+
+# Temporary files
+*.tmp
+*.temp
+
+# SARIF reports (CI artifacts — large binary output)
+*.sarif
+.semgrep.sarif
+
+# Agent memory/workspace state
+MEMORY.md
+
+/.agclaw-dashboard-pass-hash
+/.argentum-dashboard-pass-hash

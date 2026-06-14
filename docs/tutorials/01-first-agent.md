@@ -31,7 +31,7 @@ Verify the installation:
 
 ```bash
 argentum --version
-# 0.0.7
+# 0.0.8-alpha
 ```
 
 ---
@@ -43,6 +43,7 @@ argentum init
 ```
 
 This creates:
+
 - `argentum.json` — your configuration file
 - `data/` — directory for SQLite databases and session data
 - `backups/` — directory for automated backups
@@ -97,7 +98,7 @@ curl http://localhost:18789/health
   "success": true,
   "data": {
     "status": "ok",
-    "version": "0.0.7",
+    "version": "0.0.8-alpha",
     "uptime": 3,
     "features": "12/59 active",
     "memory": { "semantic": 0, "knowledge_graph": 0, "sessions": 0 }
@@ -175,6 +176,7 @@ To connect your agent to a Telegram bot:
   "channels": {
     "telegram": {
       "enabled": true,
+      <!-- nosemgrep: generic.secrets.security.detected-telegram-bot-api-key.detected-telegram-bot-api-key -->
       "token": "7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "allowedUsers": []
     }

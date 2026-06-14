@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Memory Compression Feature
  *
@@ -46,7 +48,7 @@ export interface CompressionStats {
 class MemoryCompressionFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'memory-compression',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Compress and archive old memory entries',
     dependencies: [],
   };

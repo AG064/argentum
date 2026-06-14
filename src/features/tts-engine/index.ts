@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * TTS Engine Feature
  *
@@ -79,7 +81,7 @@ export interface TtsEngineConfig {
 class TtsEngineFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'tts-engine',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Text-to-speech engine with provider abstraction and audio caching',
     dependencies: [],
   };
@@ -332,6 +334,7 @@ class TtsEngineFeature implements FeatureModule {
     // Generate filename
     const ext = request.format ?? this.config.defaultFormat;
     const filename = `${crypto.randomBytes(16).toString('hex')}.${ext}`;
+
     const filepath = join(this.cacheDir, filename);
 
     // Ensure cache directory exists

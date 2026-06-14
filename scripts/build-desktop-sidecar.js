@@ -30,12 +30,28 @@ const targets = {
   },
 };
 
+const ALLOWED_COMMANDS = ['npm', 'npm.cmd', 'npx', 'npx.cmd'];
+
 function run(command, args) {
+  // Validate command against allowlist to prevent command injection
   const commandName = basename(command).toLowerCase();
+  if (!ALLOWED_COMMANDS.includes(commandName)) {
+    throw new Error(`Blocked unsafe command: ${command}`);
+  }
+
+  // Sanitize args to prevent injection via path/argument values
+  const shellMetaChars = /[;&|`$<>{}[:space:]]/;
+  for (const arg of args) {
+    if (typeof arg !== 'string' || shellMetaChars.test(arg)) {
+      throw new Error(`Blocked potentially dangerous argument: ${arg}`);
+    }
+  }
+
   const isWindowsCmd =
     process.platform === 'win32' && (commandName.endsWith('.cmd') || commandName.endsWith('.bat'));
   const actualCommand = isWindowsCmd ? 'cmd.exe' : command;
   const actualArgs = isWindowsCmd ? ['/d', '/s', '/c', command, ...args] : args;
+  /* nosemgrep: js/shell-command-injection-from-environment */
   const result = spawnSync(actualCommand, actualArgs, {
     cwd: root,
     stdio: 'inherit',
@@ -56,9 +72,19 @@ if (!existsSync(distCli)) {
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
 }
 
-const target = targets[`${process.platform}-${process.arch}`];
+const allowedPlatforms = ['win32', 'linux', 'darwin'];
+const allowedArchs = ['x64', 'arm64'];
+
+const platform = process.platform;
+const arch = process.arch;
+
+if (!allowedPlatforms.includes(platform) || !allowedArchs.includes(arch)) {
+  throw new Error(`Unsupported desktop sidecar host: ${platform}-${arch}`);
+}
+
+const target = targets[`${platform}-${arch}`];
 if (!target) {
-  throw new Error(`Unsupported desktop sidecar host: ${process.platform}-${process.arch}`);
+  throw new Error(`Unsupported desktop sidecar target: ${platform}-${arch}`);
 }
 
 mkdirSync(binariesDir, { recursive: true });

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Mobile Push Notifications Feature
  *
@@ -81,7 +83,7 @@ export interface MobilePushConfig {
 class MobilePushFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mobile-push',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Mobile push notification service with FCM/APNs support',
     dependencies: [],
   };

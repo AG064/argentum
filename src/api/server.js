@@ -14,7 +14,11 @@ const path = require('path');
 // Configuration
 const PORT = process.env.DASHBOARD_PORT || 3002;
 const STATIC_DIR = path.resolve(path.join(__dirname, '../ui/dashboard'));
-const ALLOWED_ORIGINS = (process.env.AGCLAW_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002').split(',').map(o => o.trim());
+const ALLOWED_ORIGINS = (
+  process.env.ARGENTUM_CORS_ORIGINS || 'http://localhost:3002,http://127.0.0.1:3002'
+)
+  .split(',')
+  .map((o) => o.trim());
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB max request body
 
 // Lazily resolved real path for static dir (avoids crash if assets are missing at startup)
@@ -31,7 +35,7 @@ function getStaticDirReal() {
     _staticDirResolutionFailed = true;
     console.warn(
       `[Dashboard] Static assets directory unavailable: ${STATIC_DIR}. ` +
-      'Dashboard file serving will be disabled until assets are present.'
+        'Dashboard file serving will be disabled until assets are present.',
     );
     return null;
   }
@@ -188,9 +192,10 @@ function sendJson(res, statusCode, data, req) {
 // Note: 501 (Not Implemented) and 503 (Service Unavailable) pass through because
 // they contain actionable client-facing information, unlike 500/502 which may leak internals.
 function sendError(res, statusCode, message, req) {
-  const safeMessage = statusCode >= 500 && statusCode !== 501 && statusCode !== 503
-    ? 'Internal server error'
-    : message;
+  const safeMessage =
+    statusCode >= 500 && statusCode !== 501 && statusCode !== 503
+      ? 'Internal server error'
+      : message;
   sendJson(res, statusCode, { error: safeMessage }, req);
 }
 
@@ -198,11 +203,16 @@ function sendError(res, statusCode, message, req) {
 const routes = {
   // Health check
   'GET /api/health': (req, res) => {
-    sendJson(res, 200, {
-      status: 'healthy',
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-    }, req);
+    sendJson(
+      res,
+      200,
+      {
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      },
+      req,
+    );
   },
 
   // System stats
@@ -210,13 +220,18 @@ const routes = {
     const cpuUsage = Math.random() * 40 + 10;
     const memoryUsage = Math.random() * 2 + 0.5;
 
-    sendJson(res, 200, {
-      uptime: '99.9%',
-      activeAgents: 4,
-      cpuUsage: cpuUsage.toFixed(1) + '%',
-      memoryUsage: memoryUsage.toFixed(1) + ' GB',
-      requestsPerMinute: Math.floor(Math.random() * 500) + 100,
-    }, req);
+    sendJson(
+      res,
+      200,
+      {
+        uptime: '99.9%',
+        activeAgents: 4,
+        cpuUsage: cpuUsage.toFixed(1) + '%',
+        memoryUsage: memoryUsage.toFixed(1) + ' GB',
+        requestsPerMinute: Math.floor(Math.random() * 500) + 100,
+      },
+      req,
+    );
   },
 
   // Get all agents
@@ -275,10 +290,15 @@ const routes = {
 
     logs = logs.slice(-parseInt(limit));
 
-    sendJson(res, 200, {
-      logs,
-      total: mockData.logs.length,
-    }, req);
+    sendJson(
+      res,
+      200,
+      {
+        logs,
+        total: mockData.logs.length,
+      },
+      req,
+    );
   },
 
   // Add log entry
@@ -321,13 +341,18 @@ const routes = {
 
   // Get settings
   'GET /api/settings': (req, res) => {
-    sendJson(res, 200, {
-      theme: 'dark',
-      language: 'en',
-      autoUpdate: true,
-      llmProvider: 'minimax',
-      llmModel: 'MiniMax-M2.7',
-    }, req);
+    sendJson(
+      res,
+      200,
+      {
+        theme: 'dark',
+        language: 'en',
+        autoUpdate: true,
+        llmProvider: 'minimax',
+        llmModel: 'MiniMax-M2.7',
+      },
+      req,
+    );
   },
 
   // Update settings
@@ -374,6 +399,7 @@ function matchRoute(method, reqPath) {
 }
 
 // Create HTTP server
+
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
@@ -429,7 +455,9 @@ const server = http.createServer(async (req, res) => {
   // so encoded variants like %2e%2e are caught too.
   let requestedPath;
   try {
-    requestedPath = decodeURIComponent(pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+    requestedPath = decodeURIComponent(
+      pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''),
+    );
   } catch {
     res.writeHead(400);
     res.end('Bad Request');

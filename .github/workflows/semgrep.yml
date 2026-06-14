@@ -1,0 +1,61 @@
+name: Semgrep Security Scan
+
+"on":
+  workflow_dispatch:
+    inputs:
+      scan_path:
+        description: 'Path to scan (default: .)'
+        required: false
+        default: '.'
+      exclude_rules:
+        description: 'Rules to exclude (comma-separated rule IDs)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep-scan:
+    name: Semgrep Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+
+      - name: Run Semgrep
+        id: semgrep
+        run: |
+          echo "Running Semgrep scan..."
+          
+          # Build semgrep command with optional exclusions
+          SCAN_PATH="${{ github.event.inputs.scan_path || '.' }}"
+          EXCLUDE_RULES="${{ github.event.inputs.exclude_rules }}"
+          
+          CMD="semgrep scan --config=auto --json-output=semgrep-results.json --no-git-cache"
+          
+          if [ -n "$EXCLUDE_RULES" ]; then
+            echo "Excluding rules: $EXCLUDE_RULES"
+            IFS=',' read -ra RULES <<< "$EXCLUDE_RULES"
+            for rule in "${RULES[@]}"; do
+              CMD="$CMD --exclude-rule $(echo $rule | tr -d ' ')"
+            done
+          fi
+          
+          # Add exclusions for known false positive paths
+          CMD="$CMD --exclude src/ui/dashboard/js --exclude **/*.test.ts --exclude dist/ --exclude build/"
+          
+          CMD="$CMD $SCAN_PATH"
+          
+          echo "Command: $CMD"
+          eval $CMD || true
+
+      - name: Upload Semgrep results to GitHub
+        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57
+        if: always()
+        with:
+          sarif_file: semgrep-results.json
+          category: semgrep

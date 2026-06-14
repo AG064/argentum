@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 /**
  * Markdown Memory Backend
  *
@@ -44,6 +46,7 @@ export class MarkdownMemory {
   private parseMarkdown(filename: string): MarkdownEntry | null {
     try {
       // Prevent path traversal: resolve and ensure file stays within basePath
+
       const fullPath = resolve(this.basePath, filename);
       if (!fullPath.startsWith(`${this.basePath  }/`)) {
         // allow exact match if equals basePath file
@@ -148,6 +151,7 @@ export class MarkdownMemory {
   /** Retrieve a memory entry by filename */
   get(filename: string): MarkdownEntry | null {
     // Validate path and prevent traversal
+
     const fullPath = resolve(this.basePath, filename);
     if (!fullPath.startsWith(`${this.basePath  }/`)) return null;
     if (!existsSync(fullPath)) return null;
@@ -156,6 +160,7 @@ export class MarkdownMemory {
 
   /** Delete a memory entry */
   delete(filename: string): boolean {
+
     const fullPath = resolve(this.basePath, filename);
     if (!fullPath.startsWith(`${this.basePath  }/`)) return false;
     if (!existsSync(fullPath)) return false;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use futures_util::StreamExt;
@@ -1980,8 +1981,8 @@ fn run_sidecar(app: &tauri::AppHandle, workspace: &Path, args: &[&str]) -> Resul
         .env("ARGENTUM_LOG_FORMAT", "json")
         .env("ARGENTUM_NO_BANNER", "1")
         .env("ARGENTUM_PLAIN_OUTPUT", "1")
-        .env("AGCLAW_WORKDIR", "")
-        .env("AGCLAW_SKIP_EXIT_PAUSE", "1")
+        .env("ARGENTUM_WORKDIR", "")
+        .env("ARGENTUM_SKIP_EXIT_PAUSE", "1")
         .current_dir(workspace)
         .output()
         .map_err(|error| format!("Failed to run Argentum sidecar: {error}"))?;
@@ -7321,6 +7322,7 @@ fn run_desktop_action(
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

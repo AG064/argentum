@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 
@@ -29,7 +30,7 @@ export interface TenantIsolationConfig {
 class TenantIsolationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'tenant-isolation',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Provide tenant-scoped data isolation, quotas and cross-tenant access control',
     dependencies: [],
   };

@@ -1,4 +1,4 @@
- 
+// SPDX-License-Identifier: MIT
 // @ts-nocheck
 /**
  * Argentum Sandbox Executor
@@ -54,6 +54,7 @@ function expandPath(p: string): string {
   if (p.startsWith('~/') || p === '~') {
     return resolve(homedir(), p.slice(2));
   }
+
   return resolve(p);
 }
 
@@ -122,7 +123,8 @@ export class SandboxExecutor {
   }
 
   private normalizeTimeoutMs(timeoutMs: number): number {
-    const maxTimeoutMs = this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs ?? 30000;
+    const maxTimeoutMs =
+      this.config.maxExecutionTimeMs ?? DEFAULT_CONFIG.maxExecutionTimeMs ?? 30000;
     if (!Number.isFinite(timeoutMs)) {
       return maxTimeoutMs;
     }
@@ -351,8 +353,7 @@ export class SandboxExecutor {
       };
 
       const baseDir =
-        workingDir ??
-        (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+        workingDir ?? (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
 
       void (async () => {
         const fs = await import('fs/promises');
@@ -390,7 +391,9 @@ export class SandboxExecutor {
           void finalize({
             success,
             output: output || undefined,
-            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
+            error:
+              stderr ||
+              (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'javascript',
@@ -405,7 +408,6 @@ export class SandboxExecutor {
             language: 'javascript',
           });
         });
-
       })().catch((err) => {
         void finalize({
           success: false,
@@ -444,8 +446,7 @@ export class SandboxExecutor {
       };
 
       const baseDir =
-        workingDir ??
-        (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+        workingDir ?? (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
 
       void (async () => {
         const fs = await import('fs/promises');
@@ -483,7 +484,9 @@ export class SandboxExecutor {
           void finalize({
             success,
             output: output || undefined,
-            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
+            error:
+              stderr ||
+              (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'python',
@@ -498,7 +501,6 @@ export class SandboxExecutor {
             language: 'python',
           });
         });
-
       })().catch((err) => {
         void finalize({
           success: false,
@@ -546,8 +548,7 @@ export class SandboxExecutor {
       };
 
       const baseDir =
-        workingDir ??
-        (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
+        workingDir ?? (existsSync('/tmp/ag-claw-sandbox') ? '/tmp/ag-claw-sandbox' : '/tmp');
 
       void (async () => {
         const fs = await import('fs/promises');
@@ -585,7 +586,9 @@ export class SandboxExecutor {
           void finalize({
             success,
             output: output || undefined,
-            error: stderr || (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
+            error:
+              stderr ||
+              (timedOut ? `Execution timed out after ${effectiveTimeoutMs}ms` : undefined),
             exitCode: code ?? undefined,
             executionTimeMs: Date.now() - startTime,
             language: 'bash',
@@ -600,7 +603,6 @@ export class SandboxExecutor {
             language: 'bash',
           });
         });
-
       })().catch((err) => {
         void finalize({
           success: false,

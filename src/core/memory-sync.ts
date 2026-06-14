@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Git-Based Memory Sync for Argentum
- * 
+ *
  * Exports memories as compressed chunks, commits to git for cross-machine sync.
  * Uses checksums for deduplication.
  */
@@ -46,7 +48,9 @@ export class MemoryGitSync {
       enabled: config.enabled ?? false,
       repoPath: config.repoPath,
       branch,
+
       commitMessage: config.commitMessage ?? 'chore(memory): sync memories',
+
       compress: config.compress ?? true,
       maxChunkSize: config.maxChunkSize ?? 1024 * 1024, // 1MB
       autoSyncInterval: config.autoSyncInterval ?? 3600000, // 1 hour

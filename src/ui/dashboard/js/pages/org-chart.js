@@ -6,7 +6,6 @@ async function loadOrgChartData() {
   const container = document.getElementById('orgChartContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="flex justify-center items-center" style="height: 200px">
       ${Components.spinner('lg')}
@@ -25,7 +24,6 @@ function renderOrgChart(data) {
   const container = document.getElementById('orgChartContainer');
   if (!container) return;
 
-  /* nosemgrep: javascript.browser.security.insecure-document-method.insecure-document-method */
   container.innerHTML = `
     <div class="card">
       <div class="card-header">
@@ -98,7 +96,7 @@ function renderOrgChart(data) {
     <div class="card" style="margin-top: var(--space-6)">
       <h3 class="card-title">Team Members</h3>
       <div class="agents-grid" style="margin-top: var(--space-4)">
-        ${data.nodes.map(node => renderAgentCard(node)).join('')}
+        ${data.nodes.map((node) => renderAgentCard(node)).join('')}
       </div>
     </div>
 
@@ -115,9 +113,10 @@ function renderOrgChart(data) {
             <label class="form-label">Assign To</label>
             <select class="input select" name="agentId">
               <option value="">Select agent...</option>
-              ${data.nodes.filter(n => n.status === 'active').map(n => 
-                `<option value="${n.id}">${n.name} (${n.role})</option>`
-              ).join('')}
+              ${data.nodes
+                .filter((n) => n.status === 'active')
+                .map((n) => `<option value="${n.id}">${n.name} (${n.role})</option>`)
+                .join('')}
             </select>
           </div>
           <div class="form-group">
@@ -139,16 +138,18 @@ function renderOrgChart(data) {
 
 function renderAsciiTree(tree) {
   if (!tree) return 'No organization data available.';
-  
+
   const lines = [];
-  
+
   function renderNode(node, prefix = '', isLast = true) {
     const connector = isLast ? '└── ' : '├── ';
     const statusIcon = node.status === 'active' ? '🟢' : node.status === 'paused' ? '🟡' : '⚫';
     const agentIcon = getAgentTypeIcon(node.agentType);
-    
-    lines.push(`${prefix}${connector}${statusIcon} ${agentIcon} ${node.name} <span class="text-muted">(${node.role})</span>`);
-    
+
+    lines.push(
+      `${prefix}${connector}${statusIcon} ${agentIcon} ${node.name} <span class="text-muted">(${node.role})</span>`,
+    );
+
     const childPrefix = prefix + (isLast ? '    ' : '│   ');
     if (node.children && node.children.length > 0) {
       node.children.forEach((child, index) => {
@@ -156,10 +157,10 @@ function renderAsciiTree(tree) {
       });
     }
   }
-  
+
   lines.push(`⚡ Argentum Organization`);
   lines.push('');
-  
+
   if (tree.children && tree.children.length > 0) {
     tree.children.forEach((child, index) => {
       renderNode(child, '', index === tree.children.length - 1);
@@ -167,26 +168,27 @@ function renderAsciiTree(tree) {
   } else {
     lines.push('└── ⚠️ No team members yet. Click "Hire Agent" to get started.');
   }
-  
+
   return lines.join('\n');
 }
 
 function getAgentTypeIcon(agentType) {
   const icons = {
-    'coder': '💻',
-    'researcher': '🔬',
-    'foreman': '👷',
-    'analyst': '📊',
-    'CTO': '🏛️',
-    'default': '🤖'
+    coder: '💻',
+    researcher: '🔬',
+    foreman: '👷',
+    analyst: '📊',
+    CTO: '🏛️',
+    default: '🤖',
   };
   return icons[agentType] || icons.default;
 }
 
 function renderAgentCard(node) {
-  const statusClass = node.status === 'active' ? 'success' : node.status === 'paused' ? 'warning' : 'muted';
-  const tasksCount = node.tasks ? node.tasks.filter(t => t.status !== 'completed').length : 0;
-  
+  const statusClass =
+    node.status === 'active' ? 'success' : node.status === 'paused' ? 'warning' : 'muted';
+  const tasksCount = node.tasks ? node.tasks.filter((t) => t.status !== 'completed').length : 0;
+
   return `
     <div class="agent-card" data-agent-id="${node.id}">
       <div class="agent-header">
@@ -215,15 +217,21 @@ function renderAgentCard(node) {
         </div>
       </div>
       <div class="agent-actions" style="margin-top: var(--space-3)">
-        ${node.status === 'active' ? `
+        ${
+          node.status === 'active'
+            ? `
           <button class="btn btn-warning btn-sm flex-1" onclick="pauseAgent('${node.id}')">
             Pause
           </button>
-        ` : node.status === 'paused' ? `
+        `
+            : node.status === 'paused'
+              ? `
           <button class="btn btn-success btn-sm flex-1" onclick="resumeAgent('${node.id}')">
             Resume
           </button>
-        ` : ''}
+        `
+              : ''
+        }
         <button class="btn btn-danger btn-sm flex-1" onclick="showFireConfirmation('${node.id}', '${node.name}')">
           Fire
         </button>
@@ -236,18 +244,18 @@ async function handleTaskDelegation(e) {
   e.preventDefault();
   const form = e.target;
   const formData = new FormData(form);
-  
+
   const task = {
     description: formData.get('taskDescription'),
     agentId: formData.get('agentId'),
     priority: parseInt(formData.get('priority')) || 3,
   };
-  
+
   if (!task.description || !task.agentId) {
     Components.toast('Please fill in all fields', 'error');
     return;
   }
-  
+
   try {
     await API.post('/api/org/assign', task);
     Components.toast('Task assigned successfully', 'success');
@@ -288,7 +296,7 @@ function showHireModal() {
       { label: 'Hire', class: 'btn-primary', action: 'hireAgent' },
     ],
   });
-  
+
   // Store form reference
   window.pendingHireForm = document.getElementById('hireAgentForm');
 }
@@ -296,9 +304,9 @@ function showHireModal() {
 async function hireAgent() {
   const form = window.pendingHireForm;
   if (!form) return;
-  
+
   const formData = new FormData(form);
-  
+
   try {
     await API.post('/api/org/hire', {
       name: formData.get('name'),
@@ -405,11 +413,46 @@ function getMockOrgData() {
       totalSpent: 3470000,
     },
     nodes: [
-      { id: 'agent-001', name: 'Alice', role: 'Engineer', status: 'active', agentType: 'coder', tasks: [{ status: 'in_progress' }, { status: 'completed' }] },
-      { id: 'agent-002', name: 'Bob', role: 'Engineer', status: 'active', agentType: 'coder', tasks: [] },
-      { id: 'agent-003', name: 'Carol', role: 'Engineer', status: 'paused', agentType: 'coder', tasks: [{ status: 'completed' }] },
-      { id: 'agent-004', name: 'Dave', role: 'Researcher', status: 'active', agentType: 'researcher', tasks: [{ status: 'in_progress' }] },
-      { id: 'agent-005', name: 'Eve', role: 'Analyst', status: 'active', agentType: 'analyst', tasks: [] },
+      {
+        id: 'agent-001',
+        name: 'Alice',
+        role: 'Engineer',
+        status: 'active',
+        agentType: 'coder',
+        tasks: [{ status: 'in_progress' }, { status: 'completed' }],
+      },
+      {
+        id: 'agent-002',
+        name: 'Bob',
+        role: 'Engineer',
+        status: 'active',
+        agentType: 'coder',
+        tasks: [],
+      },
+      {
+        id: 'agent-003',
+        name: 'Carol',
+        role: 'Engineer',
+        status: 'paused',
+        agentType: 'coder',
+        tasks: [{ status: 'completed' }],
+      },
+      {
+        id: 'agent-004',
+        name: 'Dave',
+        role: 'Researcher',
+        status: 'active',
+        agentType: 'researcher',
+        tasks: [{ status: 'in_progress' }],
+      },
+      {
+        id: 'agent-005',
+        name: 'Eve',
+        role: 'Analyst',
+        status: 'active',
+        agentType: 'analyst',
+        tasks: [],
+      },
     ],
   };
 }

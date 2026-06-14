@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Shared feature system types.
  * Used by PluginLoader and all feature implementations.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 
@@ -69,7 +70,7 @@ interface AgentRow {
 class MultiAgentCoordinationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'multi-agent-coordination',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Coordination between multiple agents with task assignment and broadcasting',
     dependencies: [],
   };

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Content Filtering Feature
  *
@@ -74,7 +76,7 @@ export interface ContentFilteringConfig {
 class ContentFilteringFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'content-filtering',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Content filtering for profanity, PII, and sensitive data with custom rules',
     dependencies: [],
   };

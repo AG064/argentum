@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Voice Feature for Argentum
  *
@@ -142,7 +144,7 @@ export async function getVoice(voiceId: string): Promise<VoiceInfo | null> {
 class VoiceFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'voice',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Text-to-Speech and Speech-to-Text via ElevenLabs and OpenAI',
     dependencies: [],
   };

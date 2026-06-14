@@ -50,7 +50,7 @@ Health check endpoint. Returns status of the gateway and all active features.
 ```json
 {
   "status": "ok",
-  "version": "0.0.7",
+  "version": "0.0.8-alpha",
   "uptime": 3600,
   "node": "v20.19.0",
   "features": {
@@ -493,7 +493,7 @@ List all available features.
   "features": [
     {
       "name": "sqlite-memory",
-      "version": "0.0.7",
+      "version": "0.0.8-alpha",
       "description": "SQLite-backed semantic memory",
       "state": "active",
       "enabled": true,
@@ -501,7 +501,7 @@ List all available features.
     },
     {
       "name": "knowledge-graph",
-      "version": "0.0.7",
+      "version": "0.0.8-alpha",
       "description": "Entity relationship graph",
       "state": "active",
       "enabled": true,
@@ -551,7 +551,7 @@ Get details of a specific feature.
 ```json
 {
   "name": "sqlite-memory",
-  "version": "0.0.7",
+  "version": "0.0.8-alpha",
   "description": "SQLite-backed semantic memory",
   "state": "active",
   "enabled": true,
@@ -692,17 +692,17 @@ ws.on('open', () => {
 | `OPENROUTER_API_KEY` | string | OpenRouter API key |
 | `ANTHROPIC_API_KEY` | string | Anthropic API key |
 | `OPENAI_API_KEY` | string | OpenAI API key |
-| `AGCLAW_TELEGRAM_TOKEN` | string | Telegram bot token |
-| `AGCLAW_FCM_KEY` | string | Firebase Cloud Messaging key |
-| `AGCLAW_DB_PATH` | string | Path to main SQLite DB |
-| `AGCLAW_PORT` | number | Gateway HTTP port |
-| `AGCLAW_HOST` | string | Gateway bind address |
-| `AGCLAW_LOG_LEVEL` | string | Log level: `debug`, `info`, `warn`, `error` |
-| `AGCLAW_LOG_FORMAT` | string | Log format: `json`, `pretty` |
-| `AGCLAW_API_TOKEN` | string | API authentication token |
+| `ARGENTUM_TELEGRAM_TOKEN` | string | Telegram bot token |
+| `ARGENTUM_FCM_KEY` | string | Firebase Cloud Messaging key |
+| `ARGENTUM_DB_PATH` | string | Path to main SQLite DB |
+| `ARGENTUM_PORT` | number | Gateway HTTP port |
+| `ARGENTUM_HOST` | string | Gateway bind address |
+| `ARGENTUM_LOG_LEVEL` | string | Log level: `debug`, `info`, `warn`, `error` |
+| `ARGENTUM_LOG_FORMAT` | string | Log format: `json`, `pretty` |
+| `ARGENTUM_API_TOKEN` | string | API authentication token |
 | `SUPABASE_URL` | string | Supabase project URL |
 | `SUPABASE_KEY` | string | Supabase anon key |
-| `AGCLAW_SQL_LOG` | string | Set to `debug` to log SQL queries |
+| `ARGENTUM_SQL_LOG` | string | Set to `debug` to log SQL queries |
 
 ---
 

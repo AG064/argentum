@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Argentum</string>
+    <string name="chat">Chat</string>
+    <string name="agents">Agents</string>
+    <string name="settings">Settings</string>
+    <string name="type_message">Type a message...</string>
+    <string name="send">Send</string>
+</resources>

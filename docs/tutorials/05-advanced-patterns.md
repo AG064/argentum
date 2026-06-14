@@ -446,7 +446,7 @@ argentum_workflow_duration_seconds{workflow="deploy-service"} 234.5
 Enable tracing for multi-agent debugging:
 
 ```bash
-AGCLAW_TRACE=agent,workflow npm start
+ARGENTUM_TRACE=agent,workflow npm start
 ```
 
 This outputs detailed traces of agent message passing and workflow execution.

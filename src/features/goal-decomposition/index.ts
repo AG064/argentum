@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Goal Decomposition Feature (SQLite)
  *
@@ -46,7 +48,7 @@ const DEFAULT_CONFIG: GoalDecompositionConfig = {
 class GoalDecompositionFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'goal-decomposition',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Decompose goals into tasks and track dependencies (SQLite)',
     dependencies: [],
   };
@@ -147,8 +149,7 @@ class GoalDecompositionFeature implements FeatureModule {
     const map: Record<string, TaskTreeRow> = {};
     for (const t of all) map[t.id] = { ...t, children: [] };
     for (const t of all) {
-      if (t.parent_id && map[t.parent_id] && map[t.id])
-        map[t.parent_id]!.children.push(map[t.id]!);
+      if (t.parent_id && map[t.parent_id] && map[t.id]) map[t.parent_id]!.children.push(map[t.id]!);
     }
 
     return map[goalId] ?? null;

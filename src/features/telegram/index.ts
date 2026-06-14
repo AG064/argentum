@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Telegram Integration
  *
@@ -66,7 +68,7 @@ interface CountRow {
 class TelegramFeature {
   readonly meta = {
     name: 'telegram',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Telegram bot integration via Grammy',
     dependencies: ['allowlists'],
   };
@@ -426,9 +428,7 @@ class TelegramFeature {
   }
 
   listAllowedUsers(): string[] {
-    const rows = this.db
-      .prepare<[], AllowedUserRow>('SELECT user_id FROM allowed_users')
-      .all();
+    const rows = this.db.prepare<[], AllowedUserRow>('SELECT user_id FROM allowed_users').all();
     return rows.map((r) => r.user_id);
   }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * WhatsApp Bridge Feature
  *
@@ -107,7 +109,7 @@ export interface WhatsAppBridgeConfig {
 class WhatsAppBridgeFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'whatsapp-bridge',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'WhatsApp Business API integration with webhook support',
     dependencies: [],
   };

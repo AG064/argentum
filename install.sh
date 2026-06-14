@@ -48,7 +48,7 @@ log_step()  { echo -e "${BOLD}${BLUE}==> $1${NC}"; }
 # ─── Banner ──────────────────────────────────
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║        Argentum Installer v0.0.7       ║${NC}"
+echo -e "${BLUE}║        Argentum Installer v0.0.8-alpha       ║${NC}"
 echo -e "${BLUE}║    Modular AI Agent Framework         ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════╝${NC}"
 echo ""
@@ -118,6 +118,9 @@ log_ok "Working in: $(pwd)"
 # ============================================
 log_step "Installing dependencies"
 
+# NOTE: PinnedDependencies alert for npm install is a known limitation.
+# npm commands in the install script cannot be pinned to Git commit SHAs.
+# This is not a GitHub Action; the Scorecard tool flags this for visibility.
 if [ -f "package-lock.json" ]; then
   npm ci --ignore-scripts 2>/dev/null || npm install
 else

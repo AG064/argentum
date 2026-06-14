@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Group Management Feature
  *
@@ -80,7 +82,7 @@ const ROLE_PERMISSIONS: Record<GroupRole, string[]> = {
 class GroupManagementFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'group-management',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Multi-user group management with roles and permissions',
     dependencies: [],
   };

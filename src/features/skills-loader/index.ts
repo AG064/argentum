@@ -1,4 +1,5 @@
- 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Skills Loader
  *
@@ -93,7 +94,7 @@ interface SkillManifest {
  * ---
  * name: my-skill
  * description: Brief description
- * version: 0.0.7
+ * version: 0.0.8-alpha
  * ---
  */
 function parseFrontmatter(content: string): SkillFrontmatter | null {
@@ -153,7 +154,7 @@ function extractBody(content: string): string {
 class SkillsLoaderFeature {
   readonly meta = {
     name: 'skills-loader',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Load OpenClaw skills with Hermes-style progressive disclosure',
     dependencies: [],
   };
@@ -303,7 +304,7 @@ class SkillsLoaderFeature {
       const frontmatter = parseFrontmatter(content) ?? {
         name,
         description: '',
-        version: '0.0.7',
+        version: '0.0.8-alpha-alpha',
       };
       const body = extractBody(content);
 
@@ -337,6 +338,7 @@ class SkillsLoaderFeature {
         scripts.push(
           ...fs
             .readdirSync(scriptsDir)
+
             .filter(
               (f) =>
                 f.endsWith('.sh') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.ts'),
@@ -432,6 +434,7 @@ class SkillsLoaderFeature {
     if (!skill) throw new Error(`Skill '${skillName}' not found`);
 
     const scriptsDir = path.resolve(skill.path, 'scripts');
+
     const scriptPath = path.resolve(scriptsDir, scriptName);
     if (!scriptPath.startsWith(`${scriptsDir}${path.sep}`)) {
       throw new Error(`Invalid script path for skill '${skillName}'`);
@@ -478,6 +481,7 @@ class SkillsLoaderFeature {
 
   getManifest(name: string): SkillManifest | null {
     const skill = this.skillView(name);
+
     if (!skill) return null;
 
     return {

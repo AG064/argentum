@@ -108,7 +108,7 @@ export const state = {
   setupStatus: 'setup_pending',
   setupAnimation: false,
   version: APP_VERSION,
-  workspacePath: '%LOCALAPPDATA%\\Programs\\Argentum\\workspace',
+  workspacePath: '',
   experienceLevel: '',
   runtimeMode: 'desktop',
   llmProvider: 'openai',
@@ -203,6 +203,13 @@ export const state = {
   settingsSection: 'overview',
   uiFontFamily: fontOptions.ui[0].css,
   codeFontFamily: fontOptions.mono[0].css,
+  accentColor: '',
+  highContrastMode: false,
+  updateAvailable: false,
+  updateVersion: '',
+  updateDownloading: false,
+  updateProgress: 0,
+  updateError: '',
   savedConfigPath: '',
   actionStatus: 'No GUI action has run in this session.',
   runningAction: '',
@@ -309,8 +316,17 @@ export const state = {
   ],
 };
 
+// Secure random ID generator (replaces Math.random() for security-sensitive IDs)
+function generateSecureId(length = 16) {
+  const array = new Uint8Array(length);
+  require('crypto').getRandomValues(array);
+  return Array.from(array, (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, length);
+}
+
 export function notify(type, title, message) {
-  const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = `${Date.now()}-${generateSecureId()}`;
   const notification = { id, type, title, message };
   state.notificationHistory = [notification, ...state.notificationHistory].slice(0, 40);
 
@@ -465,6 +481,7 @@ export function setSettingsSection(sectionId) {
     'telegram',
     'security',
     'advanced',
+    'appearance',
   ];
   state.settingsSection = allowed.includes(sectionId) ? sectionId : 'overview';
   recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, {
@@ -474,7 +491,7 @@ export function setSettingsSection(sectionId) {
 
 export function recordUiEvent(event, status, message, details = {}) {
   const entry = {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: generateSecureId(),
     event,
     status,
     message,
@@ -546,7 +563,7 @@ export function toggleQuickSettingsMenu(open) {
 export function addTerminalEntry(command, output, status = 'info') {
   state.terminalEntries = [
     {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: generateSecureId(),
       status,
       command,
       output,
@@ -721,7 +738,7 @@ export function setActiveChatSession(chatId) {
 
 export function createChatSession() {
   syncActiveChatSession();
-  const id = `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = `chat-${Date.now()}-${generateSecureId()}`;
   const session = {
     id,
     title: 'New chat',
@@ -856,6 +873,9 @@ export function hydrateUiPreferences() {
     if (fontOptions.mono.some((option) => option.css === saved.codeFontFamily)) {
       state.codeFontFamily = saved.codeFontFamily;
     }
+    if (typeof saved.accentColor === 'string' && saved.accentColor.trim()) {
+      state.accentColor = saved.accentColor;
+    }
     if (typeof saved.workspacePath === 'string' && saved.workspacePath.trim()) {
       state.workspacePath = saved.workspacePath;
     }
@@ -914,6 +934,7 @@ function persistUiPreferences() {
       JSON.stringify({
         uiFontFamily: state.uiFontFamily,
         codeFontFamily: state.codeFontFamily,
+        accentColor: state.accentColor,
         workspacePath: state.workspacePath,
         viewMode: state.viewMode,
         chatFilter: state.chatFilter,
@@ -937,6 +958,10 @@ export function setUiPreference(key, value) {
 
   if (key === 'codeFontFamily' && fontOptions.mono.some((option) => option.css === value)) {
     state.codeFontFamily = value;
+  }
+
+  if (key === 'accentColor') {
+    state.accentColor = typeof value === 'string' ? value.trim() : '';
   }
 
   if (key === 'workspacePath' && typeof value === 'string' && value.trim()) {
@@ -1019,7 +1044,7 @@ export function compactActiveChatSession(options = {}) {
     .slice(-1800);
 
   const compactedBlock = {
-    id: `compact-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: `compact-${Date.now()}-${generateSecureId()}`,
     type: 'summary',
     title: options.automatic ? 'Auto-compacted context' : 'Compacted context',
     body: `Earlier conversation was compacted locally to keep this session responsive.\n\n${summary}`,
@@ -1052,7 +1077,7 @@ export function appendChatMessage(role, body, options = {}) {
       ? { rawBody: String(sourceBody || ''), body: redactPrivateText(sourceBody), reasoning: '' }
       : splitReasoningFromMessage(sourceBody);
   const block = {
-    id: options.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: options.id || `${Date.now()}-${generateSecureId()}`,
     type: 'message',
     role,
     title: role === 'user' ? 'You' : state.agentName || 'Argentum',

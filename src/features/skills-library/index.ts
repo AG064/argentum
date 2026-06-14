@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Skills Library Feature (SQLite)
  *
@@ -57,7 +59,7 @@ const DEFAULT_CONFIG: SkillsLibraryConfig = {
 class SkillsLibraryFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'skills-library',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Library of agent skills with versioning (SQLite)',
     dependencies: [],
   };
@@ -132,9 +134,7 @@ class SkillsLibraryFeature implements FeatureModule {
   }
 
   getSkill(id: string): SkillRecord | null {
-    const row = this.db
-      .prepare<[string], SkillRow>('SELECT * FROM skills WHERE id = ?')
-      .get(id);
+    const row = this.db.prepare<[string], SkillRow>('SELECT * FROM skills WHERE id = ?').get(id);
     if (!row) return null;
     return this.rowToSkill(row);
   }

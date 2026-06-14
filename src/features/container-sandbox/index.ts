@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Container Sandbox
  *
@@ -170,6 +172,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
   ];
 
   // Network isolation
+
   if (!config.networkAccess) {
     args.push('--network', 'none');
   }
@@ -248,7 +251,7 @@ function buildDockerArgs(config: SandboxConfig, command: string): string[] {
 class ContainerSandboxFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'container-sandbox',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Docker-based command sandboxing with isolation',
     dependencies: [],
   };

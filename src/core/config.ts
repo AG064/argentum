@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Argentum Configuration Loader
  *
@@ -56,8 +58,16 @@ const WebchatConfigSchema = FeatureToggleSchema.extend({
   maxConnections: z.number().int().default(1000),
   messageHistory: z.number().int().default(100),
   maxMessageLength: z.number().int().min(1).max(100_000).default(10_000),
-  maxPayloadBytes: z.number().int().min(1024).default(1024 * 1024),
-  maxFileSize: z.number().int().min(1).default(10 * 1024 * 1024),
+  maxPayloadBytes: z
+    .number()
+    .int()
+    .min(1024)
+    .default(1024 * 1024),
+  maxFileSize: z
+    .number()
+    .int()
+    .min(1)
+    .default(10 * 1024 * 1024),
   rateLimitWindowMs: z.number().int().min(1000).default(60_000),
   maxMessagesPerWindow: z.number().int().min(1).default(60),
   allowedFileTypes: z
@@ -185,17 +195,21 @@ export const ModelRoutingConfigSchema = z.object({
     throughput: 0.6,
     customWeight: 1.0,
   }),
-  models: z.array(z.object({
-    modelId: z.string(),
-    costPer1K: z.number(),
-    latency: z.number(),
-    capabilities: z.array(z.string()),
-    contextLength: z.number().optional(),
-    toolSupport: z.boolean().optional(),
-    reliability: z.number().optional(),
-    specialization: z.array(z.string()).optional(),
-    throughput: z.number().optional(),
-  })).optional(),
+  models: z
+    .array(
+      z.object({
+        modelId: z.string(),
+        costPer1K: z.number(),
+        latency: z.number(),
+        capabilities: z.array(z.string()),
+        contextLength: z.number().optional(),
+        toolSupport: z.boolean().optional(),
+        reliability: z.number().optional(),
+        specialization: z.array(z.string()).optional(),
+        throughput: z.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /** LLM provider configuration schema */
@@ -617,7 +631,7 @@ export class ConfigManager {
       overrides['channels'] = {
         ...((overrides['channels'] as object) ?? {}),
         telegram: {
-          ...(((overrides['channels'] as Record<string, object> | undefined)?.['telegram']) ?? {}),
+          ...((overrides['channels'] as Record<string, object> | undefined)?.['telegram'] ?? {}),
           enabled: process.env.ARGENTUM_TELEGRAM_ENABLED === 'true',
         },
       };
@@ -636,14 +650,14 @@ export class ConfigManager {
       overrides['channels'] = {
         ...((overrides['channels'] as object) ?? {}),
         webchat: {
-          ...(((overrides['channels'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
+          ...((overrides['channels'] as Record<string, object> | undefined)?.['webchat'] ?? {}),
           authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
         },
       };
       overrides['features'] = {
         ...((overrides['features'] as object) ?? {}),
         webchat: {
-          ...(((overrides['features'] as Record<string, object> | undefined)?.['webchat']) ?? {}),
+          ...((overrides['features'] as Record<string, object> | undefined)?.['webchat'] ?? {}),
           authToken: process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN,
         },
       };

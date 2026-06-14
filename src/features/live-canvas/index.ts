@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Live Canvas Feature
  *
@@ -80,7 +82,7 @@ export interface CanvasOperation {
 class LiveCanvasFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'live-canvas',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Real-time collaborative drawing and visualization canvas',
     dependencies: [],
   };

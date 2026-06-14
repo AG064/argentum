@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 
@@ -66,7 +67,7 @@ interface ArticleRowId {
 class SharedKnowledgeBaseFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'shared-knowledge-base',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Shared knowledge base with full-text search and versioning',
     dependencies: [],
   };

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Telegram Channel for Argentum
  *
@@ -38,7 +40,7 @@ export interface TelegramChannelConfig {
 class TelegramChannel implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'telegram',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Telegram channel integration via grammY',
     dependencies: [],
   };
@@ -60,7 +62,7 @@ class TelegramChannel implements FeatureModule {
     };
 
     // Get token from config or env
-    this.config.token ??= process.env.AGCLAW_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
+    this.config.token ??= process.env.ARGENTUM_TELEGRAM_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
   }
 
   async start(): Promise<void> {

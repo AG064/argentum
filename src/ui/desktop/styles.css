@@ -192,6 +192,11 @@ button {
   color: var(--text);
 }
 
+.nav-button:focus-visible {
+  outline: 2px solid rgba(69, 196, 134, 0.72);
+  outline-offset: 2px;
+}
+
 .nav-icon {
   display: grid;
   place-items: center;
@@ -5202,3 +5207,303 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Accent Color Picker */
+.accent-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.accent-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.accent-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.accent-color-swatch:focus-visible {
+  outline: 2px solid rgba(69, 196, 134, 0.72);
+  outline-offset: 2px;
+}
+
+.accent-color-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px currentColor;
+}
+
+.accent-color-input {
+  width: 40px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+}
+
+.accent-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.accent-color-input::-webkit-color-swatch {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+/* High contrast mode */
+.high-contrast {
+  --text: #ffffff;
+  --muted: #d1d5db;
+  --line: rgba(255, 255, 255, 0.3);
+  --line-strong: rgba(255, 255, 255, 0.5);
+  --panel: #1a1a1a;
+  --panel-strong: #262626;
+}
+
+.high-contrast .nav-button,
+.high-contrast .button,
+.high-contrast .icon-button,
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea {
+  border-color: var(--line-strong);
+}
+
+
+
+/* Help panel keyboard shortcuts section */
+.help-shortcuts {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.help-shortcuts strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.help-shortcuts dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.help-shortcuts dt {
+  display: flex;
+  gap: 2px;
+}
+
+.help-shortcuts dd {
+  color: var(--muted);
+  margin: 0;
+}
+
+.help-shortcuts kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+}
+
+
+
+/* Update section styles */
+.update-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--panel-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.update-error {
+  color: #ef4444;
+  font-size: 13px;
+}
+
+/* Update nav button - red when update available */
+.nav-button[data-section="update"] .nav-icon {
+  position: relative;
+}
+
+.nav-button[data-section="update"].has-update .nav-icon::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent, #e23b3b);
+  border-radius: 50%;
+  border: 2px solid var(--bg, #0f0f0f);
+}
+
+.nav-button[data-section="update"].has-update {
+  animation: pulse-update 2s infinite;
+}
+
+@keyframes pulse-update {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .rail {
+    flex-direction: row;
+    height: 56px;
+    padding: 0 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .rail .brand-wordmark {
+    display: none;
+  }
+
+  .section-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .nav-button {
+    min-height: 44px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .nav-button span:last-child {
+    display: none;
+  }
+
+  .workspace-card {
+    display: none;
+  }
+
+  .brand-shard {
+    width: 32px;
+    height: 32px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .topbar-left {
+    flex: 1 1 100%;
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .view-root {
+    padding: 8px;
+  }
+
+  .form-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-field-group .panel-body {
+    padding: 12px;
+  }
+
+  .arg-composer-shell {
+    padding: 8px;
+  }
+
+  .composer-layout {
+    flex-direction: column;
+  }
+
+  .conversation-composer {
+    max-width: 100%;
+  }
+
+  .help-panel,
+  .notification-menu,
+  .quick-menu,
+  .workspace-menu {
+    width: 100%;
+    max-width: 100%;
+    left: 0;
+    right: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-left .breadcrumb-bar {
+    display: none;
+  }
+
+  .nav-button {
+    min-width: 44px;
+    padding: 0 8px;
+  }
+
+  .nav-button .nav-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .button {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+}
+

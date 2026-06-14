@@ -112,9 +112,57 @@ const onboardingKeyboardActivationEvents = new Set(['keyup']);
 const ACTIVATION_HANDLED_FLAG = '__argentumActivationHandled';
 let dashboardRefreshTimer = null;
 
+// Focus trap for modal dialogs - keeps keyboard focus within open panels
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusableElements(container) {
+  return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (el) => el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden',
+  );
+}
+
+function trapFocus(container) {
+  const focusable = getFocusableElements(container);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  function handleTab(e) {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  container.addEventListener('keydown', handleTab);
+  first.focus();
+  return () => container.removeEventListener('keydown', handleTab);
+}
+
 function applyUiPreferences() {
   document.documentElement.style.setProperty('--font-ui', state.uiFontFamily);
   document.documentElement.style.setProperty('--font-mono', state.codeFontFamily);
+  if (state.accentColor) {
+    document.documentElement.style.setProperty('--accent', state.accentColor);
+    // Derive soft variant from accent
+    const hex = state.accentColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    document.documentElement.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.15)`);
+  } else {
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--accent-soft');
+  }
 }
 
 function eventTargetElement(event) {
@@ -224,6 +272,11 @@ function render() {
   title.textContent = section.title;
   eyebrow.textContent = section.eyebrow;
   nav.innerHTML = renderNavigation();
+  // Add update indicator class if update is available
+  const updateNavButton = nav.querySelector('[data-section="update"]');
+  if (updateNavButton) {
+    updateNavButton.classList.toggle('has-update', Boolean(state.updateAvailable));
+  }
   providerStatusPill.innerHTML = renderProviderStatusPill();
   viewModeButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.viewMode === state.viewMode);
@@ -407,6 +460,19 @@ function renderHelpPanel(section) {
             `,
           )
           .join('')}
+      </div>
+      <div class="help-shortcuts">
+        <strong>Keyboard shortcuts</strong>
+        <dl>
+          <dt><kbd>?</kbd></dt><dd>Toggle this help panel</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close open panels</dd>
+          <dt><kbd>Ctrl+1</kbd> - <kbd>Ctrl+8</kbd></dt><dd>Navigate sections</dd>
+          <dt><kbd>Ctrl+,</kbd></dt><dd>Open Settings</dd>
+          <dt><kbd>Enter</kbd> (in chat)</dt><dd>Send message</dd>
+          <dt><kbd>Shift+Enter</kbd></dt><dd>New line in chat</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Move focus forward</dd>
+          <dt><kbd>Shift+Tab</kbd></dt><dd>Move focus back</dd>
+        </dl>
       </div>
     </aside>
   `;
@@ -869,6 +935,69 @@ function updateProviderKeyStatus() {
   status.textContent = provider.requiresKey ? 'Key required' : 'Key optional';
 }
 
+async function checkForUpdates() {
+  state.updateDownloading = true;
+  state.updateError = '';
+  render();
+
+  try {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      const result = await invoke('check_for_updates');
+      if (result?.updateAvailable) {
+        state.updateAvailable = true;
+        state.updateVersion = result.version || '';
+        notify('info', 'Update available', `Argentum ${state.updateVersion} is available.`);
+      } else {
+        state.updateAvailable = false;
+        state.updateVersion = '';
+        notify('info', 'Up to date', 'You are running the latest Argentum version.');
+      }
+    } else {
+      // Web preview mode - simulate no update
+      state.updateAvailable = false;
+      state.updateVersion = '';
+      notify('info', 'Up to date', 'Update check requires the desktop app.');
+    }
+  } catch (error) {
+    state.updateError = normalizeError(error);
+  } finally {
+    state.updateDownloading = false;
+    render();
+  }
+}
+
+async function downloadUpdate() {
+  if (!state.updateVersion) return;
+  state.updateDownloading = true;
+  state.updateProgress = 0;
+  state.updateError = '';
+  render();
+
+  try {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      // Simulate progress for demo - real implementation would use Tauri updater events
+      for (let i = 0; i <= 100; i += 10) {
+        await new Promise((r) => setTimeout(r, 200));
+        state.updateProgress = i;
+        render();
+      }
+      notify(
+        'success',
+        'Update ready',
+        `Argentum ${state.updateVersion} downloaded. Restart to apply.`,
+      );
+    }
+  } catch (error) {
+    state.updateError = normalizeError(error);
+    notify('error', 'Update failed', state.updateError);
+  } finally {
+    state.updateDownloading = false;
+    render();
+  }
+}
+
 function addActivationListeners(target) {
   if (!target) return;
   target.addEventListener('click', handleActivation, true);
@@ -887,6 +1016,14 @@ function wireRenderedControls() {
       control.setAttribute('data-argentum-click-wired', 'true');
       control.addEventListener('click', handleActivation);
     });
+  }
+
+  // Apply focus trap to open modal dialogs
+  for (const panel of overlayRoot?.querySelectorAll('[role="dialog"]') || []) {
+    if (!(panel instanceof HTMLElement)) continue;
+    if (panel.dataset.argentumFocusTrapped === 'true') continue;
+    panel.dataset.argentumFocusTrapped = 'true';
+    trapFocus(panel);
   }
 
   const dashboardFrame = document.querySelector('[data-system-dashboard-frame]');
@@ -1004,7 +1141,11 @@ async function chooseChatAttachment() {
   state.chatAttachments = [
     ...state.chatAttachments,
     {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: `${Date.now()}-${(() => {
+        const rand = new Uint8Array(8);
+        crypto.getRandomValues(rand);
+        return [...rand].map((b) => b.toString(16).padStart(2, '0')).join('');
+      })()}`,
       path,
       name: String(path).split(/[\\/]/).pop() || String(path),
       mime,
@@ -1274,7 +1415,11 @@ async function streamProviderAssistantMessage(outgoingMessage, attachments, opti
     return result;
   }
 
-  const requestId = `stream-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const requestId = `stream-${Date.now()}-${(() => {
+    const rand = new Uint8Array(8);
+    crypto.getRandomValues(rand);
+    return [...rand].map((b) => b.toString(16).padStart(2, '0')).join('');
+  })()}`;
   const request = await buildChatRequestPayload(outgoingMessage, attachments);
   request.streamRequestId = requestId;
 
@@ -1862,6 +2007,23 @@ async function handleChange(event) {
     return;
   }
 
+  if (target.id === 'settings-accent-custom') {
+    setUiPreference('accentColor', target.value.replace('#', ''));
+    render();
+    return;
+  }
+
+  if (target.id === 'settings-high-contrast') {
+    state.highContrastMode = target.checked;
+    if (state.highContrastMode) {
+      document.documentElement.classList.add('high-contrast');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
+    }
+    render();
+    return;
+  }
+
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
     render();
@@ -1908,22 +2070,86 @@ async function handleChange(event) {
 
 async function handleKeyDown(event) {
   const target = event.target;
-  if (!(target instanceof HTMLTextAreaElement)) return;
-  if (target.id !== 'chat-draft') return;
-  if (
-    event.key !== 'Enter' ||
-    event.shiftKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    event.metaKey ||
-    event.isComposing
-  )
-    return;
+  const isTextInput = target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
 
-  event.preventDefault();
-  state.draftMessage = target.value;
-  syncComposerSendState();
-  await sendChatDraft();
+  // Global keyboard shortcuts (only when not typing in a text field)
+  if (!isTextInput || target.id === 'chat-draft') {
+    const ctrl = event.ctrlKey || event.metaKey;
+    const key = event.key;
+
+    // Close open panels on Escape
+    if (key === 'Escape') {
+      const anyPanelOpen =
+        state.helpOpen ||
+        state.notificationsMenuOpen ||
+        state.quickSettingsMenuOpen ||
+        state.quickSecurityMenuOpen ||
+        state.workspaceMenuOpen;
+      if (anyPanelOpen) {
+        event.preventDefault();
+        if (state.helpOpen) toggleHelp(false);
+        if (state.notificationsMenuOpen) toggleNotificationsMenu(false);
+        if (state.quickSettingsMenuOpen) toggleQuickSettingsMenu(false);
+        if (state.quickSecurityMenuOpen) toggleQuickSecurityMenu(false);
+        if (state.workspaceMenuOpen) toggleWorkspaceMenu(false);
+        render();
+        return;
+      }
+    }
+
+    // Ctrl+, = Settings
+    if (ctrl && key === ',') {
+      event.preventDefault();
+      setActiveSection('settings');
+      return;
+    }
+
+    // ? = Help (when not in text input)
+    if (key === '?' && !isTextInput) {
+      event.preventDefault();
+      toggleHelp();
+      render();
+      return;
+    }
+
+    // Ctrl+1-9 = Quick navigation to sections
+    if (ctrl && key >= '1' && key <= '9') {
+      event.preventDefault();
+      const sectionOrder = [
+        'chat',
+        'gateway',
+        'local-server',
+        'security',
+        'pc-stats',
+        'settings',
+        'diagnostics',
+        'logs',
+      ];
+      const idx = parseInt(key, 10) - 1;
+      if (sectionOrder[idx]) {
+        setActiveSection(sectionOrder[idx]);
+      }
+      return;
+    }
+  }
+
+  // Chat composer: Enter to send (Shift+Enter for newline)
+  if (target instanceof HTMLTextAreaElement && target.id === 'chat-draft') {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      event.isComposing
+    )
+      return;
+
+    event.preventDefault();
+    state.draftMessage = target.value;
+    syncComposerSendState();
+    await sendChatDraft();
+  }
 }
 
 async function handleClick(event, activationElement = null) {
@@ -1971,6 +2197,12 @@ async function handleClick(event, activationElement = null) {
   }
 
   if (element.closest('#help-button')) {
+    toggleHelp();
+    render();
+    return;
+  }
+
+  if (element.closest('#chat-help-button')) {
     toggleHelp();
     render();
     return;
@@ -2241,6 +2473,16 @@ async function handleClick(event, activationElement = null) {
     return;
   }
 
+  const accentSwatch = element.closest('[data-accent-color]');
+  if (accentSwatch) {
+    setUiPreference('accentColor', accentSwatch.dataset.accentColor);
+    // Sync the color input value
+    const colorInput = document.getElementById('settings-accent-custom');
+    if (colorInput) colorInput.value = '#' + accentSwatch.dataset.accentColor;
+    render();
+    return;
+  }
+
   const conversationMenuButton = element.closest('[data-conversation-menu]');
   if (conversationMenuButton) {
     toggleConversationMenu(conversationMenuButton.dataset.conversationMenu);
@@ -2331,6 +2573,16 @@ async function handleClick(event, activationElement = null) {
   const actionButton = element.closest('[data-run-action]');
   if (actionButton) {
     await runAction(actionButton.dataset.runAction);
+    return;
+  }
+
+  if (element.closest('#check-for-updates')) {
+    await checkForUpdates();
+    return;
+  }
+
+  if (element.closest('#download-update')) {
+    await downloadUpdate();
     return;
   }
 

@@ -143,14 +143,14 @@ cp .env.example .env
 
 Required for development:
 - `OPENROUTER_API_KEY` — or `ANTHROPIC_API_KEY`
-- `AGCLAW_PORT` — gateway port (default 18789)
+- `ARGENTUM_PORT` — gateway port (default 18789)
 
 ---
 
 ## 3. Coding Standards
 
 Argentum uses ESLint and Prettier to maintain consistent style. Configuration files:
-- ESLint: [`.eslintrc.js`](https://github.com/AG064/argentum/blob/main/.eslintrc.js)
+- ESLint: [`eslint.config.mjs`](https://github.com/AG064/argentum/blob/main/eslint.config.mjs)
 - Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/main/.prettierrc)
 - Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/main/.editorconfig)
 
@@ -204,7 +204,7 @@ Example from `audit-log`:
 ```typescript
 export default {
   name: 'audit-log',
-  version: '0.0.7',
+  version: '0.0.8-alpha',
   init() {
     this.db = new Database(dbPath);
     this.initTables();
@@ -345,7 +345,7 @@ import * as https from 'node:https';
 
 export default {
   name: 'stock-prices',
-  version: '0.0.7',
+  version: '0.0.8-alpha',
   dependencies: [],  // optional: list required features
 
   init() {
@@ -440,7 +440,7 @@ describe('stock-prices feature', () => {
   it('has correct metadata', () => {
     const feature = require('../../../src/features/stock-prices').default;
     expect(feature.name).toBe('stock-prices');
-    expect(feature.version).toBe('0.0.7');
+    expect(feature.version).toBe('0.0.8-alpha');
   });
 });
 ```
@@ -623,7 +623,7 @@ export async function execute(
 
 export const metadata = {
   name: 'my-skill',
-  version: '0.0.7',
+  version: '0.0.8-alpha',
   description: 'Does something useful',
   author: 'Your Name',
 };
@@ -677,8 +677,8 @@ Add entries under `## [unreleased]` with section headers:
 
 ```bash
 git add -A
-git commit -m "Release v0.0.7"
-git tag v0.0.7
+git commit -m "Release v0.0.8-alpha"
+git tag v0.0.8-alpha
 git push --tags
 ```
 
@@ -691,7 +691,7 @@ npm publish --access public
 #### 6. Create GitHub Release
 
 Use the tag to create a GitHub Release with:
-- Release title: `v0.0.7`
+- Release title: `v0.0.8-alpha`
 - Description from CHANGELOG.md
 - Any special upgrade instructions
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Webchat Channel
  *
@@ -5,12 +7,18 @@
  * real-time streaming responses.
  */
 
+import { randomBytes } from 'crypto';
+
 import {
   type FeatureModule,
   type FeatureContext,
   type FeatureMeta,
   type HealthStatus,
 } from '../core/plugin-loader';
+
+function secureId(length = 8): string {
+  return randomBytes(length).toString('hex');
+}
 
 /** Webchat channel configuration */
 export interface WebchatChannelConfig {
@@ -42,7 +50,7 @@ export type WebchatMessageHandler = (sessionId: string, message: string) => Prom
 class WebchatChannel implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webchat-channel',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Web-based chat with SSE streaming responses',
     dependencies: ['webchat'],
   };
@@ -87,7 +95,7 @@ class WebchatChannel implements FeatureModule {
 
   /** Create a new chat session */
   createSession(userId: string): ChatSession {
-    const id = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = `ws_${Date.now()}_${secureId()}`;
     const session: ChatSession = {
       id,
       userId,

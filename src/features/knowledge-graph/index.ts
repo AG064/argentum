@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Knowledge Graph Feature
  *
@@ -450,7 +452,7 @@ class MemoryGraphBackend implements GraphBackend {
 class KnowledgeGraphFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'knowledge-graph',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Knowledge graph with Markdown/JSON import, export, pathfinding',
     dependencies: [],
   };

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * WebChat Feature
  *
@@ -182,7 +184,7 @@ const WEBCHAT_HTML = `<!DOCTYPE html>
 </div>
 <script>
 const MAX_MSG_LEN = 10000;
-let ws, userId = 'user_' + Math.random().toString(36).slice(2, 8);
+let ws, userId = 'user_' + secureId();
 let roomId = new URLSearchParams(location.search).get('room') || 'default';
 let token = new URLSearchParams(location.search).get('token') || '';
 let pendingFiles = [];
@@ -382,7 +384,7 @@ connect();
 class WebchatFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webchat',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Full-featured web chat UI with Markdown, file upload, themes',
     dependencies: [],
   };
@@ -422,7 +424,7 @@ class WebchatFeature implements FeatureModule {
       maxMessageHistory:
         partial.maxMessageHistory ?? partial.messageHistory ?? this.config.maxMessageHistory,
     };
-    this.authToken = partial.authToken ?? process.env.AGCLAW_WEBCHAT_AUTH_TOKEN ?? null;
+    this.authToken = partial.authToken ?? process.env.ARGENTUM_WEBCHAT_AUTH_TOKEN ?? null;
   }
 
   async start(): Promise<void> {

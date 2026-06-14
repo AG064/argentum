@@ -1,15 +1,17 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Browser Automation Feature
- * 
+ *
  * Provides automated web browser interactions using Playwright.
- * 
+ *
  * Usage:
  *   argentum browser navigate <url>
  *   argentum browser click <selector>
  *   argentum browser fill <selector> <text>
  *   argentum browser screenshot [filename]
  *   argentum browser install
- * 
+ *
  * Requires: npm install && npx playwright install chromium
  */
 

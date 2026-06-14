@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, resolve, join } from 'path';
 
@@ -54,7 +55,7 @@ interface UpdateHistoryRow {
 class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Automatic updates for Argentum components with backup and rollback',
     dependencies: [],
   };
@@ -87,7 +88,7 @@ class AutoUpdateFeature implements FeatureModule {
       const pkgPath = resolve(process.cwd(), 'package.json');
       if (existsSync(pkgPath)) {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageMetadata;
-        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.7';
+        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.8-alpha-alpha';
       } else {
         this.currentVersion = '0.0.4';
       }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 
@@ -60,7 +61,7 @@ interface UserRoleRow {
 class RoleBasedAccessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'role-based-access',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Manage roles and permissions for users and agents',
     dependencies: [],
   };

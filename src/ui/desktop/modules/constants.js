@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.0.6';
+export const APP_VERSION = '0.0.8-alpha';
 
 export const sections = [
   {
@@ -46,6 +46,14 @@ export const sections = [
     requiresSetup: false,
   },
   { id: 'logs', icon: 'logs', title: 'Activity Logs', eyebrow: 'Timeline', requiresSetup: true },
+  {
+    id: 'update',
+    icon: 'download',
+    title: 'Updates',
+    eyebrow: 'New version',
+    requiresSetup: false,
+    updateAvailable: false,
+  },
 ];
 
 export const onboardingSteps = [

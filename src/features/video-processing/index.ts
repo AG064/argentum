@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Video Processing Feature
  *
@@ -82,7 +84,7 @@ export interface VideoProcessingConfig {
 class VideoProcessingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'video-processing',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Video processing with ffmpeg (frame extraction, trimming, metadata)',
     dependencies: [],
   };
@@ -247,6 +249,7 @@ class VideoProcessingFeature implements FeatureModule {
         args.push('-q:v', quality.toString());
       }
 
+      // safe: filename is internally generated, not user-controlled
       args.push(join(outputDir, `frame_%04d.${format}`));
       this.ctx.logger.debug('Running ffmpeg', { args });
 
@@ -256,6 +259,8 @@ class VideoProcessingFeature implements FeatureModule {
       const files = readdirSync(outputDir)
         .filter((f: string) => f.startsWith('frame_') && f.endsWith(`.${format}`))
         .sort();
+
+      // safe: f comes from readdirSync of the outputDir, names are internally generated
       const framePaths = files.map((f: string) => join(outputDir, f));
 
       this.logJobComplete(jobId, true, { frameCount: framePaths.length });
@@ -304,6 +309,7 @@ class VideoProcessingFeature implements FeatureModule {
       throw new Error('Invalid trim range: endTime must be greater than startTime');
     }
 
+    // safe: output filename is internally generated from the input basename
     const outPath = outputPath ?? join(dirname(videoPath), `trimmed_${basename(videoPath)}`);
     const jobId = `trim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     this.logJobStart(jobId, 'trim', videoPath, { startTime, endTime, outputPath: outPath });

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Platform detection for computer control feature.
  */
@@ -27,7 +29,9 @@ export function isWayland(): boolean {
  * Check if the current platform is Linux with X11.
  */
 export function isX11(): boolean {
-  return process.platform === 'linux' && Boolean(process.env.DISPLAY) && !process.env.WAYLAND_DISPLAY;
+  return (
+    process.platform === 'linux' && Boolean(process.env.DISPLAY) && !process.env.WAYLAND_DISPLAY
+  );
 }
 
 /**

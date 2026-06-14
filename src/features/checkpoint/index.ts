@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Checkpoint Feature
  *
@@ -48,7 +50,7 @@ export interface CheckpointSummary {
 class CheckpointFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'checkpoint',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Task checkpoint and resume across sessions',
     dependencies: [],
   };

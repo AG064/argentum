@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Budget Enforcement Feature
  *
@@ -143,7 +145,7 @@ const DEFAULT_CONFIG: BudgetConfig = {
 class BudgetFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'budget',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description:
       'Cost control and budget management for LLM usage with per-agent and global limits',
     dependencies: [],

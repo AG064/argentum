@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Slack Integration Feature
  *
@@ -96,7 +98,7 @@ export interface SlackIntegrationConfig {
 class SlackIntegrationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'slack-integration',
-    version: '0.0.7',
+    version: '0.0.8-alpha-alpha',
     description: 'Slack bot integration with message sending and event handling',
     dependencies: [],
   };

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import crypto from 'crypto';
 import path from 'path';
 
@@ -8,15 +9,15 @@ class EncryptedSecretsFeature {
   masterKey: Buffer;
 
   constructor() {
-    const dbPath = process.env.AGCLAW_DB_PATH ?? path.join(process.cwd(), 'data', 'agclaw.db');
+    const dbPath = process.env.ARGENTUM_DB_PATH ?? path.join(process.cwd(), 'data', 'agclaw.db');
     this.db = new Database(dbPath);
-    const mk = process.env.AGCLAW_MASTER_KEY;
+    const mk = process.env.ARGENTUM_MASTER_KEY;
     if (!mk) {
-      throw new Error('AGCLAW_MASTER_KEY not set');
+      throw new Error('ARGENTUM_MASTER_KEY not set');
     }
     this.masterKey = Buffer.from(mk, 'hex');
     if (this.masterKey.length !== 32) {
-      throw new Error('AGCLAW_MASTER_KEY must be 32 bytes (hex)');
+      throw new Error('ARGENTUM_MASTER_KEY must be 32 bytes (hex)');
     }
     this.init();
   }
@@ -64,7 +65,7 @@ class EncryptedSecretsFeature {
     const iv = Buffer.from(row.iv, 'hex');
     const authTag = Buffer.from(row.authTag, 'hex');
     const encrypted = Buffer.from(row.encryptedValue, 'hex');
-    /* nosemgrep: javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length */
+
     const decipher = crypto.createDecipheriv('aes-256-gcm', this.masterKey, iv);
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(

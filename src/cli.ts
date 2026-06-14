@@ -43,7 +43,7 @@ import { PluginLoader } from './core/plugin-loader';
 import { startDashboardServer, stopDashboardServer } from './ui/server/index.js';
 import { discoverModels, type DiscoveredModel } from './utils/modelDiscovery.js';
 
-const VERSION = '0.0.7';
+const VERSION = '0.0.8-alpha';
 const PROGRAM_TITLE = 'Argentum';
 const PRIMARY_COMMAND = 'argentum';
 const WORKDIR_ENV = 'ARGENTUM_WORKDIR';
@@ -633,6 +633,7 @@ function cmdImage(): void {
 
   const { spawn } = require('child_process');
   const { existsSync: fsExistsSync } = require('fs');
+
   const homeDir = process.env.HOME ?? '/home/ag064';
   const scriptPath = `${homeDir}/.openclaw/workspace/skills/image-gen/scripts/generate_image.py`;
 
@@ -753,6 +754,7 @@ async function cmdLaunch(): Promise<void> {
   banner();
   success('Argentum is configured.');
   info(`Workspace: ${workDir}`);
+
   info(`Use "${PRIMARY_COMMAND} gateway start" to start the server.`);
   info(`Use "${PRIMARY_COMMAND} help" to see all commands.`);
   print('');
@@ -773,7 +775,7 @@ function cmdInit(): void {
     const defaultConfig = {
       $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
       name: 'My ARGENTUM Instance',
-      version: '0.0.7',
+      version: '0.0.8-alpha-alpha',
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -1249,6 +1251,7 @@ async function cmdSessions(): Promise<void> {
           id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New Session',
           created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
           model TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active',
+
           tags TEXT DEFAULT '[]', metadata TEXT DEFAULT '{}'
         );
         CREATE TABLE IF NOT EXISTS messages (

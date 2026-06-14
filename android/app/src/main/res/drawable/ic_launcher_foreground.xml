@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Argentum "A" letter with silver color -->
+    <path
+        android:fillColor="#C0C0C0"
+        android:pathData="M54,28L30,80h12l4,-10h16l4,10h12L54,28zM48,60l4,-12l4,12H48z"/>
+    <!-- Subtle accent line -->
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M34,82h40"
+        android:strokeWidth="2"
+        android:strokeColor="#D4AF37"/>
+</vector>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 AG064
 /**
  * Hierarchical Memory System (MemOS Pattern)
  *
@@ -79,7 +81,10 @@ const COMPACT_SIMILARITY = 0.85;
 // ---------------------------------------------------------------------------
 
 function generateId(): string {
-  return createHash('sha256').update(Date.now().toString() + Math.random().toString()).digest('hex').slice(0, 16);
+  return createHash('sha256')
+    .update(Date.now().toString() + Math.random().toString())
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function serializeTags(tags: string[]): string {
@@ -97,7 +102,10 @@ function deserializeTags(raw: string): string[] {
 // Simple content similarity using trigram overlap
 function contentSimilarity(a: string, b: string): number {
   const normalize = (s: string): string[] =>
-    s.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    s
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
   const wordsA = normalize(a);
   const wordsB = normalize(b);
   if (wordsA.length === 0 || wordsB.length === 0) return 0;
@@ -153,7 +161,8 @@ export class HierarchicalMemoryStore {
   // store
   // -------------------------------------------------------------------------
 
-  store(entry: MemoryEntry): MemoryEntry { // line 155
+  store(entry: MemoryEntry): MemoryEntry {
+    // line 155
     const now = Date.now();
     const id = entry.id || generateId();
 
@@ -206,14 +215,17 @@ export class HierarchicalMemoryStore {
         ORDER BY last_accessed DESC
         LIMIT ?
       `);
-      const rows = (stmt.all(maxResults) as DbRow[]);
+      const rows = stmt.all(maxResults) as DbRow[];
       return rows.map(this.rowToEntry);
     }
 
-    const keywords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const keywords = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
 
     const allStmt = this.db.prepare(`SELECT * FROM memory_entries ORDER BY last_accessed DESC`);
-    const rows = (allStmt.all() as DbRow[]);
+    const rows = allStmt.all() as DbRow[];
 
     const scored = rows
       .map((row) => {
@@ -251,7 +263,9 @@ export class HierarchicalMemoryStore {
   }
 
   private promoteInternal(id: string): void {
-    const row = this.db.prepare(`SELECT * FROM memory_entries WHERE id = ?`).get(id) as DbRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM memory_entries WHERE id = ?`).get(id) as
+      | DbRow
+      | undefined;
     if (!row) {
       log.warn('Promote: entry not found', { id });
       return;
@@ -278,7 +292,9 @@ export class HierarchicalMemoryStore {
   // -------------------------------------------------------------------------
 
   demote(id: string): void {
-    const row = this.db.prepare(`SELECT * FROM memory_entries WHERE id = ?`).get(id) as DbRow | undefined;
+    const row = this.db.prepare(`SELECT * FROM memory_entries WHERE id = ?`).get(id) as
+      | DbRow
+      | undefined;
     if (!row) {
       log.warn('Demote: entry not found', { id });
       return;
@@ -306,30 +322,42 @@ export class HierarchicalMemoryStore {
 
   prune(): void {
     // Remove oldest SHORT entries beyond 50
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       DELETE FROM memory_entries WHERE id IN (
         SELECT id FROM memory_entries
         WHERE tier = ?
         ORDER BY created_at ASC
         LIMIT MAX(0, (SELECT COUNT(*) FROM memory_entries WHERE tier = ?) - ?)
       )
-    `).run(MemoryTier.SHORT, MemoryTier.SHORT, SHORT_MAX);
+    `,
+      )
+      .run(MemoryTier.SHORT, MemoryTier.SHORT, SHORT_MAX);
 
     // Remove oldest MID entries beyond 500
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       DELETE FROM memory_entries WHERE id IN (
         SELECT id FROM memory_entries
         WHERE tier = ?
         ORDER BY created_at ASC
         LIMIT MAX(0, (SELECT COUNT(*) FROM memory_entries WHERE tier = ?) - ?)
       )
-    `).run(MemoryTier.MID, MemoryTier.MID, MID_MAX);
+    `,
+      )
+      .run(MemoryTier.MID, MemoryTier.MID, MID_MAX);
 
     // Demote long-term entries that dropped in importance
-    const demoteCandidates = this.db.prepare(`
+    const demoteCandidates = this.db
+      .prepare(
+        `
       SELECT id FROM memory_entries
       WHERE tier = ? AND importance < ?
-    `).all(MemoryTier.LONG, DEMOTE_IMPORTANCE) as { id: string }[];
+    `,
+      )
+      .all(MemoryTier.LONG, DEMOTE_IMPORTANCE) as { id: string }[];
 
     for (const { id } of demoteCandidates) {
       this.demote(id);
@@ -348,9 +376,9 @@ export class HierarchicalMemoryStore {
 
   compact(): void {
     for (const tier of [MemoryTier.SHORT, MemoryTier.MID, MemoryTier.LONG] as MemoryTier[]) {
-      const rows = this.db.prepare(
-        `SELECT * FROM memory_entries WHERE tier = ? ORDER BY created_at DESC`,
-      ).all(tier) as DbRow[];
+      const rows = this.db
+        .prepare(`SELECT * FROM memory_entries WHERE tier = ? ORDER BY created_at DESC`)
+        .all(tier) as DbRow[];
 
       const merged = new Set<string>();
 
@@ -368,19 +396,28 @@ export class HierarchicalMemoryStore {
 
             const updatedAccessCount = keep.access_count + remove.access_count;
             const updatedImportance = Math.max(keep.importance, remove.importance);
-            const updatedTags = Array.from(new Set([
-              ...deserializeTags(keep.tags),
-              ...deserializeTags(remove.tags),
-            ]));
+            const updatedTags = Array.from(
+              new Set([...deserializeTags(keep.tags), ...deserializeTags(remove.tags)]),
+            );
 
-            this.db.prepare(`
+            this.db
+              .prepare(
+                `
               UPDATE memory_entries
               SET access_count = ?,
                   importance = ?,
                   tags = ?,
                   last_accessed = ?
               WHERE id = ?
-            `).run(updatedAccessCount, updatedImportance, serializeTags(updatedTags), Date.now(), keep.id);
+            `,
+              )
+              .run(
+                updatedAccessCount,
+                updatedImportance,
+                serializeTags(updatedTags),
+                Date.now(),
+                keep.id,
+              );
 
             this.db.prepare(`DELETE FROM memory_entries WHERE id = ?`).run(remove.id);
 
@@ -401,26 +438,32 @@ export class HierarchicalMemoryStore {
   // -------------------------------------------------------------------------
 
   private enforceShortCap(): void {
-    const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM memory_entries WHERE tier = ?`);
+    const countStmt = this.db.prepare(
+      `SELECT COUNT(*) as count FROM memory_entries WHERE tier = ?`,
+    );
     const { count } = countStmt.get(MemoryTier.SHORT) as { count: number };
 
     if (count > SHORT_MAX) {
       const excess = count - SHORT_MAX;
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         DELETE FROM memory_entries WHERE id IN (
           SELECT id FROM memory_entries
           WHERE tier = ?
           ORDER BY created_at ASC
           LIMIT ?
         )
-      `).run(MemoryTier.SHORT, excess);
+      `,
+        )
+        .run(MemoryTier.SHORT, excess);
     }
   }
 
   private countTier(tier: MemoryTier): number {
-    const { count } = this.db.prepare(
-      `SELECT COUNT(*) as count FROM memory_entries WHERE tier = ?`,
-    ).get(tier) as { count: number };
+    const { count } = this.db
+      .prepare(`SELECT COUNT(*) as count FROM memory_entries WHERE tier = ?`)
+      .get(tier) as { count: number };
     return count;
   }
 
