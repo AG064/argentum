@@ -171,8 +171,8 @@ jobs:
             ls -la "$HOME/android-wrappers/"
             cat "$HOME/android-wrappers/aarch64-linux-android-clang"
             
-            # Use tauri android build for proper Android APK generation
-            npx tauri android build 2>&1 | tail -150
+            # Initialize Android project and build APK
+            cd src/desktop && npx tauri android init --ci 2>&1 | tail -50 && npx tauri android build 2>&1 | tail -150
             
             echo "=== Build output ==="
             find src/desktop/target -name "*.apk" 2>/dev/null | head -10
@@ -197,6 +197,7 @@ jobs:
             src/desktop/target/*/release/bundle/**/*.dmg
             src/desktop/target/*/release/bundle/**/*.apk
             src/desktop/target/*/release/bundle/android/**/*.apk
+            src/desktop/gen/android/app/build/outputs/apk/**/*.apk
 
   desktop-release:
     name: Attach desktop installers to release
