@@ -172,7 +172,7 @@ jobs:
             cat "$HOME/android-wrappers/aarch64-linux-android-clang"
             
             # Use tauri android build for proper Android APK generation
-            cd src/desktop && tauri android build 2>&1 | tail -150
+            npx tauri android build 2>&1 | tail -150
             
             echo "=== Build output ==="
             find src/desktop/target -name "*.apk" 2>/dev/null | head -10
