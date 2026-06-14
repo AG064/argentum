@@ -48,7 +48,7 @@ jobs:
           cat README.md | head -15
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "docs: update version badge to v${{ steps.version.outputs.version }}"
           file_pattern: README.md
