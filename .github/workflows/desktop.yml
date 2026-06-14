@@ -171,8 +171,8 @@ jobs:
             ls -la "$HOME/android-wrappers/"
             cat "$HOME/android-wrappers/aarch64-linux-android-clang"
             
-            # Use tauri build which properly handles Android APK generation
-            npm run desktop:build --ignore-scripts 2>&1 | tail -150
+            # Use tauri android build for proper Android APK generation
+            cd src/desktop && tauri android build 2>&1 | tail -150
             
             echo "=== Build output ==="
             find src/desktop/target -name "*.apk" 2>/dev/null | head -10
