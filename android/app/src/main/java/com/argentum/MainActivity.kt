@@ -38,6 +38,7 @@ import com.argentum.ui.theme.ArgentumTheme
 import com.argentum.viewmodel.AgentsViewModel
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.SettingsViewModel
+import com.argentum.viewmodel.SettingsViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +76,7 @@ sealed class BottomNavItem(
 
 @Composable
 fun ArgentumApp() {
-    val settingsViewModel: SettingsViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory())
     val settingsState by settingsViewModel.uiState.collectAsState()
 
     ArgentumTheme(darkTheme = settingsState.isDarkMode) {
