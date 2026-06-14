@@ -157,10 +157,14 @@ jobs:
             echo "AARCH64: $CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
             ls -la "$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER" 2>/dev/null || echo "Compiler not found"
             
-            # Build Android sidecar stub (pkg doesn't support Android, so we compile a minimal binary)
+            # Build Android sidecar stubs for ALL architectures (pkg doesn't support Android)
             mkdir -p src/desktop/binaries
             printf 'int main() { return 0; }' > /tmp/stub.c
+            # Compile stubs for all Android targets
             "$NDK_TOOLCHAIN/aarch64-linux-android24-clang" /tmp/stub.c -o src/desktop/binaries/argentum-cli-aarch64-linux-android
+            "$NDK_TOOLCHAIN/armv7a-linux-androideabi24-clang" /tmp/stub.c -o src/desktop/binaries/argentum-cli-armv7-linux-androideabi
+            "$NDK_TOOLCHAIN/i686-linux-android24-clang" /tmp/stub.c -o src/desktop/binaries/argentum-cli-i686-linux-android
+            "$NDK_TOOLCHAIN/x86_64-linux-android24-clang" /tmp/stub.c -o src/desktop/binaries/argentum-cli-x86_64-linux-android
             
             # Create minimal package.json for Android build (Gradle needs "npm run tauri" to work)
             printf '{"name":"argentum-desktop","scripts":{"tauri":"../../node_modules/.bin/tauri"}}' > src/desktop/package.json
