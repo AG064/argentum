@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Argentum" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#1A1A2E</item>
+        <item name="android:navigationBarColor">#1A1A2E</item>
+        <item name="android:windowBackground">#F5F5F5</item>
+    </style>
+</resources>
