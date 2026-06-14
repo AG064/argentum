@@ -173,8 +173,9 @@ jobs:
             cd src/desktop && npx tauri android init --ci 2>&1 | tail -50 && npx tauri android build 2>&1 | tail -150
             
             echo "=== Build output ==="
-            find src/desktop/target -name "*.apk" 2>/dev/null | head -10
-            find src/desktop/target -name "*.aab" 2>/dev/null | head -10
+            find src/desktop/target -name "*.apk" 2>/dev/null | head -10 || true
+            find src/desktop/target -name "*.aab" 2>/dev/null | head -10 || true
+            find src/desktop/gen/android -name "*.apk" 2>/dev/null | head -10 || true
           else
             npm run desktop:build --ignore-scripts -- ${{ matrix.args }}
           fi
