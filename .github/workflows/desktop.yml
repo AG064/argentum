@@ -176,6 +176,9 @@ jobs:
             printf 'int main() { return 0; }' > /tmp/stub.c
             "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --target=aarch64-linux-android21 /tmp/stub.c -o src/desktop/binaries/argentum-cli-aarch64-linux-android
             
+            # Create minimal package.json for Android build (Gradle needs "npm run tauri" to work)
+            printf '{"name":"argentum-desktop","scripts":{"tauri":"../../node_modules/.bin/tauri"}}' > src/desktop/package.json
+            
             # Initialize Android project and build APK
             cd src/desktop && npx tauri android init --ci 2>&1 | tail -50 && npx tauri android build 2>&1 | tail -150
             
