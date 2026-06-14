@@ -171,6 +171,10 @@ jobs:
             ls -la "$HOME/android-wrappers/"
             cat "$HOME/android-wrappers/aarch64-linux-android-clang"
             
+            # Build Android sidecar (needed for tauri android build)
+            mkdir -p src/desktop/binaries
+            npx --yes @yao-pkg/pkg@6.6.0 dist/cli.js --targets aarch64-linux-android --output src/desktop/binaries/argentum-cli-aarch64-linux-android --compress GZip --no-bytecode --public-packages "*" --public 2>&1 | tail -20
+            
             # Initialize Android project and build APK
             cd src/desktop && npx tauri android init --ci 2>&1 | tail -50 && npx tauri android build 2>&1 | tail -150
             
