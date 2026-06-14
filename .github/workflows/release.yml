@@ -153,17 +153,22 @@ jobs:
       - name: Upload APK to release via API
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.package.outputs.version }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          apk_file="artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk"
-          release_url=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" | \
-            python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")")
+          apk_file="artifacts/android/argentum-${VERSION}-android.apk"
+          release_url=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/releases/tags/${REF_NAME}" | \
+            python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
           echo "Release URL: $release_url"
           curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "Content-Type: application/octet-stream" \
             --data-binary "@$apk_file" \
-            "${release_url}?name=argentum-${{ steps.package.outputs.version }}-android.apk" | \
+            "${release_url}?name=argentum-${VERSION}-android.apk" | \
             python3 -c "import json,sys; d=json.load(sys.stdin); print('Uploaded:', d.get('name'), d.get('size'))"
 
   notify:
