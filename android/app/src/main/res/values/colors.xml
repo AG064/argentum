@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="silver">#C0C0C0</color>
+    <color name="silver_light">#E8E8E8</color>
+    <color name="silver_dark">#909090</color>
+    <color name="dark_blue">#1A1A2E</color>
+    <color name="darker_blue">#16213E</color>
+    <color name="midnight_blue">#0F0F1A</color>
+    <color name="argentum_gold">#D4AF37</color>
+    <color name="argentum_blue">#4A90D9</color>
+</resources>
