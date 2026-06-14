@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '20'
           cache: 'npm'
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '20'
           cache: 'npm'
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '20'
           cache: 'npm'
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '20'
           cache: 'npm'
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
 
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '22'
           cache: 'npm'
@@ -227,7 +227,7 @@ jobs:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
       
       - name: Setup Node.js
-        uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
+        uses: actions/setup-node@f4a67bbeca970f103397d3d2b9462cf787cd2980
         with:
           node-version: '20'
           cache: 'npm'
