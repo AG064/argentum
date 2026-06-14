@@ -67,9 +67,9 @@ jobs:
           echo "=== Gradle version ==="
           cd android && ./gradlew --version
           echo "=== Running unit tests ==="
-          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tail -100
+          ./gradlew testDebugUnitTest --stacktrace
           echo "=== Building debug APK ==="
-          ./gradlew assembleDebug --stacktrace 2>&1 | tail -100
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK artifact
         if: success()
@@ -77,3 +77,4 @@ jobs:
         with:
           name: argentum-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
