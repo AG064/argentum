@@ -149,24 +149,15 @@ jobs:
             mkdir -p "$HOME/android-wrappers"
             
             # Create aarch64-linux-android-clang wrapper
-            cat > "$HOME/android-wrappers/aarch64-linux-android-clang" << 'WRAPPER'
-            #!/bin/bash
-            exec "$ANDROID_NDK_ROOT"/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=aarch64-linux-android "$@"
-            WRAPPER
+            printf '#!/bin/bash\nexec "'"$ANDROID_NDK_ROOT"'/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --target=aarch64-linux-android "$@"\n' > "$HOME/android-wrappers/aarch64-linux-android-clang"
             chmod +x "$HOME/android-wrappers/aarch64-linux-android-clang"
             
             # Create aarch64-linux-android-clang++ wrapper
-            cat > "$HOME/android-wrappers/aarch64-linux-android-clang++" << 'WRAPPER'
-            #!/bin/bash
-            exec "$ANDROID_NDK_ROOT"/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=aarch64-linux-android "$@"
-            WRAPPER
+            printf '#!/bin/bash\nexec "'"$ANDROID_NDK_ROOT"'/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --target=aarch64-linux-android "$@"\n' > "$HOME/android-wrappers/aarch64-linux-android-clang++"
             chmod +x "$HOME/android-wrappers/aarch64-linux-android-clang++"
             
             # Create aarch64-linux-android-ar wrapper
-            cat > "$HOME/android-wrappers/aarch64-linux-android-ar" << 'WRAPPER'
-            #!/bin/bash
-            exec "$ANDROID_NDK_ROOT"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar "$@"
-            WRAPPER
+            printf '#!/bin/bash\nexec "'"$ANDROID_NDK_ROOT"'/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" "$@"\n' > "$HOME/android-wrappers/aarch64-linux-android-ar"
             chmod +x "$HOME/android-wrappers/aarch64-linux-android-ar"
             
             # Export paths with wrappers taking precedence
@@ -178,6 +169,7 @@ jobs:
             
             echo "=== Wrapper scripts created ==="
             ls -la "$HOME/android-wrappers/"
+            cat "$HOME/android-wrappers/aarch64-linux-android-clang"
             
             # Use tauri build which properly handles Android APK generation
             npm run desktop:build --ignore-scripts 2>&1 | tail -150
