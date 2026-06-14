@@ -29,6 +29,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Debug Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls -la $ANDROID_HOME 2>/dev/null || echo "ANDROID_HOME not found"
+          ls -la /opt/android-sdk 2>/dev/null || echo "/opt/android-sdk not found"
+          ls -la ~/android-sdk 2>/dev/null || echo "~/android-sdk not found"
+
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -54,7 +62,7 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
         working-directory: android
 
       - name: Upload APK artifact
