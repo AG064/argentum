@@ -32,6 +32,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref_name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Install executable packager
         run: npm install -g @yao-pkg/pkg@6.6.0
@@ -134,11 +135,19 @@ jobs:
           name: argentum-android-apk
           path: artifacts/android
 
+      - name: Read package version
+        id: package
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref_name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Rename APK
         shell: bash
         run: |
           cd artifacts/android
-          mv app-debug.apk argentum-${{ github.ref_name }}-android.apk
+          mv app-debug.apk argentum-${{ steps.package.outputs.version }}-android.apk
           ls -la
 
       - name: Upload to release
@@ -146,7 +155,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           tag_name: ${{ github.ref_name }}
-          files: artifacts/android/argentum-${{ github.ref_name }}-android.apk
+          files: |
+            artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
