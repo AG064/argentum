@@ -142,6 +142,7 @@ cp .env.example .env
 ```
 
 Required for development:
+
 - `OPENROUTER_API_KEY` — or `ANTHROPIC_API_KEY`
 - `ARGENTUM_PORT` — gateway port (default 18789)
 
@@ -150,6 +151,7 @@ Required for development:
 ## 3. Coding Standards
 
 Argentum uses ESLint and Prettier to maintain consistent style. Configuration files:
+
 - ESLint: [`eslint.config.mjs`](https://github.com/AG064/argentum/blob/main/eslint.config.mjs)
 - Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/main/.prettierrc)
 - Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/main/.editorconfig)
@@ -164,14 +166,14 @@ Argentum uses ESLint and Prettier to maintain consistent style. Configuration fi
 
 ### Naming Conventions
 
-| Thing | Convention | Example |
-|---|---|---|
-| Files | kebab-case | `audit-log.ts` |
-| Classes | PascalCase | `class AuditLogFeature` |
-| Interfaces | PascalCase | `interface ToolDefinition` |
-| Functions | camelCase | `function createLogger()` |
-| Constants | SCREAMING_SNAKE | `MAX_ITERATIONS` |
-| Private class members | `_underscore` | `this._logger` |
+| Thing                 | Convention      | Example                    |
+| --------------------- | --------------- | -------------------------- |
+| Files                 | kebab-case      | `audit-log.ts`             |
+| Classes               | PascalCase      | `class AuditLogFeature`    |
+| Interfaces            | PascalCase      | `interface ToolDefinition` |
+| Functions             | camelCase       | `function createLogger()`  |
+| Constants             | SCREAMING_SNAKE | `MAX_ITERATIONS`           |
+| Private class members | `_underscore`   | `this._logger`             |
 
 ### Import Order
 
@@ -204,7 +206,7 @@ Example from `audit-log`:
 ```typescript
 export default {
   name: 'audit-log',
-  version: '0.0.8-alpha',
+  version: '0.0.8',
   init() {
     this.db = new Database(dbPath);
     this.initTables();
@@ -315,6 +317,7 @@ describe('Memory store', () => {
 ### Coverage Requirements
 
 The CI pipeline requires:
+
 - **Lines**: 70% minimum
 - **Functions**: 70% minimum
 - **Branches**: 60% minimum
@@ -345,8 +348,8 @@ import * as https from 'node:https';
 
 export default {
   name: 'stock-prices',
-  version: '0.0.8-alpha',
-  dependencies: [],  // optional: list required features
+  version: '0.0.8',
+  dependencies: [], // optional: list required features
 
   init() {
     // Called once at startup. Use for setup that doesn't need config.
@@ -376,18 +379,20 @@ export interface StockPricesTool {
 const fetchPrice = (symbol: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const url = `https://api.example.com/quote/${symbol}`;
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(`${symbol}: $${json.price}`);
-        } catch {
-          reject(new Error('Failed to parse response'));
-        }
-      });
-    }).on('error', reject);
+    https
+      .get(url, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            resolve(`${symbol}: $${json.price}`);
+          } catch {
+            reject(new Error('Failed to parse response'));
+          }
+        });
+      })
+      .on('error', reject);
   });
 };
 
@@ -397,7 +402,10 @@ export const stockPricesTool = {
   parameters: {
     type: 'object',
     properties: {
-      symbol: { type: 'string', description: 'Stock ticker symbol (e.g. AAPL)' },
+      symbol: {
+        type: 'string',
+        description: 'Stock ticker symbol (e.g. AAPL)',
+      },
     },
     required: ['symbol'],
   },
@@ -440,7 +448,7 @@ describe('stock-prices feature', () => {
   it('has correct metadata', () => {
     const feature = require('../../../src/features/stock-prices').default;
     expect(feature.name).toBe('stock-prices');
-    expect(feature.version).toBe('0.0.8-alpha');
+    expect(feature.version).toBe('0.0.8');
   });
 });
 ```
@@ -455,13 +463,13 @@ Channels translate between messaging platform protocols and Argentum's internal 
 
 ```typescript
 interface Message {
-  id: string;          // Unique message ID
-  userId: string;      // Who sent it
-  chatId: string;      // Which chat/conversation
-  text: string;        // Message content
-  timestamp: number;   // Unix timestamp in ms
-  channel: string;    // 'telegram' | 'discord' | 'webchat' | ...
-  metadata?: Record<string, unknown>;  // Channel-specific data
+  id: string; // Unique message ID
+  userId: string; // Who sent it
+  chatId: string; // Which chat/conversation
+  text: string; // Message content
+  timestamp: number; // Unix timestamp in ms
+  channel: string; // 'telegram' | 'discord' | 'webchat' | ...
+  metadata?: Record<string, unknown>; // Channel-specific data
 }
 ```
 
@@ -615,7 +623,7 @@ export interface SkillContext {
 
 export async function execute(
   args: Record<string, unknown>,
-  context: SkillContext
+  context: SkillContext,
 ): Promise<void> {
   context.logger.info(`Running my-skill with args:`, args);
   // Your skill logic here
@@ -623,7 +631,7 @@ export async function execute(
 
 export const metadata = {
   name: 'my-skill',
-  version: '0.0.8-alpha',
+  version: '0.0.8',
   description: 'Does something useful',
   author: 'Your Name',
 };
@@ -640,6 +648,7 @@ Skills can be published to any registry. The current implementation supports loc
 ### Versioning
 
 Argentum uses [Semantic Versioning](https://semver.org/):
+
 - **MAJOR** — Breaking changes to the API or config schema
 - **MINOR** — New features, backward-compatible
 - **PATCH** — Bug fixes, no feature changes
@@ -671,14 +680,15 @@ All must pass before tagging.
 #### 3. Update CHANGELOG.md
 
 Add entries under `## [unreleased]` with section headers:
+
 - `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`
 
 #### 4. Commit and Tag
 
 ```bash
 git add -A
-git commit -m "Release v0.0.8-alpha"
-git tag v0.0.8-alpha
+git commit -m "Release v0.0.8"
+git tag v0.0.8
 git push --tags
 ```
 
@@ -691,7 +701,8 @@ npm publish --access public
 #### 6. Create GitHub Release
 
 Use the tag to create a GitHub Release with:
-- Release title: `v0.0.8-alpha`
+
+- Release title: `v0.0.8`
 - Description from CHANGELOG.md
 - Any special upgrade instructions
 
@@ -721,4 +732,4 @@ git push -u origin hotfix/fix-description
 
 ---
 
-*For questions about contributing, open an issue at [github.com/AG064/argentum](https://github.com/AG064/argentum).*
+_For questions about contributing, open an issue at [github.com/AG064/argentum](https://github.com/AG064/argentum)._

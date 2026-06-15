@@ -7,8 +7,10 @@ const checkOnly = process.argv.includes('--check');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const version = packageJson.version;
 
-if (!/^\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$/.test(version)) {
-  throw new Error(`package.json version must be semver (with optional pre-release suffix), got ${version}`);
+if (!/^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$/.test(version)) {
+  throw new Error(
+    `package.json version must be semver (with optional pre-release suffix), got ${version}`,
+  );
 }
 
 const vVersion = `v${version}`;
@@ -36,7 +38,10 @@ function rewriteJsonVersion(file) {
 
 function rewriteTomlVersion(file) {
   rewrite(file, (source) =>
-    source.replace(/^version = "\d+\.\d+\.\d+"/m, `version = "${version}"`),
+    source.replace(
+      /^version = "\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?"/m,
+      `version = "${version}"`,
+    ),
   );
 }
 
@@ -133,9 +138,18 @@ function rewriteVersionLines(source) {
       }
 
       return line
-        .replace(/(['"])v?0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?\1/g, (_match, quote) => `${quote}${version}${quote}`)
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, version);
+        .replace(
+          /(['"])v?0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?\1/g,
+          (_match, quote) => `${quote}${version}${quote}`,
+        )
+        .replace(
+          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          vVersion,
+        )
+        .replace(
+          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          version,
+        );
     })
     .join(newline);
 }
@@ -150,8 +164,14 @@ function rewriteDocumentationVersions(source) {
       }
 
       return line
-        .replace(/(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, vVersion)
-        .replace(/(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?(?!(?:\.\d)|\d)/g, version);
+        .replace(
+          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          vVersion,
+        )
+        .replace(
+          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          version,
+        );
     })
     .join(newline);
 }

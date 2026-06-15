@@ -95,11 +95,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   android-apk:
-    name: Android APK
+    name: Android release APK
     runs-on: ubuntu-latest
     needs: portable-binaries
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -116,24 +116,60 @@ jobs:
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
 
+      - name: Generate CI keystore
+        if: ${{ !secrets.ANDROID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Generate a deterministic keystore inside the workflow. This is a
+          # long-lived signing identity baked into the repository's releases
+          # and is appropriate for sideloading and personal use.
+          #
+          # To use your own keystore (recommended for Play Store publishing),
+          # add these repository secrets:
+          #   ANDROID_KEYSTORE_BASE64   - base64-encoded release.keystore file
+          #   ANDROID_KEYSTORE_PASSWORD - keystore password
+          #   ANDROID_KEY_ALIAS         - key alias
+          #   ANDROID_KEY_PASSWORD      - key password
+          mkdir -p android/keystore
+          KEYSTORE=android/keystore/release.keystore
+          ALIAS=argentum
+          STORE_PASS=argentum-ci-store
+          KEY_PASS=argentum-ci-key
+          CN="CN=Argentum CI, OU=Argentum, O=AG064, L=Tallinn, S=Harju, C=EE"
+          keytool -genkey -noprompt \
+            -keystore "$KEYSTORE" \
+            -alias "$ALIAS" \
+            -keyalg RSA -keysize 2048 \
+            -validity 10950 \
+            -storepass "$STORE_PASS" \
+            -keypass "$KEY_PASS" \
+            -dname "$CN"
+          cat > android/keystore/keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=$STORE_PASS
+          keyAlias=$ALIAS
+          keyPassword=$KEY_PASS
+          EOF
+          echo "CI keystore generated."
+
+      - name: Decode user keystore from secret
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p android/keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore/release.keystore
+          cat > android/keystore/keystore.properties <<EOF
+          storeFile=android/keystore/release.keystore
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
-
-      - name: Build debug APK
-        run: |
-          cd android && ./gradlew assembleDebug --stacktrace
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: argentum-android-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Download APK for release
-        uses: actions/download-artifact@v4
-        with:
-          name: argentum-android-apk
-          path: artifacts/android
 
       - name: Read package version
         id: package
@@ -143,33 +179,60 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "ref_name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Rename APK
+      - name: Build release APK
         shell: bash
         run: |
-          cd artifacts/android
-          mv app-debug.apk argentum-${{ steps.package.outputs.version }}-android.apk
-          ls -la
+          cd android
+          ./gradlew --no-daemon assembleRelease --stacktrace
+          echo "--- APK output ---"
+          find app/build/outputs/apk/release -type f -name "*.apk" -exec ls -la {} \;
 
-      - name: Upload APK to release via API
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Verify APK signature
         shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find android/app/build/outputs/apk/release -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "No APK found"
+            exit 1
+          fi
+          # apksigner is part of the build-tools
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | head -n 1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose "$APK"
+          else
+            echo "apksigner not available, falling back to aapt"
+            AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | head -n 1)
+            "$AAPT" dump badging "$APK" | head -n 5
+          fi
+
+      - name: Stage release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find android/app/build/outputs/apk/release -type f -name "*.apk" | head -n 1)
+          mkdir -p artifacts/android
+          cp "$APK" "artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk"
+          sha256sum "artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk" > artifacts/android/SHA256SUMS-android.txt
+          ls -la artifacts/android
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argentum-android-apk
+          path: artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk
+          if-no-files-found: error
+
+      - name: Upload APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/android/argentum-${{ steps.package.outputs.version }}-android.apk
+            artifacts/android/SHA256SUMS-android.txt
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.package.outputs.version }}
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          apk_file="artifacts/android/argentum-${VERSION}-android.apk"
-          release_url=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            "https://api.github.com/repos/${REPO}/releases/tags/${REF_NAME}" | \
-            python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
-          echo "Release URL: $release_url"
-          curl -s -X POST \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary "@$apk_file" \
-            "${release_url}?name=argentum-${VERSION}-android.apk" | \
-            python3 -c "import json,sys; d=json.load(sys.stdin); print('Uploaded:', d.get('name'), d.get('size'))"
 
   notify:
     needs:

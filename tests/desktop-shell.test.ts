@@ -17,7 +17,7 @@ describe('Argentum desktop shell', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.8-alpha');
+    expect(config.version).toBe('0.0.8');
     expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),

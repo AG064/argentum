@@ -73,7 +73,7 @@ interface GoalRow {
 class GoalsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'goals',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Hierarchical goal management with task linking',
     dependencies: [],
   };

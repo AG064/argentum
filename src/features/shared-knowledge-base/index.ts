@@ -67,7 +67,7 @@ interface ArticleRowId {
 class SharedKnowledgeBaseFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'shared-knowledge-base',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Shared knowledge base with full-text search and versioning',
     dependencies: [],
   };
@@ -169,9 +169,10 @@ class SharedKnowledgeBaseFeature implements FeatureModule {
   /** Get article versions */
   async getArticleVersions(id: string): Promise<ArticleVersion[]> {
     const rows = this.db
-      .prepare<[string], ArticleVersionRow>(
-        'SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC',
-      )
+      .prepare<
+        [string],
+        ArticleVersionRow
+      >('SELECT * FROM article_versions WHERE article_id = ? ORDER BY version DESC')
       .all(id);
 
     return rows.map((row) => ({

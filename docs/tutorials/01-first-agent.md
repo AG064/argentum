@@ -31,7 +31,7 @@ Verify the installation:
 
 ```bash
 argentum --version
-# 0.0.8-alpha
+# 0.0.8
 ```
 
 ---
@@ -98,7 +98,7 @@ curl http://localhost:18789/health
   "success": true,
   "data": {
     "status": "ok",
-    "version": "0.0.8-alpha",
+    "version": "0.0.8",
     "uptime": 3,
     "features": "12/59 active",
     "memory": { "semantic": 0, "knowledge_graph": 0, "sessions": 0 }

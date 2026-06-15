@@ -11,12 +11,12 @@ Argentum has a sophisticated multi-layered memory system. This tutorial covers e
 
 Argentum organizes memory into four layers, each with a specific role:
 
-| Layer | Technology | Purpose | Lifetime |
-|---|---|---|---|
-| **Session** | In-memory | Current conversation context | Until session ends |
-| **Semantic** | SQLite + FTS5 | Facts, indexed by meaning | Permanent until purged |
-| **Knowledge Graph** | SQLite + graph | Entity relationships | Permanent until purged |
-| **Markdown** | Files on disk | Human-readable reference | Permanent, file-managed |
+| Layer               | Technology     | Purpose                      | Lifetime                |
+| ------------------- | -------------- | ---------------------------- | ----------------------- |
+| **Session**         | In-memory      | Current conversation context | Until session ends      |
+| **Semantic**        | SQLite + FTS5  | Facts, indexed by meaning    | Permanent until purged  |
+| **Knowledge Graph** | SQLite + graph | Entity relationships         | Permanent until purged  |
+| **Markdown**        | Files on disk  | Human-readable reference     | Permanent, file-managed |
 
 Messages flow through all layers during processing. Understanding each one helps you use and debug the system effectively.
 
@@ -51,8 +51,8 @@ curl -X POST http://localhost:18789/chat \
   "features": {
     "sessions": {
       "enabled": true,
-      "maxHistory": 50,       // Max messages per session
-      "checkpointInterval": 5  // Persist every N messages
+      "maxHistory": 50, // Max messages per session
+      "checkpointInterval": 5 // Persist every N messages
     }
   }
 }
@@ -201,6 +201,7 @@ The agent automatically extracts entities and relations from conversations. When
 > "I work at Acme Corp"
 
 Argentum creates:
+
 - Entity: `Acme Corp` (type: organization)
 - Entity: `Alice` (type: person)
 - Relation: Alice → `works_at` → Acme Corp
@@ -247,7 +248,7 @@ curl -X POST http://localhost:18789/memory/graph/entity \
     "name": "Argentum",
     "type": "project",
     "properties": {
-      "version": "0.0.8-alpha",
+      "version": "0.0.8",
       "language": "TypeScript"
     }
   }'
@@ -314,6 +315,7 @@ Changes to this file are picked up immediately — no restart needed.
 ### How Markdown Memory Integrates
 
 The `markdown-memory` feature parses these files and injects relevant sections into the agent's context. It's particularly useful for:
+
 - Facts that should never be forgotten or compressed away
 - Manually curated context from other systems
 - Long-term goals and preferences

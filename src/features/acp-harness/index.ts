@@ -72,7 +72,7 @@ const DEFAULT_CONFIG: ACPConfig = {
 class ACPHarnessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'acp',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Agent Control Protocol harness for code execution',
     dependencies: [],
   };

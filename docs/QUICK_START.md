@@ -60,7 +60,7 @@ curl http://localhost:3000/health
 You should see:
 
 ```json
-{ "status": "ok", "version": "0.0.8-alpha", "features": "12/59 active" }
+{ "status": "ok", "version": "0.0.8", "features": "12/59 active" }
 ```
 
 ---
@@ -143,14 +143,14 @@ Edit `argentum.json` to customize your setup:
 
 Key configuration sections:
 
-| Section | Purpose |
-|---|---|
-| `server.port` | HTTP port for the gateway |
-| `model.provider` | `openrouter`, `anthropic`, or `openai` |
-| `model.defaultModel` | Which model to use |
-| `features` | Toggle 59 features on/off |
-| `channels` | Configure communication channels |
-| `security` | Rate limits, allowlists, audit logging |
+| Section              | Purpose                                |
+| -------------------- | -------------------------------------- |
+| `server.port`        | HTTP port for the gateway              |
+| `model.provider`     | `openrouter`, `anthropic`, or `openai` |
+| `model.defaultModel` | Which model to use                     |
+| `features`           | Toggle 59 features on/off              |
+| `channels`           | Configure communication channels       |
+| `security`           | Rate limits, allowlists, audit logging |
 
 After editing, restart: `argentum gateway restart`
 
@@ -273,4 +273,4 @@ argentum memory search "test"
 
 ---
 
-*Having trouble? Open an issue on [GitHub](https://github.com/AG064/argentum/issues) or ask in the community.*
+_Having trouble? Open an issue on [GitHub](https://github.com/AG064/argentum/issues) or ask in the community._

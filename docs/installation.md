@@ -75,15 +75,15 @@ Argentum will be available at `http://localhost:18789`.
 
 Download the latest Windows assets from the GitHub release page:
 
-- `Argentum_0.0.8-alpha_x64-setup.exe` for the normal GUI setup flow
-- `Argentum_0.0.8-alpha_x64_en-US.msi` for the direct Windows Installer package
-- `argentum-cli-v0.0.8-alpha-win-x64.exe` only if you want the terminal CLI
+- `Argentum_0.0.8_x64-setup.exe` for the normal GUI setup flow
+- `Argentum_0.0.8_x64_en-US.msi` for the direct Windows Installer package
+- `argentum-cli-v0.0.8-win-x64.exe` only if you want the terminal CLI
 
 The setup executable and MSI install the desktop application and create Start Menu and desktop shortcuts. The app opens the Argentum GUI; terminal commands remain available through the separate CLI binary:
 
 ```powershell
-.\argentum-cli-v0.0.8-alpha-win-x64.exe --version
-.\argentum-cli-v0.0.8-alpha-win-x64.exe onboard
+.\argentum-cli-v0.0.8-win-x64.exe --version
+.\argentum-cli-v0.0.8-win-x64.exe onboard
 ```
 
 See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.
@@ -187,11 +187,11 @@ npm run dev
 
 ### Environment Variables (`.env`)
 
-| Variable                | Description                           | Required            |
-| ----------------------- | ------------------------------------- | ------------------- |
+| Variable                  | Description                           | Required            |
+| ------------------------- | ------------------------------------- | ------------------- |
 | `ARGENTUM_TELEGRAM_TOKEN` | Telegram bot token from @BotFather    | For Telegram        |
-| `OPENROUTER_API_KEY`    | OpenRouter API key for model access   | Yes                 |
-| `ELEVENLABS_API_KEY`    | ElevenLabs key for voice features     | For voice           |
+| `OPENROUTER_API_KEY`      | OpenRouter API key for model access   | Yes                 |
+| `ELEVENLABS_API_KEY`      | ElevenLabs key for voice features     | For voice           |
 | `ARGENTUM_SUPABASE_URL`   | Supabase project URL                  | For Supabase memory |
 | `ARGENTUM_SUPABASE_KEY`   | Supabase anon/service key             | For Supabase memory |
 | `ARGENTUM_FCM_KEY`        | Firebase Cloud Messaging key          | For mobile push     |

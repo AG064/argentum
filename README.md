@@ -4,7 +4,7 @@
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
 </p>
 
-[![Version](https://img.shields.io/badge/version-v0.0.8-alpha-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.8-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12957/badge)](https://www.bestpractices.dev/projects/12957)
 [![OpenSSF Baseline](https://www.bestpractices.dev/projects/12957/baseline)](https://www.bestpractices.dev/projects/12957)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
@@ -22,7 +22,7 @@ Argentum is a local-first AI workspace. It runs on your own machine so your data
 
 **Download and run (Windows):**
 
-1. Download `Argentum_0.0.8-alpha_x64-setup.exe` from [releases](https://github.com/AG064/argentum/releases/latest)
+1. Download `Argentum_0.0.8_x64-setup.exe` from [releases](https://github.com/AG064/argentum/releases/latest)
 2. Run the installer, launch from Start Menu
 3. Follow onboarding, connect a messaging channel, start chatting
 
@@ -38,7 +38,7 @@ npm install && npm run build
 
 For most people on Windows, use the desktop installer:
 
-[Argentum_0.0.8-alpha_x64-setup.exe](https://github.com/AG064/argentum/releases/latest)
+[Argentum_0.0.8_x64-setup.exe](https://github.com/AG064/argentum/releases/latest)
 
 The setup wizard behaves like a normal Windows installer:
 
@@ -51,9 +51,9 @@ The setup wizard behaves like a normal Windows installer:
 
 After setup, launch Argentum from the Start Menu. First launch opens onboarding. After that, Argentum opens directly into the desktop app.
 
-### What Changed In v0.0.8-alpha
+### What Changed In v0.0.8
 
-v0.0.8-alpha is a desktop-focused release. It cleans up the chat surface, makes onboarding harder to get stuck in, adds the Monaspace Krypton font, keeps reasoning output separate from normal replies, and improves Telegram session handling. It also keeps the recent security cleanup from `development`.
+v0.0.8 is the first non-alpha cut of the Argentum workspace. It includes everything from `0.0.8` (cleaner chat, smoother onboarding, Monaspace Krypton, separate reasoning stream, improved Telegram session handling, recent security cleanup) plus the first-party **Argentum Android app** — a native Kotlin + Jetpack Compose client with a liquid-glass theme, onboarding flow, and full release-APK pipeline.
 
 This release also introduces the optional Argentum llama.cpp local server path. The Windows setup executable can install the local server binaries when you tick the installer checkbox; otherwise Argentum stays lightweight and the local server can be installed later from inside the app.
 
@@ -75,7 +75,7 @@ Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, external Ollama/local
 
 | Platform | Current support         | Assets                                                         | Runtime notes                                                                                                                               |
 | -------- | ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows  | Windows 10/11 x64       | `Argentum_0.0.8-alpha_x64-setup.exe`, `Argentum_0.0.8-alpha_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing.         |
+| Windows  | Windows 10/11 x64       | `Argentum_0.0.8_x64-setup.exe`, `Argentum_0.0.8_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing.         |
 | Linux    | Source-supported target | Linux desktop packages are planned for release automation      | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu 22.04+ and similar Debian/Fedora/Arch/openSUSE desktops are the intended targets. |
 | macOS    | Source-supported target | macOS DMGs are planned for release automation                  | Uses the system WKWebView. The intended targets are macOS 10.15+ on Intel and Apple Silicon.                                                |
 

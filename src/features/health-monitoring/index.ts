@@ -71,7 +71,7 @@ export interface HealthMonitoringConfig {
 class HealthMonitoringFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'health-monitoring',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'System health monitoring with metrics collection and alerts',
     dependencies: [],
   };

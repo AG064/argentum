@@ -50,7 +50,7 @@ Health check endpoint. Returns status of the gateway and all active features.
 ```json
 {
   "status": "ok",
-  "version": "0.0.8-alpha",
+  "version": "0.0.8",
   "uptime": 3600,
   "node": "v20.19.0",
   "features": {
@@ -132,13 +132,13 @@ Send a message to the agent and receive a response.
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `message` | string | Yes | The user's message |
-| `userId` | string | Yes | Unique user identifier |
-| `sessionId` | string | No | Conversation session ID (auto-generated if omitted) |
-| `channel` | string | No | Channel source (default: `api`) |
-| `context` | object | No | Additional context passed to the agent |
+| Field       | Type   | Required | Description                                         |
+| ----------- | ------ | -------- | --------------------------------------------------- |
+| `message`   | string | Yes      | The user's message                                  |
+| `userId`    | string | Yes      | Unique user identifier                              |
+| `sessionId` | string | No       | Conversation session ID (auto-generated if omitted) |
+| `channel`   | string | No       | Channel source (default: `api`)                     |
+| `context`   | object | No       | Additional context passed to the agent              |
 
 **Response `200 OK`:**
 
@@ -225,12 +225,12 @@ Search semantic memory.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `q` | string | — | Search query (required) |
-| `limit` | number | 5 | Max results |
-| `type` | string | all | Filter by type: `decision`, `lesson`, `error`, `preference`, `general` |
-| `userId` | string | all | Filter by user |
+| Parameter | Type   | Default | Description                                                            |
+| --------- | ------ | ------- | ---------------------------------------------------------------------- |
+| `q`       | string | —       | Search query (required)                                                |
+| `limit`   | number | 5       | Max results                                                            |
+| `type`    | string | all     | Filter by type: `decision`, `lesson`, `error`, `preference`, `general` |
+| `userId`  | string | all     | Filter by user                                                         |
 
 **Example:**
 
@@ -281,12 +281,12 @@ Store a new memory entry.
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | One of: `decision`, `lesson`, `error`, `preference`, `general` |
-| `content` | string | Yes | The memory content |
-| `userId` | string | No | Associated user ID |
-| `metadata` | object | No | Additional key-value metadata |
+| Field      | Type   | Required | Description                                                    |
+| ---------- | ------ | -------- | -------------------------------------------------------------- |
+| `type`     | string | Yes      | One of: `decision`, `lesson`, `error`, `preference`, `general` |
+| `content`  | string | Yes      | The memory content                                             |
+| `userId`   | string | No       | Associated user ID                                             |
+| `metadata` | object | No       | Additional key-value metadata                                  |
 
 **Response `201 Created`:**
 
@@ -311,10 +311,10 @@ Get recent memory entries.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `limit` | number | 10 | Max results (max 100) |
-| `type` | string | all | Filter by type |
+| Parameter | Type   | Default | Description           |
+| --------- | ------ | ------- | --------------------- |
+| `limit`   | number | 10      | Max results (max 100) |
+| `type`    | string | all     | Filter by type        |
 
 **Response `200 OK`:**
 
@@ -366,7 +366,13 @@ List all configured agents.
       "id": "default",
       "name": "Argentum Assistant",
       "model": "anthropic/claude-sonnet-4-20250514",
-      "tools": ["web_search", "read_file", "write_file", "run_command", "memory_search"],
+      "tools": [
+        "web_search",
+        "read_file",
+        "write_file",
+        "run_command",
+        "memory_search"
+      ],
       "status": "active"
     }
   ],
@@ -390,7 +396,13 @@ Get details of a specific agent.
   "systemPrompt": "You are a helpful AI assistant...",
   "maxIterations": 10,
   "temperature": 0.7,
-  "tools": ["web_search", "read_file", "write_file", "run_command", "memory_search"],
+  "tools": [
+    "web_search",
+    "read_file",
+    "write_file",
+    "run_command",
+    "memory_search"
+  ],
   "status": "active",
   "sessions": 1542,
   "totalMessages": 8934
@@ -407,11 +419,11 @@ List conversation sessions.
 
 **Query parameters:**
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `userId` | string | all | Filter by user |
-| `limit` | number | 20 | Max results |
-| `offset` | number | 0 | Pagination offset |
+| Parameter | Type   | Default | Description       |
+| --------- | ------ | ------- | ----------------- |
+| `userId`  | string | all     | Filter by user    |
+| `limit`   | number | 20      | Max results       |
+| `offset`  | number | 0       | Pagination offset |
 
 **Response `200 OK`:**
 
@@ -493,7 +505,7 @@ List all available features.
   "features": [
     {
       "name": "sqlite-memory",
-      "version": "0.0.8-alpha",
+      "version": "0.0.8",
       "description": "SQLite-backed semantic memory",
       "state": "active",
       "enabled": true,
@@ -501,7 +513,7 @@ List all available features.
     },
     {
       "name": "knowledge-graph",
-      "version": "0.0.8-alpha",
+      "version": "0.0.8",
       "description": "Entity relationship graph",
       "state": "active",
       "enabled": true,
@@ -551,7 +563,7 @@ Get details of a specific feature.
 ```json
 {
   "name": "sqlite-memory",
-  "version": "0.0.8-alpha",
+  "version": "0.0.8",
   "description": "SQLite-backed semantic memory",
   "state": "active",
   "enabled": true,
@@ -661,48 +673,48 @@ ws.on('open', () => {
 
 ### Client → Server Events
 
-| Event | Payload | Description |
-|---|---|---|
-| `auth` | `{ token: string }` | Authenticate the connection |
-| `chat` | `{ message: string, userId: string, sessionId?: string }` | Send a chat message |
-| `ping` | `{}` | Keepalive ping |
+| Event  | Payload                                                   | Description                 |
+| ------ | --------------------------------------------------------- | --------------------------- |
+| `auth` | `{ token: string }`                                       | Authenticate the connection |
+| `chat` | `{ message: string, userId: string, sessionId?: string }` | Send a chat message         |
+| `ping` | `{}`                                                      | Keepalive ping              |
 
 ### Server → Client Events
 
-| Event | Payload | Description |
-|---|---|---|
-| `auth_ok` | `{ userId: string }` | Authentication successful |
-| `auth_error` | `{ message: string }` | Authentication failed |
-| `chat_start` | `{ sessionId: string }` | Chat processing started |
-| `chat_token` | `{ content: string }` | Streaming response token |
-| `chat_tool_call` | `{ tool: string, arguments: object }` | Tool being executed |
-| `chat_tool_result` | `{ tool: string, result: string }` | Tool execution result |
-| `chat_done` | `{ response: string, tokens: object }` | Response complete |
-| `chat_error` | `{ message: string }` | Error during processing |
-| `pong` | `{}` | Pong response to ping |
-| `memory_updated` | `{ id: string, type: string }` | New memory stored |
-| `feature_status` | `{ name: string, state: string }` | Feature state changed |
+| Event              | Payload                                | Description               |
+| ------------------ | -------------------------------------- | ------------------------- |
+| `auth_ok`          | `{ userId: string }`                   | Authentication successful |
+| `auth_error`       | `{ message: string }`                  | Authentication failed     |
+| `chat_start`       | `{ sessionId: string }`                | Chat processing started   |
+| `chat_token`       | `{ content: string }`                  | Streaming response token  |
+| `chat_tool_call`   | `{ tool: string, arguments: object }`  | Tool being executed       |
+| `chat_tool_result` | `{ tool: string, result: string }`     | Tool execution result     |
+| `chat_done`        | `{ response: string, tokens: object }` | Response complete         |
+| `chat_error`       | `{ message: string }`                  | Error during processing   |
+| `pong`             | `{}`                                   | Pong response to ping     |
+| `memory_updated`   | `{ id: string, type: string }`         | New memory stored         |
+| `feature_status`   | `{ name: string, state: string }`      | Feature state changed     |
 
 ---
 
 ## Environment Variables
 
-| Variable | Type | Description |
-|---|---|---|
-| `OPENROUTER_API_KEY` | string | OpenRouter API key |
-| `ANTHROPIC_API_KEY` | string | Anthropic API key |
-| `OPENAI_API_KEY` | string | OpenAI API key |
-| `ARGENTUM_TELEGRAM_TOKEN` | string | Telegram bot token |
-| `ARGENTUM_FCM_KEY` | string | Firebase Cloud Messaging key |
-| `ARGENTUM_DB_PATH` | string | Path to main SQLite DB |
-| `ARGENTUM_PORT` | number | Gateway HTTP port |
-| `ARGENTUM_HOST` | string | Gateway bind address |
-| `ARGENTUM_LOG_LEVEL` | string | Log level: `debug`, `info`, `warn`, `error` |
-| `ARGENTUM_LOG_FORMAT` | string | Log format: `json`, `pretty` |
-| `ARGENTUM_API_TOKEN` | string | API authentication token |
-| `SUPABASE_URL` | string | Supabase project URL |
-| `SUPABASE_KEY` | string | Supabase anon key |
-| `ARGENTUM_SQL_LOG` | string | Set to `debug` to log SQL queries |
+| Variable                  | Type   | Description                                 |
+| ------------------------- | ------ | ------------------------------------------- |
+| `OPENROUTER_API_KEY`      | string | OpenRouter API key                          |
+| `ANTHROPIC_API_KEY`       | string | Anthropic API key                           |
+| `OPENAI_API_KEY`          | string | OpenAI API key                              |
+| `ARGENTUM_TELEGRAM_TOKEN` | string | Telegram bot token                          |
+| `ARGENTUM_FCM_KEY`        | string | Firebase Cloud Messaging key                |
+| `ARGENTUM_DB_PATH`        | string | Path to main SQLite DB                      |
+| `ARGENTUM_PORT`           | number | Gateway HTTP port                           |
+| `ARGENTUM_HOST`           | string | Gateway bind address                        |
+| `ARGENTUM_LOG_LEVEL`      | string | Log level: `debug`, `info`, `warn`, `error` |
+| `ARGENTUM_LOG_FORMAT`     | string | Log format: `json`, `pretty`                |
+| `ARGENTUM_API_TOKEN`      | string | API authentication token                    |
+| `SUPABASE_URL`            | string | Supabase project URL                        |
+| `SUPABASE_KEY`            | string | Supabase anon key                           |
+| `ARGENTUM_SQL_LOG`        | string | Set to `debug` to log SQL queries           |
 
 ---
 
@@ -714,22 +726,22 @@ All API errors return a JSON body:
 {
   "error": "ERROR_CODE",
   "message": "Human-readable description",
-  "details": { }
+  "details": {}
 }
 ```
 
-| HTTP Status | Error Code | Description |
-|---|---|---|
-| `400` | `INVALID_REQUEST` | Missing or malformed request fields |
-| `400` | `VALIDATION_ERROR` | Request passed validation but business logic rejected it |
-| `401` | `UNAUTHORIZED` | Missing or invalid authentication token |
-| `403` | `FORBIDDEN` | Authenticated but not authorized for this action |
-| `404` | `NOT_FOUND` | Resource does not exist |
-| `409` | `CONFLICT` | Resource already exists or state conflict |
-| `422` | `UNPROCESSABLE` | Request is well-formed but cannot be processed |
-| `429` | `RATE_LIMITED` | Too many requests; check `retryAfter` |
-| `500` | `INTERNAL_ERROR` | Unexpected server error |
-| `503` | `FEATURE_UNAVAILABLE` | Required feature is disabled or unhealthy |
+| HTTP Status | Error Code            | Description                                              |
+| ----------- | --------------------- | -------------------------------------------------------- |
+| `400`       | `INVALID_REQUEST`     | Missing or malformed request fields                      |
+| `400`       | `VALIDATION_ERROR`    | Request passed validation but business logic rejected it |
+| `401`       | `UNAUTHORIZED`        | Missing or invalid authentication token                  |
+| `403`       | `FORBIDDEN`           | Authenticated but not authorized for this action         |
+| `404`       | `NOT_FOUND`           | Resource does not exist                                  |
+| `409`       | `CONFLICT`            | Resource already exists or state conflict                |
+| `422`       | `UNPROCESSABLE`       | Request is well-formed but cannot be processed           |
+| `429`       | `RATE_LIMITED`        | Too many requests; check `retryAfter`                    |
+| `500`       | `INTERNAL_ERROR`      | Unexpected server error                                  |
+| `503`       | `FEATURE_UNAVAILABLE` | Required feature is disabled or unhealthy                |
 
 ---
 
@@ -769,10 +781,13 @@ interface ArgentumConfig {
   };
 
   // Feature toggles
-  features: Record<string, {
-    enabled: boolean;
-    [key: string]: unknown;
-  }>;
+  features: Record<
+    string,
+    {
+      enabled: boolean;
+      [key: string]: unknown;
+    }
+  >;
 
   // Communication channels
   channels: {

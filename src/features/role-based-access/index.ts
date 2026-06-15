@@ -61,7 +61,7 @@ interface UserRoleRow {
 class RoleBasedAccessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'role-based-access',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Manage roles and permissions for users and agents',
     dependencies: [],
   };
@@ -313,9 +313,10 @@ class RoleBasedAccessFeature implements FeatureModule {
   /** Get delegations for a user */
   async getDelegations(userId: string): Promise<DelegationRow[]> {
     const rows = this.db
-      .prepare<[string, string], DelegationRow>(
-        'SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC',
-      )
+      .prepare<
+        [string, string],
+        DelegationRow
+      >('SELECT * FROM delegations WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC')
       .all(userId, userId);
     return rows;
   }

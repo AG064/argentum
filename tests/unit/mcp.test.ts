@@ -2,7 +2,10 @@
  * Argentum MCP Server Tests
  */
 
+/* eslint-disable require-await -- test mock handlers */
+
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
+
 import { MCPServer, createTool, builtInTools } from '../src/mcp/server';
 
 describe('MCPServer', () => {
@@ -11,7 +14,7 @@ describe('MCPServer', () => {
   beforeAll(() => {
     server = new MCPServer({
       name: 'test-server',
-      version: '0.0.8-alpha-alpha',
+      version: '0.0.8',
       capabilities: {
         tools: true,
         resources: true,
@@ -27,7 +30,7 @@ describe('MCPServer', () => {
     test('should create server with config', () => {
       expect(server).toBeDefined();
       expect(server.config.name).toBe('test-server');
-      expect(server.config.version).toBe('0.0.8-alpha-alpha');
+      expect(server.config.version).toBe('0.0.8');
     });
 
     test('should report capabilities', () => {

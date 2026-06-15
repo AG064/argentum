@@ -53,7 +53,7 @@ interface InternalWatchEntry {
 class FileWatcherFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'file-watcher',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'File system monitoring with chokidar',
     dependencies: [],
   };

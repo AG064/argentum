@@ -6,12 +6,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
@@ -62,18 +57,18 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.argentum.ui.components.AnimatedButton
+import com.argentum.ui.components.GlassCard
 import com.argentum.ui.theme.CrimsonRed
-import com.argentum.ui.theme.GlassSilver
 import com.argentum.ui.theme.NearBlack
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.Message
 import com.halilib.markdown.compose.Markdown
-import com.halilib.markdown.compose.string.MarkdownRenderStyle
 import com.halilib.markdown.compose.rememberMarkdownState
 import java.util.Locale
 
@@ -85,6 +80,7 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val markdownState = rememberMarkdownState()
 
     // Voice input launcher
@@ -102,7 +98,7 @@ fun ChatScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasPermission.value = granted
-        if (granted && SpeechRecognizer.isRecognitionAvailable(requireContext())) {
+        if (granted && SpeechRecognizer.isRecognitionAvailable(context)) {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
@@ -158,22 +154,17 @@ fun ChatScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
-                        )
-                    )
-                )
-                .padding(8.dp)
         ) {
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            GlassCard(
+                modifier = Modifier.fillMaxSize(),
+                cornerRadius = 24.dp,
+                backgroundColor = MaterialTheme.colorScheme.surface,
             ) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(vertical = 12.dp, horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 items(uiState.messages, key = { it.id }) { message ->
                     MessageItem(
                         message = message,
@@ -203,26 +194,23 @@ fun ChatScreen(
                     }
                 }
             }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         // Input field with glass effect
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-                        )
-                    )
-                )
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 28.dp,
+            backgroundColor = MaterialTheme.colorScheme.surface,
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             // Voice input button
             IconButton(
                 onClick = {
@@ -285,11 +273,12 @@ fun ChatScreen(
                     imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
                     modifier = Modifier.size(24.dp),
-                    tint = if (uiState.inputText.isNotBlank() && !uiState.isLoading) 
-                        CrimsonRed 
-                    else 
+                    tint = if (uiState.inputText.isNotBlank() && !uiState.isLoading)
+                        CrimsonRed
+                    else
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
+            }
             }
         }
     }

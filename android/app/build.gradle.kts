@@ -11,21 +11,50 @@ android {
         applicationId = "com.argentum"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 8
+        versionName = "0.0.8"
 
         vectorDrawables {
             useSupportLibrary = true
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // The release APK is signed with a CI-managed keystore.
+            // See docs/ANDROID_BUILD.md for the signing flow and how to provide
+            // a custom keystore via repository secrets.
+            val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE") ?: "release.keystore"
+            val keystorePropsFile = rootProject.file("keystore.properties")
+            if (keystorePropsFile.exists()) {
+                val props = java.util.Properties().apply {
+                    load(keystorePropsFile.inputStream())
+                }
+                storeFile = file(props.getProperty("storeFile", keystoreFile))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
+                signingConfigs.getByName("release")
+            } else {
+                // Fall back to debug signing so the release workflow can still
+                // produce a signed, installable APK when no keystore is provided.
+                // The APK is fully functional for sideloading; replace with a
+                // real signing config before publishing to the Play Store.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

@@ -145,7 +145,7 @@ const DEFAULT_CONFIG: BudgetConfig = {
 class BudgetFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'budget',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description:
       'Cost control and budget management for LLM usage with per-agent and global limits',
     dependencies: [],

@@ -55,7 +55,7 @@ interface UpdateHistoryRow {
 class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Automatic updates for Argentum components with backup and rollback',
     dependencies: [],
   };
@@ -88,7 +88,7 @@ class AutoUpdateFeature implements FeatureModule {
       const pkgPath = resolve(process.cwd(), 'package.json');
       if (existsSync(pkgPath)) {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageMetadata;
-        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.8-alpha-alpha';
+        this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.8';
       } else {
         this.currentVersion = '0.0.4';
       }
@@ -407,7 +407,10 @@ class AutoUpdateFeature implements FeatureModule {
 
   private loadUpdateHistory(): void {
     const rows = this.database
-      .prepare<[], UpdateHistoryRow>('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
+      .prepare<
+        [],
+        UpdateHistoryRow
+      >('SELECT * FROM update_history ORDER BY timestamp DESC LIMIT 100')
       .all();
     this.updateHistory = rows.map((row) => ({
       version: row.version,

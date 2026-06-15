@@ -79,7 +79,7 @@ interface BudgetService {
 class CronSchedulerFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'cron-scheduler',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Cron-like job scheduler with persistent storage and custom handlers',
     dependencies: [],
   };
@@ -428,9 +428,10 @@ class CronSchedulerFeature implements FeatureModule {
       // persist any session state optionally provided by handler via running_tasks.session_state
       try {
         const row = this.db
-          .prepare<[string], RunningTaskStateRow>(
-            'SELECT session_state FROM running_tasks WHERE job_id = ?',
-          )
+          .prepare<
+            [string],
+            RunningTaskStateRow
+          >('SELECT session_state FROM running_tasks WHERE job_id = ?')
           .get(job.id);
         if (row?.session_state) {
           // store as last_error field for visibility (placeholder) or a dedicated sessions table
@@ -464,9 +465,10 @@ class CronSchedulerFeature implements FeatureModule {
 
   async getJobRuns(jobId: string, limit: number = 50): Promise<JobRun[]> {
     const rows = this.db
-      .prepare<[string, number], JobRunRow>(
-        'SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?',
-      )
+      .prepare<
+        [string, number],
+        JobRunRow
+      >('SELECT * FROM job_runs WHERE job_id = ? ORDER BY started_at DESC LIMIT ?')
       .all(jobId, limit);
 
     return rows.map((row) => ({

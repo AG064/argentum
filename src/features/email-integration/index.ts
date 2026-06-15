@@ -106,7 +106,7 @@ export interface EmailIntegrationConfig {
 class EmailIntegrationFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'email-integration',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'IMAP/SMTP email integration with encrypted credential storage',
     dependencies: [],
   };

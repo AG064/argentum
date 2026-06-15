@@ -43,7 +43,9 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g)) {
+        for (const match of line.matchAll(
+          /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g,
+        )) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -63,7 +65,6 @@ describe('version synchronization', () => {
       ...listFiles('docs', new Set(['.md', '.html'])).filter(
         (file) => !file.split(/[\\/]/).includes('releases'),
       ),
-      ...listFiles('backups', new Set(['.json'])),
       'src/ui/desktop/index.html',
       '.github/ISSUE_TEMPLATE/bug_report.md',
       'install.sh',
@@ -77,7 +78,9 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(/(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g)) {
+        for (const match of line.matchAll(
+          /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g,
+        )) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);

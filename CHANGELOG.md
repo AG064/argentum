@@ -7,11 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-06-15
+
+> **Note:** First non-alpha cut of the 0.0.8 line. Adds the Argentum Android app (Kotlin + Jetpack Compose, liquid-glass theme), a real release-APK pipeline, and a polished onboarding flow. Desktop builds remain unchanged from 0.0.8-alpha. All desktop platforms (Windows NSIS/MSI, macOS DMG x64+arm64, Linux AppImage/deb/rpm) and Android APKs are produced by the release workflow on every `v*` tag.
+
+### Added
+
+- **Argentum Android App** — first-party Android client
+  - Kotlin + Jetpack Compose, Material 3, `minSdk 26` / `targetSdk 34`
+  - Liquid-glass theme (silver/crimson Argentum palette, blur surfaces, animated highlights)
+  - Onboarding flow: welcome → provider pick → API key → ready, persisted via DataStore
+  - Chat, Settings, and (optional) Agents screens, wired to the desktop API
+  - Animated button component with press scale + haptics
+  - Unit tests for `ChatViewModel`, `SettingsViewModel`, `AgentsViewModel`
+  - See `docs/ANDROID_BUILD.md` for the full build/install/sign story
+- **Android Release Pipeline** — `release.yml` now builds and signs a release APK on every `v*` tag
+  - Asset: `argentum-v{version}-android.apk` (universal, ABI-sliced variants on request)
+  - Signing: CI-managed keystore (see Android docs); falls back to the debug key when no keystore is provided so the workflow always produces an installable artifact
+- **Desktop Build Docs** — `docs/RELEASE_PACKAGING.md` already covers Windows / macOS / Linux; the Android doc mirrors it
+- **Default Provider**: `minimax` (MiniMax-M2.7) is the first onboarding option; `openai` and `local` (llama.cpp) remain stable alternatives
+
+### Changed
+
+- **Version**: `0.0.8-alpha` → `0.0.8` (non-alpha)
+- **Android `versionName`/`versionCode`**: now mirrors the Argentum release version (`0.0.8` / `8`) instead of the placeholder `1.0.0` / `1`
+- **Tauri Windows WiX version**: `0.0.8.1` → `0.0.8` to match the product version
+
+### Fixed
+
+- **Android CI**: workflow now also produces a release APK (it previously only produced a debug APK as a CI artifact)
+- **Android signing config**: release build no longer hard-fails when no keystore is present
+
+### Known Issues
+
+- The release APK is signed with a CI-managed keystore by default. This is fine for sideloading and personal use; replace with your own keystore (see `docs/ANDROID_BUILD.md`) before publishing to the Play Store.
+- The Android `Chat` screen talks to the local agent over HTTP on the host machine. Out-of-the-box this only works on emulators and rooted/debuggable devices; see the Android docs for the secure tunneling options.
+
 ## [0.0.8-alpha] - 2026-06-10
 
-### THIS IS A PRE-RELEASE, NOT READY FOR PRODUCTION
+### THIS WAS A PRE-RELEASE. SUPERSEDED BY 0.0.8.
 
-> **Note:** This release focuses on build system fixes, internationalization (i18n), and UI/UX improvements. All desktop platforms now build successfully.
+> **Note:** This pre-release focused on build system fixes, internationalization (i18n), and UI/UX improvements. All desktop platforms built successfully.
 
 ### Added
 

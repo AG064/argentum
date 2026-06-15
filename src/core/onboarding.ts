@@ -203,7 +203,7 @@ export function createOnboardingProfile(options: OnboardingOptions = {}): Onboar
   const config: Record<string, unknown> = {
     $schema: 'https://github.com/AG064/argentum/blob/main/config-schema.json',
     name: nonEmptyTrimmed(options.name, 'My Argentum Instance'),
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     server: {
       port,
       host: '127.0.0.1',
@@ -308,10 +308,7 @@ function resolveProvider(options: OnboardingOptions): ProviderPreset {
     return {
       name: nonEmptyTrimmed(options.customProvider?.name, 'custom'),
       label: nonEmptyTrimmed(options.customProvider?.label, 'Custom'),
-      base_url: nonEmptyTrimmed(
-        options.customProvider?.base_url,
-        'https://example.invalid/v1',
-      ),
+      base_url: nonEmptyTrimmed(options.customProvider?.base_url, 'https://example.invalid/v1'),
       api_key_env: nonEmptyTrimmed(options.customProvider?.api_key_env, 'MY_API_KEY'),
       api: options.customProvider?.api ?? 'openai',
       defaultModel: nonEmptyTrimmed(
@@ -353,7 +350,9 @@ function normalizeTelegram(options?: OnboardingTelegramOptions): {
   const allowedUsers = options?.allowedUsers?.filter(Number.isFinite) ?? [];
   const allowedChats = options?.allowedChats?.filter(Number.isFinite) ?? [];
   const allowAll = options?.allowAll === true;
-  const enabled = Boolean(token && (allowAll || allowedUsers.length > 0 || allowedChats.length > 0));
+  const enabled = Boolean(
+    token && (allowAll || allowedUsers.length > 0 || allowedChats.length > 0),
+  );
 
   return {
     enabled,

@@ -94,7 +94,7 @@ interface SkillManifest {
  * ---
  * name: my-skill
  * description: Brief description
- * version: 0.0.8-alpha
+ * version: 0.0.8
  * ---
  */
 function parseFrontmatter(content: string): SkillFrontmatter | null {
@@ -154,7 +154,7 @@ function extractBody(content: string): string {
 class SkillsLoaderFeature {
   readonly meta = {
     name: 'skills-loader',
-    version: '0.0.8-alpha-alpha',
+    version: '0.0.8',
     description: 'Load OpenClaw skills with Hermes-style progressive disclosure',
     dependencies: [],
   };
@@ -304,7 +304,7 @@ class SkillsLoaderFeature {
       const frontmatter = parseFrontmatter(content) ?? {
         name,
         description: '',
-        version: '0.0.8-alpha-alpha',
+        version: '0.0.8',
       };
       const body = extractBody(content);
 

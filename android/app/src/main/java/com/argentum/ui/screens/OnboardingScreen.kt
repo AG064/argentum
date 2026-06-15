@@ -3,7 +3,6 @@ package com.argentum.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,8 +29,6 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,19 +39,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.argentum.ui.components.ArgentumLogo
+import com.argentum.ui.components.GlassButton
+import com.argentum.ui.components.GlassCard
+import com.argentum.ui.components.GlassSurface
 import com.argentum.ui.theme.CrimsonRed
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.OnboardingViewModel
@@ -84,20 +83,13 @@ fun OnboardingScreen(
 
     val totalSteps = 3
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-                    )
-                )
-            )
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    GlassSurface(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         // Progress indicator
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -203,6 +195,7 @@ fun OnboardingScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -214,6 +207,13 @@ private fun WelcomeStep(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
     ) {
+        ArgentumLogo(
+            modifier = Modifier.padding(top = 8.dp),
+            size = 120.dp,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
             text = "Argentum",
             style = MaterialTheme.typography.headlineLarge,
@@ -228,7 +228,7 @@ private fun WelcomeStep(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         Text(
             text = "Welcome! Let's set up Argentum for you.",
@@ -239,15 +239,12 @@ private fun WelcomeStep(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Dark mode toggle
-        Card(
+        // Dark mode toggle in a glass card
+        GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onToggleDarkMode() },
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-            ),
-            shape = RoundedCornerShape(12.dp)
+            cornerRadius = 18.dp,
         ) {
             Row(
                 modifier = Modifier
@@ -328,17 +325,19 @@ private fun ProviderCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                CrimsonRed.copy(alpha = 0.15f)
-            else
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-        ),
-        shape = RoundedCornerShape(12.dp)
+        cornerRadius = 18.dp,
+        backgroundColor = if (isSelected)
+            CrimsonRed.copy(alpha = 0.10f)
+        else
+            MaterialTheme.colorScheme.surface,
+        borderColor = if (isSelected)
+            CrimsonRed.copy(alpha = 0.55f)
+        else
+            Silver.copy(alpha = 0.30f),
     ) {
         Row(
             modifier = Modifier
@@ -349,11 +348,7 @@ private fun ProviderCard(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isSelected) CrimsonRed.copy(alpha = 0.2f)
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    ),
+                    .clip(CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

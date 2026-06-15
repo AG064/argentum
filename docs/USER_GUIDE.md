@@ -71,17 +71,17 @@ Argentum is built around three principles:
 
 ### Core Components
 
-| Component | File(s) | Role |
-|---|---|---|
-| **Gateway** | `src/index.ts` | HTTP server, boots all features, manages lifecycle |
-| **CLI** | `src/cli.ts` | User-facing command interface |
-| **Plugin Loader** | `src/core/plugin-loader.ts` | Discovers, loads, starts, and health-checks 59 feature modules |
-| **Agent** | `src/index.ts` (class `Agent`) | Agentic Tool Loop — orchestrates LLM + tools + memory |
-| **LLM Provider** | `src/core/llm-provider.ts` | Abstraction over OpenRouter, Anthropic, OpenAI |
-| **Memory** | `src/memory/` | Semantic search, knowledge graph, SQLite persistence |
-| **Channels** | `src/channels/` | Protocol adapters (Telegram, Discord, Webchat, SMS, Email) |
-| **Features** | `src/features/*/index.ts` | 59 individual modules |
-| **Security** | `src/security/` | Policy engine, encrypted secrets, allowlists |
+| Component         | File(s)                        | Role                                                           |
+| ----------------- | ------------------------------ | -------------------------------------------------------------- |
+| **Gateway**       | `src/index.ts`                 | HTTP server, boots all features, manages lifecycle             |
+| **CLI**           | `src/cli.ts`                   | User-facing command interface                                  |
+| **Plugin Loader** | `src/core/plugin-loader.ts`    | Discovers, loads, starts, and health-checks 59 feature modules |
+| **Agent**         | `src/index.ts` (class `Agent`) | Agentic Tool Loop — orchestrates LLM + tools + memory          |
+| **LLM Provider**  | `src/core/llm-provider.ts`     | Abstraction over OpenRouter, Anthropic, OpenAI                 |
+| **Memory**        | `src/memory/`                  | Semantic search, knowledge graph, SQLite persistence           |
+| **Channels**      | `src/channels/`                | Protocol adapters (Telegram, Discord, Webchat, SMS, Email)     |
+| **Features**      | `src/features/*/index.ts`      | 59 individual modules                                          |
+| **Security**      | `src/security/`                | Policy engine, encrypted secrets, allowlists                   |
 
 ### The Agentic Tool Loop
 
@@ -100,6 +100,7 @@ The loop runs up to 10 iterations per message to handle complex multi-step tasks
 ### Feature System
 
 Each feature is a self-contained module in `src/features/<name>/index.ts`. Features are independent and configurable. They can:
+
 - Expose tools to the LLM
 - Run background jobs on a schedule
 - React to events in the system
@@ -219,6 +220,7 @@ argentum sessions export <session-id> > session.json
 ```
 
 Sessions are useful for:
+
 - Continuing long conversations across restarts
 - Analyzing how the agent approaches certain problems
 - Auditing what information was provided to the model
@@ -236,6 +238,7 @@ argentum gateway restart
 ```
 
 Available providers:
+
 - **OpenRouter** — Recommended. Access to 100+ models including Claude, GPT-4, Llama, Mistral
 - **Anthropic** — Direct API access to Claude models
 - **OpenAI** — GPT-4, GPT-4o, GPT-3.5 Turbo
@@ -279,6 +282,7 @@ curl "http://localhost:18789/memory/search?q=Alice%20TypeScript"
 ```
 
 Key characteristics:
+
 - Automatic indexing by the `self-evolving-memory` feature
 - Entries tagged and categorized automatically
 - Configurable compression when entries exceed threshold
@@ -294,6 +298,7 @@ curl "http://localhost:18789/memory/graph?entity=alice"
 ```
 
 Example knowledge graph entry:
+
 ```
 Entity: Alice (type: person)
   - works_at: Acme Corp (type: company)
@@ -324,6 +329,7 @@ EOF
 ```
 
 Markdown files are parsed and integrated into the agent's context. This is useful for:
+
 - Manually curated facts
 - Notes from other systems
 - Information that should survive memory compression
@@ -345,6 +351,7 @@ argentum memory import memories.json
 ```
 
 The `self-evolving-memory` feature automatically:
+
 - Consolidates similar memories to save space
 - Discovers patterns in stored information
 - Applies configurable decay to low-relevance entries
@@ -359,14 +366,14 @@ Skills are reusable capability packs that extend what your agent can do. They li
 
 Argentum ships with several skills already installed:
 
-| Skill | What It Does |
-|---|---|
-| `weather` | Current weather and forecasts via wttr.in or Open-Meteo |
-| `summarize` | Summarize URLs, PDFs, images, audio, YouTube videos |
-| `gog` | Google Workspace: Gmail, Calendar, Drive, Sheets, Docs |
-| `xurl` | Twitter/X API: post, reply, search, DMs, media |
-| `himalaya` | CLI email client via IMAP/SMTP |
-| `telegram` | Telegram Bot API workflows |
+| Skill       | What It Does                                            |
+| ----------- | ------------------------------------------------------- |
+| `weather`   | Current weather and forecasts via wttr.in or Open-Meteo |
+| `summarize` | Summarize URLs, PDFs, images, audio, YouTube videos     |
+| `gog`       | Google Workspace: Gmail, Calendar, Drive, Sheets, Docs  |
+| `xurl`      | Twitter/X API: post, reply, search, DMs, media          |
+| `himalaya`  | CLI email client via IMAP/SMTP                          |
+| `telegram`  | Telegram Bot API workflows                              |
 
 ### Listing Installed Skills
 
@@ -520,6 +527,7 @@ The `content-filtering` feature scans messages and tool outputs for sensitive da
 ```
 
 It automatically redacts:
+
 - API keys and tokens
 - Credit card numbers
 - Social security numbers
@@ -551,6 +559,7 @@ docker compose up -d
 ```
 
 The Docker setup includes:
+
 - Argentum gateway container
 - Health check endpoint
 - Volume mounts for data persistence
@@ -740,11 +749,11 @@ Output:
 
 ```
 NAME                    STATUS      HEALTH        VERSION
-sqlite-memory           active      ok            0.0.8-alpha
-semantic-search         active      ok            0.0.8-alpha
-audit-log               active      ok            0.0.8-alpha
-telegram                inactive    -             0.0.8-alpha
-morning-briefing         active      ok            0.0.8-alpha
+sqlite-memory           active      ok            0.0.8
+semantic-search         active      ok            0.0.8
+audit-log               active      ok            0.0.8
+telegram                inactive    -             0.0.8
+morning-briefing         active      ok            0.0.8
 ```
 
 ---
@@ -768,16 +777,16 @@ argentum backup restore backup-2026-03-18T18-58-44
 
 Argentum backs up all critical data files:
 
-| File | Description |
-|---|---|
-| `data/argentum.db` | Main SQLite database (audit log, decisions) |
-| `data/semantic-memory.db` | Semantic memory entries |
-| `data/knowledge.db` | Knowledge graph |
-| `data/sessions.db` | Conversation sessions |
-| `data/skills-library.db` | Installed skills |
-| `data/goals.db` | Goals and decomposition |
-| `data/life-domains.db` | Life domain tracking |
-| `argentum.json` | Configuration |
+| File                      | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| `data/argentum.db`        | Main SQLite database (audit log, decisions) |
+| `data/semantic-memory.db` | Semantic memory entries                     |
+| `data/knowledge.db`       | Knowledge graph                             |
+| `data/sessions.db`        | Conversation sessions                       |
+| `data/skills-library.db`  | Installed skills                            |
+| `data/goals.db`           | Goals and decomposition                     |
+| `data/life-domains.db`    | Life domain tracking                        |
+| `argentum.json`           | Configuration                               |
 
 ### Automated Backups
 
@@ -799,22 +808,26 @@ Backups run on the schedule you specify. Old backups beyond `retentionDays` are 
 ### Disaster Recovery Procedure
 
 1. Stop the gateway cleanly:
+
    ```bash
    argentum gateway stop
    ```
 
 2. Restore files from a known-good backup:
+
    ```bash
    argentum backup restore <backup-name>
    ```
 
 3. Verify the restore:
+
    ```bash
    argentum gateway start
    curl http://localhost:18789/health
    ```
 
 4. Check session continuity:
+
    ```bash
    argentum sessions list
    ```
@@ -836,20 +849,20 @@ See the full [API Reference](./API.md) for complete REST endpoint documentation,
 
 Quick reference for common endpoints:
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/health` | GET | Health check with version and feature count |
-| `/metrics` | GET | Prometheus-compatible metrics |
-| `/chat` | POST | Send a message to the agent |
-| `/chat/stream` | POST | Streaming response (Server-Sent Events) |
-| `/memory/search` | GET | Search semantic memory |
-| `/memory/store` | POST | Store a new memory entry |
-| `/memory/graph` | GET | Query the knowledge graph |
-| `/agents` | GET/POST | List or create agents |
-| `/features` | GET | List all features with status |
-| `/features/:name` | POST | Enable or disable a feature |
-| `/config` | GET/PATCH | View or update configuration |
-| `/sessions` | GET | List recent sessions |
+| Endpoint          | Method    | Description                                 |
+| ----------------- | --------- | ------------------------------------------- |
+| `/health`         | GET       | Health check with version and feature count |
+| `/metrics`        | GET       | Prometheus-compatible metrics               |
+| `/chat`           | POST      | Send a message to the agent                 |
+| `/chat/stream`    | POST      | Streaming response (Server-Sent Events)     |
+| `/memory/search`  | GET       | Search semantic memory                      |
+| `/memory/store`   | POST      | Store a new memory entry                    |
+| `/memory/graph`   | GET       | Query the knowledge graph                   |
+| `/agents`         | GET/POST  | List or create agents                       |
+| `/features`       | GET       | List all features with status               |
+| `/features/:name` | POST      | Enable or disable a feature                 |
+| `/config`         | GET/PATCH | View or update configuration                |
+| `/sessions`       | GET       | List recent sessions                        |
 
 ---
 
@@ -859,32 +872,32 @@ Quick reference for common endpoints:
 
 ```typescript
 interface ArgentumConfig {
-  name: string;                          // Instance name
-  version: string;                       // Config format version (const: "0.0.8-alpha")
+  name: string; // Instance name
+  version: string; // Config format version (const: "0.0.8")
 
   server: {
-    port: number;                         // Gateway port (default: 18789)
-    host: string;                         // Bind address (default: 0.0.0.0)
+    port: number; // Gateway port (default: 18789)
+    host: string; // Bind address (default: 0.0.0.0)
     cors: {
       enabled: boolean;
       origins: string[];
     };
     rateLimit: {
       enabled: boolean;
-      windowMs: number;                   // Time window in ms
-      maxRequests: number;                // Max requests per window
+      windowMs: number; // Time window in ms
+      maxRequests: number; // Max requests per window
     };
     auth: {
-      token?: string;                     // Bearer token for API auth
+      token?: string; // Bearer token for API auth
     };
   };
 
   agent: {
-    name: string;                         // Display name
-    systemPrompt?: string;                 // Override default system prompt
-    maxIterations: number;                 // Max tool loop iterations (default: 10)
-    temperature: number;                  // LLM temperature 0-2 (default: 0.7)
-    tools: string[];                      // Enabled tool names
+    name: string; // Display name
+    systemPrompt?: string; // Override default system prompt
+    maxIterations: number; // Max tool loop iterations (default: 10)
+    temperature: number; // LLM temperature 0-2 (default: 0.7)
+    tools: string[]; // Enabled tool names
   };
 
   model: {
@@ -897,10 +910,13 @@ interface ArgentumConfig {
     retryDelayMs: number;
   };
 
-  features: Record<string, {
-    enabled: boolean;
-    [key: string]: unknown;
-  }>;
+  features: Record<
+    string,
+    {
+      enabled: boolean;
+      [key: string]: unknown;
+    }
+  >;
 
   channels: {
     telegram?: {
@@ -953,23 +969,23 @@ interface ArgentumConfig {
 
 ### Environment Variables
 
-| Variable | Type | Default | Description |
-|---|---|---|---|
-| `OPENROUTER_API_KEY` | string | — | OpenRouter API key (required for most models) |
-| `ANTHROPIC_API_KEY` | string | — | Anthropic API key (direct Claude access) |
-| `OPENAI_API_KEY` | string | — | OpenAI key (Whisper STT, DALL-E) |
-| `ARGENTUM_PORT` | number | `18789` | Gateway HTTP port |
-| `ARGENTUM_HOST` | string | `0.0.0.0` | Gateway bind address |
-| `ARGENTUM_DB_PATH` | string | `./data/argentum.db` | SQLite database path |
-| `ARGENTUM_CONFIG_PATH` | string | `./argentum.json` | Config file path |
-| `ARGENTUM_LOG_LEVEL` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `ARGENTUM_LOG_FORMAT` | string | `pretty` | Log format: `pretty` or `json` |
-| `ARGENTUM_TELEGRAM_TOKEN` | string | — | Telegram bot token |
-| `ARGENTUM_FCM_KEY` | string | — | Firebase Cloud Messaging key |
-| `ARGENTUM_SESSION_SECRET` | string | auto-generated | Secret for session encryption |
-| `SUPABASE_URL` | string | — | Supabase project URL |
-| `SUPABASE_KEY` | string | — | Supabase anon key |
-| `NODE_ENV` | string | `development` | Environment mode |
+| Variable                  | Type   | Default              | Description                                   |
+| ------------------------- | ------ | -------------------- | --------------------------------------------- |
+| `OPENROUTER_API_KEY`      | string | —                    | OpenRouter API key (required for most models) |
+| `ANTHROPIC_API_KEY`       | string | —                    | Anthropic API key (direct Claude access)      |
+| `OPENAI_API_KEY`          | string | —                    | OpenAI key (Whisper STT, DALL-E)              |
+| `ARGENTUM_PORT`           | number | `18789`              | Gateway HTTP port                             |
+| `ARGENTUM_HOST`           | string | `0.0.0.0`            | Gateway bind address                          |
+| `ARGENTUM_DB_PATH`        | string | `./data/argentum.db` | SQLite database path                          |
+| `ARGENTUM_CONFIG_PATH`    | string | `./argentum.json`    | Config file path                              |
+| `ARGENTUM_LOG_LEVEL`      | string | `info`               | Log level: `debug`, `info`, `warn`, `error`   |
+| `ARGENTUM_LOG_FORMAT`     | string | `pretty`             | Log format: `pretty` or `json`                |
+| `ARGENTUM_TELEGRAM_TOKEN` | string | —                    | Telegram bot token                            |
+| `ARGENTUM_FCM_KEY`        | string | —                    | Firebase Cloud Messaging key                  |
+| `ARGENTUM_SESSION_SECRET` | string | auto-generated       | Secret for session encryption                 |
+| `SUPABASE_URL`            | string | —                    | Supabase project URL                          |
+| `SUPABASE_KEY`            | string | —                    | Supabase anon key                             |
+| `NODE_ENV`                | string | `development`        | Environment mode                              |
 
 ### Hot-Reload
 
@@ -981,4 +997,4 @@ argentum gateway restart
 
 ---
 
-*For tutorials and step-by-step guides, see the [tutorials directory](./tutorials/).*
+_For tutorials and step-by-step guides, see the [tutorials directory](./tutorials/)._

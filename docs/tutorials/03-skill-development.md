@@ -1,6 +1,6 @@
 # Tutorial 3: Skill Development
 
-*Estimated time: 30 minutes*
+_Estimated time: 30 minutes_
 
 In this tutorial, you'll create a custom skill that adds new capabilities to your agent. Skills are the primary way to extend Argentum — they register tools that the agent can call during conversations.
 
@@ -11,6 +11,7 @@ In this tutorial, you'll create a custom skill that adds new capabilities to you
 A skill is a feature module that registers one or more **tools** with the agent. Tools are functions the agent can call while processing a conversation. When the agent decides a tool would help answer your question, it calls the tool and incorporates the result into its response.
 
 Example built-in tools:
+
 - `web_search` — searches the web
 - `memory_search` — searches semantic memory
 - `run_command` — executes a shell command
@@ -37,13 +38,18 @@ mkdir -p src/features/git-assistant
 Create `src/features/git-assistant/index.ts`:
 
 ```typescript
-import { FeatureModule, FeatureMeta, FeatureContext, HealthStatus } from '../../core/types';
+import {
+  FeatureModule,
+  FeatureMeta,
+  FeatureContext,
+  HealthStatus,
+} from '../../core/types';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 
 const meta: FeatureMeta = {
   name: 'git-assistant',
-  version: '0.0.8-alpha',
+  version: '0.0.8',
   description: 'Git repository assistant — status, log, branches, and more',
   dependencies: [],
 };
@@ -53,10 +59,15 @@ class GitAssistant implements FeatureModule {
   private ctx!: FeatureContext;
   private repoPath: string = process.cwd();
 
-  async init(config: Record<string, unknown>, context: FeatureContext): Promise<void> {
+  async init(
+    config: Record<string, unknown>,
+    context: FeatureContext,
+  ): Promise<void> {
     this.ctx = context;
     this.repoPath = (config.repoPath as string) ?? process.cwd();
-    this.ctx.logger.info('GitAssistant initialized', { repoPath: this.repoPath });
+    this.ctx.logger.info('GitAssistant initialized', {
+      repoPath: this.repoPath,
+    });
   }
 
   async start(): Promise<void> {
@@ -75,7 +86,9 @@ class GitAssistant implements FeatureModule {
     const isRepo = existsSync(`${this.repoPath}/.git`);
     return {
       healthy: true,
-      message: isRepo ? `Git repo at ${this.repoPath}` : `Not a git repo: ${this.repoPath}`,
+      message: isRepo
+        ? `Git repo at ${this.repoPath}`
+        : `Not a git repo: ${this.repoPath}`,
     };
   }
 
@@ -129,7 +142,8 @@ class GitAssistant implements FeatureModule {
     return [
       {
         name: 'git_status',
-        description: 'Show the current git repository status (short format). Returns modified, added, and deleted files.',
+        description:
+          'Show the current git repository status (short format). Returns modified, added, and deleted files.',
         parameters: {},
         execute: async () => this.gitStatus(),
       },
@@ -137,13 +151,18 @@ class GitAssistant implements FeatureModule {
         name: 'git_log',
         description: 'Show recent git commit history.',
         parameters: {
-          limit: { type: 'number', description: 'Number of commits to show (default: 10)', required: false },
+          limit: {
+            type: 'number',
+            description: 'Number of commits to show (default: 10)',
+            required: false,
+          },
         },
         execute: async (params) => this.gitLog((params.limit as number) ?? 10),
       },
       {
         name: 'git_branch',
-        description: 'List all local and remote git branches. Current branch is marked with an asterisk.',
+        description:
+          'List all local and remote git branches. Current branch is marked with an asterisk.',
         parameters: {},
         execute: async () => this.gitBranch(),
       },
@@ -189,7 +208,7 @@ Update `config/default.yaml`:
 features:
   git-assistant:
     enabled: false
-    repoPath: "."   # Path to the git repository
+    repoPath: '.' # Path to the git repository
 ```
 
 ### Step 5 — Enable and Test
@@ -211,6 +230,7 @@ curl -X POST http://localhost:3000/chat \
 ```
 
 Expected response:
+
 ```
 Based on the git status:
  M README.md
@@ -257,16 +277,16 @@ The description is critical — it tells the LLM when to use the tool. Be specif
 
 ```typescript
 // Bad — too vague
-description: 'Search something'
+description: 'Search something';
 
 // Good — specific
-description: 'Search the web for information. Returns titles and snippets from search results.'
+description: 'Search the web for information. Returns titles and snippets from search results.';
 
 // Good — explains input format
-description: 'Search git history. Input should be a grep pattern to match against commit messages.'
+description: 'Search git history. Input should be a grep pattern to match against commit messages.';
 
 // Good — explains output format
-description: 'List directory contents. Returns a table with columns: name, size, modified.'
+description: 'List directory contents. Returns a table with columns: name, size, modified.';
 ```
 
 ### Error Handling in Tools
@@ -282,7 +302,7 @@ execute: async (params) => {
     // Return error as string — the agent can then explain it to the user
     return `Error: ${err instanceof Error ? err.message : String(err)}`;
   }
-}
+};
 ```
 
 ---
@@ -335,7 +355,7 @@ execute: async (params) => {
     return 'Error: path parameter is required and must be a string';
   }
   // Proceed...
-}
+};
 ```
 
 ### 3. Limit Output Size
@@ -349,7 +369,7 @@ execute: async (params) => {
     return result.slice(0, 5000) + '\n... (truncated)';
   }
   return result;
-}
+};
 ```
 
 ### 4. Log Wisely
@@ -363,7 +383,7 @@ execute: async (params) => {
 
   const result = doWork(params);
   return result;
-}
+};
 ```
 
 ### 5. Always Return Strings
@@ -373,10 +393,10 @@ The tool executor expects string returns. Convert everything to strings:
 ```typescript
 execute: async (params) => {
   const num = someNumber;
-  return String(num);                    // Good
+  return String(num); // Good
   return JSON.stringify({ value: num }); // Good for structured data
-  return num;                            // Bad — must be string
-}
+  return num; // Bad — must be string
+};
 ```
 
 ---
@@ -400,13 +420,13 @@ Once your skill works, consider sharing it:
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---|---|
-| Tool not appearing | Rebuild with `npm run build` and restart the gateway |
-| Tool not called by agent | Improve the tool description — the LLM needs to understand when to use it |
-| Tool always returns error | Check `argentum gateway logs` for the actual exception |
-| Feature won't load | Run `argentum doctor` to diagnose dependency issues |
+| Problem                   | Solution                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| Tool not appearing        | Rebuild with `npm run build` and restart the gateway                      |
+| Tool not called by agent  | Improve the tool description — the LLM needs to understand when to use it |
+| Tool always returns error | Check `argentum gateway logs` for the actual exception                    |
+| Feature won't load        | Run `argentum doctor` to diagnose dependency issues                       |
 
 ---
 
-*Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues).*
+_Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues)._

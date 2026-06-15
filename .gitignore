@@ -27,7 +27,12 @@ OpenSpace/
 src/desktop/gen/
 src/desktop/target/
 src/desktop/binaries/argentum-cli-*
+src/desktop/binaries/llama.cpp/
+src/ui/desktop/llama.cpp/
 coverage/
+
+# Local caches (llama.cpp binaries, model files, scratch)
+.cache/
 
 # Dependencies
 vendor/
