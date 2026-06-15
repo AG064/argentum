@@ -85,6 +85,7 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+    val markdownState = rememberMarkdownState()
 
     // Voice input launcher
     val voiceInputLauncher = rememberLauncherForActivityResult(
@@ -175,7 +176,8 @@ fun ChatScreen(
             ) {
                 items(uiState.messages, key = { it.id }) { message ->
                     MessageItem(
-                        message = message
+                        message = message,
+                        markdownState = markdownState
                     )
                 }
 
@@ -296,10 +298,10 @@ fun ChatScreen(
 @Composable
 private fun MessageItem(
     message: Message,
+    markdownState: com.halilib.markdown.compose.MarkdownState,
     modifier: Modifier = Modifier
 ) {
     val isUser = message.isUser
-    val markdownState = rememberMarkdownState()
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -454,9 +456,4 @@ private fun ThinkingItem(
             }
         }
     }
-}
-
-@Composable
-private fun requireContext(): android.content.Context {
-    return androidx.compose.ui.platform.LocalContext.current
 }
