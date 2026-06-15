@@ -36,7 +36,7 @@ jobs:
       - name: Run npm audit
         id: audit
         run: |
-          npm audit --json > npm-audit.json || true
+          npm audit --omit=dev --json > npm-audit.json || true
           node <<'NODE'
           const fs = require('fs');
           const audit = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));

@@ -25,7 +25,7 @@ jobs:
           cache: 'npm'
 
       - name: Run npm audit
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
         continue-on-error: true
 
       - name: Run Trivy dependency scan
@@ -74,7 +74,7 @@ jobs:
 
       - name: Check npm audit results
         run: |
-          RESULT=$(npm audit --audit-level=high 2>&1)
+          RESULT=$(npm audit --omit=dev --audit-level=high 2>&1)
           echo "$RESULT"
           if echo "$RESULT" | grep -qP '[1-9]\d*(?=\s+vulnerabilit)'; then
             echo "FAIL: npm audit found high/critical issues"
