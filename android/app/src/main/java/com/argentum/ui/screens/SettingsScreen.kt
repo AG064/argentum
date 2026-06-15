@@ -16,17 +16,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Provider
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -45,9 +47,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -59,9 +58,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.argentum.ui.theme.CrimsonRed
-import com.argentum.ui.theme.GlassSilver
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.SettingsViewModel
+
+val PROVIDER_OPTIONS = listOf(
+    "minimax" to "MiniMax",
+    "openai" to "OpenAI",
+    "local" to "Local (llama.cpp)"
+)
 
 @Composable
 fun SettingsScreen(
@@ -88,8 +92,24 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // AI Provider section
+            item {
+                SectionHeader(title = "AI Provider")
+            }
+
+            item {
+                ProviderSelector(
+                    selectedProvider = uiState.selectedProvider,
+                    onProviderSelected = { provider ->
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.selectProvider(provider)
+                    }
+                )
+            }
+
             // API Configuration section
             item {
+                Spacer(modifier = Modifier.height(8.dp))
                 SectionHeader(title = "API Configuration")
             }
 
@@ -121,6 +141,58 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.selectModel(model)
                     }
+                )
+            }
+
+            // System Prompt section
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionHeader(title = "System Prompt")
+            }
+
+            item {
+                SystemPromptInput(
+                    systemPrompt = uiState.systemPrompt,
+                    onSystemPromptChange = { viewModel.updateSystemPrompt(it) }
+                )
+            }
+
+            // Local Server section
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionHeader(title = "Local Intelligence")
+            }
+
+            item {
+                LocalServerInput(
+                    localServerUrl = uiState.localServerUrl,
+                    onLocalServerUrlChange = { viewModel.updateLocalServerUrl(it) }
+                )
+            }
+
+            // Input Features section
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionHeader(title = "Input Features")
+            }
+
+            item {
+                SettingsToggleItem(
+                    icon = Icons.Default.Mic,
+                    title = "Voice Input",
+                    subtitle = "Enable speech recognition",
+                    checked = true, // TODO: connect to actual state
+                    onToggle = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    icon = Icons.Default.AttachFile,
+                    title = "File Attachments",
+                    subtitle = "Allow sending files in chat",
+                    checked = true, // TODO: connect to actual state
+                    onToggle = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
                 )
             }
 
@@ -194,6 +266,83 @@ private fun SectionHeader(
 }
 
 @Composable
+private fun ProviderSelector(
+    selectedProvider: String,
+    onProviderSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    val providerLabel = PROVIDER_OPTIONS.find { it.first == selectedProvider }?.second ?: "MiniMax"
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                expanded = true
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Provider,
+                    contentDescription = null,
+                    tint = CrimsonRed
+                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Provider",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = providerLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                PROVIDER_OPTIONS.forEach { (id, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            onProviderSelected(id)
+                            expanded = false
+                        },
+                        trailingIcon = if (id == selectedProvider) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = CrimsonRed
+                                )
+                            }
+                        } else null
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ApiKeyInput(
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
@@ -225,7 +374,7 @@ private fun ApiKeyInput(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Your MiniMax API key",
+                        text = "Your API key for selected provider",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
@@ -289,7 +438,7 @@ private fun ApiEndpointInput(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "MiniMax API server URL",
+                        text = "API server URL",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
@@ -444,6 +593,118 @@ private fun ModelSelector(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SystemPromptInput(
+    systemPrompt: String,
+    onSystemPromptChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Terminal,
+                    contentDescription = null,
+                    tint = CrimsonRed
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "System Prompt",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Custom instructions for the AI",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = systemPrompt,
+                onValueChange = onSystemPromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("You are a helpful AI assistant...") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Silver.copy(alpha = 0.5f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                minLines = 3,
+                maxLines = 6
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocalServerInput(
+    localServerUrl: String,
+    onLocalServerUrlChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Terminal,
+                    contentDescription = null,
+                    tint = CrimsonRed
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Local llama.cpp Server",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "URL for local AI inference server",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = localServerUrl,
+                onValueChange = onLocalServerUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("http://127.0.0.1:8080/v1") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Silver.copy(alpha = 0.5f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true
+            )
         }
     }
 }

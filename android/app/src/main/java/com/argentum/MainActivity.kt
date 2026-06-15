@@ -28,20 +28,23 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.argentum.ui.screens.AgentsScreen
 import com.argentum.ui.screens.ChatScreen
+import com.argentum.ui.screens.OnboardingScreen
 import com.argentum.ui.screens.SettingsScreen
 import com.argentum.ui.theme.ArgentumTheme
 import com.argentum.ui.theme.CrimsonRed
 import com.argentum.ui.theme.Silver
-import com.argentum.viewmodel.AgentsViewModel
 import com.argentum.viewmodel.ChatViewModel
+import com.argentum.viewmodel.ChatViewModelFactory
+import com.argentum.viewmodel.OnboardingViewModel
+import com.argentum.viewmodel.OnboardingViewModelFactory
 import com.argentum.viewmodel.SettingsViewModel
 import com.argentum.viewmodel.SettingsViewModelFactory
-import com.argentum.viewmodel.ChatViewModelFactory
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,12 +67,6 @@ sealed class BottomNavItem(
         unselectedIcon = Icons.Outlined.Chat
     )
 
-    data object Agents : BottomNavItem(
-        title = "Agents",
-        selectedIcon = Icons.Filled.Chat,
-        unselectedIcon = Icons.Outlined.Chat
-    )
-
     data object Settings : BottomNavItem(
         title = "Settings",
         selectedIcon = Icons.Filled.Settings,
@@ -83,40 +80,73 @@ fun ArgentumApp() {
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(context))
     val settingsState by settingsViewModel.uiState.collectAsState()
 
+    // Check onboarding status
+    val onboardingViewModel: OnboardingViewModel = viewModel(factory = OnboardingViewModelFactory(context))
+    val onboardingState by onboardingViewModel.uiState.collectAsState()
+
+    // RunBlocking to check onboarding synchronously on first composition
+    var isOnboardingComplete by remember {
+        var value = false
+        runBlocking {
+            value = settingsViewModel.isOnboardingComplete()
+        }
+        mutableIntStateOf(if (value) 1 else 0)
+    }
+
     ArgentumTheme(darkTheme = settingsState.isDarkMode) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            var selectedTab by remember { mutableIntStateOf(0) }
-
-            val navItems = listOf(
-                BottomNavItem.Chat,
-                BottomNavItem.Agents,
-                BottomNavItem.Settings
-            )
-
-            Scaffold(
-                bottomBar = {
-                    ArgentumBottomNavigation(
-                        items = navItems,
-                        selectedIndex = selectedTab,
-                        onItemSelected = { selectedTab = it }
-                    )
-                }
-            ) { paddingValues ->
-                Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    when (selectedTab) {
-                        0 -> ChatScreen(viewModel = viewModel(factory = ChatViewModelFactory(context)))
-                        1 -> AgentsScreen(viewModel = AgentsViewModel())
-                        2 -> SettingsScreen(viewModel = settingsViewModel)
+            if (isOnboardingComplete.intValue == 0 && !onboardingState.isComplete) {
+                // Show onboarding
+                OnboardingScreen(
+                    viewModel = onboardingViewModel,
+                    onComplete = {
+                        isOnboardingComplete.intValue = 1
                     }
-                }
+                )
+            } else {
+                // Show main app
+                MainContent(
+                    settingsViewModel = settingsViewModel,
+                    chatViewModel = viewModel(factory = ChatViewModelFactory(context))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainContent(
+    settingsViewModel: SettingsViewModel,
+    chatViewModel: ChatViewModel
+) {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    val navItems = listOf(
+        BottomNavItem.Chat,
+        BottomNavItem.Settings
+    )
+
+    Scaffold(
+        bottomBar = {
+            ArgentumBottomNavigation(
+                items = navItems,
+                selectedIndex = selectedTab,
+                onItemSelected = { selectedTab = it }
+            )
+        }
+    ) { paddingValues ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            when (selectedTab) {
+                0 -> ChatScreen(viewModel = chatViewModel)
+                1 -> SettingsScreen(viewModel = settingsViewModel)
             }
         }
     }

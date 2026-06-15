@@ -1,5 +1,6 @@
 package com.argentum.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.argentum.data.api.ChatMessage
@@ -20,11 +21,22 @@ data class Message(
     val isError: Boolean = false
 )
 
+data class Conversation(
+    val id: String,
+    val title: String,
+    val messages: List<Message>,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 data class ChatUiState(
     val messages: List<Message> = emptyList(),
     val inputText: String = "",
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val thinking: String = "",
+    val conversations: List<Conversation> = emptyList(),
+    val currentConversationId: String? = null
 )
 
 class ChatViewModel(
@@ -34,6 +46,17 @@ class ChatViewModel(
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    init {
+        loadConversations()
+    }
+
+    private fun loadConversations() {
+        viewModelScope.launch {
+            val savedConversations = settingsRepository.conversationsFlow.first()
+            _uiState.update { it.copy(conversations = savedConversations) }
+        }
+    }
 
     fun onInputChange(text: String) {
         _uiState.update { it.copy(inputText = text, error = null) }
@@ -48,16 +71,17 @@ class ChatViewModel(
                 messages = state.messages + Message(text = text, isUser = true),
                 inputText = "",
                 isLoading = true,
-                error = null
+                error = null,
+                thinking = ""
             )
         }
 
         viewModelScope.launch {
             try {
-                val settings = settingsRepository.darkModeFlow.first() // just need to access repo
                 val apiKey = settingsRepository.apiKeyFlow.first()
                 val endpoint = settingsRepository.apiEndpointFlow.first()
                 val model = settingsRepository.selectedModelFlow.first()
+                val systemPrompt = settingsRepository.systemPromptFlow.first()
 
                 if (apiKey.isBlank()) {
                     _uiState.update { state ->
@@ -74,10 +98,20 @@ class ChatViewModel(
                     return@launch
                 }
 
-                val chatMessages = _uiState.value.messages.map { msg ->
-                    ChatMessage(
-                        role = if (msg.isUser) "user" else "assistant",
-                        content = msg.text
+                val chatMessages = mutableListOf<ChatMessage>()
+                
+                // Add system prompt if present
+                if (systemPrompt.isNotBlank()) {
+                    chatMessages.add(ChatMessage(role = "system", content = systemPrompt))
+                }
+                
+                // Add conversation history
+                _uiState.value.messages.forEach { msg ->
+                    chatMessages.add(
+                        ChatMessage(
+                            role = if (msg.isUser) "user" else "assistant",
+                            content = msg.text
+                        )
                     )
                 }
 
@@ -96,9 +130,11 @@ class ChatViewModel(
                                     text = response,
                                     isUser = false
                                 ),
-                                isLoading = false
+                                isLoading = false,
+                                thinking = ""
                             )
                         }
+                        saveConversation()
                     },
                     onFailure = { error ->
                         _uiState.update { state ->
@@ -109,7 +145,8 @@ class ChatViewModel(
                                     isError = true
                                 ),
                                 isLoading = false,
-                                error = error.message
+                                error = error.message,
+                                thinking = ""
                             )
                         }
                     }
@@ -123,7 +160,8 @@ class ChatViewModel(
                             isError = true
                         ),
                         isLoading = false,
-                        error = e.message
+                        error = e.message,
+                        thinking = ""
                     )
                 }
             }
@@ -131,6 +169,81 @@ class ChatViewModel(
     }
 
     fun clearChat() {
-        _uiState.update { ChatUiState() }
+        _uiState.update { ChatUiState(conversations = _uiState.value.conversations) }
+    }
+
+    fun selectConversation(conversationId: String) {
+        viewModelScope.launch {
+            val conversation = _uiState.value.conversations.find { it.id == conversationId }
+            conversation?.let {
+                _uiState.update { state ->
+                    state.copy(
+                        messages = it.messages,
+                        currentConversationId = conversationId
+                    )
+                }
+            }
+        }
+    }
+
+    fun createNewConversation() {
+        _uiState.update { state ->
+            state.copy(
+                messages = emptyList(),
+                currentConversationId = null
+            )
+        }
+    }
+
+    private fun saveConversation() {
+        viewModelScope.launch {
+            val currentMessages = _uiState.value.messages
+            if (currentMessages.isEmpty()) return@launch
+
+            val title = currentMessages.firstOrNull()?.text?.take(50) ?: "New Chat"
+            val conversationId = _uiState.value.currentConversationId ?: java.util.UUID.randomUUID().toString()
+            
+            val conversation = Conversation(
+                id = conversationId,
+                title = title,
+                messages = currentMessages,
+                updatedAt = System.currentTimeMillis()
+            )
+
+            val updatedConversations = _uiState.value.conversations
+                .filter { it.id != conversationId } + conversation
+
+            settingsRepository.saveConversations(updatedConversations)
+            
+            _uiState.update { state ->
+                state.copy(
+                    conversations = updatedConversations,
+                    currentConversationId = conversationId
+                )
+            }
+        }
+    }
+
+    fun deleteConversation(conversationId: String) {
+        viewModelScope.launch {
+            val updatedConversations = _uiState.value.conversations.filter { it.id != conversationId }
+            settingsRepository.saveConversations(updatedConversations)
+            
+            _uiState.update { state ->
+                state.copy(conversations = updatedConversations)
+            }
+        }
+    }
+}
+
+class ChatViewModelFactory(
+    private val context: Context
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return ChatViewModel(
+            chatRepository = ChatRepository(),
+            settingsRepository = SettingsRepository(context)
+        ) as T
     }
 }

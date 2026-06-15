@@ -1,9 +1,17 @@
 package com.argentum.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,9 +33,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,9 +52,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,6 +72,10 @@ import com.argentum.ui.theme.NearBlack
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.Message
+import com.halilib.markdown.compose.Markdown
+import com.halilib.markdown.compose.string.MarkdownRenderStyle
+import com.halilib.markdown.compose.rememberMarkdownState
+import java.util.Locale
 
 @Composable
 fun ChatScreen(
@@ -66,6 +85,30 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+
+    // Voice input launcher
+    val voiceInputLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+        spokenText?.firstOrNull()?.let { text ->
+            viewModel.onInputChange(uiState.inputText + text)
+        }
+    }
+
+    val hasPermission = remember { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission.value = granted
+        if (granted && SpeechRecognizer.isRecognitionAvailable(requireContext())) {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            }
+            voiceInputLauncher.launch(intent)
+        }
+    }
 
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
@@ -150,6 +193,13 @@ fun ChatScreen(
                         }
                     }
                 }
+
+                // Show thinking indicator if thinking is not empty
+                if (uiState.thinking.isNotEmpty()) {
+                    item {
+                        ThinkingItem(thinking = uiState.thinking)
+                    }
+                }
             }
         }
 
@@ -171,6 +221,34 @@ fun ChatScreen(
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Voice input button
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Voice input",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            // File attachment button
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    // TODO: Implement file picker
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AttachFile,
+                    contentDescription = "Attach file",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
             OutlinedTextField(
                 value = uiState.inputText,
                 onValueChange = { viewModel.onInputChange(it) },
@@ -221,6 +299,7 @@ private fun MessageItem(
     modifier: Modifier = Modifier
 ) {
     val isUser = message.isUser
+    val markdownState = rememberMarkdownState()
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -266,18 +345,23 @@ private fun MessageItem(
             )
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isUser)
-                        MaterialTheme.colorScheme.onPrimary
-                    else if (message.isError)
-                        CrimsonRed
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1000,
-                    overflow = TextOverflow.Clip
-                )
+                if (isUser) {
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1000,
+                        overflow = TextOverflow.Clip
+                    )
+                } else {
+                    // Render markdown for AI responses
+                    Markdown(
+                        content = message.text,
+                        markdownState = markdownState,
+                        modifier = Modifier,
+                        onClickLink = { /* Handle link click */ }
+                    )
+                }
             }
         }
 
@@ -303,4 +387,76 @@ private fun MessageItem(
             }
         }
     }
+}
+
+@Composable
+private fun ThinkingItem(
+    thinking: String,
+    modifier: Modifier = Modifier
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (thinking.isNotEmpty()) 360f else 0f,
+        label = "thinkingRotation"
+    )
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(CrimsonRed.copy(alpha = 0.5f), CrimsonRed.copy(alpha = 0.3f))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(rotation),
+                strokeWidth = 2.dp,
+                color = CrimsonRed
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Card(
+            modifier = Modifier.widthIn(max = 280.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = 4.dp,
+                bottomEnd = 16.dp
+            )
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "Thinking...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CrimsonRed.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = thinking,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 100,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun requireContext(): android.content.Context {
+    return androidx.compose.ui.platform.LocalContext.current
 }
