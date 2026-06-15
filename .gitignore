@@ -16,6 +16,11 @@ artifacts/
 memory/
 logs/
 *.log
+
+# Allow the Android data package (Kotlin source) — the root `data/` is
+# for runtime/test artifacts and stays ignored.
+!android/app/src/main/java/com/argentum/data/
+!android/app/src/test/java/com/argentum/data/
 .env
 *.env.*
 agclaw-*

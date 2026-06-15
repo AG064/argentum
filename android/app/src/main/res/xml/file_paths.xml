@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Exposes the in-app download directory to the system package installer.
+        Anything placed under files/downloads/ becomes a content:// URI we can
+        hand to ACTION_INSTALL_PACKAGE.
+    -->
+    <files-path
+        name="apk_downloads"
+        path="downloads/" />
+    <cache-path
+        name="apk_cache"
+        path="downloads/" />
+</paths>

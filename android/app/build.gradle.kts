@@ -17,6 +17,12 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // BuildConfig fields used by the in-app updater. We embed the current
+        // version and the canonical releases URL so the updater doesn't need
+        // a separate config file.
+        buildConfigField("String", "GITHUB_RELEASES_URL", "\"https://api.github.com/repos/AG064/argentum/releases/latest\"")
+        buildConfigField("String", "GITHUB_RELEASES_PAGE", "\"https://github.com/AG064/argentum/releases/latest\"")
     }
 
     signingConfigs {
@@ -69,6 +75,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

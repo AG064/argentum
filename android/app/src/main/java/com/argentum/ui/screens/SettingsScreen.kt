@@ -1,5 +1,9 @@
 package com.argentum.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Key
@@ -25,10 +31,13 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Provider
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -40,6 +49,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,9 +68,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.argentum.BuildConfig
+import com.argentum.ui.components.GlassCard
 import com.argentum.ui.theme.CrimsonRed
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.SettingsViewModel
+import com.argentum.viewmodel.UpdateState
 
 val PROVIDER_OPTIONS = listOf(
     "minimax" to "MiniMax",
@@ -231,6 +245,27 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.toggleNotifications()
                     }
+                )
+            }
+
+            // Updates section
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionHeader(title = "Updates")
+            }
+
+            item {
+                UpdatesCard(
+                    updateState = uiState.updateState,
+                    onCheck = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.checkForUpdates()
+                    },
+                    onDownload = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.downloadUpdate()
+                    },
+                    onDismiss = { viewModel.dismissUpdateState() },
                 )
             }
 
@@ -710,6 +745,220 @@ private fun LocalServerInput(
 }
 
 @Composable
+private fun UpdatesCard(
+    updateState: UpdateState,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+
+    // When we have a ReadyToInstall state, fire the system installer intent once.
+    LaunchedEffect(updateState) {
+        val s = updateState
+        if (s is UpdateState.ReadyToInstall) {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(
+                    s.apkUri,
+                    "application/vnd.android.package-archive",
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(intent)
+            } catch (_: ActivityNotFoundException) {
+                // No system installer; fall back to opening the release page
+                runCatching {
+                    context.startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(BuildConfig.GITHUB_RELEASES_PAGE),
+                        )
+                    )
+                }
+            }
+            onDismiss()
+        }
+    }
+
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    tint = CrimsonRed,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Argentum updates",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Current version: ${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Status block — one of: Idle, Checking, UpToDate, Available, Downloading, Error
+            when (updateState) {
+                is UpdateState.Idle -> {
+                    Text(
+                        text = "Tap below to check for a new release on GitHub.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+                is UpdateState.Checking -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = CrimsonRed,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Checking GitHub for a new release…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+                is UpdateState.UpToDate -> {
+                    Text(
+                        text = "You're on the latest version.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+                is UpdateState.Available -> {
+                    Text(
+                        text = "Argentum v${updateState.version} is available.",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = CrimsonRed,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Size: ${humanSize(updateState.apkSize)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Button(
+                            onClick = onDownload,
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = CrimsonRed,
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Download")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse(updateState.releasePageUrl),
+                                        )
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open in browser")
+                        }
+                    }
+                }
+                is UpdateState.Downloading -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = CrimsonRed,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Downloading v${updateState.version}…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+                is UpdateState.ReadyToInstall -> {
+                    // LaunchedEffect above fires the installer intent and dismisses.
+                    Text(
+                        text = "Opening the system installer for v${updateState.version}…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+                is UpdateState.Error -> {
+                    Text(
+                        text = "Couldn't check for updates: ${updateState.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CrimsonRed,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Primary action button row
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.TextButton(
+                    onClick = onCheck,
+                    enabled = updateState !is UpdateState.Checking,
+                ) {
+                    Text(if (updateState is UpdateState.Available) "Re-check" else "Check for updates")
+                }
+                AnimatedVisibility(visible = updateState is UpdateState.Available ||
+                    updateState is UpdateState.UpToDate ||
+                    updateState is UpdateState.Error) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Dismiss")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun humanSize(bytes: Long): String {
+    if (bytes <= 0) return "—"
+    val mb = bytes.toDouble() / (1024.0 * 1024.0)
+    return if (mb < 1) "${(bytes / 1024.0).toInt()} KB" else String.format("%.1f MB", mb)
+}
+
+@Composable
 private fun AboutCard(
     modifier: Modifier = Modifier
 ) {
@@ -728,7 +977,7 @@ private fun AboutCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Version 1.0.0",
+                text = "Version ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
