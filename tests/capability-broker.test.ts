@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -18,7 +26,11 @@ describe('capability broker', () => {
 
       expect(decision.allowed).toBe(true);
       expect(decision.reason).toBe('inside-workspace');
-      expect(decision.resolvedPath).toBe(resolve(workspace, 'config', 'default.yaml'));
+      // The broker canonicalizes (realpath) the workspace, so compare against
+      // the canonical path of the directory we just created.
+      expect(decision.resolvedPath).toBe(
+        resolve(realpathSync(workspace), 'config', 'default.yaml'),
+      );
       expect(broker.getAuditEntries()).toEqual([
         expect.objectContaining({
           action: 'file.read',

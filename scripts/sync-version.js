@@ -85,7 +85,6 @@ for (const file of [
   ...listFiles('docs', new Set(['.md', '.html'])).filter(
     (file) => !file.split(/[\\/]/).includes('releases'),
   ),
-  ...listFiles('backups', new Set(['.json'])),
   '.github/ISSUE_TEMPLATE/bug_report.md',
   'install.sh',
   'README.md',
@@ -143,11 +142,11 @@ function rewriteVersionLines(source) {
           (_match, quote) => `${quote}${version}${quote}`,
         )
         .replace(
-          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
           vVersion,
         )
         .replace(
-          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
           version,
         );
     })
@@ -165,11 +164,11 @@ function rewriteDocumentationVersions(source) {
 
       return line
         .replace(
-          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
           vVersion,
         )
         .replace(
-          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?!(?:\.\d)|\d)/g,
+          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
           version,
         );
     })

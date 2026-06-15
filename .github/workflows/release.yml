@@ -131,8 +131,9 @@ jobs:
           #   ANDROID_KEYSTORE_PASSWORD - keystore password
           #   ANDROID_KEY_ALIAS         - key alias
           #   ANDROID_KEY_PASSWORD      - key password
-          mkdir -p android/keystore
-          KEYSTORE=android/keystore/release.keystore
+          cd android/app
+          mkdir -p keystore
+          KEYSTORE=keystore/release.keystore
           ALIAS=argentum
           STORE_PASS=argentum-ci-store
           KEY_PASS=argentum-ci-key
@@ -145,7 +146,7 @@ jobs:
             -storepass "$STORE_PASS" \
             -keypass "$KEY_PASS" \
             -dname "$CN"
-          cat > android/keystore/keystore.properties <<EOF
+          cat > keystore.properties <<EOF
           storeFile=$KEYSTORE
           storePassword=$STORE_PASS
           keyAlias=$ALIAS
@@ -159,10 +160,11 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          mkdir -p android/keystore
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore/release.keystore
-          cat > android/keystore/keystore.properties <<EOF
-          storeFile=android/keystore/release.keystore
+          cd android/app
+          mkdir -p keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > keystore/release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=keystore/release.keystore
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}

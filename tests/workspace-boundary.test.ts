@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { join } from 'path';
 
 import { createWorkspaceBoundary } from '../src/security/workspace-boundary';
 
@@ -14,7 +14,9 @@ describe('workspace boundary policy', () => {
 
       expect(decision.allowed).toBe(true);
       expect(decision.reason).toBe('inside-workspace');
-      expect(decision.workspaceRoot).toBe(resolve(root));
+      // The boundary canonicalizes (realpath) the root, so compare against
+      // the canonical path of the directory we just created.
+      expect(decision.workspaceRoot).toBe(realpathSync(root));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -53,9 +55,7 @@ describe('workspace boundary policy', () => {
     try {
       const boundary = createWorkspaceBoundary(root);
 
-      expect(() => boundary.assertPath(join(parent, 'secret.txt'))).toThrow(
-        /outside-workspace/,
-      );
+      expect(() => boundary.assertPath(join(parent, 'secret.txt'))).toThrow(/outside-workspace/);
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }

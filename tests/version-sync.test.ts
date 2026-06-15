@@ -31,6 +31,12 @@ describe('version synchronization', () => {
     const expectedVersion = packageJson.version;
     const mismatches: string[] = [];
 
+    // Match a version literal: 0.0.8 with optional dotted pre-release.
+    // We require the version to be followed by either end-of-line, a space,
+    // or a non-alphanumeric character (so we don't over-match).
+    const versionRe =
+      /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?)(?![-a-zA-Z0-9.]|\d)/g;
+
     for (const file of [
       ...listFiles('src', new Set(['.ts', '.js'])),
       ...listFiles('tests', new Set(['.ts', '.js'])),
@@ -43,9 +49,7 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(
-          /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g,
-        )) {
+        for (const match of line.matchAll(versionRe)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
@@ -71,6 +75,13 @@ describe('version synchronization', () => {
       'README.md',
     ].filter((file) => existsSync(file));
 
+    // Match a version literal: 0.0.8 with optional dotted pre-release.
+    // We require the version to be followed by either end-of-line, a space,
+    // or a non-alphanumeric character (so we don't over-match in things like
+    // `argentum-v0.0.8-linux-x64` where the suffix isn't a pre-release).
+    const versionRe =
+      /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?)(?![-a-zA-Z0-9.]|\d)/g;
+
     for (const file of files) {
       const source = readFileSync(file, 'utf8');
       for (const line of source.split(/\r?\n/)) {
@@ -78,9 +89,16 @@ describe('version synchronization', () => {
           continue;
         }
 
-        for (const match of line.matchAll(
-          /(?<![\d.])v?(0\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)(?!(?:\.\d)|\d)/g,
-        )) {
+        // Strip backtick-quoted code spans — these are illustrative
+        // filenames / commands, not version references.
+        const stripped = line.replace(/`[^`]*`/g, '');
+        // Strip markdown links — the URL inside [text](url) is not a
+        // version reference even if it contains one.
+        const stripped2 = stripped.replace(/\[[^\]]*\]\(([^)]+)\)/g, '');
+        // Strip inline code fences and HTML tags.
+        const cleaned = stripped2.replace(/<[^>]+>/g, '');
+
+        for (const match of cleaned.matchAll(versionRe)) {
           const version = match[1];
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);

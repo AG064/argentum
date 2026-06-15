@@ -4,7 +4,7 @@
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
 </p>
 
-[![Version](https://img.shields.io/badge/version-v0.0.8-blue.svg?style=flat-square)](https://github.com/AG064/argentum/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.8?style=flat-square)](https://github.com/AG064/argentum/releases)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12957/badge)](https://www.bestpractices.dev/projects/12957)
 [![OpenSSF Baseline](https://www.bestpractices.dev/projects/12957/baseline)](https://www.bestpractices.dev/projects/12957)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)

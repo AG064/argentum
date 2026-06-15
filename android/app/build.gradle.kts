@@ -30,13 +30,12 @@ android {
             // The release APK is signed with a CI-managed keystore.
             // See docs/ANDROID_BUILD.md for the signing flow and how to provide
             // a custom keystore via repository secrets.
-            val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE") ?: "release.keystore"
-            val keystorePropsFile = rootProject.file("keystore.properties")
+            val keystorePropsFile = file("keystore.properties")
             if (keystorePropsFile.exists()) {
                 val props = java.util.Properties().apply {
                     load(keystorePropsFile.inputStream())
                 }
-                storeFile = file(props.getProperty("storeFile", keystoreFile))
+                storeFile = file(props.getProperty("storeFile", "keystore/release.keystore"))
                 storePassword = props.getProperty("storePassword")
                 keyAlias = props.getProperty("keyAlias")
                 keyPassword = props.getProperty("keyPassword")
@@ -52,13 +51,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
+            // The release signing config is only useful when a keystore is
+            // present. Otherwise fall back to the debug keystore so local
+            // builds still produce an installable APK.
+            signingConfig = if (file("keystore.properties").exists()) {
                 signingConfigs.getByName("release")
             } else {
-                // Fall back to debug signing so the release workflow can still
-                // produce a signed, installable APK when no keystore is provided.
-                // The APK is fully functional for sideloading; replace with a
-                // real signing config before publishing to the Play Store.
                 signingConfigs.getByName("debug")
             }
         }

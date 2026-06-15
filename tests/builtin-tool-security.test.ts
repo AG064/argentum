@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -29,13 +29,15 @@ describe('built-in tool security', () => {
         path: 'nested/output.txt',
         content: 'created inside workspace',
       });
-      expect(writeResult).toContain(resolve(workspace, 'nested', 'output.txt'));
+      // The tools canonicalize (realpath) the workspace, so compare against
+      // the canonical path of the directory we just created.
+      expect(writeResult).toContain(resolve(realpathSync(workspace), 'nested', 'output.txt'));
       expect(readFileSync(join(workspace, 'nested', 'output.txt'), 'utf8')).toBe(
         'created inside workspace',
       );
-      expect(await writeFile?.execute({ path: join(sibling, 'owned.txt'), content: 'nope' })).toContain(
-        'outside the configured workspace',
-      );
+      expect(
+        await writeFile?.execute({ path: join(sibling, 'owned.txt'), content: 'nope' }),
+      ).toContain('outside the configured workspace');
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
@@ -83,7 +85,9 @@ describe('built-in tool security', () => {
         command: 'node -e "process.stdout.write(process.cwd())"',
       });
 
-      expect(resolve(output ?? '')).toBe(resolve(workspace));
+      // Canonicalize both sides so the comparison is robust to Windows
+      // symlink / junction resolution (e.g. %TEMP% realpath).
+      expect(resolve(output ?? '')).toBe(realpathSync(workspace));
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
@@ -103,8 +107,10 @@ describe('built-in tool security', () => {
       const writeFile = tools.find((tool) => tool.name === 'write_file');
       const runCommand = tools.find((tool) => tool.name === 'run_command');
 
+      // The broker canonicalizes (realpath) the workspace; compare against
+      // the canonical path on the test side too.
       expect(await writeFile?.execute({ path: 'allowed.txt', content: 'ok' })).toContain(
-        resolve(workspace, 'allowed.txt'),
+        resolve(realpathSync(workspace), 'allowed.txt'),
       );
       expect(await runCommand?.execute({ command: 'node -v' })).toContain(
         'not permitted by current capability policy',

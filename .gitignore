@@ -36,6 +36,12 @@ src/desktop/binaries/llama.cpp/
 src/ui/desktop/llama.cpp/
 coverage/
 
+# Android signing (keystore + properties are per-developer, never committed)
+android/app/keystore/
+android/app/keystore.properties
+android/local.properties
+android/.gradle/
+
 # Local caches (llama.cpp binaries, model files, scratch)
 .cache/
 

@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { isAbsolute, resolve } from 'path';
 
 const CLI = process.env.ARGENTUM_CLI ?? resolve(__dirname, '../dist/cli.js');
 const PACKAGE_VERSION = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8'))
@@ -9,8 +9,8 @@ const PACKAGE_VERSION = JSON.parse(readFileSync(resolve(__dirname, '../package.j
 function run(args: string[], env?: Record<string, string>): string {
   // Validate CLI is an absolute path to prevent arbitrary code execution
   const resolvedCLI = CLI;
-  if (!resolvedCLI.startsWith('/')) {
-    throw new Error('CLI path must be absolute');
+  if (!isAbsolute(resolvedCLI)) {
+    throw new Error(`CLI path must be absolute, got: ${resolvedCLI}`);
   }
   // Use execFileSync to avoid shell interpretation — args passed directly to node process
   const safeEnv: Record<string, string> = { ...process.env, ARGENTUM_NO_BANNER: '1' };
