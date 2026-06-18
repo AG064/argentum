@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.8] - 2026-06-15
+## [0.0.9] - 2026-06-15
 
 > **Note:** First non-alpha cut of the 0.0.8 line. Adds the Argentum Android app (Kotlin + Jetpack Compose, liquid-glass theme), a real release-APK pipeline, and a polished onboarding flow. Desktop builds remain unchanged from 0.0.8-alpha. All desktop platforms (Windows NSIS/MSI, macOS DMG x64+arm64, Linux AppImage/deb/rpm) and Android APKs are produced by the release workflow on every `v*` tag.
 

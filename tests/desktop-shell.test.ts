@@ -1026,8 +1026,10 @@ describe('Argentum desktop shell', () => {
     );
 
     expect(emptyState).toContain('${renderPromptSuggestions()}');
+    expect(emptyState).toContain('empty-state-logo');
+    expect(emptyState).toContain('data-action="tutorial"');
     expect(emptyState.indexOf('${renderPromptSuggestions()}')).toBeLessThan(
-      emptyState.indexOf('<div class="workspace-action-grid">'),
+      emptyState.indexOf('data-action="tutorial"'),
     );
     expect(composer).not.toContain('${renderPromptSuggestions()}');
     expect(composer.indexOf('<div class="conversation-composer composer">')).toBeLessThan(

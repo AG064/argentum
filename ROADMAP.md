@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Argentum v0.0.7 is released and functional. The project is actively maintained.
+Argentum v0.0.9 is in development. The project is actively maintained.
 
 ## What We Will Do
 

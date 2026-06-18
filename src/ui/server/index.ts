@@ -383,7 +383,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   if (pathname === '/health') {
     sendJSON(res, 200, {
       status: 'ok',
-      version: '0.0.8',
+      version: '0.0.9',
       uptime: process.uptime(),
       wsClients: wsClients.size,
     });

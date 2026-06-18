@@ -240,40 +240,14 @@ function renderWorkspaceEmptyState(state, provider, metadata) {
   if (hasUserMessage) return '';
 
   return `
-    <section class="workspace-empty-state fresh-conversation-hero fresh-action-grid">
-      <div class="fresh-state-mark" aria-hidden="true">
-        <span></span>
-      </div>
-      <span class="pill ok">Fresh conversation</span>
+    <section class="workspace-empty-state fresh-conversation-hero">
+      <img class="empty-state-logo" src="./assets/argentum.png" alt="Argentum" width="52" height="52" />
       <h2>Welcome to Argentum</h2>
-      <p>Start with a prompt, inspect context, or open a runtime tool. Argentum stays inside your approved workspace and permissions.</p>
+      <p>Start with a prompt below, or explore the interface to get oriented.</p>
       ${renderPromptSuggestions()}
-      <div class="workspace-action-grid">
-        <button class="workspace-action-card" data-section="security">
-          <span data-icon="shield"></span>
-          <strong>Inspect context</strong>
-          <small>Review what Argentum may see.</small>
-        </button>
-        <button class="workspace-action-card" data-section="gateway">
-          <span data-icon="terminal"></span>
-          <strong>Gateway</strong>
-          <small>Start or check local runtime.</small>
-        </button>
-        <button class="workspace-action-card" data-section="settings">
-          <span data-icon="settings"></span>
-          <strong>Provider</strong>
-          <small>${escapeHtml(provider.label)} · ${escapeHtml(metadata.contextWindow)}</small>
-        </button>
-        <button class="workspace-action-card" data-chat-option="security-policy">
-          <span data-icon="lock"></span>
-          <strong>Security</strong>
-          <small>Check approval policy.</small>
-        </button>
+      <div class="empty-state-footer">
+        <button type="button" class="btn-ghost" data-action="tutorial">Tutorial</button>
       </div>
-      <article class="fresh-helper-card">
-        <strong>${escapeHtml(state.agentName || 'Argentum')}</strong>
-        <p>I can answer normally, inspect approved app context, and help run fixed desktop actions when you ask.</p>
-      </article>
     </section>
   `;
 }
