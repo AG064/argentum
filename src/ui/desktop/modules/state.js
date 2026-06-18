@@ -203,6 +203,7 @@ export const state = {
   settingsSection: 'overview',
   uiFontFamily: fontOptions.ui[0].css,
   codeFontFamily: fontOptions.mono[0].css,
+  uiLanguage: 'en',
   accentColor: '',
   highContrastMode: false,
   updateAvailable: false,
@@ -894,6 +895,9 @@ export function hydrateUiPreferences() {
     if (typeof saved.userAvatarPath === 'string') {
       state.userAvatarPath = saved.userAvatarPath;
     }
+    if (typeof saved.uiLanguage === 'string' && saved.uiLanguage.trim()) {
+      state.uiLanguage = saved.uiLanguage;
+    }
     if (typeof saved.setupComplete === 'boolean') {
       state.setupComplete = saved.setupComplete;
       state.onboardingOpen = !saved.setupComplete;
@@ -941,6 +945,7 @@ function persistUiPreferences() {
         conversationsCollapsed: state.conversationsCollapsed,
         inspectorCollapsed: state.inspectorCollapsed,
         userAvatarPath: state.userAvatarPath,
+        uiLanguage: state.uiLanguage,
         setupComplete: state.setupComplete,
         savedConfigPath: state.savedConfigPath,
         llamaServerConfig: state.llamaServerConfig,
@@ -970,6 +975,10 @@ export function setUiPreference(key, value) {
 
   if (key === 'userAvatarPath' && typeof value === 'string') {
     state.userAvatarPath = value.trim();
+  }
+
+  if (key === 'uiLanguage' && typeof value === 'string' && value.trim()) {
+    state.uiLanguage = value.trim();
   }
 
   persistUiPreferences();

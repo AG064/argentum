@@ -1,0 +1,327 @@
+{
+  "_comment": "Argentum base locale. All keys must exist here. Other locales (et.json, etc.) are partial overrides.",
+
+  "app": {
+    "name": "Argentum",
+    "tagline": "Self-hosted modular AI agent framework"
+  },
+
+  "nav": {
+    "onboarding": "Onboarding",
+    "chat": "Chat",
+    "gateway": "Gateway",
+    "localServer": "Local Server",
+    "security": "Security & Permissions",
+    "systemDashboard": "System Dashboard",
+    "settings": "Settings",
+    "diagnostics": "Diagnostics",
+    "logs": "Activity Logs",
+    "update": "Updates"
+  },
+
+  "onboarding": {
+    "stepOf": "Step {current} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "saveAndOpen": "Save and open Argentum",
+    "cancel": "Cancel",
+    "close": "Close onboarding",
+    "stepWelcome": "Welcome",
+    "stepWorkspace": "Workspace",
+    "stepProvider": "Choose provider",
+    "stepConfigure": "Configure access",
+    "stepModel": "Choose model",
+    "stepBehavior": "Basic behavior",
+    "stepTest": "Test and start"
+  },
+
+  "chat": {
+    "placeholder": "Ask Argentum anything...",
+    "welcomeTitle": "Welcome to Argentum",
+    "welcomeDetail": "Start with a prompt below, or explore the interface to get oriented.",
+    "tutorial": "Tutorial",
+    "emptyHistory": "No messages yet",
+    "thinking": "Thinking...",
+    "send": "Send",
+    "retry": "Retry",
+    "abort": "Abort"
+  },
+
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDescription": "Choose the interface language",
+    "accentColor": "Accent color",
+    "accentColorDescription": "Pick a color for highlights and focus states",
+    "font": "Font",
+    "fontDescription": "Choose the UI and monospace fonts",
+    "securityProfile": "Security profile",
+    "securityProfileDescription": "Control how Argentum handles permission requests",
+    "contextAccess": "Context access",
+    "contextAccessDescription": "Choose what Argentum can see and act on",
+    "thinkingLevel": "Thinking level",
+    "thinkingLevelDescription": "How much reasoning effort Argentum uses",
+    "showThinking": "Show reasoning in chat",
+    "showThinkingTelegram": "Show reasoning in Telegram",
+    "channels": "Channels",
+    "channelsDescription": "Enable messaging channels",
+    "provider": "Provider",
+    "providerDescription": "LLM provider and model",
+    "apiTest": "Test provider",
+    "apiTestSuccess": "Provider test passed",
+    "apiTestFailed": "Provider test failed",
+    "apiTestPending": "Testing provider...",
+    "resetToDefaults": "Reset to defaults",
+    "save": "Save settings"
+  },
+
+  "gateway": {
+    "title": "Gateway",
+    "subtitle": "Runtime",
+    "start": "Start",
+    "stop": "Stop",
+    "status": "Status",
+    "running": "Running",
+    "stopped": "Stopped",
+    "restart": "Restart",
+    "logs": "View logs",
+    "notConfigured": "Gateway is not configured",
+    "starting": "Starting...",
+    "stopping": "Stopping...",
+    "pid": "PID",
+    "uptime": "Uptime",
+    "health": "Health"
+  },
+
+  "localServer": {
+    "title": "Local Server",
+    "subtitle": "llama.cpp",
+    "install": "Install llama.cpp",
+    "start": "Start server",
+    "stop": "Stop server",
+    "status": "Status",
+    "model": "Model",
+    "modelPath": "Model path",
+    "downloadPreset": "Download preset",
+    "downloading": "Downloading...",
+    "installing": "Installing...",
+    "ready": "Ready",
+    "notInstalled": "llama.cpp is not installed",
+    "running": "Server running",
+    "stopped": "Server stopped",
+    "description": "Argentum can run a localhost llama.cpp server from a selected GGUF file or a vetted Hugging Face download preset."
+  },
+
+  "security": {
+    "title": "Security & Permissions",
+    "subtitle": "Control",
+    "status": "Security status",
+    "approvals": "Review approvals",
+    "policy": "Policy",
+    "restricted": "Restricted workspace",
+    "askEveryTime": "Ask every time",
+    "sessionGrants": "Session grants",
+    "trusted": "Trusted mode",
+    "audit": "Audit trail",
+    "noApprovals": "No pending approvals"
+  },
+
+  "diagnostics": {
+    "title": "Diagnostics",
+    "subtitle": "Doctor",
+    "run": "Run diagnostics",
+    "running": "Running diagnostics...",
+    "ok": "All checks passed",
+    "issuesFound": "{count} issue(s) found",
+    "configHealth": "Config health",
+    "dataFolders": "Data folders",
+    "nativeDeps": "Native dependencies",
+    "noIssues": "No issues found"
+  },
+
+  "logs": {
+    "title": "Activity Logs",
+    "subtitle": "Timeline",
+    "refresh": "Refresh",
+    "clear": "Clear",
+    "download": "Download",
+    "noEntries": "No log entries yet",
+    "filter": "Filter logs...",
+    "eventLog": "Activity event log",
+    "events": "{count} events"
+  },
+
+  "update": {
+    "title": "Updates",
+    "subtitle": "New version",
+    "check": "Check for updates",
+    "checking": "Checking...",
+    "upToDate": "You are on the latest version",
+    "available": "Version {version} is available",
+    "download": "Download update",
+    "install": "Install and restart",
+    "autoUpdate": "Automatic updates",
+    "currentVersion": "Current version",
+    "releaseNotes": "Release notes"
+  },
+
+  "systemDashboard": {
+    "title": "Argentum System Dashboard",
+    "subtitle": "System",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "network": "Network",
+    "gpu": "GPU",
+    "temperature": "Temperature",
+    "uptime": "Uptime",
+    "processes": "Processes",
+    "refresh": "Refresh",
+    "loading": "Loading system data..."
+  },
+
+  "notifications": {
+    "dismiss": "Dismiss notification",
+    "settingsSaved": "Settings saved",
+    "providerConfigured": "Provider configured",
+    "workspaceSet": "Workspace set to {path}",
+    "updateAvailable": "Update available: {version}",
+    "error": "An error occurred"
+  },
+
+  "errors": {
+    "notFound": "Not found",
+    "networkError": "Network error — check your connection",
+    "providerError": "Provider error: {message}",
+    "unauthorized": "Unauthorized",
+    "forbidden": "Forbidden",
+    "serverError": "Server error",
+    "timeout": "Request timed out",
+    "workspaceNotSet": "Workspace is not set",
+    "noMessages": "No messages to display"
+  },
+
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "copy": "Copy",
+    "loading": "Loading...",
+    "error": "Error",
+    "warning": "Warning",
+    "success": "Success",
+    "info": "Info",
+    "yes": "Yes",
+    "no": "No",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "skip": "Skip",
+    "retry": "Retry",
+    "unknown": "Unknown",
+    "none": "None",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "active": "Active",
+    "inactive": "Inactive",
+    "open": "Open",
+    "start": "Start",
+    "stop": "Stop",
+    "restart": "Restart",
+    "refresh": "Refresh",
+    "download": "Download",
+    "upload": "Upload",
+    "search": "Search...",
+    "filter": "Filter...",
+    "clear": "Clear",
+    "reset": "Reset",
+    "apply": "Apply",
+    "select": "Select...",
+    "selected": "Selected",
+    "notSet": "Not set",
+    "unknownRemaining": "unknown remaining",
+    "usageUnavailable": "Usage unavailable from provider",
+    "usageProviderUnavailable": "Usage is unavailable until a provider test or chat response returns limits."
+  },
+
+  "experience": {
+    "beginner": "Beginner",
+    "beginnerDetail": "Explain each choice",
+    "comfortable": "Intermediate",
+    "comfortableDetail": "Balanced guidance",
+    "expert": "Expert",
+    "expertDetail": "Show the controls"
+  },
+
+  "runtimeMode": {
+    "desktop": "Desktop app",
+    "desktopDetail": "GUI first, CLI included",
+    "cli": "CLI tools",
+    "cliDetail": "Terminal-first workflow",
+    "service": "Local service",
+    "serviceDetail": "Service with desktop control"
+  },
+
+  "thinkingLevels": {
+    "fast": "Fast",
+    "fastDetail": "Shorter replies, lower latency, lighter reasoning.",
+    "balanced": "Balanced",
+    "balancedDetail": "Good default for everyday planning, chat, and implementation.",
+    "deep": "Deep",
+    "deepDetail": "More careful reasoning for ambiguous, risky, or multi-step work."
+  },
+
+  "contextAccess": {
+    "workspaceSummary": "Workspace summary",
+    "workspaceSummaryDetail": "Argentum may see the selected workspace path, config health, gateway state, and high-level project status.",
+    "profile": "Profile details",
+    "profileDetail": "Argentum may use your name, the agent name, and the system prompt you write during setup.",
+    "logs": "Logs and diagnostics",
+    "logsDetail": "Argentum may summarize redacted gateway logs, diagnostics, and audit status. Secrets stay hidden.",
+    "toolState": "Tool and permission state",
+    "toolStateDetail": "Argentum may see which local capabilities are allowed, blocked, or waiting for approval.",
+    "systemDashboard": "Live system dashboard",
+    "systemDashboardDetail": "Argentum may collect local CPU, memory, process, disk, network, temperature, and GPU telemetry while the dashboard tab is open.",
+    "localServer": "Local llama.cpp server",
+    "localServerDetail": "Argentum may see and control the bundled or workspace-provided llama.cpp server process, endpoint, model path, and redacted logs."
+  },
+
+  "channelStatus": {
+    "local": "Local app",
+    "localDetail": "The desktop app can work inside the selected workspace folder even when every outside channel is off.",
+    "webchat": "Webchat",
+    "webchatDetail": "Expose a local browser chat after you set an auth token and port.",
+    "telegram": "Telegram",
+    "telegramDetail": "Connect a Telegram bot only for allowed users or chats.",
+    "whatsapp": "WhatsApp",
+    "whatsappDetail": "Selectable as a channel choice, but full Business API webhook setup may still be required."
+  },
+
+  "securityProfiles": {
+    "restricted": "Restricted workspace",
+    "restrictedDetail": "Argentum can read and write only inside the selected workspace folder unless you approve more.",
+    "ask": "Ask every time",
+    "askDetail": "Every shell, network, browser, OS, or external folder action asks before it runs.",
+    "session": "Session grants",
+    "sessionDetail": "You can grant a capability for the current session, then it expires.",
+    "trusted": "Trusted mode",
+    "trustedDetail": "Fewer prompts for power users. Still audited, but not recommended as the first profile."
+  },
+
+  "providers": {
+    "openai": "ChatGPT / OpenAI",
+    "anthropic": "Anthropic Claude",
+    "google": "Google Gemini",
+    "openrouter": "OpenRouter",
+    "nvidia": "NVIDIA",
+    "groq": "Groq",
+    "minimax": "MiniMax",
+    "local": "LM Studio / local",
+    "llamaCpp": "Argentum llama.cpp",
+    "ollama": "Ollama / local",
+    "custom": "Custom endpoint"
+  }
+}

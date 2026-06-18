@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.9] - 2026-06-15
+## [0.0.9] - 2026-06-18
+
+### Added
+
+- **i18n infrastructure** — full internationalization system
+  - `src/i18n/index.js` — locale core: `t()` translation, `setLocale`/`getLocale`, `formatNumber`, `formatDate`, `formatRelativeTime`, `textDirection`
+  - `src/i18n/en.json` — English base locale (all user-facing strings)
+  - `src/i18n/et.json` — Estonian locale (partial override)
+  - Language picker in Settings → Appearance (English, Eesti)
+  - RTL infrastructure: `dir` attribute on `<html>`, CSS logical properties documented in `styles.css`
+  - Locale preference persisted via localStorage UI preferences
+
+## [0.0.8] - 2026-06-15
 
 > **Note:** First non-alpha cut of the 0.0.8 line. Adds the Argentum Android app (Kotlin + Jetpack Compose, liquid-glass theme), a real release-APK pipeline, and a polished onboarding flow. Desktop builds remain unchanged from 0.0.8-alpha. All desktop platforms (Windows NSIS/MSI, macOS DMG x64+arm64, Linux AppImage/deb/rpm) and Android APKs are produced by the release workflow on every `v*` tag.
 

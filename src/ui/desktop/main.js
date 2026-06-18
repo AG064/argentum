@@ -8,6 +8,7 @@ import {
 } from './modules/constants.js';
 import { hydrateStaticIcons } from './modules/icons.js';
 import { modules } from './modules/sections.js';
+import { setLocale, textDirection } from './i18n/index.js';
 import {
   clearOnboardingError,
   clearOnboardingProgress,
@@ -62,6 +63,7 @@ import {
   toggleQuickSettingsMenu,
   toggleWorkspaceMenu,
   updateChatMessage,
+  persistUiPreferences,
 } from './modules/state.js';
 import {
   chooseWorkspaceFolder,
@@ -2024,6 +2026,17 @@ async function handleChange(event) {
     return;
   }
 
+  if (target.id === 'settings-language') {
+    const newLocale = target.value;
+    setLocale(newLocale);
+    state.uiLanguage = newLocale;
+    document.documentElement.dir = textDirection(newLocale);
+    document.documentElement.lang = newLocale;
+    persistUiPreferences();
+    render();
+    return;
+  }
+
   if (target.id === 'settings-provider') {
     updateProviderFieldsFromPreset(target.value);
     render();
@@ -2746,6 +2759,18 @@ hydrateUiPreferences();
 const chatHistoryRestored = hydrateChatHistory();
 hydrateOnboardingProgress();
 scheduleVisibleNotifications();
+
+// Apply locale and text direction from persisted preference
+setLocale(state.uiLanguage);
+document.documentElement.dir = textDirection();
+document.documentElement.lang = state.uiLanguage;
+
+// Re-apply locale + RTL on locale change and re-render
+document.addEventListener('localechange', () => {
+  document.documentElement.dir = textDirection();
+  document.documentElement.lang = state.uiLanguage;
+  render();
+});
 hydrateDesktopDefaults()
   .then(() => refreshDesktopState())
   .then(() => {

@@ -10,6 +10,7 @@ import {
   securityProfiles,
   thinkingLevels,
 } from './constants.js';
+import { SUPPORTED_LOCALES } from '../i18n/index.js';
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
 import { terminalEntriesForDisplay } from './state.js';
@@ -774,7 +775,7 @@ function settingsSectionSummary(id, state, provider, metadata) {
         : 'Binary not installed',
     'context': `${state.thinkingLevel} thinking; ${state.selectedContextAccess.length} context sources`,
     'chat': state.showThinkingInChat ? 'Reasoning visible in chat' : 'Reasoning hidden in chat',
-    'appearance': state.accentColor ? `Accent color: ${state.accentColor}` : 'Default red accent',
+    'appearance': `Language: ${state.uiLanguage}; accent ${state.accentColor || 'default red'}`,
     'telegram': state.selectedChannels.includes('telegram') ? 'Telegram selected' : 'Telegram off',
     'security': labelFor(securityProfiles, state.securityProfile),
     'advanced': `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
@@ -1099,51 +1100,21 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
   }
 
   if (activeSection === 'appearance') {
-    const presetColors = [
-      { id: 'e23b3b', label: 'Default Red' },
-      { id: '3b82f6', label: 'Blue' },
-      { id: '22c55e', label: 'Green' },
-      { id: 'a855f7', label: 'Purple' },
-      { id: 'f59e0b', label: 'Amber' },
-      { id: 'ec4899', label: 'Pink' },
-      { id: '06b6d4', label: 'Cyan' },
-      { id: '6366f1', label: 'Indigo' },
-    ];
     return `
       <label>
-        Accent color
-        <div class="accent-color-picker">
-          ${presetColors
+        Language
+        <select id="settings-language">
+          ${SUPPORTED_LOCALES
             .map(
-              (color) => `
-                <button
-                  type="button"
-                  class="accent-color-swatch ${state.accentColor === color.id || (!state.accentColor && color.id === 'e23b3b') ? 'active' : ''}"
-                  data-accent-color="${color.id}"
-                  style="background:#${color.id}"
-                  aria-label="${escapeAttribute(color.label)}"
-                  title="${escapeAttribute(color.label)}"
-                ></button>
+              (locale) => `
+                <option value="${escapeAttribute(locale.code)}" ${state.uiLanguage === locale.code ? 'selected' : ''}>${escapeHtml(locale.label)}</option>
               `,
             )
             .join('')}
-          <input
-            type="color"
-            id="settings-accent-custom"
-            value="${state.accentColor || '#e23b3b'}"
-            class="accent-color-input"
-            aria-label="Custom accent color"
-          />
-        </div>
-        <small>Choose a preset or pick any color. The Argentum logo stays red.</small>
+        </select>
+        <small>Changes the interface language. More languages will be added in future releases.</small>
       </label>
-      <label class="check-card compact-toggle ${state.highContrastMode ? 'active' : ''}">
-        <span class="check-card-head">
-          <input id="settings-high-contrast" type="checkbox" ${state.highContrastMode ? 'checked' : ''} />
-          <span><em>Accessibility</em><strong>High contrast mode</strong></span>
-        </span>
-        <p>Increase contrast for better visibility. Affects text and UI borders.</p>
-      </label>
+      ${renderAppearanceFields(state)}
     `;
   }
 
@@ -1192,36 +1163,85 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
       </label>
       <label class="full-span">
         System prompt
-        <textarea id="profile-purpose" placeholder="How should Argentum behave in this workspace?">${escapeHtml(state.systemPrompt)}</textarea>
+        <textarea id="profile-purpose" rows="4" placeholder="Optional instructions that guide how Argentum behaves. Keep it short and focused.">${escapeHtml(state.systemPrompt || '')}</textarea>
+        <small>Shown to the model on every request. Keep it brief.</small>
       </label>
     `;
   }
 
+  if (activeSection === 'advanced') {
+    return `
+      <label>
+        Runtime mode
+        <select id="settings-runtime-mode">
+          ${runtimeModes
+            .map(
+              (item) => `
+                <option value="${item.id}" ${selected(state.runtimeMode, item.id)}>${escapeHtml(item.label)}</option>
+              `,
+            )
+            .join('')}
+        </select>
+      </label>
+      <div class="settings-inline-note">
+        <strong>${escapeHtml(labelFor(runtimeModes, state.runtimeMode))}</strong>
+        <p>${escapeHtml(labelFor(runtimeModes, state.runtimeMode) === 'Desktop app' ? 'GUI first, CLI tools available. Chat, settings, diagnostics, and gateway controls remain in the GUI.' : 'Terminal-first. Desktop settings still save to the workspace config used by argentum commands.')}</p>
+      </div>
+      ${renderSettingsOAuthPanel(state)}
+    `;
+  }
+
+  return '';
+}
+
+// ─── Appearance fields (shared between appearance section and overview) ───────────
+
+function renderAppearanceFields(state) {
+  const presetColors = [
+    { id: 'e23b3b', label: 'Default Red' },
+    { id: '3b82f6', label: 'Blue' },
+    { id: '22c55e', label: 'Green' },
+    { id: 'a855f7', label: 'Purple' },
+    { id: 'f59e0b', label: 'Amber' },
+    { id: 'ec4899', label: 'Pink' },
+    { id: '06b6d4', label: 'Cyan' },
+    { id: '6366f1', label: 'Indigo' },
+  ];
   return `
     <label>
-      Runtime
-      <select id="settings-runtime">
-        ${runtimeModes
+      Accent color
+      <div class="accent-color-picker">
+        ${presetColors
           .map(
-            (item) => `
-              <option value="${item.id}" ${item.id === state.runtimeMode ? 'selected' : ''}>${escapeHtml(item.label)}</option>
+            (color) => `
+              <button
+                type="button"
+                class="accent-color-swatch ${state.accentColor === color.id || (!state.accentColor && color.id === 'e23b3b') ? 'active' : ''}"
+                data-accent-color="${color.id}"
+                style="background:#${color.id}"
+                aria-label="${escapeAttribute(color.label)}"
+                title="${escapeAttribute(color.label)}"
+              ></button>
             `,
           )
           .join('')}
-      </select>
+        <input
+          type="color"
+          id="settings-accent-custom"
+          value="${state.accentColor || '#e23b3b'}"
+          class="accent-color-input"
+          aria-label="Custom accent color"
+        />
+      </div>
+      <small>Choose a preset or pick any color. The Argentum logo stays red.</small>
     </label>
-    <div class="runtime-mode-tabs full-span" aria-label="Runtime behavior">
-      ${runtimeModes
-        .map(
-          (mode) => `
-            <button class="runtime-mode-pill ${state.runtimeMode === mode.id ? 'active' : ''}" data-runtime-mode="${escapeAttribute(mode.id)}">
-              <strong>${escapeHtml(mode.label)}</strong>
-              <span>${escapeHtml(mode.headline)}</span>
-            </button>
-          `,
-        )
-        .join('')}
-    </div>
+    <label class="check-card compact-toggle ${state.highContrastMode ? 'active' : ''}">
+      <span class="check-card-head">
+        <input id="settings-high-contrast" type="checkbox" ${state.highContrastMode ? 'checked' : ''} />
+        <span><em>Accessibility</em><strong>High contrast mode</strong></span>
+      </span>
+      <p>Increase contrast for better visibility. Affects text and UI borders.</p>
+    </label>
   `;
 }
 
