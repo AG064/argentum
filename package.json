@@ -78,7 +78,7 @@
   "author": "AG064",
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.1",
+    "@anthropic-ai/sdk": "^0.105.0",
     "@clack/prompts": "^1.2.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "bcryptjs": "^3.0.3",
