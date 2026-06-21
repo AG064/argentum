@@ -17,7 +17,7 @@ jobs:
       matrix:
         node-version: ['20', '22']
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -44,7 +44,7 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -70,7 +70,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-2022]
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -97,7 +97,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -122,7 +122,7 @@ jobs:
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -144,7 +144,7 @@ jobs:
     name: Onboarding Smoke Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
@@ -169,7 +169,7 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Build Docker image
         run: |
@@ -188,7 +188,7 @@ jobs:
       matrix:
         install_method: [npm, docker, binary]
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: NPM install
         if: matrix.install_method == 'npm'
@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     steps:
-      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js
         uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
