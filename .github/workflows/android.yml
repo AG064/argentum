@@ -39,7 +39,7 @@ jobs:
           ls -la "${ANDROID_HOME}" 2>/dev/null || ls -la /opt/android-sdk 2>/dev/null || echo "SDK dir not found"
 
       - name: Cache Gradle packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches/
@@ -50,7 +50,7 @@ jobs:
 
 
       - name: Cache Android build outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             android/.gradle/
