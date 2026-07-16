@@ -16,8 +16,8 @@ local development, the release pipeline, signing, and Play Store notes.
 - **Build system**: Gradle 8.5, Android Gradle Plugin 8.2.x
 - **Module**: `android/`
 - **Application ID**: `com.argentum`
-- **Versioning**: mirrors the Argentum release version (`versionName` = `0.0.8`,
-  `versionCode` = `8` for v0.0.8)
+- **Versioning**: mirrors the Argentum release version (`versionName` = `0.0.9`,
+  `versionCode` = `8` for v0.0.9)
 
 The Android app is intentionally thin. The heavy lifting (LLM calls, tool calling,
 session management, audit log) lives in the Argentum gateway. The Android app is

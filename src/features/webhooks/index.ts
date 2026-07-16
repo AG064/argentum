@@ -61,7 +61,7 @@ export type WebhookHandler = (event: WebhookEvent) => Promise<void>;
 class WebhooksFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'webhooks',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Webhook receiver and dispatcher with signature verification',
     dependencies: [],
   };

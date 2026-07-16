@@ -15,6 +15,7 @@ import * as path from 'path';
 
 import 'dotenv/config';
 
+import { RouterAgent, loadRouterConfig, type MessageContext } from './agents/router/index';
 import { getConfig, type ArgentumConfig } from './core/config';
 import {
   type LLMProvider,
@@ -29,7 +30,6 @@ import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
 import { createCapabilityBroker, type CapabilityBroker } from './security/capability-broker';
 import { startDashboardServer } from './ui/server/index';
-import { RouterAgent, loadRouterConfig } from './agents/router/index.js';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 
@@ -976,7 +976,10 @@ class Argentum {
     // Initialize Router Agent for multi-user routing
     const routerConfig = loadRouterConfig();
     this.router = new RouterAgent(routerConfig);
-    this.router.registerAgent('agx', this.config.security.capabilities.workspaceRoot || process.cwd());
+    this.router.registerAgent(
+      'agx',
+      this.config.security.capabilities.workspaceRoot || process.cwd(),
+    );
     this.logger.info('Router Agent initialized', {
       rules: routerConfig.rules.length,
       defaultAgent: routerConfig.defaultAgent,
@@ -1269,7 +1272,7 @@ class Argentum {
         await ctx.replyWithChatAction('typing');
 
         // Route message through Router Agent if configured
-        const messageContext = {
+        const messageContext: MessageContext = {
           sender: {
             id: String(ctx.from?.id ?? ''),
             username: ctx.from?.username,
@@ -1277,7 +1280,7 @@ class Argentum {
           },
           chat: {
             id: String(ctx.chat?.id ?? ''),
-            type: ctx.chat?.type === 'private' ? 'direct' : ctx.chat?.type ?? 'direct',
+            type: ctx.chat?.type === 'private' ? 'direct' : 'group',
             title: ctx.chat?.title,
           },
           message: text,

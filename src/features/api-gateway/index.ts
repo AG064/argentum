@@ -70,7 +70,7 @@ export interface CreatedApiToken extends ApiToken {
 class ApiGatewayFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'api-gateway',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'REST API for external integrations with auth and rate limiting',
     dependencies: ['rate-limiting'],
   };

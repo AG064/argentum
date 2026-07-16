@@ -84,7 +84,7 @@ export interface VideoProcessingConfig {
 class VideoProcessingFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'video-processing',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Video processing with ffmpeg (frame extraction, trimming, metadata)',
     dependencies: [],
   };

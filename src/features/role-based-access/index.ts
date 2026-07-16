@@ -61,7 +61,7 @@ interface UserRoleRow {
 class RoleBasedAccessFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'role-based-access',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Manage roles and permissions for users and agents',
     dependencies: [],
   };

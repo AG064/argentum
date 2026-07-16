@@ -31,7 +31,7 @@ export interface SemanticSearchConfig {
 class SemanticSearchFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'semantic-search',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Semantic vector search with embedding-based similarity',
     dependencies: [],
   };

@@ -17,7 +17,7 @@ describe('Argentum desktop shell', () => {
     };
 
     expect(config.productName).toBe('Argentum');
-    expect(config.version).toBe('0.0.8');
+    expect(config.version).toBe('0.0.9');
     expect(config.identifier).toBe('com.argentum.desktop');
     expect(config.app?.windows?.[0]).toEqual(
       expect.objectContaining({ title: 'Argentum', width: 1280, height: 800 }),
@@ -1347,15 +1347,16 @@ describe('Argentum desktop shell', () => {
     const css = read('src/ui/desktop/styles.css');
 
     expect(chat).toContain('fresh-conversation-hero');
-    expect(chat).toContain('fresh-action-grid');
-    expect(chat).toContain('Fresh conversation');
-    expect(chat).toContain('Start with a prompt, inspect context, or open a runtime tool.');
+    expect(chat).toContain('prompt-suggestion-row');
+    expect(chat).toContain('Welcome to Argentum');
+    expect(chat).toContain('Start with a prompt below, or explore the interface to get oriented.');
     expect(onboarding).toContain('onboarding-wizard');
     expect(onboarding).toContain('onboarding-step-layout');
     expect(onboarding).toContain('onboarding-step-list');
     expect(onboarding).not.toContain('setup-mini-map');
     expect(onboarding).not.toContain('copy-block compact-copy');
     expect(css).toContain('.fresh-conversation-hero');
+    expect(css).toContain('.prompt-suggestion-row');
     expect(css).toContain('.onboarding-wizard');
   });
 

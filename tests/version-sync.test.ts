@@ -21,9 +21,20 @@ describe('version synchronization', () => {
       "rewriteTomlVersion('src/desktop/Cargo.toml')",
     );
     expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
+      "rewriteCargoLockVersion('src/desktop/Cargo.lock')",
+    );
+    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
       "rewrite('src/ui/desktop/index.html'",
     );
     expect(ciWorkflow).toContain('npm run version:check');
+
+    const cargoLock = readFileSync('src/desktop/Cargo.lock', 'utf8');
+    const escapedVersion = packageJson.version?.replace(/\./g, '\\.') ?? '';
+    expect(cargoLock).toMatch(
+      new RegExp(
+        `\\[\\[package\\]\\]\\r?\\nname = "argentum-desktop"\\r?\\nversion = "${escapedVersion}"`,
+      ),
+    );
   });
 
   test('keeps product-owned source version literals synchronized', () => {

@@ -81,7 +81,7 @@ export interface TtsEngineConfig {
 class TtsEngineFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'tts-engine',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Text-to-speech engine with provider abstraction and audio caching',
     dependencies: [],
   };

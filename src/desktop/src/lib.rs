@@ -4234,7 +4234,10 @@ fn parse_anthropic_chat_response(value: serde_json::Value) -> Result<String, Str
 
     // Find the primary text block (final answer)
     let text = content
-        .and_then(|arr| arr.iter().find(|b| b.get("type") == Some(&serde_json::Value::String("text".to_string()))))
+        .and_then(|arr| {
+            arr.iter()
+                .find(|b| b.get("type") == Some(&serde_json::Value::String("text".to_string())))
+        })
         .and_then(|b| b.get("text"))
         .and_then(|t| t.as_str())
         .map(|s| s.trim().to_string())
@@ -6925,7 +6928,9 @@ fn home_dir() -> PathBuf {
     if cfg!(target_os = "windows") {
         std::env::var("USERPROFILE")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "~".into())))
+            .unwrap_or_else(|_| {
+                PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "~".into()))
+            })
     } else {
         std::env::var("HOME")
             .map(PathBuf::from)
@@ -6994,7 +6999,9 @@ fn detect_openclaw_source() -> MigrationSource {
             found: true,
             source_path: memory_path.display().to_string(),
             dest_path: None,
-            size_bytes: std::fs::metadata(&memory_path).map(|m| m.len()).unwrap_or(0),
+            size_bytes: std::fs::metadata(&memory_path)
+                .map(|m| m.len())
+                .unwrap_or(0),
         });
     }
 
@@ -7022,7 +7029,9 @@ fn detect_openclaw_source() -> MigrationSource {
             found: true,
             source_path: agents_path.display().to_string(),
             dest_path: None,
-            size_bytes: std::fs::metadata(&agents_path).map(|m| m.len()).unwrap_or(0),
+            size_bytes: std::fs::metadata(&agents_path)
+                .map(|m| m.len())
+                .unwrap_or(0),
         });
     }
 
@@ -7081,7 +7090,9 @@ fn detect_openclaw_source() -> MigrationSource {
                 found: true,
                 source_path: config_path.display().to_string(),
                 dest_path: None,
-                size_bytes: std::fs::metadata(&config_path).map(|m| m.len()).unwrap_or(0),
+                size_bytes: std::fs::metadata(&config_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0),
             });
             break; // Only one config file needed
         }
@@ -7097,7 +7108,9 @@ fn detect_openclaw_source() -> MigrationSource {
             found: true,
             source_path: telegram_creds.display().to_string(),
             dest_path: None,
-            size_bytes: std::fs::metadata(&telegram_creds).map(|m| m.len()).unwrap_or(0),
+            size_bytes: std::fs::metadata(&telegram_creds)
+                .map(|m| m.len())
+                .unwrap_or(0),
         });
     }
 
@@ -7168,7 +7181,9 @@ fn detect_hermes_source() -> MigrationSource {
             found: true,
             source_path: config_path.display().to_string(),
             dest_path: None,
-            size_bytes: std::fs::metadata(&config_path).map(|m| m.len()).unwrap_or(0),
+            size_bytes: std::fs::metadata(&config_path)
+                .map(|m| m.len())
+                .unwrap_or(0),
         });
     }
 
@@ -7322,9 +7337,14 @@ fn copy_file_or_dir(src: &Path, dest: &Path) -> Result<(), String> {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
         }
-        std::fs::copy(src, dest)
-            .map(|_| ())
-            .map_err(|e| format!("Failed to copy {} → {}: {}", src.display(), dest.display(), e))
+        std::fs::copy(src, dest).map(|_| ()).map_err(|e| {
+            format!(
+                "Failed to copy {} → {}: {}",
+                src.display(),
+                dest.display(),
+                e
+            )
+        })
     }
 }
 
@@ -7381,8 +7401,7 @@ fn copy_workspace_files(src: &Path, dest: &Path) -> Result<(), String> {
     if !src.exists() {
         return Ok(());
     }
-    std::fs::create_dir_all(dest)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
+    std::fs::create_dir_all(dest).map_err(|e| format!("Failed to create directory: {}", e))?;
 
     let excluded = ["skills", "memory"];
 
@@ -7913,8 +7932,9 @@ fn check_for_updates() -> Result<CheckUpdateResponse, String> {
         return Err(format!("GitHub API returned status {}", resp.status()));
     }
 
-    let json: serde_json::Value =
-        resp.json().map_err(|e| format!("Failed to parse response: {}", e))?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
 
     let tag_name = json
         .get("tag_name")
@@ -7961,7 +7981,8 @@ fn get_skills_catalog() -> Result<String, String> {
         "sources": ["anthropic", "codex"],
         "catalog_url": "https://github.com/anthropics/skills",
         "codex_url": "https://github.com/openai/skills",
-    }).to_string())
+    })
+    .to_string())
 }
 
 /// Returns the local Argentum skills directory path.
@@ -7978,10 +7999,29 @@ fn argentum_skills_dir() -> PathBuf {
     base.join("argentum").join("skills")
 }
 
+fn validate_skill_name(skill_name: &str) -> Result<(), String> {
+    if skill_name.is_empty()
+        || skill_name.len() > 100
+        || skill_name == "."
+        || skill_name == ".."
+        || !skill_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
+    {
+        return Err(
+            "Invalid skill name. Use letters, numbers, dots, hyphens, or underscores.".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
 /// Installs a skill from GitHub into the local skills directory using git sparse-checkout.
 /// source: "anthropic" | "codex"
 /// skill_name: the skill folder name (e.g. "docx", "figma-use")
+#[tauri::command]
 fn install_skill(source: String, skill_name: String) -> Result<String, String> {
+    validate_skill_name(&skill_name)?;
     let skills_dir = argentum_skills_dir();
 
     std::fs::create_dir_all(&skills_dir)
@@ -8063,8 +8103,8 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
     // Move files up: dest/skills/<skill_name>/* → dest/*
     let inner_src = dest.join(&sub_path);
     if inner_src.exists() {
-        for entry in std::fs::read_dir(&inner_src)
-            .map_err(|e| format!("Failed to read inner dir: {}", e))?
+        for entry in
+            std::fs::read_dir(&inner_src).map_err(|e| format!("Failed to read inner dir: {}", e))?
         {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
             let src_path = entry.path();
@@ -8072,14 +8112,18 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
             std::fs::rename(&src_path, &dst_path)
                 .map_err(|e| format!("Failed to move {}: {}", src_path.display(), e))?;
         }
-        std::fs::remove_dir(&inner_src)
-            .ok(); // Ignore if not empty (should be empty after moves)
+        std::fs::remove_dir(&inner_src).ok(); // Ignore if not empty (should be empty after moves)
     }
 
     // Symlink into ~/.openclaw/workspace/skills/ so the skills-loader picks it up
     if cfg!(target_os = "windows") {
         let openclaw_skills = std::env::var("USERPROFILE")
-            .map(|h| PathBuf::from(h).join(".openclaw").join("workspace").join("skills"))
+            .map(|h| {
+                PathBuf::from(h)
+                    .join(".openclaw")
+                    .join("workspace")
+                    .join("skills")
+            })
             .ok();
         if let Some(openclaw_dir) = openclaw_skills {
             if openclaw_dir.exists() || std::fs::create_dir_all(&openclaw_dir).is_ok() {
@@ -8100,7 +8144,9 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
 }
 
 /// Uninstalls a skill from the local Argentum skills directory.
+#[tauri::command]
 fn uninstall_skill(skill_name: String) -> Result<String, String> {
+    validate_skill_name(&skill_name)?;
     let skills_dir = argentum_skills_dir();
 
     let skill_path = skills_dir.join(&skill_name);
@@ -8127,6 +8173,7 @@ fn uninstall_skill(skill_name: String) -> Result<String, String> {
 }
 
 /// Lists all skills installed in the local Argentum skills directory.
+#[tauri::command]
 fn list_installed_skills() -> Result<String, String> {
     let skills_dir = argentum_skills_dir();
 
@@ -8142,7 +8189,8 @@ fn list_installed_skills() -> Result<String, String> {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name()
+            let name = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
                 .to_string();
@@ -8152,7 +8200,8 @@ fn list_installed_skills() -> Result<String, String> {
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|t| {
-                    t.duration_since(std::time::UNIX_EPOCH).ok()
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .ok()
                         .map(|d| d.as_secs())
                 })
                 .unwrap_or(0);
@@ -8353,5 +8402,22 @@ mod tests {
         assert!(merged.contains("ARGENTUM_WEBCHAT_AUTH_TOKEN=fresh"));
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn accepts_catalog_skill_names() {
+        for name in ["docx", "figma-use", "openai.docs", "skill_creator"] {
+            assert!(validate_skill_name(name).is_ok(), "{name} should be valid");
+        }
+    }
+
+    #[test]
+    fn rejects_skill_names_that_can_escape_the_skills_directory() {
+        for name in ["", ".", "..", "../outside", "nested/skill", "nested\\skill"] {
+            assert!(
+                validate_skill_name(name).is_err(),
+                "{name} should be rejected"
+            );
+        }
     }
 }

@@ -50,7 +50,7 @@ Health check endpoint. Returns status of the gateway and all active features.
 ```json
 {
   "status": "ok",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "uptime": 3600,
   "node": "v20.19.0",
   "features": {
@@ -505,7 +505,7 @@ List all available features.
   "features": [
     {
       "name": "sqlite-memory",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "description": "SQLite-backed semantic memory",
       "state": "active",
       "enabled": true,
@@ -513,7 +513,7 @@ List all available features.
     },
     {
       "name": "knowledge-graph",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "description": "Entity relationship graph",
       "state": "active",
       "enabled": true,
@@ -563,7 +563,7 @@ Get details of a specific feature.
 ```json
 {
   "name": "sqlite-memory",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "SQLite-backed semantic memory",
   "state": "active",
   "enabled": true,

@@ -67,7 +67,7 @@ interface ArticleRowId {
 class SharedKnowledgeBaseFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'shared-knowledge-base',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Shared knowledge base with full-text search and versioning',
     dependencies: [],
   };

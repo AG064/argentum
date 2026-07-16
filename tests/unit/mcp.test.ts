@@ -14,7 +14,7 @@ describe('MCPServer', () => {
   beforeAll(() => {
     server = new MCPServer({
       name: 'test-server',
-      version: '0.0.8',
+      version: '0.0.9',
       capabilities: {
         tools: true,
         resources: true,
@@ -30,7 +30,7 @@ describe('MCPServer', () => {
     test('should create server with config', () => {
       expect(server).toBeDefined();
       expect(server.config.name).toBe('test-server');
-      expect(server.config.version).toBe('0.0.8');
+      expect(server.config.version).toBe('0.0.9');
     });
 
     test('should report capabilities', () => {

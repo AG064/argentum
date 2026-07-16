@@ -82,7 +82,7 @@ const ROLE_PERMISSIONS: Record<GroupRole, string[]> = {
 class GroupManagementFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'group-management',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Multi-user group management with roles and permissions',
     dependencies: [],
   };

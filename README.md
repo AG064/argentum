@@ -53,7 +53,7 @@ After setup, launch Argentum from the Start Menu. First launch opens onboarding.
 
 ### What Changed In v0.0.9
 
-v0.0.9 ships the v0.1.0 roadmap items: i18n infrastructure, crypto algorithm agility, and test suite fixes. It includes everything from `0.0.8` (cleaner chat, smoother onboarding, Monaspace Krypton, separate reasoning stream, improved Telegram session handling, recent security cleanup) plus the first-party **Argentum Android app** — a native Kotlin + Jetpack Compose client with a liquid-glass theme, onboarding flow, and full release-APK pipeline.
+v0.0.9 brings forward the next roadmap tranche: i18n infrastructure, crypto algorithm agility, and test suite fixes. It retains the prior desktop polish (cleaner chat, smoother onboarding, Monaspace Krypton, separate reasoning stream, improved Telegram session handling, and recent security cleanup) plus the first-party **Argentum Android app** — a native Kotlin + Jetpack Compose client with a liquid-glass theme, onboarding flow, and full release-APK pipeline.
 
 This release also introduces the optional Argentum llama.cpp local server path. The Windows setup executable can install the local server binaries when you tick the installer checkbox; otherwise Argentum stays lightweight and the local server can be installed later from inside the app.
 

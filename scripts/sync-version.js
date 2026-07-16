@@ -45,6 +45,15 @@ function rewriteTomlVersion(file) {
   );
 }
 
+function rewriteCargoLockVersion(file) {
+  rewrite(file, (source) =>
+    source.replace(
+      /(\[\[package\]\]\r?\nname = "argentum-desktop"\r?\nversion = ")\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\")/,
+      `$1${version}$4`,
+    ),
+  );
+}
+
 rewrite('package-lock.json', (source) => {
   const lock = JSON.parse(source);
   const rootVersion = lock.packages?.['']?.version;
@@ -72,6 +81,7 @@ rewrite('src/core/onboarding.ts', (source) =>
 
 rewriteJsonVersion('src/desktop/tauri.conf.json');
 rewriteTomlVersion('src/desktop/Cargo.toml');
+rewriteCargoLockVersion('src/desktop/Cargo.lock');
 rewrite('src/ui/desktop/index.html', (source) => rewriteDocumentationVersions(source));
 
 for (const file of [

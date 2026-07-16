@@ -71,7 +71,7 @@ export interface NotificationResult {
 class MobileChannel implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'mobile',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Push notification channel for mobile companion apps with HTTP endpoint',
     dependencies: [],
   };

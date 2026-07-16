@@ -75,7 +75,7 @@ export interface SmsGatewayConfig {
 class SmsGatewayFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'sms-gateway',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Pluggable SMS gateway with provider abstraction and SQLite logging',
     dependencies: [],
   };

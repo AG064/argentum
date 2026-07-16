@@ -82,7 +82,7 @@ export interface CanvasOperation {
 class LiveCanvasFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'live-canvas',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Real-time collaborative drawing and visualization canvas',
     dependencies: [],
   };

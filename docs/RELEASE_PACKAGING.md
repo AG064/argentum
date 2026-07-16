@@ -4,15 +4,15 @@ Argentum releases publish GUI desktop installers from the Desktop Builds workflo
 
 ## Release assets
 
-For version `0.0.8`, the desktop workflow produces the user-facing app installers:
+For version `0.0.9`, the desktop workflow produces the user-facing app installers:
 
-- `Argentum_0.0.8_x64-setup.exe` - graphical Windows setup executable
-- `Argentum_0.0.8_x64_en-US.msi` - Windows Installer package
-- `Argentum_0.0.8_amd64.AppImage` - Linux desktop AppImage
-- `Argentum_0.0.8_amd64.deb` - Linux Debian package
-- `Argentum_0.0.8_x86_64.rpm` - Linux RPM package
-- `Argentum_0.0.8_x64.dmg` - macOS Intel desktop package
-- `Argentum_0.0.8_aarch64.dmg` - macOS Apple Silicon desktop package
+- `Argentum_0.0.9_x64-setup.exe` - graphical Windows setup executable
+- `Argentum_0.0.9_x64_en-US.msi` - Windows Installer package
+- `Argentum_0.0.9_amd64.AppImage` - Linux desktop AppImage
+- `Argentum_0.0.9_amd64.deb` - Linux Debian package
+- `Argentum_0.0.9_x86_64.rpm` - Linux RPM package
+- `Argentum_0.0.9_x64.dmg` - macOS Intel desktop package
+- `Argentum_0.0.9_aarch64.dmg` - macOS Apple Silicon desktop package
 
 The release workflow also produces optional terminal-first CLI binaries:
 
@@ -38,8 +38,8 @@ npm test -- --runInBand
 3. Tag and push the release:
 
 ```bash
-git tag v0.0.8
-git push origin v0.0.8
+git tag v0.0.9
+git push origin v0.0.9
 ```
 
 The `Release` workflow builds the artifacts and attaches them to the GitHub release.

@@ -38,7 +38,7 @@ import {
 class TrajectoryExportFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'trajectory-export',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Export conversation trajectories as JSONL for RL fine-tuning',
     dependencies: [],
   };

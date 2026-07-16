@@ -98,7 +98,7 @@ interface WeatherAlertRow {
 class WeatherAlertsFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'weather-alerts',
-    version: '0.0.8',
+    version: '0.0.9',
     description: 'Weather data retrieval and alerting via wttr.in',
     dependencies: [],
   };
