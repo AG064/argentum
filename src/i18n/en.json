@@ -323,5 +323,61 @@
     "llamaCpp": "Argentum llama.cpp",
     "ollama": "Ollama / local",
     "custom": "Custom endpoint"
+  },
+
+  "migration": {
+    "title": "Migration",
+    "openclawFound": "OpenClaw setup found",
+    "hermesFound": "Hermes setup found",
+    "notFound": "No legacy agent detected",
+    "itemsFound": "{count} item(s) found",
+    "importNow": "Import into Argentum",
+    "skipForNow": "Skip for now",
+    "complete": "Migration complete",
+    "itemsMigrated": "{ok} item(s) migrated, {err} error(s)",
+    "scanAgain": "Scan again",
+    "sourceOpenclaw": "OpenClaw",
+    "sourceHermes": "Hermes",
+    "descOpenclaw": "Import skills, memory, Telegram credentials, and config from OpenClaw.",
+    "descHermes": "Import skills, memories, SOUL.md, and config from Hermes.",
+    "noSourceDetected": "Argentum scanned ~/.openclaw/ and ~/.hermes/ but found no previous installation.",
+    "noSourceDetectedHint": "If you have a previous installation at a custom path, you can migrate manually."
+  },
+
+  "feedback": {
+    "title": "Help & Feedback",
+    "bugTitle": "Report a bug",
+    "bugDetail": "Something is broken or not working as expected.",
+    "featureTitle": "Request a feature",
+    "featureDetail": "Suggest a new capability or improvement.",
+    "openBug": "Open bug report",
+    "openFeature": "Open feature request",
+    "versionPrefilled": "Bug reports and feature requests open in your browser on GitHub. Your version and workspace path are pre-filled to save time.",
+    "securityContact": "For private security issues, email {email} directly.",
+    "reportBug": "Report a bug",
+    "requestFeature": "Request a feature"
+  },
+
+  "skills": {
+    "title": "Skills",
+    "description": "Browse and install skills from Anthropic and Codex. Skills extend Argentum's capabilities with specialized knowledge and workflows.",
+    "tabAnthropic": "Anthropic",
+    "tabCodex": "Codex",
+    "tabInstalled": "Installed",
+    "searchPlaceholder": "Search skills…",
+    "categoryAll": "All categories",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "installing": "Installing…",
+    "removing": "Removing…",
+    "viewOnGithub": "View on GitHub",
+    "emptyTab": "No skills in this tab yet.",
+    "emptySearch": "No skills match your search.",
+    "emptyInstalled": "Install skills from the Anthropic or Codex tabs above.",
+    "footerNote": "Skills are loaded from {path1} and {path2}. Restart Argentum after installing or uninstalling.",
+    "installedSuccess": "Skill '{name}' installed successfully.",
+    "uninstalledSuccess": "Skill '{name}' uninstalled successfully.",
+    "installError": "Could not install skill: {error}",
+    "uninstallError": "Could not uninstall skill: {error}"
   }
 }

@@ -14,6 +14,8 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import * as yaml from 'yaml';
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type ConditionType = 'sender_id' | 'chat_id' | 'chat_type' | 'keyword' | 'always';
@@ -243,38 +245,46 @@ export class RouterAgent extends EventEmitter {
 // ─── Config Loading ────────────────────────────────────────────────────────
 
 /**
- * Load router config from JSON file
- * Returns default config if file doesn't exist (graceful degradation)
+ * Load router config — tries YAML first (config/router.yaml),
+ * then JSON (config/router.json), then falls back to defaults.
  */
 export function loadRouterConfig(configPath?: string): RouterConfig {
-  const defaultConfigPath = path.resolve(process.cwd(), 'config/router.json');
-  const finalPath = configPath ?? defaultConfigPath;
+  // Try yaml first, then json, then default
+  const candidates = configPath
+    ? [configPath]
+    : [
+        path.resolve(process.cwd(), 'config/router.yaml'),
+        path.resolve(process.cwd(), 'config/router.json'),
+      ];
 
-  try {
-    if (fs.existsSync(finalPath)) {
+  for (const finalPath of candidates) {
+    if (!fs.existsSync(finalPath)) continue;
+
+    try {
       const content = fs.readFileSync(finalPath, 'utf-8');
-      const config = JSON.parse(content) as RouterConfig;
+      const raw = finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')
+        ? yaml.parse(content)
+        : JSON.parse(content);
+      const config = raw as RouterConfig;
 
-      // Validate loaded config
       if (!config.rules || !Array.isArray(config.rules)) {
         console.error(`[Router] Invalid config at ${finalPath}: missing "rules" array`);
-        return getEmptyConfig();
+        continue;
       }
       if (!config.defaultAgent) {
         console.error(`[Router] Invalid config at ${finalPath}: missing "defaultAgent"`);
-        return getEmptyConfig();
+        continue;
       }
 
       console.info(`[Router] Loaded config from ${finalPath}`);
       return config;
-    } else {
-      console.warn(`[Router] Config not found at ${finalPath}, using empty config`);
-      return getEmptyConfig();
+    } catch (error) {
+      console.error(`[Router] Failed to load config from ${finalPath}:`, error);
     }
-  } catch (error) {
-    console.error(`[Router] Failed to load config from ${finalPath}:`, error);
-    return getEmptyConfig();
   }
+
+  console.warn('[Router] No router config found, using default (single-user mode)');
+  return getEmptyConfig();
 }
 
 /**

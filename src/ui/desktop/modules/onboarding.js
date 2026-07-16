@@ -13,6 +13,9 @@ import {
 import { state } from './state.js';
 import { validateCurrentStep } from './onboarding-controller.js';
 import {
+  detectMigrationSources,
+} from './setup.js';
+import {
   buttonDisabled,
   checked,
   currentProvider,
@@ -278,12 +281,82 @@ function renderContextAccessChoices() {
   `;
 }
 
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+function renderMigrationCard() {
+  const openclaw = state.migrationSources?.openclaw;
+  const hermes = state.migrationSources?.hermes;
+
+  // Show only if we have something to migrate and user hasn't skipped
+  if (state.migrationSkipped) return '';
+  if (!openclaw?.found && !hermes?.found) return '';
+
+  const source = openclaw?.found ? openclaw : hermes;
+  const sourceName = openclaw?.found ? 'OpenClaw' : 'Hermes';
+  const items = source?.items || [];
+  const totalSize = source?.size_bytes || 0;
+
+  if (state.migrationResults) {
+    const results = state.migrationResults;
+    const ok = results.filter((r) => r.status === 'ok').length;
+    const err = results.filter((r) => r.status === 'error').length;
+    return `
+      <div class="migration-result-card">
+        <h4>Migration complete</h4>
+        <p>${ok} item(s) migrated${err > 0 ? `, ${err} error(s)` : ''}.</p>
+        ${err > 0 ? `<p class="muted-line">Check Settings → Migration for details.</p>` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="migration-card" id="migration-card">
+      <div class="migration-card-header">
+        <h4>We found an existing ${sourceName} setup</h4>
+        <span class="muted-line">${items.length} item(s) · ${formatBytes(totalSize)}</span>
+      </div>
+      <ul class="migration-item-list">
+        ${items
+          .map(
+            (item) => `
+              <li>
+                <span>${escapeHtml(item.label)}</span>
+                <span class="muted-line">${escapeHtml(item.description)}</span>
+              </li>
+            `,
+          )
+          .join('')}
+      </ul>
+      <div class="migration-card-actions">
+        <button type="button" class="button primary" id="do-migration">
+          Import into Argentum
+        </button>
+        <button type="button" class="button" id="skip-migration">
+          Skip for now
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function renderProviderChoiceStep() {
   const visibleProviders = providerPresets.filter(
     (item) => (item.access || 'testing') === state.providerCatalogTab,
   );
 
+  // Trigger migration detection if workspace was set manually (not via folder picker)
+  if (!state.migrationSources?.openclaw && !state.migrationSources?.hermes) {
+    detectMigrationSources();
+  }
+
   return `
+    ${renderMigrationCard()}
     ${renderProgressiveProviderFrame(
       'Provider',
       'Choose who runs the model',

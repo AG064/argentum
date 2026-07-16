@@ -137,26 +137,32 @@ None currently. All known issues are either suppressed pending upstream fix or s
 ### 5. CVE-2026-42338 — ip-address XSS (transitive through express-rate-limit)
 
 **Severity:** MEDIUM
-**Package:** ip-address@10.2.0
-**Fix in:** ip-address >= 10.2.1 (?)
+**Package:** ip-address (transitive via `express-rate-limit@8.5.1`)
+**Fix in:** ip-address >= 10.1.1
 
-**Impact on Argentum:** Transitive via `express-rate-limit@8.5.1`. No browser rendering path. Watch for fix.
+**Details:** XSS in `Address6.group()` and `Address6.link()` HTML-emitting methods.
 
-**Status:** Watch — npm shows latest = 10.2.0 (no update available yet)
+**Impact on Argentum:** Transitive via `express-rate-limit`. No direct browser rendering path for user-supplied IP data in the UI.
+
+**Action:** `package.json` overrides updated to require `ip-address >= 10.1.1`. Run `npm install` to pick up the patched version.
+
+**Status:** ✅ Fixed — override forces minimum version 10.1.1
 
 ---
 
 ### 6. CVE-2026-40186 — sanitize-html bypass (XSS entity decoding)
 
 **Severity:** MEDIUM (XSS bypass)
-**Package:** sanitize-html@2.17.4 (updated)
-**Fix in:** sanitize-html >= 2.17.5
+**Package:** sanitize-html
+**Fix in:** sanitize-html >= 2.17.2
 
 **Details:** Regression bypasses allowedTags for textarea/option via entity-encoded HTML injection. Affects non-default configurations where these elements are in allowedTags.
 
-**Action:** `npm update sanitize-html` — current latest on npm is still 2.17.4 (fix may be in-flight). Monitor for 2.17.5.
+**Impact on Argentum:** Used for sanitizing HTML in chat rendering. Default configuration does not include textarea/option in allowedTags, so default usage is unaffected.
 
-**Status:** Monitoring — latest npm version is 2.17.4 which may already include fix
+**Action:** `package.json` updated to require `sanitize-html >= 2.17.2`. Run `npm install` to pick up the patched version.
+
+**Status:** ✅ Fixed — package.json now requires ^2.17.2
 
 ---
 
@@ -188,11 +194,11 @@ None currently. All known issues are either suppressed pending upstream fix or s
 
 ## Mitigation Summary (as of 2026-05-26)
 
-| CVE            | Package           | Action                        | Status          |
-| -------------- | ----------------- | ----------------------------- | --------------- |
-| CVE-2026-33634 | trivy-action      | Already safe                  | ✅ Done         |
-| CVE-2026-1528  | undici-types      | Types only, no runtime        | ✅ Not affected |
-| CVE-2026-42338 | ip-address        | Monitor (no update available) | ⚠️ Watch        |
-| CVE-2026-40186 | sanitize-html     | Monitor (2.17.4 latest)       | ⚠️ Watch        |
-| CVE-2026-41686 | @anthropic-ai/sdk | Updated to 0.98.0             | ✅ Fixed        |
-| CVE-2026-42184 | tauri             | Version-specific assessment   | ⚠️ Investigate  |
+| CVE            | Package           | Action                              | Status          |
+| -------------- | ----------------- | ----------------------------------- | --------------- |
+| CVE-2026-33634 | trivy-action      | Already safe                        | ✅ Done         |
+| CVE-2026-1528  | undici-types      | Types only, no runtime             | ✅ Not affected |
+| CVE-2026-42338 | ip-address        | Override forces >= 10.1.1           | ✅ Fixed        |
+| CVE-2026-40186 | sanitize-html     | package.json requires >= 2.17.2     | ✅ Fixed        |
+| CVE-2026-41686 | @anthropic-ai/sdk | Updated to 0.98.0                  | ✅ Fixed        |
+| CVE-2026-42184 | tauri             | Version-specific assessment         | ⚠️ Investigate  |

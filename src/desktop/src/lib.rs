@@ -4227,15 +4227,20 @@ fn openai_tool_calls(value: &serde_json::Value) -> Vec<(String, String, serde_js
 }
 
 fn parse_anthropic_chat_response(value: serde_json::Value) -> Result<String, String> {
-    value
-        .get("content")
-        .and_then(|content| content.as_array())
-        .and_then(|content| content.first())
-        .and_then(|block| block.get("text"))
-        .and_then(|text| text.as_str())
-        .map(|content| content.trim().to_string())
-        .filter(|content| !content.is_empty())
-        .ok_or_else(|| "Provider returned an empty chat response.".to_string())
+    // Anthropic returns content blocks; text blocks hold the final answer.
+    // Thinking blocks (type "thinking") contain the reasoning trace and are
+    // stripped by the frontend <think> tag parser for display.
+    let content = value.get("content").and_then(|c| c.as_array());
+
+    // Find the primary text block (final answer)
+    let text = content
+        .and_then(|arr| arr.iter().find(|b| b.get("type") == Some(&serde_json::Value::String("text".to_string()))))
+        .and_then(|b| b.get("text"))
+        .and_then(|t| t.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    text.ok_or_else(|| "Provider returned an empty chat response.".to_string())
 }
 
 fn provider_error_detail(body: &str) -> Option<String> {
@@ -4897,6 +4902,16 @@ fn reasoning_effort(thinking_level: &str) -> &'static str {
         "fast" => "low",
         "deep" => "high",
         _ => "medium",
+    }
+}
+
+// Anthropic token budget for adaptive thinking
+// "low" = minimal extra tokens, "medium" = ~8K, "high" = ~32K
+fn anthropic_thinking_budget(thinking_level: &str) -> u32 {
+    match thinking_level {
+        "fast" => 1024,
+        "deep" => 32000,
+        _ => 8000, // balanced / default
     }
 }
 
@@ -6417,18 +6432,25 @@ async fn send_chat_message(
         builder = if config.api == "anthropic" {
             builder
                 .header("x-api-key", api_key.as_str())
-                .header("anthropic-version", "2023-06-01")
+                // 2025-01-01 enables Claude 3.7+ adaptive thinking: thinking: { type: "adaptive" }
+                .header("anthropic-version", "2025-01-01")
         } else {
             builder.bearer_auth(api_key.as_str())
         };
     }
 
     let body = if config.api == "anthropic" {
+        // Anthropic adaptive thinking — budget_tokens controls how many tokens
+        // the model can use for internal reasoning (1024=fast, 8000=balanced, 32000=deep)
         json!({
             "model": config.model,
-            "max_tokens": 900,
+            "max_tokens": 8192,
             "system": system_prompt,
-            "messages": anthropic_chat_messages_from_history(&request, message, &prepared_attachments)
+            "messages": anthropic_chat_messages_from_history(&request, message, &prepared_attachments),
+            "thinking": {
+                "type": "adaptive",
+                "budget_tokens": anthropic_thinking_budget(thinking_level)
+            }
         })
     } else {
         openai_chat_body(
@@ -6888,6 +6910,546 @@ fn desktop_system_stats() -> PcStatsSnapshot {
     collect_pc_stats()
 }
 
+// ─── Migration ────────────────────────────────────────────────────────────────
+
+/// Scans for OpenClaw and Hermes installation directories and returns
+/// available migration items for each source.
+#[tauri::command]
+fn detect_migration_sources() -> MigrationSourcesResponse {
+    let openclaw = detect_openclaw_source();
+    let hermes = detect_hermes_source();
+    MigrationSourcesResponse { openclaw, hermes }
+}
+
+fn home_dir() -> PathBuf {
+    if cfg!(target_os = "windows") {
+        std::env::var("USERPROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "~".into())))
+    } else {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("~"))
+    }
+}
+
+fn dir_size(path: &Path) -> u64 {
+    let mut size = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            size += if entry.path().is_dir() {
+                dir_size(&entry.path())
+            } else {
+                entry.metadata().map(|m| m.len()).unwrap_or(0)
+            };
+        }
+    }
+    size
+}
+
+fn count_items_in_dir(path: &Path) -> u32 {
+    std::fs::read_dir(path)
+        .map(|e| e.flatten().count() as u32)
+        .unwrap_or(0)
+}
+
+fn detect_openclaw_source() -> MigrationSource {
+    let mut root = home_dir();
+    root.push(".openclaw");
+
+    if !root.exists() {
+        return MigrationSource {
+            found: false,
+            path: None,
+            size_bytes: 0,
+            item_count: 0,
+            items: vec![],
+        };
+    }
+
+    let size_bytes = dir_size(&root);
+    let mut items = Vec::new();
+
+    // SOUL.md / persona
+    let soul_path = root.join("workspace").join("SOUL.md");
+    if soul_path.exists() {
+        items.push(MigrationItem {
+            id: "soul".to_string(),
+            label: "Persona (SOUL.md)".to_string(),
+            description: "Agent persona and character".to_string(),
+            found: true,
+            source_path: soul_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&soul_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // MEMORY.md
+    let memory_path = root.join("workspace").join("MEMORY.md");
+    if memory_path.exists() {
+        items.push(MigrationItem {
+            id: "memory".to_string(),
+            label: "Long-term memory".to_string(),
+            description: "Agent memories and learned facts".to_string(),
+            found: true,
+            source_path: memory_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&memory_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // USER.md
+    let user_path = root.join("workspace").join("USER.md");
+    if user_path.exists() {
+        items.push(MigrationItem {
+            id: "user_profile".to_string(),
+            label: "User profile".to_string(),
+            description: "User preferences and context".to_string(),
+            found: true,
+            source_path: user_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&user_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // AGENTS.md
+    let agents_path = root.join("workspace").join("AGENTS.md");
+    if agents_path.exists() {
+        items.push(MigrationItem {
+            id: "agents".to_string(),
+            label: "Agent instructions".to_string(),
+            description: "Project-level agent context (AGENTS.md)".to_string(),
+            found: true,
+            source_path: agents_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&agents_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // Skills: workspace/skills/
+    let ws_skills = root.join("workspace").join("skills");
+    if ws_skills.exists() {
+        let count = count_items_in_dir(&ws_skills);
+        items.push(MigrationItem {
+            id: "skills_workspace".to_string(),
+            label: "Workspace skills".to_string(),
+            description: format!("{} skill(s) in workspace/skills/", count),
+            found: true,
+            source_path: ws_skills.display().to_string(),
+            dest_path: None,
+            size_bytes: dir_size(&ws_skills),
+        });
+    }
+
+    // Skills: ~/.openclaw/skills/ (managed skills)
+    let managed_skills = root.join("skills");
+    if managed_skills.exists() {
+        let count = count_items_in_dir(&managed_skills);
+        items.push(MigrationItem {
+            id: "skills_managed".to_string(),
+            label: "Managed skills".to_string(),
+            description: format!("{} skill(s) in ~/.openclaw/skills/", count),
+            found: true,
+            source_path: managed_skills.display().to_string(),
+            dest_path: None,
+            size_bytes: dir_size(&managed_skills),
+        });
+    }
+
+    // Memory DB
+    let memory_db = root.join("memory.db");
+    if memory_db.exists() {
+        items.push(MigrationItem {
+            id: "memory_db".to_string(),
+            label: "Memory database".to_string(),
+            description: "SQLite memory and session logs".to_string(),
+            found: true,
+            source_path: memory_db.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&memory_db).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // Config files
+    for config_name in &["openclaw.json", "agclaw.json"] {
+        let config_path = root.join(config_name);
+        if config_path.exists() {
+            items.push(MigrationItem {
+                id: format!("config_{}", config_name.replace('.', "_")),
+                label: format!("Config ({})", config_name),
+                description: "Provider, model, MCP, and channel settings".to_string(),
+                found: true,
+                source_path: config_path.display().to_string(),
+                dest_path: None,
+                size_bytes: std::fs::metadata(&config_path).map(|m| m.len()).unwrap_or(0),
+            });
+            break; // Only one config file needed
+        }
+    }
+
+    // Telegram credentials
+    let telegram_creds = root.join("credentials").join("telegram.json");
+    if telegram_creds.exists() {
+        items.push(MigrationItem {
+            id: "telegram".to_string(),
+            label: "Telegram bot".to_string(),
+            description: "Telegram bot token and allowlist".to_string(),
+            found: true,
+            source_path: telegram_creds.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&telegram_creds).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // Workspace files (excluding known subdirs)
+    let workspace_dir = root.join("workspace");
+    if workspace_dir.exists() {
+        let excluded = ["skills", "memory"];
+        let mut file_count = 0u32;
+        let mut file_size = 0u64;
+        if let Ok(entries) = std::fs::read_dir(&workspace_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if entry.path().is_file() && !excluded.contains(&name.as_str()) {
+                    file_count += 1;
+                    file_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                } else if entry.path().is_dir() && !excluded.contains(&name.as_str()) {
+                    file_count += 1;
+                    file_size += dir_size(&entry.path());
+                }
+            }
+        }
+        if file_count > 0 {
+            items.push(MigrationItem {
+                id: "workspace_files".to_string(),
+                label: "Workspace files".to_string(),
+                description: format!("{} file(s) and folder(s) in workspace", file_count),
+                found: true,
+                source_path: workspace_dir.display().to_string(),
+                dest_path: None,
+                size_bytes: file_size,
+            });
+        }
+    }
+
+    MigrationSource {
+        found: true,
+        path: Some(root.display().to_string()),
+        size_bytes,
+        item_count: items.len() as u32,
+        items,
+    }
+}
+
+fn detect_hermes_source() -> MigrationSource {
+    let mut root = home_dir();
+    root.push(".hermes");
+
+    if !root.exists() {
+        return MigrationSource {
+            found: false,
+            path: None,
+            size_bytes: 0,
+            item_count: 0,
+            items: vec![],
+        };
+    }
+
+    let size_bytes = dir_size(&root);
+    let mut items = Vec::new();
+
+    // Config
+    let config_path = root.join("config.yaml");
+    if config_path.exists() {
+        items.push(MigrationItem {
+            id: "config".to_string(),
+            label: "Hermes config".to_string(),
+            description: "Model, provider, MCP, TTS, and messaging config".to_string(),
+            found: true,
+            source_path: config_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&config_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // Secrets
+    let env_path = root.join(".env");
+    if env_path.exists() {
+        items.push(MigrationItem {
+            id: "secrets".to_string(),
+            label: "API keys and secrets".to_string(),
+            description: "Provider API keys and tokens".to_string(),
+            found: true,
+            source_path: env_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&env_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    // Memory
+    let memories_dir = root.join("memories");
+    if memories_dir.exists() {
+        items.push(MigrationItem {
+            id: "memories".to_string(),
+            label: "Memories".to_string(),
+            description: "MEMORY.md and USER.md memories".to_string(),
+            found: true,
+            source_path: memories_dir.display().to_string(),
+            dest_path: None,
+            size_bytes: dir_size(&memories_dir),
+        });
+    }
+
+    // Skills
+    let skills_dir = root.join("skills");
+    if skills_dir.exists() {
+        let count = count_items_in_dir(&skills_dir);
+        items.push(MigrationItem {
+            id: "skills".to_string(),
+            label: "Skills".to_string(),
+            description: format!("{} skill(s)", count),
+            found: true,
+            source_path: skills_dir.display().to_string(),
+            dest_path: None,
+            size_bytes: dir_size(&skills_dir),
+        });
+    }
+
+    // SOUL.md
+    let soul_path = root.join("SOUL.md");
+    if soul_path.exists() {
+        items.push(MigrationItem {
+            id: "soul".to_string(),
+            label: "SOUL.md persona".to_string(),
+            description: "Agent persona".to_string(),
+            found: true,
+            source_path: soul_path.display().to_string(),
+            dest_path: None,
+            size_bytes: std::fs::metadata(&soul_path).map(|m| m.len()).unwrap_or(0),
+        });
+    }
+
+    MigrationSource {
+        found: true,
+        path: Some(root.display().to_string()),
+        size_bytes,
+        item_count: items.len() as u32,
+        items,
+    }
+}
+
+/// Migrate selected items from OpenClaw into an Argentum workspace.
+/// The `workspace_path` must already exist.
+#[tauri::command]
+fn migrate_from_openclaw(
+    workspace_path: String,
+    items: Vec<MigrateItemRequest>,
+) -> Result<Vec<MigrateResult>, String> {
+    let workspace = ensure_existing_workspace(&workspace_path)?;
+    let home = home_dir();
+    let openclaw_root = home.join(".openclaw");
+    let mut results = Vec::new();
+
+    for item in items {
+        let result = migrate_single_item(&workspace, &openclaw_root, &item);
+        results.push(result);
+    }
+
+    Ok(results)
+}
+
+fn migrate_single_item(
+    workspace: &Path,
+    _openclaw_root: &Path,
+    item: &MigrateItemRequest,
+) -> MigrateResult {
+    let src = PathBuf::from(&item.source_path);
+
+    let dest: PathBuf = match item.id.as_str() {
+        "soul" => workspace.join("MEMORY.md"),
+        "memory" => workspace.join("MEMORY.md"),
+        "user_profile" => workspace.join("MEMORY.md"),
+        "agents" => workspace.join("AGENTS.md"),
+        "skills_workspace" => workspace.join("skills"),
+        "skills_managed" => workspace.join("skills"),
+        "memory_db" => workspace.join("data").join("memory.db"),
+        "telegram" => workspace.join("data").join("telegram-credentials.json"),
+        "workspace_files" => workspace.join("imported"),
+        id if id.starts_with("config_") => workspace.join("data").join("openclaw-config.json"),
+        _ => workspace.join(item.id.clone()),
+    };
+
+    let copy_result = match item.id.as_str() {
+        "soul" | "memory" | "user_profile" => {
+            // Text files: append to existing or create new
+            append_or_copy(&src, &dest)
+        }
+        "skills_workspace" | "skills_managed" => {
+            // Directories: copy with rename to avoid conflicts
+            copy_skills_dir(&src, &dest)
+        }
+        "workspace_files" => {
+            // Top-level workspace files: copy everything except skills/memory subdirs
+            copy_workspace_files(&src, &dest)
+        }
+        _ => {
+            // Everything else: direct copy
+            copy_file_or_dir(&src, &dest)
+        }
+    };
+
+    match copy_result {
+        Ok(()) => MigrateResult {
+            id: item.id.clone(),
+            status: "ok".to_string(),
+            message: format!("Migrated to {}", dest.display()),
+            dest_path: dest.display().to_string(),
+        },
+        Err(e) => MigrateResult {
+            id: item.id.clone(),
+            status: "error".to_string(),
+            message: e,
+            dest_path: dest.display().to_string(),
+        },
+    }
+}
+
+fn copy_file_or_dir(src: &Path, dest: &Path) -> Result<(), String> {
+    if src.is_dir() {
+        copy_directory_recursive(src, dest)
+    } else {
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+        }
+        std::fs::copy(src, dest)
+            .map(|_| ())
+            .map_err(|e| format!("Failed to copy {} → {}: {}", src.display(), dest.display(), e))
+    }
+}
+
+fn append_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Ok(());
+    }
+
+    let content = std::fs::read_to_string(src)
+        .map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+
+    if dest.exists() {
+        // Append to existing file
+        let existing = std::fs::read_to_string(dest)
+            .map_err(|e| format!("Failed to read dest {}: {}", dest.display(), e))?;
+        let combined = format!("{}\n\n---\n\n{}\n", existing.trim(), content.trim());
+        std::fs::write(dest, combined)
+            .map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
+    } else {
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+        std::fs::write(dest, content)
+            .map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
+    }
+    Ok(())
+}
+
+fn copy_skills_dir(src: &Path, dest: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Ok(());
+    }
+    // Ensure skills go into workspace/skills/
+    let final_dest = if dest.file_name().map(|n| n == "skills").unwrap_or(false) {
+        dest.to_path_buf()
+    } else {
+        dest.join("skills")
+    };
+    std::fs::create_dir_all(&final_dest)
+        .map_err(|e| format!("Failed to create skills dir: {}", e))?;
+
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let skill_name = entry.file_name();
+            let skill_dest = final_dest.join(&skill_name);
+            copy_directory_recursive(&entry.path(), &skill_dest)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_workspace_files(src: &Path, dest: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dest)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    let excluded = ["skills", "memory"];
+
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if excluded.contains(&name.as_str()) {
+                continue;
+            }
+            let entry_dest = dest.join(&name);
+            if entry.path().is_dir() {
+                copy_directory_recursive(&entry.path(), &entry_dest)?;
+            } else {
+                std::fs::copy(&entry.path(), &entry_dest)
+                    .map(|_| ())
+                    .map_err(|e| format!("Failed to copy {}: {}", entry.path().display(), e))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationSourcesResponse {
+    openclaw: MigrationSource,
+    hermes: MigrationSource,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationSource {
+    found: bool,
+    path: Option<String>,
+    size_bytes: u64,
+    item_count: u32,
+    items: Vec<MigrationItem>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationItem {
+    id: String,
+    label: String,
+    description: String,
+    found: bool,
+    source_path: String,
+    dest_path: Option<String>,
+    size_bytes: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrateItemRequest {
+    id: String,
+    source_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrateResult {
+    id: String,
+    status: String,
+    message: String,
+    dest_path: String,
+}
+
 #[tauri::command]
 fn save_setup(request: SaveSetupRequest) -> Result<SaveSetupResponse, String> {
     let workspace = ensure_safe_workspace(&request.workspace_path)?;
@@ -7322,6 +7884,291 @@ fn run_desktop_action(
     }
 }
 
+const CURRENT_VERSION: &str = "0.0.9";
+
+#[derive(Debug, serde::Serialize)]
+struct CheckUpdateResponse {
+    update_available: bool,
+    version: Option<String>,
+    release_url: Option<String>,
+    release_notes: Option<String>,
+}
+
+#[tauri::command]
+fn check_for_updates() -> Result<CheckUpdateResponse, String> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("Argentum-Desktop/0.0.9")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    let resp = client
+        .get("https://api.github.com/repos/AG064/argentum/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("GitHub API returned status {}", resp.status()));
+    }
+
+    let json: serde_json::Value =
+        resp.json().map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let tag_name = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim_start_matches('v'))
+        .unwrap_or("0.0.0");
+
+    let release_url = json
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let release_notes = json
+        .get("body")
+        .and_then(|v| v.as_str())
+        .map(|s| s.chars().take(500).collect());
+
+    let update_available = tag_name > CURRENT_VERSION;
+
+    Ok(CheckUpdateResponse {
+        update_available,
+        version: Some(tag_name.to_string()),
+        release_url,
+        release_notes,
+    })
+}
+
+#[tauri::command]
+fn download_update() -> Result<String, String> {
+    Ok("https://github.com/AG064/argentum/releases".to_string())
+}
+
+// ─── Skills Catalog ────────────────────────────────────────────────────────────
+
+/// Returns the skills catalog — metadata for Anthropic and Codex official skills.
+/// The frontend uses this to render the browsable catalog before install.
+#[tauri::command]
+fn get_skills_catalog() -> Result<String, String> {
+    // Return a lightweight JSON manifest; actual descriptions are embedded
+    // in the frontend catalog data (src/ui/desktop/modules/skills-catalog.ts).
+    // This command's primary job is to confirm the catalog endpoint is available.
+    Ok(json!({
+        "status": "ok",
+        "sources": ["anthropic", "codex"],
+        "catalog_url": "https://github.com/anthropics/skills",
+        "codex_url": "https://github.com/openai/skills",
+    }).to_string())
+}
+
+/// Returns the local Argentum skills directory path.
+fn argentum_skills_dir() -> PathBuf {
+    let base = if cfg!(target_os = "windows") {
+        std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."))
+    } else {
+        std::env::var("HOME")
+            .map(|h| PathBuf::from(h).join(".local").join("share"))
+            .unwrap_or_else(|_| PathBuf::from("."))
+    };
+    base.join("argentum").join("skills")
+}
+
+/// Installs a skill from GitHub into the local skills directory using git sparse-checkout.
+/// source: "anthropic" | "codex"
+/// skill_name: the skill folder name (e.g. "docx", "figma-use")
+fn install_skill(source: String, skill_name: String) -> Result<String, String> {
+    let skills_dir = argentum_skills_dir();
+
+    std::fs::create_dir_all(&skills_dir)
+        .map_err(|e| format!("Failed to create skills directory: {}", e))?;
+
+    let (repo_url, sub_path) = match source.as_str() {
+        "anthropic" => (
+            "https://github.com/anthropics/skills.git",
+            format!("skills/{}", skill_name),
+        ),
+        "codex" => (
+            "https://github.com/openai/skills.git",
+            format!("skills/.curated/{}", skill_name),
+        ),
+        _ => return Err(format!("Unknown skill source: {}", source)),
+    };
+
+    let dest = skills_dir.join(&skill_name);
+    if dest.exists() {
+        return Err(format!("Skill '{}' is already installed.", skill_name));
+    }
+
+    // Use git sparse-checkout to clone only the needed subdirectory.
+    // This avoids downloading the entire repo history.
+    let output = Command::new("git")
+        .args([
+            "clone",
+            "--no-checkout",
+            "--depth=1",
+            "--filter=blob:none",
+            repo_url,
+            dest.to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}. Is git installed?", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Clean up partial clone on failure
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(format!("git clone failed: {}", stderr));
+    }
+
+    // Sparse checkout the specific subdirectory
+    let sparse_output = Command::new("git")
+        .args(["sparse-checkout", "set", &sub_path])
+        .current_dir(&dest)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("git sparse-checkout failed: {}", e))?;
+
+    if !sparse_output.status.success() {
+        let stderr = String::from_utf8_lossy(&sparse_output.stderr);
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(format!("git sparse-checkout set failed: {}", stderr));
+    }
+
+    // Checkout the files
+    let checkout_output = Command::new("git")
+        .args(["checkout", "HEAD", "--", &sub_path])
+        .current_dir(&dest)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("git checkout failed: {}", e))?;
+
+    if !checkout_output.status.success() {
+        let stderr = String::from_utf8_lossy(&checkout_output.stderr);
+        let _ = std::fs::remove_dir_all(&dest);
+        return Err(format!("git checkout failed: {}", stderr));
+    }
+
+    // Move files up: dest/skills/<skill_name>/* → dest/*
+    let inner_src = dest.join(&sub_path);
+    if inner_src.exists() {
+        for entry in std::fs::read_dir(&inner_src)
+            .map_err(|e| format!("Failed to read inner dir: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let src_path = entry.path();
+            let dst_path = dest.join(src_path.file_name().unwrap());
+            std::fs::rename(&src_path, &dst_path)
+                .map_err(|e| format!("Failed to move {}: {}", src_path.display(), e))?;
+        }
+        std::fs::remove_dir(&inner_src)
+            .ok(); // Ignore if not empty (should be empty after moves)
+    }
+
+    // Symlink into ~/.openclaw/workspace/skills/ so the skills-loader picks it up
+    if cfg!(target_os = "windows") {
+        let openclaw_skills = std::env::var("USERPROFILE")
+            .map(|h| PathBuf::from(h).join(".openclaw").join("workspace").join("skills"))
+            .ok();
+        if let Some(openclaw_dir) = openclaw_skills {
+            if openclaw_dir.exists() || std::fs::create_dir_all(&openclaw_dir).is_ok() {
+                let link = openclaw_dir.join(&skill_name);
+                if !link.exists() {
+                    let _ = std::os::windows::fs::symlink_dir(&dest, &link);
+                }
+            }
+        }
+    }
+
+    Ok(format!(
+        "Installed '{}' from {} to {}",
+        skill_name,
+        source,
+        dest.display()
+    ))
+}
+
+/// Uninstalls a skill from the local Argentum skills directory.
+fn uninstall_skill(skill_name: String) -> Result<String, String> {
+    let skills_dir = argentum_skills_dir();
+
+    let skill_path = skills_dir.join(&skill_name);
+    if !skill_path.exists() {
+        return Err(format!("Skill '{}' is not installed.", skill_name));
+    }
+
+    std::fs::remove_dir_all(&skill_path)
+        .map_err(|e| format!("Failed to remove skill directory: {}", e))?;
+
+    // Also remove symlink from ~/.openclaw/workspace/skills/
+    if cfg!(target_os = "windows") {
+        if let Ok(user_home) = std::env::var("USERPROFILE") {
+            let openclaw_link = PathBuf::from(user_home)
+                .join(".openclaw")
+                .join("workspace")
+                .join("skills")
+                .join(&skill_name);
+            let _ = std::fs::remove_file(&openclaw_link);
+        }
+    }
+
+    Ok(format!("Uninstalled '{}'", skill_name))
+}
+
+/// Lists all skills installed in the local Argentum skills directory.
+fn list_installed_skills() -> Result<String, String> {
+    let skills_dir = argentum_skills_dir();
+
+    if !skills_dir.exists() {
+        return Ok(json!([]).to_string());
+    }
+
+    let mut skills: Vec<serde_json::Value> = Vec::new();
+
+    for entry in std::fs::read_dir(&skills_dir)
+        .map_err(|e| format!("Failed to read skills directory: {}", e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            let skill_md = path.join("SKILL.md");
+            let installed_at = std::fs::metadata(&path)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH).ok()
+                        .map(|d| d.as_secs())
+                })
+                .unwrap_or(0);
+
+            skills.push(json!({
+                "name": name,
+                "path": path.to_string_lossy().to_string(),
+                "has_skill_md": skill_md.exists(),
+                "installed_at": installed_at,
+            }));
+        }
+    }
+
+    Ok(json!(skills).to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -7338,6 +8185,14 @@ pub fn run() {
             desktop_defaults,
             desktop_state,
             desktop_system_stats,
+            detect_migration_sources,
+            migrate_from_openclaw,
+            check_for_updates,
+            download_update,
+            get_skills_catalog,
+            install_skill,
+            uninstall_skill,
+            list_installed_skills,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Argentum");

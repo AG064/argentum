@@ -1,4 +1,5 @@
 import {
+  ARGENTUM_BUNDLED_SKILLS,
   contextAccessOptions,
   fontOptions,
   llamaDownloadPresets,
@@ -11,6 +12,7 @@ import {
   thinkingLevels,
 } from './constants.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
+
 import { chatModule } from './chat.js';
 import { onboardingModule } from './onboarding.js';
 import { terminalEntriesForDisplay } from './state.js';
@@ -32,6 +34,11 @@ import {
   modelOptionsFor,
   selected,
 } from './utils.js';
+import {
+  detectMigrationSources,
+  handleMigrationImport,
+  openExternalUrl,
+} from './setup.js';
 
 function terminalPreview(state, filter = '') {
   const entries = terminalEntriesForDisplay(filter);
@@ -712,7 +719,10 @@ const settingsSections = [
   ['appearance', 'Appearance'],
   ['telegram', 'Telegram'],
   ['security', 'Security'],
+  ['migration', 'Migration'],
   ['advanced', 'Advanced'],
+  ['skills', 'Skills'],
+  ['feedback', 'Help & Feedback'],
 ];
 
 function renderSettingsNav(activeSection) {
@@ -778,6 +788,13 @@ function settingsSectionSummary(id, state, provider, metadata) {
     'appearance': `Language: ${state.uiLanguage}; accent ${state.accentColor || 'default red'}`,
     'telegram': state.selectedChannels.includes('telegram') ? 'Telegram selected' : 'Telegram off',
     'security': labelFor(securityProfiles, state.securityProfile),
+    'migration': state.migrationResults
+      ? 'Import complete'
+      : state.migrationSources?.openclaw?.found
+        ? `OpenClaw found — ${state.migrationSources.openclaw.item_count} item(s)`
+        : state.migrationSources?.hermes?.found
+          ? `Hermes found — ${state.migrationSources.hermes.item_count} item(s)`
+          : 'No legacy agent detected',
     'advanced': `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
   };
   return summaries[id] || 'Open a settings section.';
@@ -853,6 +870,9 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
   }
 
   if (activeSection === 'model') {
+    const supportsThinking = (metadata.capabilities || []).some(
+      (c) => String(c).toLowerCase().includes('reasoning') || String(c).toLowerCase().includes('thinking'),
+    );
     return `
       <label>
         Model
@@ -873,7 +893,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
       </label>
       <div class="settings-inline-note">
         <strong>${escapeHtml(metadata.contextWindow)}</strong>
-        <p>${escapeHtml(metadata.detail)} ${escapeHtml(metadata.capabilities.join(', '))}.</p>
+        <p>${escapeHtml(metadata.detail)} ${escapeHtml((metadata.capabilities || []).join(', '))}.</p>
       </div>
       <label>
         API style
@@ -882,6 +902,16 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           <option value="anthropic" ${selected(state.providerApi, 'anthropic')}>Anthropic-compatible</option>
         </select>
       </label>
+      ${supportsThinking
+        ? `<div class="settings-inline-note">
+            <strong>Thinking mode</strong>
+            <p>${escapeHtml(provider.label)} supports extended reasoning. The thinking level (fast/balanced/deep) controls how much effort the model spends on internal reasoning before responding. Configure it in the "Context and thinking" settings section or in the chat composer.</p>
+          </div>`
+        : `<div class="settings-inline-note">
+            <strong>Thinking mode</strong>
+            <p>The current model does not support an externally-controlled thinking mode. The thinking level setting has no effect for this model.</p>
+          </div>`
+      }
     `;
   }
 
@@ -1188,6 +1218,285 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
         <p>${escapeHtml(labelFor(runtimeModes, state.runtimeMode) === 'Desktop app' ? 'GUI first, CLI tools available. Chat, settings, diagnostics, and gateway controls remain in the GUI.' : 'Terminal-first. Desktop settings still save to the workspace config used by argentum commands.')}</p>
       </div>
       ${renderSettingsOAuthPanel(state)}
+    `;
+  }
+
+  if (activeSection === 'skills') {
+    // Installed skills come from Rust state; catalog skills are hardcoded
+    const installedNames = new Set(
+      (state.installedSkills || []).map((s) => s.name),
+    );
+    const anthropicSkills = (state.skillsCatalog?.anthropic || []).map(normalizeCatalog);
+    const codexSkills = (state.skillsCatalog?.codex || []).map(normalizeCatalog);
+    const installedList = (state.installedSkills || []).map((s) => ({
+      ...normalizeInstalled(s),
+      isInstalled: true,
+    }));
+    const activeTab = state.skillsTab || 'argentum';
+    const searchQuery = state.skillsSearch || '';
+    const filterCategory = state.skillsCategory || 'all';
+
+    const filterByCategory = (skills) => {
+      if (filterCategory === 'all') return skills;
+      return skills.filter((s) => s.category === filterCategory);
+    };
+
+    const filterBySearch = (skills) => {
+      if (!searchQuery.trim()) return skills;
+      const q = searchQuery.toLowerCase();
+      return skills.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q) ||
+          (s.tags || []).some((t) => t.toLowerCase().includes(q)),
+      );
+    };
+
+    // Normalize installed skills to have the same shape as catalog skills
+    const normalizeInstalled = (s) => ({
+      name: s.name,
+      description: s.description || `Custom skill in your local skills directory`,
+      source: 'installed',
+      tags: s.tags || [],
+      url: s.url || null,
+      category: s.category || 'general',
+      builtinNote: s.builtinNote || null,
+    });
+
+    const normalizeCatalog = (s) => ({ ...s, isInstalled: installedNames.has(s.name) });
+
+    const renderSkillCard = (skill) => {
+      const safeSource = skill.source || 'installed';
+      const safeDesc = skill.description || '';
+      const isArgentumBuiltin = safeSource === 'argentum';
+      const badgeLabel = isArgentumBuiltin ? 'Built-in' : escapeHtml(safeSource);
+      const badgeClass = isArgentumBuiltin ? 'builtin' : safeSource;
+      return `
+        <div class="skill-card">
+          <div class="skill-card-header">
+            <div class="skill-card-name-row">
+              <span class="skill-card-name">${escapeHtml(skill.name)}</span>
+              <span class="skill-source-badge source-${escapeAttribute(badgeClass)}">${badgeLabel}</span>
+            </div>
+            <div class="skill-card-tags">
+              ${(skill.tags || []).slice(0, 3).map((t) => `<span class="skill-tag">${escapeHtml(t)}</span>`).join('')}
+            </div>
+          </div>
+          ${safeDesc ? `<p class="skill-card-description">${escapeHtml(safeDesc.slice(0, 180))}${safeDesc.length > 180 ? '…' : ''}</p>` : ''}
+          ${skill.builtinNote ? `<p class="skill-builtin-note"><em>${escapeHtml(skill.builtinNote)}</em></p>` : ''}
+          ${isArgentumBuiltin
+            ? `<p class="skill-builtin-note"><em>Part of the standard Argentum installation — always available.</em></p>`
+            : `<div class="skill-card-actions">
+                ${safeSource === 'installed'
+                  ? `<button type="button" class="button compact uninstall-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" title="Uninstall">Uninstall</button>`
+                  : `<button type="button" class="button primary compact install-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" data-skill-source="${escapeAttribute(safeSource)}" title="Install">Install</button>`
+                }
+                ${skill.url ? `<a href="${escapeAttribute(skill.url)}" class="button compact" data-open-external="${escapeAttribute(skill.url)}" target="_blank" rel="noopener">View on GitHub</a>` : ''}
+              </div>`
+          }
+        </div>`;
+    };
+
+    const renderTab = (tabId, label, skills, count) => `
+      <button type="button" class="skills-tab-btn ${activeTab === tabId ? 'active' : ''}" data-skills-tab="${escapeAttribute(tabId)}">
+        ${escapeHtml(label)} <span class="skills-tab-count">${count}</span>
+      </button>`;
+
+    const anthropicFiltered = filterBySearch(filterByCategory(anthropicSkills));
+    const codexFiltered = filterBySearch(filterByCategory(codexSkills));
+    const installedFiltered = filterBySearch(filterByCategory(installedList));
+    const argentumSkills = ARGENTUM_BUNDLED_SKILLS.map(normalizeCatalog);
+    const argentumFiltered = filterBySearch(filterByCategory(argentumSkills));
+    const tabContent =
+      activeTab === 'anthropic'
+        ? anthropicFiltered
+        : activeTab === 'codex'
+          ? codexFiltered
+          : activeTab === 'argentum'
+            ? argentumFiltered
+            : installedFiltered;
+
+    const totalCount =
+      activeTab === 'anthropic'
+        ? anthropicSkills.length
+        : activeTab === 'codex'
+          ? codexSkills.length
+          : activeTab === 'argentum'
+            ? argentumSkills.length
+            : installedList.length;
+
+    return `
+      <div class="skills-section">
+        <div class="skills-section-header">
+          <div>
+            <h3>Skills</h3>
+            <p class="muted-line">Browse Argentum's built-in skills and install additional skills from Anthropic and Codex to extend Argentum's capabilities with specialized knowledge and workflows.</p>
+          </div>
+        </div>
+        <div class="skills-toolbar">
+          <div class="skills-tabs">
+            ${renderTab('argentum', 'Built-in', argentumSkills, argentumSkills.length)}
+            ${renderTab('anthropic', 'Anthropic', anthropicSkills, anthropicSkills.length)}
+            ${renderTab('codex', 'Codex', codexSkills, codexSkills.length)}
+            ${renderTab('installed', 'Installed', installedList, installedList.length)}
+          </div>
+          <div class="skills-toolbar-right">
+            <select class="select compact skills-category-filter" title="Filter by category">
+              <option value="all" ${filterCategory === 'all' ? 'selected' : ''}>All categories</option>
+              <option value="document" ${filterCategory === 'document' ? 'selected' : ''}>Documents</option>
+              <option value="design" ${filterCategory === 'design' ? 'selected' : ''}>Design</option>
+              <option value="code" ${filterCategory === 'code' ? 'selected' : ''}>Code</option>
+              <option value="devops" ${filterCategory === 'devops' ? 'selected' : ''}>DevOps</option>
+              <option value="security" ${filterCategory === 'security' ? 'selected' : ''}>Security</option>
+              <option value="ai" ${filterCategory === 'ai' ? 'selected' : ''}>AI & APIs</option>
+              <option value="collaboration" ${filterCategory === 'collaboration' ? 'selected' : ''}>Collaboration</option>
+              <option value="testing" ${filterCategory === 'testing' ? 'selected' : ''}>Testing</option>
+              <option value="deployment" ${filterCategory === 'deployment' ? 'selected' : ''}>Deployment</option>
+              <option value="general" ${filterCategory === 'general' ? 'selected' : ''}>General</option>
+            </select>
+            <input
+              type="search"
+              class="input compact skills-search"
+              placeholder="Search skills…"
+              value="${escapeAttribute(searchQuery)}"
+            />
+          </div>
+        </div>
+        ${tabContent.length === 0
+          ? `<div class="skills-empty">
+               <p class="muted-line">${totalCount === 0 ? 'No skills in this tab yet.' : 'No skills match your search.'}</p>
+               ${activeTab === 'installed' && installedList.length === 0 ? '<p class="muted-line">Install skills from the Anthropic or Codex tabs above.</p>' : ''}
+             </div>`
+          : `<div class="skills-grid">${tabContent.map(renderSkillCard).join('')}</div>`
+        }
+        <div class="skills-footer-note">
+          <p class="muted-line">Skills are loaded from <code>~/.openclaw/workspace/skills/</code> and <code>%LOCALAPPDATA%/argentum/skills/</code>. Restart Argentum after installing or uninstalling.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (activeSection === 'feedback') {
+    const version = '0.0.9';
+    const bugUrl =
+      'https://github.com/AG064/argentum/issues/new?title=%5BBug%5D%20Brief%20description&labels=bug&body=' +
+      encodeURIComponent(
+        '## Version\n' + version + '\n\n## Steps to reproduce\n1. \n2. \n3. \n\n## Expected behavior\n\n\n## Actual behavior\n\n\n## Environment\n- OS: \n- Workspace: ' +
+        (state.workspacePath || 'not set') +
+        '\n',
+      );
+    const featureUrl =
+      'https://github.com/AG064/argentum/discussions/new?category=ideas&title=%5BFeature%5D%20Brief%20description&body=' +
+      encodeURIComponent(
+        '## Problem you want to solve\n\n\n## Suggested solution\n\n\n## Alternatives considered\n\n',
+      );
+    return `
+      <div class="feedback-section">
+        <div class="feedback-header">
+          <h3>Help & Feedback</h3>
+          <p class="muted-line">Found something broken or have an idea? Let us know.</p>
+        </div>
+        <div class="feedback-cards">
+          <div class="feedback-card">
+            <div class="feedback-card-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+            </div>
+            <div>
+              <h4>Report a bug</h4>
+              <p class="muted-line">Something is broken or not working as expected.</p>
+            </div>
+          </div>
+          <div class="feedback-actions">
+            <button type="button" class="button primary" id="feedback-bug" data-feedback-url="${escapeAttribute(bugUrl)}">
+              Open bug report
+            </button>
+          </div>
+        </div>
+        <div class="feedback-cards">
+          <div class="feedback-card">
+            <div class="feedback-card-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+            </div>
+            <div>
+              <h4>Request a feature</h4>
+              <p class="muted-line">Suggest a new capability or improvement.</p>
+            </div>
+          </div>
+          <div class="feedback-actions">
+            <button type="button" class="button primary" id="feedback-feature" data-feedback-url="${escapeAttribute(featureUrl)}">
+              Open feature request
+            </button>
+          </div>
+        </div>
+        <div class="feedback-info-box">
+          <p class="muted-line">Bug reports and feature requests open in your browser on GitHub. Your version (${version}) and workspace path are pre-filled to save time.</p>
+        </div>
+        <div class="feedback-email-hint">
+          <p class="muted-line">For private security issues, email <a href="mailto:agdroke064@gmail.com" data-open-external="mailto:agdroke064@gmail.com">agdroke064@gmail.com</a> directly.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (activeSection === 'migration') {
+    const openclaw = state.migrationSources?.openclaw;
+    const hermes = state.migrationSources?.hermes;
+    const source = openclaw?.found ? openclaw : hermes?.found ? hermes : null;
+    const sourceName = openclaw?.found ? 'OpenClaw' : 'Hermes';
+
+    if (state.migrationResults) {
+      const results = state.migrationResults;
+      const ok = results.filter((r) => r.status === 'ok').length;
+      const err = results.filter((r) => r.status === 'error').length;
+      return `
+        <div class="migration-result-card full-span">
+          <h4>Migration complete</h4>
+          <p>${ok} item(s) migrated${err > 0 ? `, ${err} error(s)` : ''}.</p>
+          ${err > 0
+            ? `<p class="muted-line">Check the list below for details on failed items.</p>
+               <ul>${results.filter((r) => r.status === 'error').map((r) => `<li>${escapeHtml(r.id)}: ${escapeHtml(r.message)}</li>`).join('')}</ul>`
+            : ''}
+        </div>
+      `;
+    }
+
+    if (!source) {
+      return `
+        <div class="settings-inline-note full-span">
+          <strong>No legacy agent detected</strong>
+          <p>Argentum scanned <code>~/.openclaw/</code> and <code>~/.hermes/</code> but found no previous installation.</p>
+          <button class="button" id="settings-rescan-migration">Scan again</button>
+        </div>
+      `;
+    }
+
+    const items = source.items || [];
+    const totalSize = source.size_bytes || 0;
+
+    return `
+      <div class="full-span migration-card" id="settings-migration-card">
+        <div class="migration-card-header">
+          <h4>Import from ${sourceName}</h4>
+          <span class="muted-line">${items.length} item(s) · ${formatBytes(source.size_bytes)}</span>
+        </div>
+        <ul class="migration-item-list">
+          ${items.map((item) => `
+            <li>
+              <span>${escapeHtml(item.label)}</span>
+              <span class="muted-line">${escapeHtml(item.description)}</span>
+            </li>
+          `).join('')}
+        </ul>
+        <div class="migration-card-actions">
+          <button type="button" class="button primary" id="settings-do-migration">
+            Import into Argentum
+          </button>
+        </div>
+      </div>
     `;
   }
 

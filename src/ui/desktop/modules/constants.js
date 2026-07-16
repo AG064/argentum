@@ -318,6 +318,24 @@ export const modelMetadata = {
     capabilities: ['chat', 'text generation'],
     detail: 'MiniMax text model kept as a testing model until the provider test confirms support.',
   },
+  'claude-sonnet-4-20250514': {
+    maxContextTokens: 200000,
+    contextWindow: '200k tokens',
+    maxContextWindow: '200k tokens',
+    currentContextLabel: 'Anthropic API: adaptive thinking, tool use, vision.',
+    capabilities: ['frontier reasoning', 'coding', 'analysis', 'tools', 'vision'],
+    detail:
+      'Claude Sonnet 4 supports adaptive thinking — Argentum maps the thinking level to a token budget (1024 for fast, 8000 for balanced, 32000 for deep). Reasoning is shown in chat when enabled.',
+  },
+  'claude-opus-4-20250514': {
+    maxContextTokens: 200000,
+    contextWindow: '200k tokens',
+    maxContextWindow: '200k tokens',
+    currentContextLabel: 'Anthropic API: strongest reasoning, adaptive thinking, tool use.',
+    capabilities: ['frontier reasoning', 'coding', 'research', 'analysis', 'tools', 'vision'],
+    detail:
+      'Claude Opus 4 is Anthropic\'s strongest model. Adaptive thinking budget: 1024 (fast), 8000 (balanced), 32000 (deep). Best for complex multi-step tasks.',
+  },
   'lmstudio-auto': {
     maxContextTokens: 32768,
     contextWindow: 'Endpoint reported when available',

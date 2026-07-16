@@ -65,8 +65,8 @@ export interface GraphData {
   stats: { entities: number; relationships: number };
 }
 
-/** Graph storage backend interface */
-interface GraphBackend {
+/** Graph storage backend interface — implement this to provide an alternative storage engine. */
+export interface GraphBackend {
   init(): Promise<void>;
   close(): Promise<void>;
   addEntity(entity: Omit<Entity, 'id' | 'createdAt' | 'updatedAt'>): Promise<Entity>;

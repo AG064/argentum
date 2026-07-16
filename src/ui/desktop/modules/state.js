@@ -295,6 +295,14 @@ export const state = {
         'Desktop shell loaded. Gateway, chat, diagnostics, and setup output will appear here when actions run.',
     },
   ],
+  // Migration
+  migrationSources: { openclaw: null, hermes: null },
+  migrationDetected: false,
+  migrationSkipped: false, // true if user skipped during onboarding
+  migrationInProgress: false,
+  migrationResults: null,
+  migrationError: '',
+
   pendingApprovals: [
     {
       id: 'workspace-read',
@@ -315,6 +323,12 @@ export const state = {
       status: 'Blocked',
     },
   ],
+  // Skills catalog
+  skillsCatalog: { argentum: [], anthropic: [], codex: [] },
+  installedSkills: [],
+  skillsTab: 'argentum',
+  skillsSearch: '',
+  skillsCategory: 'all',
 };
 
 // Secure random ID generator (replaces Math.random() for security-sensitive IDs)
@@ -483,6 +497,7 @@ export function setSettingsSection(sectionId) {
     'security',
     'advanced',
     'appearance',
+    'skills',
   ];
   state.settingsSection = allowed.includes(sectionId) ? sectionId : 'overview';
   recordUiEvent('settings.section_opened', 'ok', `Opened ${state.settingsSection} settings.`, {
@@ -1136,4 +1151,25 @@ export function updateChatMessage(messageId, patch = {}) {
       patch.status === 'sent' || patch.status === 'stopped' || patch.messageActivity === true,
   });
   return state.chatBlocks[index];
+}
+
+// Skills catalog state setters
+export function setSkillsCatalog(anthropic, codex) {
+  state.skillsCatalog = { anthropic, codex };
+}
+
+export function setInstalledSkills(skills) {
+  state.installedSkills = skills;
+}
+
+export function setSkillsTab(tab) {
+  state.skillsTab = tab;
+}
+
+export function setSkillsSearch(query) {
+  state.skillsSearch = query;
+}
+
+export function setSkillsCategory(category) {
+  state.skillsCategory = category;
 }

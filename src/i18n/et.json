@@ -323,5 +323,61 @@
     "llamaCpp": "Argentum llama.cpp",
     "ollama": "Ollama / kohalik",
     "custom": "Kohandatud otspunkt"
+  },
+
+  "migration": {
+    "title": "Migratsioon",
+    "openclawFound": "OpenClawi seadistus leitud",
+    "hermesFound": "Hermesi seadistus leitud",
+    "notFound": "Legacy agenti ei leitud",
+    "itemsFound": "{count} objekti (t) leitud",
+    "importNow": "Impordi Argentumisse",
+    "skipForNow": "Jäta hetkel vahele",
+    "complete": "Migratsioon lõpetatud",
+    "itemsMigrated": "{ok} objekti (t) migreeritud, {err} viga (d)",
+    "scanAgain": "Skanni uuesti",
+    "sourceOpenclaw": "OpenClaw",
+    "sourceHermes": "Hermes",
+    "descOpenclaw": "Impordi oskused, mälu, Telegrami volitused ja seaded OpenClawist.",
+    "descHermes": "Impordi oskused, mälud, SOUL.md ja seaded Hermesest.",
+    "noSourceDetected": "Argentum skannis ~/.openclaw/ ja ~/.hermes/, kuid ei leidnud eelmist paigaldust.",
+    "noSourceDetectedHint": "Kui teil on kohandatud asukohas eelmine paigaldus, saate käsitsi migreerida."
+  },
+
+  "feedback": {
+    "title": "Abi ja tagasiside",
+    "bugTitle": "Raporteeri viga",
+    "bugDetail": "Midagi on katki või ei tööta ootuspäraselt.",
+    "featureTitle": "Soovita funktsiooni",
+    "featureDetail": "Paku uut võimalust või parendust.",
+    "openBug": "Ava vearaport",
+    "openFeature": "Ava funktsioonitaotlus",
+    "versionPrefilled": "Vearaport ja funktsioonitaotlus avanevad brauseris GitHubis. Teie versioon ja tööruumi asukoht on eeltäidetud.",
+    "securityContact": "Privaatsete turbeprobleemide korral kirjutage otse {email}.",
+    "reportBug": "Raporteeri viga",
+    "requestFeature": "Soovita funktsiooni"
+  },
+
+  "skills": {
+    "title": "Oskused",
+    "description": "Sirvi ja paigalda oskusi Anthropicist ja Codexist. Oskused laiendavad Argentumi võimalusi spetsiaalsete teadmiste ja töövoogudega.",
+    "tabAnthropic": "Anthropic",
+    "tabCodex": "Codex",
+    "tabInstalled": "Paigaldatud",
+    "searchPlaceholder": "Otsi oskusi…",
+    "categoryAll": "Kõik kategooriad",
+    "install": "Paigalda",
+    "uninstall": "Eemalda",
+    "installing": "Paigaldamine…",
+    "removing": "Eemaldamine…",
+    "viewOnGithub": "Vaata GitHubis",
+    "emptyTab": "Selles vahekaardil pole veel oskusi.",
+    "emptySearch": "Otsingule vastavaid oskusi pole.",
+    "emptyInstalled": "Paigalda oskusi ülaltoodud Anthropic või Codex vahekaartidelt.",
+    "footerNote": "Oskusi laaditakse asukohtadest {path1} ja {path2}. Taaskäivita Argentum pärast paigaldamist või eemaldamist.",
+    "installedSuccess": "Oskus '{name}' paigaldatud edukalt.",
+    "uninstalledSuccess": "Oskus '{name}' eemaldatud edukalt.",
+    "installError": "Oskuse paigaldamine ebaõnnestus: {error}",
+    "uninstallError": "Oskuse eemaldamine ebaõnnestus: {error}"
   }
 }

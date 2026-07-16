@@ -1,0 +1,46 @@
+# Argentum Router Agent — Example Configuration
+# Copy this file to config/router.yaml and configure your routing rules.
+# The router supports YAML (.yaml / .yml) and JSON (.json) formats.
+#
+# All user/chat IDs must be configured here. No IDs are hardcoded in the router code.
+
+# Default agent for messages that don't match any rule
+defaultAgent: agx
+
+# Optional friendly-name mappings for IDs
+idMappings:
+  USER_FRIENDLY_NAME:
+    numericId: "REPLACE_WITH_NUMERIC_ID"
+    username: "@username"
+    description: "Description of this user or chat"
+
+# Routing rules are evaluated in order — first match wins
+rules:
+  # Route by sender (Telegram user ID)
+  - condition: sender_id
+    value: USER_FRIENDLY_NAME
+    targetAgent: target-agent-name
+    # Optional: override the agent's default workspace
+    targetWorkspace: /optional/path/to/workspace
+
+  # Route by chat ID (group, channel, etc.)
+  - condition: chat_id
+    value: CHAT_FRIENDLY_NAME
+    targetAgent: target-agent-name
+
+  # Route by chat type
+  - condition: chat_type
+    value: group
+    targetAgent: group-handler
+
+  # Route by keyword content
+  - condition: keyword
+    value:
+      - admin
+      - /admin
+    targetAgent: admin-agent
+
+  # Fallback — always matches last
+  - condition: always
+    value: ""
+    targetAgent: agx

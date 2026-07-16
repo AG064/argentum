@@ -29,6 +29,7 @@ import { getMemoryGraph, type MemoryGraph } from './memory/graph';
 import { getSemanticMemory, type SemanticMemory } from './memory/semantic';
 import { createCapabilityBroker, type CapabilityBroker } from './security/capability-broker';
 import { startDashboardServer } from './ui/server/index';
+import { RouterAgent, loadRouterConfig } from './agents/router/index.js';
 
 // ─── Tool Interface ───────────────────────────────────────────────────────────
 
@@ -730,6 +731,7 @@ class Argentum {
   private shuttingDown = false;
   private semanticMemory!: SemanticMemory;
   private memoryGraph!: MemoryGraph;
+  private router: RouterAgent | null = null;
   private channelHistories: Map<string, Message[]> = new Map();
 
   constructor() {
@@ -970,6 +972,15 @@ class Argentum {
         'Optional built-in filesystem or shell tools are enabled by environment override',
       );
     }
+
+    // Initialize Router Agent for multi-user routing
+    const routerConfig = loadRouterConfig();
+    this.router = new RouterAgent(routerConfig);
+    this.router.registerAgent('agx', this.config.security.capabilities.workspaceRoot || process.cwd());
+    this.logger.info('Router Agent initialized', {
+      rules: routerConfig.rules.length,
+      defaultAgent: routerConfig.defaultAgent,
+    });
 
     // Register built-in tools
     for (const tool of createBuiltinTools({
@@ -1256,6 +1267,37 @@ class Argentum {
 
         // Show typing indicator
         await ctx.replyWithChatAction('typing');
+
+        // Route message through Router Agent if configured
+        const messageContext = {
+          sender: {
+            id: String(ctx.from?.id ?? ''),
+            username: ctx.from?.username,
+            name: ctx.from?.first_name,
+          },
+          chat: {
+            id: String(ctx.chat?.id ?? ''),
+            type: ctx.chat?.type === 'private' ? 'direct' : ctx.chat?.type ?? 'direct',
+            title: ctx.chat?.title,
+          },
+          message: text,
+          platform: 'telegram',
+          timestamp: Date.now(),
+        };
+
+        if (this.router) {
+          try {
+            const routeResult = await this.router.route(messageContext);
+            this.logger.debug('Router resolved message', {
+              targetAgent: routeResult.agent,
+              workspace: routeResult.workspace,
+            });
+          } catch (err) {
+            this.logger.warn('Router routing failed, using default agent', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
 
         try {
           this.ensureChannelSession(sessionId, 'telegram', {

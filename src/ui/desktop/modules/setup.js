@@ -483,12 +483,72 @@ export async function chooseWorkspaceFolder() {
 
   state.workspacePath = Array.isArray(selected) ? selected[0] : selected;
   setUiPreference('workspacePath', state.workspacePath);
+  detectMigrationSources(); // Check for OpenClaw/Hermes to migrate
   notify(
     'success',
     'Workspace selected',
     `Default access is now limited to files and folders inside ${state.workspacePath}.`,
   );
   return true;
+}
+
+/** Detect OpenClaw and Hermes installation sources for migration. */
+export async function detectMigrationSources() {
+  if (typeof window === 'undefined' || !window.__TAURI__) return;
+  try {
+    const { invoke } = window.__TAURI__.core;
+    const sources = await invoke('detect_migration_sources');
+    state.migrationSources = sources;
+    // OpenClaw is the priority source for v0.0.9
+    state.migrationDetected = Boolean(sources?.openclaw?.found || sources?.hermes?.found);
+    state.migrationSkipped = false;
+    state.migrationResults = null;
+    state.migrationError = '';
+  } catch (err) {
+    console.warn('[Migration] Detection failed:', err);
+    state.migrationSources = { openclaw: null, hermes: null };
+    state.migrationDetected = false;
+  }
+}
+
+/** Migrate selected items from OpenClaw into the current workspace. */
+export async function runMigration(items) {
+  if (!state.workspacePath) throw new Error('No workspace selected');
+  state.migrationInProgress = true;
+  state.migrationError = '';
+  try {
+    const { invoke } = window.__TAURI__.core;
+    const results = await invoke('migrate_from_openclaw', {
+      workspacePath: state.workspacePath,
+      items,
+    });
+    state.migrationResults = results;
+    return results;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    state.migrationError = msg;
+    throw new Error(msg);
+  } finally {
+    state.migrationInProgress = false;
+  }
+}
+
+/** Handle the "Import" button click in the onboarding migration card. */
+export async function handleMigrationImport() {
+  const openclaw = state.migrationSources?.openclaw;
+  const items = (openclaw?.items || []).map((item) => ({
+    id: item.id,
+    source_path: item.source_path,
+  }));
+
+  if (!items.length) return;
+
+  try {
+    await runMigration(items);
+    notify('success', 'Migration complete', `${items.length} item(s) imported from OpenClaw.`);
+  } catch (err) {
+    notify('warning', 'Migration partial', err.message || 'Some items may not have migrated.');
+  }
 }
 
 export async function hydrateDesktopDefaults() {
@@ -500,6 +560,7 @@ export async function hydrateDesktopDefaults() {
     if (defaults?.savedWorkspacePath) {
       state.workspacePath = defaults.savedWorkspacePath;
       setUiPreference('workspacePath', state.workspacePath);
+      detectMigrationSources();
       return;
     }
     if (
@@ -508,6 +569,7 @@ export async function hydrateDesktopDefaults() {
     ) {
       state.workspacePath = defaults.defaultWorkspacePath;
       setUiPreference('workspacePath', state.workspacePath);
+      detectMigrationSources();
     }
   } catch (error) {
     notify('warning', 'Default workspace unavailable', normalizeError(error));

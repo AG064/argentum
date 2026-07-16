@@ -5,9 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.0.9] - 2026-06-18
+## [0.0.9] - 2026-06-24
 
 ### Added
 
@@ -18,6 +16,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Language picker in Settings → Appearance (English, Eesti)
   - RTL infrastructure: `dir` attribute on `<html>`, CSS logical properties documented in `styles.css`
   - Locale preference persisted via localStorage UI preferences
+
+- **In-app OpenClaw migration** — one-click import directly from the app
+  - Automatic detection on first run after workspace selection
+  - Settings → Migration section for re-scanning and re-importing anytime
+  - Imports: skills, long-term memory (MEMORY.md), user profile (USER.md), SOUL.md
+    persona, workspace files, memory database, Telegram bot credentials, and
+    OpenClaw config (provider, model, MCP servers)
+  - Per-item conflict: text files append to existing content; directories merge
+    skill-by-skill; binary files (memory.db) copy directly
+  - Hermes → Argentum migration deferred to v0.1.0
+
+  - **CI / Release pipeline** — `attach-installers` step now gracefully skips cleanup
+  when the git tag has no matching GitHub release (lightweight tags for CI-only builds)
+
+- **In-app feedback mechanism** — Settings → Help & Feedback: "Report a bug" opens a
+  GitHub issue with version and workspace path pre-filled; "Request a feature" opens GitHub
+  Discussions with a feature request template; private security issues directed to email
+
+- **Help panel doc links** — the `?` help panel now includes an "Open full docs for [section]"
+  link that opens the relevant GitHub wiki page in the browser
+
+- **Update mechanism** — `check_for_updates` Rust Tauri command calls GitHub Releases API;
+  `download_update` opens the releases page; replaces the previous simulation
+
+- **Router Agent wired in** — `src/agents/router/` now initialized in the main agent loop
+  (`Argentum.start()`); supports both YAML (`config/router.yaml`) and JSON config;
+  Telegram messages are routed through `RouterAgent.route()` before agent dispatch;
+  `config/router.yaml.example` created
+
+- **Knowledge Graph consolidation** — `GraphBackend` interface exported as a named export
+  from `features/knowledge-graph`; shared type re-export at `src/core/graph-types.ts`;
+  approach documented (three implementations aligned with the canonical interface)
+
+- **Security hardening** — `ip-address` override changed to `>= 10.1.1` (patches
+  CVE-2026-42338); `sanitize-html` constraint tightened to `>= 2.17.2` (patches
+  CVE-2026-40186); SECURITY.md updated with fixed status for both CVEs
+
+- **Tauri version synced** — `tauri.conf.json` version bumped from 0.0.8 to 0.0.9
 
 ## [0.0.8] - 2026-06-15
 

@@ -64,11 +64,22 @@ import {
   toggleWorkspaceMenu,
   updateChatMessage,
   persistUiPreferences,
+  setSkillsCatalog,
+  setInstalledSkills,
+  setSkillsTab,
+  setSkillsSearch,
+  setSkillsCategory,
 } from './modules/state.js';
+import {
+  ANTHROPIC_SKILLS,
+  CODEX_CURATED_SKILLS,
+  CODEX_SYSTEM_SKILLS,
+} from './modules/skills-catalog.js';
 import {
   chooseWorkspaceFolder,
   completeCodexOAuth,
   buildChatRequestPayload,
+  handleMigrationImport,
   openExternalUrl,
   persistRuntimeSettings,
   refreshDesktopState,
@@ -398,6 +409,20 @@ function restoreOnboardingStepScroll(previous) {
 function renderHelpPanel(section) {
   if (!state.helpOpen) return '';
 
+  // Maps section IDs to their GitHub wiki / docs URLs
+  const docLinks = {
+    chat: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#chat',
+    gateway: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#gateway',
+    'local-server': 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#local-server',
+    security: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#security--permissions',
+    'pc-stats': 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#system-dashboard',
+    settings: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#settings',
+    diagnostics: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#diagnostics',
+    logs: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#activity-logs',
+    update: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#updates',
+    onboarding: 'https://github.com/AG064/argentum/blob/trunk/docs/QUICK_START.md',
+  };
+
   const tips = {
     chat: [
       [
@@ -441,6 +466,8 @@ function renderHelpPanel(section) {
       'Argentum keeps privileged runtime actions behind fixed commands and workspace validation.',
     ],
   ];
+  const docUrl = docLinks[section.id];
+  const sectionTitleId = section.id === 'pc-stats' ? 'system-dashboard' : section.id;
 
   return `
     <aside class="help-panel floating-panel" role="dialog" aria-label="Help">
@@ -463,6 +490,13 @@ function renderHelpPanel(section) {
           )
           .join('')}
       </div>
+      ${docUrl ? `
+      <div class="help-doc-link">
+        <a href="${escapeAttribute(docUrl)}" target="_blank" rel="noopener noreferrer" data-open-external="${escapeAttribute(docUrl)}">
+          Open full docs for ${escapeHtml(section.title)} <span data-icon="externalLink"></span>
+        </a>
+      </div>
+      ` : ''}
       <div class="help-shortcuts">
         <strong>Keyboard shortcuts</strong>
         <dl>
@@ -972,28 +1006,25 @@ async function checkForUpdates() {
 async function downloadUpdate() {
   if (!state.updateVersion) return;
   state.updateDownloading = true;
-  state.updateProgress = 0;
   state.updateError = '';
   render();
 
   try {
     const invoke = window.__TAURI__?.core?.invoke;
     if (invoke) {
-      // Simulate progress for demo - real implementation would use Tauri updater events
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise((r) => setTimeout(r, 200));
-        state.updateProgress = i;
-        render();
-      }
+      const releaseUrl = await invoke('download_update');
+      await openExternalUrl(releaseUrl);
       notify(
         'success',
-        'Update ready',
-        `Argentum ${state.updateVersion} downloaded. Restart to apply.`,
+        'Releases page opened',
+        `Visit ${state.updateVersion} on GitHub to download the installer for your platform.`,
       );
+    } else {
+      notify('info', 'Desktop app required', 'Opening the releases page requires the desktop app.');
     }
   } catch (error) {
     state.updateError = normalizeError(error);
-    notify('error', 'Update failed', state.updateError);
+    notify('error', 'Could not open releases', state.updateError);
   } finally {
     state.updateDownloading = false;
     render();
@@ -2399,6 +2430,18 @@ async function handleClick(event, activationElement = null) {
     return;
   }
 
+  if (element.closest('#do-migration')) {
+    await handleMigrationImport();
+    render();
+    return;
+  }
+
+  if (element.closest('#skip-migration')) {
+    state.migrationSkipped = true;
+    render();
+    return;
+  }
+
   if (element.closest('#choose-llama-model')) {
     await chooseLlamaModelFile();
     render();
@@ -2483,6 +2526,105 @@ async function handleClick(event, activationElement = null) {
   if (settingsSectionButton) {
     setSettingsSection(settingsSectionButton.dataset.settingsSection);
     render();
+    return;
+  }
+
+  const feedbackButton = element.closest('[data-feedback-url]');
+  if (feedbackButton) {
+    await openExternalUrl(feedbackButton.dataset.feedbackUrl);
+    return;
+  }
+
+  // Skills tab switching
+  const skillsTabBtn = element.closest('[data-skills-tab]');
+  if (skillsTabBtn) {
+    setSkillsTab(skillsTabBtn.dataset.skillsTab);
+    render();
+    return;
+  }
+
+  // Skills search input
+  const skillsSearchInput = element.closest('.skills-search');
+  if (skillsSearchInput && element.tagName === 'INPUT') {
+    setSkillsSearch(element.value);
+    render();
+    return;
+  }
+
+  // Skills category filter
+  const skillsCategoryFilter = element.closest('.skills-category-filter');
+  if (skillsCategoryFilter && element.tagName === 'SELECT') {
+    setSkillsCategory(element.value);
+    render();
+    return;
+  }
+
+  // Install skill button
+  const installBtn = element.closest('.install-skill-btn');
+  if (installBtn) {
+    const { invoke } = window.__TAURI__?.core || {};
+    if (!invoke) {
+      notify('error', 'Tauri API not available. Cannot install skill.');
+      return;
+    }
+    installBtn.disabled = true;
+    installBtn.textContent = 'Installing…';
+    try {
+      const result = await invoke('install_skill', {
+        source: installBtn.dataset.skillSource,
+        skillName: installBtn.dataset.skillName,
+      });
+      // Refresh installed skills list
+      try {
+        const installedJson = await invoke('list_installed_skills');
+        const installed = JSON.parse(installedJson);
+        setInstalledSkills(installed);
+      } catch {
+        // Best-effort refresh
+      }
+      notify('success', result);
+      recordUiEvent('skills.installed', 'ok', installBtn.dataset.skillName, {
+        source: installBtn.dataset.skillSource,
+      });
+      render();
+    } catch (err) {
+      notify('error', typeof err === 'string' ? err : String(err));
+      installBtn.disabled = false;
+      installBtn.textContent = 'Install';
+    }
+    return;
+  }
+
+  // Uninstall skill button
+  const uninstallBtn = element.closest('.uninstall-skill-btn');
+  if (uninstallBtn) {
+    const { invoke } = window.__TAURI__?.core || {};
+    if (!invoke) {
+      notify('error', 'Tauri API not available. Cannot uninstall skill.');
+      return;
+    }
+    uninstallBtn.disabled = true;
+    uninstallBtn.textContent = 'Removing…';
+    try {
+      const result = await invoke('uninstall_skill', {
+        skillName: uninstallBtn.dataset.skillName,
+      });
+      // Refresh installed skills list
+      try {
+        const installedJson = await invoke('list_installed_skills');
+        const installed = JSON.parse(installedJson);
+        setInstalledSkills(installed);
+      } catch {
+        // Best-effort refresh
+      }
+      notify('success', result);
+      recordUiEvent('skills.uninstalled', 'ok', uninstallBtn.dataset.skillName);
+      render();
+    } catch (err) {
+      notify('error', typeof err === 'string' ? err : String(err));
+      uninstallBtn.disabled = false;
+      uninstallBtn.textContent = 'Uninstall';
+    }
     return;
   }
 
@@ -2596,6 +2738,18 @@ async function handleClick(event, activationElement = null) {
 
   if (element.closest('#download-update')) {
     await downloadUpdate();
+    return;
+  }
+
+  if (element.closest('#settings-rescan-migration')) {
+    await detectMigrationSources();
+    render();
+    return;
+  }
+
+  if (element.closest('#settings-do-migration')) {
+    await handleMigrationImport();
+    render();
     return;
   }
 
@@ -2760,6 +2914,9 @@ const chatHistoryRestored = hydrateChatHistory();
 hydrateOnboardingProgress();
 scheduleVisibleNotifications();
 
+// Initialize skills catalog with static Anthropic + Codex data
+setSkillsCatalog(ANTHROPIC_SKILLS, [...CODEX_CURATED_SKILLS, ...CODEX_SYSTEM_SKILLS]);
+
 // Apply locale and text direction from persisted preference
 setLocale(state.uiLanguage);
 document.documentElement.dir = textDirection();
@@ -2773,6 +2930,23 @@ document.addEventListener('localechange', () => {
 });
 hydrateDesktopDefaults()
   .then(() => refreshDesktopState())
+  .then(() => {
+    // Load installed skills list on startup
+    const { invoke } = window.__TAURI__?.core || {};
+    if (invoke) {
+      invoke('list_installed_skills')
+        .then((json) => {
+          try {
+            setInstalledSkills(JSON.parse(json));
+          } catch {
+            // Ignore parse errors
+          }
+        })
+        .catch(() => {
+          // Best-effort load
+        });
+    }
+  })
   .then(() => {
     if (state.desktopState?.configExists) {
       state.setupComplete = true;
