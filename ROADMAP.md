@@ -2,19 +2,20 @@
 
 ## Current Status
 
-Argentum v0.0.9 is in development. The project is actively maintained.
+Argentum v0.0.9 is a release candidate on `development`. The latest published release is v0.0.7.
 
-## v0.0.9 — Done
+## v0.0.9 — Release Gate
 
-- **In-app OpenClaw migration** — one-click import from `~/.openclaw/`: skills, memory, SOUL.md, workspace files, memory.db, Telegram credentials, and config. Detects automatically on first run and accessible from Settings → Migration.
-- **In-app feedback mechanism** — Settings → Help & Feedback: "Report a bug" and "Request a feature" open GitHub issue/discussion URLs with version and workspace info pre-filled. Security contact email also listed.
+- **In-app OpenClaw migration** — imports allowlisted items from `~/.openclaw/`. Skills merge without overwriting conflicts; other files are archived for review and are not activated automatically.
+- **In-app feedback mechanism** — GitHub issue/discussion links include version and workspace-presence metadata without exposing the local workspace path.
 - **Help panel doc links** — clicking `?` shows the help panel with a docs link specific to the current section (Chat, Gateway, Settings, etc.).
-- **Update mechanism** — `check_for_updates` and `download_update` Rust Tauri commands wired to GitHub Releases API; "Download update" opens the releases page in browser.
+- **Update mechanism** — GitHub Releases check with numeric semantic-version comparison; the update action opens the releases page in the browser.
 - **Security hardening** — `ip-address` override fixed to require `>= 10.1.1` (CVE-2026-42338); `sanitize-html` constraint tightened to `>= 2.17.2` (CVE-2026-40186); SECURITY.md updated.
-- **Router Agent wired in** — `src/agents/router/` integrated into the main agent loop; YAML config support (`config/router.yaml`) added; `config/router.yaml.example` created.
-- **Knowledge Graph consolidation** — `GraphBackend` interface exported from `features/knowledge-graph`; shared type re-export at `src/core/graph-types.ts`; three-implementation approach documented.
-- **Thinking mode wired to all providers** — thinking level (fast/balanced/deep) now passed to Anthropic (adaptive thinking budget), Codex (reasoning effort), and OpenAI (reasoning_effort); Settings UI shows green note for reasoning-capable models.
-- **Skills catalog Built-in tab** — new `source: 'argentum'` type; red "Built-in" badge; Built-in tab renders first by default; no install/GitHub link for bundled skills.
+- **Router Agent decision layer** — YAML and nested JSON rules are validated and decisions are logged before the existing single-agent dispatch path.
+- **Knowledge Graph consolidation groundwork** — canonical interface exports and shared type re-export are in place; implementation convergence remains planned.
+- **Thinking mode wired to providers** — Anthropic Claude 4 uses manual extended-thinking budgets; Codex and OpenAI use provider-specific reasoning-effort fields.
+- **Skills catalog Built-in tab** — lists the four SKILL.md files actually bundled with Argentum and states external dependency requirements.
+- **Localization foundation** — English/Estonian catalogs, locale persistence, formatting helpers, and direction metadata are packaged. Translating all visible desktop strings remains planned.
 - **New Claude models** — `claude-sonnet-4-20250514` and `claude-opus-4-20250514` added to model catalog with 200k context and frontier reasoning capability.
 
 ## v0.1.0 (Next 3-6 months)
@@ -22,6 +23,8 @@ Argentum v0.0.9 is in development. The project is actively maintained.
 - **Hermes → Argentum migration** — full parity import of skills, memories, SOUL.md, config.yaml, `.env` secrets, MCP servers, TTS, and messaging tokens from `~/.hermes/`
 - **Knowledge Graph full consolidation** — refactor `core/knowledge-graph.ts` and `memory/graph.ts` to implement the shared `GraphBackend` interface; migrate `memory/graph.ts` to delegate traversal/pathfinding on top of the canonical SQLite backend
 - **Router Agent multi-user testing** — test with 2+ Telegram users; workspace-per-user isolation; document migration path from single-user to multi-user
+- **Router Agent dispatch** — create and select real agent sessions/workspaces from routing decisions instead of telemetry-only routing
+- **Complete desktop localization** — route visible strings through `t()` and add translation regression coverage
 - **Crypto algorithm agility** — already implemented (`AES-256-GCM` / `ChaCha20-Poly1305` via `ARGENTUM_ENCRYPTION_ALGORITHM`); verify all callers use the configured algorithm and document the switching process
 - **Private security disclosure process** — formalize the practice for handling non-public security vulnerabilities
 

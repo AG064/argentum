@@ -339,8 +339,8 @@
     "sourceOpenclaw": "OpenClaw",
     "sourceHermes": "Hermes",
     "descOpenclaw": "Import skills, memory, Telegram credentials, and config from OpenClaw.",
-    "descHermes": "Import skills, memories, SOUL.md, and config from Hermes.",
-    "noSourceDetected": "Argentum scanned ~/.openclaw/ and ~/.hermes/ but found no previous installation.",
+    "descHermes": "Hermes import is planned for v0.1.0.",
+    "noSourceDetected": "Argentum found no supported OpenClaw installation. Hermes import is planned for v0.1.0.",
     "noSourceDetectedHint": "If you have a previous installation at a custom path, you can migrate manually."
   },
 
@@ -352,7 +352,7 @@
     "featureDetail": "Suggest a new capability or improvement.",
     "openBug": "Open bug report",
     "openFeature": "Open feature request",
-    "versionPrefilled": "Bug reports and feature requests open in your browser on GitHub. Your version and workspace path are pre-filled to save time.",
+    "versionPrefilled": "Bug reports and feature requests open in your browser on GitHub. Your version and workspace-presence status are pre-filled; the local path stays private.",
     "securityContact": "For private security issues, email {email} directly.",
     "reportBug": "Report a bug",
     "requestFeature": "Request a feature"

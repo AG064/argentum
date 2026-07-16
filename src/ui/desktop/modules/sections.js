@@ -1,5 +1,4 @@
 import {
-  ARGENTUM_BUNDLED_SKILLS,
   contextAccessOptions,
   fontOptions,
   llamaDownloadPresets,
@@ -11,6 +10,7 @@ import {
   securityProfiles,
   thinkingLevels,
 } from './constants.js';
+import { ARGENTUM_BUNDLED_SKILLS } from './skills-catalog.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
 
 import { chatModule } from './chat.js';
@@ -34,11 +34,7 @@ import {
   modelOptionsFor,
   selected,
 } from './utils.js';
-import {
-  detectMigrationSources,
-  handleMigrationImport,
-  openExternalUrl,
-} from './setup.js';
+import { detectMigrationSources, handleMigrationImport, openExternalUrl } from './setup.js';
 
 function terminalPreview(state, filter = '') {
   const entries = terminalEntriesForDisplay(filter);
@@ -791,9 +787,9 @@ function settingsSectionSummary(id, state, provider, metadata) {
     'migration': state.migrationResults
       ? 'Import complete'
       : state.migrationSources?.openclaw?.found
-        ? `OpenClaw found — ${state.migrationSources.openclaw.item_count} item(s)`
+        ? `OpenClaw found — ${state.migrationSources.openclaw.itemCount} item(s)`
         : state.migrationSources?.hermes?.found
-          ? `Hermes found — ${state.migrationSources.hermes.item_count} item(s)`
+          ? `Hermes found — ${state.migrationSources.hermes.itemCount} item(s)`
           : 'No legacy agent detected',
     'advanced': `${labelFor(runtimeModes, state.runtimeMode)} runtime; fonts and diagnostics`,
   };
@@ -871,7 +867,9 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
 
   if (activeSection === 'model') {
     const supportsThinking = (metadata.capabilities || []).some(
-      (c) => String(c).toLowerCase().includes('reasoning') || String(c).toLowerCase().includes('thinking'),
+      (c) =>
+        String(c).toLowerCase().includes('reasoning') ||
+        String(c).toLowerCase().includes('thinking'),
     );
     return `
       <label>
@@ -902,12 +900,13 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           <option value="anthropic" ${selected(state.providerApi, 'anthropic')}>Anthropic-compatible</option>
         </select>
       </label>
-      ${supportsThinking
-        ? `<div class="settings-inline-note">
+      ${
+        supportsThinking
+          ? `<div class="settings-inline-note">
             <strong>Thinking mode</strong>
             <p>${escapeHtml(provider.label)} supports extended reasoning. The thinking level (fast/balanced/deep) controls how much effort the model spends on internal reasoning before responding. Configure it in the "Context and thinking" settings section or in the chat composer.</p>
           </div>`
-        : `<div class="settings-inline-note">
+          : `<div class="settings-inline-note">
             <strong>Thinking mode</strong>
             <p>The current model does not support an externally-controlled thinking mode. The thinking level setting has no effect for this model.</p>
           </div>`
@@ -1134,13 +1133,11 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
       <label>
         Language
         <select id="settings-language">
-          ${SUPPORTED_LOCALES
-            .map(
-              (locale) => `
+          ${SUPPORTED_LOCALES.map(
+            (locale) => `
                 <option value="${escapeAttribute(locale.code)}" ${state.uiLanguage === locale.code ? 'selected' : ''}>${escapeHtml(locale.label)}</option>
               `,
-            )
-            .join('')}
+          ).join('')}
         </select>
         <small>Changes the interface language. More languages will be added in future releases.</small>
       </label>
@@ -1223,9 +1220,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
 
   if (activeSection === 'skills') {
     // Installed skills come from Rust state; catalog skills are hardcoded
-    const installedNames = new Set(
-      (state.installedSkills || []).map((s) => s.name),
-    );
+    const installedNames = new Set((state.installedSkills || []).map((s) => s.name));
     const anthropicSkills = (state.skillsCatalog?.anthropic || []).map(normalizeCatalog);
     const codexSkills = (state.skillsCatalog?.codex || []).map(normalizeCatalog);
     const installedList = (state.installedSkills || []).map((s) => ({
@@ -1279,17 +1274,22 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
               <span class="skill-source-badge source-${escapeAttribute(badgeClass)}">${badgeLabel}</span>
             </div>
             <div class="skill-card-tags">
-              ${(skill.tags || []).slice(0, 3).map((t) => `<span class="skill-tag">${escapeHtml(t)}</span>`).join('')}
+              ${(skill.tags || [])
+                .slice(0, 3)
+                .map((t) => `<span class="skill-tag">${escapeHtml(t)}</span>`)
+                .join('')}
             </div>
           </div>
           ${safeDesc ? `<p class="skill-card-description">${escapeHtml(safeDesc.slice(0, 180))}${safeDesc.length > 180 ? '…' : ''}</p>` : ''}
           ${skill.builtinNote ? `<p class="skill-builtin-note"><em>${escapeHtml(skill.builtinNote)}</em></p>` : ''}
-          ${isArgentumBuiltin
-            ? `<p class="skill-builtin-note"><em>Part of the standard Argentum installation — always available.</em></p>`
-            : `<div class="skill-card-actions">
-                ${safeSource === 'installed'
-                  ? `<button type="button" class="button compact uninstall-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" title="Uninstall">Uninstall</button>`
-                  : `<button type="button" class="button primary compact install-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" data-skill-source="${escapeAttribute(safeSource)}" title="Install">Install</button>`
+          ${
+            isArgentumBuiltin
+              ? `<p class="skill-builtin-note"><em>Part of the standard Argentum installation — always available.</em></p>`
+              : `<div class="skill-card-actions">
+                ${
+                  safeSource === 'installed'
+                    ? `<button type="button" class="button compact uninstall-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" title="Uninstall">Uninstall</button>`
+                    : `<button type="button" class="button primary compact install-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" data-skill-source="${escapeAttribute(safeSource)}" title="Install">Install</button>`
                 }
                 ${skill.url ? `<a href="${escapeAttribute(skill.url)}" class="button compact" data-open-external="${escapeAttribute(skill.url)}" target="_blank" rel="noopener">View on GitHub</a>` : ''}
               </div>`
@@ -1362,12 +1362,13 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
             />
           </div>
         </div>
-        ${tabContent.length === 0
-          ? `<div class="skills-empty">
+        ${
+          tabContent.length === 0
+            ? `<div class="skills-empty">
                <p class="muted-line">${totalCount === 0 ? 'No skills in this tab yet.' : 'No skills match your search.'}</p>
                ${activeTab === 'installed' && installedList.length === 0 ? '<p class="muted-line">Install skills from the Anthropic or Codex tabs above.</p>' : ''}
              </div>`
-          : `<div class="skills-grid">${tabContent.map(renderSkillCard).join('')}</div>`
+            : `<div class="skills-grid">${tabContent.map(renderSkillCard).join('')}</div>`
         }
         <div class="skills-footer-note">
           <p class="muted-line">Skills are loaded from <code>~/.openclaw/workspace/skills/</code> and <code>%LOCALAPPDATA%/argentum/skills/</code>. Restart Argentum after installing or uninstalling.</p>
@@ -1381,9 +1382,11 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
     const bugUrl =
       'https://github.com/AG064/argentum/issues/new?title=%5BBug%5D%20Brief%20description&labels=bug&body=' +
       encodeURIComponent(
-        '## Version\n' + version + '\n\n## Steps to reproduce\n1. \n2. \n3. \n\n## Expected behavior\n\n\n## Actual behavior\n\n\n## Environment\n- OS: \n- Workspace: ' +
-        (state.workspacePath || 'not set') +
-        '\n',
+        '## Version\n' +
+          version +
+          '\n\n## Steps to reproduce\n1. \n2. \n3. \n\n## Expected behavior\n\n\n## Actual behavior\n\n\n## Environment\n- OS: \n- Workspace configured: ' +
+          (state.workspacePath ? 'yes' : 'no') +
+          '\n',
       );
     const featureUrl =
       'https://github.com/AG064/argentum/discussions/new?category=ideas&title=%5BFeature%5D%20Brief%20description&body=' +
@@ -1433,7 +1436,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           </div>
         </div>
         <div class="feedback-info-box">
-          <p class="muted-line">Bug reports and feature requests open in your browser on GitHub. Your version (${version}) and workspace path are pre-filled to save time.</p>
+          <p class="muted-line">Bug reports and feature requests open in your browser on GitHub. Your version (${version}) and whether a workspace is configured are pre-filled; its path stays private.</p>
         </div>
         <div class="feedback-email-hint">
           <p class="muted-line">For private security issues, email <a href="mailto:agdroke064@gmail.com" data-open-external="mailto:agdroke064@gmail.com">agdroke064@gmail.com</a> directly.</p>
@@ -1456,10 +1459,15 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
         <div class="migration-result-card full-span">
           <h4>Migration complete</h4>
           <p>${ok} item(s) migrated${err > 0 ? `, ${err} error(s)` : ''}.</p>
-          ${err > 0
-            ? `<p class="muted-line">Check the list below for details on failed items.</p>
-               <ul>${results.filter((r) => r.status === 'error').map((r) => `<li>${escapeHtml(r.id)}: ${escapeHtml(r.message)}</li>`).join('')}</ul>`
-            : ''}
+          ${
+            err > 0
+              ? `<p class="muted-line">Check the list below for details on failed items.</p>
+               <ul>${results
+                 .filter((r) => r.status === 'error')
+                 .map((r) => `<li>${escapeHtml(r.id)}: ${escapeHtml(r.message)}</li>`)
+                 .join('')}</ul>`
+              : ''
+          }
         </div>
       `;
     }
@@ -1467,29 +1475,33 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
     if (!source) {
       return `
         <div class="settings-inline-note full-span">
-          <strong>No legacy agent detected</strong>
-          <p>Argentum scanned <code>~/.openclaw/</code> and <code>~/.hermes/</code> but found no previous installation.</p>
+          <strong>No supported OpenClaw setup detected</strong>
+          <p>Argentum found no importable data under <code>~/.openclaw/</code>. Hermes import is planned for v0.1.0.</p>
           <button class="button" id="settings-rescan-migration">Scan again</button>
         </div>
       `;
     }
 
     const items = source.items || [];
-    const totalSize = source.size_bytes || 0;
+    const totalSize = source.sizeBytes || 0;
 
     return `
       <div class="full-span migration-card" id="settings-migration-card">
         <div class="migration-card-header">
           <h4>Import from ${sourceName}</h4>
-          <span class="muted-line">${items.length} item(s) · ${formatBytes(source.size_bytes)}</span>
+          <span class="muted-line">${items.length} item(s) · ${formatBytes(totalSize)}</span>
         </div>
         <ul class="migration-item-list">
-          ${items.map((item) => `
+          ${items
+            .map(
+              (item) => `
             <li>
               <span>${escapeHtml(item.label)}</span>
               <span class="muted-line">${escapeHtml(item.description)}</span>
             </li>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </ul>
         <div class="migration-card-actions">
           <button type="button" class="button primary" id="settings-do-migration">

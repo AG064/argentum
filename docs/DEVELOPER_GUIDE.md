@@ -152,9 +152,9 @@ Required for development:
 
 Argentum uses ESLint and Prettier to maintain consistent style. Configuration files:
 
-- ESLint: [`eslint.config.mjs`](https://github.com/AG064/argentum/blob/main/eslint.config.mjs)
-- Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/main/.prettierrc)
-- Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/main/.editorconfig)
+- ESLint: [`eslint.config.mjs`](https://github.com/AG064/argentum/blob/development/eslint.config.mjs)
+- Prettier: [`.prettierrc`](https://github.com/AG064/argentum/blob/development/.prettierrc)
+- Editor config: [`.editorconfig`](https://github.com/AG064/argentum/blob/development/.editorconfig)
 
 ### TypeScript Rules
 

@@ -339,8 +339,8 @@
     "sourceOpenclaw": "OpenClaw",
     "sourceHermes": "Hermes",
     "descOpenclaw": "Impordi oskused, mälu, Telegrami volitused ja seaded OpenClawist.",
-    "descHermes": "Impordi oskused, mälud, SOUL.md ja seaded Hermesest.",
-    "noSourceDetected": "Argentum skannis ~/.openclaw/ ja ~/.hermes/, kuid ei leidnud eelmist paigaldust.",
+    "descHermes": "Hermese import on kavandatud versioonile v0.1.0.",
+    "noSourceDetected": "Argentum ei leidnud toetatud OpenClawi paigaldust. Hermese import on kavandatud versioonile v0.1.0.",
     "noSourceDetectedHint": "Kui teil on kohandatud asukohas eelmine paigaldus, saate käsitsi migreerida."
   },
 
@@ -352,7 +352,7 @@
     "featureDetail": "Paku uut võimalust või parendust.",
     "openBug": "Ava vearaport",
     "openFeature": "Ava funktsioonitaotlus",
-    "versionPrefilled": "Vearaport ja funktsioonitaotlus avanevad brauseris GitHubis. Teie versioon ja tööruumi asukoht on eeltäidetud.",
+    "versionPrefilled": "Vearaport ja funktsioonitaotlus avanevad brauseris GitHubis. Versioon ja tööruumi olemasolu on eeltäidetud; kohalik tee jääb privaatseks.",
     "securityContact": "Privaatsete turbeprobleemide korral kirjutage otse {email}.",
     "reportBug": "Raporteeri viga",
     "requestFeature": "Soovita funktsiooni"

@@ -11,7 +11,7 @@
  *
  * 1. src/core/knowledge-graph.ts  — KnowledgeGraphMemory
  *    SQLite with bitemporal versioning (valid_time + transaction_time) and
- *    scope hierarchy (global/project/task). Implements GraphBackend + extras.
+ *    scope hierarchy (global/project/task). It does not yet implement GraphBackend.
  *
  * 2. src/memory/graph.ts  — MemoryGraph
  *    Builds on semantic memory, adds typed edges, BFS traversal, and

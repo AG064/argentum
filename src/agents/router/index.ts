@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 AG064
 /**
- * Router Agent — Central routing for multi-user Argentum
+ * Router Agent — routing decision layer for Argentum
  *
- * Receives all messages, determines routing rules,
- * and forwards to appropriate agent session.
+ * Evaluates message context and returns target metadata. Session creation and
+ * multi-agent forwarding remain planned for v0.1.0.
  *
  * IMPORTANT: All routing IDs must be configured via config file.
  * No user/chat IDs should be hardcoded in this module.
@@ -38,6 +38,10 @@ export interface RouterConfig {
   defaultAgent: string;
   /** ID mappings for friendly names (optional) */
   idMappings?: Record<string, IdMapping>;
+}
+
+interface RouterConfigFile {
+  router?: RouterConfig & { enabled?: boolean };
 }
 
 export interface IdMapping {
@@ -121,28 +125,8 @@ export class RouterAgent extends EventEmitter {
 
   constructor(config: RouterConfig) {
     super();
-    this.validateConfig(config);
+    validateRouterConfig(config);
     this.config = config;
-  }
-
-  /**
-   * Validate that config has required fields
-   */
-  private validateConfig(config: RouterConfig): void {
-    if (!config.rules || !Array.isArray(config.rules)) {
-      throw new Error('Router config must have a "rules" array');
-    }
-    if (!config.defaultAgent || typeof config.defaultAgent !== 'string') {
-      throw new Error('Router config must have a "defaultAgent" string');
-    }
-    for (const rule of config.rules) {
-      if (!rule.condition || !rule.targetAgent) {
-        throw new Error('Each routing rule must have "condition" and "targetAgent"');
-      }
-      if (!['sender_id', 'chat_id', 'chat_type', 'keyword', 'always'].includes(rule.condition)) {
-        throw new Error(`Invalid condition type: ${rule.condition}`);
-      }
-    }
   }
 
   /**
@@ -213,7 +197,7 @@ export class RouterAgent extends EventEmitter {
         if (rule.value instanceof RegExp) {
           return rule.value.test(ctx.message);
         }
-        return ctx.message.includes(rule.value);
+        return ctx.message.toLowerCase().includes(rule.value.toLowerCase());
 
       case 'always':
         return true;
@@ -242,6 +226,36 @@ export class RouterAgent extends EventEmitter {
   }
 }
 
+export function validateRouterConfig(config: RouterConfig): void {
+  if (!config || !Array.isArray(config.rules)) {
+    throw new Error('Router config must have a "rules" array');
+  }
+  if (typeof config.defaultAgent !== 'string' || !config.defaultAgent.trim()) {
+    throw new Error('Router config must have a non-empty "defaultAgent" string');
+  }
+
+  const conditions: ConditionType[] = ['sender_id', 'chat_id', 'chat_type', 'keyword', 'always'];
+  for (const rule of config.rules) {
+    if (!rule || !conditions.includes(rule.condition)) {
+      throw new Error(`Invalid condition type: ${String(rule?.condition)}`);
+    }
+    if (typeof rule.targetAgent !== 'string' || !rule.targetAgent.trim()) {
+      throw new Error('Each routing rule must have a non-empty "targetAgent"');
+    }
+    if (rule.condition === 'always') continue;
+    const isKeywordList =
+      rule.condition === 'keyword' &&
+      Array.isArray(rule.value) &&
+      rule.value.length > 0 &&
+      rule.value.every((value) => typeof value === 'string' && value.length > 0);
+    const isStringValue = typeof rule.value === 'string' && rule.value.length > 0;
+    const isRegexValue = rule.condition === 'keyword' && rule.value instanceof RegExp;
+    if (!isStringValue && !isKeywordList && !isRegexValue) {
+      throw new Error(`Routing rule "${rule.condition}" has an invalid value`);
+    }
+  }
+}
+
 // ─── Config Loading ────────────────────────────────────────────────────────
 
 /**
@@ -262,19 +276,13 @@ export function loadRouterConfig(configPath?: string): RouterConfig {
 
     try {
       const content = fs.readFileSync(finalPath, 'utf-8');
-      const raw = finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')
-        ? yaml.parse(content)
-        : JSON.parse(content);
-      const config = raw as RouterConfig;
-
-      if (!config.rules || !Array.isArray(config.rules)) {
-        console.error(`[Router] Invalid config at ${finalPath}: missing "rules" array`);
-        continue;
-      }
-      if (!config.defaultAgent) {
-        console.error(`[Router] Invalid config at ${finalPath}: missing "defaultAgent"`);
-        continue;
-      }
+      const raw =
+        finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')
+          ? yaml.parse(content)
+          : JSON.parse(content);
+      const file = raw as RouterConfigFile & RouterConfig;
+      const config = (file.router ?? file) as RouterConfig;
+      validateRouterConfig(config);
 
       console.info(`[Router] Loaded config from ${finalPath}`);
       return config;

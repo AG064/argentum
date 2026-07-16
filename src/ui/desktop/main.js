@@ -411,16 +411,23 @@ function renderHelpPanel(section) {
 
   // Maps section IDs to their GitHub wiki / docs URLs
   const docLinks = {
-    chat: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#chat',
-    gateway: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#gateway',
-    'local-server': 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#local-server',
-    security: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#security--permissions',
-    'pc-stats': 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#system-dashboard',
-    settings: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#settings',
-    diagnostics: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#diagnostics',
-    logs: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#activity-logs',
-    update: 'https://github.com/AG064/argentum/blob/trunk/docs/USER_GUIDE.md#updates',
-    onboarding: 'https://github.com/AG064/argentum/blob/trunk/docs/QUICK_START.md',
+    'chat':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#2-agent-creation-and-management',
+    'gateway':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#6-deployment-options',
+    'local-server':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#local-development',
+    'security':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#5-security-best-practices',
+    'pc-stats':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#7-monitoring-and-logging',
+    'settings':
+      'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#agent-configuration',
+    'diagnostics':
+      'https://github.com/AG064/argentum/blob/development/docs/QUICK_START.md#troubleshooting-common-issues',
+    'logs': 'https://github.com/AG064/argentum/blob/development/docs/USER_GUIDE.md#viewing-logs',
+    'update': 'https://github.com/AG064/argentum/releases',
+    'onboarding': 'https://github.com/AG064/argentum/blob/development/docs/QUICK_START.md',
   };
 
   const tips = {
@@ -490,13 +497,17 @@ function renderHelpPanel(section) {
           )
           .join('')}
       </div>
-      ${docUrl ? `
+      ${
+        docUrl
+          ? `
       <div class="help-doc-link">
         <a href="${escapeAttribute(docUrl)}" target="_blank" rel="noopener noreferrer" data-open-external="${escapeAttribute(docUrl)}">
           Open full docs for ${escapeHtml(section.title)} <span data-icon="externalLink"></span>
         </a>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
       <div class="help-shortcuts">
         <strong>Keyboard shortcuts</strong>
         <dl>

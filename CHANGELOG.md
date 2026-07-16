@@ -5,47 +5,47 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.9] - 2026-06-24
+## [Unreleased]
+
+### v0.0.9 release candidate
 
 ### Added
 
-- **i18n infrastructure** — full internationalization system
+- **i18n foundation** — locale and formatting infrastructure
   - `src/i18n/index.js` — locale core: `t()` translation, `setLocale`/`getLocale`, `formatNumber`, `formatDate`, `formatRelativeTime`, `textDirection`
-  - `src/i18n/en.json` — English base locale (all user-facing strings)
+  - `src/i18n/en.json` — English catalog for strings migrated to the translation layer
   - `src/i18n/et.json` — Estonian locale (partial override)
-  - Language picker in Settings → Appearance (English, Eesti)
+  - Language metadata picker in Settings → Appearance (English, Eesti); full visible-string translation remains planned
   - RTL infrastructure: `dir` attribute on `<html>`, CSS logical properties documented in `styles.css`
   - Locale preference persisted via localStorage UI preferences
 
-- **In-app OpenClaw migration** — one-click import directly from the app
+- **In-app OpenClaw migration** — allowlisted import directly from the app
   - Automatic detection on first run after workspace selection
   - Settings → Migration section for re-scanning and re-importing anytime
-  - Imports: skills, long-term memory (MEMORY.md), user profile (USER.md), SOUL.md
-    persona, workspace files, memory database, Telegram bot credentials, and
-    OpenClaw config (provider, model, MCP servers)
-  - Per-item conflict: text files append to existing content; directories merge
-    skill-by-skill; binary files (memory.db) copy directly
+  - Skills merge into the workspace skill directory without overwriting conflicts
+  - Memory, persona, workspace files, database, credentials, and configuration are
+    copied into explicit OpenClaw archive folders for review; they are not activated automatically
+  - Migration item IDs are allowlisted in Rust; interface-supplied filesystem paths are not trusted
   - Hermes → Argentum migration deferred to v0.1.0
 
   - **CI / Release pipeline** — `attach-installers` step now gracefully skips cleanup
-  when the git tag has no matching GitHub release (lightweight tags for CI-only builds)
+    when the git tag has no matching GitHub release (lightweight tags for CI-only builds)
 
 - **In-app feedback mechanism** — Settings → Help & Feedback: "Report a bug" opens a
-  GitHub issue with version and workspace path pre-filled; "Request a feature" opens GitHub
+  GitHub issue with version and workspace-presence metadata pre-filled, without exposing its path; "Request a feature" opens GitHub
   Discussions with a feature request template; private security issues directed to email
 
-- **Help panel doc links** — the `?` help panel now includes an "Open full docs for [section]"
-  link that opens the relevant GitHub wiki page in the browser
+- **Help panel doc links** — the `?` help panel opens tracked documentation on the
+  repository's development branch
 
-- **Update mechanism** — `check_for_updates` Rust Tauri command calls GitHub Releases API;
-  `download_update` opens the releases page; replaces the previous simulation
+- **Update mechanism** — `check_for_updates` calls the GitHub Releases API and uses
+  numeric semantic-version ordering; the follow-up action opens the releases page
 
-- **Router Agent wired in** — `src/agents/router/` now initialized in the main agent loop
-  (`Argentum.start()`); supports both YAML (`config/router.yaml`) and JSON config;
-  Telegram messages are routed through `RouterAgent.route()` before agent dispatch;
-  `config/router.yaml.example` created
+- **Router decision telemetry** — `src/agents/router/` is initialized in the main agent loop;
+  top-level YAML and nested JSON configuration are validated and routing decisions are logged.
+  Multi-agent dispatch and workspace/session isolation remain planned for v0.1.0
 
-- **Knowledge Graph consolidation** — `GraphBackend` interface exported as a named export
+- **Knowledge Graph consolidation groundwork** — `GraphBackend` interface exported as a named export
   from `features/knowledge-graph`; shared type re-export at `src/core/graph-types.ts`;
   approach documented (three implementations aligned with the canonical interface)
 
@@ -54,6 +54,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CVE-2026-40186); SECURITY.md updated with fixed status for both CVEs
 
 - **Tauri version synced** — `tauri.conf.json` version bumped from 0.0.8 to 0.0.9
+
+- **Thinking levels** — Anthropic Claude 4 requests use the documented manual extended-thinking
+  shape and token constraints; Codex and OpenAI receive their provider-specific effort fields
+
+- **Built-in skills catalog** — lists the four SKILL.md files actually bundled in this repository:
+  browser automation, computer control, skill loader, and YouTube Shorts guidance
+
+### Fixed
+
+- Desktop release assets now include generated JavaScript for the skills catalog and localization
+  modules, with a drift check that fails when the browser module graph is incomplete
+- OpenClaw migration no longer accepts arbitrary source or destination paths and preserves existing data
+- Update checks correctly recognize releases such as `0.0.10` as newer than `0.0.9`
 
 ## [0.0.8] - 2026-06-15
 

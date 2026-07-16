@@ -4908,14 +4908,42 @@ fn reasoning_effort(thinking_level: &str) -> &'static str {
     }
 }
 
-// Anthropic token budget for adaptive thinking
-// "low" = minimal extra tokens, "medium" = ~8K, "high" = ~32K
+const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+
+// Claude Sonnet 4 and Opus 4 use manual extended-thinking budgets. Keep the
+// output allowance above the thinking budget, as required by the Messages API.
 fn anthropic_thinking_budget(thinking_level: &str) -> u32 {
     match thinking_level {
         "fast" => 1024,
-        "deep" => 32000,
+        "deep" => 24000,
         _ => 8000, // balanced / default
     }
+}
+
+fn anthropic_max_tokens(thinking_level: &str) -> u32 {
+    match thinking_level {
+        "fast" => 8192,
+        "deep" => 32000,
+        _ => 16384,
+    }
+}
+
+fn anthropic_chat_body(
+    model: &str,
+    system_prompt: &str,
+    messages: serde_json::Value,
+    thinking_level: &str,
+) -> serde_json::Value {
+    json!({
+        "model": model,
+        "max_tokens": anthropic_max_tokens(thinking_level),
+        "system": system_prompt,
+        "messages": messages,
+        "thinking": {
+            "type": "enabled",
+            "budget_tokens": anthropic_thinking_budget(thinking_level)
+        }
+    })
 }
 
 fn build_system_prompt(
@@ -6107,7 +6135,7 @@ async fn test_provider(request: TestProviderRequest) -> Result<TestProviderRespo
         builder = if request.api == "anthropic" {
             builder
                 .header("x-api-key", api_key.as_str())
-                .header("anthropic-version", "2023-06-01")
+                .header("anthropic-version", ANTHROPIC_API_VERSION)
         } else {
             builder.bearer_auth(api_key.as_str())
         };
@@ -6435,26 +6463,23 @@ async fn send_chat_message(
         builder = if config.api == "anthropic" {
             builder
                 .header("x-api-key", api_key.as_str())
-                // 2025-01-01 enables Claude 3.7+ adaptive thinking: thinking: { type: "adaptive" }
-                .header("anthropic-version", "2025-01-01")
+                .header("anthropic-version", ANTHROPIC_API_VERSION)
         } else {
             builder.bearer_auth(api_key.as_str())
         };
     }
 
     let body = if config.api == "anthropic" {
-        // Anthropic adaptive thinking — budget_tokens controls how many tokens
-        // the model can use for internal reasoning (1024=fast, 8000=balanced, 32000=deep)
-        json!({
-            "model": config.model,
-            "max_tokens": 8192,
-            "system": system_prompt,
-            "messages": anthropic_chat_messages_from_history(&request, message, &prepared_attachments),
-            "thinking": {
-                "type": "adaptive",
-                "budget_tokens": anthropic_thinking_budget(thinking_level)
-            }
-        })
+        anthropic_chat_body(
+            &config.model,
+            &system_prompt,
+            json!(anthropic_chat_messages_from_history(
+                &request,
+                message,
+                &prepared_attachments
+            )),
+            thinking_level,
+        )
     } else {
         openai_chat_body(
             &config,
@@ -6915,12 +6940,18 @@ fn desktop_system_stats() -> PcStatsSnapshot {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-/// Scans for OpenClaw and Hermes installation directories and returns
-/// available migration items for each source.
+/// Scans for supported legacy installation directories. Hermes is returned as
+/// unavailable until its v0.1.0 migration semantics are implemented.
 #[tauri::command]
 fn detect_migration_sources() -> MigrationSourcesResponse {
     let openclaw = detect_openclaw_source();
-    let hermes = detect_hermes_source();
+    let hermes = MigrationSource {
+        found: false,
+        path: None,
+        size_bytes: 0,
+        item_count: 0,
+        items: vec![],
+    };
     MigrationSourcesResponse { openclaw, hermes }
 }
 
@@ -7117,7 +7148,14 @@ fn detect_openclaw_source() -> MigrationSource {
     // Workspace files (excluding known subdirs)
     let workspace_dir = root.join("workspace");
     if workspace_dir.exists() {
-        let excluded = ["skills", "memory"];
+        let excluded = [
+            "skills",
+            "memory",
+            "SOUL.md",
+            "MEMORY.md",
+            "USER.md",
+            "AGENTS.md",
+        ];
         let mut file_count = 0u32;
         let mut file_size = 0u64;
         if let Ok(entries) = std::fs::read_dir(&workspace_dir) {
@@ -7146,106 +7184,7 @@ fn detect_openclaw_source() -> MigrationSource {
     }
 
     MigrationSource {
-        found: true,
-        path: Some(root.display().to_string()),
-        size_bytes,
-        item_count: items.len() as u32,
-        items,
-    }
-}
-
-fn detect_hermes_source() -> MigrationSource {
-    let mut root = home_dir();
-    root.push(".hermes");
-
-    if !root.exists() {
-        return MigrationSource {
-            found: false,
-            path: None,
-            size_bytes: 0,
-            item_count: 0,
-            items: vec![],
-        };
-    }
-
-    let size_bytes = dir_size(&root);
-    let mut items = Vec::new();
-
-    // Config
-    let config_path = root.join("config.yaml");
-    if config_path.exists() {
-        items.push(MigrationItem {
-            id: "config".to_string(),
-            label: "Hermes config".to_string(),
-            description: "Model, provider, MCP, TTS, and messaging config".to_string(),
-            found: true,
-            source_path: config_path.display().to_string(),
-            dest_path: None,
-            size_bytes: std::fs::metadata(&config_path)
-                .map(|m| m.len())
-                .unwrap_or(0),
-        });
-    }
-
-    // Secrets
-    let env_path = root.join(".env");
-    if env_path.exists() {
-        items.push(MigrationItem {
-            id: "secrets".to_string(),
-            label: "API keys and secrets".to_string(),
-            description: "Provider API keys and tokens".to_string(),
-            found: true,
-            source_path: env_path.display().to_string(),
-            dest_path: None,
-            size_bytes: std::fs::metadata(&env_path).map(|m| m.len()).unwrap_or(0),
-        });
-    }
-
-    // Memory
-    let memories_dir = root.join("memories");
-    if memories_dir.exists() {
-        items.push(MigrationItem {
-            id: "memories".to_string(),
-            label: "Memories".to_string(),
-            description: "MEMORY.md and USER.md memories".to_string(),
-            found: true,
-            source_path: memories_dir.display().to_string(),
-            dest_path: None,
-            size_bytes: dir_size(&memories_dir),
-        });
-    }
-
-    // Skills
-    let skills_dir = root.join("skills");
-    if skills_dir.exists() {
-        let count = count_items_in_dir(&skills_dir);
-        items.push(MigrationItem {
-            id: "skills".to_string(),
-            label: "Skills".to_string(),
-            description: format!("{} skill(s)", count),
-            found: true,
-            source_path: skills_dir.display().to_string(),
-            dest_path: None,
-            size_bytes: dir_size(&skills_dir),
-        });
-    }
-
-    // SOUL.md
-    let soul_path = root.join("SOUL.md");
-    if soul_path.exists() {
-        items.push(MigrationItem {
-            id: "soul".to_string(),
-            label: "SOUL.md persona".to_string(),
-            description: "Agent persona".to_string(),
-            found: true,
-            source_path: soul_path.display().to_string(),
-            dest_path: None,
-            size_bytes: std::fs::metadata(&soul_path).map(|m| m.len()).unwrap_or(0),
-        });
-    }
-
-    MigrationSource {
-        found: true,
+        found: !items.is_empty(),
         path: Some(root.display().to_string()),
         size_bytes,
         item_count: items.len() as u32,
@@ -7275,42 +7214,35 @@ fn migrate_from_openclaw(
 
 fn migrate_single_item(
     workspace: &Path,
-    _openclaw_root: &Path,
+    openclaw_root: &Path,
     item: &MigrateItemRequest,
 ) -> MigrateResult {
-    let src = PathBuf::from(&item.source_path);
-
-    let dest: PathBuf = match item.id.as_str() {
-        "soul" => workspace.join("MEMORY.md"),
-        "memory" => workspace.join("MEMORY.md"),
-        "user_profile" => workspace.join("MEMORY.md"),
-        "agents" => workspace.join("AGENTS.md"),
-        "skills_workspace" => workspace.join("skills"),
-        "skills_managed" => workspace.join("skills"),
-        "memory_db" => workspace.join("data").join("memory.db"),
-        "telegram" => workspace.join("data").join("telegram-credentials.json"),
-        "workspace_files" => workspace.join("imported"),
-        id if id.starts_with("config_") => workspace.join("data").join("openclaw-config.json"),
-        _ => workspace.join(item.id.clone()),
+    let paths = migration_item_paths(workspace, openclaw_root, &item.id);
+    let (src, dest) = match paths {
+        Ok(paths) => paths,
+        Err(message) => {
+            return MigrateResult {
+                id: item.id.clone(),
+                status: "error".to_string(),
+                message,
+                dest_path: String::new(),
+            }
+        }
     };
 
-    let copy_result = match item.id.as_str() {
-        "soul" | "memory" | "user_profile" => {
-            // Text files: append to existing or create new
-            append_or_copy(&src, &dest)
-        }
-        "skills_workspace" | "skills_managed" => {
-            // Directories: copy with rename to avoid conflicts
-            copy_skills_dir(&src, &dest)
-        }
-        "workspace_files" => {
-            // Top-level workspace files: copy everything except skills/memory subdirs
-            copy_workspace_files(&src, &dest)
-        }
-        _ => {
-            // Everything else: direct copy
-            copy_file_or_dir(&src, &dest)
-        }
+    if let Err(message) = ensure_destination_within_workspace(workspace, &dest) {
+        return MigrateResult {
+            id: item.id.clone(),
+            status: "error".to_string(),
+            message,
+            dest_path: dest.display().to_string(),
+        };
+    }
+
+    let copy_result = if item.id == "workspace_files" {
+        copy_workspace_files(&src, &dest)
+    } else {
+        copy_path_preserving_existing(&src, &dest)
     };
 
     match copy_result {
@@ -7329,97 +7261,180 @@ fn migrate_single_item(
     }
 }
 
-fn copy_file_or_dir(src: &Path, dest: &Path) -> Result<(), String> {
-    if src.is_dir() {
-        copy_directory_recursive(src, dest)
-    } else {
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+fn ensure_destination_within_workspace(workspace: &Path, destination: &Path) -> Result<(), String> {
+    let canonical_workspace = std::fs::canonicalize(workspace)
+        .map_err(|e| format!("Failed to resolve workspace {}: {}", workspace.display(), e))?;
+    let mut existing_ancestor = destination.to_path_buf();
+    while !existing_ancestor.exists() {
+        if !existing_ancestor.pop() {
+            return Err("Migration destination has no existing workspace ancestor".to_string());
         }
-        std::fs::copy(src, dest).map(|_| ()).map_err(|e| {
-            format!(
-                "Failed to copy {} → {}: {}",
-                src.display(),
-                dest.display(),
-                e
-            )
-        })
     }
+    let canonical_ancestor = std::fs::canonicalize(&existing_ancestor).map_err(|e| {
+        format!(
+            "Failed to resolve migration destination {}: {}",
+            existing_ancestor.display(),
+            e
+        )
+    })?;
+    if !canonical_ancestor.starts_with(&canonical_workspace) {
+        return Err(format!(
+            "Migration destination {} resolves outside the selected workspace",
+            destination.display()
+        ));
+    }
+    Ok(())
 }
 
-fn append_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
-    if !src.exists() {
+fn migration_item_paths(
+    workspace: &Path,
+    openclaw_root: &Path,
+    item_id: &str,
+) -> Result<(PathBuf, PathBuf), String> {
+    let archive_root = workspace.join("imported").join("openclaw");
+    let data_archive = workspace.join("data").join("migration").join("openclaw");
+    let paths = match item_id {
+        "soul" => (
+            openclaw_root.join("workspace").join("SOUL.md"),
+            archive_root.join("SOUL.md"),
+        ),
+        "memory" => (
+            openclaw_root.join("workspace").join("MEMORY.md"),
+            archive_root.join("MEMORY.md"),
+        ),
+        "user_profile" => (
+            openclaw_root.join("workspace").join("USER.md"),
+            archive_root.join("USER.md"),
+        ),
+        "agents" => (
+            openclaw_root.join("workspace").join("AGENTS.md"),
+            archive_root.join("AGENTS.md"),
+        ),
+        "skills_workspace" => (
+            openclaw_root.join("workspace").join("skills"),
+            workspace.join("skills"),
+        ),
+        "skills_managed" => (openclaw_root.join("skills"), workspace.join("skills")),
+        "memory_db" => (
+            openclaw_root.join("memory.db"),
+            data_archive.join("memory.db"),
+        ),
+        "telegram" => (
+            openclaw_root.join("credentials").join("telegram.json"),
+            data_archive.join("telegram.json"),
+        ),
+        "workspace_files" => (
+            openclaw_root.join("workspace"),
+            archive_root.join("workspace"),
+        ),
+        "config_openclaw_json" => (
+            openclaw_root.join("openclaw.json"),
+            data_archive.join("openclaw.json"),
+        ),
+        "config_agclaw_json" => (
+            openclaw_root.join("agclaw.json"),
+            data_archive.join("agclaw.json"),
+        ),
+        _ => return Err(format!("Unsupported OpenClaw migration item: {item_id}")),
+    };
+    Ok(paths)
+}
+
+fn copy_path_preserving_existing(src: &Path, dest: &Path) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(src)
+        .map_err(|e| format!("Failed to inspect {}: {}", src.display(), e))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "Refusing to migrate symbolic link {}",
+            src.display()
+        ));
+    }
+
+    if metadata.is_dir() {
+        if dest.exists() && !dest.is_dir() {
+            return Err(format!(
+                "Destination {} already exists and is not a directory",
+                dest.display()
+            ));
+        }
+        std::fs::create_dir_all(dest)
+            .map_err(|e| format!("Failed to create {}: {}", dest.display(), e))?;
+        let entries = std::fs::read_dir(src)
+            .map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+            copy_path_preserving_existing(&entry.path(), &dest.join(entry.file_name()))?;
+        }
         return Ok(());
     }
 
-    let content = std::fs::read_to_string(src)
-        .map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+    if !metadata.is_file() {
+        return Err(format!("Unsupported source type: {}", src.display()));
+    }
 
     if dest.exists() {
-        // Append to existing file
-        let existing = std::fs::read_to_string(dest)
-            .map_err(|e| format!("Failed to read dest {}: {}", dest.display(), e))?;
-        let combined = format!("{}\n\n---\n\n{}\n", existing.trim(), content.trim());
-        std::fs::write(dest, combined)
-            .map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
-    } else {
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        if !dest.is_file() {
+            return Err(format!(
+                "Destination {} already exists and is not a file",
+                dest.display()
+            ));
         }
-        std::fs::write(dest, content)
-            .map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
-    }
-    Ok(())
-}
-
-fn copy_skills_dir(src: &Path, dest: &Path) -> Result<(), String> {
-    if !src.exists() {
-        return Ok(());
-    }
-    // Ensure skills go into workspace/skills/
-    let final_dest = if dest.file_name().map(|n| n == "skills").unwrap_or(false) {
-        dest.to_path_buf()
-    } else {
-        dest.join("skills")
-    };
-    std::fs::create_dir_all(&final_dest)
-        .map_err(|e| format!("Failed to create skills dir: {}", e))?;
-
-    if let Ok(entries) = std::fs::read_dir(src) {
-        for entry in entries.flatten() {
-            let skill_name = entry.file_name();
-            let skill_dest = final_dest.join(&skill_name);
-            copy_directory_recursive(&entry.path(), &skill_dest)?;
+        let source_bytes =
+            std::fs::read(src).map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+        let destination_bytes =
+            std::fs::read(dest).map_err(|e| format!("Failed to read {}: {}", dest.display(), e))?;
+        if source_bytes == destination_bytes {
+            return Ok(());
         }
+        return Err(format!(
+            "Destination {} already contains different data; existing data was preserved",
+            dest.display()
+        ));
     }
-    Ok(())
+
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+    }
+    std::fs::copy(src, dest).map(|_| ()).map_err(|e| {
+        format!(
+            "Failed to copy {} to {}: {}",
+            src.display(),
+            dest.display(),
+            e
+        )
+    })
 }
 
 fn copy_workspace_files(src: &Path, dest: &Path) -> Result<(), String> {
-    if !src.exists() {
-        return Ok(());
+    let metadata = std::fs::symlink_metadata(src)
+        .map_err(|e| format!("Failed to inspect {}: {}", src.display(), e))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!(
+            "OpenClaw workspace is not a safe directory: {}",
+            src.display()
+        ));
     }
     std::fs::create_dir_all(dest).map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    let excluded = ["skills", "memory"];
+    let excluded = [
+        "skills",
+        "memory",
+        "SOUL.md",
+        "MEMORY.md",
+        "USER.md",
+        "AGENTS.md",
+    ];
 
-    if let Ok(entries) = std::fs::read_dir(src) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if excluded.contains(&name.as_str()) {
-                continue;
-            }
-            let entry_dest = dest.join(&name);
-            if entry.path().is_dir() {
-                copy_directory_recursive(&entry.path(), &entry_dest)?;
-            } else {
-                std::fs::copy(&entry.path(), &entry_dest)
-                    .map(|_| ())
-                    .map_err(|e| format!("Failed to copy {}: {}", entry.path().display(), e))?;
-            }
+    let entries =
+        std::fs::read_dir(src).map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if excluded.contains(&name.as_str()) {
+            continue;
         }
+        copy_path_preserving_existing(&entry.path(), &dest.join(entry.file_name()))?;
     }
     Ok(())
 }
@@ -7457,7 +7472,6 @@ struct MigrationItem {
 #[serde(rename_all = "camelCase")]
 struct MigrateItemRequest {
     id: String,
-    source_path: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -7905,6 +7919,71 @@ fn run_desktop_action(
 
 const CURRENT_VERSION: &str = "0.0.9";
 
+fn parse_version(version: &str) -> Option<(Vec<u64>, Option<Vec<String>>)> {
+    let normalized = version.trim().trim_start_matches('v');
+    let without_build = normalized.split('+').next()?;
+    let mut parts = without_build.splitn(2, '-');
+    let core = parts.next()?;
+    let prerelease = parts.next().map(|value| {
+        value
+            .split('.')
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    });
+    let numbers = core
+        .split('.')
+        .map(str::parse::<u64>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if numbers.is_empty() {
+        return None;
+    }
+    Some((numbers, prerelease))
+}
+
+fn compare_prerelease(left: &[String], right: &[String]) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    for (left_part, right_part) in left.iter().zip(right.iter()) {
+        let ordering = match (left_part.parse::<u64>(), right_part.parse::<u64>()) {
+            (Ok(left_number), Ok(right_number)) => left_number.cmp(&right_number),
+            (Ok(_), Err(_)) => Ordering::Less,
+            (Err(_), Ok(_)) => Ordering::Greater,
+            (Err(_), Err(_)) => left_part.cmp(right_part),
+        };
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    left.len().cmp(&right.len())
+}
+
+fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+
+    let (mut left_core, left_pre) = parse_version(left)?;
+    let (mut right_core, right_pre) = parse_version(right)?;
+    let width = left_core.len().max(right_core.len());
+    left_core.resize(width, 0);
+    right_core.resize(width, 0);
+
+    let core_ordering = left_core.cmp(&right_core);
+    if core_ordering != Ordering::Equal {
+        return Some(core_ordering);
+    }
+
+    Some(match (left_pre, right_pre) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(left_pre), Some(right_pre)) => compare_prerelease(&left_pre, &right_pre),
+    })
+}
+
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    compare_versions(latest, current) == Some(std::cmp::Ordering::Greater)
+}
+
 #[derive(Debug, serde::Serialize)]
 struct CheckUpdateResponse {
     update_available: bool,
@@ -7952,7 +8031,7 @@ fn check_for_updates() -> Result<CheckUpdateResponse, String> {
         .and_then(|v| v.as_str())
         .map(|s| s.chars().take(500).collect());
 
-    let update_available = tag_name > CURRENT_VERSION;
+    let update_available = is_newer_version(tag_name, CURRENT_VERSION);
 
     Ok(CheckUpdateResponse {
         update_available,
@@ -8419,5 +8498,98 @@ mod tests {
                 "{name} should be rejected"
             );
         }
+    }
+
+    #[test]
+    fn anthropic_thinking_payload_uses_supported_manual_shape() {
+        for level in ["fast", "balanced", "deep"] {
+            let body = anthropic_chat_body("claude-sonnet-4-20250514", "system", json!([]), level);
+            let budget = body["thinking"]["budget_tokens"]
+                .as_u64()
+                .expect("budget should be numeric");
+            let max_tokens = body["max_tokens"]
+                .as_u64()
+                .expect("max_tokens should be numeric");
+
+            assert_eq!(body["thinking"]["type"], "enabled");
+            assert!(max_tokens > budget);
+        }
+        assert_eq!(ANTHROPIC_API_VERSION, "2023-06-01");
+    }
+
+    #[test]
+    fn update_comparison_uses_numeric_semver_ordering() {
+        assert!(is_newer_version("v0.0.10", "0.0.9"));
+        assert!(is_newer_version("0.1.0", "0.0.99"));
+        assert!(is_newer_version("0.0.9", "0.0.9-beta.1"));
+        assert!(!is_newer_version("0.0.9", "0.0.9"));
+        assert!(!is_newer_version("0.0.8", "0.0.9"));
+        assert!(!is_newer_version("not-a-version", "0.0.9"));
+    }
+
+    fn migration_test_dirs(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "argentum-migration-{label}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should work")
+                .as_nanos()
+        ));
+        let workspace = root.join("workspace");
+        let openclaw = root.join(".openclaw");
+        std::fs::create_dir_all(&workspace).expect("workspace should be created");
+        std::fs::create_dir_all(&openclaw).expect("OpenClaw root should be created");
+        (root, workspace, openclaw)
+    }
+
+    #[test]
+    fn migration_rejects_unknown_item_ids() {
+        let (root, workspace, openclaw) = migration_test_dirs("unknown");
+        let result = migrate_single_item(
+            &workspace,
+            &openclaw,
+            &MigrateItemRequest {
+                id: "../../outside".to_string(),
+            },
+        );
+
+        assert_eq!(result.status, "error");
+        assert!(result
+            .message
+            .contains("Unsupported OpenClaw migration item"));
+        assert!(!root.join("outside").exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migration_is_idempotent_and_preserves_conflicting_files() {
+        let (root, workspace, openclaw) = migration_test_dirs("preserve");
+        let source = openclaw.join("workspace").join("skills").join("example");
+        std::fs::create_dir_all(&source).expect("source skill should be created");
+        std::fs::write(source.join("SKILL.md"), "source skill").expect("source should write");
+        let request = MigrateItemRequest {
+            id: "skills_workspace".to_string(),
+        };
+
+        assert_eq!(
+            migrate_single_item(&workspace, &openclaw, &request).status,
+            "ok"
+        );
+        assert_eq!(
+            migrate_single_item(&workspace, &openclaw, &request).status,
+            "ok"
+        );
+
+        let destination = workspace.join("skills").join("example").join("SKILL.md");
+        std::fs::write(&destination, "local change").expect("destination should update");
+        let conflict = migrate_single_item(&workspace, &openclaw, &request);
+        assert_eq!(conflict.status, "error");
+        assert!(conflict.message.contains("existing data was preserved"));
+        assert_eq!(
+            std::fs::read_to_string(destination).expect("destination should remain"),
+            "local change"
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 }

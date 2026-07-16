@@ -4,7 +4,7 @@
   <img src="assets/brand/argentum.png" alt="Argentum icon" width="160">
 </p>
 
-[![Version](https://img.shields.io/badge/version-v0.0.9?style=flat-square)](https://github.com/AG064/argentum/releases)
+[![Development version](https://img.shields.io/badge/development-v0.0.9?style=flat-square)](https://github.com/AG064/argentum/tree/development)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12957/badge)](https://www.bestpractices.dev/projects/12957)
 [![OpenSSF Baseline](https://www.bestpractices.dev/projects/12957/baseline)](https://www.bestpractices.dev/projects/12957)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg?style=flat-square)](https://nodejs.org)
@@ -22,7 +22,7 @@ Argentum is a local-first AI workspace. It runs on your own machine so your data
 
 **Download and run (Windows):**
 
-1. Download `Argentum_0.0.9_x64-setup.exe` from [releases](https://github.com/AG064/argentum/releases/latest)
+1. Download the Windows setup executable from the [latest published release](https://github.com/AG064/argentum/releases/latest)
 2. Run the installer, launch from Start Menu
 3. Follow onboarding, connect a messaging channel, start chatting
 
@@ -38,7 +38,7 @@ npm install && npm run build
 
 For most people on Windows, use the desktop installer:
 
-[Argentum_0.0.9_x64-setup.exe](https://github.com/AG064/argentum/releases/latest)
+[Download the latest Windows installer](https://github.com/AG064/argentum/releases/latest)
 
 The setup wizard behaves like a normal Windows installer:
 
@@ -51,11 +51,11 @@ The setup wizard behaves like a normal Windows installer:
 
 After setup, launch Argentum from the Start Menu. First launch opens onboarding. After that, Argentum opens directly into the desktop app.
 
-### What Changed In v0.0.9
+### v0.0.9 Release Candidate
 
-v0.0.9 brings forward the next roadmap tranche: i18n infrastructure, crypto algorithm agility, and test suite fixes. It retains the prior desktop polish (cleaner chat, smoother onboarding, Monaspace Krypton, separate reasoning stream, improved Telegram session handling, and recent security cleanup) plus the first-party **Argentum Android app** — a native Kotlin + Jetpack Compose client with a liquid-glass theme, onboarding flow, and full release-APK pipeline.
+The `development` branch is validating v0.0.9. It includes the desktop localization foundation, provider thinking-level payloads, a safe OpenClaw import/archive flow, real built-in skill metadata, numeric update comparison, router decision telemetry, dependency security fixes, and release-pipeline corrections. The latest published GitHub release remains v0.0.7 until v0.0.9 passes its release gate and is tagged.
 
-This release also introduces the optional Argentum llama.cpp local server path. The Windows setup executable can install the local server binaries when you tick the installer checkbox; otherwise Argentum stays lightweight and the local server can be installed later from inside the app.
+The candidate also contains the optional Argentum llama.cpp local server path. Candidate installers are produced by release automation; they are not advertised as public downloads until a v0.0.9 GitHub release exists.
 
 ## Provider Status
 
@@ -73,11 +73,11 @@ Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, external Ollama/local
 
 ## Supported OS
 
-| Platform | Current support         | Assets                                                         | Runtime notes                                                                                                                               |
-| -------- | ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows  | Windows 10/11 x64       | `Argentum_0.0.9_x64-setup.exe`, `Argentum_0.0.9_x64_en-US.msi` | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing.         |
-| Linux    | Source-supported target | Linux desktop packages are planned for release automation      | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu 22.04+ and similar Debian/Fedora/Arch/openSUSE desktops are the intended targets. |
-| macOS    | Source-supported target | macOS DMGs are planned for release automation                  | Uses the system WKWebView. The intended targets are macOS 10.15+ on Intel and Apple Silicon.                                                |
+| Platform | Current support         | Assets                                                    | Runtime notes                                                                                                                               |
+| -------- | ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows  | Windows 10/11 x64       | Latest published Windows setup executable and MSI         | Uses Microsoft Edge WebView2. Windows 11 includes it; Windows 10 1803+ usually has it, and the installer can install it if missing.         |
+| Linux    | Source-supported target | Linux desktop packages are planned for release automation | Requires the normal Tauri/WebKitGTK desktop stack. Ubuntu 22.04+ and similar Debian/Fedora/Arch/openSUSE desktops are the intended targets. |
+| macOS    | Source-supported target | macOS DMGs are planned for release automation             | Uses the system WKWebView. The intended targets are macOS 10.15+ on Intel and Apple Silicon.                                                |
 
 ## Hardware Requirements
 

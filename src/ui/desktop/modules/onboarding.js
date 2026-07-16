@@ -12,9 +12,7 @@ import {
 } from './constants.js';
 import { state } from './state.js';
 import { validateCurrentStep } from './onboarding-controller.js';
-import {
-  detectMigrationSources,
-} from './setup.js';
+import { detectMigrationSources } from './setup.js';
 import {
   buttonDisabled,
   checked,
@@ -300,7 +298,7 @@ function renderMigrationCard() {
   const source = openclaw?.found ? openclaw : hermes;
   const sourceName = openclaw?.found ? 'OpenClaw' : 'Hermes';
   const items = source?.items || [];
-  const totalSize = source?.size_bytes || 0;
+  const totalSize = source?.sizeBytes || 0;
 
   if (state.migrationResults) {
     const results = state.migrationResults;

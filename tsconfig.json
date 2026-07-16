@@ -41,6 +41,6 @@
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/features/browser-automation/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/desktop/target", "src/features/browser-automation/**/*.ts"],
   "references": []
 }

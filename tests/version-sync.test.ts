@@ -99,6 +99,11 @@ describe('version synchronization', () => {
         if (/Node\.js/i.test(line)) {
           continue;
         }
+        // Public release references intentionally lag the development package
+        // version until a candidate is tagged and published.
+        if (/latest (?:public|published)(?: GitHub)? release/i.test(line)) {
+          continue;
+        }
 
         // Strip backtick-quoted code spans — these are illustrative
         // filenames / commands, not version references.

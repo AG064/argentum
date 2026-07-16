@@ -483,7 +483,7 @@ export async function chooseWorkspaceFolder() {
 
   state.workspacePath = Array.isArray(selected) ? selected[0] : selected;
   setUiPreference('workspacePath', state.workspacePath);
-  detectMigrationSources(); // Check for OpenClaw/Hermes to migrate
+  detectMigrationSources(); // Check for a supported OpenClaw source to migrate
   notify(
     'success',
     'Workspace selected',
@@ -492,15 +492,14 @@ export async function chooseWorkspaceFolder() {
   return true;
 }
 
-/** Detect OpenClaw and Hermes installation sources for migration. */
+/** Detect supported legacy installation sources for migration. */
 export async function detectMigrationSources() {
   if (typeof window === 'undefined' || !window.__TAURI__) return;
   try {
     const { invoke } = window.__TAURI__.core;
     const sources = await invoke('detect_migration_sources');
     state.migrationSources = sources;
-    // OpenClaw is the priority source for v0.0.9
-    state.migrationDetected = Boolean(sources?.openclaw?.found || sources?.hermes?.found);
+    state.migrationDetected = Boolean(sources?.openclaw?.found);
     state.migrationSkipped = false;
     state.migrationResults = null;
     state.migrationError = '';
@@ -538,14 +537,23 @@ export async function handleMigrationImport() {
   const openclaw = state.migrationSources?.openclaw;
   const items = (openclaw?.items || []).map((item) => ({
     id: item.id,
-    source_path: item.source_path,
   }));
 
   if (!items.length) return;
 
   try {
-    await runMigration(items);
-    notify('success', 'Migration complete', `${items.length} item(s) imported from OpenClaw.`);
+    const results = await runMigration(items);
+    const failed = results.filter((result) => result.status === 'error');
+    const imported = results.length - failed.length;
+    if (failed.length > 0) {
+      notify(
+        'warning',
+        'Migration partial',
+        `${imported} item(s) imported; ${failed.length} item(s) were preserved or could not be copied.`,
+      );
+    } else {
+      notify('success', 'Migration complete', `${imported} item(s) imported from OpenClaw.`);
+    }
   } catch (err) {
     notify('warning', 'Migration partial', err.message || 'Some items may not have migrated.');
   }

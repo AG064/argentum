@@ -1,6 +1,6 @@
 # Release Packaging
 
-Argentum releases publish GUI desktop installers from the Desktop Builds workflow and optional portable CLI binaries from the Release workflow.
+Argentum releases publish GUI desktop installers from the Desktop Builds workflow and optional portable CLI binaries from the Release workflow. The v0.0.9 names below describe candidate outputs; the latest published release remains v0.0.7.
 
 ## Release assets
 
@@ -14,11 +14,11 @@ For version `0.0.9`, the desktop workflow produces the user-facing app installer
 - `Argentum_0.0.9_x64.dmg` - macOS Intel desktop package
 - `Argentum_0.0.9_aarch64.dmg` - macOS Apple Silicon desktop package
 
-The release workflow also produces optional terminal-first CLI binaries:
+The v0.0.9 release workflow is configured to produce optional terminal-first CLI binaries:
 
-- `argentum-cli-v0.0.8-win-x64.exe` - portable Windows CLI executable
-- `argentum-v0.0.8-linux-x64` - portable Linux CLI executable
-- `argentum-v0.0.8-macos-x64` - portable macOS CLI executable
+- `argentum-cli-v0.0.9-win-x64.exe` - portable Windows CLI executable
+- `argentum-v0.0.9-linux-x64` - portable Linux CLI executable
+- `argentum-v0.0.9-macos-x64` - portable macOS CLI executable
 - `SHA256SUMS-portable.txt` - checksums for portable CLI binaries
 
 The Windows setup executable and MSI are GUI desktop installers. They create normal Windows app entries and should launch the Argentum interface, not the terminal CLI. CLI assets are deliberately named with `argentum-cli-`.

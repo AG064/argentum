@@ -80,6 +80,9 @@ jobs:
       - name: Verify version sync
         run: npm run version:check
 
+      - name: Verify desktop frontend assets
+        run: npm run desktop-assets:check
+
       - name: Build TypeScript
         run: npm run build
 
@@ -111,7 +114,7 @@ jobs:
     needs: desktop-build
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317
         with:
@@ -143,7 +146,7 @@ jobs:
             const keepers = [
               /^argentum-v\d+\.\d+\.\d+-linux-x64$/,
               /^argentum-v\d+\.\d+\.\d+-macos-x64$/,
-              /^argentum-v\d+\.\d+\.\d+-android(?:-\w+)?\.apk$/,
+              /^argentum-v?\d+\.\d+\.\d+-android(?:-\w+)?\.apk$/,
               /^argentum-cli-v\d+\.\d+\.\d+-win-x64\.exe$/,
               /^SHA256SUMS(?:-portable)?\.txt$/,
               /^Argentum[_-]\d+\.\d+\.\d+.*\.(?:AppImage|deb|rpm|dmg|msi|exe|apk)$/,

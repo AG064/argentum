@@ -1,235 +1,81 @@
-# Router Agent — Multi-User Orchestrator for Argentum
+# Router Agent decision layer
 
-## Overview
+Router Agent evaluates message metadata against ordered rules and returns a target agent and optional
+workspace. In v0.0.9, Argentum records that decision before continuing through its existing single-agent
+dispatch path.
 
-Router Agent is the central entry point that receives ALL messages and routes them to the appropriate agent based on user/chat identification.
-
-**IMPORTANT: All user and chat IDs must be configured via config file. No IDs are hardcoded in the router code.**
-
-## Architecture
-
-```
-Message → Router → [AGX | Anneka | Home | ...] → Response
-                 ↓
-           Routing Rules (from config)
-```
+It does **not** yet create separate agent sessions, forward messages to different agent instances, or
+enforce workspace-per-user isolation. Those dispatch and isolation capabilities are planned for v0.1.0.
 
 ## Configuration
 
-All routing is controlled via `config/router.json`:
+The loader checks `config/router.yaml` and then `config/router.json`. YAML uses a top-level configuration:
+
+```yaml
+defaultAgent: agx
+idMappings:
+  ADMIN:
+    numericId: '123456789'
+rules:
+  - condition: sender_id
+    value: ADMIN
+    targetAgent: admin
+  - condition: keyword
+    value: [admin, /admin]
+    targetAgent: admin
+  - condition: always
+    value: ''
+    targetAgent: agx
+```
+
+JSON may use the same top-level shape or the nested shape shipped in `config/router.example.json`:
 
 ```json
 {
   "router": {
     "enabled": true,
     "defaultAgent": "agx",
-    "idMappings": {
-      "anneka": {
-        "numericId": "836565331",
-        "username": "@anneka",
-        "description": "Anneka's Telegram account"
-      },
-      "homeChat": {
-        "numericId": "123456789",
-        "description": "Family group chat"
-      }
-    },
     "rules": [
       {
-        "condition": "sender_id",
-        "value": "anneka",
-        "targetAgent": "anneka"
+        "condition": "chat_type",
+        "value": "group",
+        "targetAgent": "group-handler"
       },
-      {
-        "condition": "chat_id",
-        "value": "homeChat",
-        "targetAgent": "home"
-      },
-      {
-        "condition": "always",
-        "value": "",
-        "targetAgent": "agx"
-      }
-    ]
-  }
-}
-```
-
-### ID Formats
-
-The router accepts IDs in multiple formats:
-
-| Format | Example | Resolution |
-|--------|---------|------------|
-| Numeric | `123456789` | Used directly |
-| Platform prefix | `telegram:123456789` | Strips prefix |
-| Friendly name | `anneka` | Looks up in `idMappings` |
-| Username | `[REMOVED]` | Resolves via Telegram API (future) |
-
-### Condition Types
-
-| Condition | Description |
-|-----------|-------------|
-| `sender_id` | Match message sender |
-| `chat_id` | Match chat where message was sent |
-| `chat_type` | Match chat type (`direct`, `group`, `channel`) |
-| `keyword` | Match message content (string or array) |
-| `always` | Always match (fallback) |
-
-### ID Mappings
-
-Use `idMappings` to define friendly names for IDs:
-
-```json
-{
-  "idMappings": {
-    "FRIENDLY_NAME": {
-      "numericId": "123456789",
-      "username": "@username",
-      "description": "Optional description"
-    }
-  }
-}
-```
-
-Then reference friendly names in rules:
-```json
-{
-  "condition": "sender_id",
-  "value": "FRIENDLY_NAME",
-  "targetAgent": "target"
-}
-```
-
-## Privacy Model
-
-```
-┌─────────────────────────────────────────────┐
-│                  Router                       │
-│         (no memory, pure routing)            │
-└───────────────┬─────────────────────────────┘
-                │
-    ┌───────────┼───────────┐
-    │           │           │
-    ▼           ▼           ▼
-┌──────┐  ┌──────┐  ┌──────────┐
-│ AGX  │  │Anneka│  │   Home   │
-└──┬───┘  └───┬───┘  └────┬─────┘
-   │          │            │
-   └────┬─────┴────────────┘
-        │
-        └── Shared context (configurable per agent)
-            AGX ↔ Anneka = ISOLATED (unless configured)
-```
-
-## Example Configurations
-
-### Basic Single User
-
-```json
-{
-  "router": {
-    "defaultAgent": "agx",
-    "rules": [
-      {
-        "condition": "always",
-        "value": "",
-        "targetAgent": "agx"
-      }
-    ]
-  }
-}
-```
-
-### Multi-User with Specific Routing
-
-```json
-{
-  "router": {
-    "defaultAgent": "agx",
-    "idMappings": {
-      "alice": { "numericId": "111111111" },
-      "bob": { "numericId": "222222222" },
-      "familyGroup": { "numericId": "-1003333333333" }
-    },
-    "rules": [
-      { "condition": "sender_id", "value": "alice", "targetAgent": "alice-agent" },
-      { "condition": "sender_id", "value": "bob", "targetAgent": "bob-agent" },
-      { "condition": "chat_id", "value": "familyGroup", "targetAgent": "home" },
       { "condition": "always", "value": "", "targetAgent": "agx" }
     ]
   }
 }
 ```
 
-### Keyword-Based Routing
+Invalid configuration is rejected as a whole and Argentum falls back to empty rules with the `agx`
+default. This keeps the single-agent runtime available without applying partially valid rules.
 
-```json
-{
-  "router": {
-    "defaultAgent": "agx",
-    "rules": [
-      {
-        "condition": "keyword",
-        "value": ["admin", "/admin"],
-        "targetAgent": "admin"
-      },
-      {
-        "condition": "keyword",
-        "value": ["help", "/help"],
-        "targetAgent": "helpdesk"
-      },
-      {
-        "condition": "always",
-        "value": "",
-        "targetAgent": "agx"
-      }
-    ]
-  }
-}
+## Conditions
+
+| Condition   | Match behavior                                                                        |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `sender_id` | Exact ID match after prefix or friendly-name normalization                            |
+| `chat_id`   | Exact chat ID match after normalization                                               |
+| `chat_type` | `direct`, `group`, or `channel`                                                       |
+| `keyword`   | Case-insensitive string or string-array match; `RegExp` is supported programmatically |
+| `always`    | Unconditional fallback; place it last                                                 |
+
+Friendly names resolve through `idMappings`. No production user or chat IDs are hardcoded in the router.
+
+## Runtime boundary in v0.0.9
+
+```text
+message -> validate context -> evaluate rules -> record target decision -> existing Argentum agent
 ```
 
-## Adding to Argentum
+The `RouteResult` fields are reliable decision metadata. `sessionKey` remains empty because session
+creation is not implemented. Do not treat a target agent name as proof that a different agent handled
+the message.
 
-1. Create `config/router.json` with your routing rules
-2. Register agents with their workspaces:
+## v0.1.0 work
 
-```typescript
-import { RouterAgent, loadRouterConfig } from './agents/router';
-
-const config = loadRouterConfig();
-const router = new RouterAgent(config);
-
-router.registerAgent('agx', '/path/to/workspace');
-router.registerAgent('anneka', '/path/to/workspace-anneka');
-router.registerAgent('home', '/path/to/workspace-home');
-```
-
-## Graceful Degradation
-
-If the config file is missing or invalid:
-- Router logs a warning
-- Falls back to empty rules array
-- All messages route to `defaultAgent`
-- No crash occurs
-
-## Best Practices
-
-1. **Never hardcode IDs** - Always use `idMappings` for readability
-2. **Use friendly names** - Makes config self-documenting
-3. **Keep rules in priority order** - First match wins
-4. **Always have a fallback** - `always` condition as last rule
-5. **Document new mappings** - Add `description` field for future reference
-
-## File Structure
-
-```
-ag-claw/
-├── config/
-│   └── router.json          # Your routing configuration
-├── src/
-│   └── agents/
-│       └── router/
-│           ├── index.ts     # Router implementation
-│           └── README.md    # This file
-```
+- Resolve target names to registered agent instances.
+- Create and reuse target-specific sessions.
+- Enforce and test workspace isolation for multiple users.
+- Define safe fallback behavior when a configured target is unavailable.
+- Add end-to-end Telegram tests with at least two users.

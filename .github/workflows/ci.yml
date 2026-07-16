@@ -30,6 +30,9 @@ jobs:
 
       - name: Version sync check
         run: npm run version:check
+
+      - name: Desktop asset sync check
+        run: npm run desktop-assets:check
       
       - name: TypeScript check
         run: npm run typecheck

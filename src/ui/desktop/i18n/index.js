@@ -18,8 +18,8 @@
  *   formatDate(new Date(), 'short')             // locale-aware date string
  */
 
-import en from './en.json';
-import et from './et.json';
+import en from './en.js';
+import et from './et.js';
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 

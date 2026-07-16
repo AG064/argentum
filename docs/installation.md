@@ -58,7 +58,7 @@ The fastest way to get running:
 
 ```bash
 # Download and run the installer
-curl -fsSL https://raw.githubusercontent.com/AG064/argentum/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AG064/argentum/development/install.sh | bash
 
 # Configure your API keys
 nano .env
@@ -73,20 +73,21 @@ Argentum will be available at `http://localhost:18789`.
 
 ## Windows Installer
 
-Download the latest Windows assets from the GitHub release page:
+The latest published release is v0.0.7. Download these Windows assets from the GitHub release page:
 
-- `Argentum_0.0.9_x64-setup.exe` for the normal GUI setup flow
-- `Argentum_0.0.9_x64_en-US.msi` for the direct Windows Installer package
-- `argentum-cli-v0.0.8-win-x64.exe` only if you want the terminal CLI
+- the `x64-setup.exe` asset for the normal GUI setup flow
+- the `x64_en-US.msi` asset for the direct Windows Installer package
+- the `argentum-cli` Windows executable only if you want the terminal CLI
 
 The setup executable and MSI install the desktop application and create Start Menu and desktop shortcuts. The app opens the Argentum GUI; terminal commands remain available through the separate CLI binary:
 
 ```powershell
-.\argentum-cli-v0.0.8-win-x64.exe --version
-.\argentum-cli-v0.0.8-win-x64.exe onboard
+.\argentum-cli-<version>-win-x64.exe --version
+.\argentum-cli-<version>-win-x64.exe onboard
 ```
 
-See [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) for release artifact details.
+The v0.0.9 names documented in [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) are release-candidate
+outputs and are not public downloads until a v0.0.9 release is published.
 
 ---
 

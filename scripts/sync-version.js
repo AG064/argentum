@@ -136,51 +136,41 @@ function listFiles(root, extensions) {
 }
 
 function rewriteVersionLines(source) {
-  const newline = source.includes('\r\n') ? '\r\n' : '\n';
-  return source
-    .split(/\r?\n/)
-    .map((line) => {
-      if (
-        !/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)
-      ) {
-        return line;
-      }
+  return source.replace(/[^\r\n]+/g, (line) => {
+    if (!/\b(?:version|argentumVersion|agClawVersion|ver):|\bVERSION\s*=|\.version\b/.test(line)) {
+      return line;
+    }
 
-      return line
-        .replace(
-          /(['"])v?0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?\1/g,
-          (_match, quote) => `${quote}${version}${quote}`,
-        )
-        .replace(
-          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-          vVersion,
-        )
-        .replace(
-          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-          version,
-        );
-    })
-    .join(newline);
+    return line
+      .replace(
+        /(['"])v?0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?\1/g,
+        (_match, quote) => `${quote}${version}${quote}`,
+      )
+      .replace(
+        /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
+        vVersion,
+      )
+      .replace(
+        /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
+        version,
+      );
+  });
 }
 
 function rewriteDocumentationVersions(source) {
-  const newline = source.includes('\r\n') ? '\r\n' : '\n';
-  return source
-    .split(/\r?\n/)
-    .map((line) => {
-      if (/Node\.js/i.test(line)) {
-        return line;
-      }
+  return source.replace(/[^\r\n]+/g, (line) => {
+    if (/Node\.js/i.test(line) || /latest (?:public|published)(?: GitHub)? release/i.test(line)) {
+      return line;
+    }
 
-      return line
-        .replace(
-          /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-          vVersion,
-        )
-        .replace(
-          /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-          version,
-        );
-    })
-    .join(newline);
+    return line
+      .replace(
+        /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
+        vVersion,
+      )
+      .replace(
+        /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
+        version,
+      );
+  });
 }
