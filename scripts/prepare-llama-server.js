@@ -295,10 +295,6 @@ function copyDirectory(sourceDir, targetDir) {
   }
 }
 
-function nsisPath(value) {
-  return value.replaceAll('\\', '\\\\').replaceAll('$', '$$');
-}
-
 function writeOptionalInstallerHook(enabled) {
   mkdirSync(dirname(installerHookPath), { recursive: true });
 
@@ -314,7 +310,10 @@ function writeOptionalInstallerHook(enabled) {
     return;
   }
 
-  const sourceGlob = `${nsisPath(frontendDir)}\\*.*`;
+  // Keep generated hooks reproducible and free of developer-machine paths.
+  // Tauri expands __FILEDIR__ from target/release/nsis/<arch>/installer.nsi;
+  // five parents reach src/, where the prepared frontend payload lives.
+  const sourceGlob = `\${__FILEDIR__}\\..\\..\\..\\..\\..\\ui\\desktop\\llama.cpp\\${target.triple}\\*.*`;
   const installDir = `_up_\\ui\\desktop\\llama.cpp\\${target.triple}`;
   writeFileSync(
     installerHookPath,

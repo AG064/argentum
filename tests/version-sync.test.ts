@@ -8,6 +8,8 @@ describe('version synchronization', () => {
       scripts?: Record<string, string>;
     };
     const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const androidWorkflow = readFileSync('.github/workflows/android.yml', 'utf8');
+    const androidBuild = readFileSync('android/app/build.gradle.kts', 'utf8');
 
     expect(typeof packageJson.version).toBe('string');
     expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+/);
@@ -24,9 +26,22 @@ describe('version synchronization', () => {
       "rewriteCargoLockVersion('src/desktop/Cargo.lock')",
     );
     expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
+      "rewrite('android/app/build.gradle.kts'",
+    );
+    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
       "rewrite('src/ui/desktop/index.html'",
     );
     expect(ciWorkflow).toContain('npm run version:check');
+    expect(androidWorkflow).toContain('- development');
+    expect(androidWorkflow).toContain('./gradlew test assembleDebug --stacktrace');
+
+    if (!packageJson.version) throw new Error('package.json version is required');
+    const [major, minor, patch] = packageJson.version.split('-')[0].split('.').map(Number);
+    const expectedAndroidCode = major * 1_000_000 + minor * 1_000 + patch;
+    expect(androidBuild).toContain(`versionName = "${packageJson.version}"`);
+    expect(androidBuild).toContain(`versionCode = ${expectedAndroidCode}`);
+    expect(androidBuild).not.toMatch(/\r(?!\n)/);
+    expect(existsSync('android/gradlew.bat')).toBe(true);
 
     const cargoLock = readFileSync('src/desktop/Cargo.lock', 'utf8');
     const escapedVersion = packageJson.version?.replace(/\./g, '\\.') ?? '';
@@ -116,6 +131,12 @@ describe('version synchronization', () => {
 
         for (const match of cleaned.matchAll(versionRe)) {
           const version = match[1];
+          // Roadmaps and release gates may name a version newer than the
+          // package version. Those are plans, not stale current-version
+          // references, and the synchronization script preserves them too.
+          if (isNewerVersion(version, expectedVersion)) {
+            continue;
+          }
           if (version !== expectedVersion) {
             mismatches.push(`${file}: ${line.trim()}`);
           }
@@ -126,6 +147,20 @@ describe('version synchronization', () => {
     expect(mismatches).toEqual([]);
   });
 });
+
+function isNewerVersion(candidate: string, current = '0.0.0'): boolean {
+  const candidateParts = candidate.split('-')[0].split('.').map(Number);
+  const currentParts = current.split('-')[0].split('.').map(Number);
+
+  for (let index = 0; index < Math.max(candidateParts.length, currentParts.length); index += 1) {
+    const left = candidateParts[index] ?? 0;
+    const right = currentParts[index] ?? 0;
+    if (left > right) return true;
+    if (left < right) return false;
+  }
+
+  return false;
+}
 
 function listFiles(root: string, extensions: Set<string>): string[] {
   if (!existsSync(root)) return [];

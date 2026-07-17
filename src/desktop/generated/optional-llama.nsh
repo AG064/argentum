@@ -32,11 +32,9 @@ FunctionEnd
 
 !macro NSIS_HOOK_POSTINSTALL
   ${If} $ArgentumInstallLlamaCpp == ${BST_CHECKED}
-    ; Check if llama.cpp directory exists in source tree before attempting to copy
-    ; On CI, this path may not exist, so we gracefully skip
-    SetOutPath "$INSTDIR\_up_\ui\desktop\llama.cpp\x86_64-unknown-linux-gnu"
-    DetailPrint "Optional: Argentum llama.cpp local server binaries not included in installer."
-    DetailPrint "Enable Local Server inside Argentum to download them automatically."
+    SetOutPath "$INSTDIR\_up_\ui\desktop\llama.cpp\x86_64-pc-windows-msvc"
+    File /r "${__FILEDIR__}\..\..\..\..\..\ui\desktop\llama.cpp\x86_64-pc-windows-msvc\*.*"
+    DetailPrint "Installed Argentum llama.cpp local server binaries."
   ${Else}
     DetailPrint "Skipped Argentum llama.cpp local server binaries. Enable Local Server inside Argentum to install later."
   ${EndIf}

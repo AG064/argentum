@@ -504,6 +504,9 @@ function renderHelpPanel(section) {
         <a href="${escapeAttribute(docUrl)}" target="_blank" rel="noopener noreferrer" data-open-external="${escapeAttribute(docUrl)}">
           Open full docs for ${escapeHtml(section.title)} <span data-icon="externalLink"></span>
         </a>
+        <a href="https://github.com/AG064/argentum/blob/development/docs/FAQ.md" target="_blank" rel="noopener noreferrer" data-open-external="https://github.com/AG064/argentum/blob/development/docs/FAQ.md">
+          Open FAQ <span data-icon="externalLink"></span>
+        </a>
       </div>
       `
           : ''
@@ -991,6 +994,7 @@ async function checkForUpdates() {
     const invoke = window.__TAURI__?.core?.invoke;
     if (invoke) {
       const result = await invoke('check_for_updates');
+      state.updateChecked = true;
       if (result?.updateAvailable) {
         state.updateAvailable = true;
         state.updateVersion = result.version || '';
@@ -1001,12 +1005,14 @@ async function checkForUpdates() {
         notify('info', 'Up to date', 'You are running the latest Argentum version.');
       }
     } else {
-      // Web preview mode - simulate no update
+      // Web preview mode cannot make an authoritative desktop update check.
       state.updateAvailable = false;
+      state.updateChecked = false;
       state.updateVersion = '';
-      notify('info', 'Up to date', 'Update check requires the desktop app.');
+      notify('info', 'Desktop app required', 'Update check requires the desktop app.');
     }
   } catch (error) {
+    state.updateChecked = false;
     state.updateError = normalizeError(error);
   } finally {
     state.updateDownloading = false;
@@ -1040,6 +1046,62 @@ async function downloadUpdate() {
     state.updateDownloading = false;
     render();
   }
+}
+
+async function searchHuggingFaceModels() {
+  const query = String(state.huggingFaceSearch?.query || '').trim();
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) {
+    notify('warning', 'Desktop app required', 'Hugging Face search uses the desktop bridge.');
+    return;
+  }
+  state.huggingFaceSearch = { ...state.huggingFaceSearch, status: 'loading', error: '' };
+  render();
+  try {
+    const results = await invoke('search_huggingface_models', { query });
+    state.huggingFaceSearch = {
+      ...state.huggingFaceSearch,
+      status: 'complete',
+      error: '',
+      results: Array.isArray(results) ? results : [],
+    };
+    if (!state.huggingFaceSearch.results.length) {
+      notify('info', 'No GGUF models found', 'Try a broader Hugging Face search.');
+    }
+  } catch (error) {
+    state.huggingFaceSearch = {
+      ...state.huggingFaceSearch,
+      status: 'error',
+      error: normalizeError(error),
+      results: [],
+    };
+  }
+  render();
+}
+
+async function scanLocalModels() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) {
+    notify('warning', 'Desktop app required', 'Local model scan uses the desktop bridge.');
+    return;
+  }
+  state.localModelScan = { ...state.localModelScan, status: 'loading', error: '' };
+  render();
+  try {
+    const results = await invoke('scan_local_models', { workspacePath: state.workspacePath });
+    state.localModelScan = {
+      status: 'complete',
+      error: '',
+      results: Array.isArray(results) ? results : [],
+    };
+  } catch (error) {
+    state.localModelScan = {
+      status: 'error',
+      error: normalizeError(error),
+      results: [],
+    };
+  }
+  render();
 }
 
 function addActivationListeners(target) {
@@ -1856,6 +1918,14 @@ function handleInput(event) {
     }
     return;
   }
+  if (target.id === 'settings-hf-model-search') {
+    state.huggingFaceSearch = {
+      ...state.huggingFaceSearch,
+      query: target.value,
+      error: '',
+    };
+    return;
+  }
   const llamaInputMap = {
     'settings-llama-model-path': ['modelPath', 'string'],
     'settings-llama-hf-repo': ['hfRepo', 'string'],
@@ -2455,6 +2525,48 @@ async function handleClick(event, activationElement = null) {
 
   if (element.closest('#choose-llama-model')) {
     await chooseLlamaModelFile();
+    render();
+    return;
+  }
+
+  if (element.closest('#search-hf-models')) {
+    await searchHuggingFaceModels();
+    return;
+  }
+
+  const huggingFaceModel = element.closest('[data-hf-model-repo]');
+  if (huggingFaceModel) {
+    const repo = huggingFaceModel.dataset.hfModelRepo;
+    setLlamaServerConfig('modelSource', 'huggingface');
+    setLlamaServerConfig('modelPreset', 'custom');
+    setLlamaServerConfig('hfRepo', repo);
+    setLlamaServerConfig('hfFile', '');
+    if (state.llmProvider === 'llama-cpp') state.providerModel = repo;
+    state.apiTest = {
+      status: 'idle',
+      message: 'Hugging Face model changed. Start llama.cpp, then test the provider.',
+    };
+    notify('info', 'Hugging Face model selected', repo);
+    render();
+    return;
+  }
+
+  if (element.closest('#scan-local-models')) {
+    await scanLocalModels();
+    return;
+  }
+
+  const localModel = element.closest('[data-local-model-path]');
+  if (localModel) {
+    const path = localModel.dataset.localModelPath;
+    setLlamaServerConfig('modelSource', 'file');
+    setLlamaServerConfig('modelPath', path);
+    state.providerModel = path.split(/[\\/]/).pop() || path;
+    state.apiTest = {
+      status: 'idle',
+      message: 'Local GGUF model changed. Start llama.cpp, then test the provider.',
+    };
+    notify('info', 'Local model selected', state.providerModel);
     render();
     return;
   }

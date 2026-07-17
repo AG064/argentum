@@ -1,6 +1,6 @@
 # Tutorial 5: Advanced Patterns
 
-*Estimated time: 35 minutes*
+_Estimated time: 35 minutes_
 
 This tutorial covers advanced Argentum patterns: multi-agent coordination, mesh workflows, task orchestration, and scaling for high-volume deployments.
 
@@ -164,7 +164,9 @@ A mesh workflow is a directed graph where nodes are tasks and edges define depen
           "id": "check-ci",
           "type": "task",
           "action": "run_command",
-          "params": { "command": "gh run list --workflow=ci.yml --head=$PR_BRANCH" }
+          "params": {
+            "command": "gh run list --workflow=ci.yml --head=$PR_BRANCH"
+          }
         },
         {
           "id": "ci-passed?",
@@ -210,7 +212,15 @@ Agent: run_workflow(name="deploy-service")
 
 ## Cron Scheduling
 
-Schedule tasks to run automatically at specific times.
+> **Planned interface, not v0.0.9 configuration.** The optional backend
+> `cron-scheduler` module is disabled by default, and v0.0.9 has no supported
+> desktop scheduling UI. The top-level `schedules` examples below are design
+> sketches and are not parsed by the current configuration schema. In
+> particular, arbitrary `run_command` schedules are not an approved production
+> capability.
+
+The supported post-v0.1.0 design will schedule permission-bound actions with
+explicit ownership, concurrency, missed-run, cancellation, and audit behavior.
 
 ### Setting Up Cron Jobs
 
@@ -261,6 +271,7 @@ Schedule tasks to run automatically at specific times.
 ```
 
 Common patterns:
+
 - `0 8 * * *` — every day at 8:00 AM
 - `0 */2 * * *` — every 2 hours
 - `0 9 * * 1` — every Monday at 9:00 AM
@@ -268,7 +279,8 @@ Common patterns:
 
 ### Atomic Task Checkout
 
-For critical scheduled tasks, the cron scheduler uses atomic checkout to prevent duplicate executions in clustered environments:
+The following is illustrative API design for future clustered execution, not a
+v0.0.9 public API:
 
 ```typescript
 // Only one instance runs this task, even with multiple replicas
@@ -400,7 +412,7 @@ For distributed task execution across multiple agent instances.
 ```typescript
 const checkout = await taskCheckout({
   taskName: 'data-sync',
-  ttlMs: 300_000,  // 5 minutes
+  ttlMs: 300_000, // 5 minutes
   heartbeatMs: 30_000,
 });
 
@@ -500,13 +512,13 @@ argentum memory stats
 
 ### 5. Use the Right Tool
 
-| Task Type | Best Approach |
-|---|---|
-| One-time complex task | Agent with tools |
-| Recurring task | Cron schedule |
-| Event-driven | Webhook |
-| Multi-step pipeline | Mesh workflow |
-| Distributed coordination | Task checkout |
+| Task Type                | Best Approach    |
+| ------------------------ | ---------------- |
+| One-time complex task    | Agent with tools |
+| Recurring task           | Cron schedule    |
+| Event-driven             | Webhook          |
+| Multi-step pipeline      | Mesh workflow    |
+| Distributed coordination | Task checkout    |
 
 ---
 
@@ -517,4 +529,4 @@ argentum memory stats
 
 ---
 
-*Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues).*
+_Questions? Open an issue on [GitHub](https://github.com/AG064/argentum/issues)._

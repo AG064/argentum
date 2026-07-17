@@ -1598,7 +1598,7 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('MiniMax account page browser profile');
   });
 
-  test('documents current support matrix and stable provider state', () => {
+  test('documents current support matrix and provider maturity', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string };
     const readme = read('README.md');
     const release = read(`docs/releases/v${packageJson.version}.md`);
@@ -1607,7 +1607,8 @@ describe('Argentum desktop shell', () => {
     expect(release).toContain(`v${packageJson.version}`);
 
     for (const document of [readme, release]) {
-      expect(document).toContain('Stable Providers');
+      expect(document).toContain('Provider Status');
+      expect(document).toContain('Release-candidate providers');
       expect(document).toContain('ChatGPT');
       expect(document).toContain('MiniMax');
       expect(document).toContain('Testing Providers');

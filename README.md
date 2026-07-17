@@ -53,23 +53,23 @@ After setup, launch Argentum from the Start Menu. First launch opens onboarding.
 
 ### v0.0.9 Release Candidate
 
-The `development` branch is validating v0.0.9. It includes the desktop localization foundation, provider thinking-level payloads, a safe OpenClaw import/archive flow, real built-in skill metadata, numeric update comparison, router decision telemetry, dependency security fixes, and release-pipeline corrections. The latest published GitHub release remains v0.0.7 until v0.0.9 passes its release gate and is tagged.
+The `development` branch is validating v0.0.9. It includes default-deny desktop AI tool/context enforcement, server-side context budgets, Hugging Face GGUF search, bounded local model scan, llama.cpp controls, a safe OpenClaw import/archive flow, help/FAQ feedback, numeric update checks, dependency fixes, and release-pipeline corrections. The latest published GitHub release remains v0.0.7 until v0.0.9 passes its release gate and is tagged.
 
 The candidate also contains the optional Argentum llama.cpp local server path. Candidate installers are produced by release automation; they are not advertised as public downloads until a v0.0.9 GitHub release exists.
 
 ## Provider Status
 
-### Stable Providers
+### Release-candidate providers
 
-| Provider                        | Status | Auth modes                                             | Notes                                                                                                                                  |
-| ------------------------------- | ------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| ChatGPT / OpenAI                | Stable | API key, ChatGPT/Codex browser-account authorization   | Live chat, model picker, provider test, and usage/error reporting are wired.                                                           |
-| MiniMax                         | Stable | API key                                                | Live chat, MiniMax Token Plan usage checks, reset cadence, and M2.7 best-practice context are wired.                                   |
-| Argentum llama.cpp local server | Stable | Local endpoint, optional bundled/in-app binary install | Runs local GGUF models through Argentum's local server controls. The installer checkbox is optional; in-app install is also available. |
+| Provider                   | Status    | Auth modes                                             | Notes                                                                                                                     |
+| -------------------------- | --------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| ChatGPT / OpenAI           | Candidate | API key, ChatGPT/Codex browser-account authorization   | Live chat, model picker, provider test, and usage/error reporting are wired.                                              |
+| MiniMax                    | Candidate | API key                                                | Live chat and optional Token Plan usage checks are wired; credentials/account combinations still require live validation. |
+| Argentum-managed llama.cpp | Candidate | Local endpoint, optional bundled/in-app binary install | Runs selected third-party GGUF models; there is no custom Argentum model.                                                 |
 
 ### Testing Providers
 
-Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, external Ollama/local endpoints, and Custom endpoint are still under Testing. They are visible for configuration and provider tests, but they are not stable desktop routes yet.
+Anthropic Claude, Google Gemini, OpenRouter, NVIDIA, Groq, external Ollama/LM Studio/local endpoints, and Custom endpoints are selectable under Testing. Adapter availability is not a claim that every credential, model, quota, attachment, and tool combination has been live-tested.
 
 ## Supported OS
 
@@ -120,10 +120,10 @@ npm run dev
 The current project includes:
 
 - local configuration and data ownership
-- 65+ modular features you can enable as needed
+- 73 optional feature source modules at the v0.0.9 review; see the status document before relying on one
 - Telegram session routing, plus Discord, Slack, WhatsApp, email, SMS, webchat, and mobile channel modules
 - SQLite, semantic search, knowledge graph, markdown, and hierarchical memory options
-- encrypted secrets, allowlists, policy controls, audit logs, and rate limiting
+- encrypted-vault support plus desktop workspace `secrets.env`, allowlists, policy controls, audit logs, and rate limiting
 - a desktop shell, a CLI, Docker support, and release packaging scripts
 
 ## Everyday Commands
@@ -162,15 +162,19 @@ Argentum
 
 ## Documentation
 
-| Guide                                          | Use it for                         |
-| ---------------------------------------------- | ---------------------------------- |
-| [Quick Start](docs/QUICK_START.md)             | Getting running quickly            |
-| [User Guide](docs/USER_GUIDE.md)               | Daily operation                    |
-| [Developer Guide](docs/DEVELOPER_GUIDE.md)     | Extending Argentum                 |
-| [API Reference](docs/API.md)                   | HTTP API and config details        |
-| [Release Packaging](docs/RELEASE_PACKAGING.md) | Binary and installer build details |
-| [Security](SECURITY.md)                        | Security model and reporting       |
-| [Features](docs/FEATURES.md)                   | Feature catalog                    |
+| Guide                                                            | Use it for                                                      |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| [Quick Start](docs/QUICK_START.md)                               | Getting running quickly                                         |
+| [User Guide](docs/USER_GUIDE.md)                                 | Daily operation                                                 |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md)                       | Extending Argentum                                              |
+| [API Reference](docs/API.md)                                     | HTTP API and config details                                     |
+| [Release Packaging](docs/RELEASE_PACKAGING.md)                   | Binary and installer build details                              |
+| [Security](SECURITY.md)                                          | Security model and reporting                                    |
+| [Features](docs/FEATURES.md)                                     | Feature catalog                                                 |
+| [AI Providers & Extensions](docs/AI_PROVIDERS_AND_EXTENSIONS.md) | Provider/plugin compatibility and licensing                     |
+| [Update Architecture](docs/UPDATE_ARCHITECTURE.md)               | Signed updater plan and current limits                          |
+| [FAQ](docs/FAQ.md)                                               | Curatable in-app help answers                                   |
+| [Project Size](docs/PROJECT_SIZE.md)                             | Workspace, dependency, artifact, and clean-install measurements |
 
 ## Development
 

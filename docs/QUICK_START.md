@@ -60,7 +60,11 @@ curl http://localhost:3000/health
 You should see:
 
 ```json
-{ "status": "ok", "version": "0.0.9", "features": "12/59 active" }
+{
+  "status": "ok",
+  "version": "0.0.9",
+  "features": "<active>/<discovered> active"
+}
 ```
 
 ---
@@ -143,14 +147,14 @@ Edit `argentum.json` to customize your setup:
 
 Key configuration sections:
 
-| Section              | Purpose                                |
-| -------------------- | -------------------------------------- |
-| `server.port`        | HTTP port for the gateway              |
-| `model.provider`     | `openrouter`, `anthropic`, or `openai` |
-| `model.defaultModel` | Which model to use                     |
-| `features`           | Toggle 59 features on/off              |
-| `channels`           | Configure communication channels       |
-| `security`           | Rate limits, allowlists, audit logging |
+| Section              | Purpose                                   |
+| -------------------- | ----------------------------------------- |
+| `server.port`        | HTTP port for the gateway                 |
+| `model.provider`     | `openrouter`, `anthropic`, or `openai`    |
+| `model.defaultModel` | Which model to use                        |
+| `features`           | Toggle optional discovered modules on/off |
+| `channels`           | Configure communication channels          |
+| `security`           | Rate limits, allowlists, audit logging    |
 
 After editing, restart: `argentum gateway restart`
 
@@ -269,7 +273,7 @@ argentum memory search "test"
 - Read the [User Guide](./USER_GUIDE.md) for a complete tour of all features
 - Follow [Tutorial 1: First Agent](./tutorials/01-first-agent.md) to build your first agent
 - Check [Deployment Guide](./tutorials/04-deployment.md) to deploy with Docker
-- Browse [all 59 features](./README.md#features-at-a-glance) and enable what you need
+- Browse the [feature status](./FEATURES.md) and enable only what you need
 
 ---
 

@@ -1,241 +1,111 @@
 # Contributing to Argentum
 
-Here's the honest truth upfront: this project is maintained by one person (AG064) in their free time. Contributions are welcome, but response times may vary. That said, every PR gets read and every issue gets considered.
+Argentum is maintained by a small team. Keep changes scoped, test behavior rather
+than screenshots, and describe unfinished work as unfinished.
 
-## Sign-off Requirement
+## Developer Certificate of Origin
 
-All contributions must include a sign-off line certifying the [Developer Certificate of Origin (DCO)](DCO.md):
+Every commit must be signed off under the [DCO](DCO.md):
 
-```
+```text
 Signed-off-by: Name <email@example.com>
 ```
 
-Use `git commit -s` to sign your commits automatically.
+Use `git commit -s` to add the line. This is a DCO sign-off, not a GPG signature.
 
-## What Can I Help With?
+## Setup
 
-**Bugs** — If something breaks and you know why, a PR with a fix is the fastest path. When fixing a bug, include a regression test if possible. Bug fix PRs must have the `fix:` commit prefix.
+Requirements:
 
-**Features** — Open an issue first to discuss before writing code. Big features might need a redesign, and it's better to find that out before you've written 500 lines.
-
-**Documentation** — Missing something? Wrong? Boring? Fixes here are always appreciated and don't require deep codebase knowledge.
-
-**Translations** — RU and ET are partially done. Other languages welcome.
-
-**Tests** — The test suite exists but coverage is thin. Real-world bug reports with reproduction steps are often more valuable than unit tests.
-
-## Getting Set Up
-
-### Prerequisites
-
-- Node.js 18+
-- npm 9+
-
-### Fork and Clone
+- Node.js 18 or newer and npm 9 or newer
+- Rust stable plus Tauri v2 prerequisites for desktop work
+- JDK 17 and Android SDK 34 for Android work
 
 ```bash
-# Fork on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/argentum.git
-cd argentum
 npm install
-```
-
-### Day-to-Day Commands
-
-```bash
-# Type check (do this before pushing, seriously)
-npm run typecheck
-
-# Lint (ESLint v9 flat config)
-npm run lint
-
-# Format code
-npm run format
-
-### Coding Standards
-
-The project uses:
-- [Prettier](https://prettier.io/) for code formatting (run `npm run format`)
-- [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) as the named reference for TypeScript conventions
-- [typescript-eslint](https://typescript-eslint.io/) for linting (run `npm run lint`)
-
-All contributions must pass `npm run lint` (warnings are acceptable for existing code, not for new) and `npm run format` before submitting.
-
-# Run tests
-npm test
-
-# Run specific test suites
-npm run test:unit
-npm run test:integration
-```
-
-### Build
-
-```bash
-# Install dependencies
-npm install
-
-# Production build (TypeScript compilation + CLI)
 npm run build
-
-# Development with watch mode
-npm run dev
-
-# Build Docker image
-npm run docker:build
-
-# Clean rebuild
-npm run rebuild
 ```
 
-### Desktop App (Optional)
+Do not commit `.env`, `secrets.env`, Android keystores, Tauri signing keys,
+downloaded models, `node_modules`, Rust targets, or build output.
 
-For local llama.cpp server + desktop GUI:
+## Commit flow
+
+Argentum enforces [Conventional Commits](https://www.conventionalcommits.org/).
+Examples:
+
+```text
+feat(models): add bounded Hugging Face search
+fix(security): prevent requests from widening context access
+docs: clarify Android signing requirements
+```
+
+The local Husky hooks are installed by `npm install`/`npm run prepare`:
+
+| Hook         | Enforced behavior                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| `pre-commit` | Runs lint-staged: Prettier and ESLint fixes for staged source, and Prettier for staged docs/config. |
+| `commit-msg` | Runs commitlint against the commit message.                                                         |
+| `pre-push`   | Runs typecheck, lint, desktop asset parity, version parity, and the Jest suite.                     |
+
+Hooks do not replace CI. Do not bypass them to make a failing change appear
+ready. If a hook changes staged files, review the diff and stage the intended
+result before committing again.
+
+Useful validation commands:
 
 ```bash
-# Prepare desktop sidecar binaries (llama.cpp server)
-npm run prepare:llama-server
-
-# Desktop development
-npm run desktop:dev
-
-# Desktop production build
-npm run desktop:build
+npm run validate:quick
+npm run validate:push
+npm run build
+cd src/desktop && cargo test --lib
 ```
 
-### Day-to-Day Commands
+For a release candidate also run the platform build you changed. Android release
+builds require the persistent signing secrets documented in
+[docs/ANDROID_BUILD.md](docs/ANDROID_BUILD.md).
 
-```
-main          — stable, always releasable
-feat/X        — new features
-fix/X         — bug fixes
-docs/X        — documentation only
-```
+## Branches and pull requests
 
-## Testing
+Create a focused branch such as `feat/model-search`, `fix/context-policy`, or
+`docs/release-flow`. Open feature/design issues before a large implementation.
+Pull requests should explain:
 
-### How to Run Tests Locally
+- the behavior and reason for the change;
+- security, data, migration, and compatibility impact;
+- tests run and any tests not run;
+- screenshots only when UI changed;
+- follow-up work that remains intentionally out of scope.
 
-```bash
-# Run all tests
-npm test
+New behavior needs targeted tests when practical. A bug fix should include a
+regression test. Do not add fake API results, placeholder success states, dead
+controls, or production dependencies without a license/security review.
 
-# Run specific test suites
-npm run test:unit        # Unit tests only
-npm run test:integration # Integration tests only
-npm run test:e2e         # End-to-end tests only
+## Modular feature requirements
 
-# Run tests with coverage report
-npm run test:coverage
+Non-core capabilities must be independently configurable and disabled by
+default. A feature module must:
 
-# Run tests in watch mode
-npm run test:watch
-```
+- declare configuration and lifecycle cleanup;
+- fail closed when permissions, credentials, or dependencies are missing;
+- avoid opening a listener, timer, browser, or OS capability while disabled;
+- expose honest health/unavailable states;
+- log meaningful state transitions without secrets;
+- document its provider/data boundary and license.
 
-### What the Tests Cover
+AI tools are default-deny. The persisted workspace policy is authoritative; UI
+request data must not widen it. Side-effecting skills/plugins require explicit
+activation and a capability check at execution time.
 
-| Test Suite            | Purpose                                                            |
-| --------------------- | ------------------------------------------------------------------ |
-| Unit tests            | Individual functions and modules (config, memory, security, tools) |
-| Integration tests     | Channel integrations (Telegram, etc.), API interactions            |
-| E2E tests             | Full workflow from user input to response                          |
-| CLI smoke tests       | Binary execution and basic commands                                |
-| GitHub workflow tests | Security configuration validation                                  |
+## Licensing
 
-### Interpreting Results
+Contributions are licensed under MIT. Third-party code, models, skills, plugins,
+and assets need source, revision, license, and notice information. MIT,
+Apache-2.0, BSD, ISC, 0BSD, and similarly permissive licenses are generally
+compatible, but every imported component must be checked. Unknown, custom,
+source-available, noncommercial, SSPL, BSL, and AGPL material requires explicit
+maintainer/legal review before inclusion.
 
-```
-Test Suites: 5 passed, 5 total
-Tests:       65 passed, 65 total
-```
+## Security reports
 
-- All tests passing: code changes don't break existing functionality
-- Test failures: check error message, fix failing test or code
-- Coverage: higher is better, focus on testing critical paths
-
-### CI/CD Pipeline
-
-Tests run automatically on every push to `development` and `main` branches, and on every Pull Request. Results visible in GitHub Actions. CI must pass before merging.
-
-### Test Policy for Major Changes
-
-**What constitutes a major change:**
-
-- New features or capabilities
-- Changes to public APIs
-- Bug fixes that alter expected behavior
-- Security-related changes
-- Changes to build or release process
-
-**What tests to add or update:**
-
-- New functionality MUST include unit tests
-- Bug fixes MUST include a test that reproduces the bug (regression test)
-- API changes MUST update existing tests
-- Security changes MUST include relevant security tests
-
-**Policy:**
-
-- PRs with new features that don't add tests will be asked to add them
-- Bug fixes without regression tests may be accepted if adding tests is impractical (e.g., one-line fixes)
-- Current test coverage is acknowledged as thin — real-world bug reports with reproduction steps are valuable
-
-## Commit Messages
-
-This project uses Conventional Commits (but not strictly enforced):
-
-```
-feat: add budget tracking feature
-fix: escapeHtml quote handling in security module
-docs: clarify Docker setup in README
-test: add integration tests for mesh workflow
-chore: update typescript-eslint to v8
-```
-
-Keep them short and honest. "WIP" commits are fine during review, just squash them before merging.
-
-## Pull Request Checklist
-
-Before requesting review:
-
-- [ ] `npm run typecheck` passes
-- [ ] `npm run lint` passes (warnings are OK for existing code, not for new)
-- [ ] Tests added/updated if applicable
-- [ ] Commit messages are clean
-- [ ] PR description explains _what_ and _why_, not just _what changed_
-
-## Things That Won't Get Merged
-
-- PRs with commented-out code left in
-- Changes that break the build
-- Code that introduces new ESLint errors (not warnings)
-- Huge PRs without explanation — split them up
-
-## Architecture Notes
-
-Argentum is built on OpenClaw. The key directories:
-
-```
-src/
-  core/          — Core agent loop, memory, tools
-  channels/      — Telegram, Discord, WhatsApp integrations
-  features/      — Pluggable features (toggle in config)
-  security/      — Policy engine, credential manager, sandbox
-  mcp/           — MCP server implementation
-  ui/dashboard/  — Web dashboard
-
-agents/          — Specialized sub-agents (coder, researcher, etc.)
-scripts/         — Automation scripts (backup, daily update, etc.)
-```
-
-If you're adding a feature, look at `src/features/` for the pattern.
-
-## Questions?
-
-- Open an issue for bugs or feature requests
-- GitHub Discussions: https://github.com/AG064/argentum/discussions
-- Check the [docs/](docs/) directory first — there's more detail there than in this file
-
-## License
-
-By contributing, you agree your work will be licensed under MIT.
+Do not open a public issue for a vulnerability. Follow [SECURITY.md](SECURITY.md).

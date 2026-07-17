@@ -1,7 +1,7 @@
 {
   "name": "argentum",
   "version": "0.0.9",
-  "description": "Self-hosted modular AI agent framework with local-first setup and no subscriptions.",
+  "description": "Local-first modular AI agent workspace and framework.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -50,9 +50,11 @@
     "prepare:llama-server": "node scripts/prepare-llama-server.js",
     "version:sync": "node scripts/sync-version.js",
     "version:check": "node scripts/sync-version.js --check",
+    "size:report": "node scripts/report-project-size.js",
+    "validate:quick": "npm run typecheck && npm run lint && npm run desktop-assets:check && npm run version:check",
+    "validate:push": "npm run validate:quick && npm test -- --runInBand",
     "prebuild": "npm run clean",
-    "postinstall": "is-ci || husky install",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "pkg": {
     "scripts": [

@@ -2,26 +2,36 @@
 
 > **⚠️ VEX (Vulnerability Exploitability eXchange):** This document serves as a VEX for Argentum, providing exploitability assessments for known vulnerabilities. It augments vulnerability reports with non-exploitability details and mitigations.
 
+## Validation snapshot — 2026-07-17
+
+- `npm audit --json`: 0 known vulnerabilities across the resolved development tree (797 dependencies reported by npm).
+- `npm audit --omit=dev --json`: 0 known vulnerabilities across the resolved production tree (216 production dependencies; npm also reports optional dependencies separately).
+- Resolved checks: `sanitize-html@2.17.4`, `ip-address@10.2.0`, `picomatch@4.0.4`, `brace-expansion@2.1.0`, `@anthropic-ai/sdk@0.95.1`, `tauri@2.11.2`.
+- `cargo tree --target all -p glib --depth 0`: `glib@0.18.5`; the documented Linux/Tauri GTK exception still applies.
+- `cargo-audit` and `osv-scanner` were not installed in this local environment, so Rust advisory status was not independently rescanned here. CI scanners remain required for release.
+
+This is a time-bound lockfile snapshot, not a guarantee that no vulnerability exists.
+
 ## SCA Remediation Policy
 
 ### Severity Threshold for Remediations
 
-| Severity | Remediation Timeline | Notes |
-|-----------|---------------------|-------|
-| Critical (CVSS 9.0-10.0) | Within 24 hours | Emergency patch or mitigation required |
-| High (CVSS 7.0-8.9) | Within 7 days | Fix or documented exception required |
-| Medium (CVSS 4.0-6.9) | Within 30 days | Fix or risk acceptance with justification |
-| Low (CVSS 0.1-3.9) | Best effort | Fix when feasible, document if not |
-| Info (CVSS 0.0) | No action required | Acknowledge and ignore |
+| Severity                 | Remediation Timeline | Notes                                     |
+| ------------------------ | -------------------- | ----------------------------------------- |
+| Critical (CVSS 9.0-10.0) | Within 24 hours      | Emergency patch or mitigation required    |
+| High (CVSS 7.0-8.9)      | Within 7 days        | Fix or documented exception required      |
+| Medium (CVSS 4.0-6.9)    | Within 30 days       | Fix or risk acceptance with justification |
+| Low (CVSS 0.1-3.9)       | Best effort          | Fix when feasible, document if not        |
+| Info (CVSS 0.0)          | No action required   | Acknowledge and ignore                    |
 
 ### License Policy
 
-| License Type | Policy |
-|-------------|--------|
-| MIT, Apache 2.0, BSD-2/3, ISC, Unlicense, CC0, 0BSD | Allowed — no action required |
-| GPL-2.0, LGPL-2.1, MPL-1.1 | Allowed — but prefer Apache 2.0 or MIT for new code |
-| AGPL-3.0, SSPL, BSL | Not allowed — do not introduce |
-| Unknown/Custom | Legal review required before use |
+| License Type                                        | Policy                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
+| MIT, Apache 2.0, BSD-2/3, ISC, Unlicense, CC0, 0BSD | Generally allowed; preserve required notices/attribution           |
+| GPL, LGPL, MPL, EPL and other reciprocal licenses   | Legal/maintainer review required before use or distribution        |
+| AGPL, SSPL, BSL, noncommercial, source-available    | Blocked unless an explicit compatible commercial grant is approved |
+| Unknown/Custom                                      | Legal review required before use                                   |
 
 ### Process for SCA Findings
 

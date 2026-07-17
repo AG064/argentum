@@ -523,6 +523,6 @@ Full memory configuration in `argentum.json`:
 
 ## Next Steps
 
-- **[Tutorial 3: Channels and Integrations](./tutorials/03-channels.md)** — Connect your agent to Discord, Slack, Email, and more
+- **[Tutorial 3: Skill Development](./03-skill-development.md)** — Build a modular skill and expose only the capabilities it needs
 - **[Developer Guide: Creating a New Feature](../DEVELOPER_GUIDE.md#5-how-to-add-a-new-feature)** — Build custom memory processors
 - **[API Reference: Memory Endpoints](../API.md#3-rest-endpoints)** — Complete endpoint documentation

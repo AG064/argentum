@@ -71,17 +71,17 @@ Argentum is built around three principles:
 
 ### Core Components
 
-| Component         | File(s)                        | Role                                                           |
-| ----------------- | ------------------------------ | -------------------------------------------------------------- |
-| **Gateway**       | `src/index.ts`                 | HTTP server, boots all features, manages lifecycle             |
-| **CLI**           | `src/cli.ts`                   | User-facing command interface                                  |
-| **Plugin Loader** | `src/core/plugin-loader.ts`    | Discovers, loads, starts, and health-checks 59 feature modules |
-| **Agent**         | `src/index.ts` (class `Agent`) | Agentic Tool Loop — orchestrates LLM + tools + memory          |
-| **LLM Provider**  | `src/core/llm-provider.ts`     | Abstraction over OpenRouter, Anthropic, OpenAI                 |
-| **Memory**        | `src/memory/`                  | Semantic search, knowledge graph, SQLite persistence           |
-| **Channels**      | `src/channels/`                | Protocol adapters (Telegram, Discord, Webchat, SMS, Email)     |
-| **Features**      | `src/features/*/index.ts`      | 59 individual modules                                          |
-| **Security**      | `src/security/`                | Policy engine, encrypted secrets, allowlists                   |
+| Component         | File(s)                        | Role                                                                                  |
+| ----------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| **Gateway**       | `src/index.ts`                 | HTTP server, boots all features, manages lifecycle                                    |
+| **CLI**           | `src/cli.ts`                   | User-facing command interface                                                         |
+| **Plugin Loader** | `src/core/plugin-loader.ts`    | Discovers, loads, starts, and health-checks optional feature modules                  |
+| **Agent**         | `src/index.ts` (class `Agent`) | Agentic Tool Loop — orchestrates LLM + tools + memory                                 |
+| **LLM Provider**  | `src/core/llm-provider.ts`     | Abstraction over OpenRouter, Anthropic, OpenAI                                        |
+| **Memory**        | `src/memory/`                  | Semantic search, knowledge graph, SQLite persistence                                  |
+| **Channels**      | `src/channels/`                | Protocol adapters (Telegram, Discord, Webchat, SMS, Email)                            |
+| **Features**      | `src/features/*/index.ts`      | 73 source module directories at v0.0.9 review time; presence is not a readiness claim |
+| **Security**      | `src/security/`                | Policy engine, encrypted secrets, allowlists                                          |
 
 ### The Agentic Tool Loop
 
@@ -108,7 +108,7 @@ Each feature is a self-contained module in `src/features/<name>/index.ts`. Featu
 
 Enabled features are listed in `argentum.json` under the `features` key. You can enable or disable any feature without touching code.
 
-Current feature count: **59 features** including audit logging, semantic search, cron scheduling, morning briefings, mesh workflows, encrypted secrets, goal tracking, and many more.
+Current source inventory: **73 feature module directories** at the v0.0.9 review. A directory is not a support claim; see [Feature Status](FEATURES.md) for verified and planned behavior.
 
 ---
 
@@ -550,7 +550,7 @@ That's the entire setup. The gateway runs at `http://localhost:18789`.
 
 ### Docker (Recommended for Production)
 
-A production-ready Docker setup is included:
+A Docker setup is included for testing and self-hosting; validate secrets, TLS/reverse-proxy policy, volumes, and dependency scans before production use:
 
 ```bash
 cd argentum/docker

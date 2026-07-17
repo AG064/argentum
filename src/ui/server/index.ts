@@ -501,74 +501,23 @@ function getSystemStats() {
   return {
     uptime: process.uptime(),
     memoryUsage: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
-    cpuUsage: 0, // Would need os module for accurate reading
-    activeAgents: 4,
     wsClients: wsClients.size,
   };
 }
 
-// API Handlers (placeholder implementations)
-function handleBudgetAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
-  // In production, this would call the actual budget feature
-  sendJSON(res, 200, {
-    monthlyCost: 3.47,
-    monthlyLimit: 10.0,
-    dailyCost: 0.23,
-    dailyLimit: 1.0,
-    perAgentLimit: 2.0,
-    alertThreshold: 0.8,
-    blockOnExhausted: true,
-    alerts: ['Monthly spending at 34.7% of limit'],
-    byAgent: [
-      { agent: 'coder', totalCost: 1.82, totalTokens: 124500, requestCount: 47 },
-      { agent: 'researcher', totalCost: 0.94, totalTokens: 67800, requestCount: 23 },
-    ],
+function sendUnavailable(res: http.ServerResponse, capability: string): void {
+  sendJSON(res, 501, {
+    error: `${capability} is not connected to a live feature module. Enable and configure that module before exposing this endpoint.`,
+    available: false,
   });
 }
 
+function handleBudgetAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
+  sendUnavailable(res, 'Budget dashboard');
+}
+
 function handleOrgChartAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
-  sendJSON(res, 200, {
-    tree: {
-      name: 'CEO',
-      status: 'active',
-      agentType: 'CTO',
-      children: [
-        { name: 'Alice', role: 'Engineer', status: 'active', agentType: 'coder', children: [] },
-        {
-          name: 'Bob',
-          role: 'Researcher',
-          status: 'active',
-          agentType: 'researcher',
-          children: [],
-        },
-      ],
-    },
-    stats: {
-      totalAgents: 2,
-      activeAgents: 2,
-      pausedAgents: 0,
-      totalBudget: 10000000,
-      totalSpent: 3470000,
-    },
-    nodes: [
-      {
-        id: 'agent-001',
-        name: 'Alice',
-        role: 'Engineer',
-        status: 'active',
-        agentType: 'coder',
-        tasks: [],
-      },
-      {
-        id: 'agent-002',
-        name: 'Bob',
-        role: 'Researcher',
-        status: 'active',
-        agentType: 'researcher',
-        tasks: [],
-      },
-    ],
-  });
+  sendUnavailable(res, 'Organization dashboard');
 }
 
 function handleOrgAPI(
@@ -577,27 +526,7 @@ function handleOrgAPI(
   pathname: string,
   body: unknown,
 ) {
-  const action = pathname.replace('/api/org/', '');
-
-  switch (action) {
-    case 'hire':
-      sendJSON(res, 200, { success: true, message: 'Agent hired (demo)' });
-      break;
-    case 'fire':
-      sendJSON(res, 200, { success: true, message: 'Agent terminated (demo)' });
-      break;
-    case 'pause':
-      sendJSON(res, 200, { success: true, message: 'Agent paused (demo)' });
-      break;
-    case 'resume':
-      sendJSON(res, 200, { success: true, message: 'Agent resumed (demo)' });
-      break;
-    case 'assign':
-      sendJSON(res, 200, { success: true, message: 'Task assigned (demo)' });
-      break;
-    default:
-      sendJSON(res, 404, { error: 'Not found' });
-  }
+  sendUnavailable(res, 'Organization actions');
 }
 
 function handleSelfImprovingAPI(
@@ -605,68 +534,15 @@ function handleSelfImprovingAPI(
   res: http.ServerResponse,
   body: unknown,
 ) {
-  sendJSON(res, 200, {
-    enabled: true,
-    lastRunTime: Date.now() - 3 * 60 * 60 * 1000,
-    nextScheduledRun: Date.now() + 21 * 60 * 60 * 1000,
-    skillsCreated: 2,
-    lessonsLearned: 12,
-    config: {
-      schedule: 'nightly',
-      idleThreshold: 120,
-      skillCreationThreshold: 5,
-      maxSkillsPerRun: 3,
-    },
-    phases: {},
-    runHistory: [],
-    lessons: [],
-  });
+  sendUnavailable(res, 'Self-improving dashboard');
 }
 
 function handleTrajectoryAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
-  sendJSON(res, 200, {
-    sessions: [
-      { id: 'session-abc', title: 'Main Session', messageCount: 847, tokens: 1245000, cost: 2.47 },
-    ],
-    stats: {
-      totalSessions: 47,
-      totalMessages: 28456,
-      totalTokens: 45230000,
-      totalCost: 89.34,
-      byAgent: {},
-    },
-    exportHistory: [],
-  });
+  sendUnavailable(res, 'Trajectory dashboard');
 }
 
 function handleSkillsAPI(req: http.IncomingMessage, res: http.ServerResponse, body: unknown) {
-  sendJSON(res, 200, {
-    installed: [
-      {
-        name: 'clawhub',
-        version: '0.0.9',
-        category: 'utility',
-        description: 'Install and manage skills.',
-      },
-      {
-        name: 'weather',
-        version: '0.0.9',
-        category: 'utility',
-        description: 'Get weather forecasts.',
-      },
-    ],
-    marketplace: [
-      {
-        name: 'slack-bot',
-        slug: 'slack-bot',
-        version: '0.0.9',
-        category: 'integration',
-        author: 'community',
-        description: 'Send messages to Slack.',
-        stars: 42,
-      },
-    ],
-  });
+  sendUnavailable(res, 'Skills dashboard');
 }
 
 /**

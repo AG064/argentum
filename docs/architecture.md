@@ -88,15 +88,15 @@ How Argentum extends OpenClaw with a modular plugin system, multi-channel suppor
 
 [OpenClaw](https://github.com/nickarora/openclaw) handles the core AI agent runtime: model communication, session management, and tool integration. Argentum builds on top of that.
 
-| Layer | OpenClaw | Argentum Extension |
-|---|---|---|
-| **Runtime** | Node.js agent runtime | Same runtime, wrapped with framework |
-| **Config** | Environment variables | YAML config with Zod validation, hot-reload |
-| **Features** | Built-in tools | Modular plugin system with lifecycle management |
-| **Channels** | Telegram (basic) | Multi-channel: Telegram, Webchat, Mobile, Discord, Slack |
-| **Memory** | File-based memory | SQLite, Markdown, Supabase, Self-evolving |
-| **Security** | Basic allowlist | Full policy engine, encrypted secrets, audit logging |
-| **Deployment** | Manual | Docker, install script, auto-update |
+| Layer          | OpenClaw              | Argentum Extension                                       |
+| -------------- | --------------------- | -------------------------------------------------------- |
+| **Runtime**    | Node.js agent runtime | Same runtime, wrapped with framework                     |
+| **Config**     | Environment variables | YAML config with Zod validation, hot-reload              |
+| **Features**   | Built-in tools        | Modular plugin system with lifecycle management          |
+| **Channels**   | Telegram (basic)      | Multi-channel: Telegram, Webchat, Mobile, Discord, Slack |
+| **Memory**     | File-based memory     | SQLite, Markdown, Supabase, Self-evolving                |
+| **Security**   | Basic allowlist       | Full policy engine, encrypted secrets, audit logging     |
+| **Deployment** | Manual                | Docker, install script, auto-update                      |
 
 Argentum does not fork OpenClaw. It wraps and extends it as a dependency, so you can still update the underlying runtime.
 
@@ -110,10 +110,10 @@ Every feature implements the `FeatureModule` interface:
 
 ```typescript
 interface FeatureModule {
-  readonly meta: FeatureMeta;           // name, version, description, dependencies
+  readonly meta: FeatureMeta; // name, version, description, dependencies
   init(config, context): Promise<void>; // Called when loaded
-  start?(): Promise<void>;             // Called when enabled
-  stop?(): Promise<void>;              // Called when disabled (cleanup)
+  start?(): Promise<void>; // Called when enabled
+  stop?(): Promise<void>; // Called when disabled (cleanup)
   healthCheck?(): Promise<HealthStatus>; // Periodic health check
 }
 ```
@@ -155,10 +155,10 @@ This lets features talk to each other without direct imports. Loose coupling.
    ```yaml
    features:
      my-feature:
-       enabled: true
+       enabled: false
        customOption: value
    ```
-4. Restart Argentum. The plugin loader picks it up automatically.
+4. Add tests and documentation, then explicitly enable it in a test workspace.
 
 ---
 
@@ -178,13 +178,11 @@ Argentum's security is layered, inspired by NemoClaw's isolation approach:
 │  Condition-based rules with priorities   │
 │  Rate limiting and quotas                │
 ├──────────────────────────────────────────┤
-│  Layer 3: Encrypted Secrets              │
-│  AES-256-GCM, PBKDF2 key derivation     │
-│  Secrets decrypted only at runtime       │
+│  Layer 3: Desktop Rust capability gate   │
+│  Persisted policy; request can only narrow│
 ├──────────────────────────────────────────┤
-│  Layer 4: Audit Logging                  │
-│  All security decisions logged           │
-│  Searchable, exportable                  │
+│  Layer 4: Secret and audit subsystems    │
+│  Encrypted vault where wired; redaction  │
 ├──────────────────────────────────────────┤
 │  Layer 5: Container Sandbox              │
 │  Isolated execution for untrusted code   │
@@ -201,9 +199,9 @@ Controls access through configurable rules with pattern matching. Deny rules alw
 - **glob** - Wildcard pattern (`*.example.com`)
 - **regex** - Regular expression
 
-Two modes:
-- **permissive** - Default allow, explicit denies block
-- **strict** - Default deny, only explicit allows pass
+Two modes exist, but release configuration uses **strict**: default deny, only
+explicit allows pass. Permissive mode is compatibility/testing only and should
+not be the release default.
 
 ### Policy Engine
 
@@ -219,8 +217,13 @@ YAML-based security policies evaluated at runtime:
 
 - **Algorithm:** AES-256-GCM with unique IV per secret
 - **Key Derivation:** PBKDF2 with 100,000 iterations
-- **Storage:** Encrypted JSON file (`data/secrets.enc`)
-- **Runtime:** Secrets decrypted only when needed, never stored in plaintext on disk
+- **Storage:** Encrypted JSON vault for callers wired to this subsystem
+- **Runtime:** Values are decrypted only for a requesting component
+
+The current desktop onboarding path uses `workspace/secrets.env` instead of the
+encrypted vault. It is Git-ignored and restricted to mode `0600` on Unix, but it
+is not application-encrypted; Windows confidentiality relies on the account and
+filesystem ACL. See `SECURITY.md`.
 
 ### Command Sandboxing
 
@@ -295,12 +298,12 @@ config/default.yaml
 
 Environment variables override YAML values:
 
-| Env Var | YAML Path |
-|---|---|
-| `ARGENTUM_PORT` | `server.port` |
-| `ARGENTUM_LOG_LEVEL` | `logging.level` |
+| Env Var                   | YAML Path                 |
+| ------------------------- | ------------------------- |
+| `ARGENTUM_PORT`           | `server.port`             |
+| `ARGENTUM_LOG_LEVEL`      | `logging.level`           |
 | `ARGENTUM_TELEGRAM_TOKEN` | `channels.telegram.token` |
-| `ARGENTUM_SUPABASE_URL` | `memory.supabaseUrl` |
+| `ARGENTUM_SUPABASE_URL`   | `memory.supabaseUrl`      |
 
 ---
 
@@ -347,9 +350,9 @@ Multiple Argentum instances sharing state via Redis and Supabase. Gateway routes
 
 ## Design Principles
 
-1. **Modular by default** - Every feature is opt-in. Ship only what you need.
-2. **Security first** - Deny by default in strict mode. Audit everything.
+1. **Modular by default** - Non-core features are opt-in and disabled by default.
+2. **Security first** - Persisted policy is authoritative; deny unknown capabilities.
 3. **Type-safe** - Zod schemas validate all configuration at startup.
-4. **Hot-reload** - Configuration changes apply without restart.
+4. **Explicit lifecycle** - A module starts/stops only through its supported lifecycle; restart is required where hot reload is not implemented.
 5. **Portable** - Runs on a laptop, a VPS, or in Docker. No cloud dependency required.
-6. **Extensible** - Adding a feature means creating one file. The plugin loader does the rest.
+6. **Extensible with gates** - Source discovery is separate from activation, permission, license, and release readiness.

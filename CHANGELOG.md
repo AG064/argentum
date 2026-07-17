@@ -61,12 +61,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Built-in skills catalog** — lists the four SKILL.md files actually bundled in this repository:
   browser automation, computer control, skill loader, and YouTube Shorts guidance
 
+- **Model discovery** — Settings can search the Hugging Face model API for GGUF repositories and
+  perform a bounded quick scan of `<workspace>/models` for common local-model file extensions;
+  only GGUF files are offered to llama.cpp
+
+- **Release validation and size reporting** — quick and pre-push validation commands, a real
+  pre-push hook, and a reproducible project/dependency/artifact size report
+
+- **Release planning documentation** — provider and extension compatibility, updater architecture,
+  Android signing, optional device sync, scheduled-task boundaries, FAQ, and current feature maturity
+  are documented without presenting planned work as implemented
+
+### Changed
+
+- Desktop AI requests now treat persisted context, channel, and security settings as authoritative.
+  Request payloads can narrow those permissions but cannot expand them; tool definitions and execution
+  enforce the same default-deny policy.
+- Message, history, summary, and conservative per-model context limits are enforced before provider
+  requests. Desktop `secrets.env` files use owner-only permissions on Unix.
+- The managed llama.cpp route no longer exposes a nonexistent Argentum model. It starts from a real
+  configurable third-party model identifier or a selected local GGUF file.
+- Curated llama.cpp quick-downloads are live-checked GGUF repositories reporting Apache-2.0; broader
+  Hugging Face results expose reported license/gating metadata and require model-card review.
+- Optional runtime modules, including the standalone dashboard and model routing, are disabled by
+  default. The gateway binds to loopback with explicit loopback CORS defaults.
+- Android release publishing now requires persistent signing secrets and fails closed when they are
+  absent. Per-run signing keys are not generated because they would make upgrades impossible.
+- Android version synchronization now updates both `versionName` and monotonic `versionCode`; the
+  Windows Gradle wrapper is included, and Android CI runs tests on the actual `development` branch.
+- External skill catalogs remain browseable, but installation is disabled until an immutable revision,
+  license decision, content digest, and capability review are available.
+
 ### Fixed
 
 - Desktop release assets now include generated JavaScript for the skills catalog and localization
   modules, with a drift check that fails when the browser module graph is incomplete
 - OpenClaw migration no longer accepts arbitrary source or destination paths and preserves existing data
 - Update checks correctly recognize releases such as `0.0.10` as newer than `0.0.9`
+- Update apply and rollback no longer fabricate successful installation or backup state; signed in-place
+  installation remains unavailable until release signing infrastructure is provisioned
+- Loopback model tools no longer follow redirects and cap response time/body size; generated NSIS llama.cpp
+  hooks no longer embed a developer-machine path
+- Unconnected dashboard endpoints no longer return fabricated budgets, agent counts, trajectories,
+  organization data, or successful actions
 
 ## [0.0.8] - 2026-06-15
 
@@ -83,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit tests for `ChatViewModel`, `SettingsViewModel`, `AgentsViewModel`
   - See `docs/ANDROID_BUILD.md` for the full build/install/sign story
 - **Android Release Pipeline** — `release.yml` now builds and signs a release APK on every `v*` tag
-  - Asset: `argentum-v{version}-android.apk` (universal, ABI-sliced variants on request)
+  - Candidate asset: `argentum-{version}-android.apk` (universal APK; publication requires the persistent release signing key)
   - Signing: CI-managed keystore (see Android docs); falls back to the debug key when no keystore is provided so the workflow always produces an installable artifact
 - **Desktop Build Docs** — `docs/RELEASE_PACKAGING.md` already covers Windows / macOS / Linux; the Android doc mirrors it
 - **Default Provider**: `minimax` (MiniMax-M2.7) is the first onboarding option; `openai` and `local` (llama.cpp) remain stable alternatives

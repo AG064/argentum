@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
-import { dirname, resolve, join } from 'path';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
 
 import Database from 'better-sqlite3';
 
@@ -56,7 +56,7 @@ class AutoUpdateFeature implements FeatureModule {
   readonly meta: FeatureMeta = {
     name: 'auto-update',
     version: '0.0.9',
-    description: 'Automatic updates for Argentum components with backup and rollback',
+    description: 'Optional GitHub release checks and update history for Argentum',
     dependencies: [],
   };
 
@@ -64,7 +64,7 @@ class AutoUpdateFeature implements FeatureModule {
     enabled: false,
     dbPath: './data/auto-update.db',
     repoOwner: 'AG064',
-    repoName: 'ag-claw',
+    repoName: 'argentum',
     checkIntervalHours: 24,
     autoApply: false,
     backupBeforeUpdate: true,
@@ -90,10 +90,10 @@ class AutoUpdateFeature implements FeatureModule {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageMetadata;
         this.currentVersion = typeof pkg.version === 'string' ? pkg.version : '0.0.9';
       } else {
-        this.currentVersion = '0.0.4';
+        this.currentVersion = '0.0.9';
       }
     } catch {
-      this.currentVersion = '0.0.4';
+      this.currentVersion = '0.0.9';
     }
   }
 
@@ -168,7 +168,10 @@ class AutoUpdateFeature implements FeatureModule {
         });
 
         if (this.config.autoApply) {
-          await this.applyUpdate('ag-claw');
+          this.ctx.logger.warn(
+            'Automatic install requested, but signed in-place updates are not enabled in this build',
+            { releaseUrl: release.url },
+          );
         }
 
         return release;
@@ -195,7 +198,7 @@ class AutoUpdateFeature implements FeatureModule {
   }
 
   /** Apply update */
-  async applyUpdate(_component: string = 'ag-claw'): Promise<UpdateResult> {
+  async applyUpdate(_component: string = 'argentum'): Promise<UpdateResult> {
     if (!this.latestRelease) {
       const release = await this.checkUpdates();
       if (!release) {
@@ -203,77 +206,22 @@ class AutoUpdateFeature implements FeatureModule {
       }
     }
 
-    this.ctx.logger.info('Applying update', {
+    const message =
+      'Signed in-place installation is not enabled in this build. Open the release URL and use the platform installer; Argentum will not report an update as installed until signature verification and atomic replacement are implemented.';
+    this.ctx.logger.warn('Update installation unavailable', {
       from: this.currentVersion,
       to: this.latestRelease!.version,
+      releaseUrl: this.latestRelease!.url,
     });
-
-    try {
-      if (this.config.backupBeforeUpdate) {
-        await this.createBackup();
-      }
-
-      // Download and install update (placeholder - actual implementation would fetch and replace files)
-      // In a real implementation, this would:
-      // 1. Download tarball/zip from release.url
-      // 2. Extract to temp
-      // 3. Verify checksums
-      // 4. Replace files atomically
-      // 5. Restart service
-
-      await this.recordUpdate(this.latestRelease!.version, true, 'Update applied successfully');
-
-      this.ctx.logger.info('Update applied', { version: this.latestRelease!.version });
-      return {
-        success: true,
-        version: this.latestRelease!.version,
-        message: 'Update applied successfully',
-        rollbackAvailable: true,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await this.recordUpdate(this.latestRelease?.version ?? 'unknown', false, message);
-      this.ctx.logger.error('Update failed', { error: err });
-      return {
-        success: false,
-        version: this.currentVersion,
-        message: `Update failed: ${message}`,
-      };
-    }
+    return { success: false, version: this.currentVersion, message, rollbackAvailable: false };
   }
 
   /** Rollback to previous version */
-  async rollback(_component: string = 'ag-claw'): Promise<UpdateResult> {
-    this.ctx.logger.info('Rolling back update...');
-
-    try {
-      // Find last successful update before current
-      const previous = this.updateHistory.find(
-        (h) => h.success && h.version !== this.currentVersion,
-      );
-      if (!previous) {
-        return { success: false, version: this.currentVersion, message: 'No rollback available' };
-      }
-
-      // Restore from backup (placeholder)
-      await this.restoreBackup();
-
-      await this.recordUpdate(previous.version, true, 'Rollback successful');
-      this.ctx.logger.info('Rollback successful', { version: previous.version });
-      return {
-        success: true,
-        version: previous.version,
-        message: 'Rollback successful',
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.ctx.logger.error('Rollback failed', { error: err });
-      return {
-        success: false,
-        version: this.currentVersion,
-        message: `Rollback failed: ${message}`,
-      };
-    }
+  async rollback(_component: string = 'argentum'): Promise<UpdateResult> {
+    const message =
+      'Rollback is unavailable because this build does not perform signed in-place installations.';
+    this.ctx.logger.warn('Update rollback unavailable');
+    return { success: false, version: this.currentVersion, message, rollbackAvailable: false };
   }
 
   /** Get update history */
@@ -293,7 +241,7 @@ class AutoUpdateFeature implements FeatureModule {
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': `ag-claw-updater/${this.currentVersion}`,
+          'User-Agent': `argentum-updater/${this.currentVersion}`,
         },
       });
 
@@ -340,46 +288,6 @@ class AutoUpdateFeature implements FeatureModule {
       if (li < ci) return false;
     }
     return false;
-  }
-
-  // ─── Backup & Restore ─────────────────────────────────────────────────────
-
-  private async createBackup(): Promise<void> {
-    const backupDir = resolve(this.config.backupPath);
-    if (!existsSync(backupDir)) {
-      mkdirSync(backupDir, { recursive: true });
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupName = `agclaw-backup-${timestamp}`;
-    const backupPath = join(backupDir, backupName);
-
-    this.ctx.logger.debug('Creating backup', { backupPath });
-
-    // Placeholder: backup critical files
-    // In a real implementation, this would tar up the project directory
-    // For now, we just create a marker file
-    writeFileSync(backupPath, `Backup created at ${new Date().toISOString()}\n`);
-  }
-
-  private async restoreBackup(): Promise<void> {
-    const backupDir = resolve(this.config.backupPath);
-    if (!existsSync(backupDir)) {
-      throw new Error('Backup directory not found');
-    }
-
-    const backups = readdirSync(backupDir)
-      .filter((f) => f.startsWith('agclaw-backup-'))
-      .sort()
-      .reverse();
-    if (backups.length === 0) {
-      throw new Error('No backups found');
-    }
-
-    const latestBackup = join(backupDir, backups[0] as string);
-    this.ctx.logger.debug('Restoring backup', { backup: latestBackup });
-
-    // Placeholder: restore files from backup
   }
 
   // ─── Database ─────────────────────────────────────────────────────────────

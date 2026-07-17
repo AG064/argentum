@@ -23,6 +23,7 @@ logs/
 !android/app/src/test/java/com/argentum/data/
 .env
 *.env.*
+secrets.env
 agclaw-*
 argentum-*
 

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,7 +13,7 @@ android {
         applicationId = "com.argentum"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
+        versionCode = 9
         versionName = "0.0.9"
 
         vectorDrawables {
@@ -27,12 +29,12 @@ android {
 
     signingConfigs {
         create("release") {
-            // The release APK is signed with a CI-managed keystore.
+            // Published APKs use the same persistent release keystore.
             // See docs/ANDROID_BUILD.md for the signing flow and how to provide
             // a custom keystore via repository secrets.
             val keystorePropsFile = file("keystore.properties")
             if (keystorePropsFile.exists()) {
-                val props = java.util.Properties().apply {
+                val props = Properties().apply {
                     load(keystorePropsFile.inputStream())
                 }
                 storeFile = file(props.getProperty("storeFile", "keystore/release.keystore"))
@@ -52,8 +54,8 @@ android {
                 "proguard-rules.pro"
             )
             // The release signing config is only useful when a keystore is
-            // present. Otherwise fall back to the debug keystore so local
-            // builds still produce an installable APK.
+            // present. Otherwise fall back to the debug keystore for local,
+            // non-publishable test builds only.
             signingConfig = if (file("keystore.properties").exists()) {
                 signingConfigs.getByName("release")
             } else {

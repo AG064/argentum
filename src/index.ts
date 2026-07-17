@@ -1040,17 +1040,20 @@ class Argentum {
       port: this.config.server.port,
     });
 
-    // Start dashboard server
-    try {
-      const dashboardServer = await startDashboardServer({
-        port: this.config.server.port,
-        host: this.config.server.host,
-      });
-      this.logger.info(`Dashboard server started on port ${this.config.server.port}`);
-    } catch (err) {
-      this.logger.warn('Failed to start dashboard server', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    // The standalone dashboard is a separate, opt-in network surface. The
+    // desktop System Dashboard module does not depend on it.
+    if (this.config.features.dashboard.enabled) {
+      try {
+        await startDashboardServer({
+          port: this.config.server.port,
+          host: this.config.server.host,
+        });
+        this.logger.info(`Dashboard server started on port ${this.config.server.port}`);
+      } catch (err) {
+        this.logger.warn('Failed to start dashboard server', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     // Start health check interval

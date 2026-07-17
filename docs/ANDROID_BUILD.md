@@ -1,10 +1,9 @@
 # Android Build Guide
 
-The Argentum Android app is a native Kotlin + Jetpack Compose client that ships
-alongside the desktop app. It shares the same Argentum theme (silver + crimson,
-liquid-glass surfaces) and the same provider stack (MiniMax, OpenAI, local
-llama.cpp), with an onboarding flow that walks a new user through the first-time
-setup.
+The Argentum Android app is a pre-release Kotlin + Jetpack Compose client being
+prepared for v0.1.0 internal testing. It shares the product theme and contains
+onboarding/chat/settings/agent screens, but desktop/provider parity, gateway
+authentication, device sync, and a complete device test matrix are not finished.
 
 This guide mirrors `docs/RELEASE_PACKAGING.md` (desktop) and covers prerequisites,
 local development, the release pipeline, signing, and Play Store notes.
@@ -19,9 +18,9 @@ local development, the release pipeline, signing, and Play Store notes.
 - **Versioning**: mirrors the Argentum release version (`versionName` = `0.0.9`,
   `versionCode` = `8` for v0.0.9)
 
-The Android app is intentionally thin. The heavy lifting (LLM calls, tool calling,
-session management, audit log) lives in the Argentum gateway. The Android app is
-a polished, secure, mobile-first shell.
+The Android app is intentionally thin. The target architecture keeps tool calls,
+session policy, and audit decisions in an authenticated Argentum gateway. Treat
+the current code as a test client until those boundaries are verified end to end.
 
 ## Layout
 
@@ -51,7 +50,8 @@ android/
 ├── settings.gradle.kts
 ├── gradle.properties
 ├── gradle/wrapper/                 # gradle-wrapper.jar + properties
-└── gradlew
+├── gradlew                          # POSIX launcher
+└── gradlew.bat                      # Windows launcher
 ```
 
 ## Prerequisites
@@ -79,6 +79,8 @@ cd android
 # APK lands at: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+On Windows PowerShell, use `.\gradlew.bat --no-daemon assembleDebug`.
+
 To install on a connected device or running emulator:
 
 ```bash
@@ -102,26 +104,23 @@ The release pipeline lives in `.github/workflows/release.yml` (`android-apk` job
 On every `v*` tag push it:
 
 1. Sets up JDK 17 and the Android SDK on Ubuntu
-2. Generates a CI-managed keystore (see [Signing](#signing) below)
+2. Requires and decodes the persistent release keystore (see [Signing](#signing))
 3. Runs `./gradlew assembleRelease`
 4. Verifies the APK signature with `apksigner verify`
-5. Renames the APK to `argentum-v{version}-android.apk`
+5. Renames the APK to `argentum-{version}-android.apk`
 6. Writes a SHA256 checksum
 7. Uploads the APK to the GitHub Release
 
-The debug CI workflow (`.github/workflows/android.yml`) runs on every push to
-`main` / `develop` and uploads the **debug** APK as a workflow artifact named
+The debug CI workflow (`.github/workflows/android.yml`) runs unit tests and builds on every push to
+`main` / `development`, then uploads the **debug** APK as a workflow artifact named
 `argentum-debug-apk`.
 
 ## Signing
 
-Argentum ships with a built-in **CI keystore** that the release workflow
-generates deterministically. This is fine for sideloading and personal use,
-and ensures every release produces a real, installable APK even when no
-keystore secrets are configured.
-
-For Play Store publishing, replace the CI keystore with your own. Add these
-repository secrets in **Settings → Secrets and variables → Actions**:
+Release CI does not generate an ephemeral fallback key. Android requires the
+same signing identity for an installed app to accept upgrades, so the workflow
+fails closed unless all four repository secrets are configured in
+**Settings → Secrets and variables → Actions**:
 
 | Secret                      | Description                                             |
 | --------------------------- | ------------------------------------------------------- |
@@ -137,16 +136,16 @@ base64 -w 0 release.keystore > release.keystore.b64
 # then paste the contents of release.keystore.b64 into the secret
 ```
 
-When all four secrets are present, the release workflow uses your keystore
-instead of the CI-generated one. See `android/app/build.gradle.kts`
-(`signingConfigs.release`) for the resolution order.
+All four secrets are mandatory for a published release. Local `assembleRelease`
+may fall back to the debug key for developer testing only; that APK must not be
+published and cannot upgrade a build signed by the release key. See
+`android/app/build.gradle.kts` (`signingConfigs.release`).
 
 ### Important: keep your keystore safe
 
-If you lose your keystore, **you cannot publish updates to an existing Play
-Store listing** — Google will treat the new APK as a different app. Keep
-backups of your keystore + passwords in a secure location (1Password, Bitwarden,
-encrypted disk, etc.).
+If you lose your keystore, you cannot publish compatible sideloaded upgrades and
+Play distribution requires the Play App Signing recovery process where
+available. Keep encrypted offline backups of the keystore and credentials.
 
 ## Play Store notes (future)
 
@@ -178,8 +177,8 @@ sdk.dir=/path/to/Android/Sdk
 
 ### `Could not find :app:` or Gradle wrapper issues
 
-Make sure `gradle/wrapper/gradle-wrapper.jar` is present. The repo tracks it, so
-a fresh clone should have it.
+Make sure `gradle/wrapper/gradle-wrapper.jar` and the launcher for your platform (`gradlew` or
+`gradlew.bat`) are present. The repo tracks them, so a fresh clone should have them.
 
 ### `Unsupported class file major version`
 

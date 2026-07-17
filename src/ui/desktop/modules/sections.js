@@ -947,7 +947,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
                 ${presetOptions}
                 <option value="custom" ${selected(config.modelPreset === 'custom')}>Other / custom Hugging Face GGUF</option>
               </select>
-              <small>${escapeHtml(selectedPreset.detail || 'Choose a GGUF preset that matches the machine.')}</small>
+              <small>${escapeHtml(selectedPreset.detail || 'Choose a GGUF preset that matches the machine.')} License: ${escapeHtml(selectedPreset.license || 'review model card')}.</small>
             </label>
             <label>
               Hugging Face repo
@@ -959,6 +959,37 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
               <input id="settings-llama-hf-file" value="${escapeAttribute(config.hfFile || selectedPreset.file || '')}" />
               <small>Optional when the repo quant suffix is enough. Use an exact <code>.gguf</code> filename for deterministic downloads.</small>
             </label>
+            <div class="settings-inline-note">
+              <strong>Search Hugging Face GGUF models</strong>
+              <div class="input-with-action">
+                <input id="settings-hf-model-search" value="${escapeAttribute(state.huggingFaceSearch?.query || '')}" placeholder="Search by model or organization" />
+                <button class="button compact" id="search-hf-models" type="button" ${state.huggingFaceSearch?.status === 'loading' ? 'disabled' : ''}>${state.huggingFaceSearch?.status === 'loading' ? 'Searching…' : 'Search'}</button>
+              </div>
+              <small>Results come from the Hugging Face Hub GGUF filter. Model licenses vary; review the model card before commercial use.</small>
+              ${
+                state.huggingFaceSearch?.error
+                  ? `<p class="error-text">${escapeHtml(state.huggingFaceSearch.error)}</p>`
+                  : ''
+              }
+              ${
+                (state.huggingFaceSearch?.results || []).length
+                  ? `<div class="quick-menu-grid">
+                    ${state.huggingFaceSearch.results
+                      .map(
+                        (model) => `<article class="quick-choice">
+                          <strong>${escapeHtml(model.id)}</strong>
+                          <span>${escapeHtml(model.license ? `License: ${model.license}` : 'License: check model card')} · ${Number(model.downloads || 0).toLocaleString()} downloads${model.gated ? ' · gated' : ''}</span>
+                          <div class="button-row">
+                            <button type="button" class="button compact" data-hf-model-repo="${escapeAttribute(model.id)}" ${model.gated ? 'disabled title="Gated model: authorize directly with Hugging Face before use"' : ''}>Use repo</button>
+                            <a class="button compact" href="https://huggingface.co/${escapeAttribute(model.id)}" data-open-external="https://huggingface.co/${escapeAttribute(model.id)}" target="_blank" rel="noopener noreferrer">Model card</a>
+                          </div>
+                        </article>`,
+                      )
+                      .join('')}
+                  </div>`
+                  : ''
+              }
+            </div>
           `
           : `
             <label>
@@ -969,6 +1000,38 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
               </div>
               <small>Use a GGUF file. Workspace models still work, and explicit external GGUF files are allowed for llama.cpp only.</small>
             </label>
+            <div class="settings-inline-note">
+              <strong>Quick scan workspace/models</strong>
+              <p>Finds GGUF plus common model files by extension. llama.cpp can launch GGUF files; other formats are reported for inventory only.</p>
+              <button class="button compact" id="scan-local-models" type="button" ${state.localModelScan?.status === 'loading' ? 'disabled' : ''}>${state.localModelScan?.status === 'loading' ? 'Scanning…' : 'Scan local models'}</button>
+              ${
+                state.localModelScan?.error
+                  ? `<p class="error-text">${escapeHtml(state.localModelScan.error)}</p>`
+                  : ''
+              }
+              ${
+                state.localModelScan?.status === 'complete' &&
+                (state.localModelScan?.results || []).length === 0
+                  ? '<p class="muted-line">No supported model files were found in workspace/models.</p>'
+                  : ''
+              }
+              ${
+                (state.localModelScan?.results || []).length
+                  ? `<div class="quick-menu-grid">
+                    ${state.localModelScan.results
+                      .map(
+                        (
+                          model,
+                        ) => `<button type="button" class="quick-choice" data-local-model-path="${escapeAttribute(model.path)}" ${model.llamaCompatible ? '' : 'disabled'} title="${escapeAttribute(model.llamaCompatible ? 'Use this GGUF model' : 'Inventory only: llama.cpp requires GGUF')}">
+                          <strong>${escapeHtml(model.name)}</strong>
+                          <span>${escapeHtml(model.extension.toUpperCase())} · ${formatBytes(model.sizeBytes)}${model.llamaCompatible ? '' : ' · not runnable by llama.cpp'}</span>
+                        </button>`,
+                      )
+                      .join('')}
+                  </div>`
+                  : ''
+              }
+            </div>
           `
       }
       <label>
@@ -1289,7 +1352,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
                 ${
                   safeSource === 'installed'
                     ? `<button type="button" class="button compact uninstall-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" title="Uninstall">Uninstall</button>`
-                    : `<button type="button" class="button primary compact install-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" data-skill-source="${escapeAttribute(safeSource)}" title="Install">Install</button>`
+                    : `<button type="button" class="button compact install-skill-btn" data-skill-name="${escapeAttribute(skill.name)}" data-skill-source="${escapeAttribute(safeSource)}" title="Installation is disabled until license, revision, integrity, and capability review are implemented" disabled>Review required</button>`
                 }
                 ${skill.url ? `<a href="${escapeAttribute(skill.url)}" class="button compact" data-open-external="${escapeAttribute(skill.url)}" target="_blank" rel="noopener">View on GitHub</a>` : ''}
               </div>`
@@ -1330,7 +1393,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
         <div class="skills-section-header">
           <div>
             <h3>Skills</h3>
-            <p class="muted-line">Browse Argentum's built-in skills and install additional skills from Anthropic and Codex to extend Argentum's capabilities with specialized knowledge and workflows.</p>
+            <p class="muted-line">Browse built-in and upstream skill metadata. External installation is disabled until Argentum can pin revisions and verify license, integrity, and requested capabilities.</p>
           </div>
         </div>
         <div class="skills-toolbar">
@@ -1764,23 +1827,32 @@ const updateModule = {
     const newVersion = state.updateVersion || currentVersion;
     const isUpdate =
       state.updateAvailable && state.updateVersion && state.updateVersion !== currentVersion;
+    const updateStatus = isUpdate
+      ? `Version ${escapeHtml(newVersion)} is available on GitHub`
+      : state.updateError
+        ? 'Update check unavailable'
+        : state.updateChecked
+          ? 'No newer GitHub release was found'
+          : 'Not checked yet';
 
     return `
       <section class="settings-field-group">
         <div class="settings-group-title">
           <div>
             <h3>Argentum Updates</h3>
-            <p>${isUpdate ? `Version ${escapeHtml(newVersion)} is available` : 'You are on the latest version'}</p>
+            <p>${updateStatus}</p>
           </div>
         </div>
         <div class="panel-body form-grid two">
           <label class="full-span">
-            <span class="pill ${isUpdate ? 'warn' : 'ok'}">${isUpdate ? 'Update available' : 'Up to date'}</span>
+            <span class="pill ${isUpdate ? 'warn' : state.updateChecked ? 'ok' : ''}">${isUpdate ? 'Update available' : state.updateChecked ? 'Checked' : 'Not checked'}</span>
             <p>Current version: <strong>${escapeHtml(currentVersion)}</strong></p>
             ${
               isUpdate
                 ? `<p>A newer version <strong>${escapeHtml(newVersion)}</strong> is available for download.</p>`
-                : '<p>You are running the latest Argentum version.</p>'
+                : state.updateChecked
+                  ? '<p>No newer published GitHub release was found.</p>'
+                  : '<p>Run a release check to compare this build with GitHub Releases.</p>'
             }
           </label>
           ${
@@ -1790,16 +1862,11 @@ const updateModule = {
               ${
                 state.updateDownloading
                   ? `
-                <div class="update-progress">
-                  <div class="progress-bar">
-                    <div class="progress-fill" style="width:${state.updateProgress}%"></div>
-                  </div>
-                  <p>Downloading... ${state.updateProgress}%</p>
-                </div>
+                <p>Opening the GitHub releases page…</p>
               `
                   : `
                 <button class="button primary" id="download-update" ${state.updateDownloading ? 'disabled' : ''}>
-                  Download ${escapeHtml(newVersion)}
+                  Open GitHub release ${escapeHtml(newVersion)}
                 </button>
               `
               }
@@ -1808,13 +1875,13 @@ const updateModule = {
           `
               : `
             <div class="full-span">
-              <button class="button" id="check-for-updates">Check for updates</button>
+              <button class="button" id="check-for-updates" ${state.updateDownloading ? 'disabled' : ''}>${state.updateDownloading ? 'Checking…' : 'Check for updates'}</button>
             </div>
           `
           }
           <div class="full-span settings-inline-note">
-            <strong>Automatic updates</strong>
-            <p>Argentum checks for new versions on startup and displays this panel when an update is available.</p>
+            <strong>Release checks</strong>
+            <p>Argentum checks GitHub Releases on startup. Signed in-place installation is not enabled yet, so this opens the published release page without claiming the app was updated.</p>
           </div>
         </div>
       </section>

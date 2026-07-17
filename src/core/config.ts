@@ -18,13 +18,16 @@ import type { FSWatcher } from 'chokidar';
 /** Server configuration schema */
 const ServerConfigSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3000),
-  host: z.string().default('0.0.0.0'),
+  host: z.string().default('127.0.0.1'),
   cors: z
     .object({
       enabled: z.boolean().default(true),
-      origins: z.array(z.string()).default(['*']),
+      origins: z.array(z.string()).default(['http://localhost:3000', 'http://127.0.0.1:3000']),
     })
-    .default({ enabled: true, origins: ['*'] }),
+    .default({
+      enabled: true,
+      origins: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    }),
   rateLimit: z
     .object({
       enabled: z.boolean().default(true),
@@ -180,7 +183,7 @@ export const ModelRoutingWeightsSchema = z.object({
 
 /** Model routing configuration schema */
 export const ModelRoutingConfigSchema = z.object({
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(false),
   cacheScoresMs: z.number().int().min(1000).max(600000).default(60000),
   weights: ModelRoutingWeightsSchema.default({
     costEfficiency: 1.2,
@@ -235,13 +238,16 @@ export const LLMConfigSchema = z
 export const ConfigSchema = z.object({
   server: ServerConfigSchema.default({
     port: 3000,
-    host: '0.0.0.0',
-    cors: { enabled: true, origins: ['*'] },
+    host: '127.0.0.1',
+    cors: {
+      enabled: true,
+      origins: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    },
     rateLimit: { enabled: true, windowMs: 60000, maxRequests: 100 },
   }),
   llm: LLMConfigSchema,
   modelRouting: ModelRoutingConfigSchema.default({
-    enabled: true,
+    enabled: false,
     cacheScoresMs: 60000,
     weights: {
       costEfficiency: 1.2,
@@ -287,6 +293,7 @@ export const ConfigSchema = z.object({
       }),
       'multimodal-memory': FeatureToggleSchema.default({ enabled: false }),
       'browser-automation': FeatureToggleSchema.default({ enabled: false }),
+      'dashboard': FeatureToggleSchema.default({ enabled: false }),
       'webhooks': FeatureToggleSchema.default({ enabled: false }),
       'mesh-workflows': FeatureToggleSchema.default({ enabled: false }),
       'live-canvas': FeatureToggleSchema.default({ enabled: false }),
@@ -411,6 +418,7 @@ export const ConfigSchema = z.object({
         path: './data/knowledge.db',
       },
       'multimodal-memory': { enabled: false },
+      'dashboard': { enabled: false },
       'browser-automation': { enabled: false },
       'webhooks': { enabled: false },
       'mesh-workflows': { enabled: false },

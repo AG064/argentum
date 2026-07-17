@@ -54,7 +54,7 @@ Health check endpoint. Returns status of the gateway and all active features.
   "uptime": 3600,
   "node": "v20.19.0",
   "features": {
-    "total": 59,
+    "total": 73,
     "active": 12,
     "unhealthy": []
   },
@@ -520,7 +520,7 @@ List all available features.
       "dependencies": ["sqlite-memory"]
     }
   ],
-  "total": 59,
+  "total": 73,
   "active": 12
 }
 ```

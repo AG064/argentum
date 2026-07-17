@@ -2,37 +2,40 @@
 
 ## Supported Versions
 
-| Version | Status | Support Type | End of Support |
-|---------|--------|--------------|----------------|
-| v0.0.7 | ✅ Current stable | Bug fixes + Security updates | Until next stable release |
-| < v0.0.7 | ❌ Unsupported | No support | End of life |
+| Version  | Status            | Support Type                 | End of Support            |
+| -------- | ----------------- | ---------------------------- | ------------------------- |
+| v0.0.7   | ✅ Current stable | Bug fixes + Security updates | Until next stable release |
+| < v0.0.7 | ❌ Unsupported    | No support                   | End of life               |
 
 ## Support Scope
 
 **Bug fixes:** Available for the current stable release (v0.0.7) only.
 
-**Security updates:** Critical security fixes provided for the current stable release (v0.0.7) only. Older versions are not supported.
+**Security updates:** Critical fixes target the current stable release and the active `development` release candidate. Older versions are not supported.
 
 **Types of support provided:**
+
 - Bug reports via GitHub Issues
 - Security vulnerability reports via GitHub Security Advisories
 - Community support via GitHub Discussions
 
 **Not provided:**
+
 - Custom feature development
 - Direct technical support
 - Support for modified builds
 
 ## Getting Support
 
-1. **Bug reports:** Open a [GitHub Issue](https://github.com/AG064/argentum/issues/new)
-2. **Security vulnerabilities:** Report privately via [Security Advisories](https://github.com/AG064/argentum/security/advisories/new)
-3. **Questions:** Use [GitHub Discussions](https://github.com/AG064/argentum/discussions)
+1. **FAQ:** Check the [curatable FAQ](docs/FAQ.md)
+2. **Bug reports:** Use the in-app Help & Feedback section or open a [GitHub Issue](https://github.com/AG064/argentum/issues/new)
+3. **Security vulnerabilities:** Follow [SECURITY.md](SECURITY.md) and report privately
+4. **Questions:** Use [GitHub Discussions](https://github.com/AG064/argentum/discussions)
 
 ## Support Response Time
 
 - Bug reports: Best effort (no guaranteed response time)
-- Security vulnerabilities: Acknowledgment within 24-48 hours, fix timeline based on severity
+- Security vulnerabilities: target acknowledgement within seven days, fix timeline based on severity and reproducibility
 
 ## Unsupported Versions
 

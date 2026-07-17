@@ -14,6 +14,8 @@ if (!/^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$/.test(version)) {
 }
 
 const vVersion = `v${version}`;
+const [versionMajor, versionMinor, versionPatch] = version.split('-')[0].split('.').map(Number);
+const androidVersionCode = versionMajor * 1_000_000 + versionMinor * 1_000 + versionPatch;
 const changed = [];
 
 function rewrite(file, updater) {
@@ -82,6 +84,12 @@ rewrite('src/core/onboarding.ts', (source) =>
 rewriteJsonVersion('src/desktop/tauri.conf.json');
 rewriteTomlVersion('src/desktop/Cargo.toml');
 rewriteCargoLockVersion('src/desktop/Cargo.lock');
+rewrite('android/app/build.gradle.kts', (source) =>
+  source
+    .replace(/\r\n?/g, '\n')
+    .replace(/^[ \t]*versionCode\s*=\s*\d+/m, `        versionCode = ${androidVersionCode}`)
+    .replace(/^[ \t]*versionName\s*=\s*"[^"]+"/m, `        versionName = "${version}"`),
+);
 rewrite('src/ui/desktop/index.html', (source) => rewriteDocumentationVersions(source));
 
 for (const file of [
@@ -166,11 +174,23 @@ function rewriteDocumentationVersions(source) {
     return line
       .replace(
         /(?<![\d.])v0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-        vVersion,
+        (match) => (isFutureDocumentationVersion(match) ? match : vVersion),
       )
       .replace(
         /(?<![\d.])0\.\d+\.\d+(?:-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(?![-a-zA-Z0-9.]|\d)/g,
-        version,
+        (match) => (isFutureDocumentationVersion(match) ? match : version),
       );
   });
+}
+
+function isFutureDocumentationVersion(candidate) {
+  const numbers = candidate.replace(/^v/, '').split('-')[0].split('.').map(Number);
+  const current = version.split('-')[0].split('.').map(Number);
+  for (let index = 0; index < Math.max(numbers.length, current.length); index += 1) {
+    const left = numbers[index] ?? 0;
+    const right = current[index] ?? 0;
+    if (left > right) return true;
+    if (left < right) return false;
+  }
+  return false;
 }

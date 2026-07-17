@@ -121,46 +121,19 @@ jobs:
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
 
-      - name: Generate CI keystore
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 == '' }}
+      - name: Validate persistent Android signing identity
         shell: bash
         run: |
           set -euo pipefail
-          # Generate a deterministic keystore inside the workflow. This is a
-          # long-lived signing identity baked into the repository's releases
-          # and is appropriate for sideloading and personal use.
-          #
-          # To use your own keystore (recommended for Play Store publishing),
-          # add these repository secrets:
-          #   ANDROID_KEYSTORE_BASE64   - base64-encoded release.keystore file
-          #   ANDROID_KEYSTORE_PASSWORD - keystore password
-          #   ANDROID_KEY_ALIAS         - key alias
-          #   ANDROID_KEY_PASSWORD      - key password
-          cd android/app
-          mkdir -p keystore
-          KEYSTORE=keystore/release.keystore
-          ALIAS=argentum
-          STORE_PASS=argentum-ci-store
-          KEY_PASS=argentum-ci-key
-          CN="CN=Argentum CI, OU=Argentum, O=AG064, L=Tallinn, S=Harju, C=EE"
-          keytool -genkey -noprompt \
-            -keystore "$KEYSTORE" \
-            -alias "$ALIAS" \
-            -keyalg RSA -keysize 2048 \
-            -validity 10950 \
-            -storepass "$STORE_PASS" \
-            -keypass "$KEY_PASS" \
-            -dname "$CN"
-          cat > keystore.properties <<EOF
-          storeFile=$KEYSTORE
-          storePassword=$STORE_PASS
-          keyAlias=$ALIAS
-          keyPassword=$KEY_PASS
-          EOF
-          echo "CI keystore generated."
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required repository secret: $name" >&2
+              echo "Release APKs must use a persistent signing key so installed builds can be upgraded." >&2
+              exit 1
+            fi
+          done
 
       - name: Decode user keystore from secret
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         shell: bash
         run: |
           cd android/app

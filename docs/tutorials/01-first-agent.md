@@ -100,7 +100,7 @@ curl http://localhost:18789/health
     "status": "ok",
     "version": "0.0.9",
     "uptime": 3,
-    "features": "12/59 active",
+    "features": "<active>/<discovered> active",
     "memory": { "semantic": 0, "knowledge_graph": 0, "sessions": 0 }
   }
 }

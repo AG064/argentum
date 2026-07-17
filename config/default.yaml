@@ -5,7 +5,7 @@
 # Server settings - the gateway HTTP server
 server:
   port: 3000
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   cors:
     enabled: true
     origins: ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -59,12 +59,17 @@ features:
 
   # Knowledge & Memory
   knowledge-graph:
-    enabled: true
+    enabled: false
     backend: sqlite
     path: ./data/knowledge.db
 
   multimodal-memory:
-    enabled: true
+    enabled: false
+
+  # Optional standalone web dashboard. The desktop System Dashboard remains an
+  # in-app module and does not require this server.
+  dashboard:
+    enabled: false
 
   # Automation
   browser-automation:
@@ -112,7 +117,7 @@ features:
 memory:
   primary: sqlite
   path: ./data/memory.db
-  selfEvolving: true
+  selfEvolving: false
   compressionThreshold: 10000
   # Supabase (optional, for cloud-backed memory)
   # supabaseUrl: ""
