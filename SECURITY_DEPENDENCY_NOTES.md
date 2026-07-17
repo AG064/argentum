@@ -7,7 +7,7 @@
 - `npm audit --json`: 0 known vulnerabilities across the resolved development tree (797 dependencies reported by npm).
 - `npm audit --omit=dev --json`: 0 known vulnerabilities across the resolved production tree (216 production dependencies; npm also reports optional dependencies separately).
 - Resolved checks: `sanitize-html@2.17.4`, `ip-address@10.2.0`, `picomatch@4.0.4`, `brace-expansion@2.1.0`, `@anthropic-ai/sdk@0.95.1`, `tauri@2.11.2`.
-- `cargo tree --target all -p glib --depth 0`: `glib@0.18.5`; the documented Linux/Tauri GTK exception still applies.
+- `cargo tree --target all -p glib --depth 0`: `glib@0.18.5`; Dependabot alert 16 remains open for the Linux-only Tauri/GTK dependency path documented below.
 - `cargo-audit` and `osv-scanner` were not installed in this local environment, so Rust advisory status was not independently rescanned here. CI scanners remain required for release.
 
 This is a time-bound lockfile snapshot, not a guarantee that no vulnerability exists.
@@ -44,8 +44,17 @@ This is a time-bound lockfile snapshot, not a guarantee that no vulnerability ex
 ### Exceptions
 
 - **Bundled npm modules** (inside `node_modules/npm/`): Not remediated directly — mitigated via `package.json` overrides where applicable
-- **RUSTSEC vulnerabilities in Tauri dependencies**: Cannot fix without Rust version upgrade — documented in `osv-scanner.toml`
+- **Rust advisories inherited through framework dependencies**: Do not blanket-ignore them. Record the exact affected target, reachable dependency path, upstream constraint, and remediation trigger below; keep the scanner finding open until it is fixed or formally accepted.
 - **False positives**: Document as "Not a vulnerability" or "Not exploitable via project"
+
+## Open Rust finding: `glib::VariantStrIter` unsoundness
+
+- **Tracking:** GitHub Dependabot alert 16; medium severity; affected range `glib >=0.15.0, <0.20.0`; first patched version `0.20.0`.
+- **Resolved version:** `glib@0.18.5` through `tauri -> gtk` on `x86_64-unknown-linux-gnu`.
+- **Target scope:** `cargo tree --target x86_64-pc-windows-msvc -i glib` reports no dependency. The crate is present in the Linux Tauri/GTK graph and must be treated as affected for Linux builds.
+- **Reachability:** Argentum does not directly import `glib` or use `VariantStrIter`. This reduces direct exposure but is not proof that the transitive GUI stack cannot reach the affected implementation.
+- **Current constraint:** The Tauri Linux stack currently resolves the `gtk-rs 0.18` family, which cannot accept `glib 0.20` as a lockfile-only patch. Forcing only `glib` to `0.20` would create an incompatible dependency graph.
+- **Disposition:** Open and monitored, not ignored and not marked non-exploitable. Upgrade the Tauri/GTK dependency family when it supports `glib >=0.20`, then run Linux desktop tests and close the alert only after the patched graph is verified.
 
 ## Overview
 
