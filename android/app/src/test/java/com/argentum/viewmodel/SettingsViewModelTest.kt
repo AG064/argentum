@@ -3,8 +3,8 @@ package com.argentum.viewmodel
 import com.argentum.data.repository.SettingsRepository
 import io.mockk.coEvery
 import io.mockk.every
-import io.mockk.firstArg
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,18 +103,26 @@ class SettingsViewModelTest {
         model: MutableStateFlow<String> = MutableStateFlow("MiniMax-M2.7"),
         endpoint: MutableStateFlow<String> = MutableStateFlow("https://api.minimax.io"),
         notifications: MutableStateFlow<Boolean> = MutableStateFlow(true),
-    ): SettingsRepository = mockk {
-        every { darkModeFlow } returns darkMode
-        every { selectedProviderFlow } returns MutableStateFlow("minimax")
-        every { selectedModelFlow } returns model
-        every { apiEndpointFlow } returns endpoint
-        every { apiKeyFlow } returns MutableStateFlow("")
-        every { notificationsEnabledFlow } returns notifications
-        every { systemPromptFlow } returns MutableStateFlow("")
-        every { localServerUrlFlow } returns MutableStateFlow("http://127.0.0.1:8080/v1")
-        coEvery { setDarkMode(any()) } answers { darkMode.value = firstArg() }
-        coEvery { setSelectedModel(any()) } answers { model.value = firstArg() }
-        coEvery { setApiEndpoint(any()) } answers { endpoint.value = firstArg() }
-        coEvery { setNotificationsEnabled(any()) } answers { notifications.value = firstArg() }
+    ): SettingsRepository {
+        val darkModeValue = slot<Boolean>()
+        val modelValue = slot<String>()
+        val endpointValue = slot<String>()
+        val notificationsValue = slot<Boolean>()
+        return mockk {
+            every { darkModeFlow } returns darkMode
+            every { selectedProviderFlow } returns MutableStateFlow("minimax")
+            every { selectedModelFlow } returns model
+            every { apiEndpointFlow } returns endpoint
+            every { apiKeyFlow } returns MutableStateFlow("")
+            every { notificationsEnabledFlow } returns notifications
+            every { systemPromptFlow } returns MutableStateFlow("")
+            every { localServerUrlFlow } returns MutableStateFlow("http://127.0.0.1:8080/v1")
+            coEvery { setDarkMode(capture(darkModeValue)) } answers { darkMode.value = darkModeValue.captured }
+            coEvery { setSelectedModel(capture(modelValue)) } answers { model.value = modelValue.captured }
+            coEvery { setApiEndpoint(capture(endpointValue)) } answers { endpoint.value = endpointValue.captured }
+            coEvery { setNotificationsEnabled(capture(notificationsValue)) } answers {
+                notifications.value = notificationsValue.captured
+            }
+        }
     }
 }

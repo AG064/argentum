@@ -6,8 +6,8 @@ import com.argentum.data.repository.SettingsRepository
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.every
-import io.mockk.fourthArg
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,10 +120,13 @@ class ChatViewModelTest {
     private fun chatRepository(
         response: Result<String> = Result.success("unused"),
         onMessages: (List<ChatMessage>) -> Unit = {},
-    ): ChatRepository = mockk {
-        coEvery { sendMessage(any(), any(), any(), any()) } answers {
-            onMessages(fourthArg())
-            response
+    ): ChatRepository {
+        val messages = slot<List<ChatMessage>>()
+        return mockk {
+            coEvery { sendMessage(any(), any(), any(), capture(messages)) } answers {
+                onMessages(messages.captured)
+                response
+            }
         }
     }
 }
