@@ -810,6 +810,9 @@ describe('Argentum desktop shell', () => {
     const prepareLlama = read('scripts/prepare-llama-server.js');
     expect(prepareLlama).toContain('optional-llama.nsh');
     expect(prepareLlama).toContain('Install Argentum llama.cpp local server binaries');
+    const defaultInstallerHook = read('src/desktop/generated/optional-llama.nsh');
+    expect(defaultInstallerHook).toContain('checked-in fallback intentionally contains no payload');
+    expect(defaultInstallerHook).not.toContain('NSIS_HOOK_POSTINSTALL');
     expect(workflow).toContain('Build desktop CLI sidecar');
   });
 
