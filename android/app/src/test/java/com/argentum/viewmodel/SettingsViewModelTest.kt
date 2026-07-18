@@ -1,86 +1,120 @@
 package com.argentum.viewmodel
 
 import com.argentum.data.repository.SettingsRepository
-import kotlinx.coroutines.flow.Flow
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.firstArg
+import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.junit.Assert.*
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
-class FakeSettingsRepository : SettingsRepository {
-    private val _darkMode = MutableStateFlow(true)
-    private val _selectedModel = MutableStateFlow("MiniMax-M2.7")
-    private val _apiEndpoint = MutableStateFlow("https://api.minimax.io")
-    private val _notifications = MutableStateFlow(true)
-
-    override val darkModeFlow: Flow<Boolean> = _darkMode
-    override val selectedModelFlow: Flow<String> = _selectedModel
-    override val apiEndpointFlow: Flow<String> = _apiEndpoint
-    override val notificationsFlow: Flow<Boolean> = _notifications
-
-    override suspend fun setDarkMode(enabled: Boolean) { _darkMode.value = enabled }
-    override suspend fun setSelectedModel(model: String) { _selectedModel.value = model }
-    override suspend fun setApiEndpoint(endpoint: String) { _apiEndpoint.value = endpoint }
-    override suspend fun setNotificationsEnabled(enabled: Boolean) { _notifications.value = enabled }
-}
-
+@OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     @Test
-    fun `initial state has default values`() {
-        val repository = FakeSettingsRepository()
-        val viewModel = SettingsViewModel(repository)
+    fun `initial state reflects persisted settings`() = runTest(dispatcher) {
+        val viewModel = SettingsViewModel(settingsRepository())
+        advanceUntilIdle()
+
         val state = viewModel.uiState.value
-        
         assertTrue(state.isDarkMode)
         assertEquals("MiniMax-M2.7", state.selectedModel)
-        assertEquals(4, state.availableModels.size)
         assertEquals("https://api.minimax.io", state.apiEndpoint)
         assertTrue(state.notificationsEnabled)
     }
 
     @Test
-    fun `toggleDarkMode toggles dark mode state`() {
-        val repository = FakeSettingsRepository()
-        val viewModel = SettingsViewModel(repository)
-        
-        assertTrue(viewModel.uiState.value.isDarkMode)
-        
+    fun `toggleDarkMode persists the opposite state`() = runTest(dispatcher) {
+        val darkMode = MutableStateFlow(true)
+        val viewModel = SettingsViewModel(settingsRepository(darkMode = darkMode))
+        advanceUntilIdle()
+
         viewModel.toggleDarkMode()
+        advanceUntilIdle()
+
+        assertFalse(darkMode.value)
         assertFalse(viewModel.uiState.value.isDarkMode)
-        
-        viewModel.toggleDarkMode()
-        assertTrue(viewModel.uiState.value.isDarkMode)
     }
 
     @Test
-    fun `selectModel updates selected model`() {
-        val repository = FakeSettingsRepository()
-        val viewModel = SettingsViewModel(repository)
-        
+    fun `selectModel persists the selected model`() = runTest(dispatcher) {
+        val model = MutableStateFlow("MiniMax-M2.7")
+        val viewModel = SettingsViewModel(settingsRepository(model = model))
+        advanceUntilIdle()
+
         viewModel.selectModel("GPT-4o")
+        advanceUntilIdle()
+
+        assertEquals("GPT-4o", model.value)
         assertEquals("GPT-4o", viewModel.uiState.value.selectedModel)
     }
 
     @Test
-    fun `updateApiEndpoint updates API endpoint`() {
-        val repository = FakeSettingsRepository()
-        val viewModel = SettingsViewModel(repository)
-        
-        viewModel.updateApiEndpoint("https://api.example.com")
-        assertEquals("https://api.example.com", viewModel.uiState.value.apiEndpoint)
+    fun `updateApiEndpoint persists the endpoint`() = runTest(dispatcher) {
+        val endpoint = MutableStateFlow("https://api.minimax.io")
+        val viewModel = SettingsViewModel(settingsRepository(endpoint = endpoint))
+        advanceUntilIdle()
+
+        viewModel.updateApiEndpoint("https://api.example.com/v1")
+        advanceUntilIdle()
+
+        assertEquals("https://api.example.com/v1", endpoint.value)
+        assertEquals("https://api.example.com/v1", viewModel.uiState.value.apiEndpoint)
     }
 
     @Test
-    fun `toggleNotifications toggles notifications state`() {
-        val repository = FakeSettingsRepository()
-        val viewModel = SettingsViewModel(repository)
-        
-        assertTrue(viewModel.uiState.value.notificationsEnabled)
-        
+    fun `toggleNotifications persists the opposite state`() = runTest(dispatcher) {
+        val notifications = MutableStateFlow(true)
+        val viewModel = SettingsViewModel(settingsRepository(notifications = notifications))
+        advanceUntilIdle()
+
         viewModel.toggleNotifications()
+        advanceUntilIdle()
+
+        assertFalse(notifications.value)
         assertFalse(viewModel.uiState.value.notificationsEnabled)
-        
-        viewModel.toggleNotifications()
-        assertTrue(viewModel.uiState.value.notificationsEnabled)
+    }
+
+    private fun settingsRepository(
+        darkMode: MutableStateFlow<Boolean> = MutableStateFlow(true),
+        model: MutableStateFlow<String> = MutableStateFlow("MiniMax-M2.7"),
+        endpoint: MutableStateFlow<String> = MutableStateFlow("https://api.minimax.io"),
+        notifications: MutableStateFlow<Boolean> = MutableStateFlow(true),
+    ): SettingsRepository = mockk {
+        every { darkModeFlow } returns darkMode
+        every { selectedProviderFlow } returns MutableStateFlow("minimax")
+        every { selectedModelFlow } returns model
+        every { apiEndpointFlow } returns endpoint
+        every { apiKeyFlow } returns MutableStateFlow("")
+        every { notificationsEnabledFlow } returns notifications
+        every { systemPromptFlow } returns MutableStateFlow("")
+        every { localServerUrlFlow } returns MutableStateFlow("http://127.0.0.1:8080/v1")
+        coEvery { setDarkMode(any()) } answers { darkMode.value = firstArg() }
+        coEvery { setSelectedModel(any()) } answers { model.value = firstArg() }
+        coEvery { setApiEndpoint(any()) } answers { endpoint.value = firstArg() }
+        coEvery { setNotificationsEnabled(any()) } answers { notifications.value = firstArg() }
     }
 }
