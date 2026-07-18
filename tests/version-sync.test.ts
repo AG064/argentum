@@ -10,27 +10,19 @@ describe('version synchronization', () => {
     const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
     const androidWorkflow = readFileSync('.github/workflows/android.yml', 'utf8');
     const androidBuild = readFileSync('android/app/build.gradle.kts', 'utf8');
+    const syncScript = readFileSync('scripts/sync-version.js', 'utf8');
 
     expect(typeof packageJson.version).toBe('string');
     expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(packageJson.scripts?.['version:sync']).toBe('node scripts/sync-version.js');
     expect(packageJson.scripts?.['version:check']).toBe('node scripts/sync-version.js --check');
     expect(existsSync('scripts/sync-version.js')).toBe(true);
-    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
-      "rewriteJsonVersion('src/desktop/tauri.conf.json')",
-    );
-    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
-      "rewriteTomlVersion('src/desktop/Cargo.toml')",
-    );
-    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
-      "rewriteCargoLockVersion('src/desktop/Cargo.lock')",
-    );
-    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
-      "rewrite('android/app/build.gradle.kts'",
-    );
-    expect(readFileSync('scripts/sync-version.js', 'utf8')).toContain(
-      "rewrite('src/ui/desktop/index.html'",
-    );
+    expect(syncScript).toContain("rewriteJsonVersion('src/desktop/tauri.conf.json')");
+    expect(syncScript).toContain("rewriteTomlVersion('src/desktop/Cargo.toml')");
+    expect(syncScript).toContain("rewriteCargoLockVersion('src/desktop/Cargo.lock')");
+    expect(syncScript).toContain("rewrite('android/app/build.gradle.kts'");
+    expect(syncScript).toContain("source.includes('\\r\\n')");
+    expect(syncScript).toContain("rewrite('src/ui/desktop/index.html'");
     expect(ciWorkflow).toContain('npm run version:check');
     expect(androidWorkflow).toContain('- development');
     expect(androidWorkflow).toContain('./gradlew test assembleDebug --stacktrace');
@@ -41,6 +33,7 @@ describe('version synchronization', () => {
     expect(androidBuild).toContain(`versionName = "${packageJson.version}"`);
     expect(androidBuild).toContain(`versionCode = ${expectedAndroidCode}`);
     expect(androidBuild).not.toMatch(/\r(?!\n)/);
+    expect(androidBuild).not.toContain('com.halilib.markdown');
     expect(existsSync('android/gradlew.bat')).toBe(true);
 
     const cargoLock = readFileSync('src/desktop/Cargo.lock', 'utf8');

@@ -122,9 +122,6 @@ dependencies {
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
-    // Markdown rendering
-    implementation("com.halilib.markdown:compose-markdown:0.5.3")
-
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

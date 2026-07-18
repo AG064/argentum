@@ -68,8 +68,6 @@ import com.argentum.ui.theme.NearBlack
 import com.argentum.ui.theme.Silver
 import com.argentum.viewmodel.ChatViewModel
 import com.argentum.viewmodel.Message
-import com.halilib.markdown.compose.Markdown
-import com.halilib.markdown.compose.rememberMarkdownState
 import java.util.Locale
 
 @Composable
@@ -81,7 +79,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val markdownState = rememberMarkdownState()
 
     // Voice input launcher
     val voiceInputLauncher = rememberLauncherForActivityResult(
@@ -166,10 +163,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                 items(uiState.messages, key = { it.id }) { message ->
-                    MessageItem(
-                        message = message,
-                        markdownState = markdownState
-                    )
+                    MessageItem(message = message)
                 }
 
                 if (uiState.isLoading) {
@@ -287,7 +281,6 @@ fun ChatScreen(
 @Composable
 private fun MessageItem(
     message: Message,
-    markdownState: com.halilib.markdown.compose.MarkdownState,
     modifier: Modifier = Modifier
 ) {
     val isUser = message.isUser
@@ -345,12 +338,13 @@ private fun MessageItem(
                         overflow = TextOverflow.Clip
                     )
                 } else {
-                    // Render markdown for AI responses
-                    Markdown(
-                        content = message.text,
-                        markdownState = markdownState,
-                        modifier = Modifier,
-                        onClickLink = { /* Handle link click */ }
+                    // Preserve AI response content without a remote-only renderer.
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1000,
+                        overflow = TextOverflow.Clip
                     )
                 }
             }

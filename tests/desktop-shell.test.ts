@@ -202,6 +202,8 @@ describe('Argentum desktop shell', () => {
     expect(rust).toContain('system_stats: Option<PcStatsSnapshot>');
     expect(rust).toContain('desktop_system_stats');
     expect(rust).toContain('CREATE_NO_WINDOW');
+    expect(rust).toContain('fn configure_background_command');
+    expect(rust).toContain('#[cfg(target_os = "windows")]\n    {');
     expect(rust).toContain('PcStatsSampler');
     expect(rust).toContain('nvidia-smi');
     expect(rust).toContain('GPU Engine(*)');

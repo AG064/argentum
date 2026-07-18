@@ -660,6 +660,14 @@ fn percent(numerator: u64, denominator: u64) -> f32 {
     ((numerator as f64 / denominator as f64) * 100.0).clamp(0.0, 100.0) as f32
 }
 
+fn configure_background_command(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = command;
+}
+
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
     let mut command = Command::new(program);
     command.args(args);
@@ -8526,7 +8534,8 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
 
     // Use git sparse-checkout to clone only the needed subdirectory.
     // This avoids downloading the entire repo history.
-    let output = Command::new("git")
+    let mut clone_command = Command::new("git");
+    clone_command
         .args([
             "clone",
             "--no-checkout",
@@ -8536,8 +8545,9 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
             dest.to_str().unwrap(),
         ])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+        .stderr(Stdio::piped());
+    configure_background_command(&mut clone_command);
+    let output = clone_command
         .output()
         .map_err(|e| format!("Failed to run git: {}. Is git installed?", e))?;
 
@@ -8549,12 +8559,14 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
     }
 
     // Sparse checkout the specific subdirectory
-    let sparse_output = Command::new("git")
+    let mut sparse_command = Command::new("git");
+    sparse_command
         .args(["sparse-checkout", "set", &sub_path])
         .current_dir(&dest)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+        .stderr(Stdio::piped());
+    configure_background_command(&mut sparse_command);
+    let sparse_output = sparse_command
         .output()
         .map_err(|e| format!("git sparse-checkout failed: {}", e))?;
 
@@ -8565,12 +8577,14 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
     }
 
     // Checkout the files
-    let checkout_output = Command::new("git")
+    let mut checkout_command = Command::new("git");
+    checkout_command
         .args(["checkout", "HEAD", "--", &sub_path])
         .current_dir(&dest)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+        .stderr(Stdio::piped());
+    configure_background_command(&mut checkout_command);
+    let checkout_output = checkout_command
         .output()
         .map_err(|e| format!("git checkout failed: {}", e))?;
 
@@ -8596,7 +8610,8 @@ fn install_skill(source: String, skill_name: String) -> Result<String, String> {
     }
 
     // Symlink into ~/.openclaw/workspace/skills/ so the skills-loader picks it up
-    if cfg!(target_os = "windows") {
+    #[cfg(target_os = "windows")]
+    {
         let openclaw_skills = std::env::var("USERPROFILE")
             .map(|h| {
                 PathBuf::from(h)

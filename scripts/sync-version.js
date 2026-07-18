@@ -84,12 +84,14 @@ rewrite('src/core/onboarding.ts', (source) =>
 rewriteJsonVersion('src/desktop/tauri.conf.json');
 rewriteTomlVersion('src/desktop/Cargo.toml');
 rewriteCargoLockVersion('src/desktop/Cargo.lock');
-rewrite('android/app/build.gradle.kts', (source) =>
-  source
+rewrite('android/app/build.gradle.kts', (source) => {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const normalized = source
     .replace(/\r\n?/g, '\n')
     .replace(/^[ \t]*versionCode\s*=\s*\d+/m, `        versionCode = ${androidVersionCode}`)
-    .replace(/^[ \t]*versionName\s*=\s*"[^"]+"/m, `        versionName = "${version}"`),
-);
+    .replace(/^[ \t]*versionName\s*=\s*"[^"]+"/m, `        versionName = "${version}"`);
+  return newline === '\n' ? normalized : normalized.replace(/\n/g, newline);
+});
 rewrite('src/ui/desktop/index.html', (source) => rewriteDocumentationVersions(source));
 
 for (const file of [
