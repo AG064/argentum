@@ -7,7 +7,11 @@ const root = path.resolve(__dirname, '..');
 const checkOnly = process.argv.includes('--check');
 
 function read(relativePath) {
-  return fs.readFileSync(path.join(root, relativePath), 'utf8');
+  return normalizeLineEndings(fs.readFileSync(path.join(root, relativePath), 'utf8'));
+}
+
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n?/g, '\n');
 }
 
 function jsonModule(relativePath) {
@@ -59,7 +63,9 @@ async function synchronize() {
       ...prettierConfig,
       filepath: absolutePath,
     });
-    const current = fs.existsSync(absolutePath) ? fs.readFileSync(absolutePath, 'utf8') : null;
+    const current = fs.existsSync(absolutePath)
+      ? normalizeLineEndings(fs.readFileSync(absolutePath, 'utf8'))
+      : null;
     if (current === content) continue;
     changed.push(relativePath);
     if (!checkOnly) {

@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.Provider
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
@@ -329,7 +328,7 @@ private fun ProviderSelector(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Provider,
+                    imageVector = Icons.Default.Terminal,
                     contentDescription = null,
                     tint = CrimsonRed
                 )

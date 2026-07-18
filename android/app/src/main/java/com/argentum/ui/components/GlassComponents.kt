@@ -1,5 +1,7 @@
 package com.argentum.ui.components
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -10,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -18,8 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RenderEffect
-import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
@@ -49,12 +50,12 @@ fun GlassCard(
     blurRadius: Dp = 18.dp,
     content: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
+    val cardShape = RoundedCornerShape(cornerRadius)
 
     Box(
         modifier = modifier
             .graphicsLayer {
-                shape = shape
+                shape = cardShape
                 clip = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     renderEffect = RenderEffect
@@ -66,7 +67,7 @@ fun GlassCard(
                         .asComposeRenderEffect()
                 }
             }
-            .clip(shape)
+            .clip(cardShape)
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
@@ -83,7 +84,7 @@ fun GlassCard(
                         Silver.copy(alpha = 0.15f),
                     )
                 ),
-                shape = shape
+                shape = cardShape
             )
     ) {
         Box(modifier = Modifier.padding(1.dp)) {
@@ -169,7 +170,7 @@ fun GlassButton(
     onClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(24.dp)
+    val buttonShape = RoundedCornerShape(24.dp)
 
     val infinite = rememberInfiniteTransition(label = "button-shimmer")
     val shimmer by infinite.animateFloat(
@@ -185,10 +186,10 @@ fun GlassButton(
     Box(
         modifier = modifier
             .graphicsLayer {
-                shape = shape
+                shape = buttonShape
                 clip = true
             }
-            .clip(shape)
+            .clip(buttonShape)
             .background(
                 brush = Brush.linearGradient(
                     colors = if (enabled) {
@@ -223,7 +224,7 @@ fun GlassButton(
                         )
                     }
                 ),
-                shape = shape
+                shape = buttonShape
             )
     ) {
         // Animated highlight sweep

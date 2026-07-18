@@ -62,6 +62,20 @@ data class SettingsUiState(
     val updateState: UpdateState = UpdateState.Idle,
 )
 
+private data class ProviderSettings(
+    val provider: String,
+    val model: String,
+    val endpoint: String,
+    val apiKey: String,
+)
+
+private data class LocalSettings(
+    val darkMode: Boolean,
+    val notificationsEnabled: Boolean,
+    val systemPrompt: String,
+    val localServerUrl: String,
+)
+
 class SettingsViewModel(
     private val repository: SettingsRepository,
     private val updateChecker: UpdateChecker = UpdateChecker(),
@@ -73,25 +87,32 @@ class SettingsViewModel(
 
     init {
         viewModelScope.launch {
-            combine(
-                repository.darkModeFlow,
+            val providerSettings = combine(
                 repository.selectedProviderFlow,
                 repository.selectedModelFlow,
                 repository.apiEndpointFlow,
                 repository.apiKeyFlow,
+            ) { provider, model, endpoint, apiKey ->
+                ProviderSettings(provider, model, endpoint, apiKey)
+            }
+            val localSettings = combine(
+                repository.darkModeFlow,
                 repository.notificationsEnabledFlow,
                 repository.systemPromptFlow,
                 repository.localServerUrlFlow
-            ) { darkMode, provider, model, endpoint, apiKey, notifications, systemPrompt, localServer ->
+            ) { darkMode, notifications, systemPrompt, localServer ->
+                LocalSettings(darkMode, notifications, systemPrompt, localServer)
+            }
+            combine(providerSettings, localSettings) { provider, local ->
                 SettingsUiState(
-                    isDarkMode = darkMode,
-                    selectedProvider = provider,
-                    selectedModel = model,
-                    apiEndpoint = endpoint,
-                    apiKey = apiKey,
-                    notificationsEnabled = notifications,
-                    systemPrompt = systemPrompt,
-                    localServerUrl = localServer,
+                    isDarkMode = local.darkMode,
+                    selectedProvider = provider.provider,
+                    selectedModel = provider.model,
+                    apiEndpoint = provider.endpoint,
+                    apiKey = provider.apiKey,
+                    notificationsEnabled = local.notificationsEnabled,
+                    systemPrompt = local.systemPrompt,
+                    localServerUrl = local.localServerUrl,
                     updateState = _uiState.value.updateState,
                 )
             }.collect { state ->

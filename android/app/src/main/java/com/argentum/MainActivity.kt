@@ -98,12 +98,12 @@ fun ArgentumApp() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            if (isOnboardingComplete.intValue == 0 && !onboardingState.isComplete) {
+            if (isOnboardingComplete == 0 && !onboardingState.isComplete) {
                 // Show onboarding
                 OnboardingScreen(
                     viewModel = onboardingViewModel,
                     onComplete = {
-                        isOnboardingComplete.intValue = 1
+                        isOnboardingComplete = 1
                     }
                 )
             } else {
