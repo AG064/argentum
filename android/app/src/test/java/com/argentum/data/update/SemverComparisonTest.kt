@@ -30,7 +30,7 @@ class SemverComparisonTest {
     @Test
     fun `prerelease is older than the release`() {
         // 0.0.9-rc.1 is older than 0.0.9
-        assertFalse(isRemoteNewer("0.0.9-rc.1", "0.0.8"))
+        assertTrue(isRemoteNewer("0.0.9-rc.1", "0.0.8"))
         assertTrue(isRemoteNewer("0.0.9", "0.0.9-rc.1"))
     }
 

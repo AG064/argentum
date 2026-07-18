@@ -137,23 +137,33 @@ internal fun isRemoteNewer(remote: String, current: String): Boolean {
         // Fallback: lexical compare (still better than nothing).
         return remote != current && remote > current
     }
-    for (i in 0..2) {
-        if (r[i] != c[i]) return r[i] > c[i]
+    if (r.major != c.major) return r.major > c.major
+    if (r.minor != c.minor) return r.minor > c.minor
+    if (r.patch != c.patch) return r.patch > c.patch
+
+    if (r.prerelease == c.prerelease) {
+        return false
     }
-    // Equal major.minor.patch — non-prerelease is considered newer.
-    return r[3] == null && c[3] != null
+    // Equal major.minor.patch — a release is newer than a pre-release.
+    if (r.prerelease == null) return true
+    if (c.prerelease == null) return false
+
+    return r.prerelease > c.prerelease
 }
 
-private fun parseSemver(version: String): IntArray? {
+private data class Semver(
+    val major: Int,
+    val minor: Int,
+    val patch: Int,
+    val prerelease: String?,
+)
+
+private fun parseSemver(version: String): Semver? {
     val main = version.split("-", limit = 2)
     val parts = main[0].split(".")
     if (parts.size != 3) return null
-    val nums = IntArray(4) // 0..2 = major.minor.patch, 3 = prerelease marker (1 if present, else 0)
-    for (i in 0..2) {
-        val n = parts[i].toIntOrNull() ?: return null
-        if (n < 0) return null
-        nums[i] = n
-    }
-    nums[3] = if (main.size > 1) 1 else 0
-    return nums
+    val major = parts[0].toIntOrNull()?.takeIf { it >= 0 } ?: return null
+    val minor = parts[1].toIntOrNull()?.takeIf { it >= 0 } ?: return null
+    val patch = parts[2].toIntOrNull()?.takeIf { it >= 0 } ?: return null
+    return Semver(major, minor, patch, main.getOrNull(1)?.ifBlank { null })
 }
