@@ -18,7 +18,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
-      - uses: ossf/scorecard-action@af76153369ae1eb1eaffc4118046b7fda9a8419e
+      - uses: ossf/scorecard-action@69bf556cea38c0fbe034b2ce923253eca7c4d651
         with:
           results_file: results.sarif
           results_format: sarif
