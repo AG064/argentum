@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 1
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@dcd589ca9f7a6ded22e224ca2e288beb6bf9846b
+        uses: actions/dependency-review-action@1e966ba708e4b64bb0c9bfb7abb5a232840be16a
         with:
           comment-summary-in-pr: on-failure
           fail-on-severity: high
