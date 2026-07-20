@@ -93,7 +93,7 @@
     "express": "^4.22.2",
     "express-rate-limit": "^8.5.1",
     "googleapis": "^171.4.0",
-    "grammy": "^1.42.0",
+    "grammy": "^1.45.1",
     "jsep": "^1.4.0",
     "node-cron": "^4.2.1",
     "openai": "^6.42.0",
