@@ -130,7 +130,7 @@
     "husky": "^9.1.7",
     "jest": "^30.4.1",
     "jest-esbuild": "^0.4.0",
-    "lint-staged": "^17.0.5",
+    "lint-staged": "^17.2.0",
     "prettier": "^3.8.1",
     "rcedit": "4.0.1",
     "ts-node": "^10.9.2",
