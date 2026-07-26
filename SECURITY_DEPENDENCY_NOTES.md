@@ -2,11 +2,11 @@
 
 > **⚠️ VEX (Vulnerability Exploitability eXchange):** This document serves as a VEX for Argentum, providing exploitability assessments for known vulnerabilities. It augments vulnerability reports with non-exploitability details and mitigations.
 
-## Validation snapshot — 2026-07-17
+## Validation snapshot - 2026-07-26
 
-- `npm audit --json`: 0 known vulnerabilities across the resolved development tree (797 dependencies reported by npm).
-- `npm audit --omit=dev --json`: 0 known vulnerabilities across the resolved production tree (216 production dependencies; npm also reports optional dependencies separately).
-- Resolved checks: `sanitize-html@2.17.4`, `ip-address@10.2.0`, `picomatch@4.0.4`, `brace-expansion@2.1.0`, `@anthropic-ai/sdk@0.95.1`, `tauri@2.11.2`.
+- `npm audit --omit=dev`: 0 known vulnerabilities across the resolved production tree after the v0.0.9 lockfile refresh.
+- Full `npm audit` still reports high-severity development-toolchain advisories through the pinned ESLint and Jest dependency graph. The available automatic fix requires the breaking `eslint-plugin-unicorn@72` upgrade, so this remains a separate maintenance task rather than a release-time forced upgrade.
+- Resolved checks: `body-parser@1.20.6`, `postcss@8.5.23`, `sanitize-html@2.17.4`, `ip-address@10.2.0`, `picomatch@4.0.4`, `brace-expansion@2.1.2`, `@anthropic-ai/sdk@0.95.1`, `tauri@2.11.2`.
 - `cargo tree --target all -p glib --depth 0`: `glib@0.18.5`; Dependabot alert 16 remains open for the Linux-only Tauri/GTK dependency path documented below.
 - `cargo-audit` and `osv-scanner` were not installed in this local environment, so Rust advisory status was not independently rescanned here. CI scanners remain required for release.
 

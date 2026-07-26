@@ -16,7 +16,7 @@ local development, the release pipeline, signing, and Play Store notes.
 - **Module**: `android/`
 - **Application ID**: `com.argentum`
 - **Versioning**: mirrors the Argentum release version (`versionName` = `0.0.9`,
-  `versionCode` = `8` for v0.0.9)
+  `versionCode` = `9` for v0.0.9)
 
 The Android app is intentionally thin. The target architecture keeps tool calls,
 session policy, and audit decisions in an authenticated Argentum gateway. Treat
