@@ -6,6 +6,8 @@
   'use strict';
 
   const MAX_DETAIL_LENGTH = 12000;
+  const CURRENT_VERSION = '0.0.9';
+  const RELEASES_URL = 'https://github.com/AG064/argentum/releases/latest';
   let reported = false;
 
   function text(value) {
@@ -16,6 +18,62 @@
     } catch {
       return String(value);
     }
+  }
+
+  function versionParts(value) {
+    const match = String(value || '')
+      .trim()
+      .replace(/^v/i, '')
+      .match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+    return match ? match.slice(1).map((part) => Number(part || 0)) : null;
+  }
+
+  function isNewerVersion(candidate, current) {
+    const left = versionParts(candidate);
+    const right = versionParts(current);
+    if (!left || !right) return false;
+    for (let index = 0; index < 3; index += 1) {
+      if (left[index] !== right[index]) return left[index] > right[index];
+    }
+    return false;
+  }
+
+  async function checkRecoveryUpdate() {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch('https://api.github.com/repos/AG064/argentum/releases/latest', {
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
+      const release = await response.json();
+      const version = String(release.tag_name || '').replace(/^v/i, '');
+      const url = String(release.html_url || '');
+      if (!/^https:\/\/github\.com\/AG064\/argentum\/releases\//.test(url)) {
+        throw new Error('GitHub returned an unexpected release URL');
+      }
+      return { available: isNewerVersion(version, CURRENT_VERSION), version, url };
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  async function openRecoveryUpdate(url) {
+    const target = url || RELEASES_URL;
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      try {
+        await invoke('open_external_url', { request: { url: target } });
+        return;
+      } catch {
+        // Fall back to the webview browser behavior if native browser launch fails.
+      }
+    }
+    window.open(target, '_blank', 'noopener,noreferrer');
   }
 
   function showFailure(reason, source) {
@@ -36,6 +94,7 @@
           <button class="button primary" type="button" data-startup-reload>Reload Argentum</button>
           <button class="button" type="button" data-startup-copy>Copy details</button>
           <button class="button" type="button" data-startup-report>Report on GitHub</button>
+          <button class="button" type="button" data-startup-update hidden>Check for updates</button>
         </div>
         <p class="startup-failure-status" aria-live="polite"></p>
       </section>`;
@@ -92,6 +151,25 @@
       }
       window.open(url, '_blank', 'noopener,noreferrer');
     });
+
+    const updateButton = root.querySelector('[data-startup-update]');
+    const status = root.querySelector('.startup-failure-status');
+    checkRecoveryUpdate()
+      .then((update) => {
+        if (!update.available) {
+          if (status) status.textContent = 'Recovery update check: no newer release found.';
+          return;
+        }
+        if (!(updateButton instanceof HTMLButtonElement)) return;
+        updateButton.hidden = false;
+        updateButton.textContent = `Update to Argentum ${update.version}`;
+        updateButton.addEventListener('click', () => openRecoveryUpdate(update.url));
+        if (status)
+          status.textContent = `A newer release is available: Argentum ${update.version}.`;
+      })
+      .catch((error) => {
+        if (status) status.textContent = `Recovery update check unavailable: ${text(error)}`;
+      });
   }
 
   window.addEventListener('error', (event) => {
