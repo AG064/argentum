@@ -16,6 +16,8 @@
 
 Argentum is a local-first AI workspace. It runs on your own machine so your data stays with you. You can chat with AI providers you choose, route conversations through Telegram, Discord, or other channels, keep memory across sessions, and use a full desktop app instead of juggling browser tabs.
 
+Website: [ag064.eu](https://ag064.eu) | Bug reports: [GitHub Issues](https://github.com/AG064/argentum/issues) or [report@ag064.eu](mailto:report@ag064.eu)
+
 ## Install
 
 ### Quick Start

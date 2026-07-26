@@ -8,6 +8,7 @@
   const MAX_DETAIL_LENGTH = 12000;
   const CURRENT_VERSION = '0.0.9';
   const RELEASES_URL = 'https://github.com/AG064/argentum/releases/latest';
+  const REPORT_EMAIL = 'report@ag064.eu';
   let reported = false;
 
   function text(value) {
@@ -62,8 +63,7 @@
     }
   }
 
-  async function openRecoveryUpdate(url) {
-    const target = url || RELEASES_URL;
+  async function openExternalTarget(target) {
     const invoke = window.__TAURI__?.core?.invoke;
     if (invoke) {
       try {
@@ -74,6 +74,10 @@
       }
     }
     window.open(target, '_blank', 'noopener,noreferrer');
+  }
+
+  async function openRecoveryUpdate(url) {
+    await openExternalTarget(url || RELEASES_URL);
   }
 
   function showFailure(reason, source) {
@@ -94,6 +98,7 @@
           <button class="button primary" type="button" data-startup-reload>Reload Argentum</button>
           <button class="button" type="button" data-startup-copy>Copy details</button>
           <button class="button" type="button" data-startup-report>Report on GitHub</button>
+          <button class="button" type="button" data-startup-email>Email report</button>
           <button class="button" type="button" data-startup-update hidden>Check for updates</button>
         </div>
         <p class="startup-failure-status" aria-live="polite"></p>
@@ -149,7 +154,23 @@
           // Fall back to the webview browser behavior if native browser launch fails.
         }
       }
-      window.open(url, '_blank', 'noopener,noreferrer');
+      await openExternalTarget(url);
+    });
+    root.querySelector('[data-startup-email]')?.addEventListener('click', async () => {
+      const emailBody = [
+        'Argentum startup error',
+        '',
+        `Phase: ${source}`,
+        `Version: ${CURRENT_VERSION}`,
+        `Platform: ${navigator.platform || 'unknown'}`,
+        `User agent: ${navigator.userAgent || 'unknown'}`,
+        '',
+        'Error details:',
+        detail,
+      ].join('\n');
+      await openExternalTarget(
+        `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent('[Argentum] Startup error')}&body=${encodeURIComponent(emailBody)}`,
+      );
     });
 
     const updateButton = root.querySelector('[data-startup-update]');

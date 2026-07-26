@@ -1451,6 +1451,17 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           (state.workspacePath ? 'yes' : 'no') +
           '\n',
       );
+    const emailUrl =
+      'mailto:report@ag064.eu?subject=' +
+      encodeURIComponent('[Argentum] Bug report') +
+      '&body=' +
+      encodeURIComponent(
+        'Argentum bug report\n\nVersion: ' +
+          version +
+          '\nWorkspace configured: ' +
+          (state.workspacePath ? 'yes' : 'no') +
+          '\n\nWhat happened?\n\nSteps to reproduce:\n1. \n2. \n3. \n\nExpected behavior:\n\nActual behavior:\n',
+      );
     const featureUrl =
       'https://github.com/AG064/argentum/discussions/new?category=ideas&title=%5BFeature%5D%20Brief%20description&body=' +
       encodeURIComponent(
@@ -1478,6 +1489,9 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
             <button type="button" class="button primary" id="feedback-bug" data-feedback-url="${escapeAttribute(bugUrl)}">
               Open bug report
             </button>
+            <button type="button" class="button" id="feedback-bug-email" data-feedback-url="${escapeAttribute(emailUrl)}">
+              Email report
+            </button>
           </div>
         </div>
         <div class="feedback-cards">
@@ -1499,10 +1513,10 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           </div>
         </div>
         <div class="feedback-info-box">
-          <p class="muted-line">Bug reports and feature requests open in your browser on GitHub. Your version (${version}) and whether a workspace is configured are pre-filled; its path stays private.</p>
+          <p class="muted-line">Bug reports can open on GitHub or start an email to report@ag064.eu. Your version (${version}) and whether a workspace is configured are pre-filled; its path stays private.</p>
         </div>
         <div class="feedback-email-hint">
-          <p class="muted-line">For private security issues, email <a href="mailto:agdroke064@gmail.com" data-open-external="mailto:agdroke064@gmail.com">agdroke064@gmail.com</a> directly.</p>
+          <p class="muted-line">For private security issues, email <a href="mailto:report@ag064.eu" data-open-external="mailto:report@ag064.eu">report@ag064.eu</a> directly.</p>
         </div>
       </div>
     `;

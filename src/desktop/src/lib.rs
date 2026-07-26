@@ -1265,6 +1265,10 @@ fn allowed_external_url(url: &str) -> bool {
         return false;
     }
 
+    if url == "mailto:report@ag064.eu" || url.starts_with("mailto:report@ag064.eu?") {
+        return true;
+    }
+
     const ALLOWED_PREFIXES: &[&str] = &[
         "https://auth.openai.com/codex/device",
         "https://platform.openai.com",
