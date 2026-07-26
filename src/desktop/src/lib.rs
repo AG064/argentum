@@ -8741,7 +8741,10 @@ pub fn run() {
             list_installed_skills,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Argentum");
+        .unwrap_or_else(|error| {
+            eprintln!("Argentum desktop startup failed: {error}");
+            std::process::exit(1);
+        });
 }
 
 #[cfg(test)]
