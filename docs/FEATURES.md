@@ -8,7 +8,7 @@ tests are wired end to end.
 
 All non-core capabilities must remain optional and disabled by default.
 
-## v0.0.9 release-candidate functionality
+## v0.0.9 functionality
 
 | Area                         | Status                  | Boundary                                                                                                                                                             |
 | ---------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

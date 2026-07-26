@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### v0.0.9 release candidate
+No unreleased changes.
+
+## [0.0.9] - 2026-07-26
+
+This release promotes the v0.0.9 candidate to a published release.
 
 ### Added
 

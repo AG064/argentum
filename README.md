@@ -51,11 +51,11 @@ The setup wizard behaves like a normal Windows installer:
 
 After setup, launch Argentum from the Start Menu. First launch opens onboarding. After that, Argentum opens directly into the desktop app.
 
-### v0.0.9 Release Candidate
+### v0.0.9 Release
 
-The `development` branch is validating v0.0.9. It includes default-deny desktop AI tool/context enforcement, server-side context budgets, Hugging Face GGUF search, bounded local model scan, llama.cpp controls, a safe OpenClaw import/archive flow, help/FAQ feedback, numeric update checks, dependency fixes, and release-pipeline corrections. The latest published GitHub release remains v0.0.7 until v0.0.9 passes its release gate and is tagged.
+The published v0.0.9 release includes default-deny desktop AI tool/context enforcement, server-side context budgets, Hugging Face GGUF search, bounded local model scan, llama.cpp controls, a safe OpenClaw import/archive flow, help/FAQ feedback, numeric update checks, dependency fixes, startup diagnostics, and release-pipeline corrections. See the [v0.0.9 release notes](https://github.com/AG064/argentum/releases/tag/v0.0.9).
 
-The candidate also contains the optional Argentum llama.cpp local server path. Candidate installers are produced by release automation; they are not advertised as public downloads until a v0.0.9 GitHub release exists.
+The release also contains the optional Argentum llama.cpp local server path. Installers and portable binaries are produced by release automation and attached to the GitHub release.
 
 ## Provider Status
 

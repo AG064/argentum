@@ -1,6 +1,6 @@
 # Release Packaging
 
-Argentum releases publish GUI desktop installers from the Desktop Builds workflow and optional portable CLI binaries from the Release workflow. The v0.0.9 names below describe candidate outputs; the latest published release remains v0.0.7.
+Argentum releases publish GUI desktop installers from the Desktop Builds workflow and optional portable CLI binaries from the Release workflow. The v0.0.9 names below describe the published release outputs.
 
 ## Release assets
 

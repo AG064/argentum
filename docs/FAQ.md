@@ -1,7 +1,7 @@
 # Frequently Asked Questions
 
 This file is the curatable source for Argentum's in-app FAQ. Answers describe
-v0.0.9 release-candidate behavior unless a later version is named.
+v0.0.9 release behavior unless a later version is named.
 
 ## Does Argentum upload my workspace automatically?
 

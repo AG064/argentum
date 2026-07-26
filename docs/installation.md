@@ -86,8 +86,8 @@ The setup executable and MSI install the desktop application and create Start Me
 .\argentum-cli-<version>-win-x64.exe onboard
 ```
 
-The v0.0.9 names documented in [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) are release-candidate
-outputs and are not public downloads until a v0.0.9 release is published.
+The v0.0.9 names documented in [RELEASE_PACKAGING.md](RELEASE_PACKAGING.md) are the published
+release outputs available from the [v0.0.9 GitHub release](https://github.com/AG064/argentum/releases/tag/v0.0.9).
 
 ---
 
