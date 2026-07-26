@@ -59,7 +59,7 @@ export const ARGENTUM_BUNDLED_SKILLS = [
       'Feature guidance is bundled with Argentum. yt-dlp, ffmpeg, and provider credentials are required; the feature is disabled by default.',
   },
 ];
-const ANTHROPIC_SKILLS = [
+export const ANTHROPIC_SKILLS = [
   {
     name: 'theme-factory',
     description:
@@ -205,7 +205,7 @@ const ANTHROPIC_SKILLS = [
   },
 ];
 // ─── Codex Curated Skills ────────────────────────────────────────────────────
-const CODEX_CURATED_SKILLS = [
+export const CODEX_CURATED_SKILLS = [
   {
     name: 'figma-use',
     description:

@@ -96,7 +96,7 @@ export const ARGENTUM_BUNDLED_SKILLS: CatalogSkill[] = [
   },
 ];
 
-const ANTHROPIC_SKILLS: CatalogSkill[] = [
+export const ANTHROPIC_SKILLS: CatalogSkill[] = [
   {
     name: 'theme-factory',
     description:
@@ -244,7 +244,7 @@ const ANTHROPIC_SKILLS: CatalogSkill[] = [
 
 // ─── Codex Curated Skills ────────────────────────────────────────────────────
 
-const CODEX_CURATED_SKILLS: CatalogSkill[] = [
+export const CODEX_CURATED_SKILLS: CatalogSkill[] = [
   {
     name: 'figma-use',
     description:

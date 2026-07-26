@@ -35,6 +35,7 @@
         <div class="startup-failure-actions">
           <button class="button primary" type="button" data-startup-reload>Reload Argentum</button>
           <button class="button" type="button" data-startup-copy>Copy details</button>
+          <button class="button" type="button" data-startup-report>Report on GitHub</button>
         </div>
         <p class="startup-failure-status" aria-live="polite"></p>
       </section>`;
@@ -52,6 +53,44 @@
       } catch {
         if (status) status.textContent = 'Copy was unavailable. Select the details manually.';
       }
+    });
+    root.querySelector('[data-startup-report]')?.addEventListener('click', async () => {
+      const version =
+        document.querySelector('.brand-wordmark span')?.textContent?.trim() || 'unknown';
+      const body = [
+        '## Startup error',
+        '',
+        `Argentum could not finish loading during ${source}.`,
+        '',
+        '## Error details',
+        '```text',
+        detail,
+        '```',
+        '',
+        '## Environment',
+        `- Argentum version: ${version}`,
+        `- Platform: ${navigator.platform || 'unknown'}`,
+        `- User agent: ${navigator.userAgent || 'unknown'}`,
+        '',
+        '## Steps to reproduce',
+        '1. Start Argentum.',
+        '2. Observe the startup error.',
+      ].join('\n');
+      const url =
+        'https://github.com/AG064/argentum/issues/new?title=' +
+        encodeURIComponent('[Startup error] Argentum could not finish loading') +
+        '&labels=bug&body=' +
+        encodeURIComponent(body);
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (invoke) {
+        try {
+          await invoke('open_external_url', { request: { url } });
+          return;
+        } catch {
+          // Fall back to the webview browser behavior if native browser launch fails.
+        }
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
     });
   }
 
