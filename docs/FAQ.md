@@ -9,6 +9,14 @@ No. Argentum is local-first and does not sync a workspace automatically. Text,
 attachments, and selected context are sent to the configured AI provider only
 when you make a provider request. Review the provider's data policy before use.
 
+## What information does Argentum collect?
+
+Argentum has no background analytics or automatic workspace upload. Workspace
+files, chats, logs, configuration, and model files stay local unless you use a
+configured provider, channel, model service, or user-initiated bug report. GitHub
+release checks do not send workspace contents. See the full [privacy and data
+handling note](PRIVACY.md) for the exact boundaries.
+
 ## Which model-call permissions are enabled by default?
 
 The default profile is `restricted`. Model-call tools are deny-by-default, and
@@ -38,10 +46,10 @@ sync is planned for v0.1.1.
 
 ## How do I report a bug?
 
-Open **Settings → Help & Feedback**. The bug-report action opens a GitHub issue
-with the app version and workspace-presence status. It does not include the local
-workspace path. For a security vulnerability, follow [SECURITY.md](../SECURITY.md)
-instead of filing a public issue.
+Open **Settings → Help & Feedback**. The bug-report actions open a GitHub issue or
+an email draft with diagnostics, app version, platform, and workspace-presence
+status. They do not include the local workspace path by default. For a security
+vulnerability, follow [SECURITY.md](../SECURITY.md) instead of filing a public issue.
 
 ## Are scheduled tasks available?
 

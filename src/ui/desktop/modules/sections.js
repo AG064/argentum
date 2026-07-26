@@ -1513,7 +1513,7 @@ function renderSettingsSectionFields(state, activeSection, provider, metadata) {
           </div>
         </div>
         <div class="feedback-info-box">
-          <p class="muted-line">Bug reports can open on GitHub or start an email to report@ag064.eu. Your version (${version}) and whether a workspace is configured are pre-filled; its path stays private.</p>
+          <p class="muted-line">Bug reports can open on GitHub or start an email to report@ag064.eu. Your version (${version}) and whether a workspace is configured are pre-filled; its path stays private. See <a href="https://github.com/AG064/argentum/blob/development/docs/PRIVACY.md" data-open-external="https://github.com/AG064/argentum/blob/development/docs/PRIVACY.md">privacy details</a>.</p>
         </div>
         <div class="feedback-email-hint">
           <p class="muted-line">For private security issues, email <a href="mailto:report@ag064.eu" data-open-external="mailto:report@ag064.eu">report@ag064.eu</a> directly.</p>

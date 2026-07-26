@@ -7,7 +7,7 @@ current `development` release candidate. Older builds may not receive patches.
 
 ## Report a vulnerability
 
-Email **agdroke064@gmail.com** with a description, affected version, impact, and
+Email **report@ag064.eu** with a description, affected version, impact, and
 minimal reproduction. Do not include real credentials or private user data. Do
 not open a public issue until the maintainer has assessed the report. You should
 receive an acknowledgement within seven days; remediation timing depends on
