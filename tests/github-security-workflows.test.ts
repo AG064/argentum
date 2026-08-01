@@ -42,6 +42,18 @@ describe('GitHub security workflow baseline', () => {
     }
   });
 
+  test('privileged release workflow pins third-party actions to immutable commits', () => {
+    const release = workflow('release.yml');
+    const actionReferences = [...release.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)/gm)].map(
+      (match) => match[1],
+    );
+
+    expect(actionReferences).not.toHaveLength(0);
+    for (const reference of actionReferences) {
+      expect(reference).toMatch(/^[^@]+@[0-9a-f]{40}$/);
+    }
+  });
+
   test('desktop workflow builds Tauri artifacts for each supported platform', () => {
     const desktop = workflow('desktop.yml');
 
@@ -59,14 +71,18 @@ describe('GitHub security workflow baseline', () => {
     expect(desktop).toContain('actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a');
     expect(desktop).toContain('src/desktop/target/release/bundle/**/*');
     expect(desktop).toContain('src/desktop/target/*/release/bundle/**/*');
-    expect(desktop).toContain('softprops/action-gh-release@403a5240f3837fa857f642062e05aad6bb3391ca');
+    expect(desktop).toContain(
+      'softprops/action-gh-release@403a5240f3837fa857f642062e05aad6bb3391ca',
+    );
   });
 
   test('OpenSSF Scorecard uploads SARIF results to GitHub code scanning', () => {
     const scorecard = workflow('scorecard.yml');
 
     expect(scorecard).toContain('ossf/scorecard-action@af76153369ae1eb1eaffc4118046b7fda9a8419e');
-    expect(scorecard).toContain('github/codeql-action/upload-sarif@0e150e40762c1253b364a04b0fc9f2cc14effff2');
+    expect(scorecard).toContain(
+      'github/codeql-action/upload-sarif@0e150e40762c1253b364a04b0fc9f2cc14effff2',
+    );
     expect(scorecard).toContain('category: scorecard');
   });
 });
