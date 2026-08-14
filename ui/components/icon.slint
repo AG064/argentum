@@ -1,0 +1,74 @@
+import { AgTheme } from "../tokens.slint";
+
+export component AgIcon inherits Rectangle {
+    in property <string> name;
+    in property <color> tint: AgTheme.silver-400;
+    in property <length> size: 18px;
+    private property <bool> valid-svg-name: root.name == "plus"
+        || root.name == "search"
+        || root.name == "menu"
+        || root.name == "close"
+        || root.name == "more"
+        || root.name == "activity"
+        || root.name == "workspace"
+        || root.name == "folder"
+        || root.name == "file"
+        || root.name == "check"
+        || root.name == "play"
+        || root.name == "stop"
+        || root.name == "chevron-right"
+        || root.name == "chevron-down"
+        || root.name == "lock"
+        || root.name == "sliders"
+        || root.name == "command"
+        || root.name == "paperclip"
+        || root.name == "panel"
+        || root.name == "terminal"
+        || root.name == "session"
+        || root.name == "model"
+        || root.name == "review"
+        || root.name == "diff"
+        || root.name == "verify"
+        || root.name == "motion"
+        || root.name == "alert";
+
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    if root.valid-svg-name: Image {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        source: root.name == "plus" ? @image-url("../assets/icons/plus.svg")
+            : (root.name == "search" ? @image-url("../assets/icons/search.svg")
+            : (root.name == "menu" ? @image-url("../assets/icons/menu.svg")
+            : (root.name == "close" ? @image-url("../assets/icons/close.svg")
+            : (root.name == "more" ? @image-url("../assets/icons/more.svg")
+            : (root.name == "activity" ? @image-url("../assets/icons/activity.svg")
+            : (root.name == "workspace" ? @image-url("../assets/icons/workspace.svg")
+            : (root.name == "folder" ? @image-url("../assets/icons/folder.svg")
+            : (root.name == "file" ? @image-url("../assets/icons/file.svg")
+            : (root.name == "check" ? @image-url("../assets/icons/check.svg")
+            : (root.name == "play" ? @image-url("../assets/icons/play.svg")
+            : (root.name == "stop" ? @image-url("../assets/icons/stop.svg")
+            : (root.name == "chevron-right" ? @image-url("../assets/icons/chevron-right.svg")
+            : (root.name == "chevron-down" ? @image-url("../assets/icons/chevron-down.svg")
+            : (root.name == "lock" ? @image-url("../assets/icons/lock.svg")
+            : (root.name == "sliders" ? @image-url("../assets/icons/sliders.svg")
+            : (root.name == "command" ? @image-url("../assets/icons/command.svg")
+            : (root.name == "paperclip" ? @image-url("../assets/icons/paperclip.svg")
+            : (root.name == "panel" ? @image-url("../assets/icons/panel.svg")
+            : (root.name == "terminal" ? @image-url("../assets/icons/terminal.svg")
+            : (root.name == "session" ? @image-url("../assets/icons/session.svg")
+            : (root.name == "model" ? @image-url("../assets/icons/model.svg")
+            : (root.name == "review" ? @image-url("../assets/icons/review.svg")
+            : (root.name == "diff" ? @image-url("../assets/icons/diff.svg")
+            : (root.name == "verify" ? @image-url("../assets/icons/verify.svg")
+            : (root.name == "motion" ? @image-url("../assets/icons/motion.svg")
+            : @image-url("../assets/icons/alert.svg"))))))))))))))))))))))))));
+        colorize: root.tint;
+        image-fit: contain;
+    }
+}

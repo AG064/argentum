@@ -1,0 +1,211 @@
+import { AgTheme } from "../tokens.slint";
+import { AgIcon } from "icon.slint";
+
+export component ActionButton inherits Rectangle {
+    in property <string> label: "";
+    in property <string> icon: "";
+    in property <color> fill: AgTheme.control-fill;
+    in property <color> foreground: AgTheme.text-primary;
+    in property <color> outline-color: AgTheme.border-default;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    in property <bool> reduced-motion: false;
+    in property <length> target-height: AgTheme.control-height;
+    out property <bool> has-focus: key-focus.has-focus;
+    out property <bool> pressed: root.enabled && touch.pressed;
+    callback clicked();
+
+    // Existing callers may opt into the primary style with the red fill token.
+    private property <bool> uses-signal-fill: root.primary || root.fill == AgTheme.primary-fill;
+    private property <color> resting-fill: root.uses-signal-fill ? AgTheme.primary-fill : root.fill;
+    private property <color> resting-outline: root.uses-signal-fill ? AgTheme.primary-hover : root.outline-color;
+
+    height: root.target-height;
+    min-width: max(AgTheme.control-min-width, content.min-width);
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: !root.enabled
+        ? (root.uses-signal-fill ? AgTheme.red-700 : AgTheme.border-subtle)
+        : (root.has-focus ? AgTheme.focus-ring : root.resting-outline);
+    background: !root.enabled
+        ? (root.uses-signal-fill ? AgTheme.attention-surface : AgTheme.control-disabled)
+        : (touch.pressed
+            ? (root.uses-signal-fill ? AgTheme.primary-pressed : AgTheme.control-pressed)
+            : (touch.has-hover
+                ? (root.uses-signal-fill ? AgTheme.primary-hover : AgTheme.control-hover)
+                : root.resting-fill));
+    forward-focus: key-focus;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    content := HorizontalLayout {
+        padding-left: AgTheme.space-4;
+        padding-right: AgTheme.space-4;
+        spacing: AgTheme.space-2;
+        alignment: center;
+
+        Rectangle {
+            visible: root.icon != "";
+            width: AgTheme.icon-control;
+            vertical-stretch: 1;
+            background: transparent;
+
+            AgIcon {
+                x: 0px;
+                y: (parent.height - self.height) / 2;
+                name: root.icon;
+                tint: root.enabled ? root.foreground : AgTheme.text-tertiary;
+                size: AgTheme.icon-control;
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: root.enabled ? root.foreground : AgTheme.text-tertiary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-body;
+            font-weight: AgTheme.weight-semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    if root.has-focus && root.enabled: Rectangle {
+        x: AgTheme.space-1;
+        y: AgTheme.space-1;
+        width: parent.width - AgTheme.space-2;
+        height: parent.height - AgTheme.space-2;
+        border-radius: AgTheme.radius-xs;
+        border-width: AgTheme.hairline;
+        border-color: AgTheme.focus-ring-inner;
+        background: transparent;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component IconButton inherits Rectangle {
+    in property <string> glyph: "";
+    in property <string> hint: "";
+    in property <color> tint: AgTheme.silver-400;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <bool> reduced-motion: false;
+    in property <length> target-size: AgTheme.control-height;
+    out property <bool> has-focus: key-focus.has-focus;
+    out property <bool> pressed: root.enabled && touch.pressed;
+    callback clicked();
+
+    width: root.target-size;
+    height: root.target-size;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: !root.enabled
+        ? transparent
+        : (root.has-focus
+            ? AgTheme.focus-ring
+            : (root.selected
+                ? AgTheme.border-default
+                : (touch.has-hover ? AgTheme.border-subtle : transparent)));
+    background: !root.enabled
+        ? transparent
+        : (touch.pressed
+            ? AgTheme.control-pressed
+            : (root.selected
+                ? AgTheme.control-selected
+                : (touch.has-hover ? AgTheme.control-hover : transparent)));
+    forward-focus: key-focus;
+    accessible-role: button;
+    accessible-label: root.hint;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    AgIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.glyph;
+        tint: !root.enabled
+            ? AgTheme.text-tertiary
+            : (root.selected || touch.has-hover || root.has-focus ? AgTheme.text-strong : root.tint);
+        size: AgTheme.icon-control;
+    }
+
+    if root.has-focus && root.enabled: Rectangle {
+        x: AgTheme.space-1;
+        y: AgTheme.space-1;
+        width: parent.width - AgTheme.space-2;
+        height: parent.height - AgTheme.space-2;
+        border-radius: AgTheme.radius-xs;
+        border-width: AgTheme.hairline;
+        border-color: AgTheme.focus-ring-inner;
+        background: transparent;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}

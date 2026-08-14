@@ -1,0 +1,11 @@
+[package]
+name = "argentum-scheduler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argentum-domain.workspace = true
+tokio.workspace = true
+tracing.workspace = true

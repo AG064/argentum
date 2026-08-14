@@ -1,0 +1,15 @@
+[package]
+name = "argentum-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argentum-security.workspace = true
+directories.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios", target_os = "linux"))'.dependencies]
+keyring.workspace = true
+zeroize.workspace = true

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "identity": "Argentum",
+  "source": {
+    "activePath": "assets/brand/argentum-source.png",
+    "legacyPath": "legacy/assets/brand/argentum.png",
+    "sha256": "9d492768039dc93dd6c74bbf1bb15092d02e1fda5b68c946d86ff4ff3466b0e3",
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGBA",
+    "alphaBounds": {
+      "x": 269,
+      "y": 211,
+      "width": 721,
+      "height": 770
+    }
+  },
+  "derivation": {
+    "crop": {
+      "x": 195,
+      "y": 162,
+      "width": 868,
+      "height": 868
+    },
+    "minimumSafeAreaSourcePixels": 49,
+    "resampling": "Pillow 12.2.0, premultiplied RGBA, Lanczos",
+    "pngEncoding": "PNG, compression level 9, optimize false"
+  },
+  "variants": [
+    {
+      "path": "assets/brand/argentum-16.png",
+      "size": 16,
+      "sha256": "d33763715ddf67579cf4206088df3ba00dbecb345bbc7c150d6cf177dc4ee2c0"
+    },
+    {
+      "path": "assets/brand/argentum-20.png",
+      "size": 20,
+      "sha256": "2533a0fe4a86f01662dbd4e4607957c5dc6e8d07eea02d4c2e7ed259dd9f5ced"
+    },
+    {
+      "path": "assets/brand/argentum-24.png",
+      "size": 24,
+      "sha256": "3a9e32379f6028b172372fe3a186082550d0f83f754218b22bf545cbebaf2141"
+    },
+    {
+      "path": "assets/brand/argentum-32.png",
+      "size": 32,
+      "sha256": "2d39f4a2f71116c180cbf011dc267b5b455d3541880da79cecadfb087a162cf1"
+    },
+    {
+      "path": "assets/brand/argentum-48.png",
+      "size": 48,
+      "sha256": "84d2101c796fa18062aca2d38292072bc20b067a6ddc5e162760d8affb95a248"
+    },
+    {
+      "path": "assets/brand/argentum-64.png",
+      "size": 64,
+      "sha256": "df6ff956a48777d4e86ce7b15b680292f3c05e8575b54d6311c0bae79a937743"
+    },
+    {
+      "path": "assets/brand/argentum-128.png",
+      "size": 128,
+      "sha256": "c0963e09f10e3d2f50a64aeb492c2d71face005bed45f182fbbfa761a7d8f8e4"
+    },
+    {
+      "path": "assets/brand/argentum-256.png",
+      "size": 256,
+      "sha256": "26a6ef14a5229e667e514125ffafded22c47539ed06b232cfd65f13a180b7373"
+    },
+    {
+      "path": "assets/brand/argentum-512.png",
+      "size": 512,
+      "sha256": "1704e8bd5705a786f93891ceedc0e88e22240cc6fd3506d9661eb84be3cf03a5"
+    }
+  ],
+  "platformAssets": [
+    {
+      "path": "assets/brand/argentum.ico",
+      "legacyPath": "legacy/installer/wix/argentum.ico",
+      "sha256": "d7fca1e3f4e1073d62b54700c9aaa3ac0f171622b616a873d22dc37ee0afbaba"
+    },
+    {
+      "path": "assets/brand/argentum.icns",
+      "legacyPath": "legacy/installer/macos/argentum.icns",
+      "sha256": "9b361752f994ac3946b38464e586981bdb8e2c18a54e4a695c0496e45477baa9"
+    }
+  ]
+}

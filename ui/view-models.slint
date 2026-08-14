@@ -1,0 +1,53 @@
+export struct PlanStepView {
+    index: int,
+    title: string,
+    detail: string,
+    state: string,
+}
+
+export struct ActivityItemView {
+    title: string,
+    detail: string,
+    state: string,
+}
+
+export struct ConversationMessageView {
+    role: string,
+    text: string,
+    reasoning: string,
+    reasoning_available: bool,
+    provider_label: string,
+    model: string,
+    usage_reported: bool,
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
+    context_window_reported: bool,
+    context_window_tokens: int,
+    state: string,
+}
+
+export struct SessionItemView {
+    id: string,
+    title: string,
+    detail: string,
+    active: bool,
+}
+
+export struct ProviderProfileView {
+    id: string,
+    label: string,
+    kind: string,
+    kind_label: string,
+    endpoint: string,
+    model: string,
+    selected: bool,
+}
+
+export struct ProviderModelView {
+    id: string,
+    label: string,
+    context_window_tokens: int,
+    context_window_reported: bool,
+    selected: bool,
+}

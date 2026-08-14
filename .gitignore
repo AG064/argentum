@@ -2,6 +2,8 @@ node_modules/
 dist/
 build/
 target/
+legacy/node_modules/
+legacy/**/target/
 *.js.map
 *.d.ts.map
 data/
@@ -17,7 +19,7 @@ memory/
 logs/
 *.log
 
-# Allow the Android data package (Kotlin source) — the root `data/` is
+# Allow the Android data package (Kotlin source). The root `data/` is
 # for runtime/test artifacts and stays ignored.
 !android/app/src/main/java/com/argentum/data/
 !android/app/src/test/java/com/argentum/data/
@@ -26,6 +28,13 @@ logs/
 secrets.env
 agclaw-*
 argentum-*
+!/crates/argentum-*/
+!/assets/brand/
+!/assets/brand/**
+!/platforms/windows/
+!/platforms/windows/**
+!/platforms/macos/
+!/platforms/macos/**
 
 # OpenSpace fork
 OpenSpace/
@@ -42,6 +51,7 @@ android/app/keystore/
 android/app/keystore.properties
 android/local.properties
 android/.gradle/
+release.keystore.b64
 
 # Local caches (llama.cpp binaries, model files, scratch)
 .cache/
@@ -61,6 +71,7 @@ Thumbs.db
 
 # Testing
 .nyc_output/
+/.playwright-cli/
 
 # Credentials (NEVER commit)
 credentials/
@@ -77,7 +88,7 @@ secrets/
 *.tmp
 *.temp
 
-# SARIF reports (CI artifacts — large binary output)
+# SARIF reports (large CI artifacts)
 *.sarif
 .semgrep.sarif
 

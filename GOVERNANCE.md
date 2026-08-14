@@ -13,7 +13,7 @@ All final decisions about the project are made by the project maintainer. This i
 
 ## Roles
 
-**Maintainer** — AG064 (agdroke064@gmail.com)
+**Maintainer**: AG064 (agdroke064@gmail.com)
 
 - Sole decision-maker for the project
 - Reviews all contributions

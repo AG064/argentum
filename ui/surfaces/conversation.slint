@@ -1,0 +1,661 @@
+import { ScrollView } from "std-widgets.slint";
+import { AgTheme } from "../tokens.slint";
+import { ConversationMessageView, PlanStepView } from "../view-models.slint";
+import { BrandMark } from "../components/brand.slint";
+import { AgIcon } from "../components/icon.slint";
+
+component PlanItem inherits Rectangle {
+    in property <PlanStepView> step;
+
+    height: AgTheme.space-16;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: 30px;
+            background: transparent;
+
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                width: 30px;
+                height: 30px;
+                border-radius: AgTheme.radius-xs;
+                border-width: AgTheme.hairline;
+                border-color: root.step.state == "blocked"
+                    ? AgTheme.red-600
+                    : (root.step.state == "active" ? AgTheme.silver-400 : AgTheme.silver-700);
+                background: root.step.state == "active"
+                    ? AgTheme.raised
+                    : (root.step.state == "blocked" ? AgTheme.attention-surface : AgTheme.chrome);
+
+                if root.step.state == "complete": AgIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: "check";
+                    size: 14px;
+                    tint: AgTheme.silver-300;
+                }
+
+                if root.step.state != "complete": Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: root.step.index;
+                    color: root.step.state == "blocked" ? AgTheme.red-400 : AgTheme.text-muted;
+                    font-size: AgTheme.type-compact;
+                    font-weight: AgTheme.weight-semibold;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+
+            Text {
+                text: root.step.title;
+                color: root.step.state == "upcoming" ? AgTheme.text-secondary : AgTheme.white-100;
+                font-size: AgTheme.type-body;
+                font-weight: root.step.state == "active"
+                    ? AgTheme.weight-semibold
+                    : AgTheme.weight-medium;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.step.detail;
+                color: root.step.state == "blocked" ? AgTheme.red-100 : AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+                overflow: elide;
+            }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        if root.step.state == "active": Text {
+            text: "Current";
+            color: AgTheme.text-secondary;
+            font-size: AgTheme.type-compact;
+            vertical-alignment: center;
+        }
+
+        if root.step.state == "blocked": Text {
+            text: "Blocked";
+            color: AgTheme.red-400;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-semibold;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component EmptyState inherits Rectangle {
+    in property <bool> provider-connected: false;
+    in property <string> provider-label;
+
+    height: 190px;
+    background: transparent;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: AgTheme.space-3;
+
+        HorizontalLayout {
+            Rectangle { horizontal-stretch: 1; }
+            BrandMark { size: AgTheme.brand-mark-lg; }
+            Rectangle { horizontal-stretch: 1; }
+        }
+
+        Text {
+            text: "Start a task";
+            color: AgTheme.white-100;
+            font-size: AgTheme.type-page-title;
+            font-weight: AgTheme.weight-title;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "Ask a question or describe a task. Tool access stays inside this workspace, and file writes require approval.";
+            color: AgTheme.text-secondary;
+            font-size: AgTheme.type-body;
+            horizontal-stretch: 1;
+            max-width: 720px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.provider-connected
+                ? root.provider-label + " is connected"
+                : root.provider-label + " is configured. Connection not tested.";
+            color: AgTheme.text-muted;
+            font-size: AgTheme.type-compact;
+            horizontal-stretch: 1;
+            max-width: 720px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component UserMessage inherits Rectangle {
+    in property <string> message;
+
+    min-height: max(74px, user-message-content.min-height);
+    border-radius: AgTheme.radius-xs;
+    border-width: 0px;
+    background: AgTheme.surface-line;
+
+    Rectangle {
+        x: 0px;
+        y: 10px;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - 20px;
+        background: AgTheme.silver-500;
+    }
+
+    user-message-content := VerticalLayout {
+        padding: AgTheme.space-4;
+        spacing: AgTheme.space-2;
+
+        Text {
+            text: "You";
+            color: AgTheme.text-muted;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-semibold;
+        }
+
+        Text {
+            text: root.message;
+            color: AgTheme.white-100;
+            font-size: AgTheme.type-body;
+            font-weight: AgTheme.weight-regular;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component ReasoningDisclosure inherits Rectangle {
+    in property <string> reasoning: "";
+    in property <bool> available: false;
+    in property <bool> running: false;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+    private property <bool> expanded: false;
+    private property <bool> follow-tail: true;
+    private property <length> header-height: root.touch-mode
+        ? AgTheme.mobile-control-height
+        : AgTheme.reasoning-disclosure-header-height;
+    private property <length> expanded-body-height: min(
+        AgTheme.reasoning-disclosure-body-height,
+        max(AgTheme.space-12, reasoning_measure.preferred-height + AgTheme.space-4)
+    );
+    out property <bool> has-focus: reasoning-focus.has-focus;
+
+    height: root.available
+        ? (root.expanded
+            ? root.header-height + root.expanded-body-height
+            : root.header-height)
+        : 0px;
+    visible: root.available;
+    clip: true;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: root.has-focus ? AgTheme.focus-ring : AgTheme.border-subtle;
+    background: reasoning-touch.pressed
+        ? AgTheme.control-pressed
+        : (reasoning-touch.has-hover ? AgTheme.control-hover : AgTheme.surface-soft);
+    accessible-role: button;
+    accessible-label: root.expanded ? "Collapse model reasoning" : "Expand model reasoning";
+    accessible-action-default => { root.expanded = !root.expanded; }
+    forward-focus: reasoning-focus;
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    reasoning_measure := Text {
+        width: max(0px, root.width - AgTheme.space-6);
+        height: self.preferred-height;
+        visible: false;
+        text: root.reasoning;
+        font-family: AgTheme.font-ui;
+        font-size: AgTheme.type-body;
+        font-weight: AgTheme.weight-regular;
+        wrap: word-wrap;
+    }
+
+    reasoning-content := VerticalLayout {
+        Rectangle {
+            height: root.header-height;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: AgTheme.space-3;
+                padding-right: AgTheme.space-3;
+                spacing: AgTheme.space-2;
+                alignment: stretch;
+
+                Rectangle {
+                    width: AgTheme.icon-inline;
+                    background: transparent;
+
+                    AgIcon {
+                        x: 0px;
+                        y: (parent.height - self.height) / 2;
+                        name: root.expanded ? "chevron-down" : "chevron-right";
+                        size: AgTheme.icon-inline;
+                        tint: AgTheme.silver-400;
+                    }
+                }
+
+                Text {
+                    text: "Reasoning";
+                    color: AgTheme.text-secondary;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-compact;
+                    font-weight: AgTheme.weight-semibold;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                Text {
+                    text: root.running ? "In progress" : "Provider supplied";
+                    color: AgTheme.text-muted;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-metadata;
+                    font-weight: AgTheme.weight-medium;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.expanded: Rectangle {
+            vertical-stretch: 1;
+            background: transparent;
+
+            Rectangle {
+                height: AgTheme.hairline;
+                background: AgTheme.border-faint;
+            }
+
+            reasoning-scroll := ScrollView {
+                x: AgTheme.space-3;
+                y: AgTheme.space-2;
+                width: parent.width - AgTheme.space-6;
+                height: parent.height - AgTheme.space-4;
+                viewport-width: self.visible-width;
+                viewport-height: max(self.visible-height, reasoning_text.preferred-height);
+                mouse-drag-pan-enabled: root.touch-mode;
+                scrolled => {
+                    root.follow-tail = self.viewport-y
+                        <= min(0px, self.visible-height - self.viewport-height)
+                            + AgTheme.space-3;
+                }
+
+                changed viewport-height => {
+                    if root.running && root.follow-tail {
+                        self.viewport-y = min(0px, self.visible-height - self.viewport-height);
+                    }
+                }
+
+                reasoning_text := TextInput {
+                    text: root.reasoning;
+                    color: AgTheme.text-secondary;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-body;
+                    font-weight: AgTheme.weight-regular;
+                    read-only: true;
+                    single-line: false;
+                    wrap: word-wrap;
+                    selection-background-color: AgTheme.control-selected;
+                    selection-foreground-color: AgTheme.text-primary;
+                    accessible-role: text;
+                    accessible-label: root.reasoning;
+                }
+            }
+        }
+    }
+
+    reasoning-touch := TouchArea {
+        height: root.header-height;
+        mouse-cursor: pointer;
+        clicked => {
+            reasoning-focus.focus();
+            root.expanded = !root.expanded;
+        }
+    }
+
+    reasoning-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.expanded = !root.expanded;
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+component AssistantMessage inherits Rectangle {
+    in property <string> message;
+    in property <string> reasoning: "";
+    in property <bool> reasoning-available: false;
+    in property <bool> reasoning-running: false;
+    in property <string> provider-label: "";
+    in property <string> model: "";
+    in property <bool> usage-reported: false;
+    in property <int> input-tokens: 0;
+    in property <int> output-tokens: 0;
+    in property <int> total-tokens: 0;
+    in property <bool> context-window-reported: false;
+    in property <int> context-window-tokens: 0;
+    in property <string> state;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+
+    min-height: max(90px, assistant-message-content.min-height);
+    background: transparent;
+
+    assistant-message-content := HorizontalLayout {
+        spacing: AgTheme.space-3;
+
+        Rectangle {
+            width: AgTheme.space-8;
+            background: transparent;
+
+            BrandMark {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                size: AgTheme.brand-mark-sm;
+                accessible-name: "";
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-2;
+
+            HorizontalLayout {
+                height: 22px;
+                spacing: AgTheme.space-2;
+                alignment: start;
+                Text { text: "Argentum"; color: AgTheme.text-secondary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; vertical-alignment: center; }
+                Text {
+                    text: root.provider-label != "" && root.model != ""
+                        ? root.provider-label + " / " + root.model + " | " + root.state
+                        : (root.model != ""
+                            ? root.model + " | " + root.state
+                            : (root.provider-label != ""
+                                ? root.provider-label + " | " + root.state
+                                : root.state));
+                    color: AgTheme.text-muted;
+                    font-size: AgTheme.type-compact;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    accessible-label: self.text;
+                }
+            }
+
+            ReasoningDisclosure {
+                reasoning: root.reasoning;
+                available: root.reasoning-available;
+                running: root.reasoning-running;
+                touch-mode: root.touch-mode;
+                reduced-motion: root.reduced-motion;
+            }
+
+            Text {
+                visible: root.message != "";
+                text: root.message;
+                color: AgTheme.white-100;
+                font-size: AgTheme.type-body;
+                font-weight: AgTheme.weight-regular;
+                wrap: word-wrap;
+            }
+
+            if root.usage-reported: Text {
+                text: root.context-window-reported && root.context-window-tokens > 0
+                    ? root.total-tokens + " / " + root.context-window-tokens + " context tokens | "
+                        + root.input-tokens + " input | " + root.output-tokens + " output"
+                    : "Context limit unknown | " + root.input-tokens + " input | "
+                        + root.output-tokens + " output | " + root.total-tokens + " total";
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-metadata;
+                font-weight: AgTheme.weight-regular;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component ConversationMessageRow inherits Rectangle {
+    in property <ConversationMessageView> message;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+
+    min-height: root.message.role == "user"
+        ? user-message.min-height
+        : assistant-message.min-height;
+    background: transparent;
+
+    user-message := UserMessage {
+        visible: root.message.role == "user";
+        width: parent.width;
+        height: user-message.min-height;
+        message: root.message.text;
+    }
+
+    assistant-message := AssistantMessage {
+        visible: root.message.role == "assistant";
+        width: parent.width;
+        height: assistant-message.min-height;
+        message: root.message.text;
+        reasoning: root.message.reasoning;
+        reasoning-available: root.message.reasoning_available;
+        provider-label: root.message.provider_label;
+        model: root.message.model;
+        usage-reported: root.message.usage_reported;
+        input-tokens: root.message.input_tokens;
+        output-tokens: root.message.output_tokens;
+        total-tokens: root.message.total_tokens;
+        context-window-reported: root.message.context_window_reported;
+        context-window-tokens: root.message.context_window_tokens;
+        state: root.message.state;
+        touch-mode: root.touch-mode;
+        reduced-motion: root.reduced-motion;
+    }
+}
+
+component ErrorNotice inherits Rectangle {
+    in property <string> message;
+
+    min-height: max(82px, error-content.min-height);
+    border-radius: AgTheme.radius-xs;
+    border-width: AgTheme.hairline;
+    border-color: AgTheme.red-700;
+    background: AgTheme.attention-surface;
+
+    Rectangle {
+        x: 0px;
+        y: 9px;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - 18px;
+        background: AgTheme.red-400;
+    }
+
+    error-content := HorizontalLayout {
+        padding: AgTheme.space-4;
+        spacing: AgTheme.space-3;
+
+        Rectangle {
+            width: AgTheme.space-8;
+            background: transparent;
+
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: "alert";
+                size: AgTheme.icon-inline;
+                tint: AgTheme.red-400;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            Text { text: "Could not continue"; color: AgTheme.red-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; }
+            Text { text: root.message; color: AgTheme.text-secondary; font-size: AgTheme.type-body; wrap: word-wrap; }
+        }
+    }
+}
+
+export component ConversationSurface inherits Rectangle {
+    in property <[ConversationMessageView]> messages: [];
+    in property <string> user-prompt: "";
+    in property <string> transcript: "";
+    in property <string> error-message: "";
+    in property <bool> provider-connected: false;
+    in property <string> provider-label: "";
+    in property <string> plan-summary: "";
+    in property <[PlanStepView]> plan-steps: [];
+    in property <string> verification-state: "pending";
+    in property <string> verification-summary: "";
+    in property <bool> running: false;
+    in property <string> run-state: "Ready";
+    in property <string> current-reasoning: "";
+    in property <bool> current-reasoning-available: false;
+    in property <string> current-provider-label: "";
+    in property <string> current-model: "";
+    in property <bool> usage-reported: false;
+    in property <int> input-tokens: 0;
+    in property <int> output-tokens: 0;
+    in property <int> total-tokens: 0;
+    in property <bool> context-window-reported: false;
+    in property <int> context-window-tokens: 0;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+
+    height: content.min-height;
+    background: transparent;
+
+    content := VerticalLayout {
+        spacing: AgTheme.space-6;
+
+        if root.messages.length == 0 && root.user-prompt == "" && root.transcript == "" && root.error-message == "": EmptyState {
+            provider-connected: root.provider-connected;
+            provider-label: root.provider-label;
+        }
+
+        for message in root.messages: ConversationMessageRow {
+            message: message;
+            touch-mode: root.touch-mode;
+            reduced-motion: root.reduced-motion;
+        }
+
+        if root.user-prompt != "": UserMessage { message: root.user-prompt; }
+
+        if root.transcript != "" || root.current-reasoning-available: AssistantMessage {
+            message: root.transcript;
+            reasoning: root.current-reasoning;
+            reasoning-available: root.current-reasoning-available;
+            reasoning-running: root.running;
+            provider-label: root.current-provider-label;
+            model: root.current-model;
+            usage-reported: root.usage-reported;
+            input-tokens: root.input-tokens;
+            output-tokens: root.output-tokens;
+            total-tokens: root.total-tokens;
+            context-window-reported: root.context-window-reported;
+            context-window-tokens: root.context-window-tokens;
+            state: root.run-state;
+            touch-mode: root.touch-mode;
+            reduced-motion: root.reduced-motion;
+        }
+
+        if root.error-message != "": ErrorNotice { message: root.error-message; }
+
+        if root.plan-steps.length > 0: Rectangle {
+            min-height: 86px;
+            border-radius: AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-700;
+            background: AgTheme.chrome;
+
+            Rectangle {
+                x: 0px;
+                y: AgTheme.space-3;
+                width: AgTheme.accent-bar-width;
+                height: parent.height - AgTheme.space-6;
+                background: root.running ? AgTheme.silver-300 : AgTheme.silver-500;
+            }
+
+            VerticalLayout {
+                padding-left: AgTheme.space-4;
+                padding-right: AgTheme.space-4;
+                padding-top: AgTheme.space-3;
+                padding-bottom: AgTheme.space-3;
+                spacing: AgTheme.optical-tight-gap;
+
+                HorizontalLayout {
+                    height: 38px;
+                    spacing: AgTheme.space-2;
+                    alignment: stretch;
+                    Text { text: "Run stages"; color: AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; vertical-alignment: center; }
+                    Text { text: root.plan-summary; color: AgTheme.text-muted; font-size: AgTheme.type-compact; vertical-alignment: center; overflow: elide; }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+
+                for step in root.plan-steps: PlanItem { step: step; }
+            }
+        }
+
+        if root.verification-state == "passed" || root.verification-state == "failed": Rectangle {
+            min-height: 74px;
+            border-radius: AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: root.verification-state == "failed" ? AgTheme.red-700 : AgTheme.silver-700;
+            background: root.verification-state == "failed" ? AgTheme.attention-surface : AgTheme.chrome;
+
+            Rectangle {
+                x: 0px;
+                y: AgTheme.space-2;
+                width: AgTheme.accent-bar-width;
+                height: parent.height - AgTheme.space-4;
+                background: root.verification-state == "failed" ? AgTheme.red-400 : AgTheme.silver-400;
+            }
+
+            HorizontalLayout {
+                padding: AgTheme.space-3;
+                spacing: AgTheme.space-3;
+                alignment: stretch;
+
+                Rectangle {
+                    width: AgTheme.space-8;
+                    background: transparent;
+
+                    AgIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        name: root.verification-state == "failed" ? "alert" : "verify";
+                        size: AgTheme.icon-inline;
+                        tint: root.verification-state == "failed" ? AgTheme.red-400 : AgTheme.text-secondary;
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: AgTheme.space-1;
+                    alignment: center;
+                    Text { text: root.verification-state == "passed" ? "Checks passed" : "Checks failed"; color: root.verification-state == "failed" ? AgTheme.red-100 : AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; }
+                    Text { text: root.verification-summary; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                }
+            }
+        }
+    }
+}

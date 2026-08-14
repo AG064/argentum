@@ -1,0 +1,34 @@
+[package]
+name = "argentum-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "argentum_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "argentum-cli"
+path = "src/main.rs"
+
+[dependencies]
+argentum-domain.workspace = true
+argentum-platform.workspace = true
+argentum-providers.workspace = true
+argentum-runtime.workspace = true
+argentum-security.workspace = true
+argentum-store.workspace = true
+argentum-tools.workspace = true
+argentum-workspaces.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+tempfile.workspace = true

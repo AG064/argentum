@@ -1,0 +1,11 @@
+[package]
+name = "argentum-workspaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argentum-domain.workspace = true
+argentum-security.workspace = true
+thiserror.workspace = true

@@ -1,358 +1,164 @@
-# Argentum Architecture
+# Argentum native architecture
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   ██████╗ ██████╗  ██████╗██╗  ██╗██╗   ██╗███████╗          ║
-║   ██╔══██╗██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝          ║
-║   ██████╔╝██████╔╝██║     ███████║██║   ██║███████╗          ║
-║   ██╔══██╗██╔══██╗██║     ██╔══██║██║   ██║╚════██║          ║
-║   ██║  ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║          ║
-║   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝          ║
-║                  Modular AI Agent Framework                       ║
-╚══════════════════════════════════════════════════════════════════╝
-```
+The active Argentum application is a Rust workspace. The old TypeScript,
+Node, Tauri, and Android application remains under `legacy/` and is not a
+runtime dependency.
 
-How Argentum extends OpenClaw with a modular plugin system, multi-channel support, and a security layer inspired by NemoClaw.
-
----
-
-## High-Level Overview
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Argentum Framework                       │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │                  Core Layer                            │  │
-│  │  ┌──────────┐  ┌──────────────┐  ┌─────────────────┐  │  │
-│  │  │  Config   │  │ Plugin Loader│  │  Security Layer │  │  │
-│  │  │  Manager  │  │              │  │  (NemoClaw)     │  │  │
-│  │  │  (YAML +  │  │  Dynamic     │  │  ┌───────────┐  │  │  │
-│  │  │   Env)    │  │  Feature     │  │  │ Allowlist │  │  │  │
-│  │  │           │  │  Loading     │  │  │ Engine    │  │  │  │
-│  │  │  Hot      │  │  + Lifecycle │  │  ├───────────┤  │  │  │
-│  │  │  Reload   │  │  + Dep       │  │  │ Encrypted │  │  │  │
-│  │  │           │  │  Resolution  │  │  │ Secrets   │  │  │  │
-│  │  │           │  │              │  │  ├───────────┤  │  │  │
-│  │  │           │  │              │  │  │ Policy    │  │  │  │
-│  │  │           │  │              │  │  │ Engine    │  │  │  │
-│  │  └──────────┘  └──────────────┘  │  └───────────┘  │  │  │
-│  │                                   └─────────────────┘  │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │                Feature Registry                        │  │
-│  │                                                        │  │
-│  │  Features are self-contained modules with:             │  │
-│  │  - Metadata (name, version, dependencies)              │  │
-│  │  - Lifecycle hooks (init, start, stop, healthCheck)    │  │
-│  │  - Own configuration from YAML                         │  │
-│  │  - Access to shared context (logger, hooks, emit)      │  │
-│  │                                                        │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │  │
-│  │  │ Webchat      │  │ Voice        │  │ Knowledge   │  │  │
-│  │  │ Browser Auto │  │ Workflows    │  │ Graph       │  │  │
-│  │  │ Webhooks     │  │ Live Canvas  │  │ Morning     │  │  │
-│  │  │ Container SB │  │ Air-Gapped   │  │ Briefing    │  │  │
-│  │  │ ...55 total  │  │              │  │ ...         │  │  │
-│  │  └──────────────┘  └──────────────┘  └─────────────┘  │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │               Channel Layer                            │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐             │  │
-│  │  │ Telegram │  │ Webchat  │  │ Mobile   │  ...        │  │
-│  │  │ (Bot API)│  │ (WS)     │  │ (Push)   │             │  │
-│  │  └──────────┘  └──────────┘  └──────────┘             │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │               Memory Layer                             │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐ │  │
-│  │  │ SQLite   │  │ Markdown │  │ Supabase (pgvector)  │ │  │
-│  │  │ Local DB │  │ Git-fri- │  │ Cloud-hosted with    │ │  │
-│  │  │ + FTS5   │  │ endly    │  │ semantic search      │ │  │
-│  │  └──────────┘  └──────────┘  └──────────────────────┘ │  │
-│  │                                                        │  │
-│  │  ┌──────────────────────────────────────────────────┐  │  │
-│  │  │ Self-Evolving Memory Layer                       │  │  │
-│  │  │ Consolidation · Pattern Discovery · Decay        │  │  │
-│  │  └──────────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+```text
+CLI command or Slint view
+  -> AppCommand
+  -> argentum-cli CommandHost
+  -> argentum-runtime RuntimeService
+  -> providers, tools, workspaces, security, store
+  -> AppEvent
+  -> CLI stream or UI projection and SQLite event log
 ```
 
----
+## CLI-first boundary
 
-## How Argentum Extends OpenClaw
+`argentum-cli` owns the shared product entry point. It provides three access
+paths over one command host, plus focused inspection commands:
 
-[OpenClaw](https://github.com/nickarora/openclaw) handles the core AI agent runtime: model communication, session management, and tool integration. Argentum builds on top of that.
+- `run` submits one task and streams its result;
+- `status` reports the workspace and configured providers;
+- `serve` keeps the runtime alive and exchanges versioned JSONL messages over
+  standard input and output.
+- `sessions` lists the durable sessions scoped to the selected workspace.
+- `session select` changes the active session through `AppCommand`.
+- `provider probe` performs a bounded, non-billable connectivity check through
+  the same provider registry used for task execution.
+- `provider list`, `provider save`, and `provider select` manage durable,
+  workspace-scoped provider profiles through the same command host.
+- `provider models` returns a bounded catalog for one exact profile.
+- `provider model` persists a model on one exact profile without changing the
+  selected provider profile.
 
-| Layer          | OpenClaw              | Argentum Extension                                       |
-| -------------- | --------------------- | -------------------------------------------------------- |
-| **Runtime**    | Node.js agent runtime | Same runtime, wrapped with framework                     |
-| **Config**     | Environment variables | YAML config with Zod validation, hot-reload              |
-| **Features**   | Built-in tools        | Modular plugin system with lifecycle management          |
-| **Channels**   | Telegram (basic)      | Multi-channel: Telegram, Webchat, Mobile, Discord, Slack |
-| **Memory**     | File-based memory     | SQLite, Markdown, Supabase, Self-evolving                |
-| **Security**   | Basic allowlist       | Full policy engine, encrypted secrets, audit logging     |
-| **Deployment** | Manual                | Docker, install script, auto-update                      |
+The native app uses `InProcessClient`, which dispatches the same `AppCommand`
+values to the same `CommandHost`. This path does not spawn a CLI process and
+does not serialize commands, so the architectural boundary does not add
+transport overhead to native interaction. JSONL is reserved for process and
+automation boundaries.
 
-Argentum does not fork OpenClaw. It wraps and extends it as a dependency, so you can still update the underlying runtime.
+The serve protocol bounds request size, command concurrency, and response
+buffering. Commands run concurrently so a long provider stream cannot prevent
+cancellation or approval commands from being accepted.
 
----
+### Durable workspace state
 
-## Plugin System
+The store resolves a stable project from the canonical workspace root and
+creates one initial session when needed. Projects and sessions are normalized
+SQLite records. Every durable event records payload version, workspace,
+project, session, and run scope where available. A new session and its
+`SessionCreated` event commit in one transaction before publication.
 
-### Feature Module Interface
+`WorkspaceStateLoaded` is a transient projection snapshot. Publishing initial
+state or selecting a session does not append replay-like events to the log.
+Clients use that snapshot to render the ordered session index and current
+selection. Raw event replay never recreates approvals or reruns tools.
 
-Every feature implements the `FeatureModule` interface:
+Provider profiles are normalized project-scoped SQLite records. Each profile
+contains a stable ID, label, usable provider kind, safe endpoint, and model.
+Exactly one profile is selected for a project. Save and select operations are
+atomic, selection survives restart, and the runtime resolves the selected
+profile for every submitted task. Endpoints must use HTTP or HTTPS with a host
+and cannot contain URL credentials, a query, or a fragment. Profile records do
+not contain API keys or other secret fields.
 
-```typescript
-interface FeatureModule {
-  readonly meta: FeatureMeta; // name, version, description, dependencies
-  init(config, context): Promise<void>; // Called when loaded
-  start?(): Promise<void>; // Called when enabled
-  stop?(): Promise<void>; // Called when disabled (cleanup)
-  healthCheck?(): Promise<HealthStatus>; // Periodic health check
-}
+Conversation messages persist visible text, separately typed reasoning, exact
+reported usage, provider profile ID, and model ID. Stored usage is rejected if
+its arithmetic, cached-token bounds, reasoning-token bounds, or context limit
+is inconsistent. Normal multi-turn history sends only visible user and
+assistant text. Prior reasoning is never inserted into a later user turn.
+
+### Provider probes
+
+`ProbeProvider` is an additive protocol-v1 command. OpenAI-compatible and LM
+Studio providers request the safely joined models endpoint with redirects
+disabled, a three-second timeout, a 256 KiB response limit, and bounded JSON
+validation. Status URLs are stripped of embedded credentials, query strings,
+and fragments before publication. Anthropic reports that a safe non-billable
+probe is unavailable instead of sending a model message.
+
+`ListProviderModels` and `SelectProviderModel` are additive protocol-v1
+commands. Catalogs are bounded, sorted, deduplicated, and scoped to the exact
+saved profile and credential. LM Studio prefers its native model catalog so a
+loaded instance can report its configured context length, then falls back to
+the OpenAI-compatible endpoint. Canonical hosted context limits are applied
+only to known model IDs. A provider-reported limit is preserved when no
+canonical value exists.
+
+Provider streams emit answer deltas, reasoning deltas, tool calls, exact usage,
+and one completion event. Raw or fragmented `<think>` markers are removed from
+the answer stream and their content is emitted as reasoning. Usage is never
+estimated or summed across tool rounds. The final provider round either stores
+its own usage or records that usage was not reported.
+
+OpenAI-compatible reasoning fields are normalized before they reach the
+runtime. `reasoning_content` is treated as a delta. `reasoning_details` accepts
+both the cumulative snapshots shown in provider examples and the incremental
+chunks returned by current MiniMax streams. The adapter detects the stream
+shape, keeps the combined reasoning under its byte limit, and never copies raw
+reasoning markers into answer text.
+
+### Tool requests and approvals
+
+Tools cross the same boundary as every other product action. A protocol v1
+read request has this exact envelope shape:
+
+```json
+{"protocol_version":1,"request_id":"read-1","type":"command","command":{"kind":"request_tool","request":{"call_id":"00000000-0000-0000-0000-000000000001","run_id":"00000000-0000-0000-0000-000000000002","input":{"kind":"read_text","path":"README.md"}}}}
 ```
 
-### Lifecycle
+A write request uses the same command with a typed `write_text` input:
 
-```
-unloaded -> loading -> active -> disabled
-                 \-> error
-```
-
-1. **Scan** - `PluginLoader` scans `src/features/` for `index.ts` files
-2. **Register** - Each feature module is registered with its metadata
-3. **Resolve** - Dependencies are resolved via topological sort (circular deps detected)
-4. **Init** - Features are initialized with their YAML config and a shared context
-5. **Start** - Feature's `start()` hook is called
-6. **Health** - Periodic health checks every 60 seconds
-7. **Stop** - Graceful shutdown calls `stop()` in reverse order
-
-### Shared Context
-
-Features receive a shared context on init:
-
-```typescript
-interface FeatureContext {
-  logger: Logger;                              // Feature-scoped logger
-  config: ArgentumConfig;                      // Full config object
-  registerHook(event, handler): void;          // Listen to events
-  emit(event, data): Promise<void>;            // Emit events to other features
+```json
+{"protocol_version":1,"request_id":"write-1","type":"command","command":{"kind":"request_tool","request":{"call_id":"00000000-0000-0000-0000-000000000003","run_id":"00000000-0000-0000-0000-000000000002","input":{"kind":"write_text","path":"notes.txt","content":"reviewed"}}}}
 ```
 
-This lets features talk to each other without direct imports. Loose coupling.
+Reads are allowed by the default host policy. Writes emit an
+`ApprovalRequested` event and do not touch the file until the client sends an
+approval command using the returned approval ID:
 
-### Adding a New Feature
-
-1. Create `src/features/my-feature/index.ts`
-2. Export a `FeatureModule` as default
-3. Add config to `config/default.yaml`:
-   ```yaml
-   features:
-     my-feature:
-       enabled: false
-       customOption: value
-   ```
-4. Add tests and documentation, then explicitly enable it in a test workspace.
-
----
-
-## Security Model
-
-### Defense in Depth
-
-Argentum's security is layered, inspired by NemoClaw's isolation approach:
-
-```
-┌──────────────────────────────────────────┐
-│  Layer 1: Allowlist / Denylist           │
-│  Pattern-based access control            │
-│  (exact, prefix, glob, regex)            │
-├──────────────────────────────────────────┤
-│  Layer 2: Policy Engine                  │
-│  Condition-based rules with priorities   │
-│  Rate limiting and quotas                │
-├──────────────────────────────────────────┤
-│  Layer 3: Desktop Rust capability gate   │
-│  Persisted policy; request can only narrow│
-├──────────────────────────────────────────┤
-│  Layer 4: Secret and audit subsystems    │
-│  Encrypted vault where wired; redaction  │
-├──────────────────────────────────────────┤
-│  Layer 5: Container Sandbox              │
-│  Isolated execution for untrusted code   │
-│  Resource limits, network restrictions   │
-└──────────────────────────────────────────┘
+```json
+{"protocol_version":1,"request_id":"approve-1","type":"command","command":{"kind":"approve_tool","approval_id":"00000000-0000-0000-0000-000000000004","scope":"Once"}}
 ```
 
-### Allowlist Manager
+The same pending request can be rejected without executing it:
 
-Controls access through configurable rules with pattern matching. Deny rules always override allow rules regardless of priority.
-
-- **exact** - Exact string match
-- **prefix** - Starts-with match
-- **glob** - Wildcard pattern (`*.example.com`)
-- **regex** - Regular expression
-
-Two modes exist, but release configuration uses **strict**: default deny, only
-explicit allows pass. Permissive mode is compatibility/testing only and should
-not be the release default.
-
-### Policy Engine
-
-YAML-based security policies evaluated at runtime:
-
-- **Conditions** - Match against context fields (user, action, resource, channel)
-- **Operators** - equals, not_equals, contains, matches, greater_than, less_than, in
-- **Actions** - allow, deny, audit, rate_limit
-- **Priorities** - Higher priority rules evaluated first
-- **Rate Limits** - Per-key sliding window rate limiting
-
-### Encrypted Secrets
-
-- **Algorithm:** AES-256-GCM with unique IV per secret
-- **Key Derivation:** PBKDF2 with 100,000 iterations
-- **Storage:** Encrypted JSON vault for callers wired to this subsystem
-- **Runtime:** Values are decrypted only for a requesting component
-
-The current desktop onboarding path uses `workspace/secrets.env` instead of the
-encrypted vault. It is Git-ignored and restricted to mode `0600` on Unix, but it
-is not application-encrypted; Windows confidentiality relies on the account and
-filesystem ACL. See `SECURITY.md`.
-
-### Command Sandboxing
-
-When `container-sandbox` feature is enabled:
-
-- Commands run in isolated Docker containers
-- Resource limits (CPU, memory, timeout)
-- Read-only root filesystem
-- Network access configurable per policy
-- Temporary filesystem for working data
-
----
-
-## Memory Architecture
-
-### Storage Backends
-
-Argentum supports pluggable memory backends:
-
-```
-┌──────────────────────────────────────────┐
-│            Memory Interface              │
-│  store() · retrieve() · search() · list()│
-└──────────┬───────────┬──────────┬────────┘
-           │           │          │
-    ┌──────▼──┐  ┌─────▼────┐  ┌─▼────────┐
-    │ SQLite  │  │ Markdown │  │ Supabase  │
-    │ Local   │  │ Git-     │  │ Cloud +   │
-    │ + FTS5  │  │ friendly │  │ pgvector  │
-    └─────────┘  └──────────┘  └───────────┘
+```json
+{"protocol_version":1,"request_id":"reject-1","type":"command","command":{"kind":"reject_tool","approval_id":"00000000-0000-0000-0000-000000000004"}}
 ```
 
-**SQLite** - Default. Fast local storage with FTS5 full-text search. Best for single-user deployments.
+Every file path is validated against the configured workspace root before the
+tool can read or write it.
 
-**Markdown** - Plain text files organized by date/topic. Git-trackable, human-readable, no dependencies.
+## Crate boundaries
 
-**Supabase** - Cloud-hosted PostgreSQL with pgvector for semantic search. Best for multi-device or team use.
+- `argentum-domain` contains serializable commands, events, lifecycle states,
+  layout profiles, and product records.
+- `argentum-cli` owns the command host, in-process client, executable commands,
+  and versioned JSONL transport.
+- `argentum-runtime` owns task orchestration, cancellation, provider selection,
+  event publication, and lifecycle transitions.
+- `argentum-providers` owns provider protocols and redacts credentials from
+  application-facing status.
+- `argentum-tools` owns typed tool descriptors and execution contracts.
+- `argentum-security` owns workspace boundaries, capabilities, approvals, and
+  secret redaction.
+- `argentum-store` owns SQLite migrations, event persistence, and layout
+  profiles.
+- `argentum-ui` owns Slint markup and a projection of domain events. It does not
+  call the filesystem, providers, subprocesses, or database directly.
+- `argentum-platform` owns OS paths and target-specific secure-storage seams.
 
-### Self-Evolving Memory
+## Renderer rule
 
-An overlay system that runs on top of any backend:
+The production renderer is native Slint. No Tauri, Wry, WebView, JavaScript,
+TypeScript, Node process, or JavaScript plugin runtime is part of the new app.
+Slint markup is compiled into Rust during the Cargo build.
 
-1. **Consolidation** - Merges similar memories (Jaccard similarity >= threshold)
-2. **Pattern Discovery** - Identifies recurring themes across memories
-3. **Importance Scoring** - Boosts frequently accessed memories, decays unused ones
-4. **Pruning** - Removes stale, low-importance memories to stay within size limits
+## Verification rule
 
-Runs on a configurable interval (default: 1 hour).
-
----
-
-## Configuration Flow
-
-```
-config/default.yaml
-        │
-        ▼
-┌───────────────┐     ┌──────────────┐
-│  ConfigManager │────▶│ Zod Schema   │
-│  (YAML + Env) │     │ Validation   │
-└───────┬───────┘     └──────────────┘
-        │
-        ▼
-  ArgentumConfig (typed)
-        │
-        ├──▶ PluginLoader  (feature toggles)
-        ├──▶ Features      (per-feature config)
-        ├──▶ Channels      (channel config)
-        ├──▶ Memory        (backend config)
-        └──▶ Security      (policy config)
-```
-
-Environment variables override YAML values:
-
-| Env Var                   | YAML Path                 |
-| ------------------------- | ------------------------- |
-| `ARGENTUM_PORT`           | `server.port`             |
-| `ARGENTUM_LOG_LEVEL`      | `logging.level`           |
-| `ARGENTUM_TELEGRAM_TOKEN` | `channels.telegram.token` |
-| `ARGENTUM_SUPABASE_URL`   | `memory.supabaseUrl`      |
-
----
-
-## Deployment Models
-
-### 1. Single Node (Default)
-
-```
-User --> Argentum (Node.js) --> LLM API
-              │
-              ├── SQLite (local)
-              └── Features (in-process)
-```
-
-Everything runs in a single Node.js process. Simple, low overhead.
-
-### 2. Docker
-
-```
-User --> Argentum Container --> LLM API
-              │
-              ├── Volume: /app/data
-              ├── Volume: /app/memory
-              └── Optional: Redis Container
-```
-
-Isolated, reproducible, easy to deploy and update.
-
-### 3. Distributed (Planned)
-
-```
-         ┌──▶ Worker 1 (heavy tasks)
-User ──▶ │
-Gateway  ├──▶ Worker 2 (browser automation)
-         │
-         └──▶ Worker 3 (voice processing)
-              │
-              └──▶ Shared Redis / Supabase
-```
-
-Multiple Argentum instances sharing state via Redis and Supabase. Gateway routes tasks to specialized workers.
-
----
-
-## Design Principles
-
-1. **Modular by default** - Non-core features are opt-in and disabled by default.
-2. **Security first** - Persisted policy is authoritative; deny unknown capabilities.
-3. **Type-safe** - Zod schemas validate all configuration at startup.
-4. **Explicit lifecycle** - A module starts/stops only through its supported lifecycle; restart is required where hot reload is not implemented.
-5. **Portable** - Runs on a laptop, a VPS, or in Docker. No cloud dependency required.
-6. **Extensible with gates** - Source discovery is separate from activation, permission, license, and release readiness.
+Compilation is not runtime proof. Windows releases must launch the actual
+packaged executable from a clean staging directory, and the evidence must name
+the artifact, hash, commit, and observed runtime behavior.

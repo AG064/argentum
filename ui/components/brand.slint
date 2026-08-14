@@ -1,0 +1,90 @@
+import { AgTheme } from "../tokens.slint";
+
+export component BrandMark inherits Rectangle {
+    in property <length> size: AgTheme.brand-mark-md;
+    in property <bool> framed: false;
+    in property <string> accessible-name: "Argentum";
+
+    width: root.size;
+    height: root.size;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: root.framed ? AgTheme.radius-md : 0px;
+    border-width: root.framed ? AgTheme.hairline : 0px;
+    border-color: root.framed ? AgTheme.border-subtle : transparent;
+    background: root.framed ? AgTheme.chrome : transparent;
+    // The lockup or adjacent text owns the accessible product name.
+    accessible-role: none;
+
+    Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.framed ? parent.width - AgTheme.space-2 : parent.width;
+        height: root.framed ? parent.height - AgTheme.space-2 : parent.height;
+        source: root.size <= 20px
+            ? @image-url("../../assets/brand/argentum-20.png")
+            : (root.size <= 32px
+                ? @image-url("../../assets/brand/argentum-32.png")
+                : (root.size <= 64px
+                    ? @image-url("../../assets/brand/argentum-64.png")
+                    : @image-url("../../assets/brand/argentum-128.png")));
+        image-fit: contain;
+        accessible-role: none;
+    }
+}
+
+export component BrandLockup inherits Rectangle {
+    in property <bool> compact: false;
+    in property <string> subtitle: "Task workbench";
+
+    width: root.compact ? AgTheme.rail-width : AgTheme.brand-lockup-width;
+    height: AgTheme.header-height;
+    background: transparent;
+    accessible-role: text;
+    accessible-label: root.compact || root.subtitle == ""
+        ? "Argentum"
+        : "Argentum. " + root.subtitle;
+
+    HorizontalLayout {
+        padding-left: root.compact ? AgTheme.space-3 : AgTheme.space-4;
+        padding-right: root.compact ? AgTheme.space-3 : AgTheme.space-4;
+        spacing: AgTheme.space-3;
+        alignment: start;
+
+        Rectangle {
+            width: AgTheme.brand-mark-md;
+            background: transparent;
+
+            BrandMark {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                size: AgTheme.brand-mark-md;
+                accessible-name: "";
+            }
+        }
+
+        if !root.compact: VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+
+            Text {
+                text: "Argentum";
+                color: AgTheme.text-strong;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                font-weight: AgTheme.weight-title;
+                accessible-role: none;
+            }
+
+            Text {
+                visible: root.subtitle != "";
+                text: root.subtitle;
+                color: AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-regular;
+                accessible-role: none;
+            }
+        }
+    }
+}

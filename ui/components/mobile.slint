@@ -1,0 +1,292 @@
+import { AgTheme } from "../tokens.slint";
+import { BrandMark } from "brand.slint";
+import { ActionButton, IconButton } from "buttons.slint";
+import { ContextButton } from "surfaces.slint";
+
+export component MobileTopBar inherits Rectangle {
+    in property <string> session-title: "New session";
+    in property <string> run-state: "Ready";
+    in property <bool> running: false;
+    in property <bool> attention: false;
+    in property <bool> reduced-motion: false;
+    callback open-sessions();
+    callback open-activity();
+    callback open-more();
+
+    height: AgTheme.mobile-header-height;
+    background: AgTheme.chrome;
+    border-width: AgTheme.hairline;
+    border-color: AgTheme.border-subtle;
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-2;
+        padding-right: AgTheme.space-2;
+        spacing: AgTheme.space-1;
+        alignment: stretch;
+
+        Rectangle {
+            width: AgTheme.mobile-control-height;
+            background: transparent;
+
+            BrandMark {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                size: AgTheme.brand-mark-sm;
+                accessible-name: "Argentum";
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+            accessible-role: button;
+            accessible-label: "Open sessions. " + root.session-title;
+            accessible-action-default => { root.open-sessions(); }
+            forward-focus: session-focus;
+
+            VerticalLayout {
+                padding-left: AgTheme.space-1;
+                padding-right: AgTheme.space-1;
+                spacing: AgTheme.optical-tight-gap;
+                alignment: center;
+
+                Text {
+                    text: root.session-title;
+                    color: AgTheme.text-primary;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-body;
+                    font-weight: AgTheme.weight-semibold;
+                    overflow: elide;
+                }
+
+                HorizontalLayout {
+                    spacing: AgTheme.space-2;
+
+                    Rectangle {
+                        width: AgTheme.accent-bar-width;
+                        height: AgTheme.icon-inline;
+                        background: root.attention
+                            ? AgTheme.state-attention
+                            : (root.running ? AgTheme.state-active : AgTheme.state-neutral);
+                    }
+
+                    Text {
+                        text: root.run-state;
+                        color: root.attention ? AgTheme.red-100 : AgTheme.text-muted;
+                        font-family: AgTheme.font-ui;
+                        font-size: AgTheme.type-compact;
+                        font-weight: AgTheme.weight-medium;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            session-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    session-focus.focus();
+                    root.open-sessions();
+                }
+            }
+
+            session-focus := FocusScope {
+                x: 0px;
+                width: 0px;
+                focus-on-click: false;
+                focus-on-tab-navigation: true;
+                key-pressed(event) => {
+                    if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                        root.open-sessions();
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+
+            if session-focus.has-focus: Rectangle {
+                x: AgTheme.space-1;
+                y: AgTheme.space-1;
+                width: parent.width - AgTheme.space-2;
+                height: parent.height - AgTheme.space-2;
+                border-radius: AgTheme.radius-xs;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.focus-ring;
+                background: transparent;
+            }
+        }
+
+        IconButton {
+            glyph: "activity";
+            hint: "Open activity";
+            selected: false;
+            reduced-motion: root.reduced-motion;
+            target-size: AgTheme.mobile-control-height;
+            clicked => { root.open-activity(); }
+        }
+
+        IconButton {
+            glyph: "more";
+            hint: "Open more actions";
+            selected: false;
+            reduced-motion: root.reduced-motion;
+            target-size: AgTheme.mobile-control-height;
+            clicked => { root.open-more(); }
+        }
+    }
+}
+
+export component MobileContextBar inherits Rectangle {
+    in property <string> provider-label: "Model";
+    in property <string> workspace-label: "Workspace";
+    in property <bool> reduced-motion: false;
+    callback open-model();
+    callback open-context();
+
+    height: AgTheme.mobile-control-height;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-2;
+
+        ContextButton {
+            icon: "model";
+            detail: root.provider-label;
+            target-height: AgTheme.mobile-control-height;
+            reduced-motion: root.reduced-motion;
+            horizontal-stretch: 1;
+            clicked => { root.open-model(); }
+        }
+
+        ContextButton {
+            icon: "folder";
+            detail: root.workspace-label;
+            target-height: AgTheme.mobile-control-height;
+            reduced-motion: root.reduced-motion;
+            horizontal-stretch: 1;
+            clicked => { root.open-context(); }
+        }
+    }
+}
+
+export component MobileComposer inherits Rectangle {
+    in-out property <string> draft: "";
+    in property <string> provider-label: "Model";
+    in property <string> workspace-label: "Workspace";
+    in property <bool> running: false;
+    in property <bool> approval-pending: false;
+    in property <bool> submission-pending: false;
+    in property <string> active-run-id: "";
+    in property <bool> reduced-motion: false;
+    callback submit(string);
+    callback cancel(string);
+    callback open-model();
+    callback open-context();
+
+    height: AgTheme.mobile-composer-height;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: editor.has-focus ? AgTheme.red-600 : AgTheme.border-default;
+    background: AgTheme.navigation;
+    clip: true;
+
+    Rectangle {
+        x: AgTheme.space-3;
+        y: 0px;
+        width: editor.has-focus ? AgTheme.space-12 : AgTheme.space-7;
+        height: AgTheme.accent-bar-width;
+        background: editor.has-focus ? AgTheme.red-500 : AgTheme.silver-600;
+    }
+
+    Text {
+        visible: root.draft == "";
+        x: AgTheme.space-4;
+        y: AgTheme.space-3;
+        width: parent.width - AgTheme.space-8;
+        height: AgTheme.space-12;
+        text: "Describe a task or ask a question";
+        color: AgTheme.text-muted;
+        font-family: AgTheme.font-ui;
+        font-size: AgTheme.type-body;
+        vertical-alignment: top;
+    }
+
+    editor := TextInput {
+        x: AgTheme.space-4;
+        y: AgTheme.space-3;
+        width: parent.width - AgTheme.space-8;
+        height: AgTheme.space-12;
+        text <=> root.draft;
+        color: AgTheme.text-primary;
+        selection-foreground-color: AgTheme.white-000;
+        selection-background-color: AgTheme.silver-700;
+        font-family: AgTheme.font-ui;
+        font-size: AgTheme.type-body;
+        font-weight: AgTheme.weight-regular;
+        single-line: false;
+        wrap: word-wrap;
+        enabled: !root.approval-pending && !root.submission-pending;
+        accessible-label: "Task prompt";
+        key-pressed(event) => {
+            if event.text == "\n"
+                && !event.modifiers.shift
+                && !root.running
+                && root.draft != ""
+            {
+                root.submit(root.draft);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Rectangle {
+        x: AgTheme.space-3;
+        y: AgTheme.space-16;
+        width: parent.width - AgTheme.space-6;
+        height: AgTheme.hairline;
+        background: AgTheme.border-subtle;
+    }
+
+    HorizontalLayout {
+        x: AgTheme.space-2;
+        y: AgTheme.space-16 + AgTheme.space-2;
+        width: parent.width - AgTheme.space-4;
+        height: AgTheme.mobile-control-height;
+        spacing: AgTheme.space-2;
+
+        ContextButton {
+            icon: "model";
+            detail: root.provider-label;
+            target-height: AgTheme.mobile-control-height;
+            reduced-motion: root.reduced-motion;
+            horizontal-stretch: 1;
+            clicked => { root.open-model(); }
+        }
+
+        IconButton {
+            glyph: "folder";
+            hint: "Open workspace context";
+            target-size: AgTheme.mobile-control-height;
+            reduced-motion: root.reduced-motion;
+            clicked => { root.open-context(); }
+        }
+
+        ActionButton {
+            label: root.approval-pending ? "Review" : (root.submission-pending ? "Starting" : (root.running ? "Stop" : "Start"));
+            icon: root.running ? "stop" : "play";
+            enabled: !root.approval-pending && !root.submission-pending && (root.running || root.draft != "");
+            primary: !root.running;
+            fill: root.running ? AgTheme.raised : AgTheme.primary-fill;
+            outline-color: root.running ? AgTheme.border-strong : AgTheme.primary-hover;
+            target-height: AgTheme.mobile-control-height;
+            reduced-motion: root.reduced-motion;
+            clicked => {
+                if (root.running) {
+                    root.cancel(root.active-run-id);
+                } else {
+                    root.submit(root.draft);
+                }
+            }
+        }
+    }
+}

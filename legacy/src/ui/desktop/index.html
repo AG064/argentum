@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Argentum</title>
+    <link rel="icon" type="image/png" href="./assets/argentum.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./startup.js"></script>
+  </head>
+  <body data-active-section="chat">
+    <a class="skip-link" href="#view-root">Skip to content</a>
+
+    <div class="app-frame">
+      <aside class="app-sidebar" id="app-sidebar" aria-label="Argentum navigation">
+        <div class="sidebar-top">
+          <a class="app-brand" href="#" data-section="chat" aria-label="Open Argentum tasks">
+            <span class="argentum-mark" aria-hidden="true">A</span>
+            <span class="brand-wordmark">
+              <strong>Argentum</strong>
+              <span>agent workspace · v0.0.9</span>
+            </span>
+          </a>
+
+          <div class="sidebar-environment">
+            <span class="live-indicator" aria-hidden="true"></span>
+            <span>Local workspace</span>
+            <kbd>Ctrl</kbd><kbd>K</kbd>
+          </div>
+
+          <button class="new-chat-button" id="new-chat" type="button" title="Start a new task">
+            <span data-icon="plus" aria-hidden="true"></span>
+            <span>New task</span>
+            <kbd>Ctrl</kbd><kbd>N</kbd>
+          </button>
+        </div>
+
+        <div class="sidebar-section-label">Workspace</div>
+        <nav id="section-nav" class="section-nav" aria-label="Workspace sections"></nav>
+
+        <div class="sidebar-run-queue" aria-label="Run queue">
+          <div class="sidebar-run-queue-header">
+            <span>Run queue</span>
+            <span class="queue-count">01</span>
+          </div>
+          <div class="queue-item">
+            <span class="queue-status-dot" aria-hidden="true"></span>
+            <span>
+              <strong>Desktop session</strong>
+              <small>Ready for a task</small>
+            </span>
+            <span class="queue-more" aria-hidden="true">···</span>
+          </div>
+        </div>
+
+        <div class="sidebar-bottom">
+          <button
+            class="workspace-switcher"
+            id="workspace-button"
+            type="button"
+            aria-haspopup="menu"
+            aria-label="Choose workspace"
+          >
+            <span class="workspace-mark" data-icon="folder" aria-hidden="true"></span>
+            <span class="workspace-copy">
+              <small>Workspace boundary</small>
+              <strong id="workspace-path">Not selected</strong>
+            </span>
+            <span data-icon="chevronUp" aria-hidden="true"></span>
+          </button>
+
+          <div class="sidebar-operator">
+            <span class="operator-avatar" aria-hidden="true">AG</span>
+            <span>
+              <strong>Operator</strong>
+              <small>Private by default</small>
+            </span>
+            <span class="operator-status" aria-hidden="true"></span>
+          </div>
+        </div>
+      </aside>
+
+      <button
+        class="app-sidebar-scrim"
+        id="app-sidebar-scrim"
+        type="button"
+        aria-label="Close navigation"
+        tabindex="-1"
+      ></button>
+
+      <main class="app-main">
+        <header class="app-toolbar">
+          <div class="toolbar-leading">
+            <button
+              class="toolbar-button app-sidebar-toggle"
+              id="app-sidebar-toggle"
+              type="button"
+              aria-label="Open navigation"
+              aria-controls="app-sidebar"
+              aria-expanded="false"
+            >
+              <span data-icon="panelLeft" aria-hidden="true"></span>
+            </button>
+
+            <button
+              class="toolbar-button section-back-button"
+              id="section-back-button"
+              type="button"
+              aria-label="Back to chat"
+              title="Back to chat"
+              hidden
+            >
+              <span data-icon="arrowLeft" aria-hidden="true"></span>
+              <span class="section-back-label">Back to chat</span>
+            </button>
+
+            <div class="toolbar-context" aria-label="Current location">
+              <div class="page-identity">
+                <span id="eyebrow">Workspace</span>
+                <span class="toolbar-divider" aria-hidden="true">/</span>
+                <h1 id="section-title">Tasks</h1>
+              </div>
+            </div>
+          </div>
+
+          <div class="toolbar-actions">
+            <div id="provider-status-pill"></div>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button
+              class="toolbar-button update-shortcut"
+              type="button"
+              data-section="update"
+              title="Updates"
+              aria-label="Updates"
+            >
+              <span data-icon="download" aria-hidden="true"></span>
+            </button>
+            <button class="toolbar-button" id="help-button" type="button" title="Help" aria-label="Help">
+              <span data-icon="help" aria-hidden="true"></span>
+            </button>
+            <button
+              class="toolbar-button"
+              id="notifications-button"
+              type="button"
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <span data-icon="bell" aria-hidden="true"></span>
+            </button>
+            <button class="toolbar-button" id="audit-button" type="button" title="Security" aria-label="Security">
+              <span data-icon="shield" aria-hidden="true"></span>
+            </button>
+            <button class="toolbar-button" id="settings-button" type="button" title="Settings" aria-label="Settings">
+              <span data-icon="settings" aria-hidden="true"></span>
+            </button>
+          </div>
+        </header>
+
+        <section id="view-root" class="view-root" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div id="overlay-root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

@@ -1,78 +1,85 @@
-# Roadmap
+# Argentum roadmap
 
-Roadmap items are plans, not shipped-feature claims. Dates are intentionally not
-promised before release gates pass.
+Argentum is being rebuilt as a native Rust agent harness. Dates are not release
+claims. Each stage requires a real build, runtime, security, and visual check.
 
-## Current status
+## Implemented foundation
 
-- v0.0.9 is a release candidate on `development`.
-- v0.0.7 is the latest published release as of this review.
-- Desktop Windows packaging has been locally validated; other release platforms
-  and hosted-provider combinations still require their CI/live test matrices.
+- Old application source and tooling quarantined under `legacy/`.
+- Cargo workspace with domain, runtime, provider, tool, security, storage,
+  workspace, platform, scheduler, and UI crates.
+- Native Slint shell with Argentum black, graphite, silver, white, and red
+  tokens.
+- Responsive desktop rail, session pane, task composer, plan surface, mobile
+  drawer, work pane, and activity drawer.
+- Typed command and event flow with SQLite event persistence.
+- Stable workspace and project identity with durable sessions, safe selection,
+  and CLI session listing.
+- Non-billable, bounded connectivity probes for OpenAI-compatible and LM Studio
+  providers.
+- Workspace-scoped provider profiles with safe endpoint validation, durable
+  selection, CLI management, native settings editing, and selected-provider
+  task routing.
+- Workspace path validation, default-deny write policy, secret redaction, and
+  provider boundaries.
+- LM Studio-compatible, OpenAI-compatible, and Anthropic provider foundations.
+- Canonical Argentum A/G identity in the native UI and Windows executable.
 
-## v0.0.9 release gate
+## Next vertical slice
 
-- provider setup/test/live-chat paths for candidate providers;
-- managed llama.cpp settings, curated Hub presets, Hub GGUF search, and bounded
-  local model scan with no fictitious Argentum model;
-- default-deny AI context/tool enforcement in the Rust bridge;
-- server-side message/history/context limits and honest provider quota display;
-- all optional features/listeners disabled by default;
-- help, curatable FAQ, privacy-preserving bug/feature reports;
-- GitHub update check with browser handoff only;
-- truthful feature/security/release/contribution documentation;
-- persistent Android signing identity configured before any release APK is
-  published;
-- all pre-push, CI, Rust, packaging, and dependency gates green.
+- Secure credential setup and provider model discovery.
+- Restored message history and resumable run state on top of durable sessions.
+- Model-driven tool calls through the existing approval boundary.
+- Approval policy completion for command, network, and external-process actions.
+- File changes, diff review, restore actions, and verification runners.
+- Optional persisted goal contracts with explicit lifecycle, budgets, iteration
+  linkage, next action, and verification history.
+- Evidence-driven goal completion that fails closed when required checks are
+  missing, stale, or failed.
+- Task rows with running, waiting, unread, failed, and changed-file state plus
+  search, pin, and archive foundations.
+- An effective execution-profile selector backed by the Rust capability broker,
+  with `Confirm Before Changes` as the default.
+- OS keychain implementations for Windows, macOS, Linux, Android, and iOS.
 
-## v0.1.0
+## Harness workspace
 
-- Android internal-testing client: authenticated gateway connection, core chat,
-  settings, safe update/install documentation, and repeatable device tests;
-- signed Tauri update artifacts and verified updater manifest foundation;
-- interactive per-action approval for `ask` and `session` model tools;
-- provider capability probes and a maintained provider/model test matrix;
-- permissions/license/integrity manifest for skills, plugins, hooks, MCP, LSP,
-  agents, and monitors;
-- read-only skills/MCP first; browser/computer adapters only after approval and
-  prompt-injection tests;
-- dashboard backend adapters connected to real optional modules, with each module
-  independently enabled; unconnected APIs remain unavailable;
-- supported scheduled-task UI after task ownership, permission, missed-run,
-  concurrency, cancellation, and audit semantics are verified;
-- localization coverage and Android accessibility checks.
+- Real Changes, Files, Terminal, Preview, Activity, Approval, and Goal surfaces
+  driven by runtime events rather than production fixtures.
+- Exact local, remote, branch, and worktree binding shown at the composer and
+  run boundary.
+- A permission-aware command center for commands, tasks, and files.
+- Automatic goal continuation only while the goal is active, within budget, and
+  not blocked by an approval or user decision.
+- Grouped, workspace, and timeline task views after search, pin, archive, and
+  state markers are reliable.
+- Changed-only navigation, repository orientation, and Git graph after the core
+  execution and review loop is complete.
 
-## v0.1.1
+## Platform delivery
 
-Secure, opt-in device sync across Windows, Linux, macOS, and Android:
+- Windows native release binary and installer.
+- macOS application bundle and signed disk image.
+- Linux packages and portable artifact.
+- Android companion build with safe-area, notification, and approval flows.
+- iOS companion build with the same Rust domain and event protocol.
 
-- device pairing with end-to-end encrypted transport and explicit trust;
-- independent scopes for project files, workspaces, chats, and settings;
-- local-first operation, conflict copies/merge strategy, resumable transfer;
-- device revocation, key rotation, recovery, audit history, and storage quotas;
-- no provider API keys or signing keys synced by default;
-- user-selectable self-hosted relay/direct transport where practical.
+## Release gates
 
-## Later
+- `cargo fmt --check`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- dependency license and advisory checks;
+- visual checks at desktop, tablet, 430 pixel, and 360 pixel widths;
+- actual packaged executable launch from a clean staging directory;
+- recorded artifact hashes and platform-specific runtime evidence.
 
-- componentized signed updates for models, sidecars, skills/plugins, and UI assets;
-- background staging while AI work continues, followed by graceful checkpoint,
-  drain, verified restart, health check, and recovery;
-- Tauri v3 evaluation after stable release and dependency/security review;
-- permission-gated recurring automations and cross-device execution ownership;
-- broader messaging/provider/platform coverage driven by tested demand.
+## Product standard
 
-## Non-negotiable release principles
-
-- functionality before visual claims;
-- optional modules disabled until configured;
-- no demo data or placeholder success in production paths;
-- persisted local policy—not model output or webview state—authorizes actions;
-- commercial/license review per imported component and model;
-- no update, sync, provider, or platform is called ready without an end-to-end
-  test on that target.
-
-Detailed plans: [feature status](docs/FEATURES.md),
-[AI providers/extensions](docs/AI_PROVIDERS_AND_EXTENSIONS.md),
-[update architecture](docs/UPDATE_ARCHITECTURE.md), and
-[Android build guide](docs/ANDROID_BUILD.md).
+Argentum is not ready when the shell merely looks polished. It is ready when a
+real task can be planned, executed within explicit authority, reviewed, verified,
+cancelled, or resumed without fake success states or hidden permission changes.
+A goal is complete only when current evidence passes and no required work stays
+open. Timeouts never count as permission, plan approval, or ordinary user
+consent.

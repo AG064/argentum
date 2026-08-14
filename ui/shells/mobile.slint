@@ -1,0 +1,166 @@
+import { ScrollView } from "std-widgets.slint";
+import { AgTheme } from "../tokens.slint";
+import { ConversationMessageView, PlanStepView } from "../view-models.slint";
+import { MobileComposer, MobileTopBar } from "../components/mobile.slint";
+import { ConversationSurface } from "../surfaces/conversation.slint";
+
+export component MobileShell inherits Rectangle {
+    in-out property <string> draft: "";
+    in property <string> session-title: "";
+    in property <string> run-state: "Ready";
+    in property <bool> running: false;
+    in property <bool> attention: false;
+    in property <string> user-prompt: "";
+    in property <[ConversationMessageView]> messages: [];
+    in property <string> transcript: "";
+    in property <string> current-reasoning: "";
+    in property <bool> current-reasoning-available: false;
+    in property <string> current-provider-label: "";
+    in property <string> current-model: "";
+    in property <bool> usage-reported: false;
+    in property <int> usage-input-tokens: 0;
+    in property <int> usage-output-tokens: 0;
+    in property <int> usage-total-tokens: 0;
+    in property <bool> context-window-reported: false;
+    in property <int> context-window-tokens: 0;
+    in property <string> error-message: "";
+    in property <bool> provider-connected: false;
+    in property <string> provider-label: "";
+    in property <string> workspace-label: "";
+    in property <string> plan-summary: "";
+    in property <[PlanStepView]> plan-steps: [];
+    in property <string> verification-state: "pending";
+    in property <string> verification-summary: "";
+    in property <bool> approval-pending: false;
+    in property <bool> submission-pending: false;
+    in property <string> active-run-id: "";
+    in property <bool> reduced-motion: false;
+    in property <length> gutter: AgTheme.mobile-gutter;
+    in property <length> safe-top: 0px;
+    in property <length> safe-bottom: 0px;
+    in property <length> keyboard-inset: 0px;
+    callback open-sessions();
+    callback open-activity();
+    callback open-more();
+    callback open-model();
+    callback open-context();
+    callback submit(string);
+    callback cancel(string);
+    private property <bool> conversation-follow-tail: true;
+
+    changed session-title => {
+        root.conversation-follow-tail = true;
+    }
+
+    changed active-run-id => {
+        if root.active-run-id != "" {
+            root.conversation-follow-tail = true;
+        }
+    }
+
+    background: AgTheme.canvas;
+    clip: true;
+
+    mobile-header := MobileTopBar {
+        x: 0px;
+        y: root.safe-top;
+        width: parent.width;
+        session-title: root.session-title;
+        run-state: root.run-state;
+        running: root.running;
+        attention: root.attention;
+        reduced-motion: root.reduced-motion;
+        open-sessions => { root.open-sessions(); }
+        open-activity => { root.open-activity(); }
+        open-more => { root.open-more(); }
+    }
+
+    conversation := ScrollView {
+        x: 0px;
+        y: root.safe-top + AgTheme.mobile-header-height;
+        width: parent.width;
+        height: max(0px, composer-dock.y - self.y);
+        viewport-width: self.width;
+        mouse-drag-pan-enabled: true;
+        scrolled => {
+            root.conversation-follow-tail = self.viewport-y
+                <= min(0px, self.visible-height - conversation-content.height)
+                    + AgTheme.space-12;
+        }
+
+        conversation-content := VerticalLayout {
+            padding-left: root.gutter;
+            padding-right: root.gutter;
+            padding-top: AgTheme.space-5;
+            padding-bottom: AgTheme.space-8;
+
+            changed height => {
+                if root.conversation-follow-tail {
+                    conversation.viewport-y = min(
+                        0px,
+                        conversation.visible-height - self.height
+                    );
+                }
+            }
+
+            ConversationSurface {
+                user-prompt: root.user-prompt;
+                messages: root.messages;
+                transcript: root.transcript;
+                error-message: root.error-message;
+                provider-connected: root.provider-connected;
+                provider-label: root.provider-label;
+                plan-summary: root.plan-summary;
+                plan-steps: root.plan-steps;
+                verification-state: root.verification-state;
+                verification-summary: root.verification-summary;
+                running: root.running;
+                run-state: root.run-state;
+                current-reasoning: root.current-reasoning;
+                current-reasoning-available: root.current-reasoning-available;
+                current-provider-label: root.current-provider-label;
+                current-model: root.current-model;
+                usage-reported: root.usage-reported;
+                input-tokens: root.usage-input-tokens;
+                output-tokens: root.usage-output-tokens;
+                total-tokens: root.usage-total-tokens;
+                context-window-reported: root.context-window-reported;
+                context-window-tokens: root.context-window-tokens;
+                touch-mode: true;
+                reduced-motion: root.reduced-motion;
+            }
+        }
+    }
+
+    composer-dock := Rectangle {
+        x: 0px;
+        y: parent.height - self.height;
+        width: parent.width;
+        height: AgTheme.mobile-composer-height + root.safe-bottom + root.keyboard-inset + AgTheme.space-4;
+        background: AgTheme.canvas;
+        border-width: AgTheme.hairline;
+        border-color: AgTheme.border-faint;
+
+        MobileComposer {
+            x: root.gutter;
+            y: AgTheme.space-2;
+            width: parent.width - root.gutter * 2;
+            draft <=> root.draft;
+            provider-label: root.provider-label;
+            workspace-label: root.workspace-label;
+            running: root.running;
+            approval-pending: root.approval-pending;
+            submission-pending: root.submission-pending;
+            active-run-id: root.active-run-id;
+            reduced-motion: root.reduced-motion;
+            submit(prompt) => {
+                root.conversation-follow-tail = true;
+                root.draft = prompt;
+                root.submit(prompt);
+            }
+            cancel(run-id) => { root.cancel(run-id); }
+            open-model => { root.open-model(); }
+            open-context => { root.open-context(); }
+        }
+    }
+}

@@ -2,98 +2,79 @@
 
 ## Supported versions
 
-Argentum is pre-1.0. Security fixes target the latest published release and the
-current `development` release candidate. Older builds may not receive patches.
+Argentum is pre-1.0. Security fixes target the current development branch and
+the latest published release candidate. Older builds may not receive patches.
 
 ## Report a vulnerability
 
-Email **report@ag064.eu** with a description, affected version, impact, and
-minimal reproduction. Do not include real credentials or private user data. Do
-not open a public issue until the maintainer has assessed the report. You should
-receive an acknowledgement within seven days; remediation timing depends on
-severity and reproducibility.
+Email **report@ag064.eu** with the affected version, impact, and a minimal
+reproduction. Do not include real credentials or private user data. Do not open
+a public issue until the maintainer has assessed the report. You should receive
+an acknowledgement within seven days; remediation timing depends on severity
+and reproducibility.
 
 ## Security boundaries
 
 Argentum is a local-first application, not a hardened multi-user isolation
 boundary. It protects against accidental capability expansion and untrusted
-model/tool input, but it cannot protect data from a compromised OS account,
-administrator, malicious dependency, or provider that receives an authorized
-request.
+model or tool input, but it cannot protect data from a compromised operating
+system account, administrator, malicious dependency, or provider that receives
+an authorized request.
 
 Default behavior:
 
-- network listeners bind to loopback and use explicit CORS origins;
-- optional features, dashboard, browser automation, computer control, cron, and
-  auto-update are disabled by default;
-- the persisted workspace configuration is the authority for context, channels,
-  and security profile; a webview request can reduce but not expand it;
-- model-call tools are selected by an allowlist and checked again at execution;
-- `restricted` is the default profile;
-- file read/write and loopback HTTP tools are exposed only with persisted
-  `trusted` + `tool-state` configuration;
-- loopback HTTP calls do not follow redirects, have a ten-second timeout, and
-  stop reading after 48 KiB so local endpoints cannot pivot to public hosts or
-  return unbounded model context;
-- `ask` and `session` do not expose privileged model-call tools until a real
-  interactive approval gate exists;
-- workspace paths are canonicalized and path traversal/symlink escape is denied;
-- hosted providers receive only the context categories enabled for the workspace;
-- request size, history size, attachment rules, and a conservative model context
-  budget are enforced in the Rust desktop bridge before a provider call;
-- secrets and provider errors are redacted from application logs where supported.
+- Rust owns provider, tool, storage, security, and platform behavior.
+- The shipped application has no JavaScript runtime or dynamic web content
+  execution path.
+- The persisted workspace policy is authoritative. UI state cannot grant a
+  capability that the policy does not allow.
+- Workspace paths are canonicalized and path traversal and symlink escapes are
+  denied.
+- File writes, shell commands, network access, and external processes require
+  an explicit capability and approval decision.
+- Provider requests use the Rust HTTP client with TLS and bounded request and
+  response handling.
+- Provider content, model output, tool arguments, attachments, and retrieved
+  context are untrusted input and cannot authorize themselves.
+- Secrets use the platform secure-storage boundary and zeroization helpers.
+  They never enter SQLite event data or ordinary tracing output.
+- Cancellation is propagated through provider, storage, and tool operations.
+- Errors are redacted before they are persisted or presented outside the
+  relevant workspace context.
 
-Models and remote content are untrusted input. Prompt text, tool arguments,
-plugin metadata, model cards, web pages, attachments, and retrieved context must
-not be treated as authorization. Permission decisions come from local policy.
+Permission decisions come from local policy, not from prompt text, model output,
+tool arguments, provider metadata, or remote content.
 
 ## Secret storage
 
-The Node runtime includes an encrypted vault using AES-256-GCM or
-ChaCha20-Poly1305 with an `ARGENTUM_MASTER_KEY`. The current desktop onboarding
-path instead writes provider values to `workspace/secrets.env`; it is outside
-YAML and ignored by Git, but is **not application-encrypted**. Its confidentiality
-therefore depends on the local account/filesystem permissions. Do not share or
-commit that file. Moving desktop secrets to OS secure storage/encrypted vault is
-a release hardening item.
+Never store real credentials in configuration files, screenshots, bug reports,
+model prompts, workspace event logs, or CI output. Android and Apple signing
+private keys belong only in protected build environments and offline backups.
+The local `release.keystore.b64` file and Android keystore paths are ignored and
+must not be read, moved into source control, or included in a Rust build.
 
-Never store real credentials in configuration, screenshots, bug reports, model
-prompts, plugin manifests, or GitHub Actions logs. Android and Tauri release
-signing private keys belong only in protected CI secrets and offline backups.
+## Tools and extensions
+
+The first release uses built-in Rust tools with typed capability descriptors.
+There is no unconstrained plugin runtime. A future extension protocol must be
+signed, capability-scoped, versioned, and disabled by default. Before activation
+it must record source, revision, license, declared capabilities, network
+destinations, executable hooks, and integrity information.
+
+## Dependency and release integrity
+
+Every change must pass the Rust format, check, test, clippy, advisory, license,
+and source-policy gates. The repository policy is in `deny.toml`; CI runs
+`cargo deny check`, and local release checks may also run `cargo audit`.
+
+Windows releases must be built from the root Cargo workspace, copied to the
+artifact directory with a SHA-256 sidecar, launched from a clean staging
+directory, and checked for a native window before they are called ready. See
+the scripts in `scripts/` and the release gates in `ROADMAP.md`.
 
 ## AI context and usage limits
 
-The desktop UI estimates context use and compacts at a threshold; the Rust bridge
-also rejects oversized messages/history and requests over a conservative input
-budget with an output reserve. Estimates are not provider billing truth because
-tokenization differs by model. Provider quotas are displayed only when returned
-by response headers/body or an official quota endpoint. Argentum must not invent
-remaining tokens, costs, resets, or plan limits.
-
-## Plugins, skills, MCP, browser, and computer use
-
-Extensions are disabled until explicitly installed/enabled. Before activation,
-Argentum must record source, immutable revision, license, declared capabilities,
-network destinations, executable hooks, and integrity information. Unknown or
-commercially incompatible licenses are blocked pending review. Computer/browser
-control requires per-session targets, visible warnings, audit logs, and explicit
-approval; it must remain off by default.
-
-## Updates and release integrity
-
-v0.0.9 checks GitHub Releases and opens the latest release page. It does not yet
-perform an in-place install or rollback and must not report either as successful.
-The planned updater requires signed artifacts, checksum/signature verification,
-atomic platform installation, persistent key custody, and a recovery path. See
-[docs/UPDATE_ARCHITECTURE.md](docs/UPDATE_ARCHITECTURE.md).
-
-Android release APKs must use one persistent signing identity. CI fails closed
-when signing secrets are missing; generating a new key for every release would
-make installed builds non-upgradeable.
-
-## Dependency tracking
-
-Current scanner findings, exploitability notes, and temporary exceptions belong
-in [SECURITY_DEPENDENCY_NOTES.md](SECURITY_DEPENDENCY_NOTES.md). Treat dates and
-upstream-version statements there as snapshots and revalidate them against the
-lockfiles and current advisories before a release.
+Context estimates are not provider billing truth because tokenization differs by
+model. Argentum must not invent remaining tokens, costs, resets, or plan limits.
+Provider quotas are displayed only when returned by a response or an official
+quota endpoint.

@@ -1,0 +1,1086 @@
+use std::env;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use argentum_cli::protocol::{ResponseEnvelope, ServerPayload, PROTOCOL_VERSION};
+use argentum_cli::server::serve_jsonl;
+use argentum_cli::{CommandHost, HostConfig};
+use argentum_domain::AppCommand;
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufReader};
+use tracing_subscriber::EnvFilter;
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    init_diagnostics();
+    match parse_args(env::args_os().skip(1)) {
+        Ok(Arguments::Help) => {
+            print_help();
+            ExitCode::SUCCESS
+        }
+        Ok(Arguments::Version) => {
+            print_version();
+            ExitCode::SUCCESS
+        }
+        Ok(arguments) => match run(arguments).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error_value) => {
+                eprintln!("argentum-cli: {error_value}");
+                ExitCode::FAILURE
+            }
+        },
+        Err(message) => {
+            eprintln!("argentum-cli: {message}");
+            eprintln!("Run 'argentum-cli help' for usage.");
+            ExitCode::from(2)
+        }
+    }
+}
+
+async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
+    match arguments {
+        Arguments::Serve(options) => {
+            let host = CommandHost::start(options.host_config()?)?;
+            serve_jsonl(
+                host,
+                BufReader::new(tokio::io::stdin()),
+                tokio::io::stdout(),
+            )
+            .await?;
+        }
+        Arguments::Run {
+            options,
+            prompt,
+            json,
+        } => {
+            let host = CommandHost::start(options.host_config()?)?;
+            let request_id = "run-1".to_owned();
+            let client = host.client();
+            let mut events = client.subscribe();
+            if json {
+                let mut stdout = tokio::io::stdout();
+                let sequence = AtomicU64::new(0);
+                write_machine_response(
+                    &mut stdout,
+                    &sequence,
+                    Some(request_id.clone()),
+                    ServerPayload::CommandAccepted,
+                )
+                .await?;
+                let command = client.dispatch(AppCommand::SubmitTask { prompt });
+                tokio::pin!(command);
+                loop {
+                    tokio::select! {
+                        result = &mut command => {
+                            let payload = match &result {
+                                Ok(()) => ServerPayload::CommandCompleted,
+                                Err(error_value) => ServerPayload::command_failed(
+                                    "command_failed",
+                                    error_value.to_string(),
+                                    true,
+                                ),
+                            };
+                            while let Ok(event) = events.try_recv() {
+                                write_machine_response(
+                                    &mut stdout,
+                                    &sequence,
+                                    None,
+                                    ServerPayload::Event { event },
+                                ).await?;
+                            }
+                            write_machine_response(
+                                &mut stdout,
+                                &sequence,
+                                Some(request_id),
+                                payload,
+                            ).await?;
+                            result?;
+                            break;
+                        }
+                        event = events.recv() => {
+                            match event {
+                                Ok(event) => write_machine_response(
+                                    &mut stdout,
+                                    &sequence,
+                                    None,
+                                    ServerPayload::Event { event },
+                                ).await?,
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                                    write_machine_response(
+                                        &mut stdout,
+                                        &sequence,
+                                        None,
+                                        ServerPayload::error(
+                                            "event_lagged",
+                                            format!("event subscriber lagged by {skipped} events"),
+                                            true,
+                                        ),
+                                    ).await?;
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {}
+                            }
+                        }
+                    }
+                }
+            } else {
+                let command = client.dispatch(AppCommand::SubmitTask { prompt });
+                tokio::pin!(command);
+                loop {
+                    tokio::select! {
+                        result = &mut command => {
+                            result?;
+                            while let Ok(event) = events.try_recv() {
+                                print_human_event(event);
+                            }
+                            break;
+                        }
+                        event = events.recv() => match event {
+                            Ok(event) => print_human_event(event),
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                                eprintln!("argentum-cli: skipped {skipped} events");
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {}
+                        }
+                    }
+                }
+            }
+        }
+        Arguments::Status { options, json } => {
+            let host = CommandHost::start(options.host_config()?)?;
+            let statuses = host.provider_statuses();
+            if json {
+                let value = serde_json::json!({
+                    "protocol_version": PROTOCOL_VERSION,
+                    "workspace": display_workspace(host.workspace_root()),
+                    "providers": statuses,
+                });
+                let mut stdout = tokio::io::stdout();
+                stdout.write_all(&serde_json::to_vec(&value)?).await?;
+                stdout.write_all(b"\n").await?;
+                stdout.flush().await?;
+            } else {
+                println!("Workspace: {}", display_workspace(host.workspace_root()));
+                if statuses.is_empty() {
+                    println!("Providers: none configured");
+                } else {
+                    for status in statuses {
+                        println!("{}", format_provider_status_human(&status));
+                    }
+                }
+            }
+        }
+        Arguments::ProviderProbe {
+            options,
+            provider_id,
+            json,
+        } => {
+            let host = CommandHost::start(options.host_config()?)?;
+            let request_id = "provider-probe-1".to_owned();
+            let client = host.client();
+            let mut events = client.subscribe();
+            if json {
+                let mut stdout = tokio::io::stdout();
+                let sequence = AtomicU64::new(0);
+                write_machine_response(
+                    &mut stdout,
+                    &sequence,
+                    Some(request_id.clone()),
+                    ServerPayload::CommandAccepted,
+                )
+                .await?;
+                let result = client
+                    .dispatch(AppCommand::ProbeProvider { provider_id })
+                    .await;
+                while let Ok(event) = events.try_recv() {
+                    write_machine_response(
+                        &mut stdout,
+                        &sequence,
+                        None,
+                        ServerPayload::Event { event },
+                    )
+                    .await?;
+                }
+                let payload = match &result {
+                    Ok(()) => ServerPayload::CommandCompleted,
+                    Err(error_value) => ServerPayload::command_failed(
+                        "command_failed",
+                        error_value.to_string(),
+                        true,
+                    ),
+                };
+                write_machine_response(&mut stdout, &sequence, Some(request_id), payload).await?;
+                result?;
+            } else {
+                let result = client
+                    .dispatch(AppCommand::ProbeProvider { provider_id })
+                    .await;
+                while let Ok(event) = events.try_recv() {
+                    print_human_event(event);
+                }
+                result?;
+            }
+        }
+        Arguments::ProviderList { options, json } => {
+            run_provider_profile_command(options, AppCommand::ListProviderProfiles, json).await?;
+        }
+        Arguments::ProviderSave {
+            options,
+            profile,
+            json,
+        } => {
+            run_provider_profile_command(
+                options,
+                AppCommand::SaveProviderProfile { profile },
+                json,
+            )
+            .await?;
+        }
+        Arguments::ProviderSelect {
+            options,
+            provider_id,
+            json,
+        } => {
+            run_provider_profile_command(
+                options,
+                AppCommand::SelectProviderProfile { provider_id },
+                json,
+            )
+            .await?;
+        }
+        Arguments::ProviderModels {
+            options,
+            provider_id,
+            json,
+        } => {
+            run_provider_models_command(options, provider_id, json).await?;
+        }
+        Arguments::ProviderModelSelect {
+            options,
+            provider_id,
+            model,
+            json,
+        } => {
+            run_provider_profile_command(
+                options,
+                AppCommand::SelectProviderModel { provider_id, model },
+                json,
+            )
+            .await?;
+        }
+        Arguments::Sessions { options, json } => {
+            let host = CommandHost::start(options.host_config()?)?;
+            print_sessions(host.workspace_snapshot()?, json).await?;
+        }
+        Arguments::SessionSelect {
+            options,
+            session_id,
+            json,
+        } => {
+            let host = CommandHost::start(options.host_config()?)?;
+            host.client()
+                .dispatch(AppCommand::SelectSession { session_id })
+                .await?;
+            print_sessions(host.workspace_snapshot()?, json).await?;
+        }
+        Arguments::Help | Arguments::Version => {
+            unreachable!("help and version exit before command execution")
+        }
+    }
+    Ok(())
+}
+
+async fn run_provider_models_command(
+    options: CommonOptions,
+    provider_id: String,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = CommandHost::start(options.host_config()?)?;
+    let client = host.client();
+    let mut events = client.subscribe();
+    client
+        .dispatch(AppCommand::ListProviderModels { provider_id })
+        .await?;
+    let mut catalog = None;
+    while let Ok(event) = events.try_recv() {
+        if let argentum_domain::AppEvent::ProviderModelsSnapshot {
+            provider_id,
+            models,
+            selected_model,
+        } = event
+        {
+            catalog = Some((provider_id, models, selected_model));
+        }
+    }
+    let (provider_id, models, selected_model) =
+        catalog.ok_or("provider command completed without a model catalog")?;
+    if json {
+        let value = serde_json::json!({
+            "provider_id": provider_id,
+            "selected_model": selected_model,
+            "models": models,
+        });
+        let mut stdout = tokio::io::stdout();
+        stdout.write_all(&serde_json::to_vec(&value)?).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
+    } else {
+        for model in models {
+            let marker = if model.id == selected_model { "*" } else { " " };
+            let context = model
+                .context_window_tokens
+                .map(|tokens| format!("  context {tokens}"))
+                .unwrap_or_default();
+            println!("{marker} {}  {}{context}", model.id, model.label);
+        }
+    }
+    Ok(())
+}
+
+async fn run_provider_profile_command(
+    options: CommonOptions,
+    command: AppCommand,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = CommandHost::start(options.host_config()?)?;
+    let client = host.client();
+    let mut events = client.subscribe();
+    client.dispatch(command).await?;
+    let mut profiles = None;
+    while let Ok(event) = events.try_recv() {
+        if let argentum_domain::AppEvent::ProviderProfilesSnapshot { profiles: snapshot } = event {
+            profiles = Some(snapshot);
+        }
+    }
+    let profiles = profiles.ok_or("provider command completed without a profile snapshot")?;
+    print_provider_profiles(&profiles, json).await
+}
+
+async fn print_provider_profiles(
+    profiles: &[argentum_domain::ProviderProfile],
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if json {
+        let mut stdout = tokio::io::stdout();
+        stdout.write_all(&serde_json::to_vec(profiles)?).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
+    } else {
+        print!("{}", format_provider_profiles_human(profiles));
+    }
+    Ok(())
+}
+
+fn format_provider_profiles_human(profiles: &[argentum_domain::ProviderProfile]) -> String {
+    let mut output = String::new();
+    for profile in profiles {
+        let marker = if profile.selected { "*" } else { " " };
+        output.push_str(&format!(
+            "{marker} {}  {}  {}  {}  {}\n",
+            profile.id,
+            profile.label,
+            provider_kind_argument(profile.kind),
+            profile.model,
+            profile.endpoint
+        ));
+    }
+    output
+}
+
+fn provider_kind_argument(kind: argentum_domain::ProviderKind) -> &'static str {
+    match kind {
+        argentum_domain::ProviderKind::LocalLmStudio => "lm-studio",
+        argentum_domain::ProviderKind::OpenAiCompatible => "openai-compatible",
+        argentum_domain::ProviderKind::Anthropic => "anthropic",
+        argentum_domain::ProviderKind::Unknown => "unknown",
+    }
+}
+
+async fn print_sessions(
+    snapshot: argentum_domain::WorkspaceSnapshot,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if json {
+        let mut stdout = tokio::io::stdout();
+        stdout.write_all(&serde_json::to_vec(&snapshot)?).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
+        return Ok(());
+    }
+    print!("{}", format_sessions_human(&snapshot));
+    Ok(())
+}
+
+fn format_sessions_human(snapshot: &argentum_domain::WorkspaceSnapshot) -> String {
+    let mut output = format!("Project: {}\n", snapshot.project.name);
+    for session in &snapshot.sessions {
+        let marker = if Some(session.id) == snapshot.active_session_id {
+            "*"
+        } else {
+            " "
+        };
+        output.push_str(&format!("{marker} {}  {}\n", session.id, session.title));
+    }
+    output
+}
+
+async fn write_machine_response<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    sequence: &AtomicU64,
+    request_id: Option<String>,
+    payload: ServerPayload,
+) -> std::io::Result<()> {
+    let sequence = sequence.fetch_add(1, Ordering::Relaxed) + 1;
+    let response = ResponseEnvelope::new(sequence, request_id, payload);
+    let mut bytes = serde_json::to_vec(&response).map_err(std::io::Error::other)?;
+    bytes.push(b'\n');
+    writer.write_all(&bytes).await?;
+    writer.flush().await
+}
+
+fn print_human_event(event: argentum_domain::AppEvent) {
+    match event {
+        argentum_domain::AppEvent::AssistantDelta { text, .. } => print!("{text}"),
+        argentum_domain::AppEvent::Error { message, .. } => eprintln!("Error: {message}"),
+        argentum_domain::AppEvent::ApprovalRequested(request) => eprintln!(
+            "Approval required: {} {} (id: {})",
+            request.action, request.target, request.id
+        ),
+        argentum_domain::AppEvent::RunStatusChanged { lifecycle, .. }
+            if lifecycle.is_terminal() =>
+        {
+            println!();
+            eprintln!("Run {}", lifecycle.label().to_lowercase());
+        }
+        argentum_domain::AppEvent::ProviderStatus(status) => {
+            println!("{}", format_provider_status_human(&status));
+        }
+        _ => {}
+    }
+}
+
+fn format_provider_status_human(status: &argentum_domain::ProviderStatus) -> String {
+    let connection = if status.connected {
+        "connected"
+    } else {
+        "disconnected"
+    };
+    if status.endpoint.is_empty() {
+        format!("{}: {connection}. {}", status.label, status.detail)
+    } else {
+        format!(
+            "{}: {connection}. {} ({})",
+            status.label, status.detail, status.endpoint
+        )
+    }
+}
+
+#[derive(Debug)]
+enum Arguments {
+    Serve(CommonOptions),
+    Run {
+        options: CommonOptions,
+        prompt: String,
+        json: bool,
+    },
+    Status {
+        options: CommonOptions,
+        json: bool,
+    },
+    ProviderProbe {
+        options: CommonOptions,
+        provider_id: String,
+        json: bool,
+    },
+    ProviderList {
+        options: CommonOptions,
+        json: bool,
+    },
+    ProviderSave {
+        options: CommonOptions,
+        profile: argentum_domain::ProviderProfile,
+        json: bool,
+    },
+    ProviderSelect {
+        options: CommonOptions,
+        provider_id: String,
+        json: bool,
+    },
+    ProviderModels {
+        options: CommonOptions,
+        provider_id: String,
+        json: bool,
+    },
+    ProviderModelSelect {
+        options: CommonOptions,
+        provider_id: String,
+        model: String,
+        json: bool,
+    },
+    Sessions {
+        options: CommonOptions,
+        json: bool,
+    },
+    SessionSelect {
+        options: CommonOptions,
+        session_id: argentum_domain::SessionId,
+        json: bool,
+    },
+    Help,
+    Version,
+}
+
+#[derive(Debug, Clone)]
+struct CommonOptions {
+    workspace: PathBuf,
+    database: Option<PathBuf>,
+    endpoint: String,
+    model: String,
+}
+
+impl Default for CommonOptions {
+    fn default() -> Self {
+        Self {
+            workspace: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            database: None,
+            endpoint: argentum_cli::DEFAULT_LM_STUDIO_ENDPOINT.into(),
+            model: argentum_cli::DEFAULT_MODEL.into(),
+        }
+    }
+}
+
+impl CommonOptions {
+    fn host_config(self) -> Result<HostConfig, Box<dyn std::error::Error>> {
+        let mut config = HostConfig::discover(self.workspace)?;
+        if let Some(database) = self.database {
+            config.database = Some(database);
+        }
+        config.provider_endpoint = self.endpoint;
+        config.model = self.model;
+        Ok(config)
+    }
+}
+
+fn parse_args<I, S>(arguments: I) -> Result<Arguments, String>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<std::ffi::OsString>,
+{
+    let values = arguments
+        .into_iter()
+        .map(|value| {
+            value
+                .into()
+                .into_string()
+                .map_err(|_| "arguments must be valid UTF-8".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let Some(command) = values.first().map(String::as_str) else {
+        return Ok(Arguments::Help);
+    };
+    if matches!(command, "help" | "--help" | "-h") {
+        return Ok(Arguments::Help);
+    }
+    if matches!(command, "version" | "--version" | "-V") {
+        return if values.len() == 1 {
+            Ok(Arguments::Version)
+        } else {
+            Err("version does not accept arguments".into())
+        };
+    }
+    let mut options = CommonOptions::default();
+    let mut json = false;
+    let mut prompt = None;
+    let mut session_action = None;
+    let mut session_id = None;
+    let mut provider_action = None;
+    let mut provider_id = None;
+    let mut provider_label = None;
+    let mut provider_kind = None;
+    let mut provider_endpoint = None;
+    let mut provider_model = None;
+    let mut select_saved_provider = false;
+    let mut index = 1;
+    while index < values.len() {
+        match values[index].as_str() {
+            "--workspace" => {
+                index += 1;
+                options.workspace = PathBuf::from(required_value(&values, index, "--workspace")?);
+            }
+            "--database" => {
+                index += 1;
+                options.database =
+                    Some(PathBuf::from(required_value(&values, index, "--database")?));
+            }
+            "--endpoint" => {
+                index += 1;
+                let value = required_value(&values, index, "--endpoint")?.to_owned();
+                if command == "provider" && provider_action.as_deref() == Some("save") {
+                    provider_endpoint = Some(value);
+                } else {
+                    options.endpoint = value;
+                }
+            }
+            "--model" => {
+                index += 1;
+                let value = required_value(&values, index, "--model")?.to_owned();
+                if command == "provider"
+                    && matches!(provider_action.as_deref(), Some("save" | "model"))
+                {
+                    provider_model = Some(value);
+                } else {
+                    options.model = value;
+                }
+            }
+            "--label" if command == "provider" => {
+                index += 1;
+                provider_label = Some(required_value(&values, index, "--label")?.to_owned());
+            }
+            "--kind" if command == "provider" => {
+                index += 1;
+                provider_kind = Some(parse_provider_kind(required_value(
+                    &values, index, "--kind",
+                )?)?);
+            }
+            "--select" if command == "provider" => select_saved_provider = true,
+            "--prompt" => {
+                index += 1;
+                prompt = Some(required_value(&values, index, "--prompt")?.to_owned());
+            }
+            "--json" => json = true,
+            unknown if unknown.starts_with('-') => {
+                return Err(format!("unknown option '{unknown}'"));
+            }
+            value if command == "run" && prompt.is_none() => prompt = Some(value.to_owned()),
+            value if command == "session" && session_action.is_none() => {
+                session_action = Some(value.to_owned())
+            }
+            value
+                if command == "session"
+                    && session_action.as_deref() == Some("select")
+                    && session_id.is_none() =>
+            {
+                session_id = Some(
+                    value
+                        .parse()
+                        .map_err(|_| "session select requires a valid session ID".to_owned())?,
+                )
+            }
+            value if command == "provider" && provider_action.is_none() => {
+                provider_action = Some(value.to_owned())
+            }
+            value
+                if command == "provider"
+                    && matches!(
+                        provider_action.as_deref(),
+                        Some("probe" | "save" | "select" | "models" | "model")
+                    )
+                    && provider_id.is_none() =>
+            {
+                provider_id = Some(value.to_owned())
+            }
+            value => return Err(format!("unexpected argument '{value}'")),
+        }
+        index += 1;
+    }
+    match command {
+        "serve" if json => Err("serve always uses JSONL; remove --json".into()),
+        "serve" if prompt.is_some() => Err("serve does not accept a prompt".into()),
+        "serve" => Ok(Arguments::Serve(options)),
+        "run" => Ok(Arguments::Run {
+            options,
+            prompt: prompt.ok_or_else(|| "run requires a prompt".to_owned())?,
+            json,
+        }),
+        "status" if prompt.is_some() => Err("status does not accept a prompt".into()),
+        "status" => Ok(Arguments::Status { options, json }),
+        "provider" if prompt.is_some() => Err("provider does not accept a prompt".into()),
+        "provider" => match provider_action.as_deref() {
+            Some("probe") => Ok(Arguments::ProviderProbe {
+                options,
+                provider_id: provider_id
+                    .unwrap_or_else(|| argentum_cli::DEFAULT_PROVIDER_ID.to_owned()),
+                json,
+            }),
+            Some("list") if provider_id.is_none() => Ok(Arguments::ProviderList { options, json }),
+            Some("save") => Ok(Arguments::ProviderSave {
+                options,
+                profile: argentum_domain::ProviderProfile {
+                    id: provider_id
+                        .ok_or_else(|| "provider save requires PROFILE_ID".to_owned())?,
+                    label: provider_label
+                        .ok_or_else(|| "provider save requires --label".to_owned())?,
+                    kind: provider_kind
+                        .ok_or_else(|| "provider save requires --kind".to_owned())?,
+                    endpoint: provider_endpoint
+                        .ok_or_else(|| "provider save requires --endpoint".to_owned())?,
+                    model: provider_model
+                        .ok_or_else(|| "provider save requires --model".to_owned())?,
+                    selected: select_saved_provider,
+                },
+                json,
+            }),
+            Some("select") => Ok(Arguments::ProviderSelect {
+                options,
+                provider_id: provider_id
+                    .ok_or_else(|| "provider select requires PROFILE_ID".to_owned())?,
+                json,
+            }),
+            Some("models") => Ok(Arguments::ProviderModels {
+                options,
+                provider_id: provider_id
+                    .ok_or_else(|| "provider models requires PROFILE_ID".to_owned())?,
+                json,
+            }),
+            Some("model") => Ok(Arguments::ProviderModelSelect {
+                options,
+                provider_id: provider_id
+                    .ok_or_else(|| "provider model requires PROFILE_ID".to_owned())?,
+                model: provider_model
+                    .ok_or_else(|| "provider model requires --model".to_owned())?,
+                json,
+            }),
+            _ => Err(
+                "provider requires 'list', 'save', 'select', 'models', 'model', or 'probe'".into(),
+            ),
+        },
+        "sessions" if prompt.is_some() => Err("sessions does not accept a prompt".into()),
+        "sessions" => Ok(Arguments::Sessions { options, json }),
+        "session" if session_action.as_deref() != Some("select") => {
+            Err("session requires 'select SESSION_ID'".into())
+        }
+        "session" => Ok(Arguments::SessionSelect {
+            options,
+            session_id: session_id
+                .ok_or_else(|| "session select requires a session ID".to_owned())?,
+            json,
+        }),
+        unknown => Err(format!("unknown command '{unknown}'")),
+    }
+}
+
+fn required_value<'a>(values: &'a [String], index: usize, option: &str) -> Result<&'a str, String> {
+    values
+        .get(index)
+        .map(String::as_str)
+        .ok_or_else(|| format!("{option} requires a value"))
+}
+
+fn parse_provider_kind(value: &str) -> Result<argentum_domain::ProviderKind, String> {
+    match value {
+        "lm-studio" => Ok(argentum_domain::ProviderKind::LocalLmStudio),
+        "openai-compatible" => Ok(argentum_domain::ProviderKind::OpenAiCompatible),
+        "anthropic" => Ok(argentum_domain::ProviderKind::Anthropic),
+        _ => Err("--kind must be lm-studio, openai-compatible, or anthropic".to_owned()),
+    }
+}
+
+fn display_workspace(path: &std::path::Path) -> String {
+    let raw = path.display().to_string();
+    if let Some(rest) = raw.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{rest}")
+    } else if let Some(rest) = raw.strip_prefix("\\\\?\\") {
+        rest.to_owned()
+    } else {
+        raw
+    }
+}
+
+fn init_diagnostics() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("argentum=warn")),
+        )
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .try_init()
+        .ok();
+}
+
+fn print_help() {
+    println!(
+        "Argentum command host\n\n\
+Usage:\n  \
+argentum-cli serve [OPTIONS]\n  \
+argentum-cli run [OPTIONS] --prompt TEXT\n  \
+argentum-cli status [OPTIONS]\n  \
+argentum-cli provider probe [PROVIDER_ID] [OPTIONS]\n  \
+argentum-cli provider list [OPTIONS]\n  \
+argentum-cli provider save PROFILE_ID --label LABEL --kind KIND --endpoint URL --model NAME [--select] [OPTIONS]\n  \
+argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
+argentum-cli provider models PROFILE_ID [OPTIONS]\n  \
+argentum-cli provider model PROFILE_ID --model NAME [OPTIONS]\n  \
+argentum-cli sessions [OPTIONS]\n  \
+argentum-cli session select SESSION_ID [OPTIONS]\n\n\
+Commands:\n  \
+serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
+run     Submit one task and stream its output\n  \
+status  Show workspace and configured provider information\n  \
+provider Manage and test workspace provider profiles\n  \
+sessions List durable sessions for the current workspace\n  \
+session  Select the active session for the current workspace\n\n\
+Options:\n  \
+--workspace PATH   Workspace boundary, defaults to the current directory\n  \
+--database PATH    SQLite database path, defaults to Argentum application data\n  \
+--endpoint URL     OpenAI-compatible LM Studio endpoint\n  \
+--model NAME       Provider model name\n  \
+--label LABEL      Display label for provider save\n  \
+--kind KIND        lm-studio, openai-compatible, or anthropic\n  \
+--select           Select a profile when saving it\n  \
+--json             Emit machine-readable output for run, status, provider, or sessions\n  \
+-V, --version      Print the Argentum CLI version"
+    );
+}
+
+fn print_version() {
+    println!("{}", version_line());
+}
+
+fn version_line() -> String {
+    format!("argentum-cli {}", env!("CARGO_PKG_VERSION"))
+}
+
+#[cfg(test)]
+mod tests {
+    use argentum_cli::protocol::RequestEnvelope;
+
+    use super::*;
+
+    #[test]
+    fn parses_run_and_common_options() {
+        let parsed = parse_args([
+            "run",
+            "--workspace",
+            "workspace",
+            "--database",
+            "state.db",
+            "--json",
+            "--prompt",
+            "inspect",
+        ])
+        .expect("arguments");
+        match parsed {
+            Arguments::Run {
+                options,
+                prompt,
+                json,
+            } => {
+                assert_eq!(options.workspace, PathBuf::from("workspace"));
+                assert_eq!(options.database, Some(PathBuf::from("state.db")));
+                assert_eq!(prompt, "inspect");
+                assert!(json);
+            }
+            argument => panic!("unexpected arguments: {argument:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_missing_values_and_unknown_options() {
+        assert!(parse_args(["run", "--prompt"]).is_err());
+        assert!(parse_args(["status", "--unknown"]).is_err());
+    }
+
+    #[test]
+    fn parses_version_and_session_commands() {
+        assert!(matches!(
+            parse_args(["--version"]).expect("version"),
+            Arguments::Version
+        ));
+        assert!(matches!(
+            parse_args(["version"]).expect("version subcommand"),
+            Arguments::Version
+        ));
+        assert!(matches!(
+            parse_args(["sessions", "--json"]).expect("sessions"),
+            Arguments::Sessions { json: true, .. }
+        ));
+        let session_id = "00000000-0000-0000-0000-000000000071";
+        assert!(matches!(
+            parse_args(["session", "select", session_id]).expect("session select"),
+            Arguments::SessionSelect { session_id: parsed, .. }
+                if parsed.to_string() == session_id
+        ));
+        assert!(parse_args(["version", "extra"]).is_err());
+        assert!(parse_args(["session", "select", "invalid"]).is_err());
+        assert_eq!(version_line(), "argentum-cli 0.1.0");
+    }
+
+    #[test]
+    fn parses_provider_probe_with_default_and_explicit_ids() {
+        assert!(matches!(
+            parse_args(["provider", "probe"]).expect("default provider probe"),
+            Arguments::ProviderProbe { provider_id, json: false, .. }
+                if provider_id == argentum_cli::DEFAULT_PROVIDER_ID
+        ));
+        assert!(matches!(
+            parse_args([
+                "provider",
+                "probe",
+                "openai-compatible",
+                "--endpoint",
+                "http://127.0.0.1:8080/v1",
+                "--json",
+            ])
+            .expect("explicit provider probe"),
+            Arguments::ProviderProbe { options, provider_id, json: true }
+                if provider_id == "openai-compatible"
+                    && options.endpoint == "http://127.0.0.1:8080/v1"
+        ));
+        assert!(parse_args(["provider"]).is_err());
+        assert!(parse_args(["provider", "status"]).is_err());
+        assert!(parse_args(["provider", "probe", "one", "two"]).is_err());
+    }
+
+    #[test]
+    fn parses_provider_profile_commands() {
+        assert!(matches!(
+            parse_args(["provider", "list", "--json"]).expect("provider list"),
+            Arguments::ProviderList { json: true, .. }
+        ));
+        assert!(matches!(
+            parse_args([
+                "provider",
+                "save",
+                "local-secondary",
+                "--label",
+                "Secondary local",
+                "--kind",
+                "lm-studio",
+                "--endpoint",
+                "http://127.0.0.1:5678/v1",
+                "--model",
+                "secondary-model",
+                "--select",
+                "--json",
+            ])
+            .expect("provider save"),
+            Arguments::ProviderSave { profile, json: true, .. }
+                if profile.id == "local-secondary"
+                    && profile.label == "Secondary local"
+                    && profile.kind == argentum_domain::ProviderKind::LocalLmStudio
+                    && profile.selected
+        ));
+        assert!(matches!(
+            parse_args(["provider", "select", "local-secondary"])
+                .expect("provider select"),
+            Arguments::ProviderSelect { provider_id, .. }
+                if provider_id == "local-secondary"
+        ));
+        assert!(matches!(
+            parse_args(["provider", "models", "deepseek", "--json"])
+                .expect("provider models"),
+            Arguments::ProviderModels { provider_id, json: true, .. }
+                if provider_id == "deepseek"
+        ));
+        assert!(matches!(
+            parse_args([
+                "provider",
+                "model",
+                "deepseek",
+                "--model",
+                "deepseek-chat",
+                "--json",
+            ])
+            .expect("provider model selection"),
+            Arguments::ProviderModelSelect { provider_id, model, json: true, .. }
+                if provider_id == "deepseek" && model == "deepseek-chat"
+        ));
+        assert!(parse_args(["provider", "model", "deepseek"]).is_err());
+        assert!(parse_args(["provider", "save", "missing-fields"]).is_err());
+        assert!(parse_args([
+            "provider",
+            "save",
+            "bad-kind",
+            "--label",
+            "Bad",
+            "--kind",
+            "unknown",
+            "--endpoint",
+            "https://example.test/v1",
+            "--model",
+            "test",
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn formats_selected_provider_profile_for_human_output() {
+        let profiles = vec![argentum_domain::ProviderProfile {
+            id: "local-secondary".into(),
+            label: "Secondary local".into(),
+            kind: argentum_domain::ProviderKind::LocalLmStudio,
+            endpoint: "http://127.0.0.1:5678/v1/".into(),
+            model: "secondary-model".into(),
+            selected: true,
+        }];
+
+        assert_eq!(
+            format_provider_profiles_human(&profiles),
+            "* local-secondary  Secondary local  lm-studio  secondary-model  http://127.0.0.1:5678/v1/\n"
+        );
+    }
+
+    #[test]
+    fn formats_truthful_provider_connection_state() {
+        let connected = argentum_domain::ProviderStatus {
+            profile_id: "lm-studio".into(),
+            kind: argentum_domain::ProviderKind::LocalLmStudio,
+            label: "LM Studio".into(),
+            endpoint: "http://127.0.0.1:1234/v1/".into(),
+            connected: true,
+            detail: "Reachable; configured model: local/model".into(),
+        };
+        let disconnected = argentum_domain::ProviderStatus {
+            profile_id: "missing".into(),
+            kind: argentum_domain::ProviderKind::Unknown,
+            label: "missing".into(),
+            endpoint: String::new(),
+            connected: false,
+            detail: "Not configured".into(),
+        };
+
+        assert!(format_provider_status_human(&connected).contains("connected"));
+        assert!(format_provider_status_human(&connected).contains("127.0.0.1"));
+        assert_eq!(
+            format_provider_status_human(&disconnected),
+            "missing: disconnected. Not configured"
+        );
+    }
+
+    #[test]
+    fn formats_the_active_session_for_human_output() {
+        let project_id = "00000000-0000-0000-0000-000000000081"
+            .parse()
+            .expect("project id");
+        let session_id = "00000000-0000-0000-0000-000000000082"
+            .parse()
+            .expect("session id");
+        let timestamp = argentum_domain::now();
+        let snapshot = argentum_domain::WorkspaceSnapshot {
+            project: argentum_domain::Project {
+                id: project_id,
+                name: "Workspace".into(),
+                workspace_root: PathBuf::from("workspace"),
+                created_at: timestamp,
+            },
+            sessions: vec![argentum_domain::SessionSummary {
+                id: session_id,
+                title: "Inspect workspace".into(),
+                created_at: timestamp,
+                updated_at: timestamp,
+            }],
+            active_session_id: Some(session_id),
+        };
+
+        assert_eq!(
+            format_sessions_human(&snapshot),
+            format!("Project: Workspace\n* {session_id}  Inspect workspace\n")
+        );
+    }
+
+    #[test]
+    fn builds_protocol_request_shape_used_by_serve_clients() {
+        let request = RequestEnvelope::command("test", AppCommand::NewSession);
+        assert_eq!(request.protocol_version, PROTOCOL_VERSION);
+        assert!(request.validate().is_ok());
+    }
+}

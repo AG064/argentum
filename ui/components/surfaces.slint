@@ -1,0 +1,760 @@
+import { AgTheme } from "../tokens.slint";
+import { AgIcon } from "icon.slint";
+
+export component SettingsField inherits Rectangle {
+    in property <string> label: "";
+    in property <string> placeholder: "";
+    in property <string> error: "";
+    in property <bool> enabled: true;
+    in property <length> field-height: AgTheme.control-height;
+    in-out property <string> value: "";
+    out property <bool> has-focus: editor.has-focus;
+    callback edited(string);
+
+    height: root.error == ""
+        ? root.field-height + AgTheme.space-7
+        : root.field-height + AgTheme.space-12;
+    background: transparent;
+    forward-focus: editor;
+
+    VerticalLayout {
+        spacing: AgTheme.space-1;
+
+        Text {
+            text: root.label;
+            color: root.enabled ? AgTheme.text-secondary : AgTheme.text-tertiary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-semibold;
+        }
+
+        field-frame := Rectangle {
+            height: root.field-height;
+            border-radius: AgTheme.radius-md;
+            border-width: AgTheme.hairline;
+            border-color: root.error != ""
+                ? AgTheme.red-600
+                : (editor.has-focus ? AgTheme.focus-ring : AgTheme.border-default);
+            background: root.enabled ? AgTheme.control-fill : AgTheme.control-disabled;
+
+            Text {
+                visible: root.value == "";
+                x: AgTheme.space-3;
+                width: parent.width - AgTheme.space-6;
+                height: parent.height;
+                text: root.placeholder;
+                color: AgTheme.text-tertiary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            editor := TextInput {
+                x: AgTheme.space-3;
+                width: parent.width - AgTheme.space-6;
+                height: parent.height;
+                text: root.value;
+                color: root.enabled ? AgTheme.text-primary : AgTheme.text-tertiary;
+                selection-foreground-color: AgTheme.white-000;
+                selection-background-color: AgTheme.silver-700;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                single-line: true;
+                enabled: root.enabled;
+                accessible-label: root.label;
+                edited => {
+                    root.value = self.text;
+                    root.edited(self.text);
+                }
+            }
+        }
+
+        Text {
+            visible: root.error != "";
+            text: root.error;
+            color: AgTheme.text-danger;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            wrap: word-wrap;
+            overflow: elide;
+            accessible-role: text;
+        }
+    }
+}
+
+export component ContextButton inherits Rectangle {
+    in property <string> icon: "";
+    in property <string> label: "";
+    in property <string> detail: "";
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <bool> reduced-motion: false;
+    in property <length> target-height: AgTheme.control-height;
+    out property <bool> has-focus: key-focus.has-focus;
+    out property <bool> pressed: root.enabled && touch.pressed;
+    callback clicked();
+
+    height: root.target-height;
+    min-width: max(AgTheme.control-min-width, content.min-width);
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: !root.enabled
+        ? AgTheme.border-subtle
+        : (root.has-focus
+            ? AgTheme.focus-ring
+            : (root.selected
+                ? AgTheme.border-strong
+                : (touch.has-hover ? AgTheme.border-strong : AgTheme.border-default)));
+    background: !root.enabled
+        ? AgTheme.control-disabled
+        : (touch.pressed
+            ? AgTheme.control-pressed
+            : (root.selected
+                ? AgTheme.control-selected
+                : (touch.has-hover ? AgTheme.control-hover : AgTheme.control-fill)));
+    forward-focus: key-focus;
+    accessible-role: button;
+    accessible-label: root.label == ""
+        ? root.detail
+        : (root.detail == "" ? root.label : root.label + ": " + root.detail);
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    content := HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-2;
+        alignment: center;
+
+        Rectangle {
+            visible: root.icon != "";
+            width: AgTheme.icon-control;
+            vertical-stretch: 1;
+            background: transparent;
+
+            AgIcon {
+                x: 0px;
+                y: (parent.height - self.height) / 2;
+                name: root.icon;
+                size: AgTheme.icon-control;
+                tint: !root.enabled
+                    ? AgTheme.text-tertiary
+                    : (root.selected || touch.has-hover || root.has-focus
+                        ? AgTheme.text-primary
+                        : AgTheme.silver-400);
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-none;
+            alignment: center;
+
+            Text {
+                visible: root.label != "";
+                text: root.label;
+                color: root.enabled ? AgTheme.text-muted : AgTheme.text-tertiary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-metadata;
+                font-weight: AgTheme.weight-medium;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.detail;
+                color: !root.enabled
+                    ? AgTheme.text-tertiary
+                    : (root.selected ? AgTheme.text-strong : AgTheme.text-secondary);
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                font-weight: root.selected ? AgTheme.weight-semibold : AgTheme.weight-medium;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Rectangle {
+            width: AgTheme.icon-inline;
+            vertical-stretch: 1;
+            background: transparent;
+
+            AgIcon {
+                x: 0px;
+                y: (parent.height - self.height) / 2;
+                name: "chevron-down";
+                size: AgTheme.icon-inline;
+                tint: root.enabled ? AgTheme.text-muted : AgTheme.text-tertiary;
+            }
+        }
+    }
+
+    if root.has-focus && root.enabled: Rectangle {
+        x: AgTheme.space-1;
+        y: AgTheme.space-1;
+        width: parent.width - AgTheme.space-2;
+        height: parent.height - AgTheme.space-2;
+        border-radius: AgTheme.radius-xs;
+        border-width: AgTheme.hairline;
+        border-color: AgTheme.focus-ring-inner;
+        background: transparent;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component MenuRow inherits Rectangle {
+    in property <string> icon: "";
+    in property <string> label: "";
+    in property <string> detail: "";
+    in property <string> shortcut: "";
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <bool> reduced-motion: false;
+    out property <bool> has-focus: key-focus.has-focus;
+    out property <bool> pressed: root.enabled && touch.pressed;
+    callback clicked();
+
+    height: root.detail == "" ? AgTheme.control-height : AgTheme.control-height + AgTheme.space-3;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: root.has-focus && root.enabled ? AgTheme.focus-ring : transparent;
+    background: !root.enabled
+        ? transparent
+        : (touch.pressed
+            ? AgTheme.control-pressed
+            : (root.active
+                ? AgTheme.surface-line
+                : (touch.has-hover ? AgTheme.control-hover : transparent)));
+    forward-focus: key-focus;
+    accessible-role: button;
+    accessible-label: root.detail == "" ? root.label : root.label + ". " + root.detail;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    if root.active: Rectangle {
+        x: 0px;
+        y: AgTheme.space-2;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - AgTheme.space-4;
+        border-radius: 0px;
+        background: AgTheme.state-active;
+    }
+
+    HorizontalLayout {
+        padding-left: root.active ? AgTheme.space-4 : AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            visible: root.icon != "";
+            width: AgTheme.icon-control;
+            vertical-stretch: 1;
+            background: transparent;
+
+            AgIcon {
+                x: 0px;
+                y: (parent.height - self.height) / 2;
+                name: root.icon;
+                size: AgTheme.icon-control;
+                tint: !root.enabled
+                    ? AgTheme.text-tertiary
+                    : (root.active || touch.has-hover || root.has-focus
+                        ? AgTheme.text-primary
+                        : AgTheme.silver-400);
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.label;
+                color: !root.enabled
+                    ? AgTheme.text-tertiary
+                    : (root.active ? AgTheme.text-strong : AgTheme.text-secondary);
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                font-weight: root.active ? AgTheme.weight-semibold : AgTheme.weight-medium;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                visible: root.detail != "";
+                text: root.detail;
+                color: root.enabled ? AgTheme.text-muted : AgTheme.text-tertiary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-regular;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            visible: root.shortcut != "";
+            text: root.shortcut;
+            color: root.enabled ? AgTheme.text-muted : AgTheme.text-tertiary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-metadata;
+            font-weight: AgTheme.weight-medium;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+
+    if root.has-focus && root.enabled: Rectangle {
+        x: AgTheme.space-1;
+        y: AgTheme.space-1;
+        width: parent.width - AgTheme.space-2;
+        height: parent.height - AgTheme.space-2;
+        border-radius: AgTheme.radius-xs;
+        border-width: AgTheme.hairline;
+        border-color: AgTheme.focus-ring-inner;
+        background: transparent;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component SectionHeading inherits Rectangle {
+    in property <string> label: "";
+    in property <string> detail: "";
+
+    height: AgTheme.space-8;
+    background: transparent;
+    accessible-role: text;
+    accessible-label: root.detail == "" ? root.label : root.label + ". " + root.detail;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-2;
+        alignment: stretch;
+
+        Text {
+            text: root.label;
+            color: AgTheme.text-secondary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-body;
+            font-weight: AgTheme.weight-semibold;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+
+        Rectangle {
+            height: AgTheme.hairline;
+            horizontal-stretch: 1;
+            background: AgTheme.border-subtle;
+        }
+
+        Text {
+            visible: root.detail != "";
+            text: root.detail;
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-metadata;
+            font-weight: AgTheme.weight-medium;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}
+
+export component ContextUsagePanel inherits Rectangle {
+    in property <bool> usage-reported: false;
+    in property <int> input-tokens: 0;
+    in property <int> output-tokens: 0;
+    in property <int> total-tokens: 0;
+    in property <bool> context-window-reported: false;
+    in property <int> context-window-tokens: 0;
+
+    private property <bool> complete-context: root.usage-reported
+        && root.context-window-reported
+        && root.context-window-tokens > 0;
+    private property <float> usage-fraction: root.complete-context
+        ? min(1, max(0, root.total-tokens * 1.0 / root.context-window-tokens))
+        : 0;
+
+    height: AgTheme.context-usage-panel-height;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: AgTheme.border-subtle;
+    background: AgTheme.surface-soft;
+    accessible-role: text;
+    accessible-label: !root.usage-reported
+        ? "Usage not reported"
+        : (root.complete-context
+            ? root.total-tokens + " of " + root.context-window-tokens + " context tokens. "
+                + root.input-tokens + " input tokens. " + root.output-tokens + " output tokens."
+            : "Context limit unknown. " + root.input-tokens + " input tokens. "
+                + root.output-tokens + " output tokens. " + root.total-tokens + " total tokens.");
+
+    VerticalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        padding-top: AgTheme.space-2;
+        padding-bottom: AgTheme.space-2;
+        spacing: AgTheme.space-1;
+
+        HorizontalLayout {
+            spacing: AgTheme.space-2;
+
+            Text {
+                text: "Context usage";
+                color: AgTheme.text-secondary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-semibold;
+                vertical-alignment: center;
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            Text {
+                text: !root.usage-reported
+                    ? "Usage not reported"
+                    : (root.complete-context
+                        ? root.total-tokens + " / " + root.context-window-tokens + " tokens"
+                        : "Context limit unknown");
+                color: root.complete-context ? AgTheme.text-secondary : AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: root.complete-context ? AgTheme.weight-semibold : AgTheme.weight-medium;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        Text {
+            visible: root.usage-reported;
+            text: root.complete-context
+                ? root.input-tokens + " input | " + root.output-tokens + " output"
+                : root.input-tokens + " input | " + root.output-tokens + " output | "
+                    + root.total-tokens + " total";
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-metadata;
+            font-weight: AgTheme.weight-regular;
+            overflow: elide;
+        }
+
+        if root.complete-context: Rectangle {
+            height: AgTheme.space-1;
+            border-radius: 0px;
+            background: AgTheme.control-fill;
+            clip: true;
+
+            Rectangle {
+                width: parent.width * root.usage-fraction;
+                height: parent.height;
+                border-radius: 0px;
+                background: root.usage-fraction >= 0.9 ? AgTheme.red-400 : AgTheme.silver-400;
+            }
+        }
+    }
+}
+
+export component StepRow inherits Rectangle {
+    in property <string> state: "upcoming";
+    in property <string> number: "";
+    in property <string> label: "";
+    in property <string> detail: "";
+
+    private property <bool> active-state: root.state == "active" || root.state == "running";
+    private property <bool> complete-state: root.state == "done"
+        || root.state == "complete"
+        || root.state == "success"
+        || root.state == "passed";
+    private property <bool> attention-state: root.state == "blocked"
+        || root.state == "error"
+        || root.state == "failed"
+        || root.state == "attention";
+
+    height: root.detail == "" ? AgTheme.space-12 : AgTheme.space-16;
+    background: transparent;
+    accessible-role: list-item;
+    accessible-label: root.number + ". " + root.label + ". " + root.state
+        + (root.detail == "" ? "" : ". " + root.detail);
+
+    HorizontalLayout {
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: AgTheme.step-marker-size;
+            background: transparent;
+
+            Rectangle {
+                x: (parent.width - AgTheme.hairline) / 2;
+                y: 0px;
+                width: AgTheme.hairline;
+                height: parent.height;
+                background: root.attention-state
+                    ? AgTheme.red-600
+                    : (root.active-state ? AgTheme.border-strong : AgTheme.border-subtle);
+            }
+
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: AgTheme.step-marker-size;
+                height: AgTheme.step-marker-size;
+                border-radius: AgTheme.radius-sm;
+                border-width: AgTheme.hairline;
+                border-color: root.attention-state
+                    ? AgTheme.state-attention
+                    : (root.complete-state
+                        ? AgTheme.silver-400
+                        : (root.active-state ? AgTheme.state-active : AgTheme.border-strong));
+                background: root.attention-state
+                    ? AgTheme.attention-surface
+                    : (root.complete-state ? AgTheme.surface-line : AgTheme.navigation);
+
+                if root.complete-state: AgIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: "check";
+                    size: AgTheme.icon-inline;
+                    tint: AgTheme.state-complete;
+                }
+
+                if root.attention-state: Text {
+                    text: "!";
+                    color: AgTheme.red-100;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-body;
+                    font-weight: AgTheme.weight-title;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                if root.active-state: Rectangle {
+                    x: AgTheme.space-2;
+                    y: AgTheme.space-2;
+                    width: AgTheme.space-2;
+                    height: AgTheme.space-2;
+                    border-radius: AgTheme.radius-xs;
+                    background: AgTheme.state-active;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+            horizontal-stretch: 1;
+
+            HorizontalLayout {
+                spacing: AgTheme.space-2;
+
+                Text {
+                    text: root.number;
+                    color: root.attention-state ? AgTheme.red-100 : AgTheme.text-muted;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-metadata;
+                    font-weight: AgTheme.weight-semibold;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.label;
+                    color: root.attention-state
+                        ? AgTheme.red-100
+                        : (root.active-state
+                            ? AgTheme.text-strong
+                            : (root.complete-state ? AgTheme.text-secondary : AgTheme.silver-400));
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-body;
+                    font-weight: root.active-state || root.attention-state
+                        ? AgTheme.weight-semibold
+                        : AgTheme.weight-medium;
+                    overflow: elide;
+                }
+            }
+
+            Text {
+                visible: root.detail != "";
+                text: root.detail;
+                color: root.attention-state ? AgTheme.red-100 : AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-regular;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+export component PlanCell inherits Rectangle {
+    in property <string> index: "";
+    in property <string> label: "";
+    in property <string> detail: "";
+    in property <string> state: "upcoming";
+
+    private property <bool> active-state: root.state == "active" || root.state == "running";
+    private property <bool> complete-state: root.state == "done"
+        || root.state == "complete"
+        || root.state == "success"
+        || root.state == "passed";
+    private property <bool> attention-state: root.state == "blocked"
+        || root.state == "error"
+        || root.state == "failed"
+        || root.state == "attention";
+
+    height: AgTheme.space-16;
+    border-radius: AgTheme.radius-md;
+    border-width: root.active-state || root.attention-state ? AgTheme.hairline : 0px;
+    border-color: root.attention-state ? AgTheme.red-600 : AgTheme.border-default;
+    background: root.attention-state
+        ? AgTheme.attention-surface
+        : (root.active-state ? AgTheme.surface-soft : transparent);
+    accessible-role: list-item;
+    accessible-label: root.index + ". " + root.label + ". " + root.state
+        + (root.detail == "" ? "" : ". " + root.detail);
+
+    if root.active-state || root.attention-state: Rectangle {
+        x: 0px;
+        y: AgTheme.space-2;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - AgTheme.space-4;
+        border-radius: 0px;
+        background: root.attention-state ? AgTheme.state-attention : AgTheme.state-active;
+    }
+
+    VerticalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        padding-top: AgTheme.space-2;
+        padding-bottom: AgTheme.space-2;
+        spacing: AgTheme.space-1;
+        alignment: center;
+
+        HorizontalLayout {
+            spacing: AgTheme.space-2;
+
+            Text {
+                text: root.index;
+                color: root.attention-state ? AgTheme.red-100 : AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-metadata;
+                font-weight: AgTheme.weight-semibold;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.label;
+                color: root.attention-state
+                    ? AgTheme.red-100
+                    : (root.active-state ? AgTheme.text-strong : AgTheme.text-secondary);
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                font-weight: root.active-state || root.attention-state
+                    ? AgTheme.weight-semibold
+                    : AgTheme.weight-medium;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+
+            if root.complete-state: Rectangle {
+                width: AgTheme.icon-inline;
+                vertical-stretch: 1;
+                background: transparent;
+
+                AgIcon {
+                    x: 0px;
+                    y: (parent.height - self.height) / 2;
+                    name: "check";
+                    size: AgTheme.icon-inline;
+                    tint: AgTheme.state-complete;
+                }
+            }
+
+            if root.attention-state: Text {
+                text: "!";
+                color: AgTheme.red-100;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+                font-weight: AgTheme.weight-title;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.detail;
+            color: root.attention-state ? AgTheme.red-100 : AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-regular;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+}

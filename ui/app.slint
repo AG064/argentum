@@ -1,0 +1,2599 @@
+import { ScrollView } from "std-widgets.slint";
+import { ActionButton, IconButton } from "components/buttons.slint";
+import { AgIcon } from "components/icon.slint";
+import { BrandLockup, BrandMark } from "components/brand.slint";
+import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsField } from "components/surfaces.slint";
+import { MobileShell } from "shells/mobile.slint";
+import { ConversationSurface } from "surfaces/conversation.slint";
+import { ActivityItemView, ConversationMessageView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
+import { AgTheme } from "tokens.slint";
+
+component RailSettingsButton inherits Rectangle {
+    in property <bool> reduced-motion: false;
+    out property <bool> has-focus: rail-settings-focus.has-focus;
+    callback clicked();
+
+    height: 44px;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: root.has-focus ? AgTheme.focus-ring : transparent;
+    background: rail-settings-touch.pressed
+        ? AgTheme.control-pressed
+        : (rail-settings-touch.has-hover ? AgTheme.control-hover : transparent);
+    accessible-role: button;
+    accessible-label: "Settings";
+    accessible-action-default => { root.clicked(); }
+    forward-focus: rail-settings-focus;
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: 20px;
+            background: transparent;
+
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: "sliders";
+                size: 18px;
+                tint: rail-settings-touch.has-hover ? AgTheme.white-100 : AgTheme.silver-400;
+            }
+        }
+
+        Text { text: "Settings"; color: AgTheme.text-secondary; font-size: AgTheme.type-body; font-weight: AgTheme.weight-medium; vertical-alignment: center; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+
+    rail-settings-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            rail-settings-focus.focus();
+            root.clicked();
+        }
+    }
+
+    rail-settings-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+component SessionItem inherits Rectangle {
+    in property <bool> active: false;
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> reduced-motion: false;
+    out property <bool> has-focus: key-focus.has-focus;
+    callback clicked();
+
+    height: AgTheme.space-16;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: root.has-focus
+        ? AgTheme.focus-ring
+        : (root.active ? AgTheme.border-subtle : transparent);
+    background: root.active
+        ? AgTheme.surface-soft
+        : (touch.pressed ? AgTheme.elevated : (touch.has-hover ? AgTheme.hover : transparent));
+    accessible-role: button;
+    accessible-label: root.title + ", " + root.detail;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: key-focus;
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    if root.active: Rectangle {
+        x: 0px;
+        y: 10px;
+        width: 2px;
+        height: parent.height - 20px;
+        background: AgTheme.silver-300;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: 30px;
+            background: transparent;
+
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: "session";
+                size: 18px;
+                tint: root.active ? AgTheme.silver-200 : AgTheme.silver-500;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+
+            Text {
+                text: root.title;
+                color: root.active ? AgTheme.white-100 : AgTheme.text-secondary;
+                font-size: AgTheme.type-body;
+                font-weight: root.active ? AgTheme.weight-semibold : AgTheme.weight-medium;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.detail;
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+component StateBadge inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> attention: false;
+    in property <bool> reduced-motion: false;
+
+    height: 30px;
+    min-width: 86px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: root.attention
+        ? AgTheme.red-600
+        : (root.active ? AgTheme.silver-500 : AgTheme.silver-700);
+    background: root.attention ? AgTheme.attention-surface : AgTheme.chrome;
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-2;
+        alignment: center;
+
+        Rectangle {
+            width: 3px;
+            background: transparent;
+
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                width: 3px;
+                height: 14px;
+                background: root.attention
+                    ? AgTheme.red-400
+                    : (root.active ? AgTheme.white-100 : AgTheme.silver-500);
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: root.attention ? AgTheme.red-100 : AgTheme.text-secondary;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-semibold;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component ActivityItem inherits Rectangle {
+    in property <ActivityItemView> item;
+
+    height: AgTheme.space-16;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-xs;
+    background: item-touch.has-hover ? AgTheme.hover : transparent;
+
+    Rectangle {
+        x: 0px;
+        y: 9px;
+        width: 2px;
+        height: parent.height - 18px;
+        background: root.item.state == "error" || root.item.state == "attention"
+            ? AgTheme.red-500
+            : AgTheme.silver-700;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        padding-top: AgTheme.space-2;
+        padding-bottom: AgTheme.space-2;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: 28px;
+            background: transparent;
+
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: root.item.state == "success"
+                    ? "check"
+                    : ((root.item.state == "error" || root.item.state == "attention") ? "alert" : "activity");
+                size: 14px;
+                tint: root.item.state == "error" || root.item.state == "attention"
+                    ? AgTheme.red-400
+                    : AgTheme.silver-400;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+
+            Text {
+                text: root.item.title;
+                color: AgTheme.text-secondary;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-medium;
+                wrap: word-wrap;
+            }
+
+            Text {
+                text: root.item.detail;
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    item-touch := TouchArea { mouse-cursor: default; }
+}
+
+component Composer inherits Rectangle {
+    in-out property <string> draft: "";
+    in property <string> provider-label: "LM Studio";
+    in property <string> workspace-label: "Local workspace";
+    in property <bool> running: false;
+    in property <bool> approval-pending: false;
+    in property <bool> submission-pending: false;
+    in property <string> active-run-id: "";
+    in property <bool> reduced-motion: false;
+    callback submit(string);
+    callback cancel(string);
+    callback open-model();
+    callback open-context();
+
+    height: root.width < AgTheme.composer-compact-breakpoint ? 128px : 116px;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: editor.has-focus ? AgTheme.red-600 : AgTheme.silver-700;
+    background: AgTheme.navigation;
+    clip: true;
+
+    Rectangle {
+        x: 12px;
+        y: 0px;
+        width: editor.has-focus ? 48px : 28px;
+        height: 2px;
+        background: editor.has-focus ? AgTheme.red-500 : AgTheme.silver-600;
+    }
+
+    Text {
+        visible: root.draft == "";
+        x: 16px;
+        y: 14px;
+        width: parent.width - 32px;
+        height: 34px;
+        text: "Describe a task or ask a question";
+        color: AgTheme.text-muted;
+        font-size: AgTheme.type-body;
+        vertical-alignment: top;
+    }
+
+    editor := TextInput {
+        x: 16px;
+        y: 12px;
+        width: parent.width - 32px;
+        height: root.width < AgTheme.composer-compact-breakpoint ? 54px : 46px;
+        text <=> root.draft;
+        color: AgTheme.white-100;
+        selection-foreground-color: AgTheme.white-000;
+        selection-background-color: AgTheme.silver-700;
+        font-size: AgTheme.type-body;
+        font-weight: AgTheme.weight-regular;
+        single-line: false;
+        wrap: word-wrap;
+        enabled: !root.approval-pending && !root.submission-pending;
+        accessible-label: "Task prompt";
+        key-pressed(event) => {
+            if event.text == "\n"
+                && !event.modifiers.shift
+                && !root.running
+                && root.draft != ""
+            {
+                root.submit(root.draft);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Rectangle {
+        x: 12px;
+        y: root.width < AgTheme.composer-compact-breakpoint ? 69px : 58px;
+        width: parent.width - 24px;
+        height: 1px;
+        background: AgTheme.border-subtle;
+    }
+
+    HorizontalLayout {
+        x: 8px;
+        y: root.width < AgTheme.composer-compact-breakpoint ? 74px : 63px;
+        width: parent.width - 16px;
+        height: 46px;
+        spacing: AgTheme.space-2;
+        alignment: stretch;
+
+        ContextButton {
+            icon: "model";
+            label: "Model";
+            detail: root.provider-label;
+            reduced-motion: root.reduced-motion;
+            clicked => { root.open-model(); }
+        }
+
+        if root.width >= AgTheme.composer-context-actions-breakpoint: ContextButton {
+            icon: "folder";
+            label: "Scope";
+            detail: root.workspace-label;
+            reduced-motion: root.reduced-motion;
+            clicked => { root.open-context(); }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        ActionButton {
+            label: root.approval-pending ? "Approval needed" : (root.submission-pending ? "Starting" : (root.running ? "Stop" : "Start"));
+            icon: root.running ? "stop" : "play";
+            enabled: !root.approval-pending && !root.submission-pending && (root.running || root.draft != "");
+            primary: !root.running;
+            fill: root.running ? AgTheme.raised : AgTheme.primary-fill;
+            outline-color: root.running ? AgTheme.border-strong : AgTheme.primary-hover;
+            reduced-motion: root.reduced-motion;
+            clicked => {
+                if root.running {
+                    root.cancel(root.active-run-id);
+                } else {
+                    root.submit(root.draft);
+                }
+            }
+        }
+    }
+}
+
+component PanelHeader inherits Rectangle {
+    in property <string> icon: "";
+    in property <bool> brand: false;
+    in property <string> title;
+    in property <string> detail: "";
+    callback close();
+
+    height: 56px;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            visible: root.brand || root.icon != "";
+            width: 24px;
+            background: transparent;
+
+            if root.brand: BrandMark {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                size: AgTheme.brand-mark-sm;
+                accessible-name: "";
+            }
+
+            if !root.brand && root.icon != "": AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: root.icon;
+                size: AgTheme.icon-navigation;
+                tint: AgTheme.silver-300;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.optical-tight-gap;
+            alignment: center;
+            Text { text: root.title; color: AgTheme.white-100; font-size: AgTheme.type-section-title; font-weight: AgTheme.weight-title; }
+            Text { visible: root.detail != ""; text: root.detail; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        Rectangle {
+            width: AgTheme.control-height;
+            background: transparent;
+
+            IconButton {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                glyph: "close";
+                hint: "Close " + root.title;
+                clicked => { root.close(); }
+            }
+        }
+    }
+}
+
+component HeaderAction inherits Rectangle {
+    in property <string> glyph;
+    in property <string> hint;
+    in property <bool> selected: false;
+    in property <bool> reduced-motion: false;
+    in property <length> target-size: AgTheme.control-height;
+    callback clicked();
+
+    width: root.target-size;
+    height: AgTheme.header-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    background: transparent;
+
+    IconButton {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        glyph: root.glyph;
+        hint: root.hint;
+        selected: root.selected;
+        reduced-motion: root.reduced-motion;
+        target-size: root.target-size;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "Argentum";
+    icon: @image-url("../assets/brand/argentum-256.png");
+    preferred-width: 1400px;
+    preferred-height: 820px;
+    min-width: 360px;
+    min-height: 360px;
+    background: AgTheme.canvas;
+    default-font-family: AgTheme.font-ui;
+
+    in-out property <string> draft: "";
+    in-out property <string> run_state: "Ready";
+    in-out property <string> transcript: "";
+    in-out property <string> current_reasoning: "";
+    in-out property <bool> current_reasoning_available: false;
+    in-out property <string> current_run_provider_label: "";
+    in-out property <string> current_run_model: "";
+    in-out property <bool> usage_reported: false;
+    in-out property <int> usage_input_tokens: 0;
+    in-out property <int> usage_output_tokens: 0;
+    in-out property <int> usage_total_tokens: 0;
+    in-out property <bool> context_window_reported: false;
+    in-out property <int> context_window_tokens: 0;
+    in-out property <string> error_message: "";
+    in-out property <string> provider_label: "LM Studio";
+    in-out property <string> provider_id: "lm-studio";
+    in-out property <string> provider_kind: "lm-studio";
+    in-out property <string> provider_kind_label: "LM Studio";
+    in-out property <string> provider_endpoint: "";
+    in-out property <string> provider_model: "local-model";
+    in-out property <string> provider_detail: "Model is configured";
+    in-out property <bool> provider_connected: false;
+    in-out property <bool> provider_testing: false;
+    in-out property <bool> provider_loading: false;
+    in-out property <bool> provider_saving: false;
+    in-out property <bool> provider_selecting: false;
+    in-out property <string> provider_pending: "";
+    in-out property <string> provider_probe_state: "untested";
+    in-out property <string> provider_error: "";
+    in-out property <string> provider_notice: "";
+    in-out property <bool> provider_error_consumes_next: false;
+    in-out property <[ProviderProfileView]> provider_profiles: [];
+    in-out property <[ProviderModelView]> provider_models: [];
+    in-out property <bool> provider_models_loading: false;
+    in-out property <bool> provider_model_selecting: false;
+    in-out property <string> provider_models_pending: "";
+    in-out property <string> provider_models_provider_id: "";
+    in-out property <string> provider_models_error: "";
+    in-out property <string> provider_draft_label: "LM Studio";
+    in-out property <string> provider_draft_endpoint: "";
+    in-out property <string> provider_draft_model: "local-model";
+    in-out property <string> provider_label_error: "";
+    in-out property <string> provider_endpoint_error: "";
+    in-out property <string> provider_model_error: "";
+    in-out property <string> project_name: "Argentum";
+    in-out property <string> workspace_label: "Local workspace";
+    in-out property <string> session_title: "New session";
+    in-out property <string> active_session_id: "";
+    in-out property <[SessionItemView]> session_items: [];
+    in-out property <string> user_prompt: "";
+    in-out property <[ConversationMessageView]> conversation_messages: [];
+    in-out property <string> plan_summary: "No stages yet";
+    in-out property <[PlanStepView]> plan_steps: [];
+    in-out property <string> activity_summary: "No activity yet";
+    in-out property <[ActivityItemView]> activity_items: [];
+    in-out property <string> change_summary: "No files changed";
+    in-out property <int> changed_files: 0;
+    in-out property <int> additions: 0;
+    in-out property <int> removals: 0;
+    in-out property <string> verification_state: "pending";
+    in-out property <string> verification_summary: "No automated checks were run";
+    in-out property <string> active_run_id: "";
+    in-out property <bool> running: false;
+    in-out property <bool> submission_pending: false;
+    in-out property <bool> drawer_open: false;
+    in-out property <bool> inspector_open: false;
+    in-out property <bool> activity_open: false;
+    in-out property <bool> approval_open: false;
+    in-out property <string> approval_id: "";
+    in-out property <string> approval_action: "";
+    in-out property <string> approval_target: "";
+    in-out property <string> approval_reason: "";
+    in-out property <bool> approval_response_pending: false;
+    in-out property <bool> about_open: false;
+    in-out property <bool> settings_open: false;
+    in-out property <bool> command_palette_open: false;
+    in-out property <bool> model_menu_open: false;
+    in-out property <bool> context_menu_open: false;
+    in-out property <bool> reduced_motion: false;
+    // Platform hosts may project native insets here. Desktop defaults remain zero.
+    in-out property <length> safe_area_top: 0px;
+    in-out property <length> safe_area_bottom: 0px;
+    in-out property <length> keyboard_inset: 0px;
+
+    private property <bool> provider_dirty: root.provider_draft_label != root.provider_label
+        || root.provider_draft_endpoint != root.provider_endpoint
+        || root.provider_draft_model != root.provider_model;
+    private property <bool> provider_valid: root.provider_label_error == ""
+        && root.provider_endpoint_error == ""
+        && root.provider_model_error == "";
+    private property <bool> provider_busy: root.provider_loading
+        || root.provider_saving
+        || root.provider_selecting
+        || root.provider_testing
+        || root.provider_models_loading
+        || root.provider_model_selecting;
+    private property <bool> provider_models_current: root.provider_id != ""
+        && root.provider_models_provider_id == root.provider_id;
+    private property <string> provider_state_label: root.provider_model_selecting
+        ? "Updating model"
+        : (root.provider_models_loading
+            ? "Loading models"
+            : (root.provider_testing
+                ? "Testing connection"
+                : (root.provider_probe_state == "connected"
+                    ? "Connected"
+                    : (root.provider_probe_state == "failed" ? "Connection failed" : "Not tested"))));
+    private property <string> verification_label: root.verification_state == "passed"
+        ? "Passed"
+        : (root.verification_state == "failed"
+            ? "Failed"
+             : (root.verification_state == "ready" ? "Ready" : "Not run"));
+    private property <bool> phone_layout: root.width < AgTheme.tablet-breakpoint
+        || (root.height < AgTheme.mobile-landscape-height-breakpoint
+            && root.width < AgTheme.shell-navigation-breakpoint);
+    private property <length> phone_gutter: root.width < AgTheme.mobile-standard-breakpoint
+        ? AgTheme.mobile-gutter-compact
+        : AgTheme.mobile-gutter;
+    private property <bool> conversation_follow_tail: true;
+
+    changed active_session_id => {
+        root.conversation_follow_tail = true;
+        conversation-scroll.viewport-y = min(
+            0px,
+            conversation-scroll.visible-height - conversation-scroll-content.height
+        );
+    }
+
+    callback submit_task(string);
+    callback cancel_run(string);
+    callback new_session();
+    callback select_session(string);
+    callback probe_provider(string);
+    callback open_settings();
+    callback save_provider_profile(string, string, string, string, string, bool);
+    callback select_provider_profile(string);
+    callback refresh_provider_models(string);
+    callback select_provider_model(string, string);
+    callback validate_provider_label(string) -> string;
+    callback validate_provider_endpoint(string) -> string;
+    callback validate_provider_model(string) -> string;
+    callback toggle_drawer();
+    callback toggle_inspector();
+    callback toggle_activity();
+    callback approve_tool(string);
+    callback reject_tool(string);
+
+    app-keyboard := FocusScope {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+
+        capture-key-pressed(event) => {
+            if event.text != Key.Escape {
+                return reject;
+            }
+            if root.approval_open {
+                return accept;
+            }
+            if root.settings_open {
+                root.settings_open = false;
+                return accept;
+            }
+            if root.about_open {
+                root.about_open = false;
+                return accept;
+            }
+            if root.command_palette_open {
+                root.command_palette_open = false;
+                return accept;
+            }
+            if root.model_menu_open {
+                root.model_menu_open = false;
+                return accept;
+            }
+            if root.context_menu_open {
+                root.context_menu_open = false;
+                return accept;
+            }
+            if root.drawer_open {
+                root.drawer_open = false;
+                root.toggle_drawer();
+                return accept;
+            }
+            if root.activity_open {
+                root.activity_open = false;
+                root.toggle_activity();
+                return accept;
+            }
+            if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint {
+                root.inspector_open = false;
+                root.toggle_inspector();
+                return accept;
+            }
+            return reject;
+        }
+
+        KeyBinding {
+            keys: @keys(Control + K);
+            enabled: !root.approval_open && !root.settings_open && !root.about_open;
+            activated => {
+                root.command_palette_open = !root.command_palette_open;
+                root.model_menu_open = false;
+                root.context_menu_open = false;
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Control + ",");
+            enabled: !root.approval_open;
+            activated => {
+                root.settings_open = true;
+                root.about_open = false;
+                root.command_palette_open = false;
+                root.model_menu_open = false;
+                root.context_menu_open = false;
+                root.provider_loading = true;
+                root.provider_pending = "list";
+                root.provider_error = "";
+                root.provider_notice = "";
+                root.open_settings();
+                if root.provider_id != "" && !root.running {
+                    root.provider_models_loading = true;
+                    root.provider_models_pending = "list";
+                    root.provider_models_provider_id = root.provider_id;
+                    root.provider_models_error = "";
+                    root.refresh_provider_models(root.provider_id);
+                }
+            }
+        }
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: AgTheme.canvas;
+        }
+
+        if !root.phone_layout && root.width >= AgTheme.shell-navigation-breakpoint: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: AgTheme.navigation-width;
+            height: parent.height;
+            background: AgTheme.navigation;
+            border-width: 1px;
+            border-color: AgTheme.border-faint;
+
+            VerticalLayout {
+                padding-left: AgTheme.space-3;
+                padding-right: AgTheme.space-3;
+                padding-bottom: AgTheme.space-3;
+                spacing: AgTheme.space-3;
+
+                BrandLockup { compact: false; }
+
+                ActionButton {
+                    label: "New session";
+                    icon: "plus";
+                    fill: AgTheme.surface-soft;
+                    outline-color: AgTheme.border-default;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.new_session();
+                    }
+                }
+
+                Rectangle { height: 6px; }
+
+                SectionHeading { label: "Project"; detail: "Local"; }
+
+                MenuRow {
+                    icon: "folder";
+                    label: root.project_name;
+                    detail: root.workspace_label;
+                    active: true;
+                }
+
+                SectionHeading { label: "Sessions"; detail: root.session_items.length; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        spacing: AgTheme.space-1;
+
+                        for session in root.session_items: SessionItem {
+                            active: session.active;
+                            title: session.title;
+                            detail: session.active ? root.run_state : session.detail;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                if (!session.active) {
+                                    root.select_session(session.id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: AgTheme.border-faint; }
+
+                Rectangle {
+                    height: 62px;
+                    border-radius: AgTheme.radius-xs;
+                    border-width: 1px;
+                    border-color: provider-focus.has-focus ? AgTheme.focus-ring : transparent;
+                    background: provider-touch.has-hover ? AgTheme.hover : transparent;
+                    accessible-role: button;
+                    accessible-label: "Model, " + root.provider_label;
+                    accessible-action-default => { root.model_menu_open = true; }
+                    forward-focus: provider-focus;
+                    animate background, border-color {
+                        duration: root.reduced_motion ? 0ms : AgTheme.motion-fast;
+                    }
+
+                    Rectangle {
+                        x: 0px;
+                        y: 12px;
+                        width: 2px;
+                        height: parent.height - 24px;
+                        background: root.provider_probe_state == "failed"
+                            ? AgTheme.red-400
+                            : (root.provider_connected ? AgTheme.silver-300 : AgTheme.silver-700);
+                    }
+
+                    HorizontalLayout {
+                        padding-left: AgTheme.space-3;
+                        padding-right: AgTheme.space-1;
+                        spacing: AgTheme.space-3;
+                        alignment: stretch;
+
+                        Rectangle {
+                            width: 30px;
+                            background: transparent;
+
+                            AgIcon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                name: "model";
+                                size: 18px;
+                                tint: AgTheme.silver-300;
+                            }
+
+                            Rectangle {
+                                x: parent.width - self.width;
+                                y: (parent.height + 16px) / 2;
+                                width: 6px;
+                                height: 6px;
+                                background: root.provider_probe_state == "failed"
+                                    ? AgTheme.red-400
+                                    : (root.provider_connected ? AgTheme.silver-200 : AgTheme.silver-700);
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: AgTheme.optical-tight-gap;
+                            alignment: center;
+                            Text { text: root.provider_label; color: AgTheme.text-secondary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; }
+                            Text {
+                                text: root.provider_state_label;
+                                color: root.provider_probe_state == "failed" ? AgTheme.text-danger : AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        Rectangle {
+                            width: 18px;
+                            background: transparent;
+
+                            AgIcon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                name: "chevron-right";
+                                size: 14px;
+                                tint: AgTheme.silver-500;
+                            }
+                        }
+                    }
+
+                    provider-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            provider-focus.focus();
+                            root.model_menu_open = true;
+                        }
+                    }
+
+                    provider-focus := FocusScope {
+                        x: 0px;
+                        width: 0px;
+                        focus-on-click: false;
+                        focus-on-tab-navigation: true;
+                        key-pressed(event) => {
+                            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                                root.model_menu_open = true;
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+                }
+
+                RailSettingsButton {
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.settings_open = true;
+                        root.provider_loading = true;
+                        root.provider_pending = "list";
+                        root.provider_error = "";
+                        root.provider_notice = "";
+                        root.open_settings();
+                        if root.provider_id != "" && !root.running {
+                            root.provider_models_loading = true;
+                            root.provider_models_pending = "list";
+                            root.provider_models_provider_id = root.provider_id;
+                            root.provider_models_error = "";
+                            root.refresh_provider_models(root.provider_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        workbench := Rectangle {
+            visible: !root.phone_layout;
+            x: root.width >= AgTheme.shell-navigation-breakpoint ? AgTheme.navigation-width : 0px;
+            y: 0px;
+            width: root.width
+                - (root.width >= AgTheme.shell-navigation-breakpoint ? AgTheme.navigation-width : 0px)
+                - (root.inspector_open && root.width >= AgTheme.work-pane-docked-breakpoint ? AgTheme.work-pane-width : 0px);
+            height: root.height;
+            background: AgTheme.canvas;
+
+            header := Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: AgTheme.header-height;
+                background: AgTheme.chrome;
+                border-width: 1px;
+                border-color: AgTheme.border-subtle;
+
+                HorizontalLayout {
+                    padding-left: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-2 : AgTheme.space-4;
+                    padding-right: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-2 : AgTheme.space-3;
+                    spacing: AgTheme.space-2;
+                    alignment: stretch;
+
+                    if root.width < AgTheme.shell-navigation-breakpoint: HeaderAction {
+                        glyph: "menu";
+                        hint: "Open navigation";
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.drawer_open = true;
+                            root.toggle_drawer();
+                        }
+                    }
+
+                    VerticalLayout {
+                        width: workbench.width < AgTheme.composer-compact-breakpoint ? 120px : 260px;
+                        spacing: AgTheme.optical-tight-gap;
+                        alignment: center;
+                        horizontal-stretch: 0;
+
+                        Text {
+                            text: root.session_title;
+                            color: AgTheme.white-100;
+                            font-size: AgTheme.type-lead;
+                            font-weight: AgTheme.weight-semibold;
+                            overflow: elide;
+                        }
+
+                        if workbench.width >= AgTheme.session-detail-breakpoint: Text {
+                            text: root.project_name + "  /  Local workspace";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            overflow: elide;
+                        }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    if workbench.width >= AgTheme.header-divider-breakpoint: Rectangle {
+                        width: 124px;
+                        background: transparent;
+
+                        StateBadge {
+                            width: 116px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            label: root.run_state;
+                            active: root.running;
+                            attention: root.approval_open || root.error_message != "";
+                            reduced-motion: root.reduced_motion;
+                        }
+                    }
+
+                    HeaderAction {
+                        glyph: "activity";
+                        hint: "Activity";
+                        selected: root.activity_open;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.activity_open = !root.activity_open;
+                            root.command_palette_open = false;
+                            root.model_menu_open = false;
+                            root.context_menu_open = false;
+                            root.toggle_activity();
+                        }
+                    }
+
+                    if workbench.width >= AgTheme.header-actions-breakpoint: HeaderAction {
+                        glyph: "review";
+                        hint: "Review changes and checks";
+                        selected: root.inspector_open;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.inspector_open = !root.inspector_open;
+                            root.command_palette_open = false;
+                            root.toggle_inspector();
+                        }
+                    }
+
+                    HeaderAction {
+                        glyph: "more";
+                        hint: "More actions";
+                        selected: root.command_palette_open;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.command_palette_open = !root.command_palette_open;
+                            root.model_menu_open = false;
+                            root.context_menu_open = false;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: workbench.width < AgTheme.composer-compact-breakpoint ? 8px : 16px;
+                    y: parent.height - 2px;
+                    width: 36px;
+                    height: 2px;
+                    background: root.approval_open
+                        ? AgTheme.state-attention
+                        : (root.running ? AgTheme.silver-300 : AgTheme.silver-700);
+                }
+            }
+
+            conversation-scroll := ScrollView {
+                x: 0px;
+                y: AgTheme.header-height;
+                width: parent.width;
+                height: parent.height - AgTheme.header-height
+                    - (workbench.width < AgTheme.composer-compact-breakpoint ? 172px : 160px);
+                viewport-width: self.width;
+                mouse-drag-pan-enabled: true;
+                scrolled => {
+                    root.conversation_follow_tail = self.viewport-y
+                        <= min(0px, self.visible-height - conversation-scroll-content.height)
+                            + AgTheme.space-12;
+                }
+
+                conversation-scroll-content := VerticalLayout {
+                    padding-top: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-6 : AgTheme.space-10;
+                    padding-bottom: AgTheme.space-9;
+
+                    changed height => {
+                        if root.conversation_follow_tail {
+                            conversation-scroll.viewport-y = min(
+                                0px,
+                                conversation-scroll.visible-height - self.height
+                            );
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-4 : AgTheme.space-7;
+                        padding-right: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-4 : AgTheme.space-7;
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        Rectangle {
+                            horizontal-stretch: 8;
+                            max-width: AgTheme.work-content-max-width;
+                            background: transparent;
+
+                            ConversationSurface {
+                                user-prompt: root.user_prompt;
+                                messages: root.conversation_messages;
+                                transcript: root.transcript;
+                                error-message: root.error_message;
+                                provider-connected: root.provider_connected;
+                                provider-label: root.provider_label;
+                                plan-summary: root.plan_summary;
+                                plan-steps: root.plan_steps;
+                                verification-state: root.verification_state;
+                                verification-summary: root.verification_summary;
+                                running: root.running;
+                                run-state: root.run_state;
+                                current-reasoning: root.current_reasoning;
+                                current-reasoning-available: root.current_reasoning_available;
+                                current-provider-label: root.current_run_provider_label;
+                                current-model: root.current_run_model;
+                                usage-reported: root.usage_reported;
+                                input-tokens: root.usage_input_tokens;
+                                output-tokens: root.usage_output_tokens;
+                                total-tokens: root.usage_total_tokens;
+                                context-window-reported: root.context_window_reported;
+                                context-window-tokens: root.context_window_tokens;
+                                reduced-motion: root.reduced_motion;
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: 0px;
+                y: parent.height - (workbench.width < AgTheme.composer-compact-breakpoint ? 172px : 160px);
+                width: parent.width;
+                height: workbench.width < AgTheme.composer-compact-breakpoint ? 172px : 160px;
+                background: AgTheme.canvas;
+                border-width: 0px;
+
+                VerticalLayout {
+                    padding-top: AgTheme.space-3;
+                    padding-bottom: AgTheme.space-2;
+                    spacing: AgTheme.space-2;
+
+                    HorizontalLayout {
+                        padding-left: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-3 : AgTheme.space-6;
+                        padding-right: workbench.width < AgTheme.composer-compact-breakpoint ? AgTheme.space-3 : AgTheme.space-6;
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        Composer {
+                            horizontal-stretch: 8;
+                            max-width: AgTheme.work-content-max-width;
+                            draft <=> root.draft;
+                            provider-label: root.provider_label;
+                            workspace-label: root.project_name;
+                            running: root.running;
+                            approval-pending: root.approval_open;
+                            submission-pending: root.submission_pending;
+                            active-run-id: root.active_run_id;
+                            reduced-motion: root.reduced_motion;
+                            submit(prompt) => { root.draft = prompt; root.submit_task(prompt); }
+                            cancel(run-id) => { root.cancel_run(run-id); }
+                            open-model => {
+                                root.model_menu_open = !root.model_menu_open;
+                                root.context_menu_open = false;
+                                root.command_palette_open = false;
+                            }
+                            open-context => {
+                                root.context_menu_open = !root.context_menu_open;
+                                root.model_menu_open = false;
+                                root.command_palette_open = false;
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+
+                    Text {
+                        text: root.approval_open ? "Review the pending approval to continue" : "File writes require approval";
+                        color: root.approval_open ? AgTheme.red-100 : AgTheme.text-muted;
+                        font-size: AgTheme.type-compact;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.phone_layout: MobileShell {
+            x: 0px;
+            y: 0px;
+            width: root.width;
+            height: root.height;
+            draft <=> root.draft;
+            session-title: root.session_title;
+            run-state: root.run_state;
+            running: root.running;
+            attention: root.approval_open || root.error_message != "";
+            user-prompt: root.user_prompt;
+            messages: root.conversation_messages;
+            transcript: root.transcript;
+            error-message: root.error_message;
+            provider-connected: root.provider_connected;
+            provider-label: root.provider_label;
+            workspace-label: root.project_name;
+            plan-summary: root.plan_summary;
+            plan-steps: root.plan_steps;
+            verification-state: root.verification_state;
+            verification-summary: root.verification_summary;
+            current-reasoning: root.current_reasoning;
+            current-reasoning-available: root.current_reasoning_available;
+            current-provider-label: root.current_run_provider_label;
+            current-model: root.current_run_model;
+            usage-reported: root.usage_reported;
+            usage-input-tokens: root.usage_input_tokens;
+            usage-output-tokens: root.usage_output_tokens;
+            usage-total-tokens: root.usage_total_tokens;
+            context-window-reported: root.context_window_reported;
+            context-window-tokens: root.context_window_tokens;
+            approval-pending: root.approval_open;
+            submission-pending: root.submission_pending;
+            active-run-id: root.active_run_id;
+            reduced-motion: root.reduced_motion;
+            gutter: root.phone_gutter;
+            safe-top: root.safe_area_top;
+            safe-bottom: root.safe_area_bottom;
+            keyboard-inset: root.keyboard_inset;
+            open-sessions => {
+                root.drawer_open = true;
+                root.activity_open = false;
+                root.command_palette_open = false;
+                root.model_menu_open = false;
+                root.context_menu_open = false;
+                root.toggle_drawer();
+            }
+            open-activity => {
+                root.activity_open = true;
+                root.drawer_open = false;
+                root.command_palette_open = false;
+                root.model_menu_open = false;
+                root.context_menu_open = false;
+                root.toggle_activity();
+            }
+            open-more => {
+                root.command_palette_open = true;
+                root.drawer_open = false;
+                root.activity_open = false;
+                root.model_menu_open = false;
+                root.context_menu_open = false;
+            }
+            open-model => {
+                root.model_menu_open = true;
+                root.context_menu_open = false;
+                root.command_palette_open = false;
+            }
+            open-context => {
+                root.context_menu_open = true;
+                root.model_menu_open = false;
+                root.command_palette_open = false;
+            }
+            submit(prompt) => { root.draft = prompt; root.submit_task(prompt); }
+            cancel(run-id) => { root.cancel_run(run-id); }
+        }
+
+        if !root.phone_layout && root.inspector_open && root.width >= AgTheme.work-pane-docked-breakpoint: Rectangle {
+            x: root.width - AgTheme.work-pane-width;
+            y: 0px;
+            width: AgTheme.work-pane-width;
+            height: root.height;
+            background: AgTheme.navigation;
+            border-width: 1px;
+            border-color: AgTheme.border-subtle;
+
+            VerticalLayout {
+                padding-left: AgTheme.space-5;
+                padding-right: AgTheme.space-5;
+                padding-top: AgTheme.space-3;
+                padding-bottom: AgTheme.space-4;
+                spacing: AgTheme.space-4;
+
+                PanelHeader {
+                    icon: "review";
+                    title: "Review";
+                    detail: "Changes and checks";
+                    close => {
+                        root.inspector_open = false;
+                        root.toggle_inspector();
+                    }
+                }
+
+                SectionHeading { label: "Changes"; }
+
+                Rectangle {
+                    height: 92px;
+                    border-radius: AgTheme.radius-xs;
+                    border-width: 1px;
+                    border-color: AgTheme.silver-700;
+                    background: AgTheme.chrome;
+
+                    Rectangle {
+                        x: 0px;
+                        y: 12px;
+                        width: 2px;
+                        height: parent.height - 24px;
+                        background: AgTheme.silver-400;
+                    }
+
+                    HorizontalLayout {
+                        padding: AgTheme.space-3;
+                        spacing: AgTheme.space-3;
+                        alignment: stretch;
+
+                        Rectangle {
+                            width: 38px;
+                            background: transparent;
+
+                            AgIcon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                name: "diff";
+                                size: 18px;
+                                tint: AgTheme.silver-300;
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: AgTheme.space-1;
+                            alignment: center;
+                            Text { text: root.change_summary; color: AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; }
+                            Text { text: root.changed_files > 0 ? "+" + root.additions + "  -" + root.removals : "No additions or removals"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+                        }
+                    }
+                }
+
+                SectionHeading { label: "Checks"; detail: root.verification_label; }
+
+                Rectangle {
+                    min-height: 82px;
+                    border-radius: AgTheme.radius-xs;
+                    border-width: 1px;
+                    border-color: root.verification_state == "failed" ? AgTheme.red-700 : AgTheme.silver-700;
+                    background: root.verification_state == "failed" ? AgTheme.attention-surface : AgTheme.chrome;
+
+                    Rectangle {
+                        x: 0px;
+                        y: 10px;
+                        width: 2px;
+                        height: parent.height - 20px;
+                        background: root.verification_state == "failed" ? AgTheme.red-400 : AgTheme.silver-600;
+                    }
+
+                    VerticalLayout {
+                        padding: AgTheme.space-3;
+                        spacing: AgTheme.space-1;
+                        Text { text: root.verification_label; color: root.verification_state == "failed" ? AgTheme.red-100 : AgTheme.text-secondary; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; }
+                        Text { text: root.verification_summary; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                    }
+                }
+
+                SectionHeading { label: "Recent activity"; detail: root.activity_summary; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        spacing: AgTheme.optical-tight-gap;
+
+                        if root.activity_items.length == 0: Text {
+                            text: "Project, run, approval, and tool events appear here.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for item in root.activity_items: ActivityItem { item: item; }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: AgTheme.space-2;
+                    alignment: stretch;
+
+                    Rectangle {
+                        width: 16px;
+                        background: transparent;
+
+                        AgIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            name: "lock";
+                            size: 14px;
+                            tint: AgTheme.silver-500;
+                        }
+                    }
+
+                    Text { text: "Access limited to this workspace"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; vertical-alignment: center; }
+                }
+            }
+        }
+
+        general-scrim := Rectangle {
+            visible: root.drawer_open
+                || root.activity_open
+                || root.settings_open
+                || root.about_open
+                || root.command_palette_open
+                || root.model_menu_open
+                || root.context_menu_open
+                || (root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint);
+            x: 0px;
+            y: 0px;
+            width: root.width;
+            height: root.height;
+            background: AgTheme.scrim;
+
+            TouchArea {
+                enabled: !root.phone_layout;
+                clicked => {
+                    if root.drawer_open {
+                        root.drawer_open = false;
+                        root.toggle_drawer();
+                    }
+                    if root.activity_open {
+                        root.activity_open = false;
+                        root.toggle_activity();
+                    }
+                    if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint {
+                        root.inspector_open = false;
+                        root.toggle_inspector();
+                    }
+                    root.settings_open = false;
+                    root.about_open = false;
+                    root.command_palette_open = false;
+                    root.model_menu_open = false;
+                    root.context_menu_open = false;
+                }
+            }
+        }
+
+        if root.drawer_open: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : 0px;
+            y: root.phone_layout ? root.safe_area_top + AgTheme.space-2 : 0px;
+            width: root.phone_layout
+                ? root.width - root.phone_gutter * 2
+                : (root.width < AgTheme.navigation-drawer-breakpoint ? root.width - AgTheme.space-2 : 320px);
+            height: root.phone_layout
+                ? root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-2
+                : root.height;
+            border-radius: root.phone_layout ? AgTheme.radius-lg : 0px;
+            background: AgTheme.navigation;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.border-default;
+
+            VerticalLayout {
+                padding-left: AgTheme.space-3;
+                padding-right: AgTheme.space-3;
+                padding-bottom: AgTheme.space-4;
+                spacing: AgTheme.space-3;
+
+                HorizontalLayout {
+                    height: AgTheme.header-height;
+                    alignment: stretch;
+                    BrandLockup { compact: false; }
+                    Rectangle { horizontal-stretch: 1; }
+
+                    HeaderAction {
+                        glyph: "close";
+                        hint: "Close navigation";
+                        target-size: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                        clicked => {
+                            root.drawer_open = false;
+                            root.toggle_drawer();
+                        }
+                    }
+                }
+
+                ActionButton {
+                    label: "New session";
+                    icon: "plus";
+                    fill: AgTheme.surface-soft;
+                    outline-color: AgTheme.border-default;
+                    target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                    clicked => {
+                        root.drawer_open = false;
+                        root.new_session();
+                    }
+                }
+
+                SectionHeading { label: "Project"; detail: "Local"; }
+                MenuRow { icon: "folder"; label: root.project_name; detail: root.workspace_label; active: true; }
+                SectionHeading { label: "Sessions"; detail: root.session_items.length; }
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        spacing: AgTheme.space-1;
+
+                        for session in root.session_items: SessionItem {
+                            active: session.active;
+                            title: session.title;
+                            detail: session.active ? root.run_state : session.detail;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                if (!session.active) {
+                                    root.drawer_open = false;
+                                    root.select_session(session.id);
+                                }
+                            }
+                        }
+                    }
+                }
+                MenuRow {
+                    icon: "sliders";
+                    label: "Settings";
+                    detail: "Provider and interface";
+                    clicked => {
+                        root.drawer_open = false;
+                        root.settings_open = true;
+                        root.provider_loading = true;
+                        root.provider_pending = "list";
+                        root.provider_error = "";
+                        root.provider_notice = "";
+                        root.open_settings();
+                        if root.provider_id != "" && !root.running {
+                            root.provider_models_loading = true;
+                            root.provider_models_pending = "list";
+                            root.provider_models_provider_id = root.provider_id;
+                            root.provider_models_error = "";
+                            root.refresh_provider_models(root.provider_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.activity_open: Rectangle {
+            x: root.width >= AgTheme.tablet-breakpoint
+                ? root.width - 392px
+                : root.phone_gutter;
+            y: root.width >= AgTheme.tablet-breakpoint
+                ? AgTheme.space-2
+                : max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-sheet-height);
+            width: root.width >= AgTheme.tablet-breakpoint
+                ? 384px
+                : root.width - root.phone_gutter * 2;
+            height: root.width >= AgTheme.tablet-breakpoint
+                ? root.height - AgTheme.space-4
+                : min(AgTheme.mobile-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4);
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-700;
+            background: AgTheme.navigation;
+
+            Rectangle {
+                x: 16px;
+                y: 0px;
+                width: 42px;
+                height: 2px;
+                background: root.running ? AgTheme.silver-300 : AgTheme.silver-500;
+            }
+
+            VerticalLayout {
+                padding-left: AgTheme.space-4;
+                padding-right: AgTheme.space-4;
+                padding-top: AgTheme.space-3;
+                padding-bottom: AgTheme.space-4;
+                spacing: AgTheme.space-3;
+
+                PanelHeader {
+                    icon: "activity";
+                    title: "Activity";
+                    detail: root.run_state;
+                    close => {
+                        root.activity_open = false;
+                        root.toggle_activity();
+                    }
+                }
+
+                Text {
+                    text: "Recent project, run, approval, and tool events.";
+                    color: AgTheme.text-muted;
+                    font-size: AgTheme.type-compact;
+                    wrap: word-wrap;
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        spacing: AgTheme.optical-tight-gap;
+
+                        if root.activity_items.length == 0: Rectangle {
+                            height: 100px;
+                            border-radius: AgTheme.radius-xs;
+                            border-width: 0px;
+                            background: AgTheme.chrome;
+
+                            Rectangle {
+                                x: 0px;
+                                y: 16px;
+                                width: 2px;
+                                height: parent.height - 32px;
+                                background: AgTheme.silver-700;
+                            }
+
+                            Text { text: "No activity yet"; color: AgTheme.text-muted; font-size: AgTheme.type-body; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+
+                        for item in root.activity_items: ActivityItem { item: item; }
+                    }
+                }
+
+                ActionButton {
+                    label: "Open review";
+                    icon: "review";
+                    fill: AgTheme.surface-soft;
+                    outline-color: AgTheme.border-default;
+                    clicked => {
+                        root.activity_open = false;
+                        root.inspector_open = true;
+                        root.toggle_activity();
+                        root.toggle_inspector();
+                    }
+                }
+            }
+        }
+
+        if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : AgTheme.space-2;
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-sheet-height)
+                : (root.height < AgTheme.review-overlay-height-breakpoint ? AgTheme.space-2 : root.height - 492px);
+            width: root.phone_layout ? root.width - root.phone_gutter * 2 : root.width - AgTheme.space-4;
+            height: root.phone_layout
+                ? min(AgTheme.mobile-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4)
+                : 484px;
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-700;
+            background: AgTheme.navigation;
+
+            Rectangle {
+                x: 16px;
+                y: 0px;
+                width: 42px;
+                height: 2px;
+                background: root.verification_state == "failed" ? AgTheme.red-500 : AgTheme.silver-500;
+            }
+
+            VerticalLayout {
+                padding: AgTheme.space-4;
+                spacing: AgTheme.space-3;
+
+                PanelHeader {
+                    icon: "review";
+                    title: "Review";
+                    detail: "Changes and checks";
+                    close => {
+                        root.inspector_open = false;
+                        root.toggle_inspector();
+                    }
+                }
+
+                SectionHeading { label: "Changes"; }
+                MenuRow { icon: "diff"; label: root.change_summary; detail: root.changed_files > 0 ? "+" + root.additions + "  -" + root.removals : "No additions or removals"; }
+                SectionHeading { label: "Checks"; detail: root.verification_label; }
+
+                Rectangle {
+                    min-height: 84px;
+                    border-radius: AgTheme.radius-xs;
+                    border-width: 1px;
+                    border-color: root.verification_state == "failed" ? AgTheme.red-700 : AgTheme.silver-700;
+                    background: root.verification_state == "failed" ? AgTheme.attention-surface : AgTheme.chrome;
+
+                    Rectangle {
+                        x: 0px;
+                        y: 10px;
+                        width: 2px;
+                        height: parent.height - 20px;
+                        background: root.verification_state == "failed" ? AgTheme.red-400 : AgTheme.silver-600;
+                    }
+
+                    VerticalLayout {
+                        padding: AgTheme.space-3;
+                        spacing: AgTheme.space-1;
+                        Text { text: root.verification_summary; color: AgTheme.text-secondary; font-size: AgTheme.type-body; wrap: word-wrap; }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout {
+                    spacing: AgTheme.space-2;
+                    alignment: stretch;
+
+                    Rectangle {
+                        width: 16px;
+                        background: transparent;
+
+                        AgIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            name: "lock";
+                            size: 14px;
+                            tint: AgTheme.silver-500;
+                        }
+                    }
+
+                    Text { text: "Access limited to this workspace"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; vertical-alignment: center; }
+                }
+            }
+        }
+
+        if root.command_palette_open: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : (root.width < AgTheme.command-palette-breakpoint ? AgTheme.space-3 : (root.width - 460px) / 2);
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-menu-sheet-height)
+                : (root.width < AgTheme.command-palette-breakpoint ? 74px : 88px);
+            width: root.phone_layout ? root.width - root.phone_gutter * 2 : (root.width < AgTheme.command-palette-breakpoint ? root.width - AgTheme.space-6 : 460px);
+            height: root.phone_layout ? min(AgTheme.mobile-menu-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4) : 390px;
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-600;
+            background: AgTheme.raised;
+
+            Rectangle { x: 12px; y: 0px; width: 42px; height: 2px; background: AgTheme.silver-300; }
+
+            VerticalLayout {
+                padding: AgTheme.space-3;
+                spacing: AgTheme.space-1;
+
+                PanelHeader { title: "Actions"; close => { root.command_palette_open = false; } }
+                MenuRow { icon: "plus"; label: "New session"; detail: "Start a new task session"; clicked => { root.command_palette_open = false; root.new_session(); } }
+                MenuRow { icon: "activity"; label: "Activity"; detail: "Review recent events"; clicked => { root.command_palette_open = false; root.activity_open = true; root.toggle_activity(); } }
+                MenuRow { icon: "review"; label: "Review"; detail: "Changes and checks"; clicked => { root.command_palette_open = false; root.inspector_open = true; root.toggle_inspector(); } }
+                MenuRow {
+                    icon: "sliders";
+                    label: "Settings";
+                    detail: "Provider and interface";
+                    clicked => {
+                        root.command_palette_open = false;
+                        root.settings_open = true;
+                        root.provider_loading = true;
+                        root.provider_pending = "list";
+                        root.provider_error = "";
+                        root.provider_notice = "";
+                        root.open_settings();
+                        if root.provider_id != "" && !root.running {
+                            root.provider_models_loading = true;
+                            root.provider_models_pending = "list";
+                            root.provider_models_provider_id = root.provider_id;
+                            root.provider_models_error = "";
+                            root.refresh_provider_models(root.provider_id);
+                        }
+                    }
+                }
+                MenuRow { label: "About Argentum"; detail: "Identity and runtime"; clicked => { root.command_palette_open = false; root.about_open = true; } }
+            }
+        }
+
+        if root.model_menu_open: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : (root.width < AgTheme.compact-menu-width-breakpoint ? AgTheme.space-3 : (root.width - AgTheme.model-menu-width) / 2);
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-menu-sheet-height)
+                : max(AgTheme.space-3, root.height - AgTheme.model-menu-panel-height - AgTheme.space-10);
+            width: root.phone_layout ? root.width - root.phone_gutter * 2 : (root.width < AgTheme.compact-menu-width-breakpoint ? root.width - AgTheme.space-6 : AgTheme.model-menu-width);
+            height: root.phone_layout
+                ? min(AgTheme.mobile-menu-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4)
+                : min(AgTheme.model-menu-panel-height, root.height - AgTheme.space-6);
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-600;
+            background: AgTheme.raised;
+
+            Rectangle { x: 12px; y: 0px; width: 42px; height: 2px; background: AgTheme.silver-300; }
+
+            VerticalLayout {
+                padding: AgTheme.space-3;
+                spacing: AgTheme.space-2;
+                PanelHeader { icon: "model"; title: "Model"; detail: root.provider_state_label; close => { root.model_menu_open = false; } }
+
+                Rectangle {
+                    height: AgTheme.provider-profile-picker-height;
+                    border-radius: AgTheme.radius-md;
+                    border-width: AgTheme.hairline;
+                    border-color: AgTheme.border-subtle;
+                    background: AgTheme.chrome;
+                    clip: true;
+
+                    ScrollView {
+                        viewport-width: self.width;
+                        mouse-drag-pan-enabled: true;
+
+                        VerticalLayout {
+                            padding: AgTheme.space-1;
+                            spacing: AgTheme.optical-tight-gap;
+
+                            if root.provider_profiles.length == 0: Text {
+                                text: root.provider_loading ? "Loading profiles" : "No provider profiles available";
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            for profile in root.provider_profiles: MenuRow {
+                                icon: "model";
+                                label: profile.label;
+                                detail: profile.model;
+                                active: profile.selected;
+                                enabled: !root.running
+                                    && !root.provider_busy
+                                    && (!root.provider_dirty || profile.selected);
+                                reduced-motion: root.reduced_motion;
+                                clicked => {
+                                    if (!profile.selected) {
+                                        root.provider_selecting = true;
+                                        root.provider_pending = "select";
+                                        root.provider_error = "";
+                                        root.provider_notice = "";
+                                        root.provider_models_loading = true;
+                                        root.provider_models_pending = "list";
+                                        root.provider_models_provider_id = profile.id;
+                                        root.provider_models_error = "";
+                                        root.select_provider_profile(profile.id);
+                                        root.refresh_provider_models(profile.id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ContextUsagePanel {
+                    usage-reported: root.usage_reported;
+                    input-tokens: root.usage_input_tokens;
+                    output-tokens: root.usage_output_tokens;
+                    total-tokens: root.usage_total_tokens;
+                    context-window-reported: root.context_window_reported;
+                    context-window-tokens: root.context_window_tokens;
+                }
+
+                MenuRow {
+                    icon: "sliders";
+                    label: "Provider settings";
+                    detail: root.provider_dirty
+                        ? "Unsaved changes need review"
+                        : root.provider_label + " | " + root.provider_kind_label;
+                    clicked => {
+                        root.model_menu_open = false;
+                        root.settings_open = true;
+                        root.provider_loading = true;
+                        root.provider_pending = "list";
+                        root.provider_error = "";
+                        root.provider_notice = "";
+                        root.open_settings();
+                        if root.provider_id != "" && !root.running {
+                            root.provider_models_loading = true;
+                            root.provider_models_pending = "list";
+                            root.provider_models_provider_id = root.provider_id;
+                            root.provider_models_error = "";
+                            root.refresh_provider_models(root.provider_id);
+                        }
+                    }
+                }
+                ActionButton {
+                    label: root.provider_testing ? "Testing connection" : "Test connection";
+                    icon: "activity";
+                    enabled: !root.running
+                        && !root.provider_dirty
+                        && root.provider_valid
+                        && !root.provider_busy
+                        && root.provider_id != "";
+                    fill: AgTheme.surface-soft;
+                    outline-color: AgTheme.border-default;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.provider_testing = true;
+                        root.provider_pending = "probe";
+                        root.provider_probe_state = "testing";
+                        root.provider_error = "";
+                        root.provider_notice = "";
+                        root.probe_provider(root.provider_id);
+                    }
+                }
+            }
+        }
+
+        if root.context_menu_open: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : (root.width < AgTheme.compact-menu-width-breakpoint ? AgTheme.space-3 : (root.width - 380px) / 2);
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-context-sheet-height)
+                : (root.height < AgTheme.context-menu-height-breakpoint ? AgTheme.space-3 : root.height - 372px);
+            width: root.phone_layout ? root.width - root.phone_gutter * 2 : (root.width < AgTheme.compact-menu-width-breakpoint ? root.width - AgTheme.space-6 : 380px);
+            height: root.phone_layout ? min(AgTheme.mobile-context-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4) : 246px;
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-600;
+            background: AgTheme.raised;
+
+            Rectangle { x: 12px; y: 0px; width: 42px; height: 2px; background: AgTheme.silver-300; }
+
+            VerticalLayout {
+                padding: AgTheme.space-3;
+                spacing: AgTheme.space-2;
+                PanelHeader { icon: "folder"; title: "Execution scope"; detail: root.project_name; close => { root.context_menu_open = false; } }
+                MenuRow { icon: "folder"; label: root.project_name; detail: root.workspace_label; active: true; clicked => { root.context_menu_open = false; } }
+                MenuRow { icon: "lock"; label: "File tool approval"; detail: "Read tools are allowed. Each write tool needs approval."; clicked => { root.context_menu_open = false; } }
+            }
+        }
+
+        if root.settings_open: Rectangle {
+            x: root.phone_layout
+                ? 0px
+                : (root.width < AgTheme.settings-dialog-width-breakpoint
+                ? AgTheme.space-3
+                : (root.width - AgTheme.settings-dialog-width) / 2);
+            y: root.phone_layout
+                ? root.safe_area_top
+                : (root.height < AgTheme.settings-dialog-height-breakpoint
+                ? AgTheme.space-3
+                : (root.height - AgTheme.settings-dialog-height) / 2);
+            width: root.phone_layout
+                ? root.width
+                : (root.width < AgTheme.settings-dialog-width-breakpoint
+                ? root.width - AgTheme.space-6
+                : AgTheme.settings-dialog-width);
+            height: root.phone_layout
+                ? root.height - root.safe_area_top - root.safe_area_bottom
+                : (root.height < AgTheme.settings-dialog-height-breakpoint
+                ? root.height - AgTheme.space-6
+                : AgTheme.settings-dialog-height);
+            border-radius: root.phone_layout ? 0px : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-700;
+            background: AgTheme.navigation;
+
+            Rectangle {
+                x: AgTheme.space-5;
+                y: 0px;
+                width: AgTheme.space-10;
+                height: AgTheme.accent-bar-width;
+                background: root.provider_error == "" ? AgTheme.silver-400 : AgTheme.red-400;
+            }
+
+            VerticalLayout {
+                padding: root.phone_layout ? AgTheme.space-4 : AgTheme.space-5;
+                spacing: AgTheme.space-3;
+
+                PanelHeader {
+                    title: "Settings";
+                    detail: "Provider and interface";
+                    close => { root.settings_open = false; }
+                }
+
+                Text {
+                    text: "Choose the model provider Argentum uses for this workspace.";
+                    color: AgTheme.text-muted;
+                    font-size: AgTheme.type-body;
+                    wrap: word-wrap;
+                }
+
+                SectionHeading { label: "Provider profiles"; detail: root.provider_profiles.length; }
+
+                Rectangle {
+                    height: AgTheme.provider-profile-list-height;
+                    border-radius: AgTheme.radius-md;
+                    border-width: AgTheme.hairline;
+                    border-color: AgTheme.border-subtle;
+                    background: AgTheme.chrome;
+                    clip: true;
+
+                    ScrollView {
+                        viewport-width: self.width;
+                        mouse-drag-pan-enabled: true;
+
+                        VerticalLayout {
+                            padding: AgTheme.space-1;
+                            spacing: AgTheme.optical-tight-gap;
+
+                            if root.provider_profiles.length == 0: Text {
+                                text: root.provider_loading ? "Loading provider profiles" : "No provider profiles are available";
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-body;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+
+                            for profile in root.provider_profiles: MenuRow {
+                                icon: "model";
+                                label: profile.label;
+                                detail: profile.kind_label + " | " + profile.model;
+                                active: profile.selected;
+                                enabled: !root.running
+                                    && !root.provider_busy
+                                    && (!root.provider_dirty || profile.selected);
+                                reduced-motion: root.reduced_motion;
+                                clicked => {
+                                    if (!profile.selected) {
+                                        root.provider_selecting = true;
+                                        root.provider_pending = "select";
+                                        root.provider_error = "";
+                                        root.provider_notice = "";
+                                        root.provider_models_loading = true;
+                                        root.provider_models_pending = "list";
+                                        root.provider_models_provider_id = profile.id;
+                                        root.provider_models_error = "";
+                                        root.select_provider_profile(profile.id);
+                                        root.refresh_provider_models(profile.id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        padding-right: AgTheme.space-1;
+                        spacing: AgTheme.space-3;
+
+                        SectionHeading {
+                            label: root.provider_id == "" ? "Selected profile" : root.provider_label;
+                            detail: root.provider_id;
+                        }
+
+                        MenuRow {
+                            icon: "model";
+                            label: "Provider type";
+                            detail: root.provider_kind_label;
+                            active: true;
+                            enabled: false;
+                        }
+
+                        SettingsField {
+                            label: "Profile name";
+                            placeholder: "LM Studio";
+                            value: root.provider_draft_label;
+                            error: root.provider_label_error;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_draft_label = value;
+                                root.provider_label_error = root.validate_provider_label(value);
+                                root.provider_notice = "";
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Endpoint";
+                            placeholder: "http://127.0.0.1:1234/v1/";
+                            value: root.provider_draft_endpoint;
+                            error: root.provider_endpoint_error;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_draft_endpoint = value;
+                                root.provider_endpoint_error = root.validate_provider_endpoint(value);
+                                root.provider_notice = "";
+                            }
+                        }
+
+                        SectionHeading {
+                            label: "Model catalog";
+                            detail: root.provider_models_loading
+                                ? "Refreshing"
+                                : (root.provider_models_current
+                                    ? root.provider_models.length + " available"
+                                    : "Not loaded");
+                        }
+
+                        HorizontalLayout {
+                            height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            spacing: AgTheme.space-2;
+
+                            Text {
+                                text: root.provider_models_error != ""
+                                    ? root.provider_models_error
+                                    : "Models reported by this provider";
+                                color: root.provider_models_error != "" ? AgTheme.text-danger : AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+
+                            ActionButton {
+                                label: root.provider_models_loading ? "Refreshing" : "Refresh models";
+                                icon: "activity";
+                                enabled: root.provider_id != ""
+                                    && !root.running
+                                    && !root.provider_dirty
+                                    && !root.provider_busy;
+                                target-height: root.phone_layout
+                                    ? AgTheme.mobile-control-height
+                                    : AgTheme.control-height;
+                                fill: AgTheme.surface-soft;
+                                outline-color: AgTheme.border-default;
+                                reduced-motion: root.reduced_motion;
+                                clicked => {
+                                    root.provider_models_loading = true;
+                                    root.provider_models_pending = "list";
+                                    root.provider_models_provider_id = root.provider_id;
+                                    root.provider_models_error = "";
+                                    root.provider_notice = "";
+                                    root.refresh_provider_models(root.provider_id);
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            height: AgTheme.provider-model-list-height;
+                            border-radius: AgTheme.radius-md;
+                            border-width: AgTheme.hairline;
+                            border-color: root.provider_models_error == ""
+                                ? AgTheme.border-subtle
+                                : AgTheme.red-700;
+                            background: AgTheme.chrome;
+                            clip: true;
+
+                            ScrollView {
+                                viewport-width: self.width;
+                                mouse-drag-pan-enabled: true;
+
+                                VerticalLayout {
+                                    padding: AgTheme.space-1;
+                                    spacing: AgTheme.optical-tight-gap;
+
+                                    if root.provider_models_loading: Text {
+                                        text: "Loading provider models";
+                                        color: AgTheme.text-muted;
+                                        font-size: AgTheme.type-body;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    if !root.provider_models_loading
+                                        && (!root.provider_models_current || root.provider_models.length == 0): Text {
+                                        text: root.provider_models_error != ""
+                                            ? "The model catalog could not be loaded"
+                                            : "No catalog models reported. Enter a custom model below.";
+                                        color: root.provider_models_error != "" ? AgTheme.text-danger : AgTheme.text-muted;
+                                        font-size: AgTheme.type-compact;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+
+                                    if root.provider_models_current: VerticalLayout {
+                                        spacing: AgTheme.optical-tight-gap;
+
+                                        for model in root.provider_models: MenuRow {
+                                            icon: "model";
+                                            label: model.label == "" ? model.id : model.label;
+                                            detail: (model.label != "" && model.label != model.id ? model.id + " | " : "")
+                                                + (model.context_window_reported
+                                                    ? model.context_window_tokens + " token context"
+                                                    : "Context limit unknown");
+                                            active: model.selected;
+                                            enabled: !root.running
+                                                && !root.provider_dirty
+                                                && !root.provider_busy;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                if (!model.selected) {
+                                                    root.provider_model_selecting = true;
+                                                    root.provider_models_pending = "select";
+                                                    root.provider_error = "";
+                                                    root.provider_notice = "";
+                                                    root.select_provider_model(root.provider_id, model.id);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Custom model ID";
+                            placeholder: "local-model";
+                            value: root.provider_draft_model;
+                            error: root.provider_model_error;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_draft_model = value;
+                                root.provider_model_error = root.validate_provider_model(value);
+                                root.provider_notice = "";
+                            }
+                        }
+
+                        Text {
+                            text: "Catalog selection updates this profile only. Use the custom field when a model is not listed.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            min-height: AgTheme.space-16;
+                            border-radius: AgTheme.radius-md;
+                            border-width: AgTheme.hairline;
+                            border-color: root.provider_error == "" ? AgTheme.border-subtle : AgTheme.red-600;
+                            background: root.provider_error == "" ? AgTheme.surface-soft : AgTheme.attention-surface;
+
+                            if root.provider_error != "": Rectangle {
+                                x: 0px;
+                                y: AgTheme.space-2;
+                                width: AgTheme.accent-bar-width;
+                                height: parent.height - AgTheme.space-4;
+                                background: AgTheme.red-400;
+                            }
+
+                            VerticalLayout {
+                                padding-left: AgTheme.space-3;
+                                padding-right: AgTheme.space-3;
+                                padding-top: AgTheme.space-2;
+                                padding-bottom: AgTheme.space-2;
+                                spacing: AgTheme.space-1;
+
+                                Text {
+                                    text: root.provider_dirty ? "Unsaved changes" : root.provider_state_label;
+                                    color: root.provider_error == "" ? AgTheme.text-secondary : AgTheme.red-100;
+                                    font-size: AgTheme.type-body;
+                                    font-weight: AgTheme.weight-semibold;
+                                }
+
+                                Text {
+                                    text: root.provider_error != ""
+                                        ? root.provider_error
+                                        : (root.provider_dirty
+                                            ? "Save before testing or switching profiles."
+                                            : (root.provider_notice != "" ? root.provider_notice : root.provider_detail));
+                                    color: root.provider_error == "" ? AgTheme.text-muted : AgTheme.text-danger;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: root.provider_kind == "anthropic";
+                            text: "Anthropic credentials are not stored in this profile. Configure credentials outside Argentum before testing.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        SectionHeading { label: "Interface"; detail: "Local preferences"; }
+
+                        MenuRow {
+                            icon: "motion";
+                            label: "Reduced motion";
+                            detail: root.reduced_motion ? "On" : "Off";
+                            active: root.reduced_motion;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.reduced_motion = !root.reduced_motion; }
+                        }
+
+                        MenuRow {
+                            icon: "review";
+                            label: "Review pane";
+                            detail: root.inspector_open ? "Open" : "Closed";
+                            active: root.inspector_open;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.inspector_open = !root.inspector_open;
+                                root.toggle_inspector();
+                            }
+                        }
+                    }
+                }
+
+                if !root.phone_layout: HorizontalLayout {
+                    height: AgTheme.control-height;
+                    spacing: AgTheme.space-2;
+
+                    ActionButton {
+                        label: "Revert";
+                        enabled: root.provider_dirty && !root.running && !root.provider_busy;
+                        fill: AgTheme.chrome;
+                        outline-color: AgTheme.border-subtle;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.provider_draft_label = root.provider_label;
+                            root.provider_draft_endpoint = root.provider_endpoint;
+                            root.provider_draft_model = root.provider_model;
+                            root.provider_label_error = "";
+                            root.provider_endpoint_error = "";
+                            root.provider_model_error = "";
+                            root.provider_error = "";
+                            root.provider_notice = "Changes reverted.";
+                        }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    ActionButton {
+                        label: root.provider_testing ? "Testing" : "Test connection";
+                        icon: "activity";
+                        enabled: root.provider_id != ""
+                            && !root.running
+                            && !root.provider_dirty
+                            && root.provider_valid
+                            && !root.provider_busy;
+                        fill: AgTheme.surface-soft;
+                        outline-color: AgTheme.border-default;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.provider_testing = true;
+                            root.provider_pending = "probe";
+                            root.provider_probe_state = "testing";
+                            root.provider_error = "";
+                            root.provider_notice = "";
+                            root.probe_provider(root.provider_id);
+                        }
+                    }
+
+                    ActionButton {
+                        label: root.provider_saving ? "Saving" : "Save";
+                        icon: "check";
+                        primary: true;
+                        enabled: root.provider_id != ""
+                            && !root.running
+                            && root.provider_dirty
+                            && root.provider_valid
+                            && !root.provider_busy;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.provider_saving = true;
+                            root.provider_pending = "save";
+                            root.provider_error = "";
+                            root.provider_notice = "";
+                            root.save_provider_profile(
+                                root.provider_id,
+                                root.provider_draft_label,
+                                root.provider_kind,
+                                root.provider_draft_endpoint,
+                                root.provider_draft_model,
+                                true
+                            );
+                        }
+                    }
+                }
+
+                if root.phone_layout: VerticalLayout {
+                    spacing: AgTheme.space-2;
+
+                    HorizontalLayout {
+                        height: AgTheme.mobile-control-height;
+                        spacing: AgTheme.space-2;
+
+                        ActionButton {
+                            label: "Revert";
+                            enabled: root.provider_dirty && !root.running && !root.provider_busy;
+                            fill: AgTheme.chrome;
+                            outline-color: AgTheme.border-subtle;
+                            reduced-motion: root.reduced_motion;
+                            target-height: AgTheme.mobile-control-height;
+                            clicked => {
+                                root.provider_draft_label = root.provider_label;
+                                root.provider_draft_endpoint = root.provider_endpoint;
+                                root.provider_draft_model = root.provider_model;
+                                root.provider_label_error = "";
+                                root.provider_endpoint_error = "";
+                                root.provider_model_error = "";
+                                root.provider_error = "";
+                                root.provider_notice = "Changes reverted.";
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        ActionButton {
+                            label: root.provider_testing ? "Testing" : "Test connection";
+                            icon: "activity";
+                            enabled: root.provider_id != ""
+                                && !root.running
+                                && !root.provider_dirty
+                                && root.provider_valid
+                                && !root.provider_busy;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            target-height: AgTheme.mobile-control-height;
+                            clicked => {
+                                root.provider_testing = true;
+                                root.provider_pending = "probe";
+                                root.provider_probe_state = "testing";
+                                root.provider_error = "";
+                                root.provider_notice = "";
+                                root.probe_provider(root.provider_id);
+                            }
+                        }
+                    }
+
+                    ActionButton {
+                        label: root.provider_saving ? "Saving" : "Save provider";
+                        icon: "check";
+                        primary: true;
+                        enabled: root.provider_id != ""
+                            && !root.running
+                            && root.provider_dirty
+                            && root.provider_valid
+                            && !root.provider_busy;
+                        reduced-motion: root.reduced_motion;
+                        target-height: AgTheme.mobile-control-height;
+                        horizontal-stretch: 1;
+                        clicked => {
+                            root.provider_saving = true;
+                            root.provider_pending = "save";
+                            root.provider_error = "";
+                            root.provider_notice = "";
+                            root.save_provider_profile(
+                                root.provider_id,
+                                root.provider_draft_label,
+                                root.provider_kind,
+                                root.provider_draft_endpoint,
+                                root.provider_draft_model,
+                                true
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.about_open: Rectangle {
+            x: root.width < AgTheme.about-dialog-width-breakpoint ? 12px : (root.width - 500px) / 2;
+            y: root.height < AgTheme.about-dialog-height-breakpoint ? 12px : (root.height - 370px) / 2;
+            width: root.width < AgTheme.about-dialog-width-breakpoint ? root.width - 24px : 500px;
+            height: 370px;
+            border-radius: AgTheme.radius-xs;
+            border-width: 1px;
+            border-color: AgTheme.silver-700;
+            background: AgTheme.navigation;
+
+            Rectangle { x: 20px; y: 0px; width: 42px; height: 2px; background: AgTheme.silver-300; }
+
+            VerticalLayout {
+                padding: AgTheme.space-5;
+                spacing: AgTheme.space-4;
+
+                PanelHeader { brand: true; title: "Argentum"; detail: "0.1.0 draft. Native task workbench"; close => { root.about_open = false; } }
+                Text { text: "A local-first desktop app for running model tasks and reviewing runtime activity."; color: AgTheme.white-100; font-size: AgTheme.type-lead; font-weight: AgTheme.weight-semibold; wrap: word-wrap; }
+                Text { text: "A Rust runtime manages storage, model providers, tools, and workspace permissions. Slint renders the native interface."; color: AgTheme.text-secondary; font-size: AgTheme.type-body; wrap: word-wrap; }
+                Rectangle { height: 1px; background: AgTheme.border-faint; }
+                HorizontalLayout {
+                    spacing: AgTheme.space-2;
+                    alignment: stretch;
+
+                    Rectangle {
+                        width: 17px;
+                        background: transparent;
+
+                        AgIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            name: "lock";
+                            size: 15px;
+                            tint: AgTheme.silver-500;
+                        }
+                    }
+
+                    Text { text: "Native interface. No WebView or JavaScript runtime."; color: AgTheme.text-muted; font-size: AgTheme.type-compact; vertical-alignment: center; }
+                }
+                Rectangle { vertical-stretch: 1; }
+                ActionButton { label: "Close"; fill: AgTheme.surface-soft; outline-color: AgTheme.border-default; clicked => { root.about_open = false; } }
+            }
+        }
+
+        if root.approval_open: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: root.width;
+            height: root.height;
+            background: AgTheme.scrim;
+
+            TouchArea { mouse-cursor: default; }
+        }
+
+        if root.approval_open: Rectangle {
+            x: root.phone_layout ? root.phone_gutter : (root.width < AgTheme.approval-dialog-width-breakpoint ? AgTheme.space-2 : (root.width - 520px) / 2);
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-approval-sheet-height)
+                : (root.height < AgTheme.approval-dialog-height-breakpoint ? AgTheme.space-2 : (root.height - 472px) / 2);
+            width: root.phone_layout ? root.width - root.phone_gutter * 2 : (root.width < AgTheme.approval-dialog-width-breakpoint ? root.width - AgTheme.space-4 : 520px);
+            height: root.phone_layout
+                ? min(AgTheme.mobile-approval-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4)
+                : (root.height < AgTheme.approval-dialog-height-breakpoint ? root.height - AgTheme.space-4 : 472px);
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.red-600;
+            background: AgTheme.navigation;
+
+            Rectangle {
+                x: 20px;
+                y: 0px;
+                width: 56px;
+                height: 2px;
+                background: AgTheme.red-400;
+            }
+
+            approval-focus-timer := Timer {
+                interval: 1ms;
+                running: true;
+                triggered => {
+                    self.running = false;
+                    reject-button.focus();
+                }
+            }
+
+            VerticalLayout {
+                padding: root.phone_layout ? AgTheme.space-4 : AgTheme.space-5;
+                spacing: AgTheme.space-4;
+
+                HorizontalLayout {
+                    spacing: AgTheme.space-3;
+                    alignment: stretch;
+
+                    Rectangle {
+                        width: 40px;
+                        background: transparent;
+
+                        Rectangle {
+                            x: 0px;
+                            y: (parent.height - 28px) / 2;
+                            width: 2px;
+                            height: 28px;
+                            background: AgTheme.red-400;
+                        }
+
+                        AgIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            name: "lock";
+                            size: 18px;
+                            tint: AgTheme.red-400;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: AgTheme.optical-tight-gap;
+                        alignment: center;
+                        Text { text: "Approval needed"; color: AgTheme.white-100; font-size: AgTheme.type-dialog-title; font-weight: AgTheme.weight-title; }
+                        Text { text: "Review the action before Argentum continues."; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                    }
+                }
+
+                Rectangle { height: 1px; background: AgTheme.border-faint; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        padding-right: AgTheme.space-1;
+                        spacing: AgTheme.space-4;
+
+                        VerticalLayout {
+                            spacing: AgTheme.space-2;
+                            Text { text: "Action"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; }
+                            Text { text: root.approval_action; color: AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; wrap: word-wrap; }
+                        }
+
+                        VerticalLayout {
+                            spacing: AgTheme.space-2;
+                            Text { text: "Target"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; }
+                            Rectangle {
+                                height: 84px;
+                                border-radius: AgTheme.radius-xs;
+                                border-width: 1px;
+                                border-color: AgTheme.silver-700;
+                                background: AgTheme.chrome;
+                                Text { x: 12px; y: 10px; width: parent.width - 24px; height: parent.height - 20px; text: root.approval_target; color: AgTheme.text-secondary; font-size: AgTheme.type-compact; wrap: word-wrap; vertical-alignment: center; overflow: elide; }
+                            }
+                        }
+
+                        Text { text: root.approval_reason; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: AgTheme.space-2;
+                    reject-button := ActionButton { label: root.approval_response_pending ? "Responding" : "Reject"; enabled: !root.approval_response_pending; fill: AgTheme.surface-soft; outline-color: AgTheme.border-default; target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height; clicked => { root.reject_tool(root.approval_id); } }
+                    Rectangle { horizontal-stretch: 1; }
+                    ActionButton { label: root.approval_response_pending ? "Responding" : "Approve once"; icon: "check"; enabled: !root.approval_response_pending; primary: true; target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height; clicked => { root.approve_tool(root.approval_id); } }
+                }
+            }
+        }
+    }
+}
