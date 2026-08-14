@@ -29,6 +29,19 @@ and does **not** change any committed artefact on `UI_redesign`. It
 lives on its own branch and is meant to be reviewed, edited, and then
 backed into the master plan one plan at a time.
 
+### 0.1 Owner decisions (2026-08-14)
+
+Two questions are resolved; everything else in §9 remains open.
+
+| # | Decision | Effect on the plan |
+| --- | --- | --- |
+| 1 | **No interop with other ADEs.** Argentum is a standalone product. Other tools may import Argentum's sessions; Argentum does not import theirs. | Deprioritise Plans B (hooks), F (recipes), G (ACP host), I (subagent delegation, optional), and the ADE-detection part of Plan L. Keep the AGENTS.md / ARGENTUM.md reading in Plan A as a user-facing project memory feature, not as an ADE bridge. |
+| 2 | **Priority pair: Plan D (goal contract) + Plan H (context compaction).** The owner has scoped the next implementation effort to these two plans together. | These two plans are coupled: long-running goal iterations are exactly what makes silent context growth a real risk. Compaction without goals is a UI nicety; goals without compaction hit the context wall. Ship them as a pair. |
+
+The remaining 12 plans in §7 (A and C through N, minus the parts affected
+by decision 1) stay in the plan doc as **deferred**. When a deferred
+plan becomes relevant again, re-open §9 and promote it.
+
 ---
 
 ## 1. How the plan is organized
@@ -410,21 +423,34 @@ Each plan has: **objective**, **scope (in / out)**, **owned crates**,
   start; surface in the session header; expose via a typed command.
 - **In scope:** parser, versioned types, watcher for change, a
   single canonical "Argentum project memory" view that is the
-  ordered union of `AGENTS.md` (if present), `SKILL.md` files
-  (if present), and the legacy v0.0.9 `MEMBERS.md` (if present).
+  ordered union of `AGENTS.md` (if present), `ARGENTUM.md` (if
+  present), `SKILL.md` files (if present), and the legacy v0.0.9
+  `MEMBERS.md` (if present). When both `AGENTS.md` and
+  `ARGENTUM.md` exist, both are loaded and `AGENTS.md` is shown
+  first.
 - **Out of scope:** running instructions from the file automatically;
   only humans, the composer, and the onboarding step see them.
+  After decision 1 (§0.1), this is also explicitly **not** an
+  interop surface — no detection or import of `.claude/`,
+  `.cursor/`, `.codex/`, `.continue/`, `.clinerules`,
+  `.cursorrules`, etc. Those files are ignored.
 - **Owned crates:** `argentum-workspaces` (load), `argentum-domain`
   (ProjectMemory type), `argentum-ui` (display), `argentum-cli`
   (`memory show` / `memory set` commands).
 - **Acceptance:**
   - a workspace-root `AGENTS.md` is parsed, versioned, and shown
     in the session header;
+  - if both `AGENTS.md` and `ARGENTUM.md` are present, both are
+    shown with `AGENTS.md` first;
   - a `SKILL.md` is registered into the typed skill registry;
   - a missing file does not error;
   - redaction is applied to anything that looks like a credential
-    or a URL credential.
+    or a URL credential;
+  - presence of other ADE configuration (`.claude/`, `.cursor/`,
+    etc.) is ignored and not advertised in onboarding.
 - **Phase:** 1 (Rust foundation) → 2 (golden path).
+- **Status after §0.1:** accepted at spec level. Implementation
+  deferred — not part of the priority pair (D + H).
 - **References:** Claude Code `CLAUDE.md`, Codex `AGENTS.md`,
   OpenCode `AGENTS.md`, Goose `SKILL.md`-compatible.
 
@@ -478,7 +504,7 @@ Each plan has: **objective**, **scope (in / out)**, **owned crates**,
 - **References:** Cursor `/worktree`, Codex worktrees,
   Superset, Muse Code.
 
-### Plan D — Goal contract & verification (extends master plan)
+### Plan D — Goal contract & verification (extends master plan) **[PRIORITY]**
 
 - **Objective:** codify the master-plan goal contract in types
   and tests. Map to ZCode Goal Mode and Codex `/goal`.
@@ -494,8 +520,16 @@ Each plan has: **objective**, **scope (in / out)**, **owned crates**,
     change set, and a verification record;
   - missing, stale, cancelled, or failed evidence cannot
     complete the goal;
-  - the audit log records every transition.
+  - the audit log records every transition;
+  - a goal cannot enter `verifying` while Plan H is mid-compaction
+    of the same session (coordination contract — see Plan H);
+  - the lifecycle states that block compaction are declared in
+    `argentum-domain` and unit-tested.
 - **Phase:** 1 (foundation) → 6 (release hardening).
+- **Status after §0.1:** **PRIORITY.** This plan is part of the
+  next implementation pair alongside Plan H. It should be
+  implemented first within the pair, so that Plan H can declare
+  its coordination contract against the goal lifecycle.
 - **References:** ZCode Goal Mode, Codex `/goal`, master plan
   §"Agent lifecycle" and §"Goal contract".
 
@@ -562,24 +596,42 @@ Each plan has: **objective**, **scope (in / out)**, **owned crates**,
 - **References:** Agent Client Protocol (Zed, JetBrains,
   others), Zed AI agents panel.
 
-### Plan H — Context compaction
+### Plan H — Context compaction **[PRIORITY]**
 
 - **Objective:** explicit, observable, user-controlled context
   compaction (Claude Code five-layer, OpenCode auto-compact).
 - **In scope:** a `Compact` command; a clear user-visible
   boundary; pinned segments preserved; transcript re-anchored
-  correctly.
+  correctly. A typed `ContextCompacted` event in the event log
+  recording the pinned-segment list, the new compact
+  watermark, and the model-window threshold that triggered it.
 - **Out of scope:** silent compaction; compaction that loses
-  pinned segments; compaction that hides user-visible state.
+  pinned segments; compaction that hides user-visible state;
+  compaction that runs while a goal is in `verifying` or
+  `waiting_for_approval` (coordination contract — see Plan D).
 - **Owned crates:** `argentum-runtime`, `argentum-store`,
-  `argentum-ui`.
+  `argentum-ui`, `argentum-domain` (CompactCommand type and
+  the pinned-segment predicate).
 - **Acceptance:**
-  - a session can compact on user request;
-  - the user sees a "before / after" summary;
-  - pinned segments are preserved;
-  - the event log records the compaction;
-  - a compact cannot grant a capability.
+  - a session can compact on user request or on a declared
+    threshold;
+  - the user sees a "before / after" summary and a diff
+    against the prior state;
+  - pinned segments are preserved (the pinned-segment list
+    must be unit-tested against every event category);
+  - the event log records every compaction as a typed
+    `ContextCompacted` event;
+  - a compact cannot grant a capability;
+  - if compaction itself errors (storage, schema, redaction),
+    the goal pauses with a typed `CompactionFailed` event;
+  - a compaction never fires while a goal iteration is in
+    `verifying` or `waiting_for_approval` (Plan D coordination
+    contract).
 - **Phase:** 3 (harness workspace).
+- **Status after §0.1:** **PRIORITY.** This plan is part of the
+  next implementation pair alongside Plan D. It should be
+  implemented after Plan D's lifecycle types are stable, so
+  that the compaction predicate can reference the goal state.
 - **References:** Claude Code five-layer compaction, OpenCode
   auto-compact, LangChain summarizers.
 
@@ -724,28 +776,30 @@ Each plan has: **objective**, **scope (in / out)**, **owned crates**,
 
 The table below maps each plan to the master plan's Phases 0–6.
 "S" = spec, "B" = build, "T" = test, "R" = refine, "G" = release
-gate. Empty cells mean the plan does not touch that phase.
+gate. Empty cells mean the plan does not touch that phase. The
+**Status** column reflects the decisions in §0.1.
 
-| Plan | Phase 0 (lock) | Phase 1 (foundation) | Phase 2 (vertical slice) | Phase 3 (harness workspace) | Phase 4 (extension) | Phase 5 (mobile) | Phase 6 (hardening) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A — AGENTS.md / SKILL.md | S | B | T | R | | | G |
-| B — Hooks | | S | | | B | | G |
-| C — Worktree | | S | | B | R | | G |
-| D — Goal contract & verification | S | B | T | R | | | G |
-| E — Architect/Editor | | | | | B | | G |
-| F — Recipes | | | | | B | | G |
-| G — ACP host | | | | | B | T | G |
-| H — Context compaction | | | B | R | | | G |
-| I — Subagent delegation | | S | | | B | | G |
-| J — Mobile companion | | | | | | B | G |
-| K — Visual regression & fixtures | S | seed | T | R | R | R | G |
-| L — ADE-aware onboarding | | | B | R | | | G |
-| M — Memory tiers | S | B | | R | | | G |
-| N — Versioning | S | B | G | G | G | G | G |
+| Plan | Status | Phase 0 (lock) | Phase 1 (foundation) | Phase 2 (vertical slice) | Phase 3 (harness workspace) | Phase 4 (extension) | Phase 5 (mobile) | Phase 6 (hardening) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **D — Goal contract & verification** | **PRIORITY** | S | B | T | R | | | G |
+| **H — Context compaction** | **PRIORITY** | | | B | R | | | G |
+| A — AGENTS.md / project memory | accepted (deferred impl) | S | B | T | R | | | G |
+| B — Hooks | deferred (no interop) | | S | | | B | | G |
+| C — Worktree | deferred | | S | | B | R | | G |
+| E — Architect/Editor | deferred | | | | | B | | G |
+| F — Recipes | deferred (no interop) | | | | | B | | G |
+| G — ACP host | deferred (no interop) | | | | | B | T | G |
+| I — Subagent delegation | deferred (no interop) | | S | | | B | | G |
+| J — Mobile companion | deferred | | | | | | B | G |
+| K — Visual regression & fixtures | always on | S | seed | T | R | R | R | G |
+| L — ADE-aware onboarding | narrowed (no ADE bridge) | | | B | R | | | G |
+| M — Memory tiers | deferred | S | B | | R | | | G |
+| N — Versioning | always on | S | B | G | G | G | G | G |
 
 The "G" markers in Phase 6 are intentionally identical across
 plans: the master plan's "Definition of done" is the universal
-gate.
+gate. Plans marked **PRIORITY** are the next implementation
+effort (Plan D first, then Plan H against D's lifecycle).
 
 ---
 
@@ -753,48 +807,64 @@ gate.
 
 These are the questions this plan cannot answer on its own. The
 owner (Aleksey / AG 064) should answer or defer each one
-explicitly.
+explicitly. Decisions taken on 2026-08-14 are noted in §0.1.
 
-1. **Interop vs native.** Of the 30+ ADEs / harnesses surveyed,
-   which should Argentum *natively* support (provider adapter,
-   import, exporter), and which should it be *interoperable
-   with* (ACP, MCP, JSONL, hooks)? Specifically:
-   - Should Argentum host an ACP server (Plan G)?
-   - Should Argentum accept MCP servers in 0.1.x, or only as
-     sidecar processes?
-   - Should the JSONL protocol become a published standard, or
-     stay internal?
-2. **Naming.** Should Argentum use `AGENTS.md` (Codex / OpenCode
-   convention) or its own name (`ARGENTUM.md` / `SKILL.md`)?
-   The field has converged on `AGENTS.md`; using it lowers
-   friction.
-3. **Recipes scope.** Should the recipes feature ship in 0.1.x,
-   or wait for a stable extension boundary? Shipping earlier
-   locks in the schema.
-4. **Mobile pattern.** Should the mobile companion follow Claude
-   Code / Codex (notification + deep link) or be entirely
-   native (no notifications, only a foreground app)? Native
-   matches Argentum's "calm, no fake readiness" tone.
-5. **Onboarding aggression.** How aggressively should Argentum
-   detect and migrate existing ADE files in onboarding? A
-   conservative default is "show one card, never auto-import."
-6. **Architect/Editor default.** Should Architect/Editor be a
-   monorole by default with an opt-in to split, or should it
-   be split by default for tasks above a token threshold? The
-   master plan is silent here; Plan E is the carrier.
-7. **Worktree creation.** Should Argentum ever create a
+1. ~~**Interop vs native.**~~ — **Resolved (2026-08-14, §0.1).**
+   Argentum is standalone. Plans B, F, G, I (optional), and the
+   ADE-detection part of Plan L are deprioritised.
+2. **Naming.** Resolved (2026-08-14): detect both `AGENTS.md` and
+   `ARGENTUM.md`, prefer `AGENTS.md`. Implementation note for
+   Plan A: drop the ADE-bridge scope; this is a user-facing
+   project memory feature, not an interop surface.
+3. **Recipes scope.** Defer. With decision 1 (no interop), recipes
+   are a future extension boundary, not a 0.1.x concern.
+4. **Mobile pattern.** Open. Claude Code / Codex (notification +
+   deep link) vs fully native (no notifications, foreground
+   only). The master plan leans native. Plan J is the carrier.
+5. **Onboarding aggression.** Largely moot after decision 1. ADE
+   detection is out. Project-memory detection (Plan A) is
+   always-on and non-destructive.
+6. **Architect/Editor default.** Open. Should Plan E default to
+   monorole with opt-in, or split above a token threshold? The
+   master plan is silent.
+7. **Worktree creation.** Open. Should Argentum ever create a
    worktree on its own (e.g., for a sandboxed run), or is
    worktree creation always a user action? The master plan
    implies the latter; Plan C is the carrier.
-8. **Subagent budget.** When a parent run has 10 minutes of
-   budget left, what fraction may a subagent consume? 50%? 30%?
-   Plan I must answer this.
-9. **Goal contract elaboration.** Should the goal contract
+8. **Subagent budget.** Open, and lower priority after
+   decision 1. If / when Plan I is built, the rule must be set.
+9. **Goal contract elaboration.** Open. Should the goal contract
    support AWS Kiro-style "requirements / design / tasks" sub-
    documents, or stay flat? Plan D is the carrier.
-10. **Memory tier retention.** What are the default retention
-    policies for `workspace`, `project`, and `session` memory?
-    Plan M is the carrier.
+10. **Memory tier retention.** Open. What are the default
+    retention policies for `workspace`, `project`, and
+    `session` memory? Plan M is the carrier.
+
+### 9.1 New questions raised by decision 2 (D + H as a pair)
+
+These are specific to the priority pair and must be resolved
+before the first PR for D or H:
+
+- **Compaction boundary.** Where does compaction fire — at a
+  fixed token threshold, at a percentage of the model window, or
+  only on user request? Plan H currently allows both.
+- **What is pinned.** Which event categories are immune to
+  compaction: `GoalCreated`, `BudgetUpdated`, `VerificationPassed`,
+  `VerificationFailed`, `ApprovalRequested`, `ApprovalGranted`?
+  Plan H should make this list explicit and unit-test it.
+- **Compaction visibility.** Should the user see the compacted
+  summary, the diff against the prior state, or both? Plan H
+  currently says "both."
+- **Goal pause on compaction failure.** If compaction itself
+  errors (storage, schema, redaction), should the goal pause
+  with a typed failure, or fall back to "no compaction, keep
+  appending"? Plan H must answer this.
+- **Verification during compaction.** A goal iteration in
+  `verifying` state must not be compacted mid-flight. Plan D
+  should declare the lifecycle states that block compaction.
+- **Audit trail.** Every compaction must produce a typed
+  `ContextCompacted` event with the pinned-segment list. Plan
+  D's event log must include it.
 
 ---
 
@@ -877,6 +947,45 @@ are true:
 6. The plan is reviewed by at least one independent ADE
    (Codex CLI / GitHub Copilot Coding Agent / OpenHands /
    OpenCode / Aider / Goose) before final acceptance.
+
+---
+
+## 12. Next steps (post 2026-08-14)
+
+The owner has scoped the next implementation effort to the
+priority pair **Plan D + Plan H** (see §0.1). The recommended
+sequence is:
+
+1. **Owner answers §9.1** (the six new questions raised by the
+   D + H pairing) before the first PR for D or H is opened.
+   The questions that block the first PR most directly:
+   - *Compaction boundary* — fixed threshold vs percentage vs
+     user-only.
+   - *What is pinned* — the event-category list.
+   - *Compaction visibility* — before/after vs both.
+2. **Open a feature branch off `UI_redesign` (or its
+   successor) named `feature/goal-contract-d`.** Implement
+   Plan D's goal lifecycle types, the `GoalCreated` /
+   `BudgetUpdated` / `IterationLinked` / `VerificationPassed` /
+   `VerificationFailed` events, and the audit-log emission. No
+   UI in this PR.
+3. **Open a follow-up branch `feature/context-compaction-h`.**
+   Implement Plan H's `Compact` command, the pinned-segment
+   predicate, the `ContextCompacted` and `CompactionFailed`
+   events, and the coordination contract against Plan D's
+   lifecycle. UI shows the before/after and the diff.
+4. **PRs are reviewed against §7's acceptance criteria for D
+   and H**, plus the master plan's "Definition of done."
+5. **Update `ROADMAP.md`** when D and H land. Plan D folds into
+   "Harness workspace" (Phase 3 of the master plan); Plan H
+   folds into "Harness workspace" (Phase 3) as well. Both are
+   release-gated by Phase 6.
+6. **Re-open §9** when the rewrite on `UI_redesign` lands and
+   the priority pair is done. Promote the next deferred plan
+   based on user-visible value.
+
+The other 12 plans stay in this document as **deferred** until
+the rewrite stabilizes and the owner re-prioritises.
 
 ---
 
