@@ -282,9 +282,80 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
             print_sessions(host.workspace_snapshot()?, json).await?;
         }
+        Arguments::Goal {
+            options,
+            action,
+            json,
+        } => {
+            run_goal_command(options, action, json).await?;
+        }
         Arguments::Help | Arguments::Version => {
             unreachable!("help and version exit before command execution")
         }
+    }
+    Ok(())
+}
+
+async fn run_goal_command(
+    options: CommonOptions,
+    action: GoalAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = CommandHost::start(options.host_config()?)?;
+    let client = host.client();
+    match action {
+        GoalAction::Status => print_goal(host.goal()?, json).await?,
+        action => {
+            let command = match action {
+                GoalAction::Set {
+                    objective,
+                    token_budget,
+                    tool_budget,
+                    time_budget_seconds,
+                } => AppCommand::SetGoal {
+                    objective,
+                    token_budget,
+                    tool_budget,
+                    time_budget_seconds,
+                },
+                GoalAction::Pause => AppCommand::PauseGoal,
+                GoalAction::Resume => AppCommand::ResumeGoal,
+                GoalAction::Clear => AppCommand::ClearGoal,
+                GoalAction::Status => unreachable!("status handled above"),
+            };
+            client.dispatch(command).await?;
+            print_goal(host.goal()?, json).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn print_goal(
+    goal: Option<argentum_domain::Goal>,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({ "goal": goal }))?
+        );
+    } else if let Some(goal) = goal {
+        println!("Goal: {}", goal.objective);
+        println!("State: {}", goal.lifecycle.label());
+        println!("Iteration: {}", goal.iteration);
+        println!("Next action: {}", goal.next_action);
+        if let Some(budget) = goal.token_budget {
+            println!("Tokens: {} / {}", goal.tokens_used, budget);
+        }
+        if let Some(budget) = goal.tool_budget {
+            println!("Tools: {} / {}", goal.tools_used, budget);
+        }
+        if let Some(budget) = goal.time_budget_seconds {
+            println!("Time budget: {} seconds", budget);
+        }
+        println!("Verification records: {}", goal.verification_history.len());
+    } else {
+        println!("Goal: none");
     }
     Ok(())
 }
@@ -525,8 +596,27 @@ enum Arguments {
         session_id: argentum_domain::SessionId,
         json: bool,
     },
+    Goal {
+        options: CommonOptions,
+        action: GoalAction,
+        json: bool,
+    },
     Help,
     Version,
+}
+
+#[derive(Debug)]
+enum GoalAction {
+    Status,
+    Set {
+        objective: String,
+        token_budget: Option<u64>,
+        tool_budget: Option<u32>,
+        time_budget_seconds: Option<u64>,
+    },
+    Pause,
+    Resume,
+    Clear,
 }
 
 #[derive(Debug, Clone)]
@@ -599,6 +689,11 @@ where
     let mut provider_endpoint = None;
     let mut provider_model = None;
     let mut select_saved_provider = false;
+    let mut goal_action = None;
+    let mut goal_objective = None;
+    let mut goal_token_budget = None;
+    let mut goal_tool_budget = None;
+    let mut goal_time_budget_seconds = None;
     let mut index = 1;
     while index < values.len() {
         match values[index].as_str() {
@@ -646,6 +741,31 @@ where
                 index += 1;
                 prompt = Some(required_value(&values, index, "--prompt")?.to_owned());
             }
+            "--objective" if command == "goal" => {
+                index += 1;
+                goal_objective = Some(required_value(&values, index, "--objective")?.to_owned());
+            }
+            "--token-budget" if command == "goal" => {
+                index += 1;
+                goal_token_budget = Some(parse_u64_option(
+                    required_value(&values, index, "--token-budget")?,
+                    "--token-budget",
+                )?);
+            }
+            "--tool-budget" if command == "goal" => {
+                index += 1;
+                goal_tool_budget = Some(parse_u32_option(
+                    required_value(&values, index, "--tool-budget")?,
+                    "--tool-budget",
+                )?);
+            }
+            "--time-budget" if command == "goal" => {
+                index += 1;
+                goal_time_budget_seconds = Some(parse_u64_option(
+                    required_value(&values, index, "--time-budget")?,
+                    "--time-budget",
+                )?);
+            }
             "--json" => json = true,
             unknown if unknown.starts_with('-') => {
                 return Err(format!("unknown option '{unknown}'"));
@@ -667,6 +787,16 @@ where
             }
             value if command == "provider" && provider_action.is_none() => {
                 provider_action = Some(value.to_owned())
+            }
+            value if command == "goal" && goal_action.is_none() => {
+                goal_action = Some(value.to_owned())
+            }
+            value
+                if command == "goal"
+                    && goal_action.as_deref() == Some("set")
+                    && goal_objective.is_none() =>
+            {
+                goal_objective = Some(value.to_owned())
             }
             value
                 if command == "provider"
@@ -754,6 +884,71 @@ where
                 .ok_or_else(|| "session select requires a session ID".to_owned())?,
             json,
         }),
+        "goal" if prompt.is_some() => Err("goal does not accept a prompt".into()),
+        "goal" => match goal_action.as_deref() {
+            Some("status")
+                if goal_objective.is_none()
+                    && goal_token_budget.is_none()
+                    && goal_tool_budget.is_none()
+                    && goal_time_budget_seconds.is_none() =>
+            {
+                Ok(Arguments::Goal {
+                    options,
+                    action: GoalAction::Status,
+                    json,
+                })
+            }
+            Some("set") => Ok(Arguments::Goal {
+                options,
+                action: GoalAction::Set {
+                    objective: goal_objective
+                        .ok_or_else(|| "goal set requires an objective".to_owned())?,
+                    token_budget: goal_token_budget,
+                    tool_budget: goal_tool_budget,
+                    time_budget_seconds: goal_time_budget_seconds,
+                },
+                json,
+            }),
+            Some("pause")
+                if goal_objective.is_none()
+                    && goal_token_budget.is_none()
+                    && goal_tool_budget.is_none()
+                    && goal_time_budget_seconds.is_none() =>
+            {
+                Ok(Arguments::Goal {
+                    options,
+                    action: GoalAction::Pause,
+                    json,
+                })
+            }
+            Some("resume")
+                if goal_objective.is_none()
+                    && goal_token_budget.is_none()
+                    && goal_tool_budget.is_none()
+                    && goal_time_budget_seconds.is_none() =>
+            {
+                Ok(Arguments::Goal {
+                    options,
+                    action: GoalAction::Resume,
+                    json,
+                })
+            }
+            Some("clear")
+                if goal_objective.is_none()
+                    && goal_token_budget.is_none()
+                    && goal_tool_budget.is_none()
+                    && goal_time_budget_seconds.is_none() =>
+            {
+                Ok(Arguments::Goal {
+                    options,
+                    action: GoalAction::Clear,
+                    json,
+                })
+            }
+            _ => {
+                Err("goal requires 'status', 'set OBJECTIVE', 'pause', 'resume', or 'clear'".into())
+            }
+        },
         unknown => Err(format!("unknown command '{unknown}'")),
     }
 }
@@ -763,6 +958,18 @@ fn required_value<'a>(values: &'a [String], index: usize, option: &str) -> Resul
         .get(index)
         .map(String::as_str)
         .ok_or_else(|| format!("{option} requires a value"))
+}
+
+fn parse_u64_option(value: &str, option: &str) -> Result<u64, String> {
+    value
+        .parse::<u64>()
+        .map_err(|_| format!("{option} requires a non-negative integer"))
+}
+
+fn parse_u32_option(value: &str, option: &str) -> Result<u32, String> {
+    value
+        .parse::<u32>()
+        .map_err(|_| format!("{option} requires a non-negative integer"))
 }
 
 fn parse_provider_kind(value: &str) -> Result<argentum_domain::ProviderKind, String> {
@@ -809,23 +1016,33 @@ argentum-cli provider save PROFILE_ID --label LABEL --kind KIND --endpoint URL -
 argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
 argentum-cli provider models PROFILE_ID [OPTIONS]\n  \
 argentum-cli provider model PROFILE_ID --model NAME [OPTIONS]\n  \
-argentum-cli sessions [OPTIONS]\n  \
-argentum-cli session select SESSION_ID [OPTIONS]\n\n\
+  argentum-cli sessions [OPTIONS]\n  \
+  argentum-cli session select SESSION_ID [OPTIONS]\n  \
+  argentum-cli goal status [OPTIONS]\n  \
+  argentum-cli goal set OBJECTIVE [--token-budget N] [--tool-budget N] [--time-budget SECONDS] [OPTIONS]\n  \
+  argentum-cli goal pause [OPTIONS]\n  \
+  argentum-cli goal resume [OPTIONS]\n  \
+  argentum-cli goal clear [OPTIONS]\n\n\
 Commands:\n  \
 serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
 run     Submit one task and stream its output\n  \
 status  Show workspace and configured provider information\n  \
-provider Manage and test workspace provider profiles\n  \
-sessions List durable sessions for the current workspace\n  \
-session  Select the active session for the current workspace\n\n\
+  provider Manage and test workspace provider profiles\n  \
+  sessions List durable sessions for the current workspace\n  \
+  session  Select the active session for the current workspace\n  \
+  goal     Manage the active session goal contract\n\n\
 Options:\n  \
 --workspace PATH   Workspace boundary, defaults to the current directory\n  \
 --database PATH    SQLite database path, defaults to Argentum application data\n  \
 --endpoint URL     OpenAI-compatible LM Studio endpoint\n  \
 --model NAME       Provider model name\n  \
 --label LABEL      Display label for provider save\n  \
---kind KIND        lm-studio, openai-compatible, or anthropic\n  \
---select           Select a profile when saving it\n  \
+  --kind KIND        lm-studio, openai-compatible, or anthropic\n  \
+  --select           Select a profile when saving it\n  \
+  --objective TEXT   Goal objective when using 'goal set'\n  \
+  --token-budget N   Maximum model tokens for the goal contract\n  \
+  --tool-budget N    Maximum tool calls for the goal contract\n  \
+  --time-budget N    Maximum goal duration in seconds\n  \
 --json             Emit machine-readable output for run, status, provider, or sessions\n  \
 -V, --version      Print the Argentum CLI version"
     );
@@ -902,6 +1119,54 @@ mod tests {
         assert!(parse_args(["version", "extra"]).is_err());
         assert!(parse_args(["session", "select", "invalid"]).is_err());
         assert_eq!(version_line(), "argentum-cli 0.1.0");
+    }
+
+    #[test]
+    fn parses_goal_lifecycle_commands_and_budgets() {
+        assert!(matches!(
+            parse_args([
+                "goal",
+                "set",
+                "Ship the bounded slice",
+                "--token-budget",
+                "4000",
+                "--tool-budget",
+                "8",
+                "--time-budget",
+                "1800",
+                "--json",
+            ])
+            .expect("goal set"),
+            Arguments::Goal {
+                action: GoalAction::Set {
+                    objective,
+                    token_budget: Some(4000),
+                    tool_budget: Some(8),
+                    time_budget_seconds: Some(1800),
+                },
+                json: true,
+                ..
+            } if objective == "Ship the bounded slice"
+        ));
+        assert!(matches!(
+            parse_args(["goal", "status", "--json"]).expect("goal status"),
+            Arguments::Goal {
+                action: GoalAction::Status,
+                json: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse_args(["goal", "pause"]).expect("goal pause"),
+            Arguments::Goal {
+                action: GoalAction::Pause,
+                json: false,
+                ..
+            }
+        ));
+        assert!(parse_args(["goal", "set"]).is_err());
+        assert!(parse_args(["goal", "set", "Objective", "--token-budget", "0"]).is_ok());
+        assert!(parse_args(["goal", "pause", "--token-budget", "10"]).is_err());
     }
 
     #[test]

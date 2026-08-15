@@ -4,7 +4,7 @@ pub mod server;
 use std::path::{Path, PathBuf};
 
 use argentum_domain::{
-    AppCommand, AppEvent, Capability, ProviderKind, ProviderProfile, ProviderStatus,
+    AppCommand, AppEvent, Capability, Goal, ProviderKind, ProviderProfile, ProviderStatus,
     WorkspaceSnapshot,
 };
 use argentum_platform::{AppPaths, PlatformError};
@@ -208,6 +208,10 @@ impl CommandHost {
 
     pub fn workspace_snapshot(&self) -> Result<WorkspaceSnapshot, HostError> {
         Ok(self.runtime.workspace_snapshot()?)
+    }
+
+    pub fn goal(&self) -> Result<Option<Goal>, HostError> {
+        Ok(self.runtime.goal()?)
     }
 
     pub fn workspace_root(&self) -> &Path {

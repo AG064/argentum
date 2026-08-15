@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use argentum_domain::{
     ActiveRunState, AppCommand, AppEvent, ApprovalId, ConversationMessageStatus, ConversationRole,
-    ProviderKind, ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId, TaskLifecycle,
+    Goal, ProviderKind, ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId, TaskLifecycle,
     ToolResultState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -167,6 +167,12 @@ impl UiHandle {
                 self.window.set_current_run_model(SharedString::default());
                 self.reset_usage_projection();
                 self.window.set_error_message(SharedString::default());
+            }
+            AppEvent::GoalSnapshotLoaded { session_id, goal } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.apply_goal_snapshot(goal.as_ref());
             }
             AppEvent::ActiveRunsSnapshot { runs } => {
                 self.apply_active_runs_snapshot(runs);
@@ -630,6 +636,16 @@ impl UiHandle {
                 self.window.set_approval_response_pending(false);
                 self.window.set_error_message(present_error(message).into());
             }
+            AppCommand::SetGoal { .. }
+            | AppCommand::PauseGoal
+            | AppCommand::ResumeGoal
+            | AppCommand::ClearGoal
+                if self.window.get_goal_action_pending() =>
+            {
+                self.window.set_goal_action_pending(false);
+                self.window.set_error_message(present_error(message).into());
+                self.push_activity("Goal action failed", present_error(message), "error");
+            }
             _ => {}
         }
     }
@@ -813,7 +829,60 @@ impl UiHandle {
         self.window.set_plan_summary("No stages yet".into());
         self.window.set_plan_steps(empty_plan_model());
         self.reset_change_and_verification_state();
+        self.apply_goal_snapshot(None);
         self.close_approval();
+    }
+
+    fn apply_goal_snapshot(&self, goal: Option<&Goal>) {
+        self.window.set_goal_available(goal.is_some());
+        self.window.set_goal_action_pending(false);
+        if let Some(goal) = goal {
+            self.window
+                .set_goal_objective(goal.objective.clone().into());
+            self.window.set_goal_draft(goal.objective.clone().into());
+            self.window.set_goal_state(goal.lifecycle.label().into());
+            self.window
+                .set_goal_next_action(goal.next_action.clone().into());
+            self.window
+                .set_goal_iteration(saturating_i32_u64(u64::from(goal.iteration)));
+            self.window
+                .set_goal_tokens_used(saturating_i32_u64(goal.tokens_used));
+            self.window
+                .set_goal_token_budget_reported(goal.token_budget.is_some());
+            self.window
+                .set_goal_token_budget(goal.token_budget.map_or(0, saturating_i32_u64));
+            self.window
+                .set_goal_tools_used(saturating_i32_u64(u64::from(goal.tools_used)));
+            self.window
+                .set_goal_tool_budget_reported(goal.tool_budget.is_some());
+            self.window.set_goal_tool_budget(
+                goal.tool_budget
+                    .map_or(0, |budget| saturating_i32_u64(u64::from(budget))),
+            );
+            self.window
+                .set_goal_time_budget_reported(goal.time_budget_seconds.is_some());
+            self.window.set_goal_time_budget_seconds(
+                goal.time_budget_seconds.map_or(0, saturating_i32_u64),
+            );
+            self.window.set_goal_verification_count(
+                goal.verification_history.len().min(i32::MAX as usize) as i32,
+            );
+        } else {
+            self.window.set_goal_objective(SharedString::default());
+            self.window.set_goal_draft(SharedString::default());
+            self.window.set_goal_state(SharedString::default());
+            self.window.set_goal_next_action(SharedString::default());
+            self.window.set_goal_iteration(0);
+            self.window.set_goal_tokens_used(0);
+            self.window.set_goal_token_budget(0);
+            self.window.set_goal_token_budget_reported(false);
+            self.window.set_goal_tools_used(0);
+            self.window.set_goal_tool_budget(0);
+            self.window.set_goal_tool_budget_reported(false);
+            self.window.set_goal_time_budget_seconds(0);
+            self.window.set_goal_time_budget_reported(false);
+            self.window.set_goal_verification_count(0);
+        }
     }
 
     fn reset_usage_projection(&self) {
@@ -1323,6 +1392,72 @@ where
         select_dispatch(AppCommand::SelectSession { session_id });
     });
 
+    let set_goal_dispatch = dispatch.clone();
+    let set_goal_window = window.as_weak();
+    window.on_set_goal(
+        move |objective, token_budget, tool_budget, time_budget_seconds| {
+            let Some(window) = set_goal_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                warn!("goal update ignored while a run or goal action is active");
+                return;
+            }
+            let objective = objective.trim().to_string();
+            if objective.is_empty() {
+                window.set_error_message("Enter a goal objective.".into());
+                return;
+            }
+            window.set_goal_action_pending(true);
+            set_goal_dispatch(AppCommand::SetGoal {
+                objective,
+                token_budget: (token_budget >= 0).then_some(token_budget as u64),
+                tool_budget: (tool_budget >= 0).then_some(tool_budget as u32),
+                time_budget_seconds: (time_budget_seconds >= 0)
+                    .then_some(time_budget_seconds as u64),
+            });
+        },
+    );
+
+    let pause_goal_dispatch = dispatch.clone();
+    let pause_goal_window = window.as_weak();
+    window.on_pause_goal(move || {
+        let Some(window) = pause_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        pause_goal_dispatch(AppCommand::PauseGoal);
+    });
+
+    let resume_goal_dispatch = dispatch.clone();
+    let resume_goal_window = window.as_weak();
+    window.on_resume_goal(move || {
+        let Some(window) = resume_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        resume_goal_dispatch(AppCommand::ResumeGoal);
+    });
+
+    let clear_goal_dispatch = dispatch.clone();
+    let clear_goal_window = window.as_weak();
+    window.on_clear_goal(move || {
+        let Some(window) = clear_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        clear_goal_dispatch(AppCommand::ClearGoal);
+    });
+
     let probe_dispatch = dispatch.clone();
     let probe_window = window.as_weak();
     window.on_probe_provider(move |provider_id| {
@@ -1490,8 +1625,8 @@ pub fn empty_string_model() -> ModelRc<SharedString> {
 mod tests {
     use argentum_domain::{
         now, ConversationMessage, ConversationMessageStatus, ConversationRole,
-        ConversationSnapshot, PlanStep, Project, ProviderProfile, SessionSummary, Task,
-        TaskLifecycle, ToolResultState, WorkspaceSnapshot,
+        ConversationSnapshot, Goal, GoalLifecycle, PlanStep, Project, ProviderProfile,
+        SessionSummary, Task, TaskLifecycle, ToolResultState, WorkspaceSnapshot,
     };
     use slint::Model;
     use std::cell::RefCell;
@@ -1596,6 +1731,47 @@ mod tests {
     #[test]
     fn event_and_callback_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
+
+        let goal_session_id: SessionId = "00000000-0000-0000-0000-0000000000c1"
+            .parse()
+            .expect("goal session id");
+        ui.window()
+            .set_active_session_id(goal_session_id.to_string().into());
+        ui.apply_event(&AppEvent::GoalSnapshotLoaded {
+            session_id: goal_session_id,
+            goal: Some(Goal {
+                id: "00000000-0000-0000-0000-0000000000c2"
+                    .parse()
+                    .expect("goal id"),
+                project_id: "00000000-0000-0000-0000-0000000000c3"
+                    .parse()
+                    .expect("goal project id"),
+                session_id: goal_session_id,
+                objective: "Ship the bounded slice".into(),
+                lifecycle: GoalLifecycle::Paused,
+                token_budget: Some(4_000),
+                tool_budget: Some(8),
+                time_budget_seconds: Some(1_800),
+                tokens_used: 640,
+                tools_used: 2,
+                iteration: 3,
+                next_action: "Resume the goal when ready".into(),
+                verification_history: Vec::new(),
+                created_at: now(),
+                updated_at: now(),
+            }),
+        });
+        assert!(ui.window().get_goal_available());
+        assert_eq!(ui.window().get_goal_objective(), "Ship the bounded slice");
+        assert_eq!(ui.window().get_goal_state(), "Paused");
+        assert_eq!(ui.window().get_goal_iteration(), 3);
+        assert_eq!(ui.window().get_goal_token_budget(), 4_000);
+        assert_eq!(ui.window().get_goal_tokens_used(), 640);
+        ui.apply_event(&AppEvent::GoalSnapshotLoaded {
+            session_id: goal_session_id,
+            goal: None,
+        });
+        assert!(!ui.window().get_goal_available());
 
         // A provider probe failure is kept out of the task error surface.
         let detail = "LM Studio could not be reached. Start the service or check the endpoint.";

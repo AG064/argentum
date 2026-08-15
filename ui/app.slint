@@ -217,6 +217,112 @@ component StateBadge inherits Rectangle {
     }
 }
 
+component GoalCard inherits Rectangle {
+    in property <bool> available: false;
+    in property <string> objective: "";
+    in property <string> state: "";
+    in property <string> next-action: "";
+    in property <int> iteration: 0;
+    in property <int> tokens-used: 0;
+    in property <int> token-budget: 0;
+    in property <bool> token-budget-reported: false;
+    in property <int> tools-used: 0;
+    in property <int> tool-budget: 0;
+    in property <bool> tool-budget-reported: false;
+    in property <int> time-budget-seconds: 0;
+    in property <bool> time-budget-reported: false;
+    in property <int> verification-count: 0;
+    in property <bool> busy: false;
+    in-out property <string> objective-draft: "";
+    in property <bool> reduced-motion: false;
+    callback set-goal(string, int, int, int);
+    callback pause-goal();
+    callback resume-goal();
+    callback clear-goal();
+
+    min-height: 160px;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: root.state == "Budget limited" ? AgTheme.red-700 : AgTheme.silver-700;
+    background: root.state == "Budget limited" ? AgTheme.attention-surface : AgTheme.chrome;
+
+    VerticalLayout {
+        padding: AgTheme.space-4;
+        spacing: AgTheme.space-3;
+
+        HorizontalLayout {
+            height: AgTheme.space-8;
+            spacing: AgTheme.space-2;
+            Text { text: "Goal"; color: AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            if root.available: StateBadge { label: root.state; active: root.state == "Active"; attention: root.state == "Budget limited"; reduced-motion: root.reduced-motion; }
+        }
+
+        if root.available: VerticalLayout {
+            spacing: AgTheme.space-1;
+            Text { text: root.objective; color: AgTheme.text-primary; font-size: AgTheme.type-body; wrap: word-wrap; }
+            Text { text: "Next: " + root.next-action; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+            Text { text: "Iteration " + root.iteration + "  |  Verifications " + root.verification-count; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+            if root.token-budget-reported: Text { text: "Tokens " + root.tokens-used + " / " + root.token-budget; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+            if root.tool-budget-reported: Text { text: "Tools " + root.tools-used + " / " + root.tool-budget; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+            if root.time-budget-reported: Text { text: "Time " + root.time-budget-seconds + " seconds"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+        }
+
+        if !root.available: Text {
+            text: "Set an objective for this session. It stays under your control until you start a run through the shared command host.";
+            color: AgTheme.text-muted;
+            font-size: AgTheme.type-compact;
+            wrap: word-wrap;
+        }
+
+        SettingsField {
+            label: "Objective";
+            placeholder: root.available ? "Replace the objective" : "Describe the objective";
+            value <=> root.objective-draft;
+            enabled: !root.busy;
+        }
+
+        HorizontalLayout {
+            spacing: AgTheme.space-2;
+            ActionButton {
+                label: root.available ? "Replace goal" : "Set goal";
+                icon: root.available ? "review" : "plus";
+                primary: !root.available;
+                enabled: !root.busy && root.objective-draft != "";
+                reduced-motion: root.reduced-motion;
+                clicked => {
+                    root.set-goal(
+                        root.objective-draft,
+                        root.token-budget-reported ? root.token-budget : -1,
+                        root.tool-budget-reported ? root.tool-budget : -1,
+                        root.time-budget-reported ? root.time-budget-seconds : -1
+                    );
+                }
+            }
+            if root.available: ActionButton {
+                label: "Pause";
+                enabled: !root.busy && root.state == "Active";
+                reduced-motion: root.reduced-motion;
+                clicked => { root.pause-goal(); }
+            }
+            if root.available && root.state == "Paused": ActionButton {
+                label: "Resume";
+                enabled: !root.busy;
+                reduced-motion: root.reduced-motion;
+                clicked => { root.resume-goal(); }
+            }
+            if root.available: ActionButton {
+                label: "Clear";
+                enabled: !root.busy;
+                foreground: AgTheme.red-100;
+                outline-color: AgTheme.red-700;
+                reduced-motion: root.reduced-motion;
+                clicked => { root.clear-goal(); }
+            }
+        }
+    }
+}
+
 component ActivityItem inherits Rectangle {
     in property <ActivityItemView> item;
 
@@ -549,6 +655,22 @@ export component MainWindow inherits Window {
     in-out property <string> session_title: "New session";
     in-out property <string> active_session_id: "";
     in-out property <[SessionItemView]> session_items: [];
+    in-out property <bool> goal_available: false;
+    in-out property <string> goal_objective: "";
+    in-out property <string> goal_draft: "";
+    in-out property <string> goal_state: "";
+    in-out property <string> goal_next_action: "";
+    in-out property <int> goal_iteration: 0;
+    in-out property <int> goal_tokens_used: 0;
+    in-out property <int> goal_token_budget: 0;
+    in-out property <bool> goal_token_budget_reported: false;
+    in-out property <int> goal_tools_used: 0;
+    in-out property <int> goal_tool_budget: 0;
+    in-out property <bool> goal_tool_budget_reported: false;
+    in-out property <int> goal_time_budget_seconds: 0;
+    in-out property <bool> goal_time_budget_reported: false;
+    in-out property <int> goal_verification_count: 0;
+    in-out property <bool> goal_action_pending: false;
     in-out property <string> user_prompt: "";
     in-out property <[ConversationMessageView]> conversation_messages: [];
     in-out property <string> plan_summary: "No stages yet";
@@ -632,6 +754,10 @@ export component MainWindow inherits Window {
     callback cancel_run(string);
     callback new_session();
     callback select_session(string);
+    callback set_goal(string, int, int, int);
+    callback pause_goal();
+    callback resume_goal();
+    callback clear_goal();
     callback probe_provider(string);
     callback open_settings();
     callback save_provider_profile(string, string, string, string, string, bool);
@@ -1280,6 +1406,32 @@ export component MainWindow inherits Window {
                         root.inspector_open = false;
                         root.toggle_inspector();
                     }
+                }
+
+                GoalCard {
+                    available: root.goal_available;
+                    objective: root.goal_objective;
+                    objective-draft <=> root.goal_draft;
+                    state: root.goal_state;
+                    next-action: root.goal_next_action;
+                    iteration: root.goal_iteration;
+                    tokens-used: root.goal_tokens_used;
+                    token-budget: root.goal_token_budget;
+                    token-budget-reported: root.goal_token_budget_reported;
+                    tools-used: root.goal_tools_used;
+                    tool-budget: root.goal_tool_budget;
+                    tool-budget-reported: root.goal_tool_budget_reported;
+                    time-budget-seconds: root.goal_time_budget_seconds;
+                    time-budget-reported: root.goal_time_budget_reported;
+                    verification-count: root.goal_verification_count;
+                    busy: root.goal_action_pending || root.running;
+                    reduced-motion: root.reduced_motion;
+                    set-goal(objective, token_budget, tool_budget, time_budget_seconds) => {
+                        root.set_goal(objective, token_budget, tool_budget, time_budget_seconds);
+                    }
+                    pause-goal => { root.pause_goal(); }
+                    resume-goal => { root.resume_goal(); }
+                    clear-goal => { root.clear_goal(); }
                 }
 
                 SectionHeading { label: "Changes"; }

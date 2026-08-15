@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use argentum_domain::{
     now, AppEvent, ConversationMessage, ConversationMessageStatus, ConversationRole,
-    ConversationSnapshot, LayoutProfile, ModelUsage, Project, ProjectId, ProviderKind,
+    ConversationSnapshot, Goal, LayoutProfile, ModelUsage, Project, ProjectId, ProviderKind,
     ProviderProfile, RunId, Session, SessionId, SessionSummary, WorkspaceSnapshot,
 };
 use directories::ProjectDirs;
@@ -36,6 +36,12 @@ pub const EVENT_PAYLOAD_VERSION: u16 = 1;
 pub const MAX_CONVERSATION_MESSAGE_BYTES: usize = 512 * 1024;
 pub const MAX_CONVERSATION_SNAPSHOT_MESSAGES: usize = 200;
 pub const MAX_CONVERSATION_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_GOAL_OBJECTIVE_BYTES: usize = 16 * 1024;
+pub const MAX_GOAL_NEXT_ACTION_BYTES: usize = 4 * 1024;
+pub const MAX_GOAL_VERIFICATION_HISTORY: usize = 64;
+const MAX_GOAL_TOKEN_BUDGET: u64 = 10_000_000;
+const MAX_GOAL_TOOL_BUDGET: u32 = 100_000;
+const MAX_GOAL_TIME_BUDGET_SECONDS: u64 = 7 * 24 * 60 * 60;
 const DATABASE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -390,6 +396,131 @@ impl Store {
         )?;
         drop(connection);
         self.workspace_snapshot(project_id)
+    }
+
+    pub fn goal(
+        &self,
+        project_id: ProjectId,
+        session_id: SessionId,
+    ) -> Result<Option<Goal>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let payload = connection
+            .query_row(
+                "SELECT payload FROM goals
+                 WHERE project_id = ?1 AND session_id = ?2",
+                params![project_id.to_string(), session_id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        payload
+            .map(|payload| {
+                let goal = serde_json::from_str::<Goal>(&payload)?;
+                validate_goal(&goal)?;
+                if goal.project_id != project_id || goal.session_id != session_id {
+                    return Err(StoreError::InvalidRecord(
+                        "stored goal belongs to a different session".into(),
+                    ));
+                }
+                Ok(goal)
+            })
+            .transpose()
+    }
+
+    pub fn save_goal(&self, goal: &Goal) -> Result<(), StoreError> {
+        validate_goal(goal)?;
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let transaction = connection.transaction()?;
+        let belongs_to_project = transaction.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sessions WHERE id = ?1 AND project_id = ?2
+             )",
+            params![goal.session_id.to_string(), goal.project_id.to_string()],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !belongs_to_project {
+            return Err(StoreError::InvalidRecord(
+                "goal session does not belong to its project".into(),
+            ));
+        }
+        transaction.execute(
+            "INSERT INTO goals (id, project_id, session_id, payload, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(session_id) DO UPDATE SET
+                 id = excluded.id,
+                 project_id = excluded.project_id,
+                 payload = excluded.payload,
+                 updated_at = excluded.updated_at",
+            params![
+                goal.id.to_string(),
+                goal.project_id.to_string(),
+                goal.session_id.to_string(),
+                serde_json::to_string(goal)?,
+                goal.updated_at.unix_timestamp(),
+            ],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn clear_goal(
+        &self,
+        project_id: ProjectId,
+        session_id: SessionId,
+    ) -> Result<bool, StoreError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let transaction = connection.transaction()?;
+        let belongs_to_project = transaction.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sessions WHERE id = ?1 AND project_id = ?2
+             )",
+            params![session_id.to_string(), project_id.to_string()],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !belongs_to_project {
+            return Err(StoreError::InvalidRecord(
+                "goal session does not belong to the current project".into(),
+            ));
+        }
+        let payload = transaction
+            .query_row(
+                "SELECT payload FROM goals
+                 WHERE project_id = ?1 AND session_id = ?2",
+                params![project_id.to_string(), session_id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let Some(payload) = payload else {
+            transaction.commit()?;
+            return Ok(false);
+        };
+        let goal = serde_json::from_str::<Goal>(&payload)?;
+        validate_goal(&goal)?;
+        transaction.execute(
+            "INSERT INTO goal_history (goal_id, project_id, session_id, payload, cleared_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                goal.id.to_string(),
+                project_id.to_string(),
+                session_id.to_string(),
+                payload,
+                now().unix_timestamp(),
+            ],
+        )?;
+        transaction.execute(
+            "DELETE FROM goals WHERE project_id = ?1 AND session_id = ?2",
+            params![project_id.to_string(), session_id.to_string()],
+        )?;
+        transaction.commit()?;
+        Ok(true)
     }
 
     pub fn append_conversation_message(
@@ -815,6 +946,25 @@ impl Store {
                  model TEXT NOT NULL DEFAULT '',
                  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
                  FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS goals (
+                 id TEXT PRIMARY KEY,
+                 project_id TEXT NOT NULL,
+                 session_id TEXT NOT NULL UNIQUE,
+                 payload TEXT NOT NULL,
+                 updated_at INTEGER NOT NULL,
+                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                 FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS goal_history (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 goal_id TEXT NOT NULL,
+                 project_id TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 payload TEXT NOT NULL,
+                 cleared_at INTEGER NOT NULL,
+                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                 FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
              );",
         )?;
         ensure_column(
@@ -855,7 +1005,11 @@ impl Store {
                  ON conversation_messages(project_id, session_id, created_at);
              CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_messages_run_role
                  ON conversation_messages(run_id, role);
-             PRAGMA user_version = 5;",
+             CREATE INDEX IF NOT EXISTS idx_goals_project_session
+                 ON goals(project_id, session_id);
+             CREATE INDEX IF NOT EXISTS idx_goal_history_session
+                 ON goal_history(project_id, session_id, cleared_at);
+             PRAGMA user_version = 6;",
         )?;
         Ok(())
     }
@@ -1134,6 +1288,95 @@ fn validate_model_usage(usage: &ModelUsage) -> Result<(), StoreError> {
             "conversation message usage is invalid".into(),
         ))
     }
+}
+
+fn validate_goal(goal: &Goal) -> Result<(), StoreError> {
+    let objective = goal.objective.trim();
+    if objective.is_empty() {
+        return Err(StoreError::InvalidRecord(
+            "goal objective must not be empty".into(),
+        ));
+    }
+    if objective.len() > MAX_GOAL_OBJECTIVE_BYTES {
+        return Err(StoreError::InvalidRecord(
+            "goal objective exceeds the byte limit".into(),
+        ));
+    }
+    if goal
+        .objective
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal objective contains unsupported control characters".into(),
+        ));
+    }
+    if goal.next_action.len() > MAX_GOAL_NEXT_ACTION_BYTES {
+        return Err(StoreError::InvalidRecord(
+            "goal next action exceeds the byte limit".into(),
+        ));
+    }
+    if goal
+        .next_action
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal next action contains unsupported control characters".into(),
+        ));
+    }
+    if goal
+        .token_budget
+        .is_some_and(|budget| budget == 0 || budget > MAX_GOAL_TOKEN_BUDGET)
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal token budget is outside the supported range".into(),
+        ));
+    }
+    if goal
+        .tool_budget
+        .is_some_and(|budget| budget == 0 || budget > MAX_GOAL_TOOL_BUDGET)
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal tool budget is outside the supported range".into(),
+        ));
+    }
+    if goal
+        .time_budget_seconds
+        .is_some_and(|budget| budget == 0 || budget > MAX_GOAL_TIME_BUDGET_SECONDS)
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal time budget is outside the supported range".into(),
+        ));
+    }
+    if goal
+        .token_budget
+        .is_some_and(|budget| goal.tokens_used > budget)
+        || goal
+            .tool_budget
+            .is_some_and(|budget| goal.tools_used > budget)
+    {
+        return Err(StoreError::InvalidRecord(
+            "goal usage exceeds its configured budget".into(),
+        ));
+    }
+    if goal.verification_history.len() > MAX_GOAL_VERIFICATION_HISTORY {
+        return Err(StoreError::InvalidRecord(
+            "goal verification history exceeds the item limit".into(),
+        ));
+    }
+    if goal.verification_history.iter().any(|verification| {
+        verification.summary.len() > MAX_GOAL_NEXT_ACTION_BYTES
+            || verification
+                .summary
+                .chars()
+                .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    }) {
+        return Err(StoreError::InvalidRecord(
+            "goal verification summary exceeds the byte limit".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_storable_provider_profile(profile: &ProviderProfile) -> Result<(), StoreError> {
@@ -1425,7 +1668,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u16>(0))
             .expect("schema version");
         assert_eq!(payload_version, EVENT_PAYLOAD_VERSION);
-        assert_eq!(schema_version, 5);
+        assert_eq!(schema_version, 6);
     }
 
     #[test]
@@ -2262,5 +2505,121 @@ mod tests {
 
         assert_eq!(after, before);
         assert!(store.events().expect("events").is_empty());
+    }
+
+    #[test]
+    fn goals_persist_replace_and_clear_with_audit_history() {
+        let directory = tempfile::tempdir().expect("directory");
+        let workspace = directory.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let database = directory.path().join("argentum.db");
+        let store = Store::open(&database).expect("store");
+        let resolution = store.resolve_workspace(&workspace).expect("resolution");
+        let project_id = resolution.snapshot.project.id;
+        let session_id = resolution.snapshot.active_session_id.expect("session");
+        let timestamp = now();
+        let goal = Goal {
+            id: argentum_domain::GoalId::new_v4(),
+            project_id,
+            session_id,
+            objective: "Ship the first verified slice".into(),
+            lifecycle: argentum_domain::GoalLifecycle::Active,
+            token_budget: Some(20_000),
+            tool_budget: Some(12),
+            time_budget_seconds: Some(3_600),
+            tokens_used: 120,
+            tools_used: 2,
+            iteration: 1,
+            next_action: "Inspect the current workspace".into(),
+            verification_history: Vec::new(),
+            created_at: timestamp,
+            updated_at: timestamp,
+        };
+        store.save_goal(&goal).expect("save goal");
+        assert_eq!(
+            store.goal(project_id, session_id).expect("load goal"),
+            Some(goal.clone())
+        );
+
+        let mut replacement = goal.clone();
+        replacement.objective = "Ship the second verified slice".into();
+        replacement.updated_at = now();
+        store.save_goal(&replacement).expect("replace goal");
+        assert_eq!(
+            store
+                .goal(project_id, session_id)
+                .expect("load replacement"),
+            Some(replacement)
+        );
+
+        assert!(store
+            .clear_goal(project_id, session_id)
+            .expect("clear goal"));
+        assert_eq!(
+            store.goal(project_id, session_id).expect("cleared goal"),
+            None
+        );
+        let history_count: i64 = store
+            .connection
+            .lock()
+            .expect("connection")
+            .query_row("SELECT COUNT(*) FROM goal_history", [], |row| row.get(0))
+            .expect("history count");
+        assert_eq!(history_count, 1);
+
+        drop(store);
+        let reopened = Store::open(&database).expect("reopened store");
+        assert_eq!(
+            reopened
+                .goal(project_id, session_id)
+                .expect("reopened goal"),
+            None
+        );
+    }
+
+    #[test]
+    fn goals_are_project_scoped_and_reject_invalid_budgets() {
+        let directory = tempfile::tempdir().expect("directory");
+        let left_root = directory.path().join("left");
+        let right_root = directory.path().join("right");
+        std::fs::create_dir(&left_root).expect("left workspace");
+        std::fs::create_dir(&right_root).expect("right workspace");
+        let store = Store::open_in_memory().expect("store");
+        let left = store.resolve_workspace(&left_root).expect("left");
+        let right = store.resolve_workspace(&right_root).expect("right");
+        let left_session = left.snapshot.active_session_id.expect("left session");
+        let right_session = right.snapshot.active_session_id.expect("right session");
+        let timestamp = now();
+        let goal = Goal {
+            id: argentum_domain::GoalId::new_v4(),
+            project_id: left.snapshot.project.id,
+            session_id: left_session,
+            objective: "Left workspace objective".into(),
+            lifecycle: argentum_domain::GoalLifecycle::Active,
+            token_budget: Some(100),
+            tool_budget: None,
+            time_budget_seconds: None,
+            tokens_used: 0,
+            tools_used: 0,
+            iteration: 0,
+            next_action: "Continue".into(),
+            verification_history: Vec::new(),
+            created_at: timestamp,
+            updated_at: timestamp,
+        };
+        store.save_goal(&goal).expect("left goal");
+        assert_eq!(
+            store
+                .goal(right.snapshot.project.id, right_session)
+                .expect("right goal"),
+            None
+        );
+
+        let mut invalid = goal;
+        invalid.token_budget = Some(0);
+        assert!(matches!(
+            store.save_goal(&invalid),
+            Err(StoreError::InvalidRecord(message)) if message.contains("token budget")
+        ));
     }
 }

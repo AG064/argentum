@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use argentum_domain::{
     now, ActiveRunState, AppCommand, AppEvent, ApprovalRequest, ApprovalScope, ChangeSet,
-    ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot,
-    LayoutProfile, ModelUsage as DomainModelUsage, PlanStep, ProviderKind,
+    ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot, Goal,
+    GoalLifecycle, LayoutProfile, ModelUsage as DomainModelUsage, PlanStep, ProviderKind,
     ProviderModel as DomainProviderModel, ProviderProfile, ProviderStatus, Run, RunId, SessionId,
     Task, TaskLifecycle, ToolResultState, ToolTrace, WorkspaceSnapshot,
 };
@@ -50,6 +50,14 @@ pub enum RuntimeError {
     InvalidProviderModel,
     #[error("this session already has an active run")]
     SessionRunActive,
+    #[error("goal objective must not be empty")]
+    EmptyGoal,
+    #[error("goal cannot be changed while this session has an active run")]
+    GoalRunActive,
+    #[error("goal is not configured for the active session")]
+    GoalMissing,
+    #[error("goal cannot be resumed from its current state")]
+    GoalNotResumable,
     #[error("runtime state lock was poisoned")]
     StateLockPoisoned,
     #[error("the model tool loop exceeded its safety limit")]
@@ -257,9 +265,16 @@ impl RuntimeService {
         self.publish_transient(AppEvent::WorkspaceStateLoaded(snapshot.clone()));
         if let Some(session_id) = snapshot.active_session_id {
             self.publish_conversation_snapshot(session_id)?;
+            self.publish_goal_snapshot(session_id)?;
         }
         self.publish_active_runs_snapshot()?;
         Ok(snapshot)
+    }
+
+    fn publish_goal_snapshot(&self, session_id: SessionId) -> Result<(), RuntimeError> {
+        let goal = self.store.goal(self.project_id, session_id)?;
+        self.publish_transient(AppEvent::GoalSnapshotLoaded { session_id, goal });
+        Ok(())
     }
 
     fn publish_active_runs_snapshot(&self) -> Result<(), RuntimeError> {
@@ -304,6 +319,11 @@ impl RuntimeService {
             .conversation_snapshot(self.project_id, session_id)?)
     }
 
+    pub fn goal(&self) -> Result<Option<Goal>, RuntimeError> {
+        let session_id = self.active_session()?;
+        Ok(self.store.goal(self.project_id, session_id)?)
+    }
+
     fn publish_conversation_snapshot(
         &self,
         session_id: SessionId,
@@ -341,8 +361,18 @@ impl RuntimeService {
                 }
                 self.publish_transient(AppEvent::WorkspaceStateLoaded(snapshot));
                 self.publish_conversation_snapshot(session_id)?;
+                self.publish_goal_snapshot(session_id)?;
                 Ok(())
             }
+            AppCommand::SetGoal {
+                objective,
+                token_budget,
+                tool_budget,
+                time_budget_seconds,
+            } => self.set_goal(objective, token_budget, tool_budget, time_budget_seconds),
+            AppCommand::PauseGoal => self.pause_goal(),
+            AppCommand::ResumeGoal => self.resume_goal(),
+            AppCommand::ClearGoal => self.clear_goal(),
             AppCommand::ProbeProvider { provider_id } => self.probe_provider(provider_id).await,
             AppCommand::ListProviderProfiles => {
                 self.publish_provider_profiles()?;
@@ -385,6 +415,128 @@ impl RuntimeService {
                 Ok(())
             }
         }
+    }
+
+    fn set_goal(
+        &self,
+        objective: String,
+        token_budget: Option<u64>,
+        tool_budget: Option<u32>,
+        time_budget_seconds: Option<u64>,
+    ) -> Result<(), RuntimeError> {
+        let objective = objective.trim().to_owned();
+        if objective.is_empty() {
+            return Err(RuntimeError::EmptyGoal);
+        }
+        if self
+            .active_session_runs
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .contains_key(&self.active_session()?)
+        {
+            return Err(RuntimeError::GoalRunActive);
+        }
+        let session_id = self.active_session()?;
+        let previous = self.store.goal(self.project_id, session_id)?;
+        let timestamp = now();
+        let goal = Goal {
+            id: previous
+                .as_ref()
+                .map(|goal| goal.id)
+                .unwrap_or_else(Uuid::new_v4),
+            project_id: self.project_id,
+            session_id,
+            objective,
+            lifecycle: GoalLifecycle::Active,
+            token_budget,
+            tool_budget,
+            time_budget_seconds,
+            tokens_used: 0,
+            tools_used: 0,
+            iteration: 0,
+            next_action: "Run the next task".into(),
+            verification_history: previous
+                .as_ref()
+                .map(|goal| goal.verification_history.clone())
+                .unwrap_or_default(),
+            created_at: previous
+                .as_ref()
+                .map(|goal| goal.created_at)
+                .unwrap_or(timestamp),
+            updated_at: timestamp,
+        };
+        self.store.save_goal(&goal)?;
+        self.publish_transient(AppEvent::GoalSnapshotLoaded {
+            session_id,
+            goal: Some(goal),
+        });
+        Ok(())
+    }
+
+    fn pause_goal(&self) -> Result<(), RuntimeError> {
+        let session_id = self.active_session()?;
+        if self
+            .active_session_runs
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .contains_key(&session_id)
+        {
+            return Err(RuntimeError::GoalRunActive);
+        }
+        let mut goal = self
+            .store
+            .goal(self.project_id, session_id)?
+            .ok_or(RuntimeError::GoalMissing)?;
+        if goal.lifecycle != GoalLifecycle::Active {
+            return Err(RuntimeError::GoalNotResumable);
+        }
+        goal.lifecycle = GoalLifecycle::Paused;
+        goal.next_action = "Resume the goal when ready".into();
+        goal.updated_at = now();
+        self.store.save_goal(&goal)?;
+        self.publish_transient(AppEvent::GoalSnapshotLoaded {
+            session_id,
+            goal: Some(goal),
+        });
+        Ok(())
+    }
+
+    fn resume_goal(&self) -> Result<(), RuntimeError> {
+        let session_id = self.active_session()?;
+        let mut goal = self
+            .store
+            .goal(self.project_id, session_id)?
+            .ok_or(RuntimeError::GoalMissing)?;
+        if !goal.lifecycle.can_resume() {
+            return Err(RuntimeError::GoalNotResumable);
+        }
+        goal.lifecycle = GoalLifecycle::Active;
+        goal.next_action = "Run the next task".into();
+        goal.updated_at = now();
+        self.store.save_goal(&goal)?;
+        self.publish_transient(AppEvent::GoalSnapshotLoaded {
+            session_id,
+            goal: Some(goal),
+        });
+        Ok(())
+    }
+
+    fn clear_goal(&self) -> Result<(), RuntimeError> {
+        let session_id = self.active_session()?;
+        if self
+            .active_session_runs
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .contains_key(&session_id)
+        {
+            return Err(RuntimeError::GoalRunActive);
+        }
+        self.store.clear_goal(self.project_id, session_id)?;
+        self.publish_transient(AppEvent::GoalSnapshotLoaded {
+            session_id,
+            goal: None,
+        });
+        Ok(())
     }
 
     fn save_provider_profile(&self, profile: ProviderProfile) -> Result<(), RuntimeError> {
@@ -1747,6 +1899,13 @@ impl RuntimeService {
             .collect())
     }
 
+    fn active_session(&self) -> Result<SessionId, RuntimeError> {
+        self.session_id
+            .lock()
+            .map(|value| *value)
+            .map_err(|_| RuntimeError::StateLockPoisoned)
+    }
+
     pub fn project_id(&self) -> Uuid {
         self.project_id
     }
@@ -2072,6 +2231,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         AppEvent::ChangeSetReady(change_set) => Some(change_set.run_id),
         AppEvent::WorkspaceStateLoaded(_)
         | AppEvent::ConversationSnapshotLoaded(_)
+        | AppEvent::GoalSnapshotLoaded { .. }
         | AppEvent::ActiveRunsSnapshot { .. }
         | AppEvent::ProjectCreated(_)
         | AppEvent::SessionCreated(_)
@@ -2164,6 +2324,11 @@ mod tests {
                 if conversation.project_id == runtime.project_id()
                     && conversation.session_id == runtime.session_id()
                     && conversation.messages.is_empty()
+        ));
+        assert!(matches!(
+            events.recv().await.expect("goal event"),
+            AppEvent::GoalSnapshotLoaded { session_id, goal: None }
+                if session_id == runtime.session_id()
         ));
         assert!(matches!(
             events.recv().await.expect("active runs event"),
@@ -3626,6 +3791,99 @@ mod tests {
             .lock()
             .expect("lifecycles")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn goal_lifecycle_is_persisted_and_published_without_auto_continuation() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+        assert_eq!(runtime.goal().expect("initial goal"), None);
+
+        runtime
+            .dispatch(AppCommand::SetGoal {
+                objective: "Ship a verified slice".into(),
+                token_budget: Some(4_000),
+                tool_budget: Some(8),
+                time_budget_seconds: Some(1_800),
+            })
+            .await
+            .expect("set goal");
+        let active = runtime.goal().expect("active goal").expect("goal");
+        assert_eq!(active.lifecycle, GoalLifecycle::Active);
+        assert_eq!(active.objective, "Ship a verified slice");
+        assert_eq!(active.token_budget, Some(4_000));
+        assert!(drain_events(&mut events).iter().any(|event| matches!(
+            event,
+            AppEvent::GoalSnapshotLoaded { goal: Some(goal), .. }
+                if goal.lifecycle == GoalLifecycle::Active
+        )));
+
+        runtime
+            .dispatch(AppCommand::PauseGoal)
+            .await
+            .expect("pause goal");
+        assert_eq!(
+            runtime
+                .goal()
+                .expect("paused goal")
+                .expect("goal")
+                .lifecycle,
+            GoalLifecycle::Paused
+        );
+        runtime
+            .dispatch(AppCommand::ResumeGoal)
+            .await
+            .expect("resume goal");
+        assert_eq!(
+            runtime
+                .goal()
+                .expect("resumed goal")
+                .expect("goal")
+                .lifecycle,
+            GoalLifecycle::Active
+        );
+
+        runtime
+            .dispatch(AppCommand::ClearGoal)
+            .await
+            .expect("clear goal");
+        assert_eq!(runtime.goal().expect("cleared goal"), None);
+        assert!(drain_events(&mut events)
+            .iter()
+            .any(|event| matches!(event, AppEvent::GoalSnapshotLoaded { goal: None, .. })));
+    }
+
+    #[tokio::test]
+    async fn goal_actions_reject_empty_objectives_and_active_runs() {
+        let (runtime, _events) = runtime_with_providers(ProviderRegistry::default());
+        assert!(matches!(
+            runtime
+                .dispatch(AppCommand::SetGoal {
+                    objective: "  ".into(),
+                    token_budget: None,
+                    tool_budget: None,
+                    time_budget_seconds: None,
+                })
+                .await,
+            Err(RuntimeError::EmptyGoal)
+        ));
+
+        let session_id = runtime.session_id();
+        runtime
+            .active_session_runs
+            .lock()
+            .expect("active runs")
+            .insert(session_id, RunId::new_v4());
+        assert!(matches!(
+            runtime
+                .dispatch(AppCommand::SetGoal {
+                    objective: "Cannot change during a run".into(),
+                    token_budget: None,
+                    tool_budget: None,
+                    time_budget_seconds: None,
+                })
+                .await,
+            Err(RuntimeError::GoalRunActive)
+        ));
     }
 
     fn runtime_with_providers(

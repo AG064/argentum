@@ -12,6 +12,7 @@ pub type RunId = Uuid;
 pub type MessageId = Uuid;
 pub type ApprovalId = Uuid;
 pub type ToolCallId = Uuid;
+pub type GoalId = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -179,6 +180,57 @@ pub struct Session {
 pub struct SessionSummary {
     pub id: SessionId,
     pub title: String,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalLifecycle {
+    Active,
+    Paused,
+    BudgetLimited,
+    Complete,
+}
+
+impl GoalLifecycle {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Paused => "Paused",
+            Self::BudgetLimited => "Budget limited",
+            Self::Complete => "Complete",
+        }
+    }
+
+    pub const fn can_resume(self) -> bool {
+        matches!(self, Self::Paused)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalVerification {
+    pub run_id: RunId,
+    pub passed: bool,
+    pub summary: String,
+    pub recorded_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Goal {
+    pub id: GoalId,
+    pub project_id: ProjectId,
+    pub session_id: SessionId,
+    pub objective: String,
+    pub lifecycle: GoalLifecycle,
+    pub token_budget: Option<u64>,
+    pub tool_budget: Option<u32>,
+    pub time_budget_seconds: Option<u64>,
+    pub tokens_used: u64,
+    pub tools_used: u32,
+    pub iteration: u32,
+    pub next_action: String,
+    pub verification_history: Vec<GoalVerification>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
@@ -406,6 +458,15 @@ pub enum AppCommand {
     SelectSession {
         session_id: SessionId,
     },
+    SetGoal {
+        objective: String,
+        token_budget: Option<u64>,
+        tool_budget: Option<u32>,
+        time_budget_seconds: Option<u64>,
+    },
+    PauseGoal,
+    ResumeGoal,
+    ClearGoal,
     ProbeProvider {
         provider_id: String,
     },
@@ -455,6 +516,10 @@ pub type UiCommand = AppCommand;
 pub enum AppEvent {
     WorkspaceStateLoaded(WorkspaceSnapshot),
     ConversationSnapshotLoaded(ConversationSnapshot),
+    GoalSnapshotLoaded {
+        session_id: SessionId,
+        goal: Option<Goal>,
+    },
     ActiveRunsSnapshot {
         runs: Vec<ActiveRunState>,
     },
@@ -524,6 +589,7 @@ impl AppEvent {
         match self {
             Self::WorkspaceStateLoaded(_) => "workspace_state_loaded",
             Self::ConversationSnapshotLoaded(_) => "conversation_snapshot_loaded",
+            Self::GoalSnapshotLoaded { .. } => "goal_snapshot_loaded",
             Self::ActiveRunsSnapshot { .. } => "active_runs_snapshot",
             Self::ProjectCreated(_) => "project_created",
             Self::SessionCreated(_) => "session_created",
