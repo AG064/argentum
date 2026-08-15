@@ -252,6 +252,23 @@ impl RuntimeService {
         Ok(self.store.provider_profiles(self.project_id)?)
     }
 
+    pub fn provider_credential_configured(&self, profile_id: &str) -> bool {
+        self.providers.credential_configured(profile_id)
+    }
+
+    pub fn set_provider_credential(
+        &self,
+        profile_id: &str,
+        credential: argentum_security::SecretValue,
+    ) -> Result<(), RuntimeError> {
+        self.providers.set_credential(profile_id, credential)?;
+        Ok(())
+    }
+
+    pub fn clear_provider_credential(&self, profile_id: &str) {
+        self.providers.clear_credential(profile_id);
+    }
+
     pub fn publish_provider_profiles(&self) -> Result<Vec<ProviderProfile>, RuntimeError> {
         let profiles = self.provider_profiles()?;
         self.publish_transient(AppEvent::ProviderProfilesSnapshot {

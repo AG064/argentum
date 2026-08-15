@@ -2404,7 +2404,24 @@ export component MainWindow inherits Window {
                             wrap: word-wrap;
                         }
 
+                        Text {
+                            visible: root.provider_id == "openai"
+                                || root.provider_id == "minimax"
+                                || root.provider_id == "deepseek";
+                            text: "Secure credentials are kept in the OS keyring. Configure this profile with: argentum-cli provider credential set " + root.provider_id;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
                         SectionHeading { label: "Interface"; detail: "Local preferences"; }
+
+                        Text {
+                            text: "Workspace: " + root.workspace_label;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
 
                         MenuRow {
                             icon: "motion";

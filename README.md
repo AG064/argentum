@@ -76,6 +76,22 @@ cargo run -p argentum-cli -- provider models local-secondary
 cargo run -p argentum-cli -- provider model local-secondary --model "qwen-local"
 ```
 
+Persist or inspect the workspace used by the desktop host:
+
+```powershell
+cargo run -p argentum-cli -- workspace status
+cargo run -p argentum-cli -- workspace set "A:\path\to\workspace"
+```
+
+Store a hosted-provider credential in the operating-system keyring. The command
+reads the credential from standard input and never accepts it as a command-line
+argument:
+
+```powershell
+cargo run -p argentum-cli -- provider credential set minimax
+cargo run -p argentum-cli -- provider credential clear minimax
+```
+
 Start the native client:
 
 ```powershell
@@ -86,10 +102,11 @@ By default, Argentum creates a local LM Studio-compatible profile at
 `http://127.0.0.1:1234/v1/`. Provider profiles are scoped to the workspace and
 the selected profile drives task execution immediately. Profile records contain
 only a label, provider kind, endpoint, and model. Credentials are not accepted
-by this profile workflow or stored in SQLite or events. Canonical profile IDs
+by profile save and are never stored in SQLite or events. Canonical profile IDs
 `openai`, `minimax`, and `deepseek` receive only their matching
 `OPENAI_API_KEY`, `MINIMAX_API_KEY`, or `DEEPSEEK_API_KEY` from the host
-environment. Missing credentials fail before network access. The connectivity
+environment or from the operating-system keyring through `provider credential
+set`. Missing credentials fail before network access. The connectivity
 probe uses the profile's bounded models endpoint and does not send a billable
 model request. A canonical credential is sent only to its approved HTTPS origin
 with the default TLS port. A saved canonical profile cannot redirect that key

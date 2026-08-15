@@ -8,8 +8,13 @@ license.workspace = true
 [dependencies]
 argentum-security.workspace = true
 directories.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios", target_os = "linux"))'.dependencies]
 keyring.workspace = true
 zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

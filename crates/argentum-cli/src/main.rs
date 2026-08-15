@@ -7,7 +7,9 @@ use argentum_cli::protocol::{ResponseEnvelope, ServerPayload, PROTOCOL_VERSION};
 use argentum_cli::server::serve_jsonl;
 use argentum_cli::{CommandHost, HostConfig};
 use argentum_domain::AppCommand;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufReader};
+use argentum_platform::AppPaths;
+use argentum_security::SecretValue;
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -267,6 +269,17 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
         }
+        Arguments::ProviderCredential {
+            options,
+            provider_id,
+            action,
+            json,
+        } => {
+            run_provider_credential_command(options, provider_id, action, json).await?;
+        }
+        Arguments::Workspace { action, json } => {
+            run_workspace_command(action, json).await?;
+        }
         Arguments::Sessions { options, json } => {
             let host = CommandHost::start(options.host_config()?)?;
             print_sessions(host.workspace_snapshot()?, json).await?;
@@ -356,6 +369,100 @@ async fn print_goal(
         println!("Verification records: {}", goal.verification_history.len());
     } else {
         println!("Goal: none");
+    }
+    Ok(())
+}
+
+async fn run_provider_credential_command(
+    options: CommonOptions,
+    provider_id: String,
+    action: ProviderCredentialAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = CommandHost::start(options.host_config()?)?;
+    match action {
+        ProviderCredentialAction::Set => {
+            let secret = read_secret_from_stdin().await?;
+            host.set_provider_credential(&provider_id, secret)?;
+            print_credential_status(&provider_id, true, json);
+        }
+        ProviderCredentialAction::Clear => {
+            host.clear_provider_credential(&provider_id)?;
+            print_credential_status(&provider_id, false, json);
+        }
+    }
+    Ok(())
+}
+
+async fn read_secret_from_stdin() -> Result<SecretValue, Box<dyn std::error::Error>> {
+    const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
+    let mut bytes = Vec::new();
+    tokio::io::stdin()
+        .take((MAX_CREDENTIAL_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .await?;
+    if bytes.len() > MAX_CREDENTIAL_BYTES {
+        return Err("credential input exceeds the supported limit".into());
+    }
+    let value = String::from_utf8(bytes)?.trim().to_owned();
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return Err("credential input must be a non-empty single line".into());
+    }
+    Ok(SecretValue::new(value))
+}
+
+fn print_credential_status(provider_id: &str, configured: bool, json: bool) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "provider_id": provider_id,
+                "configured": configured,
+            })
+        );
+    } else if configured {
+        println!("Credential stored securely for {provider_id}.");
+    } else {
+        println!("Credential removed for {provider_id}.");
+    }
+}
+
+async fn run_workspace_command(
+    action: WorkspaceAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let paths = AppPaths::discover()?;
+    match action {
+        WorkspaceAction::Status => {
+            let workspace = paths.load_workspace()?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "configured": workspace.is_some(),
+                        "workspace": workspace.as_ref().map(|path| display_workspace(path)),
+                    })
+                );
+            } else if let Some(workspace) = workspace {
+                println!("Workspace: {}", display_workspace(&workspace));
+            } else {
+                println!("Workspace: not configured");
+            }
+        }
+        WorkspaceAction::Set { path } => {
+            let workspace = paths.save_workspace(path)?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "configured": true,
+                        "workspace": display_workspace(&workspace),
+                    })
+                );
+            } else {
+                println!("Workspace saved: {}", display_workspace(&workspace));
+            }
+        }
     }
     Ok(())
 }
@@ -587,6 +694,16 @@ enum Arguments {
         model: String,
         json: bool,
     },
+    ProviderCredential {
+        options: CommonOptions,
+        provider_id: String,
+        action: ProviderCredentialAction,
+        json: bool,
+    },
+    Workspace {
+        action: WorkspaceAction,
+        json: bool,
+    },
     Sessions {
         options: CommonOptions,
         json: bool,
@@ -619,6 +736,18 @@ enum GoalAction {
     Clear,
 }
 
+#[derive(Debug)]
+enum ProviderCredentialAction {
+    Set,
+    Clear,
+}
+
+#[derive(Debug)]
+enum WorkspaceAction {
+    Status,
+    Set { path: PathBuf },
+}
+
 #[derive(Debug, Clone)]
 struct CommonOptions {
     workspace: PathBuf,
@@ -630,12 +759,20 @@ struct CommonOptions {
 impl Default for CommonOptions {
     fn default() -> Self {
         Self {
-            workspace: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            workspace: default_workspace(),
             database: None,
             endpoint: argentum_cli::DEFAULT_LM_STUDIO_ENDPOINT.into(),
             model: argentum_cli::DEFAULT_MODEL.into(),
         }
     }
+}
+
+fn default_workspace() -> PathBuf {
+    AppPaths::discover()
+        .ok()
+        .and_then(|paths| paths.load_workspace().ok().flatten())
+        .or_else(|| env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 impl CommonOptions {
@@ -683,6 +820,7 @@ where
     let mut session_action = None;
     let mut session_id = None;
     let mut provider_action = None;
+    let mut provider_subaction = None;
     let mut provider_id = None;
     let mut provider_label = None;
     let mut provider_kind = None;
@@ -694,6 +832,8 @@ where
     let mut goal_token_budget = None;
     let mut goal_tool_budget = None;
     let mut goal_time_budget_seconds = None;
+    let mut workspace_action = None;
+    let mut workspace_path = None;
     let mut index = 1;
     while index < values.len() {
         match values[index].as_str() {
@@ -788,8 +928,25 @@ where
             value if command == "provider" && provider_action.is_none() => {
                 provider_action = Some(value.to_owned())
             }
+            value
+                if command == "provider"
+                    && provider_action.as_deref() == Some("credential")
+                    && provider_subaction.is_none() =>
+            {
+                provider_subaction = Some(value.to_owned())
+            }
             value if command == "goal" && goal_action.is_none() => {
                 goal_action = Some(value.to_owned())
+            }
+            value if command == "workspace" && workspace_action.is_none() => {
+                workspace_action = Some(value.to_owned())
+            }
+            value
+                if command == "workspace"
+                    && workspace_action.as_deref() == Some("set")
+                    && workspace_path.is_none() =>
+            {
+                workspace_path = Some(PathBuf::from(value))
             }
             value
                 if command == "goal"
@@ -804,6 +961,14 @@ where
                         provider_action.as_deref(),
                         Some("probe" | "save" | "select" | "models" | "model")
                     )
+                    && provider_id.is_none() =>
+            {
+                provider_id = Some(value.to_owned())
+            }
+            value
+                if command == "provider"
+                    && provider_action.as_deref() == Some("credential")
+                    && matches!(provider_subaction.as_deref(), Some("set" | "clear"))
                     && provider_id.is_none() =>
             {
                 provider_id = Some(value.to_owned())
@@ -869,8 +1034,26 @@ where
                     .ok_or_else(|| "provider model requires --model".to_owned())?,
                 json,
             }),
+            Some("credential") => match provider_subaction.as_deref() {
+                Some("set") => Ok(Arguments::ProviderCredential {
+                    options,
+                    provider_id: provider_id
+                        .ok_or_else(|| "provider credential set requires PROFILE_ID".to_owned())?,
+                    action: ProviderCredentialAction::Set,
+                    json,
+                }),
+                Some("clear") => Ok(Arguments::ProviderCredential {
+                    options,
+                    provider_id: provider_id.ok_or_else(|| {
+                        "provider credential clear requires PROFILE_ID".to_owned()
+                    })?,
+                    action: ProviderCredentialAction::Clear,
+                    json,
+                }),
+                _ => Err("provider credential requires 'set PROFILE_ID' or 'clear PROFILE_ID'".into()),
+            },
             _ => Err(
-                "provider requires 'list', 'save', 'select', 'models', 'model', or 'probe'".into(),
+                "provider requires 'list', 'save', 'select', 'models', 'model', 'credential', or 'probe'".into(),
             ),
         },
         "sessions" if prompt.is_some() => Err("sessions does not accept a prompt".into()),
@@ -949,6 +1132,21 @@ where
                 Err("goal requires 'status', 'set OBJECTIVE', 'pause', 'resume', or 'clear'".into())
             }
         },
+        "workspace" if prompt.is_some() => Err("workspace does not accept a prompt".into()),
+        "workspace" => match workspace_action.as_deref() {
+            Some("status") if workspace_path.is_none() => Ok(Arguments::Workspace {
+                action: WorkspaceAction::Status,
+                json,
+            }),
+            Some("set") => Ok(Arguments::Workspace {
+                action: WorkspaceAction::Set {
+                    path: workspace_path
+                        .ok_or_else(|| "workspace set requires PATH".to_owned())?,
+                },
+                json,
+            }),
+            _ => Err("workspace requires 'status' or 'set PATH'".into()),
+        },
         unknown => Err(format!("unknown command '{unknown}'")),
     }
 }
@@ -1014,8 +1212,12 @@ argentum-cli provider probe [PROVIDER_ID] [OPTIONS]\n  \
 argentum-cli provider list [OPTIONS]\n  \
 argentum-cli provider save PROFILE_ID --label LABEL --kind KIND --endpoint URL --model NAME [--select] [OPTIONS]\n  \
 argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
-argentum-cli provider models PROFILE_ID [OPTIONS]\n  \
-argentum-cli provider model PROFILE_ID --model NAME [OPTIONS]\n  \
+  argentum-cli provider models PROFILE_ID [OPTIONS]\n  \
+  argentum-cli provider model PROFILE_ID --model NAME [OPTIONS]\n  \
+  argentum-cli provider credential set PROFILE_ID < credential.txt\n  \
+  argentum-cli provider credential clear PROFILE_ID [OPTIONS]\n  \
+  argentum-cli workspace status [OPTIONS]\n  \
+  argentum-cli workspace set PATH [OPTIONS]\n  \
   argentum-cli sessions [OPTIONS]\n  \
   argentum-cli session select SESSION_ID [OPTIONS]\n  \
   argentum-cli goal status [OPTIONS]\n  \
@@ -1028,6 +1230,7 @@ serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n 
 run     Submit one task and stream its output\n  \
 status  Show workspace and configured provider information\n  \
   provider Manage and test workspace provider profiles\n  \
+  workspace Manage the persisted desktop workspace selection\n  \
   sessions List durable sessions for the current workspace\n  \
   session  Select the active session for the current workspace\n  \
   goal     Manage the active session goal contract\n\n\
@@ -1043,6 +1246,7 @@ Options:\n  \
   --token-budget N   Maximum model tokens for the goal contract\n  \
   --tool-budget N    Maximum tool calls for the goal contract\n  \
   --time-budget N    Maximum goal duration in seconds\n  \
+  provider credential set reads the secret from stdin and never accepts it as an option\n  \
 --json             Emit machine-readable output for run, status, provider, or sessions\n  \
 -V, --version      Print the Argentum CLI version"
     );
@@ -1058,6 +1262,8 @@ fn version_line() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use argentum_cli::protocol::RequestEnvelope;
 
     use super::*;
@@ -1265,6 +1471,46 @@ mod tests {
             "test",
         ])
         .is_err());
+    }
+
+    #[test]
+    fn parses_workspace_and_secure_credential_commands() {
+        assert!(matches!(
+            parse_args(["workspace", "status", "--json"]).expect("workspace status"),
+            Arguments::Workspace {
+                action: WorkspaceAction::Status,
+                json: true,
+            }
+        ));
+        assert!(matches!(
+            parse_args(["workspace", "set", r"A:\workspace"]).expect("workspace set"),
+            Arguments::Workspace {
+                action: WorkspaceAction::Set { path },
+                json: false,
+            } if path == Path::new(r"A:\workspace")
+        ));
+        assert!(matches!(
+            parse_args(["provider", "credential", "set", "minimax", "--json"])
+                .expect("credential set"),
+            Arguments::ProviderCredential {
+                provider_id,
+                action: ProviderCredentialAction::Set,
+                json: true,
+                ..
+            } if provider_id == "minimax"
+        ));
+        assert!(matches!(
+            parse_args(["provider", "credential", "clear", "deepseek"])
+                .expect("credential clear"),
+            Arguments::ProviderCredential {
+                provider_id,
+                action: ProviderCredentialAction::Clear,
+                json: false,
+                ..
+            } if provider_id == "deepseek"
+        ));
+        assert!(parse_args(["provider", "credential", "set", "minimax", "secret"]).is_err());
+        assert!(parse_args(["workspace", "set"]).is_err());
     }
 
     #[test]

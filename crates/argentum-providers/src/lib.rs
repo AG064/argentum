@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use argentum_domain::{ProviderKind, ProviderProfile, ProviderStatus};
@@ -779,6 +779,22 @@ impl ProviderRegistry {
         }
     }
 
+    pub fn set_credential(
+        &self,
+        profile_id: impl AsRef<str>,
+        api_key: SecretValue,
+    ) -> Result<(), ProviderError> {
+        self.credentials.insert(profile_id, api_key)
+    }
+
+    pub fn clear_credential(&self, profile_id: &str) -> bool {
+        self.credentials.remove(profile_id)
+    }
+
+    pub fn credential_configured(&self, profile_id: &str) -> bool {
+        self.credentials.contains_profile(profile_id)
+    }
+
     pub fn register<P>(&mut self, provider: P)
     where
         P: ModelProvider + 'static,
@@ -945,14 +961,21 @@ impl ProviderRegistry {
 
 #[derive(Clone, Default)]
 pub struct ProviderCredentials {
-    api_keys: Arc<BTreeMap<String, SecretValue>>,
+    api_keys: Arc<RwLock<BTreeMap<String, SecretValue>>>,
 }
 
 impl std::fmt::Debug for ProviderCredentials {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ProviderCredentials")
-            .field("profile_ids", &self.api_keys.keys().collect::<Vec<_>>())
+            .field(
+                "profile_ids",
+                &self
+                    .api_keys
+                    .read()
+                    .map(|keys| keys.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default(),
+            )
             .finish()
     }
 }
@@ -961,7 +984,7 @@ impl ProviderCredentials {
     pub fn from_profile_api_keys(
         values: impl IntoIterator<Item = (String, SecretValue)>,
     ) -> Result<Self, ProviderError> {
-        let mut credentials = Self::default();
+        let credentials = Self::default();
         for (profile_id, api_key) in values {
             credentials.insert(profile_id, api_key)?;
         }
@@ -969,7 +992,7 @@ impl ProviderCredentials {
     }
 
     pub fn insert(
-        &mut self,
+        &self,
         profile_id: impl AsRef<str>,
         api_key: SecretValue,
     ) -> Result<(), ProviderError> {
@@ -979,18 +1002,33 @@ impl ProviderCredentials {
                 provider_id: profile_id,
             });
         }
-        let mut api_keys = (*self.api_keys).clone();
-        api_keys.insert(profile_id, api_key);
-        self.api_keys = Arc::new(api_keys);
+        self.api_keys
+            .write()
+            .map_err(|_| ProviderError::InvalidResponse("credential state is unavailable".into()))?
+            .insert(profile_id, api_key);
         Ok(())
     }
 
     pub fn contains_profile(&self, profile_id: &str) -> bool {
-        self.api_keys.contains_key(profile_id)
+        self.api_keys
+            .read()
+            .map(|keys| keys.contains_key(profile_id))
+            .unwrap_or(false)
     }
 
     fn for_profile(&self, profile_id: &str) -> Option<SecretValue> {
-        self.api_keys.get(profile_id).cloned()
+        self.api_keys
+            .read()
+            .ok()
+            .and_then(|keys| keys.get(profile_id).cloned())
+    }
+
+    pub fn remove(&self, profile_id: &str) -> bool {
+        self.api_keys
+            .write()
+            .ok()
+            .and_then(|mut keys| keys.remove(profile_id))
+            .is_some()
     }
 }
 

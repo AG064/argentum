@@ -1,8 +1,9 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use argentum_cli::{CommandHost, HostConfig};
+use argentum_cli::{CommandHost, HostConfig, HostError};
 use argentum_domain::{AppCommand, AppEvent, ProviderKind, ProviderProfile};
+use argentum_platform::{AppPaths, PlatformError};
 use argentum_ui::{connect_commands, UiHandle, WeakUiHandle};
 use slint::ComponentHandle;
 use tokio::runtime::Builder;
@@ -36,11 +37,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let compatibility = legacy_compat::discover();
     let explicit_workspace = env::var_os("ARGENTUM_WORKSPACE").map(PathBuf::from);
-    let (workspace_root, uses_legacy_workspace) = select_workspace(
+    let app_paths = AppPaths::discover()?;
+    let persisted_workspace = app_paths.load_workspace()?;
+    let (selected_workspace, source) = select_workspace(
         explicit_workspace,
+        persisted_workspace.as_deref(),
         compatibility.workspace.as_deref(),
         env::current_dir()?,
     );
+    let workspace_root = match source {
+        WorkspaceSource::Explicit | WorkspaceSource::Persisted => {
+            canonical_workspace(&selected_workspace)?
+        }
+        WorkspaceSource::Legacy | WorkspaceSource::CurrentDirectory => {
+            app_paths.save_workspace(&selected_workspace)?
+        }
+    };
+    let uses_legacy_workspace = source == WorkspaceSource::Legacy;
     let environment_has_minimax = has_nonempty_env("MINIMAX_API_KEY");
     let legacy_minimax_key = if uses_legacy_workspace && !environment_has_minimax {
         compatibility.minimax_key
@@ -228,9 +241,48 @@ fn deliver_ui_command_failure(ui: WeakUiHandle, command: AppCommand, message: St
     }
 }
 
-fn safe_startup_error(_error_value: &(dyn std::error::Error + 'static)) -> String {
-    "Argentum could not start. Check workspace access and provider configuration, then try again."
-        .into()
+fn safe_startup_error(error_value: &(dyn std::error::Error + 'static)) -> String {
+    if let Some(error) = error_value.downcast_ref::<HostError>() {
+        return match error {
+            HostError::Platform(error) => safe_platform_startup_error(error),
+            HostError::Security(_) => {
+                "Argentum could not access the selected workspace. Choose an accessible directory with `argentum-cli workspace set PATH`.".into()
+            }
+            HostError::Store(_) => {
+                "Argentum could not open its workspace database. Check the workspace and application-data permissions, then try again.".into()
+            }
+            HostError::Provider(_) => {
+                "Argentum could not configure the selected provider. Check its endpoint and model in Settings, then try again.".into()
+            }
+            HostError::Runtime(_) | HostError::ProviderCredentialUnsupported => {
+                "Argentum could not complete startup. Check the workspace and provider settings, then try again.".into()
+            }
+        };
+    }
+    if let Some(error) = error_value.downcast_ref::<PlatformError>() {
+        return safe_platform_startup_error(error);
+    }
+    "Argentum could not start. Check the workspace and provider settings, then try again.".into()
+}
+
+fn safe_platform_startup_error(error: &PlatformError) -> String {
+    match error {
+        PlatformError::InvalidWorkspaceConfiguration => {
+            "The saved workspace selection is invalid. Choose a workspace with `argentum-cli workspace set PATH`, then restart Argentum.".into()
+        }
+        PlatformError::WorkspaceUnavailable => {
+            "The selected workspace is unavailable. Choose an accessible directory with `argentum-cli workspace set PATH`, then restart Argentum.".into()
+        }
+        PlatformError::MissingDataDirectory => {
+            "Argentum could not locate its application-data directory. Check the account environment and try again.".into()
+        }
+        PlatformError::SecureStorageUnavailable | PlatformError::SecureStorage(_) => {
+            "Argentum could not access secure credential storage. Check the operating-system keyring or configure a provider through the host environment.".into()
+        }
+        PlatformError::InvalidProviderCredentialProfile => {
+            "The saved provider credential profile is invalid. Review provider settings and try again.".into()
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -297,16 +349,36 @@ fn display_workspace(path: &Path) -> String {
 
 fn select_workspace(
     explicit: Option<PathBuf>,
+    persisted: Option<&Path>,
     legacy: Option<&Path>,
     fallback: PathBuf,
-) -> (PathBuf, bool) {
+) -> (PathBuf, WorkspaceSource) {
     if let Some(path) = explicit {
-        return (path, false);
+        return (path, WorkspaceSource::Explicit);
+    }
+    if let Some(path) = persisted {
+        return (path.to_path_buf(), WorkspaceSource::Persisted);
     }
     if let Some(path) = legacy {
-        return (path.to_path_buf(), true);
+        return (path.to_path_buf(), WorkspaceSource::Legacy);
     }
-    (fallback, false)
+    (fallback, WorkspaceSource::CurrentDirectory)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkspaceSource {
+    Explicit,
+    Persisted,
+    Legacy,
+    CurrentDirectory,
+}
+
+fn canonical_workspace(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let canonical = std::fs::canonicalize(path)?;
+    if !canonical.is_dir() {
+        return Err("the selected workspace is not a directory".into());
+    }
+    Ok(canonical)
 }
 
 fn has_nonempty_env(name: &str) -> bool {
@@ -330,9 +402,10 @@ fn legacy_minimax_profile() -> ProviderProfile {
 mod tests {
     use super::{
         append_matching_stream_delta, display_workspace, legacy_minimax_profile, parse_window_size,
-        select_workspace,
+        safe_startup_error, select_workspace, WorkspaceSource,
     };
     use argentum_domain::AppEvent;
+    use argentum_platform::PlatformError;
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -371,26 +444,48 @@ mod tests {
 
     #[test]
     fn explicit_workspace_never_inherits_legacy_workspace_credentials() {
-        let (workspace, uses_legacy_credentials) = select_workspace(
+        let (workspace, source) = select_workspace(
             Some(PathBuf::from(r"A:\explicit")),
+            Some(Path::new(r"A:\persisted")),
             Some(Path::new(r"A:\legacy")),
             PathBuf::from(r"A:\fallback"),
         );
 
         assert_eq!(workspace, PathBuf::from(r"A:\explicit"));
-        assert!(!uses_legacy_credentials);
+        assert_eq!(source, WorkspaceSource::Explicit);
     }
 
     #[test]
     fn legacy_workspace_is_used_only_without_an_explicit_override() {
-        let (workspace, uses_legacy_credentials) = select_workspace(
+        let (workspace, source) = select_workspace(
+            None,
             None,
             Some(Path::new(r"A:\legacy")),
             PathBuf::from(r"A:\fallback"),
         );
 
         assert_eq!(workspace, PathBuf::from(r"A:\legacy"));
-        assert!(uses_legacy_credentials);
+        assert_eq!(source, WorkspaceSource::Legacy);
+    }
+
+    #[test]
+    fn persisted_workspace_precedes_legacy_and_current_directory() {
+        let (workspace, source) = select_workspace(
+            None,
+            Some(Path::new(r"A:\persisted")),
+            Some(Path::new(r"A:\legacy")),
+            PathBuf::from(r"A:\fallback"),
+        );
+
+        assert_eq!(workspace, PathBuf::from(r"A:\persisted"));
+        assert_eq!(source, WorkspaceSource::Persisted);
+    }
+
+    #[test]
+    fn startup_diagnostics_explain_how_to_recover_workspace_selection() {
+        let message = safe_startup_error(&PlatformError::InvalidWorkspaceConfiguration);
+        assert!(message.contains("workspace set PATH"));
+        assert!(!message.contains("secret"));
     }
 
     #[test]

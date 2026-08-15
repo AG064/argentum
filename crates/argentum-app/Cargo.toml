@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 argentum-cli.workspace = true
 argentum-domain.workspace = true
+argentum-platform.workspace = true
 argentum-security.workspace = true
 argentum-ui.workspace = true
 slint.workspace = true

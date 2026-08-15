@@ -32,6 +32,11 @@ paths over one command host, plus focused inspection commands:
 - `provider models` returns a bounded catalog for one exact profile.
 - `provider model` persists a model on one exact profile without changing the
   selected provider profile.
+- `workspace status` and `workspace set PATH` inspect and persist the canonical
+  workspace used by the desktop host.
+- `provider credential set PROFILE_ID` reads one credential from standard input
+  and stores it in the operating-system keyring. `provider credential clear`
+  removes it. Credential values never cross the typed command protocol.
 
 The native app uses `InProcessClient`, which dispatches the same `AppCommand`
 values to the same `CommandHost`. This path does not spawn a CLI process and
@@ -63,6 +68,15 @@ atomic, selection survives restart, and the runtime resolves the selected
 profile for every submitted task. Endpoints must use HTTP or HTTPS with a host
 and cannot contain URL credentials, a query, or a fragment. Profile records do
 not contain API keys or other secret fields.
+
+Hosted credentials are resolved separately from the profile record. The host
+loads only the exact canonical profile IDs `openai`, `minimax`, and `deepseek`
+from the operating-system keyring or matching environment variables. The
+runtime keeps the credential in a redacted in-memory provider map, and sends it
+only after the provider endpoint has passed the canonical-origin policy. Secure
+store failures are reported without including credential values. Generic
+OpenAI-compatible profiles remain unauthenticated unless a provider-specific
+integration is registered.
 
 Conversation messages persist visible text, separately typed reasoning, exact
 reported usage, provider profile ID, and model ID. Stored usage is rejected if

@@ -258,6 +258,7 @@ version = "0.1.0"
 dependencies = [
  "argentum-cli",
  "argentum-domain",
+ "argentum-platform",
  "argentum-security",
  "argentum-ui",
  "slint",
@@ -308,6 +309,9 @@ dependencies = [
  "argentum-security",
  "directories",
  "keyring",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.19",
  "zeroize",
 ]

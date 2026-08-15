@@ -2,12 +2,16 @@ pub mod protocol;
 pub mod server;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use argentum_domain::{
     AppCommand, AppEvent, Capability, Goal, ProviderKind, ProviderProfile, ProviderStatus,
     WorkspaceSnapshot,
 };
-use argentum_platform::{AppPaths, PlatformError};
+use argentum_platform::{
+    default_secret_store, provider_credential_key, AppPaths, PlatformError, SecretStore,
+    UnavailableSecretStore, SECRET_SERVICE,
+};
 use argentum_providers::{
     LocalLmStudioProvider, ProviderCredentials, ProviderError, ProviderRegistry,
 };
@@ -31,6 +35,7 @@ pub struct HostConfig {
     pub provider_endpoint: String,
     pub model: String,
     provider_credentials: ProviderCredentials,
+    secret_store: Arc<dyn SecretStore>,
 }
 
 impl std::fmt::Debug for HostConfig {
@@ -49,12 +54,16 @@ impl std::fmt::Debug for HostConfig {
 impl HostConfig {
     pub fn discover(workspace: impl Into<PathBuf>) -> Result<Self, HostError> {
         let paths = AppPaths::discover()?;
+        let secret_store = default_secret_store(SECRET_SERVICE);
+        let mut provider_credentials = provider_credentials_from_environment()?;
+        load_secure_provider_credentials(secret_store.as_ref(), &mut provider_credentials);
         Ok(Self {
             workspace: workspace.into(),
             database: Some(paths.database),
             provider_endpoint: DEFAULT_LM_STUDIO_ENDPOINT.into(),
             model: DEFAULT_MODEL.into(),
-            provider_credentials: provider_credentials_from_environment()?,
+            provider_credentials,
+            secret_store,
         })
     }
 
@@ -65,6 +74,7 @@ impl HostConfig {
             provider_endpoint: DEFAULT_LM_STUDIO_ENDPOINT.into(),
             model: DEFAULT_MODEL.into(),
             provider_credentials: ProviderCredentials::default(),
+            secret_store: Arc::new(UnavailableSecretStore),
         }
     }
 
@@ -73,8 +83,14 @@ impl HostConfig {
         self
     }
 
+    pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
+        load_secure_provider_credentials(secret_store.as_ref(), &mut self.provider_credentials);
+        self.secret_store = secret_store;
+        self
+    }
+
     pub fn with_provider_credential(
-        mut self,
+        self,
         profile_id: impl AsRef<str>,
         api_key: SecretValue,
     ) -> Result<Self, HostError> {
@@ -95,6 +111,28 @@ fn provider_credentials_from_environment() -> Result<ProviderCredentials, HostEr
     provider_credentials_from_lookup(|variable| std::env::var(variable))
 }
 
+fn load_secure_provider_credentials(
+    store: &dyn SecretStore,
+    credentials: &mut ProviderCredentials,
+) {
+    for profile_id in ["openai", "minimax", "deepseek"] {
+        let Ok(key) = provider_credential_key(profile_id) else {
+            continue;
+        };
+        match store.get(&key) {
+            Ok(Some(secret)) if !credentials.contains_profile(profile_id) => {
+                if let Err(error_value) = credentials.insert(profile_id, secret) {
+                    warn!(profile_id, error = %error_value, "secure provider credential was rejected");
+                }
+            }
+            Ok(Some(_)) | Ok(None) => {}
+            Err(_) => {
+                warn!(profile_id, "secure provider credential is unavailable");
+            }
+        }
+    }
+}
+
 fn provider_credentials_from_lookup(
     mut lookup: impl FnMut(&str) -> Result<String, std::env::VarError>,
 ) -> Result<ProviderCredentials, HostError> {
@@ -103,7 +141,7 @@ fn provider_credentials_from_lookup(
         ("minimax", "MINIMAX_API_KEY"),
         ("deepseek", "DEEPSEEK_API_KEY"),
     ];
-    let mut credentials = ProviderCredentials::default();
+    let credentials = ProviderCredentials::default();
     for (profile_id, variable) in SUPPORTED_KEYS {
         match lookup(variable) {
             Ok(value) if !value.trim().is_empty() => {
@@ -133,15 +171,19 @@ pub enum HostError {
     Provider(#[from] ProviderError),
     #[error(transparent)]
     Runtime(#[from] RuntimeError),
+    #[error("secure credentials are supported only for OpenAI, MiniMax, and DeepSeek profiles")]
+    ProviderCredentialUnsupported,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct CommandHost {
     runtime: RuntimeService,
+    secret_store: Arc<dyn SecretStore>,
 }
 
 impl CommandHost {
     pub fn start(config: HostConfig) -> Result<Self, HostError> {
+        let secret_store = config.secret_store.clone();
         let store = match config.database {
             Some(path) => Store::open(path)?,
             None => Store::open_in_memory()?,
@@ -165,7 +207,7 @@ impl CommandHost {
             model: config.model,
             selected: true,
         };
-        Ok(Self::from_runtime(
+        Ok(Self::from_runtime_with_secret_store(
             RuntimeService::new_with_default_provider_profile(
                 store,
                 providers,
@@ -173,11 +215,22 @@ impl CommandHost {
                 workspace,
                 default_provider,
             )?,
+            secret_store,
         ))
     }
 
     pub fn from_runtime(runtime: RuntimeService) -> Self {
-        Self { runtime }
+        Self::from_runtime_with_secret_store(runtime, default_secret_store(SECRET_SERVICE))
+    }
+
+    pub fn from_runtime_with_secret_store(
+        runtime: RuntimeService,
+        secret_store: Arc<dyn SecretStore>,
+    ) -> Self {
+        Self {
+            runtime,
+            secret_store,
+        }
     }
 
     pub fn client(&self) -> InProcessClient {
@@ -214,12 +267,48 @@ impl CommandHost {
         Ok(self.runtime.goal()?)
     }
 
+    pub fn provider_credential_configured(&self, profile_id: &str) -> bool {
+        self.runtime.provider_credential_configured(profile_id)
+    }
+
+    pub fn set_provider_credential(
+        &self,
+        profile_id: &str,
+        credential: SecretValue,
+    ) -> Result<(), HostError> {
+        validate_hosted_credential_profile(profile_id)?;
+        let key = provider_credential_key(profile_id)?;
+        self.runtime
+            .set_provider_credential(profile_id, credential.clone())?;
+        if let Err(error_value) = self.secret_store.set(&key, credential) {
+            self.runtime.clear_provider_credential(profile_id);
+            return Err(error_value.into());
+        }
+        Ok(())
+    }
+
+    pub fn clear_provider_credential(&self, profile_id: &str) -> Result<(), HostError> {
+        validate_hosted_credential_profile(profile_id)?;
+        let key = provider_credential_key(profile_id)?;
+        self.secret_store.delete(&key)?;
+        self.runtime.clear_provider_credential(profile_id);
+        Ok(())
+    }
+
     pub fn workspace_root(&self) -> &Path {
         self.runtime.workspace_root()
     }
 
     pub fn runtime(&self) -> &RuntimeService {
         &self.runtime
+    }
+}
+
+fn validate_hosted_credential_profile(profile_id: &str) -> Result<(), HostError> {
+    if matches!(profile_id.trim(), "openai" | "minimax" | "deepseek") {
+        Ok(())
+    } else {
+        Err(HostError::ProviderCredentialUnsupported)
     }
 }
 
@@ -241,11 +330,48 @@ impl InProcessClient {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
+
     use argentum_domain::{
         AppCommand, AppEvent, ApprovalScope, Capability, ToolInput, ToolRequest, ToolResultState,
     };
 
     use super::*;
+
+    #[derive(Default)]
+    struct MemorySecretStore {
+        values: Mutex<BTreeMap<String, String>>,
+    }
+
+    impl MemorySecretStore {
+        fn value(&self, key: &str) -> Option<String> {
+            self.values
+                .lock()
+                .expect("secret store lock")
+                .get(key)
+                .cloned()
+        }
+    }
+
+    impl SecretStore for MemorySecretStore {
+        fn get(&self, key: &str) -> Result<Option<SecretValue>, PlatformError> {
+            Ok(self.value(key).map(SecretValue::new))
+        }
+
+        fn set(&self, key: &str, value: SecretValue) -> Result<(), PlatformError> {
+            self.values
+                .lock()
+                .expect("secret store lock")
+                .insert(key.to_owned(), value.expose().to_owned());
+            Ok(())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), PlatformError> {
+            self.values.lock().expect("secret store lock").remove(key);
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn in_process_client_dispatches_without_a_transport_boundary() {
@@ -499,6 +625,33 @@ mod tests {
         let rendered = format!("{config:?}");
         assert!(!rendered.contains("openai-fixture"));
         assert!(!rendered.contains("minimax-fixture"));
+    }
+
+    #[tokio::test]
+    async fn command_host_round_trips_hosted_credentials_through_secure_store() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let store = Arc::new(MemorySecretStore::default());
+        let config = HostConfig::in_memory(workspace.path()).with_secret_store(store.clone());
+        let secret = "minimax-secure-store-fixture";
+        let host = CommandHost::start(config).expect("host");
+
+        host.set_provider_credential("minimax", SecretValue::new(secret))
+            .expect("store credential");
+        assert!(host.provider_credential_configured("minimax"));
+        assert_eq!(store.value("provider/minimax").as_deref(), Some(secret));
+        assert!(!format!("{:?}", host.provider_statuses()).contains(secret));
+
+        let reopened = CommandHost::start(
+            HostConfig::in_memory(workspace.path()).with_secret_store(store.clone()),
+        )
+        .expect("reopened host");
+        assert!(reopened.provider_credential_configured("minimax"));
+
+        reopened
+            .clear_provider_credential("minimax")
+            .expect("clear credential");
+        assert!(!reopened.provider_credential_configured("minimax"));
+        assert_eq!(store.value("provider/minimax"), None);
     }
 
     #[tokio::test]
