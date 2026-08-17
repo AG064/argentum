@@ -25,6 +25,9 @@ claims. Each stage requires a real build, runtime, security, and visual check.
 - Durable restored conversation history, separated provider reasoning, exact
   reported usage, bounded context, and one active run per session.
 - Bounded model-driven read and write tools through the approval boundary.
+- Policy-backed Read Only, Confirm Before Changes, and exact custom execution
+  profiles for read and write text tools, persisted per project and enforced at
+  every runtime tool boundary.
 - Provider-scoped model catalogs and durable model selection.
 - Workspace path validation, default-deny write policy, secret redaction, and
   provider boundaries.
@@ -33,8 +36,6 @@ claims. Each stage requires a real build, runtime, security, and visual check.
 
 ## Next vertical slices
 
-- An inspectable Rust harness registry with named presentation profiles,
-  truthful capability availability, and explicit surface visibility.
 - Native first-run workspace and credential setup without exposing secrets to
   Slint state.
 - Resumable in-progress run state on top of durable sessions.
@@ -46,8 +47,7 @@ claims. Each stage requires a real build, runtime, security, and visual check.
   missing, stale, or failed.
 - Task rows with running, waiting, unread, failed, and changed-file state plus
   search, pin, and archive foundations.
-- An effective execution-profile selector backed by the Rust capability broker,
-  with `Confirm Before Changes` as the default.
+- Capability gates for future command, network, and external-process modules.
 - Platform secure-store verification for macOS, Linux, Android, and iOS.
 
 ## Harness workspace

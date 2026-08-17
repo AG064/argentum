@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use argentum_domain::{
     now, ActiveRunState, AppCommand, AppEvent, ApprovalRequest, ApprovalScope, ChangeSet,
     ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot, Goal,
-    GoalLifecycle, HarnessReadiness, HarnessSnapshot, LayoutProfile,
+    GoalLifecycle, HarnessExecutionPolicy, HarnessReadiness, HarnessSnapshot, LayoutProfile,
     ModelUsage as DomainModelUsage, PlanStep, ProviderKind, ProviderModel as DomainProviderModel,
     ProviderProfile, ProviderStatus, Run, RunId, SessionId, Task, TaskLifecycle, ToolResultState,
     ToolTrace, WorkspaceSnapshot,
@@ -68,6 +68,10 @@ pub enum RuntimeError {
     ToolLoopLimit,
     #[error("the pending tool continuation closed before completion")]
     ToolContinuationClosed,
+    #[error("harness capability is disabled by execution policy: {0}")]
+    CapabilityDisabled(String),
+    #[error("execution policy cannot change while a run or approval is active")]
+    ExecutionPolicyBusy,
 }
 
 const MAX_MODEL_ROUNDS: usize = 8;
@@ -221,6 +225,16 @@ impl RuntimeService {
             let legacy_or_default = store.load_layout("default")?.unwrap_or_default();
             store.save_layout(&layout_key, &legacy_or_default)?;
         }
+        let harness = HarnessRegistry::built_in()?;
+        if store
+            .load_execution_policy(resolution.snapshot.project.id)?
+            .is_none()
+        {
+            store.save_execution_policy(
+                resolution.snapshot.project.id,
+                &harness.reconcile_execution_policy(&HarnessExecutionPolicy::default()),
+            )?;
+        }
         let (events, _) = broadcast::channel(256);
         Ok(Self {
             store,
@@ -239,7 +253,7 @@ impl RuntimeService {
             model_context_windows: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalogs: Arc::new(Mutex::new(BTreeMap::new())),
             pending_approvals: Arc::new(Mutex::new(BTreeMap::new())),
-            harness: HarnessRegistry::built_in()?,
+            harness,
         })
     }
 
@@ -371,7 +385,10 @@ impl RuntimeService {
 
     pub fn harness_snapshot(&self) -> Result<HarnessSnapshot, RuntimeError> {
         let layout = self.load_harness_layout()?;
-        Ok(self.harness.snapshot(&layout, &self.harness_facts()?))
+        let execution_policy = self.load_execution_policy()?;
+        Ok(self
+            .harness
+            .snapshot(&layout, &execution_policy, &self.harness_facts()?))
     }
 
     pub fn publish_harness_snapshot(&self) -> Result<HarnessSnapshot, RuntimeError> {
@@ -451,6 +468,23 @@ impl RuntimeService {
                     .set_surface_visibility(&layout, surface, visible)?;
                 self.save_and_publish_harness_layout(layout)
             }
+            AppCommand::SelectExecutionProfile { profile_id } => {
+                self.ensure_execution_policy_mutable()?;
+                let policy = self.load_execution_policy()?;
+                let policy = self.harness.apply_execution_profile(&policy, &profile_id)?;
+                self.save_and_publish_execution_policy(policy)
+            }
+            AppCommand::SetHarnessCapabilityEnabled {
+                capability_id,
+                enabled,
+            } => {
+                self.ensure_execution_policy_mutable()?;
+                let policy = self.load_execution_policy()?;
+                let policy =
+                    self.harness
+                        .set_capability_enabled(&policy, &capability_id, enabled)?;
+                self.save_and_publish_execution_policy(policy)
+            }
             AppCommand::SubmitTask { prompt } => self.submit_task(prompt).await,
             AppCommand::RequestTool { request } => self.request_tool(request).await,
             AppCommand::CancelRun { run_id } => self.cancel(run_id),
@@ -489,6 +523,41 @@ impl RuntimeService {
         self.store.save_layout(&self.layout_key, &profile)?;
         self.publish_transient(AppEvent::LayoutChanged(profile));
         self.publish_harness_snapshot()?;
+        Ok(())
+    }
+
+    fn load_execution_policy(&self) -> Result<HarnessExecutionPolicy, RuntimeError> {
+        let policy = self
+            .store
+            .load_execution_policy(self.project_id)?
+            .unwrap_or_default();
+        Ok(self.harness.reconcile_execution_policy(&policy))
+    }
+
+    fn save_and_publish_execution_policy(
+        &self,
+        policy: HarnessExecutionPolicy,
+    ) -> Result<(), RuntimeError> {
+        let policy = self.harness.reconcile_execution_policy(&policy);
+        self.store.save_execution_policy(self.project_id, &policy)?;
+        self.publish_harness_snapshot()?;
+        Ok(())
+    }
+
+    fn ensure_execution_policy_mutable(&self) -> Result<(), RuntimeError> {
+        let has_active_run = !self
+            .active_session_runs
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .is_empty();
+        let has_pending_approval = !self
+            .pending_approvals
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .is_empty();
+        if has_active_run || has_pending_approval {
+            return Err(RuntimeError::ExecutionPolicyBusy);
+        }
         Ok(())
     }
 
@@ -679,10 +748,6 @@ impl RuntimeService {
             .find(|profile| profile.id == provider_id);
         let Some(profile) = profile else {
             let detail = "Provider profile is not available in this workspace.".to_owned();
-            self.publish_transient(AppEvent::Error {
-                message: detail.clone(),
-                recoverable: true,
-            });
             return Err(RuntimeError::ProviderCatalogFailed(detail));
         };
         match self.providers.list_models_for_profile(&profile).await {
@@ -706,10 +771,6 @@ impl RuntimeService {
             }
             Err(error_value) => {
                 let detail = provider_catalog_failure_detail(&profile.label, &error_value);
-                self.publish_transient(AppEvent::Error {
-                    message: detail.clone(),
-                    recoverable: true,
-                });
                 Err(RuntimeError::ProviderCatalogFailed(detail))
             }
         }
@@ -1081,7 +1142,7 @@ impl RuntimeService {
             profile.kind,
             ProviderKind::OpenAiCompatible | ProviderKind::LocalLmStudio
         ) {
-            self.model_tool_definitions()
+            self.model_tool_definitions()?
         } else {
             Vec::new()
         };
@@ -1349,13 +1410,19 @@ impl RuntimeService {
         Ok(())
     }
 
-    fn model_tool_definitions(&self) -> Vec<ModelToolDefinition> {
-        self.tools
+    fn model_tool_definitions(&self) -> Result<Vec<ModelToolDefinition>, RuntimeError> {
+        let policy = self.load_execution_policy()?;
+        Ok(self
+            .tools
             .descriptors()
             .into_iter()
             .filter_map(|descriptor| match descriptor.id.as_str() {
                 "read_text"
-                    if descriptor.capabilities.as_slice() == [argentum_domain::Capability::ReadFiles] =>
+                    if self
+                        .harness
+                        .capability_is_enabled(&policy, "tool.read-text")
+                        && descriptor.capabilities.as_slice()
+                            == [argentum_domain::Capability::ReadFiles] =>
                 {
                     Some(ModelToolDefinition {
                         name: "read_text".into(),
@@ -1372,7 +1439,10 @@ impl RuntimeService {
                     })
                 }
                 "write_text"
-                    if descriptor.requires_approval
+                    if self
+                        .harness
+                        .capability_is_enabled(&policy, "tool.write-text")
+                        && descriptor.requires_approval
                         && descriptor.capabilities.as_slice()
                             == [argentum_domain::Capability::WriteFiles] =>
                 {
@@ -1393,7 +1463,7 @@ impl RuntimeService {
                 }
                 _ => None,
             })
-            .collect()
+            .collect())
     }
 
     async fn execute_model_tool_call(
@@ -1417,6 +1487,16 @@ impl RuntimeService {
             input,
         };
         let descriptor = self.tool_descriptor(&request)?;
+        match self.ensure_tool_enabled_by_policy(&descriptor) {
+            Ok(()) => {}
+            Err(RuntimeError::CapabilityDisabled(_)) => {
+                return Ok(ModelToolStep::Ready(ModelToolResult {
+                    call_id: call.id,
+                    content: "Tool is disabled by the selected execution policy.".into(),
+                }));
+            }
+            Err(error_value) => return Err(error_value),
+        }
         if !self.tool_needs_approval(&descriptor)? {
             return self
                 .execute_model_tool_request(request, call.id, ApprovalGrant::default())
@@ -1692,12 +1772,13 @@ impl RuntimeService {
     }
 
     pub async fn request_tool(&self, request: ToolRequest) -> Result<(), RuntimeError> {
+        let descriptor = self.tool_descriptor(&request)?;
+        self.ensure_tool_enabled_by_policy(&descriptor)?;
         if let Ok(mut sessions) = self.run_sessions.lock() {
             sessions
                 .entry(request.run_id)
                 .or_insert_with(|| self.session_id());
         }
-        let descriptor = self.tool_descriptor(&request)?;
         if self.tool_needs_approval(&descriptor)? {
             let approval = self.approval_request(&request, descriptor);
             self.pending_approvals
@@ -1747,6 +1828,23 @@ impl RuntimeService {
         Ok(descriptor.requires_approval || policy_requires_approval)
     }
 
+    fn ensure_tool_enabled_by_policy(
+        &self,
+        descriptor: &argentum_domain::ToolDescriptor,
+    ) -> Result<(), RuntimeError> {
+        let capability_id = match descriptor.id.as_str() {
+            "read_text" => "tool.read-text",
+            "write_text" => "tool.write-text",
+            _ => return Err(RuntimeError::CapabilityDisabled(descriptor.id.clone())),
+        };
+        let policy = self.load_execution_policy()?;
+        if self.harness.capability_is_enabled(&policy, capability_id) {
+            Ok(())
+        } else {
+            Err(RuntimeError::CapabilityDisabled(capability_id.into()))
+        }
+    }
+
     fn approval_request(
         &self,
         request: &ToolRequest,
@@ -1793,6 +1891,39 @@ impl RuntimeService {
             approval,
             continuation,
         } = pending;
+        if let Err(error_value) =
+            self.ensure_tool_enabled_by_policy(&self.tool_descriptor(&request)?)
+        {
+            self.emit_for_run(
+                AppEvent::ApprovalResolved {
+                    approval_id,
+                    approved: false,
+                },
+                request.run_id,
+            )?;
+            self.emit_for_run(
+                AppEvent::ToolFinished(ToolTrace {
+                    id: request.call_id,
+                    run_id: request.run_id,
+                    tool_id: approval.tool_id,
+                    summary: approval.target,
+                    result: ToolResultState::Cancelled,
+                    duration_ms: Some(0),
+                }),
+                request.run_id,
+            )?;
+            if let PendingToolContinuation::Model {
+                provider_call_id,
+                sender,
+            } = continuation
+            {
+                let _ = sender.send(ModelToolStep::Ready(ModelToolResult {
+                    call_id: provider_call_id,
+                    content: "Tool is disabled by the selected execution policy.".into(),
+                }));
+            }
+            return Err(error_value);
+        }
         self.emit_for_run(
             AppEvent::ApprovalResolved {
                 approval_id,
@@ -1904,6 +2035,8 @@ impl RuntimeService {
         request: ToolRequest,
         approval: ApprovalGrant,
     ) -> Result<Result<ToolResult, ToolError>, RuntimeError> {
+        let descriptor = self.tool_descriptor(&request)?;
+        self.ensure_tool_enabled_by_policy(&descriptor)?;
         let tool_id = match &request.input {
             argentum_tools::ToolInput::ReadText { .. } => "read_text",
             argentum_tools::ToolInput::WriteText { .. } => "write_text",
@@ -2485,6 +2618,200 @@ mod tests {
                 .selected_profile_id,
             "standard"
         );
+    }
+
+    #[tokio::test]
+    async fn read_only_execution_profile_removes_and_rejects_write_tools() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+
+        runtime
+            .dispatch(AppCommand::SelectExecutionProfile {
+                profile_id: "read-only".into(),
+            })
+            .await
+            .expect("read-only profile");
+        assert!(matches!(
+            events.recv().await.expect("harness snapshot"),
+            AppEvent::HarnessSnapshotLoaded(snapshot)
+                if snapshot.selected_execution_profile_id == "read-only"
+                    && snapshot.capabilities.iter().any(|capability| {
+                        capability.id == "tool.read-text" && capability.enabled
+                    })
+                    && snapshot.capabilities.iter().any(|capability| {
+                        capability.id == "tool.write-text"
+                            && capability.configurable
+                            && !capability.enabled
+                    })
+        ));
+
+        let definitions = runtime.model_tool_definitions().expect("tool definitions");
+        assert_eq!(definitions.len(), 1);
+        assert_eq!(definitions[0].name, "read_text");
+
+        let error = runtime
+            .request_tool(ToolRequest {
+                call_id: Uuid::new_v4(),
+                run_id: Uuid::new_v4(),
+                input: ToolInput::WriteText {
+                    path: "blocked.txt".into(),
+                    content: "must not be written".into(),
+                },
+            })
+            .await
+            .expect_err("write denied");
+        assert!(matches!(
+            error,
+            RuntimeError::CapabilityDisabled(capability)
+                if capability == "tool.write-text"
+        ));
+        assert!(!runtime.workspace_root().join("blocked.txt").exists());
+        assert!(events.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn capability_overrides_are_custom_persisted_and_project_scoped() {
+        let first_workspace = tempfile::tempdir().expect("first workspace");
+        let second_workspace = tempfile::tempdir().expect("second workspace");
+        let store = Store::open_in_memory().expect("store");
+        let first_manager = WorkspaceManager::new(
+            CapabilityBroker::new(first_workspace.path(), ApprovalPolicy::default())
+                .expect("first broker"),
+        );
+        let first = RuntimeService::new(
+            store.clone(),
+            ProviderRegistry::default(),
+            ToolRegistry::with_builtins(first_manager.clone()),
+            first_manager,
+        )
+        .expect("first runtime");
+        let second_manager = WorkspaceManager::new(
+            CapabilityBroker::new(second_workspace.path(), ApprovalPolicy::default())
+                .expect("second broker"),
+        );
+        let second = RuntimeService::new(
+            store,
+            ProviderRegistry::default(),
+            ToolRegistry::with_builtins(second_manager.clone()),
+            second_manager,
+        )
+        .expect("second runtime");
+
+        first
+            .dispatch(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id: "tool.read-text".into(),
+                enabled: false,
+            })
+            .await
+            .expect("disable first read tool");
+
+        let first_snapshot = first.harness_snapshot().expect("first snapshot");
+        assert_eq!(first_snapshot.selected_execution_profile_id, "custom");
+        assert!(first_snapshot
+            .capabilities
+            .iter()
+            .any(|capability| capability.id == "tool.read-text" && !capability.enabled));
+        let second_snapshot = second.harness_snapshot().expect("second snapshot");
+        assert_eq!(
+            second_snapshot.selected_execution_profile_id,
+            "confirm-before-changes"
+        );
+        assert!(second_snapshot
+            .capabilities
+            .iter()
+            .any(|capability| capability.id == "tool.read-text" && capability.enabled));
+    }
+
+    #[tokio::test]
+    async fn execution_policy_cannot_change_during_a_pending_approval() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+        let run_id = Uuid::new_v4();
+        runtime
+            .request_tool(ToolRequest {
+                call_id: Uuid::new_v4(),
+                run_id,
+                input: ToolInput::WriteText {
+                    path: "pending.txt".into(),
+                    content: "pending".into(),
+                },
+            })
+            .await
+            .expect("approval requested");
+        assert!(matches!(
+            events.recv().await.expect("approval"),
+            AppEvent::ApprovalRequested(request) if request.run_id == run_id
+        ));
+
+        assert!(matches!(
+            runtime
+                .dispatch(AppCommand::SelectExecutionProfile {
+                    profile_id: "read-only".into(),
+                })
+                .await,
+            Err(RuntimeError::ExecutionPolicyBusy)
+        ));
+        assert_eq!(
+            runtime
+                .harness_snapshot()
+                .expect("snapshot")
+                .selected_execution_profile_id,
+            "confirm-before-changes"
+        );
+    }
+
+    #[tokio::test]
+    async fn approval_rechecks_policy_before_a_cross_process_write() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+        let run_id = Uuid::new_v4();
+        runtime
+            .request_tool(ToolRequest {
+                call_id: Uuid::new_v4(),
+                run_id,
+                input: ToolInput::WriteText {
+                    path: "revoked.txt".into(),
+                    content: "must not be written".into(),
+                },
+            })
+            .await
+            .expect("approval requested");
+        let approval_id = match events.recv().await.expect("approval") {
+            AppEvent::ApprovalRequested(request) => request.id,
+            event => panic!("unexpected event: {event:?}"),
+        };
+        let read_only = runtime
+            .harness
+            .apply_execution_profile(
+                &runtime.load_execution_policy().expect("policy"),
+                "read-only",
+            )
+            .expect("read-only");
+        runtime
+            .store
+            .save_execution_policy(runtime.project_id, &read_only)
+            .expect("external policy update");
+
+        assert!(matches!(
+            runtime
+                .dispatch(AppCommand::ApproveTool {
+                    approval_id,
+                    scope: ApprovalScope::Once,
+                })
+                .await,
+            Err(RuntimeError::CapabilityDisabled(capability))
+                if capability == "tool.write-text"
+        ));
+        assert!(!runtime.workspace_root().join("revoked.txt").exists());
+        assert!(matches!(
+            events.recv().await.expect("resolution"),
+            AppEvent::ApprovalResolved {
+                approval_id: resolved,
+                approved: false,
+            } if resolved == approval_id
+        ));
+        assert!(matches!(
+            events.recv().await.expect("cancelled trace"),
+            AppEvent::ToolFinished(trace)
+                if trace.run_id == run_id && trace.result == ToolResultState::Cancelled
+        ));
     }
 
     #[tokio::test]
@@ -3088,6 +3415,7 @@ mod tests {
                 .await,
             Err(RuntimeError::ProviderCatalogFailed(_))
         ));
+        assert!(drain_events(&mut events).is_empty());
         assert!(matches!(
             runtime
                 .dispatch(AppCommand::SelectProviderModel {

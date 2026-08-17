@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use argentum_domain::{
     now, AppEvent, ConversationMessage, ConversationMessageStatus, ConversationRole,
-    ConversationSnapshot, Goal, LayoutProfile, ModelUsage, Project, ProjectId, ProviderKind,
-    ProviderProfile, RunId, Session, SessionId, SessionSummary, WorkspaceSnapshot,
+    ConversationSnapshot, Goal, HarnessExecutionPolicy, LayoutProfile, ModelUsage, Project,
+    ProjectId, ProviderKind, ProviderProfile, RunId, Session, SessionId, SessionSummary,
+    WorkspaceSnapshot,
 };
 use directories::ProjectDirs;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -882,6 +883,53 @@ impl Store {
         Ok(Some(serde_json::from_str(&payload)?))
     }
 
+    pub fn save_execution_policy(
+        &self,
+        project_id: ProjectId,
+        policy: &HarnessExecutionPolicy,
+    ) -> Result<(), StoreError> {
+        validate_execution_policy(policy)?;
+        let payload = serde_json::to_string(policy)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        connection.execute(
+            "INSERT INTO execution_policies (project_id, payload) VALUES (?1, ?2)
+             ON CONFLICT(project_id) DO UPDATE SET payload = excluded.payload",
+            params![project_id.to_string(), payload],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_execution_policy(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Option<HarnessExecutionPolicy>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let payload = connection
+            .query_row(
+                "SELECT payload FROM execution_policies WHERE project_id = ?1",
+                [project_id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let Some(payload) = payload else {
+            return Ok(None);
+        };
+        if payload.len() > 64 * 1024 {
+            return Err(StoreError::InvalidRecord(
+                "stored execution policy exceeds the size limit".into(),
+            ));
+        }
+        let policy = serde_json::from_str(&payload)?;
+        validate_execution_policy(&policy)?;
+        Ok(Some(policy))
+    }
+
     fn migrate(&self) -> Result<(), StoreError> {
         let connection = self
             .connection
@@ -965,6 +1013,11 @@ impl Store {
                  cleared_at INTEGER NOT NULL,
                  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
                  FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS execution_policies (
+                 project_id TEXT PRIMARY KEY,
+                 payload TEXT NOT NULL,
+                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
              );",
         )?;
         ensure_column(
@@ -1009,7 +1062,7 @@ impl Store {
                  ON goals(project_id, session_id);
              CREATE INDEX IF NOT EXISTS idx_goal_history_session
                  ON goal_history(project_id, session_id, cleared_at);
-             PRAGMA user_version = 6;",
+             PRAGMA user_version = 7;",
         )?;
         Ok(())
     }
@@ -1379,6 +1432,32 @@ fn validate_goal(goal: &Goal) -> Result<(), StoreError> {
     Ok(())
 }
 
+fn validate_execution_policy(policy: &HarnessExecutionPolicy) -> Result<(), StoreError> {
+    if !valid_harness_id(&policy.profile_id) || policy.capability_enabled.len() > 128 {
+        return Err(StoreError::InvalidRecord(
+            "execution policy contains invalid bounded fields".into(),
+        ));
+    }
+    if policy
+        .capability_enabled
+        .keys()
+        .any(|capability_id| !valid_harness_id(capability_id))
+    {
+        return Err(StoreError::InvalidRecord(
+            "execution policy contains invalid bounded fields".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn valid_harness_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
+        })
+}
+
 fn validate_storable_provider_profile(profile: &ProviderProfile) -> Result<(), StoreError> {
     let valid_id = valid_storable_provider_id(&profile.id);
     let valid_label = !profile.label.trim().is_empty()
@@ -1507,6 +1586,8 @@ fn ensure_column(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use argentum_domain::{AppEvent, LayoutProfile};
 
     use super::*;
@@ -1668,7 +1749,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u16>(0))
             .expect("schema version");
         assert_eq!(payload_version, EVENT_PAYLOAD_VERSION);
-        assert_eq!(schema_version, 6);
+        assert_eq!(schema_version, 7);
     }
 
     #[test]
@@ -2141,6 +2222,71 @@ mod tests {
                 .expect("selected profile"),
             &custom
         );
+    }
+
+    #[test]
+    fn execution_policy_persists_and_is_isolated_by_project() {
+        let directory = tempfile::tempdir().expect("directory");
+        let left_root = directory.path().join("left");
+        let right_root = directory.path().join("right");
+        std::fs::create_dir(&left_root).expect("left workspace");
+        std::fs::create_dir(&right_root).expect("right workspace");
+        let database = directory.path().join("argentum.db");
+        let store = Store::open(&database).expect("store");
+        let left = store.resolve_workspace(&left_root).expect("left");
+        let right = store.resolve_workspace(&right_root).expect("right");
+        let policy = HarnessExecutionPolicy {
+            profile_id: "read-only".into(),
+            capability_enabled: BTreeMap::from([
+                ("tool.read-text".into(), true),
+                ("tool.write-text".into(), false),
+            ]),
+        };
+        store
+            .save_execution_policy(left.snapshot.project.id, &policy)
+            .expect("saved policy");
+        assert!(store
+            .load_execution_policy(right.snapshot.project.id)
+            .expect("right policy")
+            .is_none());
+        drop(store);
+
+        let reopened = Store::open(&database).expect("reopened store");
+        assert_eq!(
+            reopened
+                .load_execution_policy(left.snapshot.project.id)
+                .expect("left policy"),
+            Some(policy)
+        );
+        assert!(reopened
+            .load_execution_policy(right.snapshot.project.id)
+            .expect("right policy")
+            .is_none());
+    }
+
+    #[test]
+    fn execution_policy_rejects_unbounded_or_invalid_ids() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let store = Store::open_in_memory().expect("store");
+        let project_id = store
+            .resolve_workspace(workspace.path())
+            .expect("workspace")
+            .snapshot
+            .project
+            .id;
+        let invalid = HarnessExecutionPolicy {
+            profile_id: "Read Only".into(),
+            capability_enabled: BTreeMap::new(),
+        };
+        assert!(matches!(
+            store.save_execution_policy(project_id, &invalid),
+            Err(StoreError::InvalidRecord(message))
+                if message == "execution policy contains invalid bounded fields"
+        ));
+        assert!(store
+            .load_execution_policy(project_id)
+            .expect("policy remains absent")
+            .is_none());
     }
 
     #[test]

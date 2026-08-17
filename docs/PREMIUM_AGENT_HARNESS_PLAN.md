@@ -359,6 +359,13 @@ Rules:
 - Execution profiles resolve to explicit capability policy. Switching a visual
   profile cannot bypass an approval already required by policy.
 
+Current 0.1.0 implementation boundary: `Read Only`, `Confirm Before Changes`,
+and exact custom enablement are persisted per project for `read_text` and
+`write_text`. The runtime checks the resolved policy before model advertisement,
+manual requests, approval resume, and execution. Command, network,
+external-process, full-access, timeout, and session-grant profiles remain
+target-state work.
+
 ### Rust migration order
 
 1. Create the Cargo workspace and domain event model.

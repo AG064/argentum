@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use argentum_domain::{
     ActiveRunState, AppCommand, AppEvent, ApprovalId, ConversationMessageStatus, ConversationRole,
-    Goal, HarnessAvailability, HarnessCapabilityState, HarnessProfileSummary, HarnessReadiness,
-    HarnessSnapshot, HarnessSurfaceState, ProviderKind, ProviderModel, ProviderProfile, RunId,
-    SessionId, SurfaceId, TaskLifecycle, ToolResultState,
+    Goal, HarnessAvailability, HarnessCapabilityState, HarnessExecutionProfileSummary,
+    HarnessProfileSummary, HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, ProviderKind,
+    ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId, TaskLifecycle, ToolResultState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tracing::warn;
@@ -630,7 +630,9 @@ impl UiHandle {
             }
             AppCommand::ListHarnessState
             | AppCommand::SelectHarnessProfile { .. }
-            | AppCommand::SetSurfaceVisibility { .. } => {
+            | AppCommand::SetSurfaceVisibility { .. }
+            | AppCommand::SelectExecutionProfile { .. }
+            | AppCommand::SetHarnessCapabilityEnabled { .. } => {
                 self.window.set_harness_loading(false);
                 self.window.set_harness_pending(SharedString::default());
                 self.window.set_harness_error(present_error(message).into());
@@ -825,6 +827,20 @@ impl UiHandle {
             .set_harness_profile_id(snapshot.selected_profile_id.clone().into());
         self.window
             .set_harness_profiles(harness_profile_model(&snapshot.profiles));
+        self.window
+            .set_execution_profile_id(snapshot.selected_execution_profile_id.clone().into());
+        self.window
+            .set_harness_execution_profiles(harness_execution_profile_model(
+                &snapshot.execution_profiles,
+            ));
+        let selected_label = snapshot
+            .execution_profiles
+            .iter()
+            .find(|profile| profile.selected)
+            .map(|profile| profile.label.as_str())
+            .unwrap_or("Custom");
+        self.window
+            .set_execution_profile_label(selected_label.into());
         self.window
             .set_harness_surfaces(harness_surface_model(&snapshot.surfaces));
         self.window
@@ -1149,6 +1165,22 @@ fn harness_profile_model(profiles: &[HarnessProfileSummary]) -> ModelRc<HarnessP
     ModelRc::new(VecModel::from(rows))
 }
 
+fn harness_execution_profile_model(
+    profiles: &[HarnessExecutionProfileSummary],
+) -> ModelRc<HarnessExecutionProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| HarnessExecutionProfileView {
+            id: profile.id.clone().into(),
+            label: profile.label.clone().into(),
+            detail: profile.detail.clone().into(),
+            selected: profile.selected,
+            selectable: profile.selectable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn harness_surface_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<HarnessSurfaceView> {
     let rows = surfaces
         .iter()
@@ -1410,6 +1442,7 @@ fn harness_surface_state(surface: &HarnessSurfaceState) -> &'static str {
 fn harness_capability_state(capability: &HarnessCapabilityState) -> &'static str {
     match capability.availability {
         HarnessAvailability::Unavailable => "unavailable",
+        HarnessAvailability::Available if !capability.enabled => "disabled",
         HarnessAvailability::Available => match capability.readiness {
             HarnessReadiness::Ready => "ready",
             HarnessReadiness::NeedsConfiguration => "needs configuration",
@@ -1732,6 +1765,48 @@ where
         window.set_harness_pending("surface".into());
         window.set_harness_error(SharedString::default());
         surface_visibility_dispatch(AppCommand::SetSurfaceVisibility { surface, visible });
+    });
+
+    let execution_profile_dispatch = dispatch.clone();
+    let execution_profile_window = window.as_weak();
+    window.on_select_execution_profile(move |profile_id| {
+        let Some(window) = execution_profile_window.upgrade() else {
+            return;
+        };
+        let profile_id = profile_id.trim().to_string();
+        if window.get_running()
+            || window.get_approval_open()
+            || !window.get_harness_pending().is_empty()
+            || profile_id.is_empty()
+            || profile_id == "custom"
+        {
+            return;
+        }
+        window.set_harness_pending("execution".into());
+        window.set_harness_error(SharedString::default());
+        execution_profile_dispatch(AppCommand::SelectExecutionProfile { profile_id });
+    });
+
+    let capability_dispatch = dispatch.clone();
+    let capability_window = window.as_weak();
+    window.on_set_harness_capability_enabled(move |capability_id, enabled| {
+        let Some(window) = capability_window.upgrade() else {
+            return;
+        };
+        let capability_id = capability_id.trim().to_string();
+        if window.get_running()
+            || window.get_approval_open()
+            || !window.get_harness_pending().is_empty()
+            || capability_id.is_empty()
+        {
+            return;
+        }
+        window.set_harness_pending("capability".into());
+        window.set_harness_error(SharedString::default());
+        capability_dispatch(AppCommand::SetHarnessCapabilityEnabled {
+            capability_id,
+            enabled,
+        });
     });
 
     window.on_validate_provider_label(|value| validate_provider_label(value.as_str()).into());
@@ -2070,6 +2145,22 @@ mod tests {
                 if provider_id == "minimax" && model == "MiniMax-M2.7"
         ));
 
+        ui.window().set_run_state("Ready".into());
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_provider_models_loading(true);
+        ui.window().set_provider_models_pending("list".into());
+        ui.window()
+            .set_provider_models_provider_id("minimax".into());
+        ui.apply_command_failure(
+            &AppCommand::ListProviderModels {
+                provider_id: "minimax".into(),
+            },
+            "MiniMax could not return its model catalog. Check its settings.",
+        );
+        assert_eq!(ui.window().get_run_state(), "Ready");
+        assert_eq!(ui.window().get_error_message(), "");
+        assert_ne!(ui.window().get_provider_models_error(), "");
+
         // Harness state keeps presentation visibility separate from capability
         // availability and dispatches only typed profile or surface changes.
         commands.borrow_mut().clear();
@@ -2082,18 +2173,49 @@ mod tests {
                 selected: false,
                 selectable: true,
             }],
-            capabilities: vec![HarnessCapabilityState {
-                id: "verification.runner".into(),
-                label: "Verification runners".into(),
-                kind: HarnessCapabilityKind::Review,
-                availability: HarnessAvailability::Unavailable,
-                readiness: HarnessReadiness::Unavailable,
-                enabled: false,
-                configurable: false,
-                detail: String::new(),
-                unavailable_reason: "No verification runner is registered.".into(),
-                dependencies: Vec::new(),
-            }],
+            selected_execution_profile_id: "confirm-before-changes".into(),
+            execution_profiles: vec![
+                HarnessExecutionProfileSummary {
+                    id: "read-only".into(),
+                    label: "Read Only".into(),
+                    detail: "File changes are disabled.".into(),
+                    selected: false,
+                    selectable: true,
+                },
+                HarnessExecutionProfileSummary {
+                    id: "confirm-before-changes".into(),
+                    label: "Confirm Before Changes".into(),
+                    detail: "Every write needs approval.".into(),
+                    selected: true,
+                    selectable: true,
+                },
+            ],
+            capabilities: vec![
+                HarnessCapabilityState {
+                    id: "verification.runner".into(),
+                    label: "Verification runners".into(),
+                    kind: HarnessCapabilityKind::Review,
+                    availability: HarnessAvailability::Unavailable,
+                    readiness: HarnessReadiness::Unavailable,
+                    enabled: false,
+                    configurable: false,
+                    detail: String::new(),
+                    unavailable_reason: "No verification runner is registered.".into(),
+                    dependencies: Vec::new(),
+                },
+                HarnessCapabilityState {
+                    id: "tool.write-text".into(),
+                    label: "Write text tool".into(),
+                    kind: HarnessCapabilityKind::Tool,
+                    availability: HarnessAvailability::Available,
+                    readiness: HarnessReadiness::Ready,
+                    enabled: true,
+                    configurable: true,
+                    detail: "Writes require approval.".into(),
+                    unavailable_reason: String::new(),
+                    dependencies: vec!["approval.write".into()],
+                },
+            ],
             surfaces: vec![HarnessSurfaceState {
                 id: SurfaceId::Activity,
                 label: "Activity".into(),
@@ -2106,6 +2228,14 @@ mod tests {
         };
         ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
         assert_eq!(ui.window().get_harness_profile_id(), "standard");
+        assert_eq!(
+            ui.window().get_execution_profile_id(),
+            "confirm-before-changes"
+        );
+        assert_eq!(
+            ui.window().get_execution_profile_label(),
+            "Confirm Before Changes"
+        );
         assert_eq!(ui.window().get_harness_profiles().row_count(), 1);
         assert_eq!(
             ui.window()
@@ -2115,15 +2245,49 @@ mod tests {
                 .state,
             "unavailable"
         );
+        ui.window()
+            .invoke_select_execution_profile("read-only".into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SelectExecutionProfile { profile_id })
+                if profile_id == "read-only"
+        ));
+        let mut read_only_snapshot = harness_snapshot.clone();
+        read_only_snapshot.selected_execution_profile_id = "read-only".into();
+        read_only_snapshot.execution_profiles[0].selected = true;
+        read_only_snapshot.execution_profiles[1].selected = false;
+        read_only_snapshot.capabilities[1].enabled = false;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(read_only_snapshot));
+        assert_eq!(ui.window().get_execution_profile_label(), "Read Only");
+        assert_eq!(
+            ui.window()
+                .get_harness_capabilities()
+                .row_data(1)
+                .expect("write capability")
+                .state,
+            "disabled"
+        );
+        commands.borrow_mut().clear();
+        ui.window()
+            .invoke_set_harness_capability_enabled("tool.write-text".into(), true);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id,
+                enabled: true,
+            }) if capability_id == "tool.write-text"
+        ));
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
+        commands.borrow_mut().clear();
         ui.window().invoke_select_harness_profile("review".into());
         assert!(matches!(
             commands.borrow().first(),
             Some(AppCommand::SelectHarnessProfile { profile_id }) if profile_id == "review"
         ));
-        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(HarnessSnapshot {
-            selected_profile_id: "review".into(),
-            ..harness_snapshot
-        }));
+        let mut review_snapshot = harness_snapshot;
+        review_snapshot.selected_profile_id = "review".into();
+        review_snapshot.profiles[0].selected = true;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(review_snapshot));
         commands.borrow_mut().clear();
         ui.window()
             .invoke_set_harness_surface_visibility("activity".into(), true);
@@ -2171,6 +2335,10 @@ mod tests {
         ui.window().invoke_refresh_provider_models("minimax".into());
         ui.window()
             .invoke_select_provider_model("minimax".into(), "MiniMax-M2.7".into());
+        ui.window()
+            .invoke_select_execution_profile("read-only".into());
+        ui.window()
+            .invoke_set_harness_capability_enabled("tool.write-text".into(), false);
         assert!(commands.borrow().is_empty());
         ui.window().set_running(false);
 

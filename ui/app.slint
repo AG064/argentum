@@ -5,7 +5,7 @@ import { BrandLockup, BrandMark } from "components/brand.slint";
 import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsField } from "components/surfaces.slint";
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
-import { ActivityItemView, ConversationMessageView, HarnessCapabilityView, HarnessProfileView, HarnessSurfaceView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
+import { ActivityItemView, ConversationMessageView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 
 component RailSettingsButton inherits Rectangle {
@@ -652,6 +652,9 @@ export component MainWindow inherits Window {
     in-out property <string> provider_model_error: "";
     in-out property <string> harness_profile_id: "standard";
     in-out property <[HarnessProfileView]> harness_profiles: [];
+    in-out property <string> execution_profile_id: "confirm-before-changes";
+    in-out property <string> execution_profile_label: "Confirm Before Changes";
+    in-out property <[HarnessExecutionProfileView]> harness_execution_profiles: [];
     in-out property <[HarnessSurfaceView]> harness_surfaces: [];
     in-out property <[HarnessCapabilityView]> harness_capabilities: [];
     in-out property <bool> harness_loading: false;
@@ -777,6 +780,8 @@ export component MainWindow inherits Window {
     callback refresh_harness();
     callback select_harness_profile(string);
     callback set_harness_surface_visibility(string, bool);
+    callback select_execution_profile(string);
+    callback set_harness_capability_enabled(string, bool);
     callback validate_provider_label(string) -> string;
     callback validate_provider_endpoint(string) -> string;
     callback validate_provider_model(string) -> string;
@@ -1310,7 +1315,11 @@ export component MainWindow inherits Window {
                     }
 
                     Text {
-                        text: root.approval_open ? "Review the pending approval to continue" : "File writes require approval";
+                        text: root.approval_open
+                            ? "Review the pending approval to continue"
+                            : (root.execution_profile_id == "read-only"
+                                ? "Read only. File changes are disabled"
+                                : "Confirm before changes. File writes require approval");
                         color: root.approval_open ? AgTheme.red-100 : AgTheme.text-muted;
                         font-size: AgTheme.type-compact;
                         horizontal-alignment: center;
@@ -2069,7 +2078,15 @@ export component MainWindow inherits Window {
                 spacing: AgTheme.space-2;
                 PanelHeader { icon: "folder"; title: "Execution scope"; detail: root.project_name; close => { root.context_menu_open = false; } }
                 MenuRow { icon: "folder"; label: root.project_name; detail: root.workspace_label; active: true; clicked => { root.context_menu_open = false; } }
-                MenuRow { icon: "lock"; label: "File tool approval"; detail: "Read tools are allowed. Each write tool needs approval."; clicked => { root.context_menu_open = false; } }
+                MenuRow {
+                    icon: "lock";
+                    label: root.execution_profile_label;
+                    detail: root.execution_profile_id == "read-only"
+                        ? "Workspace reads are allowed. File changes are disabled."
+                        : "Workspace reads are allowed. Every file write needs approval.";
+                    active: true;
+                    clicked => { root.context_menu_open = false; }
+                }
             }
         }
 
@@ -2430,6 +2447,36 @@ export component MainWindow inherits Window {
                         Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
 
                         SectionHeading {
+                            label: "Execution policy";
+                            detail: root.harness_loading ? "Loading" : root.execution_profile_label;
+                        }
+
+                        Text {
+                            text: "Execution policy is saved for this project and enforced by the Rust tool boundary.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for profile in root.harness_execution_profiles: MenuRow {
+                            icon: profile.id == "read-only" ? "lock" : "check";
+                            label: profile.label;
+                            detail: profile.detail;
+                            active: profile.selected;
+                            enabled: profile.selectable
+                                && !profile.selected
+                                && !root.running
+                                && !root.harness_busy;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.harness_error = "";
+                                root.select_execution_profile(profile.id);
+                            }
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
                             label: "Harness profile";
                             detail: root.harness_loading ? "Loading" : root.harness_profile_id;
                         }
@@ -2520,7 +2567,9 @@ export component MainWindow inherits Window {
                             spacing: AgTheme.optical-tight-gap;
 
                             for capability in root.harness_capabilities: MenuRow {
-                                icon: capability.state == "unavailable" ? "alert" : "check";
+                                icon: capability.state == "unavailable"
+                                    ? "alert"
+                                    : (capability.enabled ? "check" : "lock");
                                 label: capability.label;
                                 detail: capability.state + " | " + capability.detail;
                                 active: capability.enabled;
@@ -2528,6 +2577,13 @@ export component MainWindow inherits Window {
                                     && !root.running
                                     && !root.harness_busy;
                                 reduced-motion: root.reduced_motion;
+                                clicked => {
+                                    root.harness_error = "";
+                                    root.set_harness_capability_enabled(
+                                        capability.id,
+                                        !capability.enabled
+                                    );
+                                }
                             }
                         }
 

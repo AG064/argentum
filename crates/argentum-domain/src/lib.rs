@@ -167,10 +167,54 @@ pub struct HarnessProfileSummary {
     pub selectable: bool,
 }
 
+pub const DEFAULT_EXECUTION_PROFILE_ID: &str = "confirm-before-changes";
+pub const CUSTOM_EXECUTION_PROFILE_ID: &str = "custom";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessExecutionPolicy {
+    #[serde(default = "default_execution_profile_id")]
+    pub profile_id: String,
+    #[serde(default = "default_execution_capabilities")]
+    pub capability_enabled: BTreeMap<String, bool>,
+}
+
+impl Default for HarnessExecutionPolicy {
+    fn default() -> Self {
+        Self {
+            profile_id: default_execution_profile_id(),
+            capability_enabled: default_execution_capabilities(),
+        }
+    }
+}
+
+fn default_execution_profile_id() -> String {
+    DEFAULT_EXECUTION_PROFILE_ID.to_owned()
+}
+
+fn default_execution_capabilities() -> BTreeMap<String, bool> {
+    BTreeMap::from([
+        ("tool.read-text".to_owned(), true),
+        ("tool.write-text".to_owned(), true),
+    ])
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessExecutionProfileSummary {
+    pub id: String,
+    pub label: String,
+    pub detail: String,
+    pub selected: bool,
+    pub selectable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HarnessSnapshot {
     pub selected_profile_id: String,
     pub profiles: Vec<HarnessProfileSummary>,
+    #[serde(default = "default_execution_profile_id")]
+    pub selected_execution_profile_id: String,
+    #[serde(default)]
+    pub execution_profiles: Vec<HarnessExecutionProfileSummary>,
     pub capabilities: Vec<HarnessCapabilityState>,
     pub surfaces: Vec<HarnessSurfaceState>,
 }
@@ -572,6 +616,13 @@ pub enum AppCommand {
         surface: SurfaceId,
         visible: bool,
     },
+    SelectExecutionProfile {
+        profile_id: String,
+    },
+    SetHarnessCapabilityEnabled {
+        capability_id: String,
+        enabled: bool,
+    },
     SubmitTask {
         prompt: String,
     },
@@ -832,5 +883,22 @@ mod tests {
         });
         let layout: LayoutProfile = serde_json::from_value(value).expect("legacy layout");
         assert_eq!(layout.harness_profile_id, "standard");
+    }
+
+    #[test]
+    fn legacy_harness_snapshots_default_to_confirm_before_changes() {
+        let snapshot: HarnessSnapshot = serde_json::from_value(serde_json::json!({
+            "selected_profile_id": "standard",
+            "profiles": [],
+            "capabilities": [],
+            "surfaces": []
+        }))
+        .expect("legacy harness snapshot");
+
+        assert_eq!(
+            snapshot.selected_execution_profile_id,
+            DEFAULT_EXECUTION_PROFILE_ID
+        );
+        assert!(snapshot.execution_profiles.is_empty());
     }
 }

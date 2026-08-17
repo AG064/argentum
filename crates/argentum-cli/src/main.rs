@@ -334,6 +334,22 @@ async fn run_harness_command(
                 .dispatch(AppCommand::SetSurfaceVisibility { surface, visible })
                 .await?;
         }
+        HarnessAction::SelectExecutionProfile { profile_id } => {
+            host.client()
+                .dispatch(AppCommand::SelectExecutionProfile { profile_id })
+                .await?;
+        }
+        HarnessAction::SetCapability {
+            capability_id,
+            enabled,
+        } => {
+            host.client()
+                .dispatch(AppCommand::SetHarnessCapabilityEnabled {
+                    capability_id,
+                    enabled,
+                })
+                .await?;
+        }
     }
     print_harness(host.harness_snapshot()?, json);
     Ok(())
@@ -348,6 +364,21 @@ fn print_harness(snapshot: argentum_domain::HarnessSnapshot, json: bool) {
     println!("Harness profile: {}", snapshot.selected_profile_id);
     println!("Profiles:");
     for profile in snapshot.profiles {
+        let state = if profile.selected {
+            "selected"
+        } else if profile.selectable {
+            "available"
+        } else {
+            "derived"
+        };
+        println!("  {} [{}]: {}", profile.label, state, profile.detail);
+    }
+    println!(
+        "Execution profile: {}",
+        snapshot.selected_execution_profile_id
+    );
+    println!("Execution profiles:");
+    for profile in snapshot.execution_profiles {
         let state = if profile.selected {
             "selected"
         } else if profile.selectable {
@@ -375,6 +406,7 @@ fn print_harness(snapshot: argentum_domain::HarnessSnapshot, json: bool) {
     for capability in snapshot.capabilities {
         let state = match capability.availability {
             argentum_domain::HarnessAvailability::Unavailable => "unavailable",
+            argentum_domain::HarnessAvailability::Available if !capability.enabled => "disabled",
             argentum_domain::HarnessAvailability::Available => match capability.readiness {
                 argentum_domain::HarnessReadiness::Ready => "ready",
                 argentum_domain::HarnessReadiness::NeedsConfiguration => "needs configuration",
@@ -834,6 +866,13 @@ enum HarnessAction {
         surface: argentum_domain::SurfaceId,
         visible: bool,
     },
+    SelectExecutionProfile {
+        profile_id: String,
+    },
+    SetCapability {
+        capability_id: String,
+        enabled: bool,
+    },
 }
 
 #[derive(Debug)]
@@ -1056,14 +1095,17 @@ where
             }
             value
                 if command == "harness"
-                    && matches!(harness_action.as_deref(), Some("profile" | "surface"))
+                    && matches!(
+                        harness_action.as_deref(),
+                        Some("profile" | "surface" | "execution" | "capability")
+                    )
                     && harness_target.is_none() =>
             {
                 harness_target = Some(value.to_owned())
             }
             value
                 if command == "harness"
-                    && harness_action.as_deref() == Some("surface")
+                    && matches!(harness_action.as_deref(), Some("surface" | "capability"))
                     && harness_target.is_some()
                     && harness_visibility.is_none() =>
             {
@@ -1306,7 +1348,37 @@ where
                     json,
                 })
             }
-            _ => Err("harness requires 'status', 'profile PROFILE_ID', or 'surface SURFACE show|hide'".into()),
+            Some("execution") if harness_visibility.is_none() => Ok(Arguments::Harness {
+                options,
+                action: HarnessAction::SelectExecutionProfile {
+                    profile_id: harness_target
+                        .ok_or_else(|| "harness execution requires PROFILE_ID".to_owned())?,
+                },
+                json,
+            }),
+            Some("capability") => {
+                let capability_id = harness_target
+                    .ok_or_else(|| "harness capability requires CAPABILITY_ID".to_owned())?;
+                let enabled = match harness_visibility.as_deref() {
+                    Some("enable") => true,
+                    Some("disable") => false,
+                    _ => {
+                        return Err(
+                            "harness capability requires 'enable' or 'disable' after CAPABILITY_ID"
+                                .into(),
+                        )
+                    }
+                };
+                Ok(Arguments::Harness {
+                    options,
+                    action: HarnessAction::SetCapability {
+                        capability_id,
+                        enabled,
+                    },
+                    json,
+                })
+            }
+            _ => Err("harness requires 'status', 'profile PROFILE_ID', 'surface SURFACE show|hide', 'execution PROFILE_ID', or 'capability CAPABILITY_ID enable|disable'".into()),
         },
         unknown => Err(format!("unknown command '{unknown}'")),
     }
@@ -1405,7 +1477,9 @@ argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
   argentum-cli goal clear [OPTIONS]\n  \
   argentum-cli harness status [OPTIONS]\n  \
   argentum-cli harness profile PROFILE_ID [OPTIONS]\n  \
-  argentum-cli harness surface SURFACE show|hide [OPTIONS]\n\n\
+  argentum-cli harness surface SURFACE show|hide [OPTIONS]\n  \
+  argentum-cli harness execution PROFILE_ID [OPTIONS]\n  \
+  argentum-cli harness capability CAPABILITY_ID enable|disable [OPTIONS]\n\n\
 Commands:\n  \
 serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
 run     Submit one task and stream its output\n  \
@@ -1415,7 +1489,7 @@ status  Show workspace and configured provider information\n  \
   sessions List durable sessions for the current workspace\n  \
   session  Select the active session for the current workspace\n  \
   goal     Manage the active session goal contract\n  \
-  harness  Inspect composition, select a profile, or show and hide a surface\n\n\
+  harness  Inspect composition, presentation, execution policy, and surfaces\n\n\
 Options:\n  \
 --workspace PATH   Workspace boundary, defaults to the current directory\n  \
 --database PATH    SQLite database path, defaults to Argentum application data\n  \
@@ -1558,7 +1632,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_harness_inspection_profile_and_surface_commands() {
+    fn parses_harness_inspection_presentation_and_execution_commands() {
         assert!(matches!(
             parse_args(["harness", "status", "--json"]).expect("harness status"),
             Arguments::Harness {
@@ -1584,9 +1658,35 @@ mod tests {
                 ..
             }
         ));
+        assert!(matches!(
+            parse_args(["harness", "execution", "read-only"])
+                .expect("execution profile"),
+            Arguments::Harness {
+                action: HarnessAction::SelectExecutionProfile { profile_id },
+                ..
+            } if profile_id == "read-only"
+        ));
+        assert!(matches!(
+            parse_args([
+                "harness",
+                "capability",
+                "tool.write-text",
+                "disable",
+            ])
+            .expect("capability disable"),
+            Arguments::Harness {
+                action: HarnessAction::SetCapability {
+                    capability_id,
+                    enabled: false,
+                },
+                ..
+            } if capability_id == "tool.write-text"
+        ));
         assert!(parse_args(["harness", "surface", "terminal"]).is_err());
         assert!(parse_args(["harness", "surface", "unknown", "show"]).is_err());
         assert!(parse_args(["harness", "profile"]).is_err());
+        assert!(parse_args(["harness", "execution"]).is_err());
+        assert!(parse_args(["harness", "capability", "tool.read-text", "show"]).is_err());
     }
 
     #[test]

@@ -312,6 +312,19 @@ mod tests {
                 },
                 "set_surface_visibility",
             ),
+            (
+                AppCommand::SelectExecutionProfile {
+                    profile_id: "read-only".into(),
+                },
+                "select_execution_profile",
+            ),
+            (
+                AppCommand::SetHarnessCapabilityEnabled {
+                    capability_id: "tool.write-text".into(),
+                    enabled: false,
+                },
+                "set_harness_capability_enabled",
+            ),
         ];
 
         for (index, (command, expected_kind)) in cases.into_iter().enumerate() {

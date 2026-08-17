@@ -124,10 +124,32 @@ Each surface reports:
 - whether visibility is user configurable;
 - a factual detail or unavailable reason.
 
-The first implementation slice permits only surface composition. Capability
-enablement is read-only until each command, prompt schema, tool registry, and
-runtime path is guarded by the same resolved state. This prevents a decorative
-toggle from pretending to enforce behavior.
+The first implementation slice permits surface composition. The second slice
+adds policy-backed enablement only for the existing read and write text tools.
+Every model schema, manual tool command, approval path, and execution path must
+resolve the same persisted project policy. A visual toggle is never authority.
+
+## Execution policy contract
+
+Execution policy is separate from presentation. It is persisted per project
+and has two selectable built-in profiles:
+
+| Profile | Read text | Write text | Approval behavior |
+| --- | --- | --- | --- |
+| Read Only | Enabled | Disabled | No write request can be created |
+| Confirm Before Changes | Enabled | Enabled | Every write requires approval once |
+| Custom | Exact saved tool enablement | Exact saved tool enablement | Writes still require approval |
+
+`Confirm Before Changes` is the default. The current product does not expose a
+full-access profile, approval timeouts, session-wide grants, command execution,
+network access, or external-process access. Enabling a tool cannot enable an
+unavailable dependency. Disabling a tool removes it from the model schema and
+causes manual requests for that tool to fail before execution or approval.
+
+The active execution profile, effective tool states, and approval behavior are
+visible in Settings, the composer context, CLI human output, and protocol JSON.
+Capability changes are rejected while a run or approval is active so one run
+cannot observe a policy that changes midway through execution.
 
 ## Built-in profiles
 
@@ -147,9 +169,8 @@ is not yet enforced by every component. Their distinction becomes active only
 after the density token reaches the whole shell. Argentum does not claim a
 visual difference before that migration is complete.
 
-Future execution profiles such as Confirm Before Changes must be backed by
-`argentum-security` policy and a complete runtime gate. They are not aliases
-for these presentation profiles.
+Execution profiles are backed by the Rust harness and security boundary. They
+are not aliases for presentation profiles.
 
 ## Initial truthful catalog
 
@@ -248,6 +269,10 @@ restored feature a place and an off switch:
 - persist capability overrides per project;
 - require dependency and security validation before enablement;
 - expose `Confirm Before Changes` as the first policy-backed execution profile.
+
+The first bounded implementation covers `read_text` and `write_text`. Provider
+selection remains a separate exact-profile setting. Command, network,
+external-process, browser, and terminal capabilities remain unavailable.
 
 ### Slice 3: trajectory and context inspector
 

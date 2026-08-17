@@ -19,14 +19,16 @@ CLI command or Slint view
 
 `argentum-harness` is the small composition layer between the command host and
 runtime services. It owns stable capability and surface declarations, built-in
-presentation profiles, dependency metadata, and truthful snapshot projection.
-It does not execute a model request, tool, database query, or UI action.
+presentation and execution profiles, dependency metadata, policy resolution,
+and truthful snapshot projection. It does not execute a model request, tool,
+database query, or UI action.
 
 Availability, enablement, readiness, authority, and surface visibility are
-separate states. The 0.1.0 first slice allows profile and surface composition
-only. Capability enablement remains read-only until every affected runtime path
-is guarded by the same resolved state. See
-[the modular harness contract](HARNESS_MODULARITY.md).
+separate states. The current bounded execution slice controls `read_text` and
+`write_text`. Policy is project scoped and enforced when model tools are
+advertised, when manual tool requests are accepted, when approvals resume, and
+immediately before tool execution. A presentation profile cannot change
+execution authority. See [the modular harness contract](HARNESS_MODULARITY.md).
 
 ## CLI-first boundary
 
@@ -51,6 +53,10 @@ paths over one command host, plus focused inspection commands:
 - `harness status`, `harness profile PROFILE_ID`, and `harness surface SURFACE
   show|hide` inspect and change the persisted presentation composition without
   changing execution authority.
+- `harness execution PROFILE_ID` selects `read-only` or
+  `confirm-before-changes`. `harness capability CAPABILITY_ID enable|disable`
+  creates an exact custom policy for configurable built-ins. Policy changes are
+  rejected while a project run or approval is active.
 - `provider credential set PROFILE_ID` reads one credential from standard input
   and stores it in the operating-system keyring. `provider credential clear`
   removes it. Credential values never cross the typed command protocol.
@@ -168,7 +174,8 @@ tool can read or write it.
 - `argentum-domain` contains serializable commands, events, lifecycle states,
   layout profiles, and product records.
 - `argentum-harness` owns capability and surface registration, dependency
-  metadata, and built-in composition profiles. It does not own execution.
+  metadata, built-in presentation and execution profiles, and policy
+  resolution. It does not own execution.
 - `argentum-cli` owns the command host, in-process client, executable commands,
   and versioned JSONL transport.
 - `argentum-runtime` owns task orchestration, cancellation, provider selection,

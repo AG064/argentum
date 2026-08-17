@@ -15,9 +15,10 @@ start a subprocess or serialize JSON for each action. External clients can use
 the versioned JSONL protocol exposed by `argentum-cli serve`.
 
 A small Rust harness registry reports every built-in capability and surface,
-including unavailable work with a factual reason. Presentation profiles and
-surface visibility are persisted, while execution authority stays in the
-security broker.
+including unavailable work with a factual reason. Presentation profiles,
+surface visibility, and the bounded read and write execution policy are
+persisted per project. The runtime and security broker enforce the resolved
+policy at model-schema, manual-request, approval, and execution boundaries.
 
 OpenAI-compatible task runs can use the built-in `read_text` and `write_text`
 tools through the same command host. Reads remain inside the active workspace.
@@ -59,8 +60,19 @@ cargo run -p argentum-cli -- harness profile review
 cargo run -p argentum-cli -- harness surface activity show
 ```
 
-Profiles change presentation only. They do not grant tools, network access, or
-filesystem authority. See [the modular harness contract](docs/HARNESS_MODULARITY.md).
+Select the execution policy or change one configurable built-in capability:
+
+```powershell
+cargo run -p argentum-cli -- harness execution read-only
+cargo run -p argentum-cli -- harness execution confirm-before-changes
+cargo run -p argentum-cli -- harness capability tool.write-text disable
+```
+
+Presentation profiles change presentation only. Execution profiles resolve to
+persisted capability policy. `Confirm Before Changes` is the default, and every
+write still requires one explicit approval. This draft does not expose full
+access, shell commands, network access, or external-process authority. See
+[the modular harness contract](docs/HARNESS_MODULARITY.md).
 
 Inspect or select durable sessions for the current workspace:
 

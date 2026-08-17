@@ -23,7 +23,7 @@ fn harness_snapshot(output: &Output) -> serde_json::Value {
 }
 
 #[test]
-fn harness_profile_and_surface_visibility_persist_without_enabling_missing_work() {
+fn harness_presentation_and_execution_policy_persist_without_enabling_missing_work() {
     let workspace = tempfile::tempdir().expect("workspace");
     let database_dir = tempfile::tempdir().expect("database directory");
     let database = database_dir.path().join("argentum.db");
@@ -83,4 +83,60 @@ fn harness_profile_and_surface_visibility_persist_without_enabling_missing_work(
                 && surface["availability"] == "unavailable"
                 && surface["visible"] == false
         }));
+
+    let read_only = harness_snapshot(&run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "execution", "read-only"],
+    ));
+    assert_eq!(
+        read_only["harness"]["selected_execution_profile_id"],
+        "read-only"
+    );
+    assert!(read_only["harness"]["capabilities"]
+        .as_array()
+        .expect("capabilities")
+        .iter()
+        .any(|capability| {
+            capability["id"] == "tool.write-text"
+                && capability["availability"] == "available"
+                && capability["enabled"] == false
+                && capability["configurable"] == true
+        }));
+
+    let restarted_read_only = harness_snapshot(&run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "status"],
+    ));
+    assert_eq!(
+        restarted_read_only["harness"]["selected_execution_profile_id"],
+        "read-only"
+    );
+
+    let custom_execution = harness_snapshot(&run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "capability", "tool.write-text", "enable"],
+    ));
+    assert_eq!(
+        custom_execution["harness"]["selected_execution_profile_id"],
+        "custom"
+    );
+    assert!(custom_execution["harness"]["capabilities"]
+        .as_array()
+        .expect("capabilities")
+        .iter()
+        .any(|capability| {
+            capability["id"] == "tool.write-text" && capability["enabled"] == true
+        }));
+
+    let unavailable_capability = run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "capability", "verification.runner", "enable"],
+    );
+    assert!(!unavailable_capability.status.success());
+    assert!(String::from_utf8_lossy(&unavailable_capability.stderr)
+        .contains("not available in this build"));
 }
