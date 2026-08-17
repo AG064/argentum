@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use argentum_domain::{
-    AppCommand, AppEvent, Capability, Goal, ProviderKind, ProviderProfile, ProviderStatus,
-    WorkspaceSnapshot,
+    AppCommand, AppEvent, Capability, Goal, HarnessSnapshot, ProviderKind, ProviderProfile,
+    ProviderStatus, WorkspaceSnapshot,
 };
 use argentum_platform::{
     default_secret_store, provider_credential_key, AppPaths, PlatformError, SecretStore,
@@ -256,7 +256,12 @@ impl CommandHost {
         self.runtime.publish_provider_profiles()?;
         self.runtime.publish_provider_statuses();
         self.runtime.publish_layout()?;
+        self.runtime.publish_harness_snapshot()?;
         Ok(())
+    }
+
+    pub fn harness_snapshot(&self) -> Result<HarnessSnapshot, HostError> {
+        Ok(self.runtime.harness_snapshot()?)
     }
 
     pub fn workspace_snapshot(&self) -> Result<WorkspaceSnapshot, HostError> {
@@ -284,6 +289,9 @@ impl CommandHost {
             self.runtime.clear_provider_credential(profile_id);
             return Err(error_value.into());
         }
+        if let Err(error_value) = self.runtime.publish_harness_snapshot() {
+            warn!(error = %error_value, "unable to refresh harness state after credential update");
+        }
         Ok(())
     }
 
@@ -292,6 +300,9 @@ impl CommandHost {
         let key = provider_credential_key(profile_id)?;
         self.secret_store.delete(&key)?;
         self.runtime.clear_provider_credential(profile_id);
+        if let Err(error_value) = self.runtime.publish_harness_snapshot() {
+            warn!(error = %error_value, "unable to refresh harness state after credential removal");
+        }
         Ok(())
     }
 

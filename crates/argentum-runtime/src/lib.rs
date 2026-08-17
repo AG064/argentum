@@ -4,10 +4,12 @@ use std::sync::{Arc, Mutex};
 use argentum_domain::{
     now, ActiveRunState, AppCommand, AppEvent, ApprovalRequest, ApprovalScope, ChangeSet,
     ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot, Goal,
-    GoalLifecycle, LayoutProfile, ModelUsage as DomainModelUsage, PlanStep, ProviderKind,
-    ProviderModel as DomainProviderModel, ProviderProfile, ProviderStatus, Run, RunId, SessionId,
-    Task, TaskLifecycle, ToolResultState, ToolTrace, WorkspaceSnapshot,
+    GoalLifecycle, HarnessReadiness, HarnessSnapshot, LayoutProfile,
+    ModelUsage as DomainModelUsage, PlanStep, ProviderKind, ProviderModel as DomainProviderModel,
+    ProviderProfile, ProviderStatus, Run, RunId, SessionId, Task, TaskLifecycle, ToolResultState,
+    ToolTrace, WorkspaceSnapshot,
 };
+use argentum_harness::{HarnessError, HarnessFacts, HarnessRegistry};
 use argentum_providers::{
     normalize_provider_profile, ModelMessage, ModelMessageRole, ModelRequest, ModelToolCall,
     ModelToolDefinition, ModelToolExchange, ModelToolResult, ProviderError, ProviderEvent,
@@ -34,6 +36,8 @@ pub enum RuntimeError {
     Security(#[from] SecurityError),
     #[error(transparent)]
     Tool(#[from] ToolError),
+    #[error(transparent)]
+    Harness(#[from] HarnessError),
     #[error("no provider is configured")]
     NoProvider,
     #[error("task prompt must not be empty")]
@@ -89,6 +93,7 @@ pub struct RuntimeService {
     tools: ToolRegistry,
     workspace: WorkspaceManager,
     workspace_key: String,
+    layout_key: String,
     project_id: Uuid,
     session_id: Arc<Mutex<SessionId>>,
     events: broadcast::Sender<AppEvent>,
@@ -99,6 +104,7 @@ pub struct RuntimeService {
     model_context_windows: Arc<Mutex<BTreeMap<(String, String), u64>>>,
     provider_model_catalogs: Arc<Mutex<BTreeMap<String, Vec<DomainProviderModel>>>>,
     pending_approvals: Arc<Mutex<BTreeMap<argentum_domain::ApprovalId, PendingTool>>>,
+    harness: HarnessRegistry,
 }
 
 struct PendingTool {
@@ -210,6 +216,11 @@ impl RuntimeService {
             .snapshot
             .active_session_id
             .ok_or(RuntimeError::MissingActiveSession)?;
+        let layout_key = format!("project:{}", resolution.snapshot.project.id);
+        if store.load_layout(&layout_key)?.is_none() {
+            let legacy_or_default = store.load_layout("default")?.unwrap_or_default();
+            store.save_layout(&layout_key, &legacy_or_default)?;
+        }
         let (events, _) = broadcast::channel(256);
         Ok(Self {
             store,
@@ -217,6 +228,7 @@ impl RuntimeService {
             tools,
             workspace,
             workspace_key: resolution.workspace_key,
+            layout_key,
             project_id: resolution.snapshot.project.id,
             session_id: Arc::new(Mutex::new(session_id)),
             events,
@@ -227,6 +239,7 @@ impl RuntimeService {
             model_context_windows: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalogs: Arc::new(Mutex::new(BTreeMap::new())),
             pending_approvals: Arc::new(Mutex::new(BTreeMap::new())),
+            harness: HarnessRegistry::built_in()?,
         })
     }
 
@@ -351,9 +364,20 @@ impl RuntimeService {
     }
 
     pub fn publish_layout(&self) -> Result<(), RuntimeError> {
-        let profile = self.store.load_layout("default")?.unwrap_or_default();
+        let profile = self.load_harness_layout()?;
         self.publish_transient(AppEvent::LayoutChanged(profile));
         Ok(())
+    }
+
+    pub fn harness_snapshot(&self) -> Result<HarnessSnapshot, RuntimeError> {
+        let layout = self.load_harness_layout()?;
+        Ok(self.harness.snapshot(&layout, &self.harness_facts()?))
+    }
+
+    pub fn publish_harness_snapshot(&self) -> Result<HarnessSnapshot, RuntimeError> {
+        let snapshot = self.harness_snapshot()?;
+        self.publish_transient(AppEvent::HarnessSnapshotLoaded(snapshot.clone()));
+        Ok(snapshot)
     }
 
     pub async fn dispatch(&self, command: AppCommand) -> Result<(), RuntimeError> {
@@ -395,15 +419,37 @@ impl RuntimeService {
                 self.publish_provider_profiles()?;
                 Ok(())
             }
-            AppCommand::SaveProviderProfile { profile } => self.save_provider_profile(profile),
+            AppCommand::SaveProviderProfile { profile } => {
+                self.save_provider_profile(profile)?;
+                self.publish_harness_snapshot()?;
+                Ok(())
+            }
             AppCommand::SelectProviderProfile { provider_id } => {
-                self.select_provider_profile(provider_id)
+                self.select_provider_profile(provider_id)?;
+                self.publish_harness_snapshot()?;
+                Ok(())
             }
             AppCommand::ListProviderModels { provider_id } => {
                 self.list_provider_models(provider_id).await
             }
             AppCommand::SelectProviderModel { provider_id, model } => {
                 self.select_provider_model(provider_id, model)
+            }
+            AppCommand::ListHarnessState => {
+                self.publish_harness_snapshot()?;
+                Ok(())
+            }
+            AppCommand::SelectHarnessProfile { profile_id } => {
+                let layout = self.load_harness_layout()?;
+                let layout = self.harness.apply_profile(&layout, &profile_id)?;
+                self.save_and_publish_harness_layout(layout)
+            }
+            AppCommand::SetSurfaceVisibility { surface, visible } => {
+                let layout = self.load_harness_layout()?;
+                let layout = self
+                    .harness
+                    .set_surface_visibility(&layout, surface, visible)?;
+                self.save_and_publish_harness_layout(layout)
             }
             AppCommand::SubmitTask { prompt } => self.submit_task(prompt).await,
             AppCommand::RequestTool { request } => self.request_tool(request).await,
@@ -413,25 +459,55 @@ impl RuntimeService {
             }
             AppCommand::RejectTool { approval_id } => self.reject_tool(approval_id),
             AppCommand::ToggleSurface { surface } => {
-                let mut profile = self.store.load_layout("default")?.unwrap_or_default();
-                let is_visible = profile.visible.entry(surface).or_insert(false);
-                *is_visible = !*is_visible;
-                self.store.save_layout("default", &profile)?;
-                self.publish_transient(AppEvent::LayoutChanged(profile));
-                Ok(())
+                let layout = self.load_harness_layout()?;
+                let visible = !layout.visible.get(&surface).copied().unwrap_or(false);
+                let layout = self
+                    .harness
+                    .set_surface_visibility(&layout, surface, visible)?;
+                self.save_and_publish_harness_layout(layout)
             }
             AppCommand::SetLayout { profile } => {
-                self.store.save_layout("default", &profile)?;
-                self.publish_transient(AppEvent::LayoutChanged(profile));
-                Ok(())
+                let profile = self.harness.reconcile_layout(&profile);
+                self.save_and_publish_harness_layout(profile)
             }
             AppCommand::ResetLayout => {
                 let profile = LayoutProfile::default();
-                self.store.save_layout("default", &profile)?;
-                self.publish_transient(AppEvent::LayoutChanged(profile));
-                Ok(())
+                self.save_and_publish_harness_layout(profile)
             }
         }
+    }
+
+    fn load_harness_layout(&self) -> Result<LayoutProfile, RuntimeError> {
+        let profile = self
+            .store
+            .load_layout(&self.layout_key)?
+            .unwrap_or_default();
+        Ok(self.harness.reconcile_layout(&profile))
+    }
+
+    fn save_and_publish_harness_layout(&self, profile: LayoutProfile) -> Result<(), RuntimeError> {
+        self.store.save_layout(&self.layout_key, &profile)?;
+        self.publish_transient(AppEvent::LayoutChanged(profile));
+        self.publish_harness_snapshot()?;
+        Ok(())
+    }
+
+    fn harness_facts(&self) -> Result<HarnessFacts, RuntimeError> {
+        let profiles = self.provider_profiles()?;
+        let selected = profiles.iter().find(|profile| profile.selected);
+        let provider_readiness = match selected {
+            None => HarnessReadiness::NeedsConfiguration,
+            Some(profile)
+                if matches!(profile.id.as_str(), "openai" | "minimax" | "deepseek")
+                    && !self.provider_credential_configured(&profile.id) =>
+            {
+                HarnessReadiness::NeedsConfiguration
+            }
+            Some(_) => HarnessReadiness::NotVerified,
+        };
+        Ok(HarnessFacts::default()
+            .with_readiness("model.streaming", provider_readiness)
+            .with_readiness("provider.catalogs", provider_readiness))
     }
 
     fn set_goal(
@@ -2257,6 +2333,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ProviderStatus(_)
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
+        | AppEvent::HarnessSnapshotLoaded(_)
         | AppEvent::LayoutChanged(_)
         | AppEvent::Error { .. } => None,
     }
@@ -2265,7 +2342,8 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
 #[cfg(test)]
 mod tests {
     use argentum_domain::{
-        AppCommand, AppEvent, Capability, LayoutProfile, SurfaceId, TaskLifecycle, ToolResultState,
+        AppCommand, AppEvent, Capability, HarnessAvailability, LayoutProfile, SurfaceId,
+        TaskLifecycle, ToolResultState,
     };
     use argentum_providers::{
         ModelProvider, ModelRequest, ModelUsage as ProviderUsage, ProviderEvent,
@@ -2297,16 +2375,116 @@ mod tests {
         profile.visible.insert(SurfaceId::Changes, true);
         runtime
             .store
-            .save_layout("default", &profile)
+            .save_layout(&runtime.layout_key, &profile)
             .expect("saved layout");
         let mut events = runtime.subscribe();
 
         runtime.publish_layout().expect("published layout");
 
         match events.recv().await.expect("layout event") {
-            AppEvent::LayoutChanged(restored) => assert_eq!(restored, profile),
+            AppEvent::LayoutChanged(restored) => {
+                assert_eq!(restored.visible, profile.visible);
+                assert_eq!(restored.harness_profile_id, "custom");
+            }
             event => panic!("unexpected event: {event:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn harness_profiles_and_surface_visibility_publish_truthful_snapshots() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+
+        runtime
+            .dispatch(AppCommand::SelectHarnessProfile {
+                profile_id: "review".into(),
+            })
+            .await
+            .expect("review profile");
+        assert!(matches!(
+            events.recv().await.expect("layout event"),
+            AppEvent::LayoutChanged(profile)
+                if profile.harness_profile_id == "review"
+                    && profile.visible.get(&SurfaceId::Changes) == Some(&true)
+        ));
+        assert!(matches!(
+            events.recv().await.expect("harness event"),
+            AppEvent::HarnessSnapshotLoaded(snapshot)
+                if snapshot.selected_profile_id == "review"
+                    && snapshot.surfaces.iter().any(|surface| {
+                        surface.id == SurfaceId::Changes
+                            && surface.visible
+                            && surface.configurable
+                    })
+                    && snapshot.capabilities.iter().any(|capability| {
+                        capability.id == "verification.runner"
+                            && capability.availability == HarnessAvailability::Unavailable
+                            && !capability.unavailable_reason.is_empty()
+                    })
+        ));
+
+        let error = runtime
+            .dispatch(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Terminal,
+                visible: true,
+            })
+            .await
+            .expect_err("terminal unavailable");
+        assert!(matches!(
+            error,
+            RuntimeError::Harness(HarnessError::UnavailableSurface("Terminal"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn harness_layout_profiles_are_isolated_by_project() {
+        let first_workspace = tempfile::tempdir().expect("first workspace");
+        let second_workspace = tempfile::tempdir().expect("second workspace");
+        let store = Store::open_in_memory().expect("store");
+
+        let first_manager = WorkspaceManager::new(
+            CapabilityBroker::new(first_workspace.path(), ApprovalPolicy::default())
+                .expect("first broker"),
+        );
+        let first = RuntimeService::new(
+            store.clone(),
+            ProviderRegistry::default(),
+            ToolRegistry::with_builtins(first_manager.clone()),
+            first_manager,
+        )
+        .expect("first runtime");
+        let second_manager = WorkspaceManager::new(
+            CapabilityBroker::new(second_workspace.path(), ApprovalPolicy::default())
+                .expect("second broker"),
+        );
+        let second = RuntimeService::new(
+            store,
+            ProviderRegistry::default(),
+            ToolRegistry::with_builtins(second_manager.clone()),
+            second_manager,
+        )
+        .expect("second runtime");
+
+        first
+            .dispatch(AppCommand::SelectHarnessProfile {
+                profile_id: "full".into(),
+            })
+            .await
+            .expect("first profile");
+
+        assert_eq!(
+            first
+                .harness_snapshot()
+                .expect("first snapshot")
+                .selected_profile_id,
+            "full"
+        );
+        assert_eq!(
+            second
+                .harness_snapshot()
+                .expect("second snapshot")
+                .selected_profile_id,
+            "standard"
+        );
     }
 
     #[tokio::test]

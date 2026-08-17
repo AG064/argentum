@@ -6,8 +6,8 @@ Date: 2026-08-02
 
 Branch: `UI_redesign`
 
-Research review: 2026-08-14, including current Codex and ZCode desktop
-workflows
+Research review: 2026-08-17, including current Codex, ZCode, and the public
+DeepSeek Harness architecture
 
 ## Product decision
 
@@ -48,6 +48,11 @@ and continuing conversations.
 - Desktop and mobile use the same domain model and event protocol.
 - Production runtime, security, persistence, providers, orchestration, CLI,
   and UI source move to Rust.
+- A small Rust composition registry makes capabilities and surfaces
+  inspectable without adding a JavaScript plugin runtime.
+- Availability, enablement, readiness, permission, and visibility remain
+  separate facts. Optional modules can be shown, hidden, or unavailable with a
+  reason, but never represented by a decorative toggle.
 - No Node.js runtime is shipped with the completed application.
 - No feature is called ready without an end-to-end security, error, and platform
   test.
@@ -93,9 +98,9 @@ Do not adopt:
 
 ## Current baseline and constraints
 
-The current branch has a Tauri Rust shell around a TypeScript and Node runtime.
-The current desktop UI is in `src/ui/desktop`, the desktop bridge is in
-`src/desktop`, and the framework runtime is primarily under `src/`.
+The active branch is a native Rust workspace with a Slint desktop UI and a
+shared CLI command host. The TypeScript, Node, Tauri, and historical Android
+sources are quarantined under `legacy/` and are not runtime dependencies.
 
 The existing repository contains many optional feature modules. Their presence
 does not establish product readiness. The migration must port verified behavior
@@ -109,6 +114,12 @@ Existing release and security behavior must be preserved during migration:
 - local package validation is separate from publication claims;
 - startup failures remain visible and actionable;
 - dynamic runtime loading is replaced with a safe, explicit mechanism.
+
+The detailed composition, inspection, and extension contract is in
+[`HARNESS_MODULARITY.md`](HARNESS_MODULARITY.md). The active implementation
+borrows profiles, service seams, and durable versus live event separation from
+DeepSeek Harness. It does not copy Cordis or ship an in-process JavaScript
+plugin host.
 
 ## Product information architecture
 

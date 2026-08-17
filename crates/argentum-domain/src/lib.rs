@@ -102,6 +102,79 @@ pub enum SurfaceId {
     Approvals,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessCapabilityKind {
+    Agent,
+    Provider,
+    Session,
+    Tool,
+    Security,
+    Review,
+    Execution,
+    Integration,
+    Extension,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessAvailability {
+    Available,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessReadiness {
+    Ready,
+    NeedsConfiguration,
+    NotVerified,
+    Blocked,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessCapabilityState {
+    pub id: String,
+    pub label: String,
+    pub kind: HarnessCapabilityKind,
+    pub availability: HarnessAvailability,
+    pub readiness: HarnessReadiness,
+    pub enabled: bool,
+    pub configurable: bool,
+    pub detail: String,
+    pub unavailable_reason: String,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessSurfaceState {
+    pub id: SurfaceId,
+    pub label: String,
+    pub availability: HarnessAvailability,
+    pub visible: bool,
+    pub configurable: bool,
+    pub detail: String,
+    pub unavailable_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessProfileSummary {
+    pub id: String,
+    pub label: String,
+    pub detail: String,
+    pub selected: bool,
+    pub selectable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessSnapshot {
+    pub selected_profile_id: String,
+    pub profiles: Vec<HarnessProfileSummary>,
+    pub capabilities: Vec<HarnessCapabilityState>,
+    pub surfaces: Vec<HarnessSurfaceState>,
+}
+
 impl SurfaceId {
     pub const fn label(self) -> &'static str {
         match self {
@@ -125,6 +198,8 @@ pub enum Density {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayoutProfile {
+    #[serde(default = "default_harness_profile_id")]
+    pub harness_profile_id: String,
     pub density: Density,
     pub visible: BTreeMap<SurfaceId, bool>,
     pub widths: BTreeMap<SurfaceId, u32>,
@@ -152,11 +227,16 @@ impl Default for LayoutProfile {
         widths.insert(SurfaceId::Approvals, 380);
 
         Self {
+            harness_profile_id: default_harness_profile_id(),
             density: Density::Comfortable,
             visible,
             widths,
         }
     }
+}
+
+fn default_harness_profile_id() -> String {
+    "standard".to_owned()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -484,6 +564,14 @@ pub enum AppCommand {
         provider_id: String,
         model: String,
     },
+    ListHarnessState,
+    SelectHarnessProfile {
+        profile_id: String,
+    },
+    SetSurfaceVisibility {
+        surface: SurfaceId,
+        visible: bool,
+    },
     SubmitTask {
         prompt: String,
     },
@@ -571,6 +659,7 @@ pub enum AppEvent {
         models: Vec<ProviderModel>,
         selected_model: String,
     },
+    HarnessSnapshotLoaded(HarnessSnapshot),
     LayoutChanged(LayoutProfile),
     Error {
         message: String,
@@ -608,6 +697,7 @@ impl AppEvent {
             Self::ProviderStatus(_) => "provider_status",
             Self::ProviderProfilesSnapshot { .. } => "provider_profiles_snapshot",
             Self::ProviderModelsSnapshot { .. } => "provider_models_snapshot",
+            Self::HarnessSnapshotLoaded(_) => "harness_snapshot_loaded",
             Self::LayoutChanged(_) => "layout_changed",
             Self::Error { .. } => "error",
             Self::RunError { .. } => "run_error",
@@ -722,5 +812,25 @@ mod tests {
         assert_eq!(events[0].kind(), "provider_models_snapshot");
         assert_eq!(events[1].kind(), "assistant_reasoning_delta");
         assert_eq!(events[2].kind(), "model_usage_updated");
+    }
+
+    #[test]
+    fn legacy_layouts_default_to_the_standard_harness_profile() {
+        let value = serde_json::json!({
+            "density": "Comfortable",
+            "visible": {
+                "Conversation": true,
+                "Plan": true,
+                "Changes": false,
+                "Files": false,
+                "Terminal": false,
+                "Preview": false,
+                "Activity": false,
+                "Approvals": false
+            },
+            "widths": {}
+        });
+        let layout: LayoutProfile = serde_json::from_value(value).expect("legacy layout");
+        assert_eq!(layout.harness_profile_id, "standard");
     }
 }

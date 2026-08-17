@@ -14,6 +14,11 @@ storage. The native client links to the command host in process, so it does not
 start a subprocess or serialize JSON for each action. External clients can use
 the versioned JSONL protocol exposed by `argentum-cli serve`.
 
+A small Rust harness registry reports every built-in capability and surface,
+including unavailable work with a factual reason. Presentation profiles and
+surface visibility are persisted, while execution authority stays in the
+security broker.
+
 OpenAI-compatible task runs can use the built-in `read_text` and `write_text`
 tools through the same command host. Reads remain inside the active workspace.
 Writes pause for explicit approval before execution. Tool rounds, calls,
@@ -45,6 +50,17 @@ Start the persistent JSONL command server for another client:
 ```powershell
 cargo run -p argentum-cli -- serve
 ```
+
+Inspect the current composition or select a presentation profile:
+
+```powershell
+cargo run -p argentum-cli -- harness status
+cargo run -p argentum-cli -- harness profile review
+cargo run -p argentum-cli -- harness surface activity show
+```
+
+Profiles change presentation only. They do not grant tools, network access, or
+filesystem authority. See [the modular harness contract](docs/HARNESS_MODULARITY.md).
 
 Inspect or select durable sessions for the current workspace:
 

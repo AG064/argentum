@@ -124,7 +124,9 @@ pub enum ProtocolError {
 
 #[cfg(test)]
 mod tests {
-    use argentum_domain::{AppCommand, ProviderKind, ProviderProfile, ToolInput, ToolRequest};
+    use argentum_domain::{
+        AppCommand, ProviderKind, ProviderProfile, SurfaceId, ToolInput, ToolRequest,
+    };
 
     use super::*;
 
@@ -291,6 +293,37 @@ mod tests {
         assert_eq!(encoded["protocol_version"], PROTOCOL_VERSION);
         assert_eq!(encoded["command"]["kind"], "select_session");
         assert_eq!(encoded["command"]["session_id"], session_id.to_string());
+    }
+
+    #[test]
+    fn harness_commands_have_stable_additive_protocol_v1_shapes() {
+        let cases = [
+            (AppCommand::ListHarnessState, "list_harness_state"),
+            (
+                AppCommand::SelectHarnessProfile {
+                    profile_id: "review".into(),
+                },
+                "select_harness_profile",
+            ),
+            (
+                AppCommand::SetSurfaceVisibility {
+                    surface: SurfaceId::Activity,
+                    visible: true,
+                },
+                "set_surface_visibility",
+            ),
+        ];
+
+        for (index, (command, expected_kind)) in cases.into_iter().enumerate() {
+            let envelope = RequestEnvelope::command(format!("harness-{index}"), command);
+            let encoded = serde_json::to_value(&envelope).expect("serialized request");
+            assert_eq!(encoded["protocol_version"], PROTOCOL_VERSION);
+            assert_eq!(encoded["command"]["kind"], expected_kind);
+            assert_eq!(
+                serde_json::from_value::<RequestEnvelope>(encoded).expect("parsed request"),
+                envelope
+            );
+        }
     }
 
     #[test]

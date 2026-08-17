@@ -302,11 +302,94 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_goal_command(options, action, json).await?;
         }
+        Arguments::Harness {
+            options,
+            action,
+            json,
+        } => {
+            run_harness_command(options, action, json).await?;
+        }
         Arguments::Help | Arguments::Version => {
             unreachable!("help and version exit before command execution")
         }
     }
     Ok(())
+}
+
+async fn run_harness_command(
+    options: CommonOptions,
+    action: HarnessAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = CommandHost::start(options.host_config()?)?;
+    match action {
+        HarnessAction::Status => {}
+        HarnessAction::SelectProfile { profile_id } => {
+            host.client()
+                .dispatch(AppCommand::SelectHarnessProfile { profile_id })
+                .await?;
+        }
+        HarnessAction::SetSurface { surface, visible } => {
+            host.client()
+                .dispatch(AppCommand::SetSurfaceVisibility { surface, visible })
+                .await?;
+        }
+    }
+    print_harness(host.harness_snapshot()?, json);
+    Ok(())
+}
+
+fn print_harness(snapshot: argentum_domain::HarnessSnapshot, json: bool) {
+    if json {
+        println!("{}", serde_json::json!({ "harness": snapshot }));
+        return;
+    }
+
+    println!("Harness profile: {}", snapshot.selected_profile_id);
+    println!("Profiles:");
+    for profile in snapshot.profiles {
+        let state = if profile.selected {
+            "selected"
+        } else if profile.selectable {
+            "available"
+        } else {
+            "derived"
+        };
+        println!("  {} [{}]: {}", profile.label, state, profile.detail);
+    }
+    println!("Surfaces:");
+    for surface in snapshot.surfaces {
+        let state = match surface.availability {
+            argentum_domain::HarnessAvailability::Unavailable => "unavailable",
+            argentum_domain::HarnessAvailability::Available if surface.visible => "visible",
+            argentum_domain::HarnessAvailability::Available => "hidden",
+        };
+        let detail = if surface.unavailable_reason.is_empty() {
+            surface.detail
+        } else {
+            surface.unavailable_reason
+        };
+        println!("  {} [{}]: {}", surface.label, state, detail);
+    }
+    println!("Capabilities:");
+    for capability in snapshot.capabilities {
+        let state = match capability.availability {
+            argentum_domain::HarnessAvailability::Unavailable => "unavailable",
+            argentum_domain::HarnessAvailability::Available => match capability.readiness {
+                argentum_domain::HarnessReadiness::Ready => "ready",
+                argentum_domain::HarnessReadiness::NeedsConfiguration => "needs configuration",
+                argentum_domain::HarnessReadiness::NotVerified => "not verified",
+                argentum_domain::HarnessReadiness::Blocked => "blocked",
+                argentum_domain::HarnessReadiness::Unavailable => "unavailable",
+            },
+        };
+        let detail = if capability.unavailable_reason.is_empty() {
+            capability.detail
+        } else {
+            capability.unavailable_reason
+        };
+        println!("  {} [{}]: {}", capability.label, state, detail);
+    }
 }
 
 async fn run_goal_command(
@@ -718,6 +801,11 @@ enum Arguments {
         action: GoalAction,
         json: bool,
     },
+    Harness {
+        options: CommonOptions,
+        action: HarnessAction,
+        json: bool,
+    },
     Help,
     Version,
 }
@@ -734,6 +822,18 @@ enum GoalAction {
     Pause,
     Resume,
     Clear,
+}
+
+#[derive(Debug)]
+enum HarnessAction {
+    Status,
+    SelectProfile {
+        profile_id: String,
+    },
+    SetSurface {
+        surface: argentum_domain::SurfaceId,
+        visible: bool,
+    },
 }
 
 #[derive(Debug)]
@@ -834,6 +934,9 @@ where
     let mut goal_time_budget_seconds = None;
     let mut workspace_action = None;
     let mut workspace_path = None;
+    let mut harness_action = None;
+    let mut harness_target = None;
+    let mut harness_visibility = None;
     let mut index = 1;
     while index < values.len() {
         match values[index].as_str() {
@@ -941,12 +1044,30 @@ where
             value if command == "workspace" && workspace_action.is_none() => {
                 workspace_action = Some(value.to_owned())
             }
+            value if command == "harness" && harness_action.is_none() => {
+                harness_action = Some(value.to_owned())
+            }
             value
                 if command == "workspace"
                     && workspace_action.as_deref() == Some("set")
                     && workspace_path.is_none() =>
             {
                 workspace_path = Some(PathBuf::from(value))
+            }
+            value
+                if command == "harness"
+                    && matches!(harness_action.as_deref(), Some("profile" | "surface"))
+                    && harness_target.is_none() =>
+            {
+                harness_target = Some(value.to_owned())
+            }
+            value
+                if command == "harness"
+                    && harness_action.as_deref() == Some("surface")
+                    && harness_target.is_some()
+                    && harness_visibility.is_none() =>
+            {
+                harness_visibility = Some(value.to_owned())
             }
             value
                 if command == "goal"
@@ -1147,6 +1268,46 @@ where
             }),
             _ => Err("workspace requires 'status' or 'set PATH'".into()),
         },
+        "harness" if prompt.is_some() => Err("harness does not accept a prompt".into()),
+        "harness" => match harness_action.as_deref() {
+            Some("status") if harness_target.is_none() && harness_visibility.is_none() => {
+                Ok(Arguments::Harness {
+                    options,
+                    action: HarnessAction::Status,
+                    json,
+                })
+            }
+            Some("profile") if harness_visibility.is_none() => Ok(Arguments::Harness {
+                options,
+                action: HarnessAction::SelectProfile {
+                    profile_id: harness_target
+                        .ok_or_else(|| "harness profile requires PROFILE_ID".to_owned())?,
+                },
+                json,
+            }),
+            Some("surface") => {
+                let surface = parse_surface_id(
+                    harness_target
+                        .as_deref()
+                        .ok_or_else(|| "harness surface requires SURFACE".to_owned())?,
+                )?;
+                let visible = match harness_visibility.as_deref() {
+                    Some("show") => true,
+                    Some("hide") => false,
+                    _ => {
+                        return Err(
+                            "harness surface requires 'show' or 'hide' after SURFACE".into(),
+                        )
+                    }
+                };
+                Ok(Arguments::Harness {
+                    options,
+                    action: HarnessAction::SetSurface { surface, visible },
+                    json,
+                })
+            }
+            _ => Err("harness requires 'status', 'profile PROFILE_ID', or 'surface SURFACE show|hide'".into()),
+        },
         unknown => Err(format!("unknown command '{unknown}'")),
     }
 }
@@ -1176,6 +1337,23 @@ fn parse_provider_kind(value: &str) -> Result<argentum_domain::ProviderKind, Str
         "openai-compatible" => Ok(argentum_domain::ProviderKind::OpenAiCompatible),
         "anthropic" => Ok(argentum_domain::ProviderKind::Anthropic),
         _ => Err("--kind must be lm-studio, openai-compatible, or anthropic".to_owned()),
+    }
+}
+
+fn parse_surface_id(value: &str) -> Result<argentum_domain::SurfaceId, String> {
+    match value {
+        "conversation" => Ok(argentum_domain::SurfaceId::Conversation),
+        "plan" => Ok(argentum_domain::SurfaceId::Plan),
+        "changes" => Ok(argentum_domain::SurfaceId::Changes),
+        "files" => Ok(argentum_domain::SurfaceId::Files),
+        "terminal" => Ok(argentum_domain::SurfaceId::Terminal),
+        "preview" => Ok(argentum_domain::SurfaceId::Preview),
+        "activity" => Ok(argentum_domain::SurfaceId::Activity),
+        "approvals" => Ok(argentum_domain::SurfaceId::Approvals),
+        _ => Err(
+            "SURFACE must be conversation, plan, changes, files, terminal, preview, activity, or approvals"
+                .to_owned(),
+        ),
     }
 }
 
@@ -1224,7 +1402,10 @@ argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
   argentum-cli goal set OBJECTIVE [--token-budget N] [--tool-budget N] [--time-budget SECONDS] [OPTIONS]\n  \
   argentum-cli goal pause [OPTIONS]\n  \
   argentum-cli goal resume [OPTIONS]\n  \
-  argentum-cli goal clear [OPTIONS]\n\n\
+  argentum-cli goal clear [OPTIONS]\n  \
+  argentum-cli harness status [OPTIONS]\n  \
+  argentum-cli harness profile PROFILE_ID [OPTIONS]\n  \
+  argentum-cli harness surface SURFACE show|hide [OPTIONS]\n\n\
 Commands:\n  \
 serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
 run     Submit one task and stream its output\n  \
@@ -1233,7 +1414,8 @@ status  Show workspace and configured provider information\n  \
   workspace Manage the persisted desktop workspace selection\n  \
   sessions List durable sessions for the current workspace\n  \
   session  Select the active session for the current workspace\n  \
-  goal     Manage the active session goal contract\n\n\
+  goal     Manage the active session goal contract\n  \
+  harness  Inspect composition, select a profile, or show and hide a surface\n\n\
 Options:\n  \
 --workspace PATH   Workspace boundary, defaults to the current directory\n  \
 --database PATH    SQLite database path, defaults to Argentum application data\n  \
@@ -1247,7 +1429,7 @@ Options:\n  \
   --tool-budget N    Maximum tool calls for the goal contract\n  \
   --time-budget N    Maximum goal duration in seconds\n  \
   provider credential set reads the secret from stdin and never accepts it as an option\n  \
---json             Emit machine-readable output for run, status, provider, or sessions\n  \
+--json             Emit machine-readable output for supported inspection commands\n  \
 -V, --version      Print the Argentum CLI version"
     );
 }
@@ -1373,6 +1555,38 @@ mod tests {
         assert!(parse_args(["goal", "set"]).is_err());
         assert!(parse_args(["goal", "set", "Objective", "--token-budget", "0"]).is_ok());
         assert!(parse_args(["goal", "pause", "--token-budget", "10"]).is_err());
+    }
+
+    #[test]
+    fn parses_harness_inspection_profile_and_surface_commands() {
+        assert!(matches!(
+            parse_args(["harness", "status", "--json"]).expect("harness status"),
+            Arguments::Harness {
+                action: HarnessAction::Status,
+                json: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse_args(["harness", "profile", "review"]).expect("harness profile"),
+            Arguments::Harness {
+                action: HarnessAction::SelectProfile { profile_id },
+                ..
+            } if profile_id == "review"
+        ));
+        assert!(matches!(
+            parse_args(["harness", "surface", "activity", "show"]).expect("harness surface"),
+            Arguments::Harness {
+                action: HarnessAction::SetSurface {
+                    surface: argentum_domain::SurfaceId::Activity,
+                    visible: true,
+                },
+                ..
+            }
+        ));
+        assert!(parse_args(["harness", "surface", "terminal"]).is_err());
+        assert!(parse_args(["harness", "surface", "unknown", "show"]).is_err());
+        assert!(parse_args(["harness", "profile"]).is_err());
     }
 
     #[test]

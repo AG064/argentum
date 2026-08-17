@@ -5,7 +5,7 @@ import { BrandLockup, BrandMark } from "components/brand.slint";
 import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsField } from "components/surfaces.slint";
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
-import { ActivityItemView, ConversationMessageView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
+import { ActivityItemView, ConversationMessageView, HarnessCapabilityView, HarnessProfileView, HarnessSurfaceView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 
 component RailSettingsButton inherits Rectangle {
@@ -650,6 +650,15 @@ export component MainWindow inherits Window {
     in-out property <string> provider_label_error: "";
     in-out property <string> provider_endpoint_error: "";
     in-out property <string> provider_model_error: "";
+    in-out property <string> harness_profile_id: "standard";
+    in-out property <[HarnessProfileView]> harness_profiles: [];
+    in-out property <[HarnessSurfaceView]> harness_surfaces: [];
+    in-out property <[HarnessCapabilityView]> harness_capabilities: [];
+    in-out property <bool> harness_loading: false;
+    in-out property <string> harness_pending: "";
+    in-out property <string> harness_error: "";
+    in-out property <bool> harness_surfaces_open: false;
+    in-out property <bool> harness_capabilities_open: false;
     in-out property <string> project_name: "Argentum";
     in-out property <string> workspace_label: "Local workspace";
     in-out property <string> session_title: "New session";
@@ -720,6 +729,7 @@ export component MainWindow inherits Window {
         || root.provider_model_selecting;
     private property <bool> provider_models_current: root.provider_id != ""
         && root.provider_models_provider_id == root.provider_id;
+    private property <bool> harness_busy: root.harness_loading || root.harness_pending != "";
     private property <string> provider_state_label: root.provider_model_selecting
         ? "Updating model"
         : (root.provider_models_loading
@@ -764,6 +774,9 @@ export component MainWindow inherits Window {
     callback select_provider_profile(string);
     callback refresh_provider_models(string);
     callback select_provider_model(string, string);
+    callback refresh_harness();
+    callback select_harness_profile(string);
+    callback set_harness_surface_visibility(string, bool);
     callback validate_provider_label(string) -> string;
     callback validate_provider_endpoint(string) -> string;
     callback validate_provider_model(string) -> string;
@@ -2412,6 +2425,110 @@ export component MainWindow inherits Window {
                             color: AgTheme.text-muted;
                             font-size: AgTheme.type-compact;
                             wrap: word-wrap;
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
+                            label: "Harness profile";
+                            detail: root.harness_loading ? "Loading" : root.harness_profile_id;
+                        }
+
+                        Text {
+                            text: "Profiles change presentation only. They do not grant tools or permissions.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.harness_error != "": Text {
+                            text: root.harness_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.harness_profiles.length == 0: Text {
+                            text: root.harness_loading
+                                ? "Loading harness profiles"
+                                : "Harness state is not available";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-body;
+                            wrap: word-wrap;
+                        }
+
+                        for profile in root.harness_profiles: MenuRow {
+                            icon: "workspace";
+                            label: profile.label;
+                            detail: profile.detail;
+                            active: profile.selected;
+                            enabled: profile.selectable
+                                && !profile.selected
+                                && !root.harness_busy;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.harness_error = "";
+                                root.select_harness_profile(profile.id);
+                            }
+                        }
+
+                        MenuRow {
+                            icon: "panel";
+                            label: "Surfaces";
+                            detail: root.harness_surfaces.length + " registered | "
+                                + (root.harness_surfaces_open ? "Hide details" : "Show details");
+                            active: root.harness_surfaces_open;
+                            enabled: !root.harness_loading;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.harness_surfaces_open = !root.harness_surfaces_open;
+                            }
+                        }
+
+                        if root.harness_surfaces_open: VerticalLayout {
+                            spacing: AgTheme.optical-tight-gap;
+
+                            for surface in root.harness_surfaces: MenuRow {
+                                icon: surface.state == "unavailable" ? "alert" : "panel";
+                                label: surface.label;
+                                detail: surface.state + " | " + surface.detail;
+                                active: surface.visible;
+                                enabled: surface.configurable
+                                    && !root.harness_busy;
+                                reduced-motion: root.reduced_motion;
+                                clicked => {
+                                    root.harness_error = "";
+                                    root.set_harness_surface_visibility(surface.id, !surface.visible);
+                                }
+                            }
+                        }
+
+                        MenuRow {
+                            icon: "activity";
+                            label: "Capability catalog";
+                            detail: root.harness_capabilities.length + " registered | "
+                                + (root.harness_capabilities_open ? "Hide details" : "Show details");
+                            active: root.harness_capabilities_open;
+                            enabled: !root.harness_loading;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.harness_capabilities_open = !root.harness_capabilities_open;
+                            }
+                        }
+
+                        if root.harness_capabilities_open: VerticalLayout {
+                            spacing: AgTheme.optical-tight-gap;
+
+                            for capability in root.harness_capabilities: MenuRow {
+                                icon: capability.state == "unavailable" ? "alert" : "check";
+                                label: capability.label;
+                                detail: capability.state + " | " + capability.detail;
+                                active: capability.enabled;
+                                enabled: capability.configurable
+                                    && !root.running
+                                    && !root.harness_busy;
+                                reduced-motion: root.reduced_motion;
+                            }
                         }
 
                         SectionHeading { label: "Interface"; detail: "Local preferences"; }

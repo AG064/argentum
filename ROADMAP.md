@@ -20,16 +20,24 @@ claims. Each stage requires a real build, runtime, security, and visual check.
 - Workspace-scoped provider profiles with safe endpoint validation, durable
   selection, CLI management, native settings editing, and selected-provider
   task routing.
+- Secure exact-profile credentials through the operating-system keyring and
+  environment compatibility path, without secret fields in SQLite or events.
+- Durable restored conversation history, separated provider reasoning, exact
+  reported usage, bounded context, and one active run per session.
+- Bounded model-driven read and write tools through the approval boundary.
+- Provider-scoped model catalogs and durable model selection.
 - Workspace path validation, default-deny write policy, secret redaction, and
   provider boundaries.
 - LM Studio-compatible, OpenAI-compatible, and Anthropic provider foundations.
 - Canonical Argentum A/G identity in the native UI and Windows executable.
 
-## Next vertical slice
+## Next vertical slices
 
-- Secure credential setup and provider model discovery.
-- Restored message history and resumable run state on top of durable sessions.
-- Model-driven tool calls through the existing approval boundary.
+- An inspectable Rust harness registry with named presentation profiles,
+  truthful capability availability, and explicit surface visibility.
+- Native first-run workspace and credential setup without exposing secrets to
+  Slint state.
+- Resumable in-progress run state on top of durable sessions.
 - Approval policy completion for command, network, and external-process actions.
 - File changes, diff review, restore actions, and verification runners.
 - Optional persisted goal contracts with explicit lifecycle, budgets, iteration
@@ -40,10 +48,14 @@ claims. Each stage requires a real build, runtime, security, and visual check.
   search, pin, and archive foundations.
 - An effective execution-profile selector backed by the Rust capability broker,
   with `Confirm Before Changes` as the default.
-- OS keychain implementations for Windows, macOS, Linux, Android, and iOS.
+- Platform secure-store verification for macOS, Linux, Android, and iOS.
 
 ## Harness workspace
 
+- Named Focused, Standard, Review, Trace, Full, and Custom presentation
+  profiles, with visibility independent from execution authority.
+- An optional trajectory and context inspector derived from real session,
+  provider, tool, approval, usage, change, and verification records.
 - Real Changes, Files, Terminal, Preview, Activity, Approval, and Goal surfaces
   driven by runtime events rather than production fixtures.
 - Exact local, remote, branch, and worktree binding shown at the composer and
@@ -83,3 +95,6 @@ cancelled, or resumed without fake success states or hidden permission changes.
 A goal is complete only when current evidence passes and no required work stays
 open. Timeouts never count as permission, plan approval, or ordinary user
 consent.
+
+The composition and extension contract is documented in
+[`docs/HARNESS_MODULARITY.md`](docs/HARNESS_MODULARITY.md).

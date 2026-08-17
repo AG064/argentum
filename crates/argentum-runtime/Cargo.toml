@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 argentum-domain.workspace = true
+argentum-harness.workspace = true
 argentum-providers.workspace = true
 argentum-security.workspace = true
 argentum-store.workspace = true

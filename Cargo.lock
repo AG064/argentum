@@ -303,6 +303,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argentum-harness"
+version = "0.1.0"
+dependencies = [
+ "argentum-domain",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "argentum-platform"
 version = "0.1.0"
 dependencies = [
@@ -339,6 +347,7 @@ name = "argentum-runtime"
 version = "0.1.0"
 dependencies = [
  "argentum-domain",
+ "argentum-harness",
  "argentum-providers",
  "argentum-security",
  "argentum-store",

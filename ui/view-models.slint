@@ -51,3 +51,29 @@ export struct ProviderModelView {
     context_window_reported: bool,
     selected: bool,
 }
+
+export struct HarnessProfileView {
+    id: string,
+    label: string,
+    detail: string,
+    selected: bool,
+    selectable: bool,
+}
+
+export struct HarnessSurfaceView {
+    id: string,
+    label: string,
+    state: string,
+    detail: string,
+    visible: bool,
+    configurable: bool,
+}
+
+export struct HarnessCapabilityView {
+    id: string,
+    label: string,
+    state: string,
+    detail: string,
+    enabled: bool,
+    configurable: bool,
+}

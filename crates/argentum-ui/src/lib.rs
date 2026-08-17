@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use argentum_domain::{
     ActiveRunState, AppCommand, AppEvent, ApprovalId, ConversationMessageStatus, ConversationRole,
-    Goal, ProviderKind, ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId, TaskLifecycle,
-    ToolResultState,
+    Goal, HarnessAvailability, HarnessCapabilityState, HarnessProfileSummary, HarnessReadiness,
+    HarnessSnapshot, HarnessSurfaceState, ProviderKind, ProviderModel, ProviderProfile, RunId,
+    SessionId, SurfaceId, TaskLifecycle, ToolResultState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tracing::warn;
@@ -420,6 +421,9 @@ impl UiHandle {
             } => {
                 self.apply_provider_models(provider_id, models, selected_model);
             }
+            AppEvent::HarnessSnapshotLoaded(snapshot) => {
+                self.apply_harness_snapshot(snapshot);
+            }
             AppEvent::ToolStarted(trace) => {
                 if !self.run_targets_active_session(trace.run_id) {
                     return;
@@ -624,6 +628,13 @@ impl UiHandle {
                 self.window
                     .set_provider_models_pending(SharedString::default());
             }
+            AppCommand::ListHarnessState
+            | AppCommand::SelectHarnessProfile { .. }
+            | AppCommand::SetSurfaceVisibility { .. } => {
+                self.window.set_harness_loading(false);
+                self.window.set_harness_pending(SharedString::default());
+                self.window.set_harness_error(present_error(message).into());
+            }
             AppCommand::SubmitTask { .. } if self.window.get_submission_pending() => {
                 self.window.set_submission_pending(false);
                 self.window.set_error_message(present_error(message).into());
@@ -807,6 +818,20 @@ impl UiHandle {
             self.window
                 .set_provider_models_pending(SharedString::default());
         }
+    }
+
+    fn apply_harness_snapshot(&self, snapshot: &HarnessSnapshot) {
+        self.window
+            .set_harness_profile_id(snapshot.selected_profile_id.clone().into());
+        self.window
+            .set_harness_profiles(harness_profile_model(&snapshot.profiles));
+        self.window
+            .set_harness_surfaces(harness_surface_model(&snapshot.surfaces));
+        self.window
+            .set_harness_capabilities(harness_capability_model(&snapshot.capabilities));
+        self.window.set_harness_loading(false);
+        self.window.set_harness_pending(SharedString::default());
+        self.window.set_harness_error(SharedString::default());
     }
 
     fn reset_session_view(&self) {
@@ -1110,6 +1135,62 @@ fn provider_model_view_model(
     ModelRc::new(VecModel::from(rows))
 }
 
+fn harness_profile_model(profiles: &[HarnessProfileSummary]) -> ModelRc<HarnessProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| HarnessProfileView {
+            id: profile.id.clone().into(),
+            label: profile.label.clone().into(),
+            detail: profile.detail.clone().into(),
+            selected: profile.selected,
+            selectable: profile.selectable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn harness_surface_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<HarnessSurfaceView> {
+    let rows = surfaces
+        .iter()
+        .map(|surface| HarnessSurfaceView {
+            id: surface_id(surface.id).into(),
+            label: surface.label.clone().into(),
+            state: harness_surface_state(surface).into(),
+            detail: if surface.unavailable_reason.is_empty() {
+                surface.detail.clone()
+            } else {
+                surface.unavailable_reason.clone()
+            }
+            .into(),
+            visible: surface.visible,
+            configurable: surface.configurable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn harness_capability_model(
+    capabilities: &[HarnessCapabilityState],
+) -> ModelRc<HarnessCapabilityView> {
+    let rows = capabilities
+        .iter()
+        .map(|capability| HarnessCapabilityView {
+            id: capability.id.clone().into(),
+            label: capability.label.clone().into(),
+            state: harness_capability_state(capability).into(),
+            detail: if capability.unavailable_reason.is_empty() {
+                capability.detail.clone()
+            } else {
+                capability.unavailable_reason.clone()
+            }
+            .into(),
+            enabled: capability.enabled,
+            configurable: capability.configurable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn plan_step_model(steps: &[argentum_domain::PlanStep]) -> ModelRc<PlanStepView> {
     let active_index = steps
         .iter()
@@ -1287,6 +1368,55 @@ fn provider_status_id(status: &argentum_domain::ProviderStatus) -> String {
         provider_kind_id(status.kind).into()
     } else {
         profile_id.into()
+    }
+}
+
+const fn surface_id(surface: SurfaceId) -> &'static str {
+    match surface {
+        SurfaceId::Conversation => "conversation",
+        SurfaceId::Plan => "plan",
+        SurfaceId::Changes => "changes",
+        SurfaceId::Files => "files",
+        SurfaceId::Terminal => "terminal",
+        SurfaceId::Preview => "preview",
+        SurfaceId::Activity => "activity",
+        SurfaceId::Approvals => "approvals",
+    }
+}
+
+fn surface_from_id(surface: &str) -> Option<SurfaceId> {
+    match surface {
+        "conversation" => Some(SurfaceId::Conversation),
+        "plan" => Some(SurfaceId::Plan),
+        "changes" => Some(SurfaceId::Changes),
+        "files" => Some(SurfaceId::Files),
+        "terminal" => Some(SurfaceId::Terminal),
+        "preview" => Some(SurfaceId::Preview),
+        "activity" => Some(SurfaceId::Activity),
+        "approvals" => Some(SurfaceId::Approvals),
+        _ => None,
+    }
+}
+
+fn harness_surface_state(surface: &HarnessSurfaceState) -> &'static str {
+    match surface.availability {
+        HarnessAvailability::Unavailable => "unavailable",
+        HarnessAvailability::Available if surface.visible => "visible",
+        HarnessAvailability::Available if surface.configurable => "hidden",
+        HarnessAvailability::Available => "automatic",
+    }
+}
+
+fn harness_capability_state(capability: &HarnessCapabilityState) -> &'static str {
+    match capability.availability {
+        HarnessAvailability::Unavailable => "unavailable",
+        HarnessAvailability::Available => match capability.readiness {
+            HarnessReadiness::Ready => "ready",
+            HarnessReadiness::NeedsConfiguration => "needs configuration",
+            HarnessReadiness::NotVerified => "not verified",
+            HarnessReadiness::Blocked => "blocked",
+            HarnessReadiness::Unavailable => "unavailable",
+        },
     }
 }
 
@@ -1551,6 +1681,59 @@ where
         select_model_dispatch(AppCommand::SelectProviderModel { provider_id, model });
     });
 
+    let refresh_harness_dispatch = dispatch.clone();
+    let refresh_harness_window = window.as_weak();
+    window.on_refresh_harness(move || {
+        let Some(window) = refresh_harness_window.upgrade() else {
+            return;
+        };
+        if window.get_harness_loading() || !window.get_harness_pending().is_empty() {
+            return;
+        }
+        window.set_harness_loading(true);
+        window.set_harness_pending("list".into());
+        window.set_harness_error(SharedString::default());
+        refresh_harness_dispatch(AppCommand::ListHarnessState);
+    });
+
+    let select_harness_dispatch = dispatch.clone();
+    let select_harness_window = window.as_weak();
+    window.on_select_harness_profile(move |profile_id| {
+        let Some(window) = select_harness_window.upgrade() else {
+            return;
+        };
+        let profile_id = profile_id.trim().to_string();
+        if !window.get_harness_pending().is_empty()
+            || profile_id.is_empty()
+            || profile_id == "custom"
+        {
+            return;
+        }
+        window.set_harness_pending("profile".into());
+        window.set_harness_error(SharedString::default());
+        select_harness_dispatch(AppCommand::SelectHarnessProfile { profile_id });
+    });
+
+    let surface_visibility_dispatch = dispatch.clone();
+    let surface_visibility_window = window.as_weak();
+    window.on_set_harness_surface_visibility(move |surface, visible| {
+        let Some(window) = surface_visibility_window.upgrade() else {
+            return;
+        };
+        if !window.get_harness_pending().is_empty() {
+            return;
+        }
+        let Some(surface) = surface_from_id(surface.trim()) else {
+            warn!("harness surface visibility requested with an invalid surface id");
+            window.set_harness_pending(SharedString::default());
+            window.set_harness_error("Unknown harness surface.".into());
+            return;
+        };
+        window.set_harness_pending("surface".into());
+        window.set_harness_error(SharedString::default());
+        surface_visibility_dispatch(AppCommand::SetSurfaceVisibility { surface, visible });
+    });
+
     window.on_validate_provider_label(|value| validate_provider_label(value.as_str()).into());
     window.on_validate_provider_endpoint(|value| validate_provider_endpoint(value.as_str()).into());
     window.on_validate_provider_model(|value| validate_provider_model(value.as_str()).into());
@@ -1561,16 +1744,26 @@ where
     });
 
     let inspector_dispatch = dispatch.clone();
+    let inspector_window = window.as_weak();
     window.on_toggle_inspector(move || {
-        inspector_dispatch(AppCommand::ToggleSurface {
-            surface: argentum_domain::SurfaceId::Changes,
+        let Some(window) = inspector_window.upgrade() else {
+            return;
+        };
+        inspector_dispatch(AppCommand::SetSurfaceVisibility {
+            surface: SurfaceId::Changes,
+            visible: window.get_inspector_open(),
         });
     });
 
     let activity_dispatch = dispatch.clone();
+    let activity_window = window.as_weak();
     window.on_toggle_activity(move || {
-        activity_dispatch(AppCommand::ToggleSurface {
-            surface: argentum_domain::SurfaceId::Activity,
+        let Some(window) = activity_window.upgrade() else {
+            return;
+        };
+        activity_dispatch(AppCommand::SetSurfaceVisibility {
+            surface: SurfaceId::Activity,
+            visible: window.get_activity_open(),
         });
     });
 
@@ -1612,8 +1805,15 @@ where
     });
 
     let settings_dispatch = dispatch.clone();
+    let settings_window = window.as_weak();
     window.on_open_settings(move || {
+        if let Some(window) = settings_window.upgrade() {
+            window.set_harness_loading(true);
+            window.set_harness_pending("list".into());
+            window.set_harness_error(SharedString::default());
+        }
         settings_dispatch(AppCommand::ListProviderProfiles);
+        settings_dispatch(AppCommand::ListHarnessState);
     });
 }
 
@@ -1625,8 +1825,10 @@ pub fn empty_string_model() -> ModelRc<SharedString> {
 mod tests {
     use argentum_domain::{
         now, ConversationMessage, ConversationMessageStatus, ConversationRole,
-        ConversationSnapshot, Goal, GoalLifecycle, PlanStep, Project, ProviderProfile,
-        SessionSummary, Task, TaskLifecycle, ToolResultState, WorkspaceSnapshot,
+        ConversationSnapshot, Goal, GoalLifecycle, HarnessAvailability, HarnessCapabilityKind,
+        HarnessCapabilityState, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
+        HarnessSurfaceState, PlanStep, Project, ProviderProfile, SessionSummary, Task,
+        TaskLifecycle, ToolResultState, WorkspaceSnapshot,
     };
     use slint::Model;
     use std::cell::RefCell;
@@ -1866,6 +2068,90 @@ mod tests {
             commands.borrow().get(1),
             Some(AppCommand::SelectProviderModel { provider_id, model })
                 if provider_id == "minimax" && model == "MiniMax-M2.7"
+        ));
+
+        // Harness state keeps presentation visibility separate from capability
+        // availability and dispatches only typed profile or surface changes.
+        commands.borrow_mut().clear();
+        let harness_snapshot = HarnessSnapshot {
+            selected_profile_id: "standard".into(),
+            profiles: vec![HarnessProfileSummary {
+                id: "review".into(),
+                label: "Review".into(),
+                detail: "Open the Changes summary.".into(),
+                selected: false,
+                selectable: true,
+            }],
+            capabilities: vec![HarnessCapabilityState {
+                id: "verification.runner".into(),
+                label: "Verification runners".into(),
+                kind: HarnessCapabilityKind::Review,
+                availability: HarnessAvailability::Unavailable,
+                readiness: HarnessReadiness::Unavailable,
+                enabled: false,
+                configurable: false,
+                detail: String::new(),
+                unavailable_reason: "No verification runner is registered.".into(),
+                dependencies: Vec::new(),
+            }],
+            surfaces: vec![HarnessSurfaceState {
+                id: SurfaceId::Activity,
+                label: "Activity".into(),
+                availability: HarnessAvailability::Available,
+                visible: false,
+                configurable: true,
+                detail: "Recent factual events.".into(),
+                unavailable_reason: String::new(),
+            }],
+        };
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
+        assert_eq!(ui.window().get_harness_profile_id(), "standard");
+        assert_eq!(ui.window().get_harness_profiles().row_count(), 1);
+        assert_eq!(
+            ui.window()
+                .get_harness_capabilities()
+                .row_data(0)
+                .expect("capability")
+                .state,
+            "unavailable"
+        );
+        ui.window().invoke_select_harness_profile("review".into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SelectHarnessProfile { profile_id }) if profile_id == "review"
+        ));
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(HarnessSnapshot {
+            selected_profile_id: "review".into(),
+            ..harness_snapshot
+        }));
+        commands.borrow_mut().clear();
+        ui.window()
+            .invoke_set_harness_surface_visibility("activity".into(), true);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Activity,
+                visible: true,
+            })
+        ));
+        commands.borrow_mut().clear();
+        ui.window().set_activity_open(false);
+        ui.window().invoke_toggle_activity();
+        ui.window().set_inspector_open(true);
+        ui.window().invoke_toggle_inspector();
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Activity,
+                visible: false,
+            })
+        ));
+        assert!(matches!(
+            commands.borrow().get(1),
+            Some(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Changes,
+                visible: true,
+            })
         ));
 
         // Provider mutations and catalog refreshes are rejected at the Rust callback

@@ -4,6 +4,7 @@ members = [
     "crates/argentum-app",
     "crates/argentum-cli",
     "crates/argentum-domain",
+    "crates/argentum-harness",
     "crates/argentum-runtime",
     "crates/argentum-providers",
     "crates/argentum-tools",
@@ -25,6 +26,7 @@ authors = ["Argentum"]
 
 [workspace.dependencies]
 argentum-domain = { path = "crates/argentum-domain" }
+argentum-harness = { path = "crates/argentum-harness" }
 argentum-cli = { path = "crates/argentum-cli" }
 argentum-platform = { path = "crates/argentum-platform" }
 argentum-providers = { path = "crates/argentum-providers" }
