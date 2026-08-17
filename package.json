@@ -100,7 +100,7 @@
     "openai": "^6.42.0",
     "pino": "^10.3.1",
     "pino-pretty": "^10.3.1",
-    "sanitize-html": "^2.17.2",
+    "sanitize-html": "^2.17.7",
     "ws": "^8.21.0",
     "yaml": "^2.3.4",
     "zod": "^4.3.6"
