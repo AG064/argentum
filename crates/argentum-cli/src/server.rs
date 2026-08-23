@@ -65,7 +65,7 @@ where
                     let Some(payload) = event_payload(event) else {
                         break;
                     };
-                    if send_event_payload(&event_sender, payload).await.is_err() {
+                    if !send_event_payload(&event_sender, payload).await {
                         break;
                     }
                 }
@@ -85,7 +85,7 @@ where
                                 | tokio::sync::broadcast::error::TryRecvError::Closed,
                             ) => break,
                         };
-                        if send_event_payload(&event_sender, payload).await.is_err() {
+                        if !send_event_payload(&event_sender, payload).await {
                             break;
                         }
                     }
@@ -362,13 +362,14 @@ fn event_payload(
 async fn send_event_payload(
     sender: &mpsc::Sender<OutboundResponse>,
     payload: ServerPayload,
-) -> Result<(), mpsc::error::SendError<OutboundResponse>> {
+) -> bool {
     sender
         .send(OutboundResponse {
             request_id: None,
             payload,
         })
         .await
+        .is_ok()
 }
 
 async fn write_response<W: AsyncWrite + Unpin>(
