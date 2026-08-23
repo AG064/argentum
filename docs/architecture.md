@@ -57,6 +57,12 @@ paths over one command host, plus focused inspection commands:
   `confirm-before-changes`. `harness capability CAPABILITY_ID enable|disable`
   creates an exact custom policy for configurable built-ins. Policy changes are
   rejected while a project run or approval is active.
+- `harness trajectory [SESSION_ID]` loads a bounded, durable, session-scoped
+  record projection through `AppCommand::LoadTrajectory`. The native desktop
+  and phone layouts use the same command and event contract. Open, refresh,
+  restart, and lag recovery use a bounded snapshot. Newly persisted facts use
+  one small ordered entry event, so tool-heavy runs do not rebuild the full
+  trajectory after every record.
 - `provider credential set PROFILE_ID` reads one credential from standard input
   and stores it in the operating-system keyring. `provider credential clear`
   removes it. Credential values never cross the typed command protocol.

@@ -1,11 +1,12 @@
 import { ScrollView } from "std-widgets.slint";
 import { ActionButton, IconButton } from "components/buttons.slint";
 import { AgIcon } from "components/icon.slint";
-import { BrandLockup, BrandMark } from "components/brand.slint";
+import { BrandMark, ProductLabel } from "components/brand.slint";
 import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsField } from "components/surfaces.slint";
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
-import { ActivityItemView, ConversationMessageView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView } from "view-models.slint";
+import { TrajectorySurface } from "surfaces/trajectory.slint";
+import { ActivityItemView, ConversationMessageView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView, TrajectoryItemView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 
 component RailSettingsButton inherits Rectangle {
@@ -41,7 +42,7 @@ component RailSettingsButton inherits Rectangle {
             AgIcon {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
-                name: "sliders";
+                name: "settings";
                 size: 18px;
                 tint: rail-settings-touch.has-hover ? AgTheme.white-100 : AgTheme.silver-400;
             }
@@ -120,7 +121,7 @@ component SessionItem inherits Rectangle {
             AgIcon {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
-                name: "session";
+                name: "sessions";
                 size: 18px;
                 tint: root.active ? AgTheme.silver-200 : AgTheme.silver-500;
             }
@@ -286,7 +287,7 @@ component GoalCard inherits Rectangle {
             spacing: AgTheme.space-2;
             ActionButton {
                 label: root.available ? "Replace goal" : "Set goal";
-                icon: root.available ? "review" : "plus";
+                icon: root.available ? "changes" : "new-task";
                 primary: !root.available;
                 enabled: !root.busy && root.objective-draft != "";
                 reduced-motion: root.reduced-motion;
@@ -484,7 +485,7 @@ component Composer inherits Rectangle {
         }
 
         if root.width >= AgTheme.composer-context-actions-breakpoint: ContextButton {
-            icon: "folder";
+            icon: "workspace";
             label: "Scope";
             detail: root.workspace-label;
             reduced-motion: root.reduced-motion;
@@ -495,7 +496,7 @@ component Composer inherits Rectangle {
 
         ActionButton {
             label: root.approval-pending ? "Approval needed" : (root.submission-pending ? "Starting" : (root.running ? "Stop" : "Start"));
-            icon: root.running ? "stop" : "play";
+            icon: root.running ? "stop" : "run";
             enabled: !root.approval-pending && !root.submission-pending && (root.running || root.draft != "");
             primary: !root.running;
             fill: root.running ? AgTheme.raised : AgTheme.primary-fill;
@@ -689,6 +690,11 @@ export component MainWindow inherits Window {
     in-out property <[PlanStepView]> plan_steps: [];
     in-out property <string> activity_summary: "No activity yet";
     in-out property <[ActivityItemView]> activity_items: [];
+    in-out property <string> trajectory_summary: "No durable records";
+    in-out property <[TrajectoryItemView]> trajectory_items: [];
+    in-out property <bool> trajectory_loading: false;
+    in-out property <bool> trajectory_truncated: false;
+    in-out property <string> trajectory_error: "";
     in-out property <string> change_summary: "No files changed";
     in-out property <int> changed_files: 0;
     in-out property <int> additions: 0;
@@ -700,6 +706,7 @@ export component MainWindow inherits Window {
     in-out property <bool> submission_pending: false;
     in-out property <bool> drawer_open: false;
     in-out property <bool> inspector_open: false;
+    in-out property <bool> trajectory_open: false;
     in-out property <bool> activity_open: false;
     in-out property <bool> approval_open: false;
     in-out property <string> approval_id: "";
@@ -733,6 +740,7 @@ export component MainWindow inherits Window {
     private property <bool> provider_models_current: root.provider_id != ""
         && root.provider_models_provider_id == root.provider_id;
     private property <bool> harness_busy: root.harness_loading || root.harness_pending != "";
+    private property <bool> work_pane_open: root.inspector_open || root.trajectory_open;
     private property <string> provider_state_label: root.provider_model_selecting
         ? "Updating model"
         : (root.provider_models_loading
@@ -787,6 +795,8 @@ export component MainWindow inherits Window {
     callback validate_provider_model(string) -> string;
     callback toggle_drawer();
     callback toggle_inspector();
+    callback toggle_trajectory();
+    callback refresh_trajectory(string);
     callback toggle_activity();
     callback approve_tool(string);
     callback reject_tool(string);
@@ -836,9 +846,15 @@ export component MainWindow inherits Window {
                 root.toggle_activity();
                 return accept;
             }
-            if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint {
-                root.inspector_open = false;
-                root.toggle_inspector();
+            if root.work_pane_open && root.width < AgTheme.work-pane-docked-breakpoint {
+                if root.inspector_open {
+                    root.inspector_open = false;
+                    root.toggle_inspector();
+                }
+                if root.trajectory_open {
+                    root.trajectory_open = false;
+                    root.toggle_trajectory();
+                }
                 return accept;
             }
             return reject;
@@ -899,11 +915,11 @@ export component MainWindow inherits Window {
                 padding-bottom: AgTheme.space-3;
                 spacing: AgTheme.space-3;
 
-                BrandLockup { compact: false; }
+                ProductLabel { }
 
                 ActionButton {
                     label: "New session";
-                    icon: "plus";
+                    icon: "new-task";
                     fill: AgTheme.surface-soft;
                     outline-color: AgTheme.border-default;
                     reduced-motion: root.reduced_motion;
@@ -917,7 +933,7 @@ export component MainWindow inherits Window {
                 SectionHeading { label: "Project"; detail: "Local"; }
 
                 MenuRow {
-                    icon: "folder";
+                    icon: "workspace";
                     label: root.project_name;
                     detail: root.workspace_label;
                     active: true;
@@ -986,7 +1002,7 @@ export component MainWindow inherits Window {
                             AgIcon {
                                 x: (parent.width - self.width) / 2;
                                 y: (parent.height - self.height) / 2;
-                                name: "model";
+                                name: "provider";
                                 size: 18px;
                                 tint: AgTheme.silver-300;
                             }
@@ -1079,7 +1095,7 @@ export component MainWindow inherits Window {
             y: 0px;
             width: root.width
                 - (root.width >= AgTheme.shell-navigation-breakpoint ? AgTheme.navigation-width : 0px)
-                - (root.inspector_open && root.width >= AgTheme.work-pane-docked-breakpoint ? AgTheme.work-pane-width : 0px);
+                - (root.work_pane_open && root.width >= AgTheme.work-pane-docked-breakpoint ? AgTheme.work-pane-width : 0px);
             height: root.height;
             background: AgTheme.canvas;
 
@@ -1162,7 +1178,7 @@ export component MainWindow inherits Window {
                     }
 
                     if workbench.width >= AgTheme.header-actions-breakpoint: HeaderAction {
-                        glyph: "review";
+                        glyph: "changes";
                         hint: "Review changes and checks";
                         selected: root.inspector_open;
                         reduced-motion: root.reduced_motion;
@@ -1170,6 +1186,20 @@ export component MainWindow inherits Window {
                             root.inspector_open = !root.inspector_open;
                             root.command_palette_open = false;
                             root.toggle_inspector();
+                        }
+                    }
+
+                    if workbench.width >= AgTheme.header-actions-breakpoint: HeaderAction {
+                        glyph: "trajectory";
+                        hint: "Durable trajectory";
+                        selected: root.trajectory_open;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.trajectory_open = !root.trajectory_open;
+                            root.trajectory_loading = root.trajectory_open;
+                            root.trajectory_error = "";
+                            root.command_palette_open = false;
+                            root.toggle_trajectory();
                         }
                     }
 
@@ -1404,7 +1434,7 @@ export component MainWindow inherits Window {
             cancel(run-id) => { root.cancel_run(run-id); }
         }
 
-        if !root.phone_layout && root.inspector_open && root.width >= AgTheme.work-pane-docked-breakpoint: Rectangle {
+        if !root.phone_layout && root.work_pane_open && root.width >= AgTheme.work-pane-docked-breakpoint: Rectangle {
             x: root.width - AgTheme.work-pane-width;
             y: 0px;
             width: AgTheme.work-pane-width;
@@ -1421,16 +1451,28 @@ export component MainWindow inherits Window {
                 spacing: AgTheme.space-4;
 
                 PanelHeader {
-                    icon: "review";
-                    title: "Review";
-                    detail: "Changes and checks";
+                    icon: root.inspector_open && root.trajectory_open
+                        ? "inspector"
+                        : (root.trajectory_open ? "trajectory" : "changes");
+                    title: root.inspector_open && root.trajectory_open
+                        ? "Inspect"
+                        : (root.trajectory_open ? "Trajectory" : "Review");
+                    detail: root.inspector_open && root.trajectory_open
+                        ? "Review and durable records"
+                        : (root.trajectory_open ? "Recorded session facts" : "Changes and checks");
                     close => {
-                        root.inspector_open = false;
-                        root.toggle_inspector();
+                        if root.inspector_open {
+                            root.inspector_open = false;
+                            root.toggle_inspector();
+                        }
+                        if root.trajectory_open {
+                            root.trajectory_open = false;
+                            root.toggle_trajectory();
+                        }
                     }
                 }
 
-                GoalCard {
+                if root.inspector_open: GoalCard {
                     available: root.goal_available;
                     objective: root.goal_objective;
                     objective-draft <=> root.goal_draft;
@@ -1456,9 +1498,9 @@ export component MainWindow inherits Window {
                     clear-goal => { root.clear_goal(); }
                 }
 
-                SectionHeading { label: "Changes"; }
+                if root.inspector_open: SectionHeading { label: "Changes"; }
 
-                Rectangle {
+                if root.inspector_open: Rectangle {
                     height: 92px;
                     border-radius: AgTheme.radius-xs;
                     border-width: 1px;
@@ -1485,7 +1527,7 @@ export component MainWindow inherits Window {
                             AgIcon {
                                 x: (parent.width - self.width) / 2;
                                 y: (parent.height - self.height) / 2;
-                                name: "diff";
+                                name: "changes";
                                 size: 18px;
                                 tint: AgTheme.silver-300;
                             }
@@ -1500,9 +1542,9 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                SectionHeading { label: "Checks"; detail: root.verification_label; }
+                if root.inspector_open: SectionHeading { label: "Checks"; detail: root.verification_label; }
 
-                Rectangle {
+                if root.inspector_open: Rectangle {
                     min-height: 82px;
                     border-radius: AgTheme.radius-xs;
                     border-width: 1px;
@@ -1525,26 +1567,25 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                SectionHeading { label: "Recent activity"; detail: root.activity_summary; }
-
-                ScrollView {
+                if root.trajectory_open: TrajectorySurface {
                     vertical-stretch: 1;
-                    viewport-width: self.width;
-                    mouse-drag-pan-enabled: true;
-
-                    VerticalLayout {
-                        spacing: AgTheme.optical-tight-gap;
-
-                        if root.activity_items.length == 0: Text {
-                            text: "Project, run, approval, and tool events appear here.";
-                            color: AgTheme.text-muted;
-                            font-size: AgTheme.type-compact;
-                            wrap: word-wrap;
+                    items: root.trajectory_items;
+                    summary: root.trajectory_summary;
+                    error: root.trajectory_error;
+                    loading: root.trajectory_loading;
+                    truncated: root.trajectory_truncated;
+                    touch-mode: false;
+                    reduced-motion: root.reduced_motion;
+                    refresh => {
+                        if root.active_session_id != "" {
+                            root.trajectory_loading = true;
+                            root.trajectory_error = "";
+                            root.refresh_trajectory(root.active_session_id);
                         }
-
-                        for item in root.activity_items: ActivityItem { item: item; }
                     }
                 }
+
+                if root.inspector_open && !root.trajectory_open: Rectangle { vertical-stretch: 1; }
 
                 HorizontalLayout {
                     spacing: AgTheme.space-2;
@@ -1557,7 +1598,7 @@ export component MainWindow inherits Window {
                         AgIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            name: "lock";
+                            name: "approval";
                             size: 14px;
                             tint: AgTheme.silver-500;
                         }
@@ -1576,7 +1617,7 @@ export component MainWindow inherits Window {
                 || root.command_palette_open
                 || root.model_menu_open
                 || root.context_menu_open
-                || (root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint);
+                || (root.work_pane_open && root.width < AgTheme.work-pane-docked-breakpoint);
             x: 0px;
             y: 0px;
             width: root.width;
@@ -1597,6 +1638,10 @@ export component MainWindow inherits Window {
                     if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint {
                         root.inspector_open = false;
                         root.toggle_inspector();
+                    }
+                    if root.trajectory_open && root.width < AgTheme.work-pane-docked-breakpoint {
+                        root.trajectory_open = false;
+                        root.toggle_trajectory();
                     }
                     root.settings_open = false;
                     root.about_open = false;
@@ -1630,7 +1675,7 @@ export component MainWindow inherits Window {
                 HorizontalLayout {
                     height: AgTheme.header-height;
                     alignment: stretch;
-                    BrandLockup { compact: false; }
+                    ProductLabel { }
                     Rectangle { horizontal-stretch: 1; }
 
                     HeaderAction {
@@ -1646,7 +1691,7 @@ export component MainWindow inherits Window {
 
                 ActionButton {
                     label: "New session";
-                    icon: "plus";
+                    icon: "new-task";
                     fill: AgTheme.surface-soft;
                     outline-color: AgTheme.border-default;
                     target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
@@ -1657,7 +1702,7 @@ export component MainWindow inherits Window {
                 }
 
                 SectionHeading { label: "Project"; detail: "Local"; }
-                MenuRow { icon: "folder"; label: root.project_name; detail: root.workspace_label; active: true; }
+                MenuRow { icon: "workspace"; label: root.project_name; detail: root.workspace_label; active: true; }
                 SectionHeading { label: "Sessions"; detail: root.session_items.length; }
                 ScrollView {
                     vertical-stretch: 1;
@@ -1682,7 +1727,7 @@ export component MainWindow inherits Window {
                     }
                 }
                 MenuRow {
-                    icon: "sliders";
+                    icon: "settings";
                     label: "Settings";
                     detail: "Provider and interface";
                     clicked => {
@@ -1786,7 +1831,7 @@ export component MainWindow inherits Window {
 
                 ActionButton {
                     label: "Open review";
-                    icon: "review";
+                    icon: "changes";
                     fill: AgTheme.surface-soft;
                     outline-color: AgTheme.border-default;
                     clicked => {
@@ -1799,7 +1844,7 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.inspector_open && root.width < AgTheme.work-pane-docked-breakpoint: Rectangle {
+        if root.work_pane_open && root.width < AgTheme.work-pane-docked-breakpoint: Rectangle {
             x: root.phone_layout ? root.phone_gutter : AgTheme.space-2;
             y: root.phone_layout
                 ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-sheet-height)
@@ -1826,20 +1871,32 @@ export component MainWindow inherits Window {
                 spacing: AgTheme.space-3;
 
                 PanelHeader {
-                    icon: "review";
-                    title: "Review";
-                    detail: "Changes and checks";
+                    icon: root.inspector_open && root.trajectory_open
+                        ? "inspector"
+                        : (root.trajectory_open ? "trajectory" : "changes");
+                    title: root.inspector_open && root.trajectory_open
+                        ? "Inspect"
+                        : (root.trajectory_open ? "Trajectory" : "Review");
+                    detail: root.inspector_open && root.trajectory_open
+                        ? "Review and durable records"
+                        : (root.trajectory_open ? "Recorded session facts" : "Changes and checks");
                     close => {
-                        root.inspector_open = false;
-                        root.toggle_inspector();
+                        if root.inspector_open {
+                            root.inspector_open = false;
+                            root.toggle_inspector();
+                        }
+                        if root.trajectory_open {
+                            root.trajectory_open = false;
+                            root.toggle_trajectory();
+                        }
                     }
                 }
 
-                SectionHeading { label: "Changes"; }
-                MenuRow { icon: "diff"; label: root.change_summary; detail: root.changed_files > 0 ? "+" + root.additions + "  -" + root.removals : "No additions or removals"; }
-                SectionHeading { label: "Checks"; detail: root.verification_label; }
+                if root.inspector_open: SectionHeading { label: "Changes"; }
+                if root.inspector_open: MenuRow { icon: "changes"; label: root.change_summary; detail: root.changed_files > 0 ? "+" + root.additions + "  -" + root.removals : "No additions or removals"; }
+                if root.inspector_open: SectionHeading { label: "Checks"; detail: root.verification_label; }
 
-                Rectangle {
+                if root.inspector_open: Rectangle {
                     min-height: 84px;
                     border-radius: AgTheme.radius-xs;
                     border-width: 1px;
@@ -1861,7 +1918,25 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle { vertical-stretch: 1; }
+                if root.trajectory_open: TrajectorySurface {
+                    vertical-stretch: 1;
+                    items: root.trajectory_items;
+                    summary: root.trajectory_summary;
+                    error: root.trajectory_error;
+                    loading: root.trajectory_loading;
+                    truncated: root.trajectory_truncated;
+                    touch-mode: root.phone_layout;
+                    reduced-motion: root.reduced_motion;
+                    refresh => {
+                        if root.active_session_id != "" {
+                            root.trajectory_loading = true;
+                            root.trajectory_error = "";
+                            root.refresh_trajectory(root.active_session_id);
+                        }
+                    }
+                }
+
+                if root.inspector_open && !root.trajectory_open: Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     spacing: AgTheme.space-2;
                     alignment: stretch;
@@ -1873,7 +1948,7 @@ export component MainWindow inherits Window {
                         AgIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            name: "lock";
+                            name: "approval";
                             size: 14px;
                             tint: AgTheme.silver-500;
                         }
@@ -1903,11 +1978,23 @@ export component MainWindow inherits Window {
                 spacing: AgTheme.space-1;
 
                 PanelHeader { title: "Actions"; close => { root.command_palette_open = false; } }
-                MenuRow { icon: "plus"; label: "New session"; detail: "Start a new task session"; clicked => { root.command_palette_open = false; root.new_session(); } }
+                MenuRow { icon: "new-task"; label: "New session"; detail: "Start a new task session"; clicked => { root.command_palette_open = false; root.new_session(); } }
                 MenuRow { icon: "activity"; label: "Activity"; detail: "Review recent events"; clicked => { root.command_palette_open = false; root.activity_open = true; root.toggle_activity(); } }
-                MenuRow { icon: "review"; label: "Review"; detail: "Changes and checks"; clicked => { root.command_palette_open = false; root.inspector_open = true; root.toggle_inspector(); } }
+                MenuRow { icon: "changes"; label: "Review"; detail: "Changes and checks"; clicked => { root.command_palette_open = false; root.inspector_open = true; root.toggle_inspector(); } }
                 MenuRow {
-                    icon: "sliders";
+                    icon: "trajectory";
+                    label: "Trajectory";
+                    detail: "Durable session records";
+                    clicked => {
+                        root.command_palette_open = false;
+                        root.trajectory_open = true;
+                        root.trajectory_loading = true;
+                        root.trajectory_error = "";
+                        root.toggle_trajectory();
+                    }
+                }
+                MenuRow {
+                    icon: "settings";
                     label: "Settings";
                     detail: "Provider and interface";
                     clicked => {
@@ -1977,7 +2064,7 @@ export component MainWindow inherits Window {
                             }
 
                             for profile in root.provider_profiles: MenuRow {
-                                icon: "model";
+                                icon: "provider";
                                 label: profile.label;
                                 detail: profile.model;
                                 active: profile.selected;
@@ -2014,7 +2101,7 @@ export component MainWindow inherits Window {
                 }
 
                 MenuRow {
-                    icon: "sliders";
+                    icon: "settings";
                     label: "Provider settings";
                     detail: root.provider_dirty
                         ? "Unsaved changes need review"
@@ -2076,10 +2163,10 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 padding: AgTheme.space-3;
                 spacing: AgTheme.space-2;
-                PanelHeader { icon: "folder"; title: "Execution scope"; detail: root.project_name; close => { root.context_menu_open = false; } }
-                MenuRow { icon: "folder"; label: root.project_name; detail: root.workspace_label; active: true; clicked => { root.context_menu_open = false; } }
+                PanelHeader { icon: "workspace"; title: "Execution scope"; detail: root.project_name; close => { root.context_menu_open = false; } }
+                MenuRow { icon: "workspace"; label: root.project_name; detail: root.workspace_label; active: true; clicked => { root.context_menu_open = false; } }
                 MenuRow {
-                    icon: "lock";
+                    icon: "approval";
                     label: root.execution_profile_label;
                     detail: root.execution_profile_id == "read-only"
                         ? "Workspace reads are allowed. File changes are disabled."
@@ -2168,7 +2255,7 @@ export component MainWindow inherits Window {
                             }
 
                             for profile in root.provider_profiles: MenuRow {
-                                icon: "model";
+                                icon: "provider";
                                 label: profile.label;
                                 detail: profile.kind_label + " | " + profile.model;
                                 active: profile.selected;
@@ -2459,7 +2546,7 @@ export component MainWindow inherits Window {
                         }
 
                         for profile in root.harness_execution_profiles: MenuRow {
-                            icon: profile.id == "read-only" ? "lock" : "check";
+                            icon: profile.id == "read-only" ? "approval" : "check";
                             label: profile.label;
                             detail: profile.detail;
                             active: profile.selected;
@@ -2520,7 +2607,7 @@ export component MainWindow inherits Window {
                         }
 
                         MenuRow {
-                            icon: "panel";
+                            icon: "inspector";
                             label: "Surfaces";
                             detail: root.harness_surfaces.length + " registered | "
                                 + (root.harness_surfaces_open ? "Hide details" : "Show details");
@@ -2536,7 +2623,7 @@ export component MainWindow inherits Window {
                             spacing: AgTheme.optical-tight-gap;
 
                             for surface in root.harness_surfaces: MenuRow {
-                                icon: surface.state == "unavailable" ? "alert" : "panel";
+                                icon: surface.state == "unavailable" ? "alert" : "inspector";
                                 label: surface.label;
                                 detail: surface.state + " | " + surface.detail;
                                 active: surface.visible;
@@ -2569,7 +2656,7 @@ export component MainWindow inherits Window {
                             for capability in root.harness_capabilities: MenuRow {
                                 icon: capability.state == "unavailable"
                                     ? "alert"
-                                    : (capability.enabled ? "check" : "lock");
+                                    : (capability.enabled ? "check" : "approval");
                                 label: capability.label;
                                 detail: capability.state + " | " + capability.detail;
                                 active: capability.enabled;
@@ -2606,7 +2693,7 @@ export component MainWindow inherits Window {
                         }
 
                         MenuRow {
-                            icon: "review";
+                            icon: "changes";
                             label: "Review pane";
                             detail: root.inspector_open ? "Open" : "Closed";
                             active: root.inspector_open;
@@ -2614,6 +2701,20 @@ export component MainWindow inherits Window {
                             clicked => {
                                 root.inspector_open = !root.inspector_open;
                                 root.toggle_inspector();
+                            }
+                        }
+
+                        MenuRow {
+                            icon: "trajectory";
+                            label: "Trajectory pane";
+                            detail: root.trajectory_open ? "Open" : "Closed";
+                            active: root.trajectory_open;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.trajectory_open = !root.trajectory_open;
+                                root.trajectory_loading = root.trajectory_open;
+                                root.trajectory_error = "";
+                                root.toggle_trajectory();
                             }
                         }
                     }
@@ -2804,7 +2905,7 @@ export component MainWindow inherits Window {
                         AgIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            name: "lock";
+                            name: "approval";
                             size: 15px;
                             tint: AgTheme.silver-500;
                         }
@@ -2881,7 +2982,7 @@ export component MainWindow inherits Window {
                         AgIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            name: "lock";
+                            name: "approval";
                             size: 18px;
                             tint: AgTheme.red-400;
                         }

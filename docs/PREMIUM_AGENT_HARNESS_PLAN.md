@@ -6,7 +6,7 @@ Date: 2026-08-02
 
 Branch: `UI_redesign`
 
-Research review: 2026-08-17, including current Codex, ZCode, and the public
+Research review: 2026-08-18, including current Codex, ZCode, and the public
 DeepSeek Harness architecture
 
 ## Product decision
@@ -50,6 +50,9 @@ and continuing conversations.
   and UI source move to Rust.
 - A small Rust composition registry makes capabilities and surfaces
   inspectable without adding a JavaScript plugin runtime.
+- A bounded durable trajectory makes existing task, lifecycle, tool, approval,
+  usage, change, verification, and error facts inspectable without exposing
+  prompts, reasoning, tool payloads, or guessed context.
 - Availability, enablement, readiness, permission, and visibility remain
   separate facts. Optional modules can be shown, hidden, or unavailable with a
   reason, but never represented by a decorative toggle.
@@ -365,6 +368,13 @@ and exact custom enablement are persisted per project for `read_text` and
 manual requests, approval resume, and execution. Command, network,
 external-process, full-access, timeout, and session-grant profiles remain
 target-state work.
+
+The first trajectory implementation is also intentionally bounded. It may show
+only normalized durable lifecycle, plan, tool, approval, failure, change,
+verification, and reported usage facts for one session. Prompt text, reasoning
+text, raw tool payloads, provider request bodies, and reconstructed model
+context are excluded until a separate redaction and context-record contract is
+implemented.
 
 ### Rust migration order
 

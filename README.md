@@ -58,6 +58,7 @@ Inspect the current composition or select a presentation profile:
 cargo run -p argentum-cli -- harness status
 cargo run -p argentum-cli -- harness profile review
 cargo run -p argentum-cli -- harness surface activity show
+cargo run -p argentum-cli -- harness trajectory
 ```
 
 Select the execution policy or change one configurable built-in capability:
@@ -73,6 +74,11 @@ persisted capability policy. `Confirm Before Changes` is the default, and every
 write still requires one explicit approval. This draft does not expose full
 access, shell commands, network access, or external-process authority. See
 [the modular harness contract](docs/HARNESS_MODULARITY.md).
+
+`harness trajectory [SESSION_ID]` returns a bounded, session-scoped projection
+of durable task, lifecycle, tool, approval, usage, change, verification, and
+run-error records. It does not return prompt text, provider reasoning, tool
+arguments, tool results, credentials, or inferred usage.
 
 Inspect or select durable sessions for the current workspace:
 
@@ -124,6 +130,12 @@ Start the native client:
 
 ```powershell
 cargo run -p argentum-app
+```
+
+Review the pinned SVG icon candidates in their real native geometry:
+
+```powershell
+cargo run --locked -p argentum-icon-gallery
 ```
 
 By default, Argentum creates a local LM Studio-compatible profile at

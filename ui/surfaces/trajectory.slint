@@ -1,0 +1,182 @@
+import { ScrollView } from "std-widgets.slint";
+import { AgTheme } from "../tokens.slint";
+import { TrajectoryItemView } from "../view-models.slint";
+import { IconButton } from "../components/buttons.slint";
+import { AgIcon } from "../components/icon.slint";
+import { SectionHeading } from "../components/surfaces.slint";
+
+component TrajectoryRow inherits Rectangle {
+    in property <TrajectoryItemView> item;
+
+    min-height: AgTheme.space-16;
+    vertical-stretch: 0;
+    border-radius: AgTheme.radius-xs;
+    background: row-touch.has-hover ? AgTheme.hover : transparent;
+
+    Rectangle {
+        x: AgTheme.space-none;
+        y: AgTheme.space-2;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - AgTheme.space-4;
+        background: root.item.state == "error" || root.item.state == "attention"
+            ? AgTheme.red-500
+            : AgTheme.silver-700;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        padding-top: AgTheme.space-2;
+        padding-bottom: AgTheme.space-2;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        Rectangle {
+            width: AgTheme.space-7;
+            background: transparent;
+
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: root.item.kind == "tool" ? "command"
+                    : root.item.kind == "approval" ? "approval"
+                    : root.item.kind == "usage" ? "model"
+                    : root.item.kind == "change" ? "changes"
+                    : root.item.kind == "verification" ? "verify"
+                    : (root.item.state == "error" || root.item.state == "attention") ? "alert"
+                    : "trajectory";
+                size: AgTheme.icon-inline;
+                tint: root.item.state == "error" || root.item.state == "attention"
+                    ? AgTheme.red-400
+                    : AgTheme.silver-400;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.optical-tight-gap;
+            alignment: center;
+
+            HorizontalLayout {
+                spacing: AgTheme.space-2;
+
+                Text {
+                    text: root.item.title;
+                    color: AgTheme.text-secondary;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-compact;
+                    font-weight: AgTheme.weight-medium;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: root.item.timestamp;
+                    color: AgTheme.text-muted;
+                    font-family: AgTheme.font-ui;
+                    font-size: AgTheme.type-metadata;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                text: root.item.detail;
+                color: AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    row-touch := TouchArea { mouse-cursor: default; }
+}
+
+export component TrajectorySurface inherits Rectangle {
+    in property <[TrajectoryItemView]> items: [];
+    in property <string> summary: "No durable records";
+    in property <string> error: "";
+    in property <bool> loading: false;
+    in property <bool> truncated: false;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+    callback refresh();
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: AgTheme.space-2;
+
+        HorizontalLayout {
+            height: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
+            spacing: AgTheme.space-2;
+            alignment: center;
+
+            SectionHeading {
+                label: "Trajectory";
+                detail: root.summary;
+                horizontal-stretch: 1;
+            }
+
+            IconButton {
+                glyph: "activity";
+                hint: "Refresh trajectory";
+                target-size: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
+                enabled: !root.loading;
+                reduced-motion: root.reduced-motion;
+                clicked => { root.refresh(); }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: AgTheme.red-100;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            wrap: word-wrap;
+        }
+
+        if root.loading: Text {
+            text: "Loading durable records";
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+        }
+
+        if !root.loading && root.error == "" && root.items.length == 0: Rectangle {
+            min-height: AgTheme.space-16;
+            border-radius: AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.border-subtle;
+            background: AgTheme.chrome;
+
+            Text {
+                text: "No durable run records for this session.";
+                color: AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        if root.items.length > 0: ScrollView {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            mouse-drag-pan-enabled: root.touch-mode;
+
+            VerticalLayout {
+                spacing: AgTheme.optical-tight-gap;
+                for item in root.items: TrajectoryRow { item: item; }
+            }
+        }
+
+        if root.truncated: Text {
+            text: "Latest bounded records shown. Earlier records remain stored.";
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-metadata;
+            wrap: word-wrap;
+        }
+    }
+}

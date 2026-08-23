@@ -28,6 +28,9 @@ claims. Each stage requires a real build, runtime, security, and visual check.
 - Policy-backed Read Only, Confirm Before Changes, and exact custom execution
   profiles for read and write text tools, persisted per project and enforced at
   every runtime tool boundary.
+- Optional bounded session trajectory from durable task, lifecycle, tool,
+  approval, usage, change, verification, and run-error records, shared by CLI,
+  desktop, and phone layouts.
 - Provider-scoped model catalogs and durable model selection.
 - Workspace path validation, default-deny write policy, secret redaction, and
   provider boundaries.
@@ -54,8 +57,8 @@ claims. Each stage requires a real build, runtime, security, and visual check.
 
 - Named Focused, Standard, Review, Trace, Full, and Custom presentation
   profiles, with visibility independent from execution authority.
-- An optional trajectory and context inspector derived from real session,
-  provider, tool, approval, usage, change, and verification records.
+- Exact model-visible context inspection and deterministic export only after
+  their storage, redaction, and schema contracts are complete.
 - Real Changes, Files, Terminal, Preview, Activity, Approval, and Goal surfaces
   driven by runtime events rather than production fixtures.
 - Exact local, remote, branch, and worktree binding shown at the composer and

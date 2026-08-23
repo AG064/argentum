@@ -350,9 +350,76 @@ async fn run_harness_command(
                 })
                 .await?;
         }
+        HarnessAction::Trajectory { session_id } => {
+            let client = host.client();
+            let mut events = client.subscribe();
+            client
+                .dispatch(AppCommand::LoadTrajectory { session_id })
+                .await?;
+            let mut trajectory = None;
+            while let Ok(event) = events.try_recv() {
+                if let argentum_domain::AppEvent::TrajectorySnapshotLoaded(snapshot) = event {
+                    trajectory = Some(snapshot);
+                }
+            }
+            let trajectory =
+                trajectory.ok_or("trajectory command completed without a trajectory snapshot")?;
+            print_trajectory(trajectory, json);
+            return Ok(());
+        }
     }
     print_harness(host.harness_snapshot()?, json);
     Ok(())
+}
+
+fn print_trajectory(snapshot: argentum_domain::TrajectorySnapshot, json: bool) {
+    if json {
+        println!("{}", serde_json::json!({ "trajectory": snapshot }));
+        return;
+    }
+
+    println!("Session trajectory: {}", snapshot.session_id);
+    println!("Durable records: {}", snapshot.entries.len());
+    if snapshot.truncated {
+        println!("Earlier records are not included in this bounded view.");
+    }
+    for entry in snapshot.entries {
+        println!(
+            "  {} [{}/{}] {}",
+            entry.occurred_at,
+            trajectory_kind_label(entry.kind),
+            trajectory_state_label(entry.state),
+            entry.title
+        );
+        if !entry.detail.is_empty() {
+            println!("    {}", entry.detail);
+        }
+    }
+}
+
+const fn trajectory_kind_label(kind: argentum_domain::TrajectoryKind) -> &'static str {
+    match kind {
+        argentum_domain::TrajectoryKind::Task => "task",
+        argentum_domain::TrajectoryKind::Plan => "plan",
+        argentum_domain::TrajectoryKind::Lifecycle => "lifecycle",
+        argentum_domain::TrajectoryKind::Tool => "tool",
+        argentum_domain::TrajectoryKind::Approval => "approval",
+        argentum_domain::TrajectoryKind::Usage => "usage",
+        argentum_domain::TrajectoryKind::Change => "change",
+        argentum_domain::TrajectoryKind::Verification => "verification",
+        argentum_domain::TrajectoryKind::Error => "error",
+    }
+}
+
+const fn trajectory_state_label(state: argentum_domain::TrajectoryState) -> &'static str {
+    match state {
+        argentum_domain::TrajectoryState::Neutral => "neutral",
+        argentum_domain::TrajectoryState::Active => "active",
+        argentum_domain::TrajectoryState::Attention => "attention",
+        argentum_domain::TrajectoryState::Success => "success",
+        argentum_domain::TrajectoryState::Error => "error",
+        argentum_domain::TrajectoryState::Cancelled => "cancelled",
+    }
 }
 
 fn print_harness(snapshot: argentum_domain::HarnessSnapshot, json: bool) {
@@ -873,6 +940,9 @@ enum HarnessAction {
         capability_id: String,
         enabled: bool,
     },
+    Trajectory {
+        session_id: Option<argentum_domain::SessionId>,
+    },
 }
 
 #[derive(Debug)]
@@ -1097,7 +1167,7 @@ where
                 if command == "harness"
                     && matches!(
                         harness_action.as_deref(),
-                        Some("profile" | "surface" | "execution" | "capability")
+                        Some("profile" | "surface" | "execution" | "capability" | "trajectory")
                     )
                     && harness_target.is_none() =>
             {
@@ -1378,7 +1448,21 @@ where
                     json,
                 })
             }
-            _ => Err("harness requires 'status', 'profile PROFILE_ID', 'surface SURFACE show|hide', 'execution PROFILE_ID', or 'capability CAPABILITY_ID enable|disable'".into()),
+            Some("trajectory") if harness_visibility.is_none() => {
+                let session_id = harness_target
+                    .map(|value| {
+                        value
+                            .parse()
+                            .map_err(|_| "harness trajectory requires a valid SESSION_ID".to_owned())
+                    })
+                    .transpose()?;
+                Ok(Arguments::Harness {
+                    options,
+                    action: HarnessAction::Trajectory { session_id },
+                    json,
+                })
+            }
+            _ => Err("harness requires 'status', 'profile PROFILE_ID', 'surface SURFACE show|hide', 'execution PROFILE_ID', 'capability CAPABILITY_ID enable|disable', or 'trajectory [SESSION_ID]'".into()),
         },
         unknown => Err(format!("unknown command '{unknown}'")),
     }
@@ -1421,9 +1505,10 @@ fn parse_surface_id(value: &str) -> Result<argentum_domain::SurfaceId, String> {
         "terminal" => Ok(argentum_domain::SurfaceId::Terminal),
         "preview" => Ok(argentum_domain::SurfaceId::Preview),
         "activity" => Ok(argentum_domain::SurfaceId::Activity),
+        "trajectory" => Ok(argentum_domain::SurfaceId::Trajectory),
         "approvals" => Ok(argentum_domain::SurfaceId::Approvals),
         _ => Err(
-            "SURFACE must be conversation, plan, changes, files, terminal, preview, activity, or approvals"
+            "SURFACE must be conversation, plan, changes, files, terminal, preview, activity, trajectory, or approvals"
                 .to_owned(),
         ),
     }
@@ -1479,7 +1564,8 @@ argentum-cli provider select PROFILE_ID [OPTIONS]\n  \
   argentum-cli harness profile PROFILE_ID [OPTIONS]\n  \
   argentum-cli harness surface SURFACE show|hide [OPTIONS]\n  \
   argentum-cli harness execution PROFILE_ID [OPTIONS]\n  \
-  argentum-cli harness capability CAPABILITY_ID enable|disable [OPTIONS]\n\n\
+  argentum-cli harness capability CAPABILITY_ID enable|disable [OPTIONS]\n  \
+  argentum-cli harness trajectory [SESSION_ID] [OPTIONS]\n\n\
 Commands:\n  \
 serve   Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
 run     Submit one task and stream its output\n  \
@@ -1682,11 +1768,29 @@ mod tests {
                 ..
             } if capability_id == "tool.write-text"
         ));
+        assert!(matches!(
+            parse_args(["harness", "trajectory", "--json"]).expect("active session trajectory"),
+            Arguments::Harness {
+                action: HarnessAction::Trajectory { session_id: None },
+                json: true,
+                ..
+            }
+        ));
+        let trajectory_session = "00000000-0000-0000-0000-0000000000a1";
+        assert!(matches!(
+            parse_args(["harness", "trajectory", trajectory_session])
+                .expect("explicit session trajectory"),
+            Arguments::Harness {
+                action: HarnessAction::Trajectory { session_id: Some(session_id) },
+                ..
+            } if session_id.to_string() == trajectory_session
+        ));
         assert!(parse_args(["harness", "surface", "terminal"]).is_err());
         assert!(parse_args(["harness", "surface", "unknown", "show"]).is_err());
         assert!(parse_args(["harness", "profile"]).is_err());
         assert!(parse_args(["harness", "execution"]).is_err());
         assert!(parse_args(["harness", "capability", "tool.read-text", "show"]).is_err());
+        assert!(parse_args(["harness", "trajectory", "not-a-session"]).is_err());
     }
 
     #[test]

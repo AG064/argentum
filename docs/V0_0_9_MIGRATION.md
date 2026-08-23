@@ -36,7 +36,7 @@ states, and tests work end to end in the active Rust product.
 | Startup diagnostics | Partial | Windows startup failures use a safe native error dialog, command failures reach the UI, and event-lag recovery republishes current state. A richer copy and report workflow remains pending. |
 | Localization foundation | Planned | Migrate after visible product copy stabilizes. Partial translation must stay labeled partial. |
 | Built-in skills catalog | Planned | Only reviewed built-ins with explicit capabilities can enter the Rust registry. External installation remains gated. |
-| Optional module visibility and profiles | Partial | The Rust harness registry lists available and unavailable capabilities with reasons. Focused, Standard, Review, Trace, Full, and Custom presentation profiles persist Activity and Changes visibility. Read and write execution profiles and exact custom toggles persist per project. Signed external modules and isolated extension hosting remain pending. |
+| Optional module visibility and profiles | Partial | The Rust harness registry lists available and unavailable capabilities with reasons. Focused, Standard, Review, Trace, Full, and Custom presentation profiles persist Activity, Trajectory, and Changes visibility. The optional Trajectory surface projects a bounded set of durable session facts through the same CLI and native command. Read and write execution profiles and exact custom toggles persist per project. Signed external modules and isolated extension hosting remain pending. |
 | Android companion | Planned | The historical Kotlin app remains archival. No active mobile artifact is claimed by the Rust draft. |
 
 ## Experimental legacy areas

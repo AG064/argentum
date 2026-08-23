@@ -366,20 +366,6 @@ component AssistantMessage inherits Rectangle {
     background: transparent;
 
     assistant-message-content := HorizontalLayout {
-        spacing: AgTheme.space-3;
-
-        Rectangle {
-            width: AgTheme.space-8;
-            background: transparent;
-
-            BrandMark {
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                size: AgTheme.brand-mark-sm;
-                accessible-name: "";
-            }
-        }
-
         VerticalLayout {
             spacing: AgTheme.space-2;
 

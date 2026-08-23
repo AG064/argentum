@@ -311,6 +311,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argentum-icon-gallery"
+version = "0.1.0"
+dependencies = [
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "argentum-platform"
 version = "0.1.0"
 dependencies = [
@@ -424,6 +432,7 @@ dependencies = [
  "argentum-domain",
  "slint",
  "slint-build",
+ "time",
  "tracing",
  "url",
 ]

@@ -99,6 +99,7 @@ pub enum SurfaceId {
     Terminal,
     Preview,
     Activity,
+    Trajectory,
     Approvals,
 }
 
@@ -229,6 +230,7 @@ impl SurfaceId {
             Self::Terminal => "Terminal",
             Self::Preview => "Preview",
             Self::Activity => "Activity",
+            Self::Trajectory => "Trajectory",
             Self::Approvals => "Approvals",
         }
     }
@@ -259,6 +261,7 @@ impl Default for LayoutProfile {
         visible.insert(SurfaceId::Terminal, false);
         visible.insert(SurfaceId::Preview, false);
         visible.insert(SurfaceId::Activity, false);
+        visible.insert(SurfaceId::Trajectory, false);
         visible.insert(SurfaceId::Approvals, false);
 
         let mut widths = BTreeMap::new();
@@ -268,6 +271,7 @@ impl Default for LayoutProfile {
         widths.insert(SurfaceId::Terminal, 420);
         widths.insert(SurfaceId::Preview, 420);
         widths.insert(SurfaceId::Activity, 360);
+        widths.insert(SurfaceId::Trajectory, 400);
         widths.insert(SurfaceId::Approvals, 380);
 
         Self {
@@ -575,6 +579,49 @@ pub struct ModelUsage {
     pub context_window_tokens: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrajectoryKind {
+    Task,
+    Plan,
+    Lifecycle,
+    Tool,
+    Approval,
+    Usage,
+    Change,
+    Verification,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrajectoryState {
+    Neutral,
+    Active,
+    Attention,
+    Success,
+    Error,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrajectoryEntry {
+    pub sequence: u64,
+    pub run_id: Option<RunId>,
+    pub kind: TrajectoryKind,
+    pub state: TrajectoryState,
+    pub title: String,
+    pub detail: String,
+    pub occurred_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrajectorySnapshot {
+    pub session_id: SessionId,
+    pub entries: Vec<TrajectoryEntry>,
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AppCommand {
@@ -622,6 +669,10 @@ pub enum AppCommand {
     SetHarnessCapabilityEnabled {
         capability_id: String,
         enabled: bool,
+    },
+    LoadTrajectory {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<SessionId>,
     },
     SubmitTask {
         prompt: String,
@@ -710,6 +761,11 @@ pub enum AppEvent {
         models: Vec<ProviderModel>,
         selected_model: String,
     },
+    TrajectoryEntryRecorded {
+        session_id: SessionId,
+        entry: TrajectoryEntry,
+    },
+    TrajectorySnapshotLoaded(TrajectorySnapshot),
     HarnessSnapshotLoaded(HarnessSnapshot),
     LayoutChanged(LayoutProfile),
     Error {
@@ -748,6 +804,8 @@ impl AppEvent {
             Self::ProviderStatus(_) => "provider_status",
             Self::ProviderProfilesSnapshot { .. } => "provider_profiles_snapshot",
             Self::ProviderModelsSnapshot { .. } => "provider_models_snapshot",
+            Self::TrajectoryEntryRecorded { .. } => "trajectory_entry_recorded",
+            Self::TrajectorySnapshotLoaded(_) => "trajectory_snapshot_loaded",
             Self::HarnessSnapshotLoaded(_) => "harness_snapshot_loaded",
             Self::LayoutChanged(_) => "layout_changed",
             Self::Error { .. } => "error",
@@ -863,6 +921,43 @@ mod tests {
         assert_eq!(events[0].kind(), "provider_models_snapshot");
         assert_eq!(events[1].kind(), "assistant_reasoning_delta");
         assert_eq!(events[2].kind(), "model_usage_updated");
+    }
+
+    #[test]
+    fn trajectory_command_and_snapshot_are_additive_and_session_scoped() {
+        let session_id = Uuid::new_v4();
+        let run_id = Uuid::new_v4();
+        let command = AppCommand::LoadTrajectory {
+            session_id: Some(session_id),
+        };
+        let event = AppEvent::TrajectorySnapshotLoaded(TrajectorySnapshot {
+            session_id,
+            entries: vec![TrajectoryEntry {
+                sequence: 7,
+                run_id: Some(run_id),
+                kind: TrajectoryKind::Lifecycle,
+                state: TrajectoryState::Success,
+                title: "Complete".into(),
+                detail: "Run lifecycle changed.".into(),
+                occurred_at: now(),
+            }],
+            truncated: false,
+        });
+
+        let command_value = serde_json::to_value(&command).expect("serialized command");
+        assert_eq!(command_value["kind"], "load_trajectory");
+        assert_eq!(command_value["session_id"], session_id.to_string());
+        assert_eq!(
+            serde_json::from_value::<AppCommand>(command_value).expect("parsed command"),
+            command
+        );
+
+        let event_value = serde_json::to_value(&event).expect("serialized event");
+        assert_eq!(
+            serde_json::from_value::<AppEvent>(event_value).expect("parsed event"),
+            event
+        );
+        assert_eq!(event.kind(), "trajectory_snapshot_loaded");
     }
 
     #[test]

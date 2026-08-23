@@ -88,3 +88,39 @@ export component BrandLockup inherits Rectangle {
         }
     }
 }
+
+export component ProductLabel inherits Rectangle {
+    in property <string> subtitle: "Task workbench";
+
+    width: AgTheme.brand-lockup-width;
+    height: AgTheme.header-height;
+    background: transparent;
+    accessible-role: text;
+    accessible-label: root.subtitle == ""
+        ? "Argentum"
+        : "Argentum. " + root.subtitle;
+
+    VerticalLayout {
+        spacing: AgTheme.space-1;
+        alignment: center;
+
+        Text {
+            text: "Argentum";
+            color: AgTheme.text-strong;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-body;
+            font-weight: AgTheme.weight-title;
+            accessible-role: none;
+        }
+
+        Text {
+            visible: root.subtitle != "";
+            text: root.subtitle;
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-regular;
+            accessible-role: none;
+        }
+    }
+}

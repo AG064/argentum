@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "Lucide",
+    "repository": "https://github.com/lucide-icons/lucide",
+    "commit": "86eb89c794cb941bf24eb16d5ef432faabaac7be",
+    "license": "ISC",
+    "license_file": "lucide/LICENSE"
+  },
+  "icons": [
+    { "role": "new-task", "upstream": "square-pen", "file": "lucide/square-pen.svg", "sha256": "09bdac7fdb94058246a5d3132eea0976e690d01694179ab6f474faa2c21de59a" },
+    { "role": "search", "upstream": "search", "file": "lucide/search.svg", "sha256": "283d371c2e433817bb9c0c8310caa6c77fa4177c0f4f1168d9c83b97af7389dc" },
+    { "role": "sessions", "upstream": "message-square", "file": "lucide/message-square.svg", "sha256": "5812a3be783fdcd73efd2b6026e03131e4b8c6649e7d52aa2dc7bf2e2023a59d" },
+    { "role": "activity", "upstream": "activity", "file": "lucide/activity.svg", "sha256": "050fbcda05e13c2051cf857683645e19c6b180861ef4d0cc28a6f09ba1ea1666" },
+    { "role": "plan", "upstream": "list-checks", "file": "lucide/list-checks.svg", "sha256": "08d26ab05aaf724222c4c0cd5a19d5eae753b2a5fff0eb2d81759dde11bac6b6" },
+    { "role": "trajectory", "upstream": "git-branch", "file": "lucide/git-branch.svg", "sha256": "041f04acc8f92657b849540f0440e2e85d0df0b8da2365611e81b9bebfafc4eb" },
+    { "role": "changes", "upstream": "file-diff", "file": "lucide/file-diff.svg", "sha256": "b6a0820a3cd44c3b11ed62aa0bf7d61a038ed52f29d91a47eb9fbade801fbdb9" },
+    { "role": "inspector", "upstream": "panel-right", "file": "lucide/panel-right.svg", "sha256": "327d197328f9feb1f88c36c9db04e9b00fe717d877459f92fcd892f5e4c349fa" },
+    { "role": "provider", "upstream": "server", "file": "lucide/server.svg", "sha256": "f7bea54b609dc488f3b848995014041846b2443fd2a880653e9e583d7a034f61" },
+    { "role": "model", "upstream": "cpu", "file": "lucide/cpu.svg", "sha256": "ec83bb69ec029d367d749afc445b39c8e95891ebf99b0400652677c2b149b99c" },
+    { "role": "workspace", "upstream": "folder", "file": "lucide/folder.svg", "sha256": "f0d92b94b797a8ab7d4c4ae33c3236c47f64068351b4e14bdb5014ee42898a39" },
+    { "role": "approval", "upstream": "shield-check", "file": "lucide/shield-check.svg", "sha256": "8d4fcdbde5bba4abb1a2f6fe53e37ceb6343a1d5449a9d88f6f97c1971d26c4e" },
+    { "role": "run", "upstream": "play", "file": "lucide/play.svg", "sha256": "d7c34786135922a92b6896f6c2384ceeb0346afbf6041dc79982011411409833" },
+    { "role": "stop", "upstream": "square", "file": "lucide/square.svg", "sha256": "bd979354f0ab184b95cecf03eedefe40c2dc65830ac6d7e60017b2b25a354acb" },
+    { "role": "settings", "upstream": "sliders-horizontal", "file": "lucide/sliders-horizontal.svg", "sha256": "e43a00e5eb684e6cbb61083bed2528d7a3fa5f265693eb2b5f314cd432aa65f4" },
+    { "role": "more", "upstream": "ellipsis", "file": "lucide/ellipsis.svg", "sha256": "4f495cc72013ffdfec677f03b33a150f7b4dd741979283fd6853a09024bca112" }
+  ]
+}

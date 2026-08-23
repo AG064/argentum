@@ -1,0 +1,188 @@
+import { ScrollView } from "std-widgets.slint";
+import { AgTheme } from "../tokens.slint";
+
+component CandidateIcon inherits Rectangle {
+    in property <string> role;
+    in property <color> tint: AgTheme.silver-300;
+    in property <length> glyph-size: AgTheme.icon-control;
+
+    width: root.glyph-size;
+    height: root.glyph-size;
+    background: transparent;
+
+    Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.role == "new-task" ? @image-url("../assets/icons/lucide/square-pen.svg")
+            : (root.role == "search" ? @image-url("../assets/icons/lucide/search.svg")
+            : (root.role == "sessions" ? @image-url("../assets/icons/lucide/message-square.svg")
+            : (root.role == "activity" ? @image-url("../assets/icons/lucide/activity.svg")
+            : (root.role == "plan" ? @image-url("../assets/icons/lucide/list-checks.svg")
+            : (root.role == "trajectory" ? @image-url("../assets/icons/lucide/git-branch.svg")
+            : (root.role == "changes" ? @image-url("../assets/icons/lucide/file-diff.svg")
+            : (root.role == "inspector" ? @image-url("../assets/icons/lucide/panel-right.svg")
+            : (root.role == "provider" ? @image-url("../assets/icons/lucide/server.svg")
+            : (root.role == "model" ? @image-url("../assets/icons/lucide/cpu.svg")
+            : (root.role == "workspace" ? @image-url("../assets/icons/lucide/folder.svg")
+            : (root.role == "approval" ? @image-url("../assets/icons/lucide/shield-check.svg")
+            : (root.role == "run" ? @image-url("../assets/icons/lucide/play.svg")
+            : (root.role == "stop" ? @image-url("../assets/icons/lucide/square.svg")
+            : (root.role == "settings" ? @image-url("../assets/icons/lucide/sliders-horizontal.svg")
+            : @image-url("../assets/icons/lucide/ellipsis.svg")))))))))))))));
+        colorize: root.tint;
+        image-fit: contain;
+    }
+}
+
+component IconStateCell inherits Rectangle {
+    in property <string> role;
+    in property <string> state: "rest";
+    in property <bool> mobile: false;
+
+    width: 112px;
+    height: 56px;
+    background: transparent;
+
+    Rectangle {
+        width: root.mobile ? AgTheme.mobile-control-height : AgTheme.control-height;
+        height: root.mobile ? AgTheme.mobile-control-height : AgTheme.control-height;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: AgTheme.radius-xs;
+        border-width: root.state == "focus" ? AgTheme.hairline : 0px;
+        border-color: root.state == "focus" ? AgTheme.focus-ring : transparent;
+        background: root.state == "hover"
+            ? AgTheme.control-hover
+            : (root.state == "selected"
+                ? AgTheme.control-selected
+                : (root.state == "attention" ? AgTheme.attention-surface : transparent));
+
+        if root.state == "selected" || root.state == "attention": Rectangle {
+            width: AgTheme.accent-bar-width;
+            height: parent.height;
+            x: 0px;
+            background: root.state == "attention" ? AgTheme.red-400 : AgTheme.silver-300;
+        }
+
+        CandidateIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            role: root.role;
+            glyph-size: root.mobile ? AgTheme.icon-navigation : AgTheme.icon-control;
+            tint: root.state == "attention"
+                ? AgTheme.red-400
+                : (root.state == "rest" ? AgTheme.silver-400 : AgTheme.white-100);
+        }
+    }
+}
+
+component GalleryHeading inherits Rectangle {
+    height: AgTheme.control-height;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-2;
+
+        Text { width: 132px; text: "Role"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; vertical-alignment: center; }
+        Text { width: 132px; text: "SVG"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; vertical-alignment: center; }
+        Text { width: 112px; text: "Rest"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+        Text { width: 112px; text: "Hover"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+        Text { width: 112px; text: "Focus"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+        Text { width: 112px; text: "Selected"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+        Text { width: 112px; text: "Attention"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+        Text { width: 112px; text: "Mobile"; color: AgTheme.text-tertiary; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; horizontal-alignment: center; vertical-alignment: center; }
+    }
+}
+
+component IconGalleryRow inherits Rectangle {
+    in property <string> role;
+    in property <string> svg-name;
+
+    height: 57px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: AgTheme.space-2;
+
+        Text { width: 132px; text: root.role; color: AgTheme.text-primary; font-size: AgTheme.type-body; font-weight: AgTheme.weight-medium; vertical-alignment: center; }
+        Text { width: 132px; text: root.svg-name; color: AgTheme.text-muted; font-size: AgTheme.type-compact; font-family: AgTheme.font-code; vertical-alignment: center; }
+        IconStateCell { role: root.role; state: "rest"; }
+        IconStateCell { role: root.role; state: "hover"; }
+        IconStateCell { role: root.role; state: "focus"; }
+        IconStateCell { role: root.role; state: "selected"; }
+        IconStateCell { role: root.role; state: "attention"; }
+        IconStateCell { role: root.role; state: "rest"; mobile: true; }
+    }
+
+    Rectangle {
+        y: parent.height - self.height;
+        height: AgTheme.hairline;
+        background: AgTheme.border-faint;
+    }
+}
+
+export component IconGallery inherits Window {
+    title: "Argentum icon system";
+    width: 1024px;
+    height: 760px;
+    background: AgTheme.canvas;
+
+    VerticalLayout {
+        padding: AgTheme.space-6;
+        spacing: AgTheme.space-4;
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+
+            Text {
+                text: "Argentum icon system";
+                color: AgTheme.text-strong;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-page-title;
+                font-weight: AgTheme.weight-title;
+            }
+            Text {
+                text: "Pinned Lucide SVGs in production geometry. Transparent at rest, restrained surfaces for interaction state.";
+                color: AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-body;
+            }
+        }
+
+        Rectangle { height: AgTheme.hairline; background: AgTheme.border-subtle; }
+
+        GalleryHeading { }
+
+        ScrollView {
+            viewport-width: self.width;
+            mouse-drag-pan-enabled: true;
+
+            VerticalLayout {
+                spacing: AgTheme.space-none;
+                IconGalleryRow { role: "new-task"; svg-name: "square-pen"; }
+                IconGalleryRow { role: "search"; svg-name: "search"; }
+                IconGalleryRow { role: "sessions"; svg-name: "message-square"; }
+                IconGalleryRow { role: "activity"; svg-name: "activity"; }
+                IconGalleryRow { role: "plan"; svg-name: "list-checks"; }
+                IconGalleryRow { role: "trajectory"; svg-name: "git-branch"; }
+                IconGalleryRow { role: "changes"; svg-name: "file-diff"; }
+                IconGalleryRow { role: "inspector"; svg-name: "panel-right"; }
+                IconGalleryRow { role: "provider"; svg-name: "server"; }
+                IconGalleryRow { role: "model"; svg-name: "cpu"; }
+                IconGalleryRow { role: "workspace"; svg-name: "folder"; }
+                IconGalleryRow { role: "approval"; svg-name: "shield-check"; }
+                IconGalleryRow { role: "run"; svg-name: "play"; }
+                IconGalleryRow { role: "stop"; svg-name: "square"; }
+                IconGalleryRow { role: "settings"; svg-name: "sliders-horizontal"; }
+                IconGalleryRow { role: "more"; svg-name: "ellipsis"; }
+            }
+        }
+
+        Text {
+            text: "Identity remains separate. The Argentum mark is not a navigation glyph.";
+            color: AgTheme.text-tertiary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+        }
+    }
+}

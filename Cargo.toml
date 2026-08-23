@@ -5,6 +5,7 @@ members = [
     "crates/argentum-cli",
     "crates/argentum-domain",
     "crates/argentum-harness",
+    "crates/argentum-icon-gallery",
     "crates/argentum-runtime",
     "crates/argentum-providers",
     "crates/argentum-tools",

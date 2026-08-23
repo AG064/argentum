@@ -927,6 +927,11 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             "Recent factual run, provider, tool, approval, and verification events.",
         ),
         available_surface(
+            SurfaceId::Trajectory,
+            true,
+            "Bounded durable task, lifecycle, tool, approval, usage, change, and verification records for one session.",
+        ),
+        available_surface(
             SurfaceId::Approvals,
             false,
             "Opens only while an action needs a user decision.",
@@ -963,12 +968,14 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
             10,
             false,
             false,
+            false,
         ),
         profile(
             DEFAULT_PROFILE_ID,
             "Standard",
             "Default session workspace with optional surfaces closed.",
             20,
+            false,
             false,
             false,
         ),
@@ -979,20 +986,23 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
             30,
             true,
             false,
+            false,
         ),
         profile(
             "trace",
             "Trace",
-            "Open factual Activity while keeping Changes closed.",
+            "Open the durable Trajectory while keeping Changes and live Activity closed.",
             40,
+            false,
             false,
             true,
         ),
         profile(
             "full",
             "Full",
-            "Open both Activity and the Changes summary.",
+            "Open Activity, Trajectory, and the Changes summary.",
             50,
+            true,
             true,
             true,
         ),
@@ -1047,6 +1057,7 @@ fn profile(
     order: u16,
     changes_visible: bool,
     activity_visible: bool,
+    trajectory_visible: bool,
 ) -> ProfileRegistration {
     ProfileRegistration {
         id: id.to_owned(),
@@ -1056,6 +1067,7 @@ fn profile(
         visibility: BTreeMap::from([
             (SurfaceId::Changes, changes_visible),
             (SurfaceId::Activity, activity_visible),
+            (SurfaceId::Trajectory, trajectory_visible),
         ]),
     }
 }
@@ -1097,6 +1109,25 @@ mod tests {
         assert_eq!(layout.visible.get(&SurfaceId::Conversation), Some(&true));
         assert_eq!(layout.visible.get(&SurfaceId::Changes), Some(&true));
         assert_eq!(layout.visible.get(&SurfaceId::Activity), Some(&false));
+        assert_eq!(layout.visible.get(&SurfaceId::Trajectory), Some(&false));
+    }
+
+    #[test]
+    fn trace_and_full_profiles_expose_the_durable_trajectory_deliberately() {
+        let registry = HarnessRegistry::built_in().expect("registry");
+        let trace = registry
+            .apply_profile(&LayoutProfile::default(), "trace")
+            .expect("trace profile");
+        assert_eq!(trace.visible.get(&SurfaceId::Trajectory), Some(&true));
+        assert_eq!(trace.visible.get(&SurfaceId::Activity), Some(&false));
+        assert_eq!(trace.visible.get(&SurfaceId::Changes), Some(&false));
+
+        let full = registry
+            .apply_profile(&LayoutProfile::default(), "full")
+            .expect("full profile");
+        assert_eq!(full.visible.get(&SurfaceId::Trajectory), Some(&true));
+        assert_eq!(full.visible.get(&SurfaceId::Activity), Some(&true));
+        assert_eq!(full.visible.get(&SurfaceId::Changes), Some(&true));
     }
 
     #[test]

@@ -7,13 +7,16 @@ use argentum_domain::{
     Goal, HarnessAvailability, HarnessCapabilityState, HarnessExecutionProfileSummary,
     HarnessProfileSummary, HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, ProviderKind,
     ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId, TaskLifecycle, ToolResultState,
+    TrajectoryEntry, TrajectoryKind, TrajectorySnapshot, TrajectoryState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use time::macros::format_description;
 use tracing::warn;
 
 slint::include_modules!();
 
 const MAX_ACTIVITY_ITEMS: usize = 50;
+const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 #[derive(Clone)]
 pub struct UiHandle {
@@ -421,6 +424,12 @@ impl UiHandle {
             } => {
                 self.apply_provider_models(provider_id, models, selected_model);
             }
+            AppEvent::TrajectoryEntryRecorded { session_id, entry } => {
+                self.append_trajectory_entry(*session_id, entry);
+            }
+            AppEvent::TrajectorySnapshotLoaded(snapshot) => {
+                self.apply_trajectory_snapshot(snapshot);
+            }
             AppEvent::HarnessSnapshotLoaded(snapshot) => {
                 self.apply_harness_snapshot(snapshot);
             }
@@ -567,6 +576,18 @@ impl UiHandle {
                         .copied()
                         .unwrap_or(false),
                 );
+                let trajectory_visible = profile
+                    .visible
+                    .get(&SurfaceId::Trajectory)
+                    .copied()
+                    .unwrap_or(false);
+                if trajectory_visible && !self.window.get_trajectory_open() {
+                    self.window.set_trajectory_loading(true);
+                    self.window.set_trajectory_error(SharedString::default());
+                } else if !trajectory_visible {
+                    self.window.set_trajectory_loading(false);
+                }
+                self.window.set_trajectory_open(trajectory_visible);
                 self.window.set_activity_open(
                     profile
                         .visible
@@ -630,12 +651,39 @@ impl UiHandle {
             }
             AppCommand::ListHarnessState
             | AppCommand::SelectHarnessProfile { .. }
-            | AppCommand::SetSurfaceVisibility { .. }
             | AppCommand::SelectExecutionProfile { .. }
             | AppCommand::SetHarnessCapabilityEnabled { .. } => {
                 self.window.set_harness_loading(false);
                 self.window.set_harness_pending(SharedString::default());
                 self.window.set_harness_error(present_error(message).into());
+            }
+            AppCommand::SetSurfaceVisibility { surface, visible } => {
+                self.window.set_harness_loading(false);
+                self.window.set_harness_pending(SharedString::default());
+                self.window.set_harness_error(present_error(message).into());
+                match surface {
+                    SurfaceId::Changes => self.window.set_inspector_open(!visible),
+                    SurfaceId::Activity => self.window.set_activity_open(!visible),
+                    SurfaceId::Trajectory => {
+                        self.window.set_trajectory_open(*visible);
+                        self.window.set_trajectory_loading(false);
+                        self.window
+                            .set_trajectory_error(present_error(message).into());
+                    }
+                    SurfaceId::Conversation
+                    | SurfaceId::Plan
+                    | SurfaceId::Files
+                    | SurfaceId::Terminal
+                    | SurfaceId::Preview
+                    | SurfaceId::Approvals => {}
+                }
+            }
+            AppCommand::LoadTrajectory { session_id }
+                if session_id.is_none() || *session_id == self.active_session_id() =>
+            {
+                self.window.set_trajectory_loading(false);
+                self.window
+                    .set_trajectory_error(present_error(message).into());
             }
             AppCommand::SubmitTask { .. } if self.window.get_submission_pending() => {
                 self.window.set_submission_pending(false);
@@ -850,6 +898,52 @@ impl UiHandle {
         self.window.set_harness_error(SharedString::default());
     }
 
+    fn apply_trajectory_snapshot(&self, snapshot: &TrajectorySnapshot) {
+        if self.active_session_id() != Some(snapshot.session_id) {
+            return;
+        }
+        self.window
+            .set_trajectory_items(trajectory_item_model(snapshot));
+        self.window
+            .set_trajectory_summary(trajectory_summary_label(snapshot.entries.len()).into());
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_truncated(snapshot.truncated);
+        self.window.set_trajectory_error(SharedString::default());
+    }
+
+    fn append_trajectory_entry(&self, session_id: SessionId, entry: &TrajectoryEntry) {
+        if self.active_session_id() != Some(session_id) {
+            return;
+        }
+        let sequence = entry.sequence.to_string();
+        let current = self.window.get_trajectory_items();
+        if (0..current.row_count()).any(|row| {
+            current
+                .row_data(row)
+                .is_some_and(|item| item.sequence.as_str() == sequence)
+        }) {
+            return;
+        }
+        let mut items = (0..current.row_count())
+            .filter_map(|row| current.row_data(row))
+            .collect::<Vec<_>>();
+        items.push(trajectory_item_view(entry));
+        items.sort_by_key(|item| item.sequence.as_str().parse::<u64>().unwrap_or(u64::MAX));
+        let truncated =
+            self.window.get_trajectory_truncated() || items.len() > MAX_TRAJECTORY_ITEMS;
+        if items.len() > MAX_TRAJECTORY_ITEMS {
+            items.drain(..items.len() - MAX_TRAJECTORY_ITEMS);
+        }
+        let count = items.len();
+        self.window
+            .set_trajectory_items(ModelRc::new(VecModel::from(items)));
+        self.window
+            .set_trajectory_summary(trajectory_summary_label(count).into());
+        self.window.set_trajectory_truncated(truncated);
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_error(SharedString::default());
+    }
+
     fn reset_session_view(&self) {
         self.window.set_user_prompt(SharedString::default());
         self.window
@@ -869,6 +963,12 @@ impl UiHandle {
         self.window.set_submission_pending(false);
         self.window.set_plan_summary("No stages yet".into());
         self.window.set_plan_steps(empty_plan_model());
+        self.window.set_trajectory_items(empty_trajectory_model());
+        self.window
+            .set_trajectory_summary("No durable records".into());
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_truncated(false);
+        self.window.set_trajectory_error(SharedString::default());
         self.reset_change_and_verification_state();
         self.apply_goal_snapshot(None);
         self.close_approval();
@@ -1017,6 +1117,69 @@ fn empty_plan_model() -> ModelRc<PlanStepView> {
 
 fn empty_conversation_model() -> ModelRc<ConversationMessageView> {
     ModelRc::new(VecModel::from(Vec::<ConversationMessageView>::new()))
+}
+
+fn empty_trajectory_model() -> ModelRc<TrajectoryItemView> {
+    ModelRc::new(VecModel::from(Vec::<TrajectoryItemView>::new()))
+}
+
+fn trajectory_item_model(snapshot: &TrajectorySnapshot) -> ModelRc<TrajectoryItemView> {
+    let rows = snapshot
+        .entries
+        .iter()
+        .map(trajectory_item_view)
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn trajectory_item_view(entry: &TrajectoryEntry) -> TrajectoryItemView {
+    TrajectoryItemView {
+        sequence: entry.sequence.to_string().into(),
+        title: entry.title.clone().into(),
+        detail: entry.detail.clone().into(),
+        state: trajectory_state_id(entry.state).into(),
+        kind: trajectory_kind_id(entry.kind).into(),
+        timestamp: entry
+            .occurred_at
+            .format(format_description!(
+                "[year]-[month]-[day] [hour]:[minute] UTC"
+            ))
+            .unwrap_or_else(|_| entry.occurred_at.unix_timestamp().to_string())
+            .into(),
+    }
+}
+
+fn trajectory_summary_label(count: usize) -> String {
+    match count {
+        0 => "No durable records".to_owned(),
+        1 => "1 durable record".to_owned(),
+        _ => format!("{count} durable records"),
+    }
+}
+
+const fn trajectory_kind_id(kind: TrajectoryKind) -> &'static str {
+    match kind {
+        TrajectoryKind::Task => "task",
+        TrajectoryKind::Plan => "plan",
+        TrajectoryKind::Lifecycle => "lifecycle",
+        TrajectoryKind::Tool => "tool",
+        TrajectoryKind::Approval => "approval",
+        TrajectoryKind::Usage => "usage",
+        TrajectoryKind::Change => "change",
+        TrajectoryKind::Verification => "verification",
+        TrajectoryKind::Error => "error",
+    }
+}
+
+const fn trajectory_state_id(state: TrajectoryState) -> &'static str {
+    match state {
+        TrajectoryState::Neutral => "neutral",
+        TrajectoryState::Active => "active",
+        TrajectoryState::Attention => "attention",
+        TrajectoryState::Success => "success",
+        TrajectoryState::Error => "error",
+        TrajectoryState::Cancelled => "cancelled",
+    }
 }
 
 fn conversation_message_model(
@@ -1412,6 +1575,7 @@ const fn surface_id(surface: SurfaceId) -> &'static str {
         SurfaceId::Terminal => "terminal",
         SurfaceId::Preview => "preview",
         SurfaceId::Activity => "activity",
+        SurfaceId::Trajectory => "trajectory",
         SurfaceId::Approvals => "approvals",
     }
 }
@@ -1425,6 +1589,7 @@ fn surface_from_id(surface: &str) -> Option<SurfaceId> {
         "terminal" => Some(SurfaceId::Terminal),
         "preview" => Some(SurfaceId::Preview),
         "activity" => Some(SurfaceId::Activity),
+        "trajectory" => Some(SurfaceId::Trajectory),
         "approvals" => Some(SurfaceId::Approvals),
         _ => None,
     }
@@ -1830,6 +1995,34 @@ where
         });
     });
 
+    let trajectory_dispatch = dispatch.clone();
+    let trajectory_window = window.as_weak();
+    window.on_toggle_trajectory(move || {
+        let Some(window) = trajectory_window.upgrade() else {
+            return;
+        };
+        trajectory_dispatch(AppCommand::SetSurfaceVisibility {
+            surface: SurfaceId::Trajectory,
+            visible: window.get_trajectory_open(),
+        });
+    });
+
+    let refresh_trajectory_dispatch = dispatch.clone();
+    let refresh_trajectory_window = window.as_weak();
+    window.on_refresh_trajectory(move |session_id| {
+        let Some(window) = refresh_trajectory_window.upgrade() else {
+            return;
+        };
+        let Ok(session_id) = session_id.trim().parse::<SessionId>() else {
+            window.set_trajectory_loading(false);
+            window.set_trajectory_error("Invalid session identifier.".into());
+            return;
+        };
+        refresh_trajectory_dispatch(AppCommand::LoadTrajectory {
+            session_id: Some(session_id),
+        });
+    });
+
     let activity_dispatch = dispatch.clone();
     let activity_window = window.as_weak();
     window.on_toggle_activity(move || {
@@ -1941,6 +2134,32 @@ mod tests {
         assert_eq!(model.row_data(0).expect("first step").state, "complete");
         assert_eq!(model.row_data(1).expect("second step").state, "active");
         assert_eq!(model.row_data(2).expect("third step").state, "upcoming");
+    }
+
+    #[test]
+    fn trajectory_projection_preserves_exact_factual_labels() {
+        let session_id = SessionId::new_v4();
+        let snapshot = TrajectorySnapshot {
+            session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 4,
+                run_id: Some(RunId::new_v4()),
+                kind: TrajectoryKind::Usage,
+                state: TrajectoryState::Neutral,
+                title: "Model usage recorded".into(),
+                detail: "deepseek | deepseek-chat | 12 input | 7 output | 19 total".into(),
+                occurred_at: now(),
+            }],
+            truncated: false,
+        };
+
+        let model = trajectory_item_model(&snapshot);
+        let row = model.row_data(0).expect("trajectory row");
+        assert_eq!(row.kind, "usage");
+        assert_eq!(row.state, "neutral");
+        assert_eq!(row.title, "Model usage recorded");
+        assert!(row.detail.contains("12 input"));
+        assert!(row.timestamp.ends_with("UTC"));
     }
 
     #[test]
@@ -2303,6 +2522,8 @@ mod tests {
         ui.window().invoke_toggle_activity();
         ui.window().set_inspector_open(true);
         ui.window().invoke_toggle_inspector();
+        ui.window().set_trajectory_open(true);
+        ui.window().invoke_toggle_trajectory();
         assert!(matches!(
             commands.borrow().first(),
             Some(AppCommand::SetSurfaceVisibility {
@@ -2314,6 +2535,13 @@ mod tests {
             commands.borrow().get(1),
             Some(AppCommand::SetSurfaceVisibility {
                 surface: SurfaceId::Changes,
+                visible: true,
+            })
+        ));
+        assert!(matches!(
+            commands.borrow().get(2),
+            Some(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Trajectory,
                 visible: true,
             })
         ));
@@ -2354,6 +2582,55 @@ mod tests {
             .expect("run id");
         ui.window()
             .set_active_session_id(active_session_id.to_string().into());
+        ui.apply_event(&AppEvent::TrajectorySnapshotLoaded(TrajectorySnapshot {
+            session_id: other_session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 1,
+                run_id: Some(run_id),
+                kind: TrajectoryKind::Lifecycle,
+                state: TrajectoryState::Active,
+                title: "Background run".into(),
+                detail: "Must stay hidden".into(),
+                occurred_at: now(),
+            }],
+            truncated: false,
+        }));
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 0);
+        ui.apply_event(&AppEvent::TrajectorySnapshotLoaded(TrajectorySnapshot {
+            session_id: active_session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 2,
+                run_id: Some(run_id),
+                kind: TrajectoryKind::Lifecycle,
+                state: TrajectoryState::Active,
+                title: "Run started".into(),
+                detail: "Run lifecycle changed.".into(),
+                occurred_at: now(),
+            }],
+            truncated: true,
+        }));
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 1);
+        assert_eq!(ui.window().get_trajectory_summary(), "1 durable record");
+        assert!(ui.window().get_trajectory_truncated());
+        let recorded_entry = argentum_domain::TrajectoryEntry {
+            sequence: 3,
+            run_id: Some(run_id),
+            kind: TrajectoryKind::Verification,
+            state: TrajectoryState::Success,
+            title: "Verification passed".into(),
+            detail: "Exact check result.".into(),
+            occurred_at: now(),
+        };
+        ui.apply_event(&AppEvent::TrajectoryEntryRecorded {
+            session_id: active_session_id,
+            entry: recorded_entry.clone(),
+        });
+        ui.apply_event(&AppEvent::TrajectoryEntryRecorded {
+            session_id: active_session_id,
+            entry: recorded_entry,
+        });
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 2);
+        assert_eq!(ui.window().get_trajectory_summary(), "2 durable records");
         ui.window().set_active_run_id(SharedString::default());
         ui.window().set_plan_steps(empty_plan_model());
         ui.window().set_user_prompt(SharedString::default());

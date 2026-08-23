@@ -11,6 +11,7 @@ use argentum_domain::{
 use directories::ProjectDirs;
 use rusqlite::{params, Connection, OptionalExtension};
 use thiserror::Error;
+use time::OffsetDateTime;
 use url::Url;
 
 #[derive(Debug, Error)]
@@ -40,6 +41,7 @@ pub const MAX_CONVERSATION_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_GOAL_OBJECTIVE_BYTES: usize = 16 * 1024;
 pub const MAX_GOAL_NEXT_ACTION_BYTES: usize = 4 * 1024;
 pub const MAX_GOAL_VERIFICATION_HISTORY: usize = 64;
+pub const MAX_SESSION_EVENT_WINDOW: usize = 256;
 const MAX_GOAL_TOKEN_BUDGET: u64 = 10_000_000;
 const MAX_GOAL_TOOL_BUDGET: u32 = 100_000;
 const MAX_GOAL_TIME_BUDGET_SECONDS: u64 = 7 * 24 * 60 * 60;
@@ -51,6 +53,20 @@ pub struct EventScope {
     pub project_id: ProjectId,
     pub session_id: Option<SessionId>,
     pub run_id: Option<RunId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredEventRecord {
+    pub sequence: u64,
+    pub occurred_at: OffsetDateTime,
+    pub run_id: Option<RunId>,
+    pub event: AppEvent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEventWindow {
+    pub records: Vec<StoredEventRecord>,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +131,7 @@ impl Store {
 
     pub fn append_event(&self, event: &AppEvent) -> Result<(), StoreError> {
         self.append_event_values(None, None, None, None, event)
+            .map(|_| ())
     }
 
     pub fn append_event_scoped(
@@ -122,6 +139,21 @@ impl Store {
         scope: &EventScope,
         event: &AppEvent,
     ) -> Result<(), StoreError> {
+        self.append_event_values(
+            Some(&scope.workspace_key),
+            Some(scope.project_id),
+            scope.session_id,
+            scope.run_id,
+            event,
+        )
+        .map(|_| ())
+    }
+
+    pub fn append_event_scoped_record(
+        &self,
+        scope: &EventScope,
+        event: &AppEvent,
+    ) -> Result<StoredEventRecord, StoreError> {
         self.append_event_values(
             Some(&scope.workspace_key),
             Some(scope.project_id),
@@ -138,19 +170,25 @@ impl Store {
         session_id: Option<SessionId>,
         run_id: Option<RunId>,
         event: &AppEvent,
-    ) -> Result<(), StoreError> {
+    ) -> Result<StoredEventRecord, StoreError> {
         let connection = self
             .connection
             .lock()
             .map_err(|_| StoreError::LockPoisoned)?;
-        append_event_on(
+        let (sequence, occurred_at) = append_event_on(
             &connection,
             workspace_key,
             project_id,
             session_id,
             run_id,
             event,
-        )
+        )?;
+        Ok(StoredEventRecord {
+            sequence,
+            occurred_at,
+            run_id,
+            event: event.clone(),
+        })
     }
 
     pub fn events(&self) -> Result<Vec<AppEvent>, StoreError> {
@@ -187,6 +225,82 @@ impl Store {
             events.push(serde_json::from_str(&row?)?);
         }
         Ok(events)
+    }
+
+    pub fn session_event_window(
+        &self,
+        project_id: ProjectId,
+        session_id: SessionId,
+        limit: usize,
+    ) -> Result<SessionEventWindow, StoreError> {
+        if limit == 0 || limit > MAX_SESSION_EVENT_WINDOW {
+            return Err(StoreError::InvalidRecord(
+                "session event window limit is invalid".into(),
+            ));
+        }
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let belongs_to_project = connection.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sessions WHERE id = ?1 AND project_id = ?2
+             )",
+            params![session_id.to_string(), project_id.to_string()],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !belongs_to_project {
+            return Err(StoreError::InvalidRecord(
+                "session does not belong to the current project".into(),
+            ));
+        }
+
+        let row_limit = i64::try_from(limit + 1).map_err(|_| {
+            StoreError::InvalidRecord("session event window limit is invalid".into())
+        })?;
+        let mut statement = connection.prepare(
+            "SELECT id, created_at, run_id, payload
+             FROM event_log
+             WHERE project_id = ?1 AND session_id = ?2
+             ORDER BY id DESC
+             LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![project_id.to_string(), session_id.to_string(), row_limit],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
+        )?;
+        let mut records = Vec::with_capacity(limit + 1);
+        for row in rows {
+            let (sequence, created_at, run_id, payload) = row?;
+            let sequence = u64::try_from(sequence)
+                .map_err(|_| StoreError::InvalidRecord("event sequence is invalid".into()))?;
+            let occurred_at = OffsetDateTime::from_unix_timestamp(created_at)
+                .map_err(|_| StoreError::InvalidRecord("event timestamp is invalid".into()))?;
+            let run_id = run_id
+                .map(|value| {
+                    value
+                        .parse()
+                        .map_err(|_| StoreError::InvalidRecord("event run id is invalid".into()))
+                })
+                .transpose()?;
+            records.push(StoredEventRecord {
+                sequence,
+                occurred_at,
+                run_id,
+                event: serde_json::from_str(&payload)?,
+            });
+        }
+        let truncated = records.len() > limit;
+        records.truncate(limit);
+        records.reverse();
+        Ok(SessionEventWindow { records, truncated })
     }
 
     pub fn resolve_workspace(
@@ -1505,8 +1619,9 @@ fn append_event_on(
     session_id: Option<SessionId>,
     run_id: Option<RunId>,
     event: &AppEvent,
-) -> Result<(), StoreError> {
+) -> Result<(u64, OffsetDateTime), StoreError> {
     let payload = serde_json::to_string(event)?;
+    let occurred_at = now();
     connection.execute(
         "INSERT INTO event_log (
             event_type, created_at, payload, payload_version,
@@ -1514,7 +1629,7 @@ fn append_event_on(
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             event.kind(),
-            now().unix_timestamp(),
+            occurred_at.unix_timestamp(),
             payload,
             EVENT_PAYLOAD_VERSION,
             workspace_key,
@@ -1523,7 +1638,9 @@ fn append_event_on(
             run_id.map(|value| value.to_string()),
         ],
     )?;
-    Ok(())
+    let sequence = u64::try_from(connection.last_insert_rowid())
+        .map_err(|_| StoreError::InvalidRecord("event sequence is invalid".into()))?;
+    Ok((sequence, occurred_at))
 }
 
 fn load_sessions(
@@ -1588,7 +1705,7 @@ fn ensure_column(
 mod tests {
     use std::collections::BTreeMap;
 
-    use argentum_domain::{AppEvent, LayoutProfile};
+    use argentum_domain::{AppEvent, LayoutProfile, TaskLifecycle};
 
     use super::*;
 
@@ -1714,6 +1831,67 @@ mod tests {
             .expect("right events")
             .is_empty());
         assert_ne!(left.snapshot.project.id, right.snapshot.project.id);
+    }
+
+    #[test]
+    fn session_event_windows_are_bounded_ordered_and_project_scoped() {
+        let directory = tempfile::tempdir().expect("directory");
+        let left_root = directory.path().join("left");
+        let right_root = directory.path().join("right");
+        std::fs::create_dir(&left_root).expect("left workspace");
+        std::fs::create_dir(&right_root).expect("right workspace");
+        let store = Store::open_in_memory().expect("store");
+        let left = store.resolve_workspace(&left_root).expect("left workspace");
+        let right = store
+            .resolve_workspace(&right_root)
+            .expect("right workspace");
+        let session_id = left.snapshot.active_session_id.expect("left session");
+        let run_id = RunId::new_v4();
+        let scope = EventScope {
+            workspace_key: left.workspace_key.clone(),
+            project_id: left.snapshot.project.id,
+            session_id: Some(session_id),
+            run_id: Some(run_id),
+        };
+        for lifecycle in [
+            TaskLifecycle::Planning,
+            TaskLifecycle::Running,
+            TaskLifecycle::Complete,
+        ] {
+            store
+                .append_event_scoped(&scope, &AppEvent::RunStatusChanged { run_id, lifecycle })
+                .expect("scoped event");
+        }
+
+        let window = store
+            .session_event_window(left.snapshot.project.id, session_id, 2)
+            .expect("event window");
+        assert!(window.truncated);
+        assert_eq!(window.records.len(), 2);
+        assert!(window.records[0].sequence < window.records[1].sequence);
+        assert!(matches!(
+            window.records[0].event,
+            AppEvent::RunStatusChanged {
+                lifecycle: TaskLifecycle::Running,
+                ..
+            }
+        ));
+        assert!(matches!(
+            window.records[1].event,
+            AppEvent::RunStatusChanged {
+                lifecycle: TaskLifecycle::Complete,
+                ..
+            }
+        ));
+        assert!(matches!(
+            store.session_event_window(left.snapshot.project.id, session_id, 0),
+            Err(StoreError::InvalidRecord(_))
+        ));
+        let right_session = right.snapshot.active_session_id.expect("right session");
+        assert!(matches!(
+            store.session_event_window(left.snapshot.project.id, right_session, 2),
+            Err(StoreError::InvalidRecord(_))
+        ));
     }
 
     #[test]

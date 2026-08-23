@@ -4,7 +4,17 @@ export component AgIcon inherits Rectangle {
     in property <string> name;
     in property <color> tint: AgTheme.silver-400;
     in property <length> size: 18px;
-    private property <bool> valid-svg-name: root.name == "plus"
+    private property <bool> valid-svg-name: root.name == "new-task"
+        || root.name == "sessions"
+        || root.name == "plan"
+        || root.name == "trajectory"
+        || root.name == "changes"
+        || root.name == "inspector"
+        || root.name == "provider"
+        || root.name == "approval"
+        || root.name == "run"
+        || root.name == "settings"
+        || root.name == "plus"
         || root.name == "search"
         || root.name == "menu"
         || root.name == "close"
@@ -30,6 +40,7 @@ export component AgIcon inherits Rectangle {
         || root.name == "diff"
         || root.name == "verify"
         || root.name == "motion"
+        || root.name == "timeline"
         || root.name == "alert";
 
     width: root.size;
@@ -41,18 +52,28 @@ export component AgIcon inherits Rectangle {
         y: 0px;
         width: parent.width;
         height: parent.height;
-        source: root.name == "plus" ? @image-url("../assets/icons/plus.svg")
-            : (root.name == "search" ? @image-url("../assets/icons/search.svg")
+        source: root.name == "new-task" ? @image-url("../assets/icons/lucide/square-pen.svg")
+            : (root.name == "sessions" ? @image-url("../assets/icons/lucide/message-square.svg")
+            : (root.name == "plan" ? @image-url("../assets/icons/lucide/list-checks.svg")
+            : (root.name == "trajectory" ? @image-url("../assets/icons/lucide/git-branch.svg")
+            : (root.name == "changes" ? @image-url("../assets/icons/lucide/file-diff.svg")
+            : (root.name == "inspector" ? @image-url("../assets/icons/lucide/panel-right.svg")
+            : (root.name == "provider" ? @image-url("../assets/icons/lucide/server.svg")
+            : (root.name == "approval" ? @image-url("../assets/icons/lucide/shield-check.svg")
+            : (root.name == "run" ? @image-url("../assets/icons/lucide/play.svg")
+            : (root.name == "settings" ? @image-url("../assets/icons/lucide/sliders-horizontal.svg")
+            : (root.name == "plus" ? @image-url("../assets/icons/plus.svg")
+            : (root.name == "search" ? @image-url("../assets/icons/lucide/search.svg")
             : (root.name == "menu" ? @image-url("../assets/icons/menu.svg")
             : (root.name == "close" ? @image-url("../assets/icons/close.svg")
-            : (root.name == "more" ? @image-url("../assets/icons/more.svg")
-            : (root.name == "activity" ? @image-url("../assets/icons/activity.svg")
-            : (root.name == "workspace" ? @image-url("../assets/icons/workspace.svg")
+            : (root.name == "more" ? @image-url("../assets/icons/lucide/ellipsis.svg")
+            : (root.name == "activity" ? @image-url("../assets/icons/lucide/activity.svg")
+            : (root.name == "workspace" ? @image-url("../assets/icons/lucide/folder.svg")
             : (root.name == "folder" ? @image-url("../assets/icons/folder.svg")
             : (root.name == "file" ? @image-url("../assets/icons/file.svg")
             : (root.name == "check" ? @image-url("../assets/icons/check.svg")
             : (root.name == "play" ? @image-url("../assets/icons/play.svg")
-            : (root.name == "stop" ? @image-url("../assets/icons/stop.svg")
+            : (root.name == "stop" ? @image-url("../assets/icons/lucide/square.svg")
             : (root.name == "chevron-right" ? @image-url("../assets/icons/chevron-right.svg")
             : (root.name == "chevron-down" ? @image-url("../assets/icons/chevron-down.svg")
             : (root.name == "lock" ? @image-url("../assets/icons/lock.svg")
@@ -62,12 +83,13 @@ export component AgIcon inherits Rectangle {
             : (root.name == "panel" ? @image-url("../assets/icons/panel.svg")
             : (root.name == "terminal" ? @image-url("../assets/icons/terminal.svg")
             : (root.name == "session" ? @image-url("../assets/icons/session.svg")
-            : (root.name == "model" ? @image-url("../assets/icons/model.svg")
+            : (root.name == "model" ? @image-url("../assets/icons/lucide/cpu.svg")
             : (root.name == "review" ? @image-url("../assets/icons/review.svg")
             : (root.name == "diff" ? @image-url("../assets/icons/diff.svg")
             : (root.name == "verify" ? @image-url("../assets/icons/verify.svg")
             : (root.name == "motion" ? @image-url("../assets/icons/motion.svg")
-            : @image-url("../assets/icons/alert.svg"))))))))))))))))))))))))));
+            : (root.name == "timeline" ? @image-url("../assets/icons/timeline.svg")
+            : @image-url("../assets/icons/alert.svg")))))))))))))))))))))))))))))))))))));
         colorize: root.tint;
         image-fit: contain;
     }

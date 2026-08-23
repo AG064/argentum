@@ -1,5 +1,4 @@
 import { AgTheme } from "../tokens.slint";
-import { BrandMark } from "brand.slint";
 import { ActionButton, IconButton } from "buttons.slint";
 import { ContextButton } from "surfaces.slint";
 
@@ -23,18 +22,6 @@ export component MobileTopBar inherits Rectangle {
         padding-right: AgTheme.space-2;
         spacing: AgTheme.space-1;
         alignment: stretch;
-
-        Rectangle {
-            width: AgTheme.mobile-control-height;
-            background: transparent;
-
-            BrandMark {
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                size: AgTheme.brand-mark-sm;
-                accessible-name: "Argentum";
-            }
-        }
 
         Rectangle {
             horizontal-stretch: 1;
@@ -158,7 +145,7 @@ export component MobileContextBar inherits Rectangle {
         }
 
         ContextButton {
-            icon: "folder";
+            icon: "workspace";
             detail: root.workspace-label;
             target-height: AgTheme.mobile-control-height;
             reduced-motion: root.reduced-motion;
@@ -264,7 +251,7 @@ export component MobileComposer inherits Rectangle {
         }
 
         IconButton {
-            glyph: "folder";
+            glyph: "workspace";
             hint: "Open workspace context";
             target-size: AgTheme.mobile-control-height;
             reduced-motion: root.reduced-motion;
@@ -273,7 +260,7 @@ export component MobileComposer inherits Rectangle {
 
         ActionButton {
             label: root.approval-pending ? "Review" : (root.submission-pending ? "Starting" : (root.running ? "Stop" : "Start"));
-            icon: root.running ? "stop" : "play";
+            icon: root.running ? "stop" : "run";
             enabled: !root.approval-pending && !root.submission-pending && (root.running || root.draft != "");
             primary: !root.running;
             fill: root.running ? AgTheme.raised : AgTheme.primary-fill;

@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 argentum-domain.workspace = true
 slint.workspace = true
+time.workspace = true
 tracing.workspace = true
 url.workspace = true
 

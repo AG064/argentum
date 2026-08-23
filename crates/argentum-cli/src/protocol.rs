@@ -325,6 +325,10 @@ mod tests {
                 },
                 "set_harness_capability_enabled",
             ),
+            (
+                AppCommand::LoadTrajectory { session_id: None },
+                "load_trajectory",
+            ),
         ];
 
         for (index, (command, expected_kind)) in cases.into_iter().enumerate() {

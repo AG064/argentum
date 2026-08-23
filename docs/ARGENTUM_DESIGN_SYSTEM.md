@@ -497,6 +497,21 @@ attention states. A static icon is preferred for navigation and decoration.
   lose clarity at the 16 px inline size;
 - every icon button has an accessible name and visible focus state.
 
+The candidate generalized icon system uses pinned, unmodified Lucide SVGs under
+`ui/assets/icons/lucide`. Exact upstream names, commit, licenses, and SHA-256
+values are recorded in `ui/assets/icons/catalog.json`. These candidates remain
+separate from the production `AgIcon` mapping until they receive visual
+acceptance in the native gallery. Run the gallery with:
+
+```powershell
+cargo run --locked -p argentum-icon-gallery
+```
+
+The gallery renders the real desktop and mobile anchors with rest, hover,
+focus, selected, and attention treatments. It is the icon acceptance surface,
+not an image-generated mockup. Validate source integrity with
+`scripts/validate-icon-system.ps1`.
+
 ## Accessibility
 
 These requirements are release acceptance criteria. Draft status does not imply

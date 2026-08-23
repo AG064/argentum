@@ -7,7 +7,8 @@ use argentum_domain::{
     GoalLifecycle, HarnessExecutionPolicy, HarnessReadiness, HarnessSnapshot, LayoutProfile,
     ModelUsage as DomainModelUsage, PlanStep, ProviderKind, ProviderModel as DomainProviderModel,
     ProviderProfile, ProviderStatus, Run, RunId, SessionId, Task, TaskLifecycle, ToolResultState,
-    ToolTrace, WorkspaceSnapshot,
+    ToolTrace, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot, TrajectoryState,
+    WorkspaceSnapshot,
 };
 use argentum_harness::{HarnessError, HarnessFacts, HarnessRegistry};
 use argentum_providers::{
@@ -16,7 +17,7 @@ use argentum_providers::{
     ProviderRegistry,
 };
 use argentum_security::{ApprovalGrant, SecurityError};
-use argentum_store::{EventScope, Store, StoreError};
+use argentum_store::{EventScope, Store, StoreError, StoredEventRecord};
 use argentum_tools::{ToolContext, ToolError, ToolRegistry, ToolRequest, ToolResult};
 use argentum_workspaces::WorkspaceManager;
 use serde::Deserialize;
@@ -25,6 +26,9 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, warn};
 use uuid::Uuid;
+
+const TRAJECTORY_ENTRY_LIMIT: usize = 200;
+const TRAJECTORY_TEXT_LIMIT: usize = 320;
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -310,6 +314,9 @@ impl RuntimeService {
         if let Some(session_id) = snapshot.active_session_id {
             self.publish_conversation_snapshot(session_id)?;
             self.publish_goal_snapshot(session_id)?;
+            if self.trajectory_visible()? {
+                self.publish_trajectory_snapshot(session_id)?;
+            }
         }
         self.publish_active_runs_snapshot()?;
         Ok(snapshot)
@@ -361,6 +368,33 @@ impl RuntimeService {
         Ok(self
             .store
             .conversation_snapshot(self.project_id, session_id)?)
+    }
+
+    pub fn trajectory_snapshot(
+        &self,
+        session_id: SessionId,
+    ) -> Result<TrajectorySnapshot, RuntimeError> {
+        let window =
+            self.store
+                .session_event_window(self.project_id, session_id, TRAJECTORY_ENTRY_LIMIT)?;
+        Ok(TrajectorySnapshot {
+            session_id,
+            entries: window
+                .records
+                .into_iter()
+                .filter_map(trajectory_entry_from_record)
+                .collect(),
+            truncated: window.truncated,
+        })
+    }
+
+    fn publish_trajectory_snapshot(
+        &self,
+        session_id: SessionId,
+    ) -> Result<TrajectorySnapshot, RuntimeError> {
+        let snapshot = self.trajectory_snapshot(session_id)?;
+        self.publish_transient(AppEvent::TrajectorySnapshotLoaded(snapshot.clone()));
+        Ok(snapshot)
     }
 
     pub fn goal(&self) -> Result<Option<Goal>, RuntimeError> {
@@ -420,6 +454,9 @@ impl RuntimeService {
                 self.publish_transient(AppEvent::WorkspaceStateLoaded(snapshot));
                 self.publish_conversation_snapshot(session_id)?;
                 self.publish_goal_snapshot(session_id)?;
+                if self.trajectory_visible()? {
+                    self.publish_trajectory_snapshot(session_id)?;
+                }
                 Ok(())
             }
             AppCommand::SetGoal {
@@ -485,6 +522,10 @@ impl RuntimeService {
                         .set_capability_enabled(&policy, &capability_id, enabled)?;
                 self.save_and_publish_execution_policy(policy)
             }
+            AppCommand::LoadTrajectory { session_id } => {
+                self.publish_trajectory_snapshot(session_id.unwrap_or_else(|| self.session_id()))?;
+                Ok(())
+            }
             AppCommand::SubmitTask { prompt } => self.submit_task(prompt).await,
             AppCommand::RequestTool { request } => self.request_tool(request).await,
             AppCommand::CancelRun { run_id } => self.cancel(run_id),
@@ -521,9 +562,26 @@ impl RuntimeService {
 
     fn save_and_publish_harness_layout(&self, profile: LayoutProfile) -> Result<(), RuntimeError> {
         self.store.save_layout(&self.layout_key, &profile)?;
+        let trajectory_visible = profile
+            .visible
+            .get(&argentum_domain::SurfaceId::Trajectory)
+            .copied()
+            .unwrap_or(false);
         self.publish_transient(AppEvent::LayoutChanged(profile));
         self.publish_harness_snapshot()?;
+        if trajectory_visible {
+            self.publish_trajectory_snapshot(self.session_id())?;
+        }
         Ok(())
+    }
+
+    fn trajectory_visible(&self) -> Result<bool, RuntimeError> {
+        Ok(self
+            .load_harness_layout()?
+            .visible
+            .get(&argentum_domain::SurfaceId::Trajectory)
+            .copied()
+            .unwrap_or(false))
     }
 
     fn load_execution_policy(&self) -> Result<HarnessExecutionPolicy, RuntimeError> {
@@ -1040,7 +1098,7 @@ impl RuntimeService {
                 status: ConversationMessageStatus::Complete,
                 created_at: now(),
             })?;
-        self.emit(AppEvent::TaskAccepted(task))?;
+        self.emit_scoped(AppEvent::TaskAccepted(task), Some(session_id), Some(run_id))?;
         self.emit(AppEvent::RunStatusChanged {
             run_id,
             lifecycle: TaskLifecycle::Planning,
@@ -1378,13 +1436,16 @@ impl RuntimeService {
                         .or(self.model_context_window(&context.profile_id, &context.model)?),
                 };
                 stream.latest_usage = Some(usage.clone());
-                self.publish_transient(AppEvent::ModelUsageUpdated {
-                    session_id: context.session_id,
-                    run_id: context.run_id,
-                    profile_id: context.profile_id.clone(),
-                    model: context.model.clone(),
-                    usage,
-                });
+                self.emit_for_run(
+                    AppEvent::ModelUsageUpdated {
+                        session_id: context.session_id,
+                        run_id: context.run_id,
+                        profile_id: context.profile_id.clone(),
+                        model: context.model.clone(),
+                        usage,
+                    },
+                    context.run_id,
+                )?;
             }
             ProviderEvent::ToolCall(call) if !round.completed => {
                 if round.tool_calls.len() >= MAX_MODEL_TOOL_CALLS_PER_ROUND {
@@ -1743,7 +1804,7 @@ impl RuntimeService {
         session_id: Option<SessionId>,
         run_id: Option<RunId>,
     ) -> Result<(), RuntimeError> {
-        self.store.append_event_scoped(
+        let stored = self.store.append_event_scoped_record(
             &EventScope {
                 workspace_key: self.workspace_key.clone(),
                 project_id: self.project_id,
@@ -1753,6 +1814,11 @@ impl RuntimeService {
             &event,
         )?;
         let _ = self.events.send(event);
+        if let Some(session_id) = session_id {
+            if let Some(entry) = trajectory_entry_from_record(stored) {
+                self.publish_transient(AppEvent::TrajectoryEntryRecorded { session_id, entry });
+            }
+        }
         Ok(())
     }
 
@@ -2443,6 +2509,223 @@ fn provider_catalog_failure_detail(label: &str, error_value: &ProviderError) -> 
     }
 }
 
+fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryEntry> {
+    let (kind, state, title, detail) = match record.event {
+        AppEvent::TaskAccepted(_) => (
+            TrajectoryKind::Task,
+            TrajectoryState::Active,
+            "Task accepted".to_owned(),
+            "Prompt accepted and stored for this session.".to_owned(),
+        ),
+        AppEvent::PlanUpdated { steps, .. } => {
+            let complete = steps.iter().filter(|step| step.complete).count();
+            let blocked = steps.iter().filter(|step| step.blocked).count();
+            let state = if blocked > 0 {
+                TrajectoryState::Attention
+            } else if !steps.is_empty() && complete == steps.len() {
+                TrajectoryState::Success
+            } else {
+                TrajectoryState::Active
+            };
+            (
+                TrajectoryKind::Plan,
+                state,
+                "Plan updated".to_owned(),
+                format!(
+                    "{} stages, {} complete, {} blocked.",
+                    steps.len(),
+                    complete,
+                    blocked
+                ),
+            )
+        }
+        AppEvent::RunStatusChanged { lifecycle, .. } => (
+            TrajectoryKind::Lifecycle,
+            trajectory_lifecycle_state(lifecycle),
+            lifecycle.label().to_owned(),
+            "Run lifecycle changed.".to_owned(),
+        ),
+        AppEvent::ModelUsageUpdated {
+            profile_id,
+            model,
+            usage,
+            ..
+        } => {
+            let context = usage
+                .context_window_tokens
+                .map_or_else(String::new, |limit| format!(" | {limit} token context"));
+            (
+                TrajectoryKind::Usage,
+                TrajectoryState::Neutral,
+                "Model usage recorded".to_owned(),
+                format!(
+                    "{} | {} | {} input | {} output | {} total{}",
+                    bounded_trajectory_text(&profile_id),
+                    bounded_trajectory_text(&model),
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.total_tokens,
+                    context
+                ),
+            )
+        }
+        AppEvent::ToolStarted(trace) => (
+            TrajectoryKind::Tool,
+            TrajectoryState::Active,
+            format!("{} started", bounded_trajectory_text(&trace.tool_id)),
+            trajectory_target_detail(&trace.summary),
+        ),
+        AppEvent::ToolFinished(trace) => {
+            let (label, state) = match trace.result {
+                ToolResultState::Running => ("running", TrajectoryState::Active),
+                ToolResultState::Succeeded => ("completed", TrajectoryState::Success),
+                ToolResultState::Failed => ("failed", TrajectoryState::Error),
+                ToolResultState::Cancelled => ("cancelled", TrajectoryState::Cancelled),
+            };
+            let duration = trace
+                .duration_ms
+                .map_or_else(String::new, |duration| format!(" | {duration} ms"));
+            (
+                TrajectoryKind::Tool,
+                state,
+                format!("{} {label}", bounded_trajectory_text(&trace.tool_id)),
+                format!("{}{duration}", trajectory_target_detail(&trace.summary)),
+            )
+        }
+        AppEvent::ApprovalRequested(approval) => (
+            TrajectoryKind::Approval,
+            TrajectoryState::Attention,
+            "Approval requested".to_owned(),
+            format!(
+                "{} | {}",
+                bounded_trajectory_text(&approval.action),
+                trajectory_target_detail(&approval.target)
+            ),
+        ),
+        AppEvent::ApprovalResolved { approved, .. } => (
+            TrajectoryKind::Approval,
+            if approved {
+                TrajectoryState::Success
+            } else {
+                TrajectoryState::Cancelled
+            },
+            if approved {
+                "Approval granted".to_owned()
+            } else {
+                "Approval rejected".to_owned()
+            },
+            "One-time decision recorded.".to_owned(),
+        ),
+        AppEvent::ChangeSetReady(change_set) => (
+            TrajectoryKind::Change,
+            if change_set.files_changed > 0 {
+                TrajectoryState::Attention
+            } else {
+                TrajectoryState::Neutral
+            },
+            "Changes recorded".to_owned(),
+            format!(
+                "{} files | +{} | -{}",
+                change_set.files_changed, change_set.additions, change_set.removals
+            ),
+        ),
+        AppEvent::VerificationCompleted {
+            passed, summary, ..
+        } => (
+            TrajectoryKind::Verification,
+            if passed {
+                TrajectoryState::Success
+            } else {
+                TrajectoryState::Error
+            },
+            if passed {
+                "Verification passed".to_owned()
+            } else {
+                "Verification failed".to_owned()
+            },
+            bounded_trajectory_text(&summary),
+        ),
+        AppEvent::RunError { message, .. } => (
+            TrajectoryKind::Error,
+            TrajectoryState::Error,
+            "Run error".to_owned(),
+            bounded_trajectory_text(&message),
+        ),
+        AppEvent::WorkspaceStateLoaded(_)
+        | AppEvent::ConversationSnapshotLoaded(_)
+        | AppEvent::GoalSnapshotLoaded { .. }
+        | AppEvent::ActiveRunsSnapshot { .. }
+        | AppEvent::ProjectCreated(_)
+        | AppEvent::SessionCreated(_)
+        | AppEvent::AssistantDelta { .. }
+        | AppEvent::AssistantReasoningDelta { .. }
+        | AppEvent::ProviderStatus(_)
+        | AppEvent::ProviderProfilesSnapshot { .. }
+        | AppEvent::ProviderModelsSnapshot { .. }
+        | AppEvent::TrajectoryEntryRecorded { .. }
+        | AppEvent::TrajectorySnapshotLoaded(_)
+        | AppEvent::HarnessSnapshotLoaded(_)
+        | AppEvent::LayoutChanged(_)
+        | AppEvent::Error { .. } => return None,
+    };
+    Some(TrajectoryEntry {
+        sequence: record.sequence,
+        run_id: record.run_id,
+        kind,
+        state,
+        title: bounded_trajectory_text(&title),
+        detail: bounded_trajectory_text(&detail),
+        occurred_at: record.occurred_at,
+    })
+}
+
+fn trajectory_lifecycle_state(lifecycle: TaskLifecycle) -> TrajectoryState {
+    match lifecycle {
+        TaskLifecycle::Complete => TrajectoryState::Success,
+        TaskLifecycle::Cancelled => TrajectoryState::Cancelled,
+        TaskLifecycle::Failed => TrajectoryState::Error,
+        TaskLifecycle::WaitingForApproval | TaskLifecycle::Paused => TrajectoryState::Attention,
+        TaskLifecycle::Draft
+        | TaskLifecycle::Queued
+        | TaskLifecycle::Planning
+        | TaskLifecycle::Running
+        | TaskLifecycle::Reviewing
+        | TaskLifecycle::Verifying => TrajectoryState::Active,
+    }
+}
+
+fn trajectory_target_detail(value: &str) -> String {
+    let value = bounded_trajectory_text(value);
+    if value.is_empty() {
+        "Target not recorded".to_owned()
+    } else {
+        value
+    }
+}
+
+fn bounded_trajectory_text(value: &str) -> String {
+    let mut output = String::with_capacity(value.len().min(TRAJECTORY_TEXT_LIMIT));
+    let mut previous_space = false;
+    let mut character_count = 0;
+    for character in value.trim().chars() {
+        if character_count >= TRAJECTORY_TEXT_LIMIT {
+            break;
+        }
+        if character.is_control() || character.is_whitespace() {
+            if !previous_space && !output.is_empty() {
+                output.push(' ');
+                previous_space = true;
+                character_count += 1;
+            }
+        } else {
+            output.push(character);
+            previous_space = false;
+            character_count += 1;
+        }
+    }
+    output.trim_end().to_owned()
+}
+
 fn event_run_id(event: &AppEvent) -> Option<RunId> {
     match event {
         AppEvent::PlanUpdated { run_id, .. }
@@ -2466,6 +2749,8 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ProviderStatus(_)
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
+        | AppEvent::TrajectoryEntryRecorded { .. }
+        | AppEvent::TrajectorySnapshotLoaded(_)
         | AppEvent::HarnessSnapshotLoaded(_)
         | AppEvent::LayoutChanged(_)
         | AppEvent::Error { .. } => None,
@@ -2489,6 +2774,102 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
+
+    #[test]
+    fn trajectory_projection_is_bounded_factual_and_omits_private_stream_content() {
+        let session_id = SessionId::new_v4();
+        let run_id = RunId::new_v4();
+        let task = trajectory_entry_from_record(StoredEventRecord {
+            sequence: 1,
+            occurred_at: now(),
+            run_id: Some(run_id),
+            event: AppEvent::TaskAccepted(Task {
+                id: Uuid::new_v4(),
+                session_id,
+                prompt: "private prompt must not appear".into(),
+                lifecycle: TaskLifecycle::Queued,
+                created_at: now(),
+            }),
+        })
+        .expect("task trajectory");
+        assert_eq!(task.kind, TrajectoryKind::Task);
+        assert!(!task.detail.contains("private prompt"));
+
+        let reasoning = trajectory_entry_from_record(StoredEventRecord {
+            sequence: 2,
+            occurred_at: now(),
+            run_id: Some(run_id),
+            event: AppEvent::AssistantReasoningDelta {
+                run_id,
+                text: "private reasoning must not appear".into(),
+            },
+        });
+        assert!(reasoning.is_none());
+
+        let usage = trajectory_entry_from_record(StoredEventRecord {
+            sequence: 3,
+            occurred_at: now(),
+            run_id: Some(run_id),
+            event: AppEvent::ModelUsageUpdated {
+                session_id,
+                run_id,
+                profile_id: "deepseek".into(),
+                model: "deepseek-chat".into(),
+                usage: DomainModelUsage {
+                    input_tokens: 12,
+                    output_tokens: 7,
+                    total_tokens: 19,
+                    reasoning_tokens: None,
+                    cached_input_tokens: None,
+                    context_window_tokens: Some(65_536),
+                },
+            },
+        })
+        .expect("usage trajectory");
+        assert_eq!(usage.kind, TrajectoryKind::Usage);
+        assert!(usage.detail.contains("12 input"));
+        assert!(usage.detail.contains("65536 token context"));
+
+        let bounded = bounded_trajectory_text(&format!("{}\nsecret", "x".repeat(400)));
+        assert_eq!(bounded.chars().count(), TRAJECTORY_TEXT_LIMIT);
+        assert!(!bounded.contains('\n'));
+    }
+
+    #[test]
+    fn durable_events_publish_one_small_trajectory_update_even_when_hidden() {
+        let (runtime, mut events) = runtime_with_providers(ProviderRegistry::default());
+        let session_id = runtime.session_id();
+        let run_id = RunId::new_v4();
+        runtime
+            .emit_scoped(
+                AppEvent::RunStatusChanged {
+                    run_id,
+                    lifecycle: TaskLifecycle::Running,
+                },
+                Some(session_id),
+                Some(run_id),
+            )
+            .expect("durable event");
+
+        assert!(matches!(
+            events.try_recv().expect("original event"),
+            AppEvent::RunStatusChanged {
+                run_id: emitted_run_id,
+                lifecycle: TaskLifecycle::Running,
+            } if emitted_run_id == run_id
+        ));
+        assert!(matches!(
+            events.try_recv().expect("trajectory update"),
+            AppEvent::TrajectoryEntryRecorded {
+                session_id: emitted_session_id,
+                entry,
+            } if emitted_session_id == session_id
+                && entry.run_id == Some(run_id)
+                && entry.kind == TrajectoryKind::Lifecycle
+                && entry.state == TrajectoryState::Active
+        ));
+        assert!(events.try_recv().is_err());
+    }
 
     #[tokio::test]
     async fn publish_layout_restores_saved_surface_visibility() {
@@ -2777,6 +3158,14 @@ mod tests {
             AppEvent::ApprovalRequested(request) => request.id,
             event => panic!("unexpected event: {event:?}"),
         };
+        assert!(matches!(
+            events.recv().await.expect("approval trajectory"),
+            AppEvent::TrajectoryEntryRecorded {
+                entry,
+                ..
+            } if entry.kind == TrajectoryKind::Approval
+                && entry.state == TrajectoryState::Attention
+        ));
         let read_only = runtime
             .harness
             .apply_execution_profile(
@@ -2808,9 +3197,25 @@ mod tests {
             } if resolved == approval_id
         ));
         assert!(matches!(
+            events.recv().await.expect("resolution trajectory"),
+            AppEvent::TrajectoryEntryRecorded {
+                entry,
+                ..
+            } if entry.kind == TrajectoryKind::Approval
+                && entry.state == TrajectoryState::Cancelled
+        ));
+        assert!(matches!(
             events.recv().await.expect("cancelled trace"),
             AppEvent::ToolFinished(trace)
                 if trace.run_id == run_id && trace.result == ToolResultState::Cancelled
+        ));
+        assert!(matches!(
+            events.recv().await.expect("tool trajectory"),
+            AppEvent::TrajectoryEntryRecorded {
+                entry,
+                ..
+            } if entry.kind == TrajectoryKind::Tool
+                && entry.state == TrajectoryState::Cancelled
         ));
     }
 

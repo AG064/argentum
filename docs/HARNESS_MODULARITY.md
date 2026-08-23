@@ -20,10 +20,29 @@ Official reference material:
 - [DeepSeek Harness repository](https://github.com/deepseek-ai/deepseek-harness)
 - [DeepSeek Harness architecture](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)
 - [DeepSeek Harness web guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/index.md)
+- [Zagens runtime architecture](https://github.com/didclawapp-ai/zagens)
+- [DeepSeek agent integration catalog](https://github.com/deepseek-ai/awesome-deepseek-agent)
 
 DeepSeek Harness is currently a developer preview and warns that compatibility
 can break. Argentum therefore adopts the architectural lessons, not its package
 format or unstable APIs.
+
+Research was rechecked on 2026-08-18. The direct mapping is:
+
+| Public harness pattern | Argentum 0.1.0 interpretation |
+| --- | --- |
+| Replaceable plugin services | Typed Rust registrations with stable IDs and explicit owners |
+| Ordered profiles and bundles | Persisted presentation and execution profiles with deterministic resolution |
+| Durable session events | Project and session scoped SQLite facts used for restore and inspection |
+| Live agent and capability events | Transient streaming, provider, catalog, and active-run projections |
+| Session log as model context source | Only stored conversation records enter later model history |
+| Capability seams | Separate definition, provider, consumer, policy, and readiness facts |
+
+Argentum does not claim dynamic plugin parity in 0.1.0. Built-ins are statically
+linked for predictable latency and review. External modules remain unavailable
+until an isolated, bounded, revocable process protocol is implemented. Zagens
+and the wider DeepSeek agent catalog are comparison sources for replay,
+approval, CLI, and multi-client ergonomics. They are not copied dependencies.
 
 ## Product rules
 
@@ -160,8 +179,8 @@ The initial profiles change presentation only:
 | Focused | Quiet session work | Activity hidden, Changes hidden |
 | Standard | Default desktop work | Activity hidden, Changes hidden |
 | Review | Inspect the current result | Changes visible |
-| Trace | Inspect runtime events | Activity visible |
-| Full | Supervise work and review | Activity visible, Changes visible |
+| Trace | Inspect durable session facts | Trajectory visible |
+| Full | Supervise work and review | Activity visible, Trajectory visible, Changes visible |
 | Custom | Result of individual visibility changes | Exact saved visibility |
 
 Focused and Standard are deliberately close in the first slice because density
@@ -185,10 +204,10 @@ extensions, real diff review, and verification runners. They remain
 unavailable with reasons until their full configuration, security, lifecycle,
 error, and test paths exist.
 
-Current visible surfaces are Conversation, Plan, Activity, Changes summary, and
-approval. Files, Terminal, Preview, and full per-file Changes review remain
-unavailable. Approval visibility is lifecycle-driven and cannot be hidden while
-an action needs a decision.
+Current visible surfaces are Conversation, Plan, Activity, Trajectory, Changes
+summary, and approval. Files, Terminal, Preview, and full per-file Changes
+review remain unavailable. Approval visibility is lifecycle-driven and cannot
+be hidden while an action needs a decision.
 
 ## Event and context contract
 
@@ -204,7 +223,7 @@ provider reasoning can be shown when explicitly returned, but it is not added
 to later user messages. Provider usage is shown only when reported, and context
 limits are shown only when the provider or a verified catalog supplies one.
 
-The optional trajectory inspector may project:
+The target trajectory inspector may eventually project:
 
 - the exact input admitted to a turn, with secret fields redacted;
 - plan and lifecycle transitions;
@@ -215,6 +234,18 @@ The optional trajectory inspector may project:
 
 It must not expose credentials, hidden provider transport fields, fabricated
 chain-of-thought, or guessed token counts.
+
+The first 0.1.0 trajectory slice is narrower. It reads one bounded,
+project-and-session-scoped window from the durable event log and normalized
+assistant records. It shows only task acceptance, plan counts, lifecycle
+transitions, tool state, approval requests and decisions, run errors, exact
+change and verification summaries, and stored provider/model usage. It does not
+show prompt text, reasoning text, tool arguments, tool results, provider request
+bodies, or an inferred model context. A truncated snapshot says so explicitly.
+Live Activity remains a separate transient surface. Opening, refresh, restart,
+and lag recovery use a bounded trajectory snapshot. Each newly persisted fact
+publishes one ordered transient entry projection, including while the surface
+is hidden. A later snapshot replaces the projection authoritatively.
 
 ## Extension security
 
@@ -276,10 +307,13 @@ external-process, browser, and terminal capabilities remain unavailable.
 
 ### Slice 3: trajectory and context inspector
 
-- define durable turn and step records where current events are insufficient;
-- render exact model-visible context, tool flow, usage, and approval state;
-- support collapsed, summary, and full inspection modes;
-- add export with deterministic redaction.
+- add a bounded durable session trajectory for existing event and message
+  records;
+- expose it through one additive command/event contract, CLI output, and an
+  optional surface shared by desktop and mobile layouts;
+- keep exact model-visible context, full tool exchanges, disclosure modes, and
+  deterministic export unavailable until their records and redaction contract
+  are complete.
 
 ### Slice 4: verified parity modules
 

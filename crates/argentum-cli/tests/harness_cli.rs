@@ -139,4 +139,29 @@ fn harness_presentation_and_execution_policy_persist_without_enabling_missing_wo
     assert!(!unavailable_capability.status.success());
     assert!(String::from_utf8_lossy(&unavailable_capability.stderr)
         .contains("not available in this build"));
+
+    let trace = harness_snapshot(&run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "profile", "trace"],
+    ));
+    assert!(trace["harness"]["surfaces"]
+        .as_array()
+        .expect("surfaces")
+        .iter()
+        .any(|surface| surface["id"] == "Trajectory" && surface["visible"] == true));
+    assert!(trace["harness"]["surfaces"]
+        .as_array()
+        .expect("surfaces")
+        .iter()
+        .any(|surface| surface["id"] == "Activity" && surface["visible"] == false));
+
+    let trajectory = harness_snapshot(&run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "trajectory"],
+    ));
+    assert!(trajectory["trajectory"]["session_id"].is_string());
+    assert!(trajectory["trajectory"]["entries"].is_array());
+    assert_eq!(trajectory["trajectory"]["truncated"], false);
 }
