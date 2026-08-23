@@ -1,4 +1,4 @@
-use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use argentum_domain::Capability;
@@ -14,6 +14,8 @@ pub enum WorkspaceError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("file exceeds the {limit_bytes} byte read limit: {path}")]
+    FileTooLarge { path: PathBuf, limit_bytes: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -37,10 +39,32 @@ impl WorkspaceManager {
         ))
     }
 
-    pub fn read_text(&self, path: impl AsRef<Path>) -> Result<String, WorkspaceError> {
-        self.require(argentum_domain::Capability::ReadFiles)?;
-        let path = self.broker.validate_path(path)?;
-        fs::read_to_string(&path).map_err(|source| WorkspaceError::Io { path, source })
+    pub fn read_text_bounded(
+        &self,
+        path: impl AsRef<Path>,
+        limit_bytes: usize,
+    ) -> Result<String, WorkspaceError> {
+        let (display_path, file) = self.broker.open_file_for_read(path)?;
+        let read_limit = u64::try_from(limit_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        let mut bytes = Vec::with_capacity(limit_bytes.min(64 * 1024));
+        file.take(read_limit)
+            .read_to_end(&mut bytes)
+            .map_err(|source| WorkspaceError::Io {
+                path: display_path.clone(),
+                source,
+            })?;
+        if bytes.len() > limit_bytes {
+            return Err(WorkspaceError::FileTooLarge {
+                path: display_path,
+                limit_bytes,
+            });
+        }
+        String::from_utf8(bytes).map_err(|source| WorkspaceError::Io {
+            path: display_path,
+            source: std::io::Error::new(std::io::ErrorKind::InvalidData, source),
+        })
     }
 
     pub fn write_text(&self, path: impl AsRef<Path>, content: &str) -> Result<(), WorkspaceError> {
@@ -53,59 +77,97 @@ impl WorkspaceManager {
         content: &str,
         grant: &ApprovalGrant,
     ) -> Result<(), WorkspaceError> {
-        self.require_with_grant(argentum_domain::Capability::WriteFiles, grant)?;
-        let path = self.broker.validate_path(path)?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| WorkspaceError::Io {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-        fs::write(&path, content).map_err(|source| WorkspaceError::Io { path, source })
+        self.broker
+            .write_file_with_grant(path, content, grant)
+            .map_err(Into::into)
     }
 
     pub fn list_files(&self) -> Result<Vec<PathBuf>, WorkspaceError> {
-        self.require(argentum_domain::Capability::ReadFiles)?;
-        let mut files = Vec::new();
-        collect_files(self.root(), &mut files).map_err(|source| WorkspaceError::Io {
-            path: self.root().to_path_buf(),
-            source,
-        })?;
-        files.sort();
-        Ok(files)
-    }
-
-    fn require(&self, capability: argentum_domain::Capability) -> Result<(), WorkspaceError> {
-        self.require_with_grant(capability, &ApprovalGrant::default())
-    }
-
-    fn require_with_grant(
-        &self,
-        capability: argentum_domain::Capability,
-        grant: &ApprovalGrant,
-    ) -> Result<(), WorkspaceError> {
-        match self.broker.authorize_with_grant(capability, grant)? {
-            Authorization::Allowed => Ok(()),
-            Authorization::RequiresApproval => {
-                Err(SecurityError::ApprovalRequired(capability).into())
-            }
-        }
+        self.broker.list_workspace_files().map_err(Into::into)
     }
 }
 
-fn collect_files(root: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let path = entry.path();
-        if file_type.is_symlink() {
-            continue;
-        }
-        if file_type.is_dir() {
-            collect_files(&path, files)?;
-        } else if file_type.is_file() {
-            files.push(path);
-        }
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    #[cfg(unix)]
+    use argentum_security::ApprovalGrant;
+    use argentum_security::{ApprovalPolicy, CapabilityBroker};
+
+    use super::*;
+
+    #[test]
+    fn bounded_read_rejects_a_file_before_returning_oversized_content() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        fs::write(workspace.path().join("large.txt"), b"eleven-byte").expect("fixture");
+        let broker =
+            CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
+        let manager = WorkspaceManager::new(broker);
+
+        assert!(matches!(
+            manager.read_text_bounded("large.txt", 10),
+            Err(WorkspaceError::FileTooLarge {
+                limit_bytes: 10,
+                ..
+            })
+        ));
     }
-    Ok(())
+
+    #[test]
+    fn bounded_read_preserves_valid_utf8_at_the_limit() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        fs::write(workspace.path().join("exact.txt"), "safe text").expect("fixture");
+        let broker =
+            CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
+        let manager = WorkspaceManager::new(broker);
+
+        assert_eq!(
+            manager
+                .read_text_bounded("exact.txt", "safe text".len())
+                .expect("bounded read"),
+            "safe text"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn capability_reads_do_not_follow_symlinks_outside_the_workspace() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().expect("workspace");
+        let outside = tempfile::tempdir().expect("outside");
+        let outside_file = outside.path().join("secret.txt");
+        fs::write(&outside_file, "private").expect("outside fixture");
+        symlink(&outside_file, workspace.path().join("link.txt")).expect("symlink fixture");
+        let broker =
+            CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
+        let manager = WorkspaceManager::new(broker);
+
+        assert!(manager.read_text_bounded("link.txt", 1024).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn capability_writes_do_not_follow_symlinks_outside_the_workspace() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().expect("workspace");
+        let outside = tempfile::tempdir().expect("outside");
+        let outside_file = outside.path().join("secret.txt");
+        fs::write(&outside_file, "private").expect("outside fixture");
+        symlink(&outside_file, workspace.path().join("link.txt")).expect("symlink fixture");
+        let broker =
+            CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
+        let manager = WorkspaceManager::new(broker);
+        let grant = ApprovalGrant::for_capabilities([Capability::WriteFiles]);
+
+        assert!(manager
+            .write_text_with_grant("link.txt", "overwrite", &grant)
+            .is_err());
+        assert_eq!(
+            fs::read_to_string(outside_file).expect("outside read"),
+            "private"
+        );
+    }
 }

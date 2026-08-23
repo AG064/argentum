@@ -9,3 +9,6 @@ license.workspace = true
 argentum-domain.workspace = true
 argentum-security.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

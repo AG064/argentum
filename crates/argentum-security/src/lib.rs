@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use argentum_domain::Capability;
+use cap_std::fs::{Dir, File};
 use thiserror::Error;
 use time::OffsetDateTime;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -19,6 +21,12 @@ pub enum SecurityError {
     CapabilityDenied(Capability),
     #[error("unable to resolve path: {0}")]
     PathResolution(PathBuf),
+    #[error("workspace operation failed for {path}: {source}")]
+    WorkspaceOperation {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +98,7 @@ impl ApprovalGrant {
 #[derive(Debug, Clone)]
 pub struct CapabilityBroker {
     root: PathBuf,
+    directory: Arc<Dir>,
     policy: ApprovalPolicy,
 }
 
@@ -101,7 +110,13 @@ impl CapabilityBroker {
         }
         let root = fs::canonicalize(root)
             .map_err(|_| SecurityError::PathResolution(root.to_path_buf()))?;
-        Ok(Self { root, policy })
+        let directory = Dir::open_ambient_dir(&root, cap_std::ambient_authority())
+            .map_err(|_| SecurityError::PathResolution(root.clone()))?;
+        Ok(Self {
+            root,
+            directory: Arc::new(directory),
+            policy,
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -110,6 +125,86 @@ impl CapabilityBroker {
 
     pub fn policy(&self) -> &ApprovalPolicy {
         &self.policy
+    }
+
+    pub fn relative_path(&self, candidate: impl AsRef<Path>) -> Result<PathBuf, SecurityError> {
+        let candidate = candidate.as_ref();
+        let relative = if candidate.is_absolute() {
+            candidate
+                .strip_prefix(&self.root)
+                .map_err(|_| SecurityError::OutsideWorkspace(candidate.to_path_buf()))?
+        } else {
+            candidate
+        };
+
+        if relative.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            return Err(SecurityError::OutsideWorkspace(candidate.to_path_buf()));
+        }
+
+        Ok(relative.to_path_buf())
+    }
+
+    pub fn open_file_for_read(
+        &self,
+        candidate: impl AsRef<Path>,
+    ) -> Result<(PathBuf, File), SecurityError> {
+        self.require_with_grant(Capability::ReadFiles, &ApprovalGrant::default())?;
+        let relative = self.relative_path(candidate)?;
+        let display_path = self.root.join(&relative);
+        let file =
+            self.directory
+                .open(&relative)
+                .map_err(|source| SecurityError::WorkspaceOperation {
+                    path: display_path.clone(),
+                    source,
+                })?;
+        Ok((display_path, file))
+    }
+
+    pub fn write_file_with_grant(
+        &self,
+        candidate: impl AsRef<Path>,
+        content: impl AsRef<[u8]>,
+        grant: &ApprovalGrant,
+    ) -> Result<(), SecurityError> {
+        self.require_with_grant(Capability::WriteFiles, grant)?;
+        let relative = self.relative_path(candidate)?;
+        let display_path = self.root.join(&relative);
+        if let Some(parent) = relative
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            self.directory.create_dir_all(parent).map_err(|source| {
+                SecurityError::WorkspaceOperation {
+                    path: self.root.join(parent),
+                    source,
+                }
+            })?;
+        }
+        self.directory.write(&relative, content).map_err(|source| {
+            SecurityError::WorkspaceOperation {
+                path: display_path,
+                source,
+            }
+        })
+    }
+
+    pub fn list_workspace_files(&self) -> Result<Vec<PathBuf>, SecurityError> {
+        self.require_with_grant(Capability::ReadFiles, &ApprovalGrant::default())?;
+        let mut files = Vec::new();
+        collect_files(&self.directory, Path::new(""), &self.root, &mut files).map_err(
+            |source| SecurityError::WorkspaceOperation {
+                path: self.root.clone(),
+                source,
+            },
+        )?;
+        files.sort();
+        Ok(files)
     }
 
     pub fn authorize(&self, capability: Capability) -> Result<Authorization, SecurityError> {
@@ -128,40 +223,38 @@ impl CapabilityBroker {
         }
     }
 
-    pub fn validate_path(&self, candidate: impl AsRef<Path>) -> Result<PathBuf, SecurityError> {
-        let candidate = candidate.as_ref();
-        let candidate = if candidate.is_absolute() {
-            candidate.to_path_buf()
-        } else {
-            self.root.join(candidate)
-        };
-        let resolved = canonicalize_with_existing_ancestor(&candidate)
-            .ok_or_else(|| SecurityError::PathResolution(candidate.clone()))?;
-        if resolved.starts_with(&self.root) {
-            Ok(resolved)
-        } else {
-            Err(SecurityError::OutsideWorkspace(candidate))
+    fn require_with_grant(
+        &self,
+        capability: Capability,
+        grant: &ApprovalGrant,
+    ) -> Result<(), SecurityError> {
+        match self.authorize_with_grant(capability, grant)? {
+            Authorization::Allowed => Ok(()),
+            Authorization::RequiresApproval => Err(SecurityError::ApprovalRequired(capability)),
         }
     }
 }
 
-fn canonicalize_with_existing_ancestor(path: &Path) -> Option<PathBuf> {
-    if path.exists() {
-        return fs::canonicalize(path).ok();
+fn collect_files(
+    directory: &Dir,
+    relative: &Path,
+    root: &Path,
+    files: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    for entry in directory.entries()? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let path = relative.join(entry.file_name());
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            collect_files(&entry.open_dir()?, &path, root, files)?;
+        } else if file_type.is_file() {
+            files.push(root.join(path));
+        }
     }
-
-    let mut missing = Vec::new();
-    let mut current = path;
-    while !current.exists() {
-        missing.push(current.file_name()?.to_os_string());
-        current = current.parent()?;
-    }
-
-    let mut resolved = fs::canonicalize(current).ok()?;
-    for part in missing.iter().rev() {
-        resolved.push(part);
-    }
-    Some(resolved)
+    Ok(())
 }
 
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
@@ -240,11 +333,14 @@ mod tests {
     fn rejects_paths_outside_workspace() {
         let temp = tempfile::tempdir().expect("temp directory");
         let outside = temp.path().parent().expect("parent").join("outside.txt");
-        fs::write(&outside, "private").expect("outside fixture");
         let broker = CapabilityBroker::new(temp.path(), ApprovalPolicy::default()).expect("broker");
 
         assert!(matches!(
-            broker.validate_path(&outside),
+            broker.relative_path(&outside),
+            Err(SecurityError::OutsideWorkspace(_))
+        ));
+        assert!(matches!(
+            broker.relative_path("../outside.txt"),
             Err(SecurityError::OutsideWorkspace(_))
         ));
     }
@@ -256,28 +352,9 @@ mod tests {
         let broker = CapabilityBroker::new(temp.path(), ApprovalPolicy::default()).expect("broker");
 
         assert_eq!(
-            broker.validate_path("note.txt").expect("relative path"),
-            fs::canonicalize(temp.path().join("note.txt")).expect("canonical path")
+            broker.relative_path("note.txt").expect("relative path"),
+            PathBuf::from("note.txt")
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn rejects_symlink_escape() {
-        use std::os::unix::fs::symlink;
-
-        let workspace = tempfile::tempdir().expect("workspace");
-        let outside = tempfile::tempdir().expect("outside");
-        let outside_file = outside.path().join("secret.txt");
-        fs::write(&outside_file, "private").expect("outside fixture");
-        symlink(&outside_file, workspace.path().join("link.txt")).expect("symlink fixture");
-        let broker =
-            CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
-
-        assert!(matches!(
-            broker.validate_path("link.txt"),
-            Err(SecurityError::OutsideWorkspace(_))
-        ));
     }
 
     #[test]

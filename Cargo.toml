@@ -40,6 +40,7 @@ argentum-ui = { path = "crates/argentum-ui" }
 argentum-workspaces = { path = "crates/argentum-workspaces" }
 
 async-trait = "0.1"
+cap-std = "4.0.3"
 directories = "6"
 futures-util = "0.3"
 keyring = { version = "3.6", default-features = false, features = ["apple-native", "linux-native", "windows-native"] }

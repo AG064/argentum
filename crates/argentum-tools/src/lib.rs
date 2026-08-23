@@ -122,7 +122,7 @@ impl AgentTool for ReadTextTool {
         let ToolInput::ReadText { path } = request.input else {
             return Err(ToolError::InvalidInput("read_text requires a path".into()));
         };
-        let output = context.workspace.read_text(path)?;
+        let output = context.workspace.read_text_bounded(path, 128 * 1024)?;
         let output = output.chars().take(32_000).collect::<String>();
         Ok(ToolResult {
             summary: "Read file".into(),

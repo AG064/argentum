@@ -187,6 +187,20 @@ where
                     .map_err(channel_closed)?;
             }
             ClientPayload::Command { command } => {
+                if !jsonl_command_is_permitted(&command) {
+                    responses
+                        .send(OutboundResponse {
+                            request_id: Some(request_id),
+                            payload: ServerPayload::error(
+                                "command_not_permitted",
+                                "command is not permitted on the untrusted JSONL transport",
+                                false,
+                            ),
+                        })
+                        .await
+                        .map_err(channel_closed)?;
+                    continue;
+                }
                 {
                     let mut active = active_request_ids.lock().await;
                     if !active.insert(request_id.clone()) {
@@ -272,6 +286,37 @@ where
     Ok(())
 }
 
+fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
+    match command {
+        AppCommand::NewSession
+        | AppCommand::SelectSession { .. }
+        | AppCommand::SetGoal { .. }
+        | AppCommand::PauseGoal
+        | AppCommand::ResumeGoal
+        | AppCommand::ClearGoal
+        | AppCommand::ProbeProvider { .. }
+        | AppCommand::ListProviderProfiles
+        | AppCommand::ListProviderModels { .. }
+        | AppCommand::ListHarnessState
+        | AppCommand::SetSurfaceVisibility { .. }
+        | AppCommand::LoadTrajectory { .. }
+        | AppCommand::SubmitTask { .. }
+        | AppCommand::CancelRun { .. }
+        | AppCommand::ToggleSurface { .. }
+        | AppCommand::SetLayout { .. }
+        | AppCommand::ResetLayout => true,
+        AppCommand::SaveProviderProfile { .. }
+        | AppCommand::SelectProviderProfile { .. }
+        | AppCommand::SelectProviderModel { .. }
+        | AppCommand::SelectHarnessProfile { .. }
+        | AppCommand::SelectExecutionProfile { .. }
+        | AppCommand::SetHarnessCapabilityEnabled { .. }
+        | AppCommand::RequestTool { .. }
+        | AppCommand::ApproveTool { .. }
+        | AppCommand::RejectTool { .. } => false,
+    }
+}
+
 fn is_long_running(command: &AppCommand) -> bool {
     matches!(
         command,
@@ -337,9 +382,21 @@ async fn write_response<W: AsyncWrite + Unpin>(
 }
 
 async fn discard_line_remainder<R: AsyncBufRead + Unpin>(reader: &mut R) -> std::io::Result<()> {
-    let mut discarded = Vec::new();
-    reader.read_until(b'\n', &mut discarded).await?;
-    Ok(())
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return Ok(());
+        }
+        let consumed = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |position| position + 1);
+        let found_newline = available.get(consumed.saturating_sub(1)) == Some(&b'\n');
+        reader.consume(consumed);
+        if found_newline {
+            return Ok(());
+        }
+    }
 }
 
 fn channel_closed(error: impl std::fmt::Display) -> std::io::Error {
@@ -361,9 +418,7 @@ fn display_workspace(path: &std::path::Path) -> String {
 mod tests {
     use std::time::Duration;
 
-    use argentum_domain::{
-        AppCommand, AppEvent, ApprovalScope, ToolInput, ToolRequest, ToolResultState,
-    };
+    use argentum_domain::{AppCommand, AppEvent, ApprovalScope, ToolInput, ToolRequest};
     use argentum_providers::{ModelProvider, ModelRequest, ProviderEvent, ProviderRegistry};
     use argentum_runtime::RuntimeService;
     use argentum_security::{ApprovalPolicy, CapabilityBroker};
@@ -499,7 +554,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn protocol_executes_a_read_tool_command() {
+    async fn protocol_rejects_direct_tool_commands_from_untrusted_clients() {
         let workspace = tempfile::tempdir().expect("workspace");
         std::fs::write(workspace.path().join("note.txt"), "workspace note").expect("fixture");
         let host = CommandHost::start(HostConfig::in_memory(workspace.path())).expect("host");
@@ -523,17 +578,18 @@ mod tests {
 
         let responses = serve_requests(host, &[request]).await;
 
-        assert!(responses.iter().any(|response| matches!(
+        assert!(responses.iter().any(|response| {
+            response.request_id.as_deref() == Some("read-1")
+                && matches!(
+                    &response.payload,
+                    ServerPayload::Error { code, .. } if code == "command_not_permitted"
+                )
+        }));
+        assert!(!responses.iter().any(|response| matches!(
             &response.payload,
             ServerPayload::Event {
-                event: AppEvent::ToolStarted(trace),
-            } if trace.id == call_id && trace.tool_id == "read_text"
-        )));
-        assert!(responses.iter().any(|response| matches!(
-            &response.payload,
-            ServerPayload::Event {
-                event: AppEvent::ToolFinished(trace),
-            } if trace.id == call_id && trace.result == ToolResultState::Succeeded
+                event: AppEvent::ToolStarted(_) | AppEvent::ToolFinished(_),
+            }
         )));
         assert!(!responses.iter().any(|response| matches!(
             &response.payload,
@@ -544,105 +600,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn protocol_approves_and_rejects_pending_write_tools() {
+    async fn protocol_rejects_commands_that_change_authority_or_network_origins() {
         let workspace = tempfile::tempdir().expect("workspace");
         let host = CommandHost::start(HostConfig::in_memory(workspace.path())).expect("host");
-        let approved_call_id = "00000000-0000-0000-0000-000000000051"
+        let call_id = "00000000-0000-0000-0000-000000000051"
             .parse()
-            .expect("approved call id");
-        let rejected_call_id = "00000000-0000-0000-0000-000000000052"
-            .parse()
-            .expect("rejected call id");
+            .expect("call id");
         let run_id = "00000000-0000-0000-0000-000000000053"
             .parse()
             .expect("run id");
-        let write_requests = [
+        let approval_id = "00000000-0000-0000-0000-000000000054"
+            .parse()
+            .expect("approval id");
+        let requests = [
             RequestEnvelope::command(
-                "write-approved",
+                "write",
                 AppCommand::RequestTool {
                     request: ToolRequest {
-                        call_id: approved_call_id,
+                        call_id,
                         run_id,
                         input: ToolInput::WriteText {
-                            path: "approved.txt".into(),
-                            content: "approved content".into(),
+                            path: "blocked.txt".into(),
+                            content: "blocked content".into(),
                         },
                     },
                 },
             ),
             RequestEnvelope::command(
-                "write-rejected",
-                AppCommand::RequestTool {
-                    request: ToolRequest {
-                        call_id: rejected_call_id,
-                        run_id,
-                        input: ToolInput::WriteText {
-                            path: "rejected.txt".into(),
-                            content: "rejected content".into(),
-                        },
-                    },
-                },
-            ),
-        ];
-
-        let write_responses = serve_requests(host.clone(), &write_requests).await;
-        let approved_id = approval_id_for_target(&write_responses, "approved.txt");
-        let rejected_id = approval_id_for_target(&write_responses, "rejected.txt");
-        assert!(!workspace.path().join("approved.txt").exists());
-        assert!(!workspace.path().join("rejected.txt").exists());
-
-        let resolution_requests = [
-            RequestEnvelope::command(
-                "approve-write",
+                "approve",
                 AppCommand::ApproveTool {
-                    approval_id: approved_id,
+                    approval_id,
                     scope: ApprovalScope::Once,
                 },
             ),
             RequestEnvelope::command(
-                "reject-write",
-                AppCommand::RejectTool {
-                    approval_id: rejected_id,
+                "provider",
+                AppCommand::SaveProviderProfile {
+                    profile: argentum_domain::ProviderProfile {
+                        id: "attacker".into(),
+                        label: "Attacker".into(),
+                        kind: argentum_domain::ProviderKind::OpenAiCompatible,
+                        endpoint: "http://127.0.0.1:9/v1/".into(),
+                        model: "capture".into(),
+                        selected: true,
+                    },
+                },
+            ),
+            RequestEnvelope::command(
+                "profile",
+                AppCommand::SelectExecutionProfile {
+                    profile_id: "autonomous".into(),
                 },
             ),
         ];
-        let resolution_responses = serve_requests(host, &resolution_requests).await;
+        let responses = serve_requests(host, &requests).await;
 
-        assert!(resolution_responses.iter().any(|response| matches!(
-            &response.payload,
-            ServerPayload::Event {
-                event: AppEvent::ApprovalResolved {
-                    approval_id,
-                    approved: true,
-                },
-            } if *approval_id == approved_id
-        )));
-        assert!(resolution_responses.iter().any(|response| matches!(
-            &response.payload,
-            ServerPayload::Event {
-                event: AppEvent::ApprovalResolved {
-                    approval_id,
-                    approved: false,
-                },
-            } if *approval_id == rejected_id
-        )));
-        assert!(resolution_responses.iter().any(|response| matches!(
-            &response.payload,
-            ServerPayload::Event {
-                event: AppEvent::ToolFinished(trace),
-            } if trace.id == approved_call_id && trace.result == ToolResultState::Succeeded
-        )));
-        assert!(resolution_responses.iter().any(|response| matches!(
-            &response.payload,
-            ServerPayload::Event {
-                event: AppEvent::ToolFinished(trace),
-            } if trace.id == rejected_call_id && trace.result == ToolResultState::Cancelled
-        )));
-        assert_eq!(
-            std::fs::read_to_string(workspace.path().join("approved.txt")).expect("approved write"),
-            "approved content"
-        );
-        assert!(!workspace.path().join("rejected.txt").exists());
+        for request_id in ["write", "approve", "provider", "profile"] {
+            assert!(responses.iter().any(|response| {
+                response.request_id.as_deref() == Some(request_id)
+                    && matches!(
+                        &response.payload,
+                        ServerPayload::Error { code, .. } if code == "command_not_permitted"
+                    )
+            }));
+        }
+        assert!(!workspace.path().join("blocked.txt").exists());
     }
 
     #[tokio::test]
@@ -754,7 +776,7 @@ mod tests {
             payload: ClientPayload::Ping,
         };
         let mut input = b"{not-json}\n".to_vec();
-        input.extend(std::iter::repeat(b'x').take(MAX_REQUEST_BYTES + 1));
+        input.extend(std::iter::repeat_n(b'x', MAX_REQUEST_BYTES + 8192));
         input.push(b'\n');
         input.extend(serde_json::to_vec(&ping).expect("ping"));
         input.push(b'\n');
@@ -900,21 +922,6 @@ mod tests {
             .await
             .expect("output");
         parse_responses(&output)
-    }
-
-    fn approval_id_for_target(
-        responses: &[ResponseEnvelope],
-        target: &str,
-    ) -> argentum_domain::ApprovalId {
-        responses
-            .iter()
-            .find_map(|response| match &response.payload {
-                ServerPayload::Event {
-                    event: AppEvent::ApprovalRequested(approval),
-                } if approval.target == target => Some(approval.id),
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("missing approval for {target}"))
     }
 
     #[derive(Debug)]

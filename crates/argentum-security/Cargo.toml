@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 argentum-domain.workspace = true
+cap-std.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 time.workspace = true

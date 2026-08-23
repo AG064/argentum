@@ -1,12 +1,16 @@
 [CmdletBinding()]
-param(
-    [switch]$SkipBuild
-)
+param()
 
 $ErrorActionPreference = "Stop"
 
 $workspaceRoot = Split-Path -Parent $PSScriptRoot
-$binaryPath = Join-Path $workspaceRoot "target\release\argentum.exe"
+$targetRoot = [System.IO.Path]::GetFullPath((Join-Path $workspaceRoot "target"))
+$releaseTargetRoot = [System.IO.Path]::GetFullPath((Join-Path $targetRoot "release-packaging"))
+$targetBoundary = $targetRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+if (-not $releaseTargetRoot.StartsWith($targetBoundary, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Release target directory escaped the workspace target directory"
+}
+$binaryPath = Join-Path $releaseTargetRoot "release\argentum.exe"
 $artifactDirectory = Join-Path $workspaceRoot "artifacts\windows-x64"
 $artifactPath = Join-Path $artifactDirectory "Argentum.exe"
 $hashPath = Join-Path $artifactDirectory "Argentum.exe.sha256"
@@ -19,17 +23,19 @@ $designValidationScript = Join-Path $PSScriptRoot "validate-design-system.ps1"
 
 & $designValidationScript
 
-if (-not $SkipBuild) {
-    Push-Location $workspaceRoot
-    try {
-        cargo build --release -p argentum-app
-        if ($LASTEXITCODE -ne 0) {
-            throw "Cargo release build failed with exit code $LASTEXITCODE"
-        }
+if (Test-Path -LiteralPath $releaseTargetRoot) {
+    Remove-Item -LiteralPath $releaseTargetRoot -Recurse -Force
+}
+
+Push-Location $workspaceRoot
+try {
+    cargo build --locked --release -p argentum-app --target-dir $releaseTargetRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cargo release build failed with exit code $LASTEXITCODE"
     }
-    finally {
-        Pop-Location
-    }
+}
+finally {
+    Pop-Location
 }
 
 if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
