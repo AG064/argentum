@@ -129,7 +129,7 @@
     "fast-check": "^4.8.0",
     "globals": "^17.4.0",
     "husky": "^9.1.7",
-    "jest": "^30.4.1",
+    "jest": "^30.5.0",
     "jest-esbuild": "^0.4.0",
     "lint-staged": "^17.0.5",
     "prettier": "^3.8.1",
