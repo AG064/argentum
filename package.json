@@ -102,7 +102,7 @@
     "pino-pretty": "^10.3.1",
     "sanitize-html": "^2.17.2",
     "ws": "^8.21.0",
-    "yaml": "^2.3.4",
+    "yaml": "^2.9.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
