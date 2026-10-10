@@ -5,6 +5,8 @@
 *.md text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.json text eol=lf
+third-party/licenses/* -text
 *.ps1 text eol=lf
 *.py text eol=lf
 *.slint text eol=lf
