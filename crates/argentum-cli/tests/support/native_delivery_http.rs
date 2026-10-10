@@ -38,7 +38,7 @@ fn next_coding_after_reported_handoff(server: &Server) -> Value {
         }
         assert!(request["tools"]
             .as_array()
-            .map_or(true, |tools| tools.is_empty()));
+            .is_none_or(|tools| tools.is_empty()));
         assert!(
             request["messages"]
                 .as_array()
@@ -176,7 +176,7 @@ fn milestone_native_handoff_delivers_redacted_search_feedback_and_rejects_new_ef
                 .contains("[native_handoff_feedback]"));
             assert!(report["tools"]
                 .as_array()
-                .map_or(true, |tools| tools.is_empty()));
+                .is_none_or(|tools| tools.is_empty()));
             assert!(report.get("tool_choice").is_none());
             assert!(tool_reply(&report,"search-two").to_string().contains("PUBLIC_EPHEMERAL_SEARCH"),"the actual fresh search body must reach the model before privacy-preserving handoff: {}",tool_reply(&report,"search-two"));
             if forbidden_effect {
@@ -1567,7 +1567,7 @@ fn milestone_native_planned_request_handoff_is_not_unlimited_correction() {
             .contains("[native_handoff_feedback]"));
         assert!(final_report["tools"]
             .as_array()
-            .map_or(true, |tools| tools.is_empty()));
+            .is_none_or(|tools| tools.is_empty()));
         text(
             &server,
             r#"{"status":"continue","remaining":["The source still requires implementation."]}"#,

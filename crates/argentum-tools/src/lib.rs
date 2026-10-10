@@ -1117,12 +1117,8 @@ async fn execute_builtin(
                     grant.capability == Capability::ExternalProcess
                         && grant.scope == GrantScope::Action
                         && grant.created_at <= now()
-                        && grant
-                            .expires_at
-                            .map_or(true, |expires_at| expires_at > now())
-                        && grant
-                            .revoked_at
-                            .map_or(true, |revoked_at| revoked_at > now())
+                        && grant.expires_at.is_none_or(|expires_at| expires_at > now())
+                        && grant.revoked_at.is_none_or(|revoked_at| revoked_at > now())
                         && matches!(
                             &grant.subject,
                             GrantSubject::Action { tool_id, binding: grant_binding, .. }

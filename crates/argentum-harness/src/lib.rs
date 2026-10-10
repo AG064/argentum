@@ -1719,7 +1719,13 @@ mod tests {
         policy = registry.reconcile_execution_policy(&policy);
 
         assert_eq!(policy.profile_id, CUSTOM_EXECUTION_PROFILE_ID);
-        assert_eq!(policy.capability_enabled.len(), 19);
+        assert_eq!(policy.capability_enabled.len(), 20);
+        assert_eq!(
+            policy
+                .capability_enabled
+                .get("verification.supplemental-rust"),
+            Some(&false)
+        );
         assert_eq!(
             policy.capability_enabled.get("tool.read-text"),
             Some(&false)

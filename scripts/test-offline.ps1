@@ -40,6 +40,9 @@ try {
         $saved[$entry.Name] = $entry.Value
         [Environment]::SetEnvironmentVariable($entry.Name, $null, 'Process')
     }
+    # Cargo ordinarily supplies this path when it launches its test harnesses.
+    $saved['CARGO'] = [Environment]::GetEnvironmentVariable('CARGO', 'Process')
+    $env:CARGO = (Get-Command cargo -CommandType Application -ErrorAction Stop).Source
     $results = @()
     $number = 0
     foreach ($artifact in $artifacts) {

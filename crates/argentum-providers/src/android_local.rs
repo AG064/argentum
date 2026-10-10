@@ -532,7 +532,7 @@ fn decode_qwen_tool_output(
     while let Some(start) = rest.find("<tool_call>") {
         let prefix = &rest[..start];
         if (start != 0 && !prefix.ends_with('\n'))
-            || prefix.matches("```").count() % 2 != 0
+            || !prefix.matches("```").count().is_multiple_of(2)
             || prefix.rfind("<think>") > prefix.rfind("</think>")
         {
             return Err(ProviderError::InvalidResponse(

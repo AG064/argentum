@@ -275,7 +275,7 @@ pub(super) fn open(
             let ceiling = argentum_providers::bundled_context_window(&profile);
             let mut sizes: Vec<u32> = argentum_providers::SIDECAR_CONTEXT_VARIANTS
                 .into_iter()
-                .filter(|n| ceiling.map_or(true, |c| u64::from(*n) <= c))
+                .filter(|n| ceiling.is_none_or(|c| u64::from(*n) <= c))
                 .collect();
             if profile.kind != ProviderKind::LocalLlamaCpp {
                 if let Some(c) = ceiling.and_then(|c| u32::try_from(c).ok()) {

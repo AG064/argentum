@@ -736,14 +736,14 @@ mod windows {
         ] {
             if value
                 .get(key)
-                .is_some_and(|x| x.as_table().map_or(true, |t| !t.is_empty()))
+                .is_some_and(|x| x.as_table().is_none_or(|t| !t.is_empty()))
             {
                 return Err(RustCheckError::Unavailable("initial library slice does not admit dependencies, target overrides or custom profiles"));
             }
         }
         if value
             .get("workspace")
-            .is_some_and(|x| x.as_table().map_or(true, |t| !t.is_empty()))
+            .is_some_and(|x| x.as_table().is_none_or(|t| !t.is_empty()))
             || value["package"].get("workspace").is_some()
         {
             return Err(RustCheckError::Unavailable(

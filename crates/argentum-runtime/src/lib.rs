@@ -843,7 +843,7 @@ impl RuntimeService {
                 .store
                 .load_module_preferences(runtime.project_id)?
                 .and_then(|p| p.get("first-party.local-backend").copied())
-                .map_or(true, |p| p.enabled);
+                .is_none_or(|p| p.enabled);
             runtime
                 .providers
                 .set_builtin_backend_enabled(enabled)

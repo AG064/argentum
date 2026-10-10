@@ -13,6 +13,14 @@ conservatively; this does not imply they are all linked into the executable.
 Dependency policy is in deny.toml; its outcome and advisory database freshness
 belong in the RC evidence. A source policy pass is not legal certification.
 
+`eventsource-stream` 0.2.3 and `reqwest-eventsource` 0.6.0 declare
+`MIT OR Apache-2.0` but omit license text in both their registry archives and
+the recorded upstream revisions. Packaging explicitly selects the declared
+Apache-2.0 option for these exact revisions, retains full standard terms and
+their original manifest/README grant and attribution metadata, and records the
+selection. `third-party/missing-license-texts.json` pins the declaration sources
+and retained term identity. An unknown missing notice still fails packaging.
+
 ## Separate source modules and optional downloads
 
 | Component | Terms and handling |

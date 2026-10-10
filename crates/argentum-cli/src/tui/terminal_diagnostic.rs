@@ -146,7 +146,7 @@ where
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::other("terminal-diagnostic requires terminal stdin and stdout; redirected input is not a native diagnostic"));
     }
-    if !output.is_absolute() || output.parent().map_or(true, |p| !p.is_dir()) {
+    if !output.is_absolute() || output.parent().is_none_or(|p| !p.is_dir()) {
         return Err(io::Error::other(
             "diagnostic output requires an absolute file path in an existing directory",
         ));
@@ -239,7 +239,7 @@ where
                     if trace.expired() { break; }
                     if stream_ticks > 0 {
                         // A labelled synthetic stream tests frame/input interleaving only.
-                        if stream_ticks % 3 == 0 { state.append_assistant_delta(stream_run, " synthetic"); dirty = true; }
+                        if stream_ticks.is_multiple_of(3) { state.append_assistant_delta(stream_run, " synthetic"); dirty = true; }
                         stream_ticks -= 1;
                     }
                     if dirty {

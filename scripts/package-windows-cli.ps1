@@ -77,14 +77,36 @@ try {
         if (-not $selected.Contains($dependency.id) -or -not $dependency.source) { continue }
         $directory = Split-Path -Parent $dependency.manifest_path
         $destination = Join-Path $package "licenses/$($dependency.name)-$($dependency.version)"
-        $files = @(Get-ChildItem -LiteralPath $directory -File | Where-Object Name -Match '^(LICENSE|LICENCE|COPYING|NOTICE|COPYRIGHT)(\.|-|$)')
+        $files = @(Get-ChildItem -LiteralPath $directory -File | Where-Object Name -Match '^(LICENSE|LICENCE|COPYING|NOTICE|COPYRIGHT)([._-]|$)')
         if ($dependency.license_file) {
-            $declared = Join-Path $directory $dependency.license_file
+            $declared = [IO.Path]::GetFullPath((Join-Path $directory $dependency.license_file))
+            if (-not $declared.StartsWith($directory.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Dependency license path escapes its source package.'
+            }
             if (Test-Path -LiteralPath $declared -PathType Leaf) { $files += Get-Item -LiteralPath $declared }
         }
         $files = @($files | Sort-Object FullName -Unique)
-        if (-not $files.Count) { throw "No retained license text for $($dependency.name) $($dependency.version)." }
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        if (-not $files.Count) {
+            # These two exact crate revisions declare dual terms but omit a
+            # license file both in the crate and upstream tree. Select their
+            # declared Apache option explicitly, not a guessed license.
+            $ledger = Get-Content -Raw -LiteralPath (Join-Path $sourceRoot 'third-party/missing-license-texts.json') | ConvertFrom-Json
+            $entry = @($ledger.packages | Where-Object { $_.name -eq $dependency.name -and $_.version -eq $dependency.version })
+            if ($entry.Count -ne 1 -or $entry[0].declared -ne $dependency.license) {
+                throw "No retained license text for $($dependency.name) $($dependency.version)."
+            }
+            $vcs = Get-Content -Raw -LiteralPath (Join-Path $directory '.cargo_vcs_info.json') | ConvertFrom-Json
+            if ($vcs.git.sha1 -ne $entry[0].vcs) { throw 'License declaration source revision mismatch.' }
+            $terms = Join-Path $sourceRoot "third-party/$($ledger.text)"
+            if ((Get-FileHash -LiteralPath $terms -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledger.text_sha256) {
+                throw 'Retained standard license text identity mismatch.'
+            }
+            Copy-Item -LiteralPath $terms -Destination (Join-Path $destination 'LICENSE-APACHE')
+            Copy-Item -LiteralPath $dependency.manifest_path -Destination (Join-Path $destination 'Cargo.toml.upstream')
+            Copy-Item -LiteralPath (Join-Path $directory 'README.md') -Destination (Join-Path $destination 'README.upstream.md')
+            $entry[0] | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $destination 'license-selection.json') -Encoding utf8NoBOM
+        }
         foreach ($file in $files) { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $destination $file.Name) }
         $notices += [ordered]@{ name=$dependency.name; version=$dependency.version; license=$dependency.license; source=$dependency.source }
     }

@@ -1733,7 +1733,7 @@ fn file_change_view(change: &FileChangeRecord, selected: bool) -> FileChangeView
     let restore_available = change
         .before
         .as_ref()
-        .map_or(true, |snapshot| snapshot.retained);
+        .is_none_or(|snapshot| snapshot.retained);
     FileChangeView {
         id: change.id.to_string().into(),
         path: change.relative_path.clone().into(),

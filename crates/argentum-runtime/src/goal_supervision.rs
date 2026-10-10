@@ -114,7 +114,7 @@ impl RuntimeService {
         let report = serde_json::from_str::<NativeWorkReport>(text).ok();
         let unfinished = report
             .as_ref()
-            .map_or(true, |report| report.status == "continue");
+            .is_none_or(|report| report.status == "continue");
         if has_tool_work || !unfinished {
             return Ok(false);
         }
@@ -814,7 +814,7 @@ impl RuntimeService {
                     delivery,
                 )?;
             }
-            let delivery_can_complete = invocation.delivery.as_ref().map_or(true, |delivery| {
+            let delivery_can_complete = invocation.delivery.as_ref().is_none_or(|delivery| {
                 delivery.implementation_ready
                     && delivery.feedback_acknowledged
                     && delivery.reported_source.as_ref() == Some(&source_before)

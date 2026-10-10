@@ -669,10 +669,7 @@ fn completed(
                 retained.push(item.clone());
             }
             Some("reasoning") => {
-                if item["encrypted_content"]
-                    .as_str()
-                    .map_or(true, str::is_empty)
-                {
+                if item["encrypted_content"].as_str().is_none_or(str::is_empty) {
                     return Err(invalid("Stateless reasoning continuation is missing"));
                 }
                 retained.push(item.clone());

@@ -4465,13 +4465,13 @@ fn validate_model_usage(usage: &ModelUsage) -> Result<(), StoreError> {
         .is_some_and(|total| total == usage.total_tokens);
     let valid_cached = usage
         .cached_input_tokens
-        .map_or(true, |tokens| tokens <= usage.input_tokens);
+        .is_none_or(|tokens| tokens <= usage.input_tokens);
     let valid_reasoning = usage
         .reasoning_tokens
-        .map_or(true, |tokens| tokens <= usage.output_tokens);
+        .is_none_or(|tokens| tokens <= usage.output_tokens);
     let valid_context = usage
         .context_window_tokens
-        .map_or(true, |tokens| tokens > 0 && usage.total_tokens <= tokens);
+        .is_none_or(|tokens| tokens > 0 && usage.total_tokens <= tokens);
     if valid_total && valid_cached && valid_reasoning && valid_context {
         Ok(())
     } else {
@@ -4684,10 +4684,10 @@ fn validate_approval_grant(
             .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'));
     let valid_time = grant
         .expires_at
-        .map_or(true, |expires_at| expires_at > grant.created_at)
+        .is_none_or(|expires_at| expires_at > grant.created_at)
         && grant
             .revoked_at
-            .map_or(true, |revoked_at| revoked_at >= grant.created_at);
+            .is_none_or(|revoked_at| revoked_at >= grant.created_at);
     let valid_subject = match &grant.subject {
         GrantSubject::Action {
             tool_id,
@@ -4722,8 +4722,8 @@ fn validate_execution_audit(record: &ExecutionAuditRecord) -> Result<(), StoreEr
         .changed_paths
         .iter()
         .all(|path| valid_audit_text(path, 4096));
-    let valid_digests = record.stdout_sha256.as_ref().map_or(true, valid_sha256)
-        && record.stderr_sha256.as_ref().map_or(true, valid_sha256);
+    let valid_digests = record.stdout_sha256.as_ref().is_none_or(valid_sha256)
+        && record.stderr_sha256.as_ref().is_none_or(valid_sha256);
     if valid_times && valid_ids && valid_target && valid_counts && valid_paths && valid_digests {
         Ok(())
     } else {

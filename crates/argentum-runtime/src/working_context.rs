@@ -527,7 +527,7 @@ impl RuntimeService {
             && total <= budget.usable_context_tokens
             && budget
                 .input_limit_tokens
-                .map_or(true, |limit| input_tokens <= limit);
+                .is_none_or(|limit| input_tokens <= limit);
         Ok(())
     }
 
@@ -1595,9 +1595,7 @@ impl RuntimeService {
                 if self
                     .store
                     .context_execution_receipt(self.project_id, session_id, run_id, call_id, tool)?
-                    .map_or(true, |receipt| {
-                        receipt.outcome != ExecutionOutcome::Succeeded
-                    })
+                    .is_none_or(|receipt| receipt.outcome != ExecutionOutcome::Succeeded)
                 {
                     return Ok(false);
                 }
@@ -1872,7 +1870,7 @@ fn valid_read_result(body: &str) -> bool {
         }
         _ => false,
     };
-    let edit_selection_valid = value.edit_selection.as_ref().map_or(true, |selection| {
+    let edit_selection_valid = value.edit_selection.as_ref().is_none_or(|selection| {
         value.range_complete
             && value.content.len() <= argentum_domain::text_contract::MAX_TARGETED_EDIT_BYTES
             && matches!(

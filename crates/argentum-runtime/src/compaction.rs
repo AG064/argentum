@@ -1201,7 +1201,7 @@ impl RuntimeService {
                 || after
                     .accounted_input
                     .checked_add(minimum_reduction)
-                    .map_or(true, |size| size > before.accounted_input)
+                    .is_none_or(|size| size > before.accounted_input)
             {
                 return Err(RuntimeError::ContextCompaction("summary does not fit or reduce complete projection by at least 20 percent and 1024 accounted tokens"));
             }

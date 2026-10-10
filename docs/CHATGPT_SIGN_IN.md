@@ -7,7 +7,9 @@ preview for eligible open-source or locally hosted applications. Do not assume
 that commercial/remote hosting, every account, or every model is eligible.
 [Official eligibility](https://developers.openai.com/siwc/token-sharing-open-source).
 
-In the owner's interactive PowerShell console:
+In the owner's interactive PowerShell console. Run `provider add chatgpt` only
+when creating a new profile; skip it for an existing configured profile so its
+deliberate model/endpoint settings are not reset:
 
 ```powershell
 $exe = 'C:\tools\argentum\argentum.exe'

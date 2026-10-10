@@ -49,7 +49,7 @@ impl ModelBudget {
             || (chatgpt_uncapped
                 && u64::from(self.maximum_output_tokens)
                     .checked_add(self.uncertainty_tokens)
-                    .map_or(true, |reserved| reserved >= self.usable_context_tokens))
+                    .is_none_or(|reserved| reserved >= self.usable_context_tokens))
             || self.requested_output_tokens > self.maximum_output_tokens
             || u64::from(self.maximum_output_tokens) >= self.usable_context_tokens
             || self.uncertainty_tokens < 128
@@ -58,7 +58,7 @@ impl ModelBudget {
                 .is_some_and(|limit| limit == 0 || limit > self.usable_context_tokens)
             || u64::from(self.requested_output_tokens)
                 .checked_add(self.uncertainty_tokens)
-                .map_or(true, |reserved| reserved >= self.usable_context_tokens)
+                .is_none_or(|reserved| reserved >= self.usable_context_tokens)
         {
             return Err(
                 "invalid context/input/output/uncertainty relationship; no allowance was reduced",
@@ -146,7 +146,7 @@ impl RequestAccounting {
             fits: total <= budget.usable_context_tokens
                 && budget
                     .input_limit_tokens
-                    .map_or(true, |limit| uncertain_input <= limit),
+                    .is_none_or(|limit| uncertain_input <= limit),
         })
     }
 }

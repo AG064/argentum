@@ -1489,7 +1489,7 @@ impl TuiState {
 
     fn record_user_prompt(&mut self, prompt: &str) {
         self.transcript_changed();
-        if self.history.last().map_or(true, |last| last != prompt) {
+        if self.history.last().is_none_or(|last| last != prompt) {
             self.history.push(prompt.to_owned());
             if self.history.len() > MAX_HISTORY_ENTRIES {
                 self.history.remove(0);

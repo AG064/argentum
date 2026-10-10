@@ -125,10 +125,10 @@ impl ObservedUsage {
             || self.output_tokens.is_some_and(|n| n > self.total_tokens)
             || self
                 .cached_input_tokens
-                .is_some_and(|n| self.input_tokens.map_or(true, |bound| n > bound))
+                .is_some_and(|n| self.input_tokens.is_none_or(|bound| n > bound))
             || self
                 .reasoning_tokens
-                .is_some_and(|n| self.output_tokens.map_or(true, |bound| n > bound))
+                .is_some_and(|n| self.output_tokens.is_none_or(|bound| n > bound))
         {
             return Err("inconsistent usage components");
         }

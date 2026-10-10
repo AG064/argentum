@@ -199,23 +199,23 @@ pub(super) fn valid_retained_result(content: &str) -> bool {
         || value
             .get("answer")
             .and_then(Value::as_str)
-            .map_or(true, |answer| answer.len() > MAX_CHILD_ANSWER_BYTES)
+            .is_none_or(|answer| answer.len() > MAX_CHILD_ANSWER_BYTES)
         || value
             .get("child_requests")
             .and_then(Value::as_u64)
-            .map_or(true, |count| count > u64::from(MAX_CHILD_REQUESTS))
+            .is_none_or(|count| count > u64::from(MAX_CHILD_REQUESTS))
         || value
             .get("child_tool_admissions")
             .and_then(Value::as_u64)
-            .map_or(true, |count| count > u64::from(MAX_CHILD_TOOL_ADMISSIONS))
+            .is_none_or(|count| count > u64::from(MAX_CHILD_TOOL_ADMISSIONS))
         || value
             .get("child_accounted_tokens")
             .and_then(Value::as_u64)
-            .map_or(true, |count| count > MAX_CHILD_ACCOUNTED_TOKENS)
+            .is_none_or(|count| count > MAX_CHILD_ACCOUNTED_TOKENS)
         || value
             .get("child_reported_tokens")
             .and_then(Value::as_u64)
-            .map_or(true, |count| count > MAX_CHILD_ACCOUNTED_TOKENS)
+            .is_none_or(|count| count > MAX_CHILD_ACCOUNTED_TOKENS)
     {
         return false;
     }
@@ -592,7 +592,7 @@ impl RuntimeService {
                 if requests >= MAX_CHILD_REQUESTS
                     || accounted_tokens
                         .checked_add(physical_charge)
-                        .map_or(true, |total| total > MAX_CHILD_ACCOUNTED_TOKENS)
+                        .is_none_or(|total| total > MAX_CHILD_ACCOUNTED_TOKENS)
                 {
                     return Err(RuntimeError::DelegationAllowanceExhausted);
                 }
@@ -1034,9 +1034,10 @@ impl RuntimeService {
             let observation = &source.observation;
             if observation.state
                 != argentum_domain::working_context::ObservationState::ResultAvailable
-                || observation.receipt.as_ref().map_or(true, |receipt| {
-                    receipt.outcome != ExecutionOutcome::Succeeded
-                })
+                || observation
+                    .receipt
+                    .as_ref()
+                    .is_none_or(|receipt| receipt.outcome != ExecutionOutcome::Succeeded)
                 || !self.context_observation_allowed(observation, &current_policy)
                 || !self.context_references_match(session_id, run_id, observation)?
             {
