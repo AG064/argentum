@@ -1,0 +1,21 @@
+[package]
+name = "argentum-android-inference"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+publish = false
+
+[dependencies]
+argentum-security.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+encoding_rs.workspace = true
+llama-cpp-2 = { workspace = true, features = ["common", "vulkan", "android-static-stdcxx"] }
+
+[dev-dependencies]
+tempfile.workspace = true

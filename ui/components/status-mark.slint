@@ -1,0 +1,55 @@
+import { AgTheme } from "../tokens.slint";
+
+export component StatusMark inherits Rectangle {
+    in property <string> label: "";
+    in property <string> state: "neutral";
+    in property <bool> active: false;
+    in property <bool> reduced_motion: false;
+    in-out property <bool> pulse: false;
+
+    private property <bool> active-state: root.active
+        || root.state == "active"
+        || root.state == "running";
+    private property <bool> complete-state: root.state == "success"
+        || root.state == "complete"
+        || root.state == "passed";
+    private property <bool> attention-state: root.state == "attention"
+        || root.state == "blocked"
+        || root.state == "error"
+        || root.state == "failed";
+
+    width: AgTheme.status-size;
+    height: AgTheme.status-size;
+    border-radius: AgTheme.radius-xs;
+    border-width: AgTheme.hairline;
+    border-color: root.attention-state
+        ? AgTheme.state-attention
+        : (root.active-state
+            ? AgTheme.state-active
+            : (root.complete-state ? AgTheme.state-complete : AgTheme.border-strong));
+    background: root.attention-state
+        ? (root.pulse ? AgTheme.red-400 : AgTheme.red-600)
+        : (root.active-state
+            ? (root.pulse ? AgTheme.white-000 : AgTheme.silver-400)
+            : (root.complete-state ? AgTheme.silver-200 : AgTheme.surface-line));
+    opacity: root.pulse ? 1.0 : 0.9;
+    accessible-role: none;
+    animate background, opacity {
+        duration: root.reduced_motion ? 0ms : AgTheme.motion-menu;
+    }
+
+    if root.complete-state: Rectangle {
+        x: AgTheme.space-1 - AgTheme.hairline;
+        y: AgTheme.space-1 - AgTheme.hairline;
+        width: AgTheme.space-1 + AgTheme.hairline + AgTheme.hairline;
+        height: AgTheme.space-1 + AgTheme.hairline + AgTheme.hairline;
+        border-radius: AgTheme.radius-xs;
+        background: AgTheme.surface;
+    }
+
+    Timer {
+        interval: 900ms;
+        running: (root.active-state || root.attention-state) && !root.reduced_motion;
+        triggered => { root.pulse = !root.pulse; }
+    }
+}

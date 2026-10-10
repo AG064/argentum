@@ -1,0 +1,180 @@
+export global AgTheme {
+    // Primitive palette: ink, graphite, silver, white, and one signal color.
+    out property <color> canvas: #090A0C;
+    out property <color> chrome: #0D0F12;
+    out property <color> navigation: #111419;
+    out property <color> surface: #101318;
+    out property <color> surface-soft: #15191E;
+    out property <color> surface-line: #1C2229;
+    out property <color> raised: #222930;
+    out property <color> elevated: #293139;
+    out property <color> hover: #242B32;
+
+    out property <color> silver-700: #59636D;
+    out property <color> silver-600: #737D87;
+    out property <color> silver-500: #929CA6;
+    out property <color> silver-400: #B4BDC6;
+    out property <color> silver-300: #C8CFD6;
+    out property <color> silver-200: #DEE3E7;
+    out property <color> white-100: #F5F6F7;
+    out property <color> white-000: #FFFFFF;
+
+    out property <color> red-700: #7E252D;
+    out property <color> red-600: #A8323C;
+    out property <color> red-500: #C64049;
+    out property <color> red-400: #E16870;
+    out property <color> red-100: #F6D9DB;
+
+    // Semantic surface and content colors.
+    out property <color> border-faint: #DEE3E70F;
+    out property <color> border-subtle: #DEE3E721;
+    out property <color> border-default: #DEE3E738;
+    out property <color> border-strong: #DEE3E75C;
+    out property <color> focus-ring: #F6D9DB;
+    out property <color> focus-ring-inner: #AEB6BF;
+    out property <color> text-primary: #F5F6F7;
+    out property <color> text-strong: #FFFFFF;
+    out property <color> text-secondary: #DEE3E7;
+    out property <color> text-muted: #929CA6;
+    // Lowest-emphasis text still clears 4.5:1 on navigation and raised surfaces.
+    out property <color> text-tertiary: #7D8791;
+    out property <color> text-danger: #E16870;
+    out property <color> attention-surface: #C8444C1F;
+    out property <color> scrim: #050607D9;
+
+    out property <color> state-neutral: #B4BDC6;
+    out property <color> state-active: #FFFFFF;
+    out property <color> state-attention: #E16870;
+    out property <color> state-danger: #DC626B;
+    out property <color> state-complete: #DEE3E7;
+
+    // Interaction colors. Red is reserved for primary actions and attention.
+    out property <color> control-fill: #1A1F25;
+    out property <color> control-hover: #242B32;
+    out property <color> control-pressed: #111419;
+    out property <color> control-selected: #252D35;
+    out property <color> control-disabled: #12161A;
+    // Every primary fill maintains AA contrast with text-primary.
+    out property <color> primary-fill: #B93641;
+    out property <color> primary-hover: #C03B46;
+    out property <color> primary-pressed: #982A34;
+
+    // Four-pixel spacing grid.
+    out property <length> space-none: 0px;
+    out property <length> space-1: 4px;
+    out property <length> space-2: 8px;
+    out property <length> space-3: 12px;
+    out property <length> space-4: 16px;
+    out property <length> space-5: 20px;
+    out property <length> space-6: 24px;
+    out property <length> space-7: 28px;
+    out property <length> space-8: 32px;
+    out property <length> space-9: 36px;
+    out property <length> space-10: 40px;
+    out property <length> space-12: 48px;
+    out property <length> space-16: 64px;
+
+    // Optical exception for paired labels and dense event stacks. Four pixels
+    // weakens the perceived vertical centering of these compact text groups.
+    out property <length> optical-tight-gap: 2px;
+
+    // Component geometry.
+    out property <length> hairline: 1px;
+    out property <length> accent-bar-width: 2px;
+    out property <length> control-height: 40px;
+    out property <length> mobile-control-height: 48px;
+    out property <length> control-min-width: 88px;
+    out property <length> icon-inline: 16px;
+    out property <length> icon-control: 18px;
+    out property <length> icon-navigation: 20px;
+    out property <length> icon-sheet: 24px;
+    out property <length> status-size: 12px;
+    out property <length> step-marker-size: 24px;
+    out property <length> brand-mark-sm: 20px;
+    out property <length> brand-mark-md: 32px;
+    out property <length> brand-mark-lg: 64px;
+    out property <length> brand-lockup-width: 240px;
+
+    // Semantic shell geometry and responsive thresholds.
+    out property <length> header-height: 64px;
+    out property <length> mobile-header-height: 56px;
+    out property <length> phone-header-height: 56px;
+    out property <length> mobile-gutter-compact: 12px;
+    out property <length> mobile-gutter-narrow: 12px;
+    out property <length> mobile-gutter: 16px;
+    out property <length> mobile-composer-height: 152px;
+    out property <length> mobile-sheet-header-height: 56px;
+    out property <length> mobile-sheet-max-width: 480px;
+    out property <length> mobile-sheet-height: 520px;
+    out property <length> mobile-menu-sheet-height: 420px;
+    out property <length> mobile-context-sheet-height: 360px;
+    out property <length> mobile-approval-sheet-height: 500px;
+    out property <length> rail-width: 56px;
+    out property <length> navigation-width: 264px;
+    out property <length> work-pane-width: 372px;
+    out property <length> work-content-max-width: 820px;
+    out property <length> model-menu-width: 380px;
+    out property <length> settings-dialog-width: 680px;
+    out property <length> settings-dialog-height: 580px;
+    out property <length> provider-profile-list-height: 104px;
+    out property <length> provider-profile-picker-height: 104px;
+    out property <length> provider-model-list-height: 156px;
+    out property <length> model-menu-panel-height: 420px;
+    out property <length> reasoning-disclosure-header-height: 40px;
+    out property <length> reasoning-disclosure-body-height: 144px;
+    out property <length> context-usage-panel-height: 76px;
+    out property <length> compact-desktop-breakpoint: 1200px;
+    out property <length> wide-desktop-breakpoint: 1600px;
+    out property <length> shell-navigation-breakpoint: 900px;
+    out property <length> work-pane-docked-breakpoint: 1240px;
+    out property <length> composer-compact-breakpoint: 560px;
+    out property <length> tablet-breakpoint: 768px;
+    out property <length> mobile-standard-breakpoint: 380px;
+    out property <length> mobile-landscape-height-breakpoint: 480px;
+    out property <length> composer-context-actions-breakpoint: 450px;
+    out property <length> session-detail-breakpoint: 520px;
+    out property <length> header-divider-breakpoint: 440px;
+    out property <length> header-actions-breakpoint: 700px;
+    out property <length> navigation-drawer-breakpoint: 340px;
+    out property <length> activity-overlay-height-breakpoint: 520px;
+    out property <length> review-overlay-height-breakpoint: 530px;
+    out property <length> command-palette-breakpoint: 500px;
+    out property <length> compact-menu-width-breakpoint: 440px;
+    out property <length> model-menu-height-breakpoint: 400px;
+    out property <length> context-menu-height-breakpoint: 410px;
+    out property <length> settings-dialog-width-breakpoint: 704px;
+    out property <length> settings-dialog-height-breakpoint: 604px;
+    out property <length> about-dialog-width-breakpoint: 540px;
+    out property <length> about-dialog-height-breakpoint: 430px;
+    out property <length> approval-dialog-width-breakpoint: 620px;
+    out property <length> approval-dialog-height-breakpoint: 520px;
+
+    // Compact corners preserve structure without softening control geometry.
+    out property <length> radius-xs: 2px;
+    out property <length> radius-sm: 3px;
+    out property <length> radius-md: 4px;
+    out property <length> radius-lg: 6px;
+    out property <length> radius-xl: 8px;
+
+    // Type scale. Meaningful body labels remain at least 14 px.
+    out property <string> font-ui: "Segoe UI Variable";
+    out property <string> font-code: "Cascadia Code";
+    out property <length> type-display: 30px;
+    out property <length> type-page-title: 22px;
+    out property <length> type-dialog-title: 18px;
+    out property <length> type-section-title: 16px;
+    out property <length> type-lead: 15px;
+    out property <length> type-body: 14px;
+    out property <length> type-compact: 12px;
+    out property <length> type-metadata: 11px;
+    out property <length> type-code: 12.5px;
+    out property <int> weight-regular: 400;
+    out property <int> weight-medium: 500;
+    out property <int> weight-semibold: 600;
+    out property <int> weight-title: 700;
+
+    out property <duration> motion-fast: 120ms;
+    out property <duration> motion-menu: 160ms;
+    out property <duration> motion-sheet: 220ms;
+    out property <duration> motion-state: 260ms;
+}

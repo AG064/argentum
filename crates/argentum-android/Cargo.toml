@@ -1,0 +1,35 @@
+[package]
+name = "argentum-android"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[lib]
+name = "main"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+android-inference-test-hook = [
+    "dep:argentum-android-inference",
+    "dep:argentum-providers",
+    "dep:argentum-security",
+    "dep:tokio",
+]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity.workspace = true
+argentum-app.workspace = true
+argentum-android-inference = { workspace = true, optional = true }
+argentum-cli.workspace = true
+argentum-domain.workspace = true
+argentum-platform.workspace = true
+argentum-providers = { workspace = true, optional = true }
+argentum-security = { workspace = true, optional = true }
+argentum-ui.workspace = true
+jni.workspace = true
+slint = { workspace = true, features = ["backend-android-activity-06"] }
+tokio = { workspace = true, optional = true }
+tracing.workspace = true

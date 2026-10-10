@@ -1,88 +1,39 @@
-node_modules/
-dist/
-build/
-target/
-*.js.map
-*.d.ts.map
-data/
-artifacts/
-.npm-cache/
-.pkg-cache/
-.dotnet-home/
-.nuget-packages/
-.appdata/
-.localappdata/
-.wix/
-memory/
-logs/
+/target/
+/artifacts/
+/build/
+/.cargo-local/
+/.cache/
+/.agents/
+/.codex/
+/.idea/
+/.vscode/
+/logs/
+/data/
 *.log
-
-# Allow the Android data package (Kotlin source) — the root `data/` is
-# for runtime/test artifacts and stays ignored.
-!android/app/src/main/java/com/argentum/data/
-!android/app/src/test/java/com/argentum/data/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.gguf
+*.keystore
+*.jks
+*.pfx
+*.p12
+*.env
 .env
-*.env.*
-secrets.env
-agclaw-*
-argentum-*
-
-# OpenSpace fork
-OpenSpace/
-.tsbuildinfo
-src/desktop/gen/
-src/desktop/target/
-src/desktop/binaries/argentum-cli-*
-src/desktop/binaries/llama.cpp/
-src/ui/desktop/llama.cpp/
-coverage/
-
-# Android signing (keystore + properties are per-developer, never committed)
-android/app/keystore/
-android/app/keystore.properties
-android/local.properties
-android/.gradle/
-
-# Local caches (llama.cpp binaries, model files, scratch)
-.cache/
-
-# Dependencies
-vendor/
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS files
+.env.*
+release.keystore.b64
+credentials/
+secrets/
+*.tmp
+*.sarif
+*.zip
+*.tar.gz
+/platforms/android/.gradle/
+/platforms/android/build/
+/platforms/android/app/build/
+/platforms/android/local.properties
+/platforms/android/app/keystore.properties
 .DS_Store
 Thumbs.db
-
-# Testing
-.nyc_output/
-
-# Credentials (NEVER commit)
-credentials/
-*.kdbx
-secrets/
-
-# Distribution / packaging
-*.tar.gz
-*.zip
-*.tar
-*.gz
-
-# Temporary files
-*.tmp
-*.temp
-
-# SARIF reports (CI artifacts — large binary output)
-*.sarif
-.semgrep.sarif
-
-# Agent memory/workspace state
-MEMORY.md
-
-/.agclaw-dashboard-pass-hash
-/.argentum-dashboard-pass-hash

@@ -1,0 +1,129 @@
+export struct PlanStepView {
+    index: int,
+    title: string,
+    detail: string,
+    state: string,
+}
+
+export struct ActivityItemView {
+    title: string,
+    detail: string,
+    state: string,
+}
+
+export struct FileChangeView {
+    id: string,
+    path: string,
+    kind: string,
+    revision: int,
+    selected: bool,
+    restore-available: bool,
+    restore-reason: string,
+}
+
+export struct TrajectoryItemView {
+    sequence: string,
+    title: string,
+    detail: string,
+    state: string,
+    kind: string,
+    timestamp: string,
+}
+
+export struct InspectorModeView {
+    id: string,
+    label: string,
+    icon: string,
+    detail: string,
+}
+
+export struct ConversationMessageView {
+    role: string,
+    text: string,
+    reasoning: string,
+    reasoning_available: bool,
+    provider_label: string,
+    model: string,
+    usage_reported: bool,
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
+    context_window_reported: bool,
+    context_window_tokens: int,
+    state: string,
+}
+
+export struct SessionItemView {
+    id: string,
+    title: string,
+    detail: string,
+    active: bool,
+}
+
+export struct ProviderProfileView {
+    id: string,
+    label: string,
+    kind: string,
+    kind_label: string,
+    endpoint: string,
+    model: string,
+    selected: bool,
+    credential_supported: bool,
+    credential_configured: bool,
+}
+
+export struct ProviderModelView {
+    id: string,
+    label: string,
+    context_window_tokens: int,
+    context_window_reported: bool,
+    selected: bool,
+}
+
+export struct HarnessProfileView {
+    id: string,
+    label: string,
+    detail: string,
+    selected: bool,
+    selectable: bool,
+}
+
+export struct HarnessExecutionProfileView {
+    id: string,
+    label: string,
+    detail: string,
+    selected: bool,
+    selectable: bool,
+}
+
+export struct HarnessSurfaceView {
+    id: string,
+    label: string,
+    state: string,
+    detail: string,
+    visible: bool,
+    configurable: bool,
+}
+
+export struct HarnessCapabilityView {
+    id: string,
+    label: string,
+    state: string,
+    detail: string,
+    enabled: bool,
+    configurable: bool,
+}
+
+export struct HarnessModuleView {
+    id: string,
+    label: string,
+    detail: string,
+    installed: bool,
+    enabled: bool,
+    recovery_pending: bool,
+}
+
+export struct DiagnosticRecordView {
+    code: string,
+    detail: string,
+}

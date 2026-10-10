@@ -1,0 +1,110 @@
+import { ScrollView } from "std-widgets.slint";
+import { AgTheme } from "../tokens.slint";
+import { ActivityItemView } from "../view-models.slint";
+import { AgIcon } from "../components/icon.slint";
+import { SectionHeading } from "../components/surfaces.slint";
+
+component ActivityRow inherits Rectangle {
+    in property <ActivityItemView> item;
+
+    min-height: AgTheme.space-16;
+    vertical-stretch: 0;
+    background: row-touch.has-hover ? AgTheme.hover : transparent;
+
+    Rectangle {
+        x: AgTheme.space-none;
+        y: AgTheme.space-2;
+        width: AgTheme.accent-bar-width;
+        height: parent.height - AgTheme.space-4;
+        background: root.item.state == "error" || root.item.state == "attention"
+            ? AgTheme.red-500
+            : AgTheme.silver-700;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        padding-top: AgTheme.space-2;
+        padding-bottom: AgTheme.space-2;
+        spacing: AgTheme.space-3;
+
+        Rectangle {
+            width: AgTheme.icon-inline;
+            background: transparent;
+            AgIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                name: root.item.state == "error" || root.item.state == "attention" ? "alert" : "activity";
+                size: AgTheme.icon-inline;
+                tint: root.item.state == "error" || root.item.state == "attention"
+                    ? AgTheme.red-400
+                    : AgTheme.silver-400;
+            }
+        }
+
+        VerticalLayout {
+            spacing: AgTheme.optical-tight-gap;
+            alignment: center;
+            Text {
+                text: root.item.title;
+                color: AgTheme.text-secondary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                font-weight: AgTheme.weight-medium;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.detail;
+                color: AgTheme.text-muted;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-compact;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    row-touch := TouchArea { mouse-cursor: default; }
+}
+
+export component ActivitySurface inherits Rectangle {
+    in property <[ActivityItemView]> items: [];
+    in property <string> summary: "No activity yet";
+    in property <bool> touch-mode: false;
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: AgTheme.space-3;
+
+        SectionHeading { label: "Activity"; detail: root.items.length; }
+
+        Text {
+            text: root.summary;
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            wrap: word-wrap;
+        }
+
+        if root.items.length == 0: Text {
+            text: "No activity yet";
+            color: AgTheme.text-muted;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-body;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            vertical-stretch: 1;
+        }
+
+        if root.items.length > 0: ScrollView {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            mouse-drag-pan-enabled: root.touch-mode;
+
+            VerticalLayout {
+                spacing: AgTheme.optical-tight-gap;
+                for item in root.items: ActivityRow { item: item; }
+            }
+        }
+    }
+}

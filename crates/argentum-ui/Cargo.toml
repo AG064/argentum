@@ -1,0 +1,17 @@
+[package]
+name = "argentum-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+build = "build.rs"
+
+[dependencies]
+argentum-domain.workspace = true
+slint.workspace = true
+time.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[build-dependencies]
+slint-build = "1.17"

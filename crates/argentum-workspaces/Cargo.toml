@@ -1,0 +1,19 @@
+[package]
+name = "argentum-workspaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[dependencies]
+argentum-domain.workspace = true
+argentum-security.workspace = true
+cap-std.workspace = true
+regex.workspace = true
+sha2.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

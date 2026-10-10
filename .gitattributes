@@ -1,0 +1,18 @@
+* text=auto
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.slint text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.png binary
+*.ico binary
+*.icns binary
+*.jar binary
+*.der binary

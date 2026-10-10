@@ -1,0 +1,250 @@
+import { AgTheme } from "../tokens.slint";
+import { ActivityItemView, FileChangeView, InspectorModeView, TrajectoryItemView } from "../view-models.slint";
+import { IconButton } from "../components/buttons.slint";
+import { AgIcon } from "../components/icon.slint";
+import { ActivitySurface } from "activity.slint";
+import { ReviewSurface } from "review.slint";
+import { TrajectorySurface } from "trajectory.slint";
+
+component InspectorModeButton inherits Rectangle {
+    in property <InspectorModeView> mode;
+    in property <bool> selected: false;
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+    out property <bool> has-focus: mode-focus.has-focus;
+    callback clicked();
+
+    height: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
+    min-width: AgTheme.control-min-width;
+    border-radius: AgTheme.radius-md;
+    border-width: AgTheme.hairline;
+    border-color: root.has-focus
+        ? AgTheme.focus-ring
+        : (root.selected ? AgTheme.border-default : transparent);
+    background: mode-touch.pressed
+        ? AgTheme.control-pressed
+        : (root.selected
+            ? AgTheme.control-selected
+            : (mode-touch.has-hover ? AgTheme.control-hover : transparent));
+    accessible-role: button;
+    accessible-label: root.mode.label + ". " + root.mode.detail;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: mode-focus;
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-2;
+        padding-right: AgTheme.space-2;
+        spacing: AgTheme.space-2;
+        alignment: center;
+        AgIcon {
+            name: root.mode.icon;
+            size: AgTheme.icon-inline;
+            tint: root.selected ? AgTheme.text-strong : AgTheme.silver-400;
+        }
+        Text {
+            text: root.mode.label;
+            color: root.selected ? AgTheme.text-strong : AgTheme.text-secondary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            font-weight: root.selected ? AgTheme.weight-semibold : AgTheme.weight-medium;
+            overflow: elide;
+        }
+    }
+
+    mode-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { mode-focus.focus(); root.clicked(); }
+    }
+    mode-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component InspectorSurface inherits Rectangle {
+    in property <[InspectorModeView]> modes: [];
+    in property <string> active-mode: "";
+    in property <[ActivityItemView]> activity-items: [];
+    in property <string> activity-summary: "No activity yet";
+    in property <[TrajectoryItemView]> trajectory-items: [];
+    in property <string> trajectory-summary: "No durable records";
+    in property <bool> trajectory-loading: false;
+    in property <bool> trajectory-truncated: false;
+    in property <string> trajectory-error: "";
+    in property <bool> goal-available: false;
+    in property <string> goal-objective: "";
+    in-out property <string> goal-draft: "";
+    in property <string> goal-state: "";
+    in property <string> goal-next-action: "";
+    in property <int> goal-iteration: 0;
+    in property <int> goal-tokens-used: 0;
+    in property <int> goal-token-budget: 0;
+    in property <bool> goal-token-budget-reported: false;
+    in property <int> goal-tools-used: 0;
+    in property <int> goal-tool-budget: 0;
+    in property <bool> goal-tool-budget-reported: false;
+    in property <int> goal-time-budget-seconds: 0;
+    in property <bool> goal-time-budget-reported: false;
+    in property <int> goal-verification-count: 0;
+    in property <bool> goal-busy: false;
+    in property <string> change-summary: "No files changed";
+    in property <[FileChangeView]> change-files: [];
+    in property <int> changed-files: 0;
+    in property <int> additions: 0;
+    in property <int> removals: 0;
+    in property <string> selected-file-change-id: "";
+    in property <string> selected-change-path: "";
+    in property <string> selected-diff: "";
+    in property <bool> selected-diff-available: false;
+    in property <bool> selected-diff-truncated: false;
+    in property <string> selected-diff-reason: "Select a file to load its diff.";
+    in property <bool> selected-restore-available: false;
+    in property <string> selected-restore-reason: "Select a file to inspect restore availability.";
+    in property <bool> recovery-required: false;
+    in property <string> recovery-summary: "";
+    in property <string> recovery-operation-id: "";
+    in property <string> verification-state: "pending";
+    in property <string> verification-label: "Not run";
+    in property <string> verification-summary: "No automated checks were run";
+    in property <string> active-session-id: "";
+    in property <bool> touch-mode: false;
+    in property <bool> reduced-motion: false;
+    callback select-mode(string);
+    callback close();
+    callback refresh-trajectory(string);
+    callback load-change-diff(string);
+    callback request-restore(string);
+    callback load-change-recovery();
+    callback retry-change-recovery(string);
+    callback request-recovery-restore(string);
+    callback set-goal(string, int, int, int);
+    callback pause-goal();
+    callback resume-goal();
+    callback clear-goal();
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: AgTheme.space-3;
+
+        HorizontalLayout {
+            height: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
+            spacing: AgTheme.space-2;
+            Text {
+                text: "Inspector";
+                color: AgTheme.text-primary;
+                font-family: AgTheme.font-ui;
+                font-size: AgTheme.type-section-title;
+                font-weight: AgTheme.weight-title;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            IconButton {
+                glyph: "close";
+                hint: "Close inspector";
+                target-size: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
+                reduced-motion: root.reduced-motion;
+                clicked => { root.close(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: AgTheme.space-1;
+            for mode in root.modes: InspectorModeButton {
+                mode: mode;
+                selected: mode.id == root.active-mode;
+                touch-mode: root.touch-mode;
+                reduced-motion: root.reduced-motion;
+                horizontal-stretch: 1;
+                clicked => { root.select-mode(mode.id); }
+            }
+        }
+
+        Rectangle { height: AgTheme.hairline; background: AgTheme.border-subtle; }
+
+        if root.active-mode == "changes": ReviewSurface {
+            vertical-stretch: 1;
+            goal-available: root.goal-available;
+            goal-objective: root.goal-objective;
+            goal-draft <=> root.goal-draft;
+            goal-state: root.goal-state;
+            goal-next-action: root.goal-next-action;
+            goal-iteration: root.goal-iteration;
+            goal-tokens-used: root.goal-tokens-used;
+            goal-token-budget: root.goal-token-budget;
+            goal-token-budget-reported: root.goal-token-budget-reported;
+            goal-tools-used: root.goal-tools-used;
+            goal-tool-budget: root.goal-tool-budget;
+            goal-tool-budget-reported: root.goal-tool-budget-reported;
+            goal-time-budget-seconds: root.goal-time-budget-seconds;
+            goal-time-budget-reported: root.goal-time-budget-reported;
+            goal-verification-count: root.goal-verification-count;
+            goal-busy: root.goal-busy;
+            change-summary: root.change-summary;
+            change-files: root.change-files;
+            changed-files: root.changed-files;
+            additions: root.additions;
+            removals: root.removals;
+            selected-file-change-id: root.selected-file-change-id;
+            selected-change-path: root.selected-change-path;
+            selected-diff: root.selected-diff;
+            selected-diff-available: root.selected-diff-available;
+            selected-diff-truncated: root.selected-diff-truncated;
+            selected-diff-reason: root.selected-diff-reason;
+            selected-restore-available: root.selected-restore-available;
+            selected-restore-reason: root.selected-restore-reason;
+            recovery-required: root.recovery-required;
+            recovery-summary: root.recovery-summary;
+            recovery-operation-id: root.recovery-operation-id;
+            verification-state: root.verification-state;
+            verification-label: root.verification-label;
+            verification-summary: root.verification-summary;
+            touch-mode: root.touch-mode;
+            reduced-motion: root.reduced-motion;
+            set-goal(objective, token-budget, tool-budget, time-budget-seconds) => {
+                root.set-goal(objective, token-budget, tool-budget, time-budget-seconds);
+            }
+            pause-goal => { root.pause-goal(); }
+            resume-goal => { root.resume-goal(); }
+            clear-goal => { root.clear-goal(); }
+            load-change-diff(file-change-id) => { root.load-change-diff(file-change-id); }
+            request-restore(file-change-id) => { root.request-restore(file-change-id); }
+            load-change-recovery => { root.load-change-recovery(); }
+            retry-change-recovery(operation-id) => { root.retry-change-recovery(operation-id); }
+            request-recovery-restore(operation-id) => { root.request-recovery-restore(operation-id); }
+        }
+
+        if root.active-mode == "activity": ActivitySurface {
+            vertical-stretch: 1;
+            items: root.activity-items;
+            summary: root.activity-summary;
+            touch-mode: root.touch-mode;
+        }
+
+        if root.active-mode == "trajectory": TrajectorySurface {
+            vertical-stretch: 1;
+            items: root.trajectory-items;
+            summary: root.trajectory-summary;
+            error: root.trajectory-error;
+            loading: root.trajectory-loading;
+            truncated: root.trajectory-truncated;
+            touch-mode: root.touch-mode;
+            reduced-motion: root.reduced-motion;
+            refresh => {
+                if root.active-session-id != "" { root.refresh-trajectory(root.active-session-id); }
+            }
+        }
+    }
+}

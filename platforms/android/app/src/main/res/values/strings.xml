@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Argentum</string>
+    <string name="host_channel_name">Argentum local inference</string>
+    <string name="inference_active">Local model operation is active</string>
+</resources>

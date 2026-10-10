@@ -1,0 +1,27 @@
+[package]
+name = "argentum-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "argentum"
+path = "src/main.rs"
+
+[dependencies]
+argentum-cli.workspace = true
+argentum-domain.workspace = true
+argentum-platform.workspace = true
+argentum-security.workspace = true
+argentum-ui.workspace = true
+slint.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.31"

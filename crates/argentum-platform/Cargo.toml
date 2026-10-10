@@ -1,0 +1,47 @@
+[package]
+name = "argentum-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+argon2.workspace = true
+argentum-domain.workspace = true
+argentum-lifecycle.workspace = true
+argentum-security.workspace = true
+async-trait.workspace = true
+chacha20poly1305.workspace = true
+directories.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zeroize.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios", target_os = "linux"))'.dependencies]
+keyring.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Credentials",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity.workspace = true
+jni.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
