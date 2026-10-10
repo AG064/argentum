@@ -1152,6 +1152,9 @@ async fn reliability_absolute_path_inside_workspace_is_relative_and_readable_in_
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("known.txt");
     std::fs::write(&path, "known data").unwrap();
+    // The public path contract advertises the canonical workspace, not an
+    // arbitrary short-name alias supplied by a platform temporary directory.
+    let path = path.canonicalize().unwrap();
     let (runtime, requests) = fixture(
         root.path(),
         vec![call("absolute", "read_text", json!({"path":path}))],

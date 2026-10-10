@@ -29,6 +29,7 @@ try {
         rustc=(& rustc --version)
         jobs=$Jobs
         test_threads=1
+        token_owner_is_user=[Security.Principal.WindowsIdentity]::GetCurrent().Owner.Equals([Security.Principal.WindowsIdentity]::GetCurrent().User)
         build_profile_names=@(Get-ChildItem Env: | Where-Object Name -match '^CARGO_PROFILE_' | Select-Object -ExpandProperty Name)
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'environment.json') -Encoding utf8NoBOM
     $args = @('test','--workspace','--all-targets','--no-run','--locked','--offline','--message-format=json','-j',[string]$Jobs)

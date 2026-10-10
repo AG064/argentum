@@ -25,11 +25,12 @@ use windows_sys::Win32::Security::Isolation::{
 };
 use windows_sys::Win32::Security::{
     AccessCheck, DeriveCapabilitySidsFromName, DuplicateToken, EqualSid, FreeSid,
-    GetSecurityDescriptorDacl, GetSecurityDescriptorSacl, GetTokenInformation,
-    SecurityImpersonation, TokenCapabilities, TokenIsAppContainer, DACL_SECURITY_INFORMATION,
-    GENERIC_MAPPING, LABEL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-    SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES, TOKEN_DUPLICATE, TOKEN_GROUPS,
-    TOKEN_QUERY,
+    GetSecurityDescriptorDacl, GetSecurityDescriptorOwner, GetSecurityDescriptorSacl,
+    GetTokenInformation, SecurityImpersonation, TokenCapabilities, TokenIsAppContainer, TokenUser,
+    DACL_SECURITY_INFORMATION, GENERIC_MAPPING, LABEL_SECURITY_INFORMATION,
+    OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SECURITY_ATTRIBUTES,
+    SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES, TOKEN_DUPLICATE, TOKEN_GROUPS, TOKEN_QUERY,
+    TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
@@ -39,7 +40,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
+    CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
     InitializeProcThreadAttributeList, OpenProcessToken, TerminateProcess,
     UpdateProcThreadAttribute, WaitForSingleObject, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW,
     CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
@@ -66,6 +67,60 @@ fn owned(handle: HANDLE) -> io::Result<OwnedHandle> {
     Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
 }
 
+fn current_user_sid_text() -> io::Result<String> {
+    let mut raw = std::ptr::null_mut();
+    // SAFETY: current-process pseudo handle and a valid output slot; query only.
+    checked(unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) })?;
+    let token = owned(raw)?;
+    let mut length = 0;
+    // SAFETY: query the required TokenUser buffer length, without dereferencing null.
+    unsafe {
+        GetTokenInformation(
+            token.as_raw_handle(),
+            TokenUser,
+            std::ptr::null_mut(),
+            0,
+            &mut length,
+        );
+    }
+    if length < std::mem::size_of::<TOKEN_USER>() as u32 || length > 64 * 1024 {
+        return Err(io::Error::other("current user SID buffer is invalid"));
+    }
+    let mut buffer = vec![0_usize; (length as usize).div_ceil(std::mem::size_of::<usize>())];
+    // SAFETY: aligned buffer with at least the queried byte capacity.
+    checked(unsafe {
+        GetTokenInformation(
+            token.as_raw_handle(),
+            TokenUser,
+            buffer.as_mut_ptr().cast(),
+            length,
+            &mut length,
+        )
+    })?;
+    // SAFETY: successful TokenUser query contains TOKEN_USER and its SID in the live buffer.
+    let user = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast::<TOKEN_USER>()) };
+    let mut text = std::ptr::null_mut();
+    checked(unsafe { ConvertSidToStringSidW(user.User.Sid, &mut text) })?;
+    let result = (|| {
+        let mut count = 0;
+        // SAFETY: ConvertSidToStringSidW returned a terminated allocated SID string.
+        unsafe {
+            while *text.add(count) != 0 {
+                count += 1;
+                if count > 256 {
+                    return Err(io::Error::other("current user SID string is invalid"));
+                }
+            }
+            String::from_utf16(std::slice::from_raw_parts(text, count)).map_err(io::Error::other)
+        }
+    })();
+    // SAFETY: this allocation belongs to ConvertSidToStringSidW and is no longer used.
+    unsafe {
+        LocalFree(text.cast());
+    }
+    result
+}
+
 pub(crate) struct ProbeSandbox {
     name: Vec<u16>,
     sid: usize,
@@ -73,6 +128,7 @@ pub(crate) struct ProbeSandbox {
     sid_text: String,
     profile: PathBuf,
     owned_root: PathBuf,
+    owner_sid_text: String,
     retired: std::sync::atomic::AtomicBool,
 }
 impl std::fmt::Debug for ProbeSandbox {
@@ -84,6 +140,7 @@ impl std::fmt::Debug for ProbeSandbox {
 }
 impl ProbeSandbox {
     pub(crate) fn create(owned_root: &Path) -> io::Result<Arc<Self>> {
+        let owner_sid_text = current_user_sid_text()?;
         crate::ensure_owner_only_directory(owned_root)?;
         let owned_root = owned_root.canonicalize()?;
         let name = wide(format!("argentum.check.{}", uuid::Uuid::new_v4().simple()));
@@ -111,6 +168,7 @@ impl ProbeSandbox {
             sid_text: String::new(),
             profile: PathBuf::new(),
             owned_root,
+            owner_sid_text,
             retired: std::sync::atomic::AtomicBool::new(false),
         };
         let cap_name = wide("registryRead");
@@ -236,8 +294,8 @@ impl ProbeSandbox {
         })?;
         let rights = if writable { "0x1301bf" } else { "0x1200a9" };
         let sddl = wide(format!(
-            "D:P(A;OICI;FA;;;OW)(A;OICI;{rights};;;{})S:(ML;OICI;NW;;;LW)",
-            self.sid_text
+            "O:{}D:P(A;OICI;FA;;;{})(A;OICI;{rights};;;{})S:(ML;OICI;NW;;;LW)",
+            self.owner_sid_text, self.owner_sid_text, self.sid_text
         ));
         let mut sd = std::ptr::null_mut();
         // SAFETY: descriptor remains live for both SetSecurityInfo calls and is freed afterwards.
@@ -258,11 +316,15 @@ impl ProbeSandbox {
                     &mut acl,
                     &mut defaulted,
                 ))?;
+                let mut owner = std::ptr::null_mut();
+                checked(GetSecurityDescriptorOwner(sd, &mut owner, &mut defaulted))?;
                 let code = SetSecurityInfo(
                     handle.as_raw_handle(),
                     SE_FILE_OBJECT,
-                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-                    std::ptr::null_mut(),
+                    OWNER_SECURITY_INFORMATION
+                        | DACL_SECURITY_INFORMATION
+                        | PROTECTED_DACL_SECURITY_INFORMATION,
+                    owner,
                     std::ptr::null_mut(),
                     acl,
                     std::ptr::null_mut(),

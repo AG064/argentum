@@ -580,6 +580,9 @@ mod windows {
             ));
             std::fs::create_dir(&root)?;
             crate::ensure_owner_only_directory(&root)?;
+            // Preserve the validated physical path in every descendant launch
+            // binding and environment value, including Windows short temp aliases.
+            let root = root.canonicalize()?;
             let keep = root.join("evidence");
             std::fs::create_dir(&keep)?;
             Ok(Self { root, keep })

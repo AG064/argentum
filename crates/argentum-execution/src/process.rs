@@ -1477,9 +1477,14 @@ fn configured_command(spec: &ProcessSpec, managed: bool) -> Command {
     }
     #[cfg(windows)]
     if managed {
-        use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_SUSPENDED};
+        use windows_sys::Win32::System::Threading::{
+            CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, CREATE_SUSPENDED,
+        };
 
-        command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED);
+        // These are owned background children with redirected standard I/O.
+        // Do not create a console window or depend on an interactive console
+        // being available on a Windows service/CI host.
+        command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED | CREATE_NO_WINDOW);
     }
     #[cfg(not(windows))]
     let _ = managed;
