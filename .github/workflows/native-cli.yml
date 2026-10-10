@@ -38,6 +38,14 @@ jobs:
         run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 2
       - name: Strict Clippy
         run: cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings
+      - name: Retain bounded test diagnostics on success or failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: offline-test-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/offline-tests/diagnostics
+          if-no-files-found: warn
+          retention-days: 14
       - name: Install pinned dependency-policy tool
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Advisory, source and license policy
