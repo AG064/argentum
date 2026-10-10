@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$TargetDirectory = '',
+    [string]$TargetName = '',
     [ValidateRange(1, 8)][int]$Jobs = 1
 )
 Set-StrictMode -Version Latest
@@ -30,6 +31,10 @@ try {
         if ($event.reason -eq 'compiler-artifact' -and $event.profile.test -and $event.executable) { $event }
     } | Sort-Object executable -Unique)
     if (-not $artifacts.Count) { throw 'No Cargo-authored test executables were returned.' }
+    if ($TargetName) {
+        $artifacts = @($artifacts | Where-Object { $_.target.name -eq $TargetName })
+        if ($artifacts.Count -ne 1) { throw 'Selected target must identify exactly one Cargo-authored test executable.' }
+    }
     # Build-only settings must not leak into a runtime guard's effective inputs.
     # Do not weaken production rejection of ambient compiler/profile overrides.
     $clear = @(Get-ChildItem Env: | Where-Object {
@@ -38,7 +43,7 @@ try {
     })
     foreach ($entry in $clear) {
         $saved[$entry.Name] = $entry.Value
-        [Environment]::SetEnvironmentVariable($entry.Name, $null, 'Process')
+        Remove-Item -LiteralPath ("Env:" + $entry.Name) -ErrorAction Stop
     }
     # Cargo ordinarily supplies this path when it launches its test harnesses.
     $saved['CARGO'] = [Environment]::GetEnvironmentVariable('CARGO', 'Process')
@@ -65,6 +70,9 @@ try {
     $results | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $output 'results.json') -Encoding utf8NoBOM
     if (@($results | Where-Object exit_code -ne 0).Count) { throw 'Offline test failures retained in results.json.' }
 } finally {
-    foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+    foreach ($name in $saved.Keys) {
+        if ($null -eq $saved[$name]) { Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue }
+        else { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+    }
     Pop-Location
 }

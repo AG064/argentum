@@ -4,6 +4,11 @@ Status is scoped to native `0.1.0-rc.1`, not the historical TypeScript release.
 Source presence, compilation, synthetic contracts, live provider evidence and
 release qualification are separate facts.
 
+Observed CLI imports include `VCRUNTIME140.dll` and Universal CRT API sets.
+An installed x64 Microsoft Visual C++ runtime is a prerequisite; it is not
+bundled. Local runtime evidence is Windows 10.0.26100, not a pristine VM or a
+general Windows minimum-version qualification.
+
 | Route | Native implementation | Evidence and qualification |
 | --- | --- | --- |
 | Windows x64 MSVC CLI | Setup, chat, headless, JSONL, tools, review, verification, recovery | Primary RC target; local clean-source and package qualification is recorded in the RC document |

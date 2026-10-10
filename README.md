@@ -11,6 +11,11 @@ hosts remain source modules, not release-qualified products in this CLI package.
 The historical TypeScript product remains in earlier Git revisions and releases;
 its plugins, channels and browser features are not native CLI capabilities.
 
+The Windows x64 package requires the Universal CRT and Microsoft Visual C++
+x64 runtime (`VCRUNTIME140.dll`). These system/runtime components are not
+redistributed in the package. The recorded local host is Windows build 26100;
+this is not clean-machine or every-Windows-version qualification.
+
 ## Build from a fresh checkout
 
 Install Rust 1.98.0 with rustfmt and Clippy, Git, and the Windows MSVC C++ build
