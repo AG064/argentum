@@ -34,7 +34,8 @@ jobs:
       - name: Check native workspace
         run: cargo check --workspace --all-targets --locked -j 2
       - name: Credential-free tests
-        run: cargo test --workspace --all-targets --locked -j 2 -- --test-threads=1
+        shell: pwsh
+        run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 2
       - name: Strict Clippy
         run: cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings
       - name: Install pinned dependency-policy tool

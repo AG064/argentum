@@ -16,6 +16,13 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo deny check
 ```
 
+When using build-only `CARGO_PROFILE_*` settings, use
+`scripts/test-offline.ps1 -OutputDirectory C:\temporary\offline-tests`.
+It compiles the same workspace/all-target test executables, then clears build
+overrides and credential-like environment variables before running them. This
+keeps supplemental checks' production environment rejection intact. It collects
+every ordinary target result and never selects live ignored tests globally.
+
 Ordinary tests use synthetic or credential-free loopback inputs. Ignored live
 provider/local-model tests require explicit separate authorization; do not run
 `--ignored` as a release shortcut. Compiler/test caches are generated outputs,

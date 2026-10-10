@@ -6555,7 +6555,8 @@ argentum permissions grants [OPTIONS]\n  \
 argentum permissions revoke GRANT_ID [OPTIONS]\n  \
 argentum verification list [OPTIONS]\n  \
 argentum verification status [RUN_ID] [OPTIONS]\n\n\
-argentum changes page --run-id UUID [--limit N] [--cursor TEXT] --json\\n  \\\nargentum changes list RUN_ID [OPTIONS]\n  \
+argentum changes page --run-id UUID [--limit N] [--cursor TEXT] --json\n  \
+argentum changes list RUN_ID [OPTIONS]\n  \
 argentum changes diff FILE_CHANGE_ID [OPTIONS]\n  \
 argentum changes restore FILE_CHANGE_ID [OPTIONS]\n  \
 argentum changes recovery [retry|restore OPERATION_ID] [OPTIONS]\n\n\
@@ -7498,7 +7499,10 @@ mod tests {
         assert!(!matches!(chat, Arguments::Help));
 
         assert!(parse_args(["--non-interactive"]).is_ok());
-        assert_eq!(version_line(), "argentum 0.1.0");
+        assert_eq!(
+            version_line(),
+            concat!("argentum ", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]
@@ -7603,7 +7607,10 @@ mod tests {
         assert!(parse_args(["session", "fork", session_id]).is_err());
         assert!(parse_args(["version", "extra"]).is_err());
         assert!(parse_args(["session", "select", "invalid"]).is_err());
-        assert_eq!(version_line(), "argentum 0.1.0");
+        assert_eq!(
+            version_line(),
+            concat!("argentum ", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]

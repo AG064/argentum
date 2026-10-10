@@ -17,7 +17,7 @@ fn canonical_binary_reports_argentum_identity() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "argentum 0.1.0"
+        concat!("argentum ", env!("CARGO_PKG_VERSION"))
     );
 }
 
@@ -33,6 +33,16 @@ fn help_uses_only_the_canonical_command_name() {
     assert!(stdout.contains("Usage:"));
     assert!(stdout.contains("argentum"));
     assert!(!stdout.contains("argentum-cli"));
+    assert!(
+        !stdout.contains(r"\n"),
+        "help contains a literal newline escape"
+    );
+    assert!(stdout
+        .lines()
+        .any(|line| line.trim_start().starts_with("argentum changes page ")));
+    assert!(stdout
+        .lines()
+        .any(|line| line.trim_start().starts_with("argentum changes list ")));
 }
 
 #[test]

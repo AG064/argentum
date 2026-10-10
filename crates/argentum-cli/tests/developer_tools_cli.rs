@@ -9,6 +9,7 @@ fn run_cli(workspace: &Path, database: &Path, arguments: &[&str]) -> Output {
         .arg("--database")
         .arg(database)
         .arg("--json")
+        .arg("--isolated")
         .output()
         .expect("run argentum")
 }
@@ -30,7 +31,7 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
 
     let tools = json(run_cli(workspace.path(), &database, &["tool", "list"]));
     let tools = tools["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 22);
+    assert_eq!(tools.len(), 23);
     for id in [
         "start_verification",
         "poll_process_job",
@@ -44,6 +45,9 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
     assert!(tools
         .iter()
         .any(|tool| tool["id"] == "delegate_readonly" && tool["enabled"] == false));
+    assert!(tools
+        .iter()
+        .any(|tool| tool["id"] == "check_rust" && tool["enabled"] == false));
     assert!(!tools
         .iter()
         .any(|tool| matches!(tool["id"].as_str(), Some("network" | "terminal"))));
