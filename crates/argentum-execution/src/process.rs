@@ -2427,6 +2427,15 @@ mod tests {
 
     #[cfg(windows)]
     fn powershell_spec(script: &str, workspace: &std::path::Path) -> ProcessSpec {
+        // Controlled process fixtures need only these OS modules. Installed CI
+        // cloud modules must not turn marker/lifetime tests into autoload tests.
+        // This is test-only, process-local, and is bound before authorization.
+        let script = format!(concat!(
+            "$env:PSModulePath=$PSHOME+'\\Modules'; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop; ",
+            "{script}"
+        ), script = script);
         ProcessSpec::argv(
             "powershell.exe",
             [
@@ -2434,7 +2443,7 @@ mod tests {
                 "-NoProfile".to_owned(),
                 "-NonInteractive".to_owned(),
                 "-Command".to_owned(),
-                script.to_owned(),
+                script,
             ],
             workspace,
         )

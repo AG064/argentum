@@ -13,8 +13,13 @@ The attempted qualification runner is `windows-2025`. Retained Server 2022
 and newer-runner failures establish that their LPAC cannot reopen the NUL
 device: the same child works with inherited stdin, but Cargo's output capture
 fails before execution. The runner change has not established qualification.
-No additional capability or global device permission is granted to obtain a
-pass. Full process, privacy and workspace test contracts remain unchanged.
+Those historical runs made no device-permission exception. The owner subsequently
+approved a temporary NUL-only DACL change on the disposable hosted job, documented
+in [CI host preparation](CI_NULL_DEVICE.md). Its actual apply/restoration and
+restricted-child capture controls passed in run `38153983871`; separate
+PowerShell startup failures mean that revision is still not qualified. No token
+capability, file, registry, network or integrity-label permission was expanded.
+Full process, privacy and workspace test contracts remain unchanged.
 Server 2022 and other Windows environments are not qualified by a successful
 newer-runner result. Local build 26100 and remote CI evidence remain separate.
 

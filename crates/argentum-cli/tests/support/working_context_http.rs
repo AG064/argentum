@@ -516,7 +516,7 @@ fn f06a_authorized_edit_and_process_receipts_survive_without_reexecution() {
     )
     .unwrap();
     let process_command = format!(
-        "Get-Content -LiteralPath '{}'",
+        "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; Get-Content -LiteralPath '{}'",
         fixture
             .workspace
             .join("process-output.txt")

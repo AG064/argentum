@@ -16,7 +16,9 @@ This is a host-wide NUL grant during the scope, not process-local access.
 workflow. The full driver scopes it to the `argentum_execution` and
 `tool_catalog_http_cli` test executables after compilation; the focused driver
 scopes it to the actual execution diagnostic. All original assertions and
-required targets remain. A global device mutex rejects overlapping helpers.
+required targets remain. A session-local device mutex rejects overlapping
+helpers in the single-job disposable VM. It does not exclude another session
+or an arbitrary administrator changing the descriptor.
 
 The native handle is opened only after GitHub-hosted Windows and existing admin
 checks, and its bounded queried kernel name must be exactly `\Device\Null`.
@@ -48,6 +50,16 @@ DACLs, integrity changes and local/self-hosted/other-OS rejection. They open no
 native NUL handle. Actual hosted LPAC compiler/test and existing private-file,
 registry, network, cancellation and source-preservation tests are still required.
 If another permission or a label change is needed, stop for a separate decision.
+
+## Hosted evidence, 2026-10-11
+
+At source `d4880ec2392d03fd707e99cbd2d44067c40a2834`, PR run
+`38153983871` retained an actual `\\Device\\Null` receipt with the exact SID
+and mask, `applied=true` and `restored=true`. The sampled owner/group/DACL/label
+hash returned to `60dcf34ca6ad1a7670bdc0f91be91a6b398ae4a35be691eb5dea8a963b3617b8`.
+The existing Low integrity label was not changed. The restricted child capture
+diagnostic passed. The focused job still failed two separate PowerShell startup
+controls, so this receipt is not an overall CI pass. Failed runs remain retained.
 
 The relevant primary sources are
 [Microsoft host preparation](https://github.com/microsoft/mxc/blob/c6f301d53a1430c4c921a05c57af838f7392348f/docs/backends/process-container/host-prep.md),

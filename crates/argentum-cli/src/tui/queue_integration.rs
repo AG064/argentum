@@ -603,7 +603,9 @@ async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue(
         .await;
     let program = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
         .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    server.replies.send(Reply::Tool(json!({"program":program,"args":["-NoProfile","-NonInteractive","-Command","[System.IO.File]::WriteAllText('owned-process.pid', [string]$PID); Start-Sleep -Seconds 30"],"timeout_ms":30000}))).unwrap();
+    // This fixture checks native goal cancellation, not discovery of modules
+    // installed on the CI image. Use CLR primitives under the same deadlines.
+    server.replies.send(Reply::Tool(json!({"program":program,"args":["-NoProfile","-NonInteractive","-Command","$env:PSModulePath=$PSHOME+'\\Modules'; [System.IO.File]::WriteAllText('owned-process.pid', [string]$PID); [System.Threading.Thread]::Sleep(30000)"],"timeout_ms":30000}))).unwrap();
     let approval = tokio::time::timeout(WATCHDOG, async {
         loop {
             if let AppEvent::ApprovalRequested(request) = harness.events.recv().await.unwrap() {
@@ -649,7 +651,7 @@ async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue(
             "-NonInteractive",
             "-Command",
             &format!(
-                "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ exit 1 }}; exit 0"
+                "try {{ $p=[System.Diagnostics.Process]::GetProcessById({pid}); if (-not $p.HasExited) {{ exit 1 }} }} catch [System.ArgumentException] {{ }}; exit 0"
             ),
         ])
         .output()

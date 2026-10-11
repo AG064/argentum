@@ -3155,6 +3155,13 @@ mod tests {
 
     #[cfg(windows)]
     fn powershell_test_spec(script: &str, working_directory: &Path) -> ProcessSpec {
+        // Deterministic test-child startup, not a production sidecar change.
+        let script = format!(concat!(
+            "$env:PSModulePath=$PSHOME+'\\Modules'; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop; ",
+            "{script}"
+        ), script = script);
         ProcessSpec::argv(
             "powershell.exe",
             [
@@ -3162,7 +3169,7 @@ mod tests {
                 "-NoProfile".to_owned(),
                 "-NonInteractive".to_owned(),
                 "-Command".to_owned(),
-                script.to_owned(),
+                script,
             ],
             working_directory,
         )
