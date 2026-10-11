@@ -2474,6 +2474,32 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
+    async fn windows_background_explicit_module_startup_diagnostic() {
+        let _process_fixture_guard = process_fixture_lock().lock().await;
+        let workspace = workspace();
+        let marker = workspace.path().join("explicit-started.txt");
+        let escaped = marker.to_string_lossy().replace('\'', "''");
+        let script = format!("$ErrorActionPreference='Stop'; [Console]::Out.WriteLine('CONTROL_BEFORE_EXPLICIT_MODULE'); Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; [Console]::Out.WriteLine('CONTROL_MANAGEMENT_IMPORTED'); Set-Content -LiteralPath '{escaped}' -Value started; [Console]::Out.WriteLine('CONTROL_EXPLICIT_AFTER')");
+        let result = ProcessRunner
+            .run(
+                powershell_spec(&script, workspace.path())
+                    .with_timeout(Duration::from_secs(20))
+                    .unwrap(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            result.exit_code == Some(0) && marker.exists(),
+            "explicit module control failed: exit={:?}; stdout={}; stderr={}",
+            result.exit_code,
+            result.stdout,
+            result.stderr
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
     async fn windows_managed_shell_listener_and_descendant_startup_diagnostic() {
         let _process_fixture_guard = process_fixture_lock().lock().await;
         let workspace = workspace();
