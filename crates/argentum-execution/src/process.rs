@@ -991,6 +991,10 @@ pub struct ManagedProcess {
     injected_lifecycle_failure: Option<TestManagedLifecycleFailure>,
 }
 
+#[path = "managed_ipc.rs"]
+mod managed_ipc;
+pub use managed_ipc::{ManagedIpcProcess, ManagedIpcStreams};
+
 struct SuspendedManagedProcess {
     containment: ProcessContainment,
     child: ManagedChild,

@@ -1,0 +1,29 @@
+[package]
+name = "argentum-extensions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[dependencies]
+argentum-domain.workspace = true
+argentum-execution.workspace = true
+argentum-lifecycle.workspace = true
+argentum-security.workspace = true
+async-trait.workspace = true
+http = "1"
+futures-util.workspace = true
+reqwest.workspace = true
+rmcp = { version = "=3.5.1", default-features = false, features = ["client", "transport-async-rw", "transport-streamable-http-client"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sse-stream = "=0.2.6"
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -37,3 +37,4 @@ secrets/
 /platforms/android/app/keystore.properties
 .DS_Store
 Thumbs.db
+/extensions/browser/node_modules/

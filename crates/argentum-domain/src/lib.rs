@@ -8,6 +8,7 @@ use uuid::Uuid;
 mod authority;
 pub mod context_budget;
 pub mod context_summary;
+pub mod extensions;
 pub mod final_result;
 pub mod goal_accounting;
 pub mod goal_supervision;
@@ -383,6 +384,9 @@ pub enum ToolInput {
     CancelProcessJob {
         job_id: String,
     },
+    Extension {
+        operation: extensions::ExtensionOperation,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -449,6 +453,7 @@ pub enum Capability {
     Verify,
     Network,
     ExternalProcess,
+    UseExtensions,
 }
 
 impl Capability {
@@ -463,6 +468,7 @@ impl Capability {
             Self::Verify => "Run verification",
             Self::Network => "Network",
             Self::ExternalProcess => "External process",
+            Self::UseExtensions => "Use reviewed extension tools",
         }
     }
 }

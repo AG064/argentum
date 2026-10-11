@@ -6,6 +6,8 @@ use std::pin::Pin;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(feature = "extensions")]
+mod extension_cli;
 mod model_picker;
 
 use argentum_cli::onboarding::{
@@ -54,6 +56,35 @@ fn main() -> ExitCode {
 
 #[tokio::main]
 async fn run_main() -> ExitCode {
+    if env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("extensions")) {
+        #[cfg(feature = "extensions")]
+        {
+            let values = env::args_os()
+                .skip(2)
+                .map(|value| {
+                    value
+                        .into_string()
+                        .map_err(|_| "extension arguments must be UTF-8")
+                })
+                .collect::<Result<Vec<_>, _>>();
+            let result = match values {
+                Ok(values) => extension_cli::run(values).await,
+                Err(error) => Err(error.into()),
+            };
+            return match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("argentum: {error}");
+                    ExitCode::FAILURE
+                }
+            };
+        }
+        #[cfg(not(feature = "extensions"))]
+        {
+            eprintln!("argentum: this build omits optional extensions; use an extensions-enabled artifact");
+            return ExitCode::FAILURE;
+        }
+    }
     match parse_args(env::args_os().skip(1)) {
         Ok(Arguments::Help) => {
             print_help();
@@ -6487,6 +6518,8 @@ fn print_skill_summary(summary: &argentum_workspaces::SkillSummary) {
 }
 
 fn print_help() {
+    #[cfg(feature = "extensions")]
+    println!("Optional governed extensions: argentum extensions help. Install/configure is not execution approval; activation requires the local owner console.");
     println!(
         "Argentum Genesis command host\n\n\
 Usage:\n  \

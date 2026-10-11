@@ -64,6 +64,7 @@ fn bound_fixture() -> (
         assistant_reasoning: "SYNTHETIC_PRIVATE_STATE".into(),
         calls,
         results: vec![ModelToolResult {
+            images: Default::default(),
             call_id: "synthetic-call".into(),
             content: "bounded result".into(),
         }],
@@ -609,6 +610,7 @@ async fn minimax_split_continuation_retains_documented_blocks_on_actual_next_htt
         assistant_reasoning: reasoning,
         calls,
         results: vec![ModelToolResult {
+            images: Default::default(),
             call_id: "synthetic-call-1".into(),
             content: "synthetic bounded result".into(),
         }],

@@ -108,6 +108,7 @@ pub(super) fn tool_definition() -> ModelToolDefinition {
 
 pub(super) fn unavailable_result(call_id: String, reason: &'static str) -> ModelToolResult {
     ModelToolResult {
+        images: Default::default(),
         call_id,
         content: json!({
             "version": 1,
@@ -390,6 +391,7 @@ impl RuntimeService {
                 )?;
                 (
                     ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: call.id,
                         content,
                     }),
@@ -1144,6 +1146,7 @@ fn failed_result(
     reported_tokens: u64,
 ) -> ModelToolResult {
     ModelToolResult {
+        images: Default::default(),
         call_id,
         content: serialize_envelope(
             child_id,

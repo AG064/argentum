@@ -97,6 +97,9 @@ pub enum LocalAuthorityAction {
     ResolveGoalAccounting {
         binding: Sha256Digest,
     },
+    ActivateExtension {
+        binding: Sha256Digest,
+    },
 }
 
 impl LocalAuthorityAction {
@@ -109,6 +112,7 @@ impl LocalAuthorityAction {
             Self::ActivateLocalRuntime { .. } => "activate_local_runtime",
             Self::ActivatePlatformTier { .. } => "activate_platform_tier",
             Self::ResolveGoalAccounting { .. } => "resolve_goal_accounting",
+            Self::ActivateExtension { .. } => "activate_extension",
         }
     }
 
@@ -141,6 +145,7 @@ impl LocalAuthorityAction {
             Self::ActivateLocalRuntime { plan } => validate_digest(plan),
             Self::ActivatePlatformTier { probe, .. } => validate_digest(probe),
             Self::ResolveGoalAccounting { binding } => validate_digest(binding),
+            Self::ActivateExtension { binding } => validate_digest(binding),
         }
     }
 }

@@ -891,12 +891,7 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             HarnessCapabilityKind::Execution,
             "No PTY or persistent terminal backend is registered.",
         ),
-        unavailable_capability(
-            "extension.external",
-            "External modules",
-            HarnessCapabilityKind::Extension,
-            "The signed isolated extension protocol is not implemented.",
-        ),
+        external_extension_capability(),
         available_capability(
             "goal.session",
             "Session goals",
@@ -1060,6 +1055,23 @@ fn disabled_configurable_capability(
     let mut capability = configurable_capability(id, label, kind, detail, dependencies);
     capability.enabled = false;
     capability
+}
+
+fn external_extension_capability() -> CapabilityRegistration {
+    #[cfg(feature = "extensions")]
+    {
+        disabled_configurable_capability("extension.external", "Reviewed extensions", HarnessCapabilityKind::Extension,
+            "Optional pinned skills/MCP adapters require exact owner activation; current-user executable code is not filesystem sandboxed.", vec!["approval.write"])
+    }
+    #[cfg(not(feature = "extensions"))]
+    {
+        unavailable_capability(
+            "extension.external",
+            "External modules",
+            HarnessCapabilityKind::Extension,
+            "This build omits optional extension support; use an extensions-enabled build.",
+        )
+    }
 }
 
 fn unavailable_capability(

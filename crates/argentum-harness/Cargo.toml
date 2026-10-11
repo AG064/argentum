@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license-file.workspace = true
 
+[features]
+extensions = []
+
 [dependencies]
 argentum-lifecycle.workspace = true
 argentum-domain.workspace = true

@@ -244,6 +244,14 @@ impl HostConfig {
         self
     }
 
+    /// Attach only the runtime's vault boundary, without enumerating unrelated
+    /// provider keys during extension-only local configuration.
+    #[cfg(feature = "extensions")]
+    pub fn with_extension_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
+        self.secret_store = secret_store;
+        self
+    }
+
     pub fn with_provider_credential(
         self,
         profile_id: impl AsRef<str>,
@@ -1084,6 +1092,8 @@ impl CommandHost {
             .as_ref()
             .map(|_| runtime.connect_interactive_approval_responder())
             .transpose()?;
+        #[cfg(feature = "extensions")]
+        runtime.attach_extension_secret_store(Arc::clone(&secret_store))?;
         Ok(Self {
             runtime,
             store_owner,
@@ -1760,6 +1770,51 @@ impl std::fmt::Debug for LocalCommandHandle {
 }
 
 impl LocalCommandHandle {
+    #[cfg(feature = "extensions")]
+    pub async fn set_extension_secret(
+        &self,
+        namespace: &str,
+        secret: SecretValue,
+    ) -> Result<(), HostError> {
+        Ok(self.runtime.set_extension_secret(namespace, secret).await?)
+    }
+    #[cfg(feature = "extensions")]
+    pub fn extension_records(
+        &self,
+    ) -> Result<Vec<argentum_domain::extensions::ExtensionRecord>, HostError> {
+        Ok(self.runtime.extension_records()?)
+    }
+
+    #[cfg(feature = "extensions")]
+    pub async fn configure_extension(
+        &self,
+        definition: argentum_domain::extensions::ExtensionDefinition,
+    ) -> Result<argentum_domain::extensions::ExtensionRecord, HostError> {
+        Ok(self.runtime.configure_extension(definition).await?)
+    }
+
+    #[cfg(feature = "extensions")]
+    pub async fn activate_extension(
+        &self,
+        namespace: &str,
+    ) -> Result<argentum_domain::extensions::ExtensionRecord, HostError> {
+        let authority = self
+            .local_authority
+            .as_ref()
+            .ok_or(RuntimeError::LocalAuthorityUnavailable)?;
+        let action = self.runtime.extension_activation_action(namespace)?;
+        let generation = authority
+            .platform_authority
+            .current_generation()
+            .ok_or(RuntimeError::LocalAuthorityUnavailable)?;
+        let ticket = authority.issuer.issue(action, generation)?;
+        Ok(self.runtime.activate_extension(namespace, ticket).await?)
+    }
+
+    #[cfg(feature = "extensions")]
+    pub async fn disable_extension(&self, namespace: &str, remove: bool) -> Result<(), HostError> {
+        Ok(self.runtime.disable_extension(namespace, remove).await?)
+    }
     pub fn chatgpt_auth(
         &self,
     ) -> Result<

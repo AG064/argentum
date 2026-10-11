@@ -5,9 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license-file.workspace = true
 
+[features]
+extensions = ["dep:argentum-extensions", "argentum-harness/extensions", "argentum-tools/extensions"]
+
 [dependencies]
 argentum-changes.workspace = true
 argentum-domain.workspace = true
+argentum-extensions = { workspace = true, optional = true }
 argentum-harness.workspace = true
 argentum-platform.workspace = true
 argentum-providers.workspace = true

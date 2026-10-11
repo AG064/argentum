@@ -36,6 +36,7 @@ use uuid::Uuid;
 
 mod command_identity;
 mod context_budget;
+mod extensions;
 mod grant_lookup;
 mod history;
 pub use grant_lookup::MAX_AUTHORIZATION_GRANTS;
@@ -3616,6 +3617,7 @@ impl Store {
             "line_count_availability",
             "TEXT CHECK(line_count_availability IS NULL OR line_count_availability IN ('computed', 'unavailable', 'unknown'))",
         )?;
+        extensions::migrate(&connection)?;
         connection.execute_batch("PRAGMA user_version = 22;")?;
         ensure_column(
             &connection,

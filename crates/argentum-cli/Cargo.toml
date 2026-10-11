@@ -12,6 +12,7 @@ path = "src/lib.rs"
 [features]
 default = []
 local-llama-cpp = ["argentum-providers/local-llama-cpp"]
+extensions = ["argentum-runtime/extensions", "dep:argentum-extensions", "dep:argentum-execution"]
 
 [[bin]]
 name = "argentum"
@@ -20,6 +21,8 @@ path = "src/main.rs"
 [dependencies]
 argentum-android-inference.workspace = true
 argentum-domain.workspace = true
+argentum-extensions = { workspace = true, optional = true }
+argentum-execution = { workspace = true, optional = true }
 argentum-platform.workspace = true
 argentum-providers.workspace = true
 argentum-runtime.workspace = true

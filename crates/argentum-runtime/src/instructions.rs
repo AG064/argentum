@@ -202,7 +202,8 @@ fn file_paths(input: &ToolInput) -> (Vec<(&str, bool)>, bool) {
         | StartVerification { .. }
         | CheckRust { .. }
         | PollProcessJob { .. }
-        | CancelProcessJob { .. } => (vec![], false),
+        | CancelProcessJob { .. }
+        | Extension { .. } => (vec![], false),
     }
 }
 

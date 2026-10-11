@@ -342,8 +342,75 @@ pub struct ModelToolCall {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModelToolResult {
+    /// Transient broker-validated image data, never reconstructed from history.
+    #[serde(skip)]
+    pub images: Vec<ModelImage>,
     pub call_id: String,
     pub content: String,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct ModelImage {
+    data_url: String,
+    pub sha256: String,
+    pub origin: String,
+}
+impl std::fmt::Debug for ModelImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModelImage")
+            .field("bytes", &self.data_url.len())
+            .field("sha256", &self.sha256)
+            .finish_non_exhaustive()
+    }
+}
+impl ModelImage {
+    pub fn from_png(
+        bytes: &[u8],
+        expected_sha256: &str,
+        origin: String,
+    ) -> Result<Self, ProviderError> {
+        if bytes.len() > 128 * 1024
+            || bytes.len() < 24
+            || !bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+            || &bytes[12..16] != b"IHDR"
+        {
+            return Err(ProviderError::InvalidRequest("image must be a bounded PNG"));
+        }
+        let width = u32::from_be_bytes(bytes[16..20].try_into().expect("checked PNG header"));
+        let height = u32::from_be_bytes(bytes[20..24].try_into().expect("checked PNG header"));
+        if width == 0 || height == 0 || width > 1200 || height > 800 {
+            return Err(ProviderError::InvalidRequest(
+                "PNG viewport exceeds admitted dimensions",
+            ));
+        }
+        use sha2::Digest;
+        let hash = format!("{:x}", sha2::Sha256::digest(bytes));
+        if hash != expected_sha256 {
+            return Err(ProviderError::InvalidRequest(
+                "image artifact identity changed",
+            ));
+        }
+        let parsed = Url::parse(&origin)?;
+        if !matches!(parsed.scheme(), "http" | "https")
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.origin().ascii_serialization() != origin
+        {
+            return Err(ProviderError::InvalidRequest("image origin is invalid"));
+        }
+        use base64::Engine;
+        Ok(Self {
+            data_url: format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            ),
+            sha256: hash,
+            origin,
+        })
+    }
+    pub fn data_url(&self) -> &str {
+        &self.data_url
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -2937,6 +3004,26 @@ fn prepare_compatible_wire(
     budget: &argentum_domain::context_budget::ModelBudget,
     request: &ModelRequest,
 ) -> Result<(Bytes, argentum_domain::context_budget::RequestAccounting), ProviderError> {
+    if request
+        .tool_exchanges
+        .iter()
+        .chain(
+            request
+                .history
+                .iter()
+                .filter_map(|message| message.tool_exchange.as_ref()),
+        )
+        .any(|exchange| {
+            exchange
+                .results
+                .iter()
+                .any(|result| !result.images.is_empty())
+        })
+    {
+        return Err(ProviderError::InvalidRequest(
+            "this route has no qualified image input representation",
+        ));
+    }
     budget
         .validate(profile)
         .map_err(ProviderError::ContextBudgetInvalid)?;
@@ -5243,6 +5330,7 @@ mod tests {
                 arguments: r#"{"path":"notes.txt"}"#.into(),
             }],
             results: vec![ModelToolResult {
+                images: Default::default(),
                 call_id: "call_1".into(),
                 content: "result".into(),
             }],
@@ -5423,6 +5511,7 @@ mod tests {
                         arguments: "{\"path\":\"fixture.txt\"}".into(),
                     }],
                     results: vec![ModelToolResult {
+                        images: Default::default(),
                         call_id: "old-call".into(),
                         content: "original result".into(),
                     }],
@@ -5640,6 +5729,7 @@ mod tests {
                     arguments: r#"{"path":"notes.txt"}"#.into(),
                 }],
                 results: vec![ModelToolResult {
+                    images: Default::default(),
                     call_id: "call_1".into(),
                     content: "bounded result".into(),
                 }],

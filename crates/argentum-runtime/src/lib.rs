@@ -87,6 +87,8 @@ use uuid::Uuid;
 
 mod authority;
 mod diagnostics;
+#[cfg(feature = "extensions")]
+mod extensions;
 mod modules;
 pub use authority::RuntimeHostAuthority;
 
@@ -313,6 +315,8 @@ fn profile_context_binding(profile: &ProviderProfile) -> String {
 
 #[derive(Clone)]
 pub struct RuntimeService {
+    #[cfg(feature = "extensions")]
+    extension_owner: Arc<std::sync::OnceLock<Arc<extensions::ExtensionOwner>>>,
     diagnostics: diagnostics::DiagnosticCapture,
     harness_publication: Arc<Mutex<()>>,
     store: Store,
@@ -454,7 +458,7 @@ enum ModelToolStep {
 }
 
 fn instruction_refresh(call_id: String) -> ModelToolStep {
-    ModelToolStep::Ready(ModelToolResult {
+    ModelToolStep::Ready(ModelToolResult { images: Default::default(),
         call_id,
         content: "{\"outcome\":\"instruction_context_refresh_required\",\"executed\":false,\"detail\":\"Applicable repository instructions changed or were not supplied. Review the fresh instruction projection in the next request before proposing another action. No approval was granted and no edit was automatically retried.\"}".into(),
     })
@@ -665,6 +669,8 @@ impl RuntimeService {
             trajectory_enabled: Arc::new(AtomicBool::new(true)),
             steering: Arc::new(Mutex::new(steering::SteeringControl::default())),
             delegation: Arc::new(Mutex::new(delegation::DelegationControl::default())),
+            #[cfg(feature = "extensions")]
+            extension_owner: Arc::default(),
         };
         runtime.reconcile_change_recovery_on_startup()?;
         Ok(runtime)
@@ -725,6 +731,8 @@ impl RuntimeService {
             trajectory_enabled: Arc::new(AtomicBool::new(true)),
             steering: Arc::new(Mutex::new(steering::SteeringControl::default())),
             delegation: Arc::new(Mutex::new(delegation::DelegationControl::default())),
+            #[cfg(feature = "extensions")]
+            extension_owner: Arc::default(),
         })
     }
 
@@ -918,6 +926,11 @@ impl RuntimeService {
         let active_run_count = active_runs.saturating_add(active_supervisors);
         if active_run_count != 0 {
             return Err(RuntimeError::ShutdownPendingRuns(active_run_count));
+        }
+
+        #[cfg(feature = "extensions")]
+        if let Some(owner) = self.extension_owner.get() {
+            owner.shutdown().await?;
         }
 
         {
@@ -1845,7 +1858,14 @@ impl RuntimeService {
             AppCommand::SetHarnessCapabilityEnabled {
                 capability_id,
                 enabled,
-            } => self.set_harness_capability_enabled(capability_id, enabled, authority),
+            } => {
+                #[cfg(feature = "extensions")]
+                if capability_id == "extension.external" && !enabled {
+                    self.ensure_execution_policy_mutable()?;
+                    self.revoke_extensions().await?;
+                }
+                self.set_harness_capability_enabled(capability_id, enabled, authority)
+            }
             AppCommand::ListApprovalGrants => {
                 let (grants, coverage) = self
                     .store
@@ -4286,7 +4306,7 @@ impl RuntimeService {
                         || !self.begin_steering_tool_admission(context.run_id)?
                     {
                         steering_deferred = true;
-                        let result = ModelToolResult {
+                        let result = ModelToolResult { images: Default::default(),
                             call_id: call.id.clone(),
                             content: steering::not_executed_result(),
                         };
@@ -5023,7 +5043,7 @@ impl RuntimeService {
                 Err(error_value) => return Err(error_value),
                 Ok(Err(error_value)) if tool_error_is_approval_required(&error_value) => {
                     if self.steering_pending(invocation.run_id)? {
-                        return Ok(ModelToolStep::Ready(ModelToolResult {
+                        return Ok(ModelToolStep::Ready(ModelToolResult { images: Default::default(),
                             call_id: call.id,
                             content: "Tool required approval and was not executed. Accepted steering will be applied before another action is considered."
                                 .into(),
@@ -5033,12 +5053,14 @@ impl RuntimeService {
                 }
                 Ok(Ok(result)) => {
                     return Ok(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: call.id,
                         content: bounded_tool_result(result),
                     }));
                 }
                 Ok(Err(_)) => {
                     return Ok(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: call.id,
                         content: "Tool execution failed inside the active security boundary."
                             .into(),
@@ -5064,6 +5086,7 @@ impl RuntimeService {
                 if authorization.try_without_grant && !authorization.prompt {
                     // The guarded no-grant attempt already emitted its trace.
                     return Ok(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: call.id,
                         content: PreflightCode::ApprovalRequired.content(None),
                     }));
@@ -5999,6 +6022,7 @@ impl RuntimeService {
             duration_ms: Some(0),
         }))?;
         Ok(ModelToolStep::Ready(ModelToolResult {
+            images: Default::default(),
             call_id: call.id.clone(),
             content,
         }))
@@ -6683,6 +6707,7 @@ impl RuntimeService {
                 } = continuation
                 {
                     let _ = sender.send(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: provider_call_id,
                         content: "Selected skill context became stale before execution.".into(),
                     }));
@@ -6802,6 +6827,7 @@ impl RuntimeService {
                     ..
                 } => {
                     let _ = sender.send(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
                         call_id: provider_call_id,
                         content: "Tool is disabled by the selected execution policy.".into(),
                     }));
@@ -6845,6 +6871,7 @@ impl RuntimeService {
                         ..
                     } => {
                         let _ = sender.send(ModelToolStep::Ready(ModelToolResult {
+                            images: Default::default(),
                             call_id: provider_call_id,
                             content: "Tool approval became stale before execution.".into(),
                         }));
@@ -6908,6 +6935,7 @@ impl RuntimeService {
                     }
                     Err(error_value) => {
                         let _ = sender.send(ModelToolStep::Ready(ModelToolResult {
+                            images: Default::default(),
                             call_id: fallback_call_id,
                             content: "Tool execution could not be completed safely.".into(),
                         }));
@@ -7025,6 +7053,14 @@ impl RuntimeService {
                 | ToolInput::SearchText { .. }
                 | ToolInput::SearchFilenames { .. }
         );
+        #[cfg(feature = "extensions")]
+        let image_input = request.input.clone();
+        #[cfg(feature = "extensions")]
+        let image_run = request.run_id;
+        #[cfg(feature = "extensions")]
+        let mut images = Vec::new();
+        #[cfg(not(feature = "extensions"))]
+        let images = Vec::new();
         let read_path = model_input_path(&request.input).map(str::to_owned);
         let recovery_arguments = match &request.input {
             ToolInput::ReadText {
@@ -7061,7 +7097,13 @@ impl RuntimeService {
                 return Ok(instruction_refresh(provider_call_id))
             }
             Err(error_value) => return Err(error_value),
-            Ok(Ok(result)) => bounded_tool_result(result),
+            Ok(Ok(result)) => {
+                #[cfg(feature = "extensions")]
+                {
+                    images = self.extension_images(&image_input, image_run, &result.output)?;
+                }
+                bounded_tool_result(result)
+            }
             Ok(Err(error)) => {
                 failed_read = read_only;
                 let feedback = if read_only {
@@ -7098,6 +7140,7 @@ impl RuntimeService {
             }
         }
         Ok(ModelToolStep::Ready(ModelToolResult {
+            images,
             call_id: provider_call_id,
             content,
         }))
@@ -7249,6 +7292,10 @@ impl RuntimeService {
                 session_id,
                 self.workspace_key.clone(),
             );
+            #[cfg(feature = "extensions")]
+            {
+                context.extension_executor = Some(self.extension_owner());
+            }
             context.remaining_execution_time = self
                 .goal_scope(request.run_id)?
                 .and_then(|scope| scope.deadline)
@@ -8408,9 +8455,30 @@ const MODEL_ASYNC_VERIFIER_RUNNERS: [&str; 4] = [
     "cargo-clippy-strict",
 ];
 
+fn extension_parameters() -> serde_json::Value {
+    use serde_json::json;
+    let namespace = json!({"type":"string","minLength":1,"maxLength":129,"description":"Exact owner-activated namespace from list; never an invented server."});
+    let variant = |action: &str, fields: serde_json::Value, required: Vec<&str>| {
+        let mut properties = fields.as_object().cloned().expect("static schema object");
+        properties.insert("action".into(), json!({"const":action}));
+        let mut required = required;
+        required.insert(0, "action");
+        json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
+    };
+    json!({"type":"object","properties":{"operation":{"oneOf":[
+        variant("list",json!({}),vec![]),
+        variant("load_skill",json!({"namespace":namespace,"path":{"type":"string","minLength":1,"maxLength":1024}}),vec!["namespace","path"]),
+        variant("discover_tools",json!({"namespace":namespace,"cursor":{"type":["string","null"],"maxLength":1024}}),vec!["namespace"]),
+        variant("invoke",json!({"namespace":namespace,"handle":{"type":"object","description":"Copy the complete exact current handle returned by discovery."},"arguments":{"type":"object","description":"Use only the discovered inline schema. No authority, installation or program selection is granted."}}),vec!["namespace","handle","arguments"]),
+        variant("discover_resources",json!({"namespace":namespace}),vec!["namespace"]),
+        variant("read_resource",json!({"namespace":namespace,"handle":{"type":"object","description":"Copy the exact current discovered resource handle."}}),vec!["namespace","handle"])
+    ]}},"required":["operation"],"additionalProperties":false})
+}
+
 fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinition> {
     let path = serde_json::json!({ "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES });
     let parameters = match descriptor.id.as_str() {
+        "extension" => extension_parameters(),
         "list_directory" => serde_json::json!({
             "type": "object", "properties": { "path": path, "max_entries": { "type": "integer", "minimum": 1, "maximum": 1024 } },
             "required": ["path", "max_entries"], "additionalProperties": false
@@ -8616,6 +8684,7 @@ fn tool_action(input: &ToolInput) -> &'static str {
         ToolInput::CheckRust { .. } => "Run isolated supplemental Rust assertions",
         ToolInput::PollProcessJob { .. } => "Poll owned verification job",
         ToolInput::CancelProcessJob { .. } => "Cancel owned verification job",
+        ToolInput::Extension { .. } => "Use reviewed extension",
     }
 }
 
@@ -8680,6 +8749,10 @@ fn mutation_summary(bindings: &[WriteApprovalBinding], completed: bool) -> Optio
 
 fn tool_target(input: &ToolInput) -> String {
     match input {
+        ToolInput::Extension { operation } => format!(
+            "reviewed extension operation {:x}",
+            Sha256::digest(serde_json::to_vec(operation).unwrap_or_default())
+        ),
         ToolInput::ListDirectory { path, .. }
         | ToolInput::FileMetadata { path }
         | ToolInput::ReadText { path, .. }
@@ -8915,6 +8988,7 @@ fn parse_model_tool_input(call: &ModelToolCall) -> Result<ToolInput, ModelInputF
             &["job_id", "stdout_cursor", "stderr_cursor", "wait_ms"],
         ),
         "cancel_process_job" => ("cancel_process_job", &["job_id"]),
+        "extension" => ("extension", &["operation"]),
         _ => return Err(model_input_failure(PreflightCode::InvalidArguments, None)),
     };
     let mut value = serde_json::from_str::<serde_json::Value>(&call.arguments)
@@ -9596,6 +9670,7 @@ fn validate_model_tool_input(
         | ToolInput::CheckRust { .. }
         | ToolInput::PollProcessJob { .. }
         | ToolInput::CancelProcessJob { .. } => Vec::new(),
+        ToolInput::Extension { .. } => Vec::new(),
     };
     for path in paths {
         validate_model_tool_path(path, scope)?;

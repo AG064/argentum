@@ -8,6 +8,7 @@ members = [
     "crates/argentum-cli",
     "crates/argentum-domain",
     "crates/argentum-execution",
+    "crates/argentum-extensions",
     "crates/argentum-harness",
     "crates/argentum-lifecycle",
     "crates/argentum-runtime",
@@ -37,6 +38,7 @@ argentum-app = { path = "crates/argentum-app" }
 argentum-android-inference = { path = "crates/argentum-android-inference" }
 argentum-domain = { path = "crates/argentum-domain" }
 argentum-execution = { path = "crates/argentum-execution" }
+argentum-extensions = { path = "crates/argentum-extensions" }
 argentum-harness = { path = "crates/argentum-harness" }
 argentum-lifecycle = { path = "crates/argentum-lifecycle" }
 argentum-cli = { path = "crates/argentum-cli" }

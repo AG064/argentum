@@ -1014,7 +1014,7 @@ impl RuntimeService {
                                     name: observation.tool,
                                     arguments: observation.arguments,
                                 });
-                                results.push(ModelToolResult {
+                                results.push(ModelToolResult { images: Default::default(),
                                     call_id: observation.provider_call_id,
                                     content,
                                 });
@@ -2320,7 +2320,7 @@ mod privacy_filter_tests {
                     name: "read_text".into(),
                     arguments: "{\"path\":\"observed.txt\"}".into(),
                 }],
-                results: vec![ModelToolResult {
+                results: vec![ModelToolResult { images: Default::default(),
                     call_id: "fixture-call".into(),
                     content: "{\"success\":true}".into(),
                 }],

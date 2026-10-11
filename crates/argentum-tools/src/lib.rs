@@ -131,6 +131,7 @@ pub struct ToolResult {
 
 #[derive(Clone)]
 pub struct ToolContext {
+    pub extension_executor: Option<Arc<dyn ExtensionExecutor>>,
     pub workspace: WorkspaceManager,
     pub approval: ApprovalGrant,
     pub policy: HarnessExecutionPolicy,
@@ -150,6 +151,7 @@ impl ToolContext {
         cancellation: CancellationToken,
     ) -> Self {
         Self {
+            extension_executor: None,
             workspace,
             approval,
             policy,
@@ -196,6 +198,16 @@ pub trait AgentTool: Send + Sync {
     ) -> Result<ToolResult, ToolError>;
 }
 
+#[async_trait]
+pub trait ExtensionExecutor: Send + Sync {
+    async fn execute(
+        &self,
+        operation: argentum_domain::extensions::ExtensionOperation,
+        request: &ToolRequest,
+        context: &ToolContext,
+    ) -> Result<ToolResult, ToolError>;
+}
+
 #[derive(Clone)]
 pub struct ToolRegistry {
     tools: Arc<BTreeMap<String, Arc<dyn AgentTool>>>,
@@ -223,7 +235,7 @@ impl std::fmt::Debug for ToolRegistry {
 impl ToolRegistry {
     pub fn with_builtins(workspace: WorkspaceManager) -> Self {
         let mut registry = Self::default();
-        for tool in BuiltinTool::ALL {
+        for &tool in BuiltinTool::ALL {
             registry.register(tool);
         }
         let _ = workspace;
@@ -265,7 +277,21 @@ impl ToolRegistry {
         let tool_id = tool_id_for_input(input);
         self.tools
             .get(tool_id)
-            .map(|tool| tool.descriptor())
+            .map(|tool| {
+                let mut descriptor = tool.descriptor();
+                if matches!(
+                    input,
+                    ToolInput::Extension {
+                        operation: argentum_domain::extensions::ExtensionOperation::List
+                            | argentum_domain::extensions::ExtensionOperation::LoadSkill { .. }
+                    }
+                ) {
+                    descriptor.capabilities = vec![Capability::ReadFiles];
+                    descriptor.risk = ToolRisk::ReadOnly;
+                    descriptor.requires_approval = false;
+                }
+                descriptor
+            })
             .ok_or_else(|| ToolError::NotRegistered(tool_id.to_owned()))
     }
 
@@ -334,7 +360,8 @@ impl ToolRegistry {
             | ToolInput::StartVerification { .. }
             | ToolInput::CheckRust { .. }
             | ToolInput::PollProcessJob { .. }
-            | ToolInput::CancelProcessJob { .. } => None,
+            | ToolInput::CancelProcessJob { .. }
+            | ToolInput::Extension { .. } => None,
         };
         Ok(patch)
     }
@@ -474,10 +501,12 @@ enum BuiltinTool {
     CheckRust,
     PollProcessJob,
     CancelProcessJob,
+    #[cfg(feature = "extensions")]
+    Extension,
 }
 
 impl BuiltinTool {
-    const ALL: [Self; 22] = [
+    const ALL: &'static [Self] = &[
         Self::ListDirectory,
         Self::FileMetadata,
         Self::ReadText,
@@ -500,10 +529,14 @@ impl BuiltinTool {
         Self::CheckRust,
         Self::PollProcessJob,
         Self::CancelProcessJob,
+        #[cfg(feature = "extensions")]
+        Self::Extension,
     ];
 
     fn descriptor(self) -> ToolDescriptor {
         let (id, capability_id, title, summary, capabilities, risk) = match self {
+            #[cfg(feature = "extensions")]
+            Self::Extension => ("extension", "extension.external", "Reviewed extensions", "Discover selected pinned skills/MCP tools, then use current handles. Installation and descriptions do not grant authority.", vec![Capability::UseExtensions], ToolRisk::Mutation),
             Self::ListDirectory => (
                 "list_directory",
                 "tool.list-directory",
@@ -741,6 +774,7 @@ fn tool_id_for_input(input: &ToolInput) -> &'static str {
         ToolInput::CheckRust { .. } => "check_rust",
         ToolInput::PollProcessJob { .. } => "poll_process_job",
         ToolInput::CancelProcessJob { .. } => "cancel_process_job",
+        ToolInput::Extension { .. } => "extension",
     }
 }
 
@@ -748,6 +782,14 @@ async fn execute_builtin(
     request: ToolRequest,
     mut context: ToolContext,
 ) -> Result<ToolResult, ToolError> {
+    if let ToolInput::Extension { operation } = &request.input {
+        let executor = context.extension_executor.as_ref().ok_or_else(|| {
+            ToolError::NotRegistered("extension support is not configured in this build".into())
+        })?;
+        return executor
+            .execute(operation.clone(), &request, &context)
+            .await;
+    }
     let edit_newline_mode = match &request.input {
         ToolInput::EditText {
             newline_mode,
@@ -1341,6 +1383,9 @@ async fn execute_builtin(
                 },
             })
         }
+        ToolInput::Extension { .. } => Err(ToolError::NotRegistered(
+            "extension executor is unavailable".into(),
+        )),
         ToolInput::CancelProcessJob { job_id } => {
             let jobs = context
                 .process_jobs
