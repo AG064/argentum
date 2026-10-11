@@ -1,5 +1,5 @@
 # Fresh credential-free portability diagnostics, separate from the full gates.
-param([Parameter(Mandatory)][string]$OutputDirectory)
+param([Parameter(Mandatory)][string]$OutputDirectory, [switch]$CiNullAccess)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'test-diagnostics.ps1')
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
@@ -20,8 +20,11 @@ try {
     if (-not [IO.Path]::IsPathFullyQualified($exe) -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Current diagnostic executable is unavailable.' }
     $started = [DateTime]::UtcNow
     $log = Join-Path $OutputDirectory 'process-boundary.log'
-    & $exe diagnostic --test-threads=1 --nocapture *> $log
-    $code = $LASTEXITCODE
+    $execute = { & $exe diagnostic --test-threads=1 --nocapture *> $log; $LASTEXITCODE }
+    if ($CiNullAccess) {
+        . (Join-Path $PSScriptRoot 'ci-null-scope.ps1')
+        $code = Invoke-CiNullScope -Body $execute -ReceiptPath (Join-Path $OutputDirectory 'null-scope.json')
+    } else { $code = & $execute }
     [ordered]@{target='process-boundary';executable_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant();exit_code=$code;started=$started.ToString('o');ended=[DateTime]::UtcNow.ToString('o');log=$log} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'results.json') -Encoding utf8NoBOM
     if ($code -ne 0) { throw 'Process boundary diagnostics failed; preserved with the full gate results.' }

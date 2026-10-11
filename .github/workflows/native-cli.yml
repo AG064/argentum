@@ -13,7 +13,7 @@ concurrency:
 jobs:
   windows-process-boundary:
     # Both hosted runner generations reproduced the restricted-child failure.
-    # Retain read-only device metadata without widening the runtime boundary.
+    # Explicit owner-approved disposable NUL-only setup; restore before return.
     runs-on: windows-2025
     timeout-minutes: 20
     env:
@@ -29,15 +29,20 @@ jobs:
           toolchain: 1.98.0
       - name: Populate pinned dependencies
         run: cargo fetch --locked
+      - name: Offline CI NUL lifecycle controls
+        shell: pwsh
+        run: ./scripts/test-ci-null-scope.ps1 -OutputDirectory "$env:RUNNER_TEMP/null-controls"
       - name: Fresh process boundary diagnostics
         shell: pwsh
-        run: ./scripts/test-process-boundary.ps1 -OutputDirectory "$env:RUNNER_TEMP/process-boundary"
+        run: ./scripts/test-process-boundary.ps1 -OutputDirectory "$env:RUNNER_TEMP/process-boundary" -CiNullAccess
       - name: Retain bounded diagnostic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: process-boundary-diagnostics-${{ github.run_id }}
-          path: ${{ runner.temp }}/process-boundary/diagnostics
+          path: |
+            ${{ runner.temp }}/process-boundary/diagnostics
+            ${{ runner.temp }}/null-controls/results.json
           if-no-files-found: warn
           retention-days: 14
   windows:
@@ -64,7 +69,7 @@ jobs:
         run: cargo check --workspace --all-targets --locked -j 2
       - name: Credential-free tests
         shell: pwsh
-        run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 2
+        run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 2 -CiNullAccess
       - name: Strict Clippy
         run: cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings
       - name: Retain bounded test diagnostics on success or failure

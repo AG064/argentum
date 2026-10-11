@@ -12,9 +12,9 @@ public static class ArgentumNullDescriptor {
  public static string Read() {
   var h=CreateFileW("NUL",0x20000,3,IntPtr.Zero,3,0,IntPtr.Zero);
   if(h==new IntPtr(-1)) return "open_error="+Marshal.GetLastWin32Error();
-  try {IntPtr owner,group,dacl,sacl,sd;var code=GetSecurityInfo(h,1,5,out owner,out group,out dacl,out sacl,out sd);
+  try {IntPtr owner,group,dacl,sacl,sd;var code=GetSecurityInfo(h,1,0x17,out owner,out group,out dacl,out sacl,out sd);
    if(code!=0)return "query_error="+code;
-   try {IntPtr text;uint len;if(!ConvertSecurityDescriptorToStringSecurityDescriptorW(sd,1,5,out text,out len))return "format_error="+Marshal.GetLastWin32Error();try{return Marshal.PtrToStringUni(text);}finally{LocalFree(text);}}
+   try {IntPtr text;uint len;if(!ConvertSecurityDescriptorToStringSecurityDescriptorW(sd,1,0x17,out text,out len))return "format_error="+Marshal.GetLastWin32Error();try{return Marshal.PtrToStringUni(text);}finally{LocalFree(text);}}
    finally{LocalFree(sd);}
   }finally{CloseHandle(h);}
  }
