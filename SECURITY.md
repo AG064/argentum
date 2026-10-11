@@ -24,8 +24,10 @@ an authorized request.
 Default behavior:
 
 - Rust owns provider, tool, storage, security, and platform behavior.
-- The shipped application has no JavaScript runtime or dynamic web content
-  execution path.
+- The default core CLI has no embedded JavaScript or dynamic web execution.
+  The optional extensions build may invoke separately reviewed current-user
+  executable code, including the pinned first-party Playwright adapter. It is
+  inert until an admitted operation uses an exactly owner-activated definition.
 - The persisted workspace policy is authoritative. UI state cannot grant a
   capability that the policy does not allow.
 - Relative paths resolve from the canonical workspace. Workspace-scoped
@@ -245,11 +247,15 @@ must not be read, moved into source control, or included in a Rust build.
 
 ## Tools and extensions
 
-The first release uses built-in Rust tools with typed capability descriptors.
-There is no unconstrained plugin runtime. A future extension protocol must be
-signed, capability-scoped, versioned, and disabled by default. Before activation
-it must record source, revision, license, declared capabilities, network
-destinations, executable hooks, and integrity information.
+The core uses built-in Rust tools with typed capability descriptors. The optional
+extensions profile records portable package source/revision/license/hash, exact
+executable/dependency identities, capabilities and destinations before activation.
+Owner-declared SHA provenance is not an upstream signature or publisher identity.
+Installation never authorizes execution; updates revoke the previous activation.
+Local stdio is explicit reviewed current-user code, not an OS filesystem/network
+sandbox. Queried Job Objects bound lifetime/resources. Remote HTTP uses exact
+endpoint/address and credential origin/account bindings, with no redirects or
+unsolicited client actions. See [the declared subset](docs/EXTENSIONS_BROWSER.md).
 
 The Phase 4 toolkit has no generic network tool or persistent terminal. Its
 product implementations remain statically linked. The separately reviewed
@@ -286,8 +292,13 @@ This kernel is not an external plugin security boundary. It does not load
 packages, persist executable closures, survive forced task abort, isolate
 untrusted code, or provide AEP or MCP transport. Its cancellation contract is
 cooperative and operation futures must be driven to a terminal result. External
-extensions remain unavailable until the signed, isolated, bounded, revocable
-process protocol and hostile-module tests are complete.
+extensions use the separate optional reviewed protocol, not this in-process
+kernel alone as an access sandbox. The default core keeps them unavailable.
+Browser content, results and screenshots remain untrusted. Actual PNG data uses
+current run/context/activation bindings and byte accounting on the supported
+ChatGPT image route; stale/revoked images cannot authorize future disclosure.
+Browser profiles are separate task-owned scopes, not another application's
+session state. Browser routing is not OS network isolation or desktop support.
 
 ## Dependency and release integrity
 

@@ -63,6 +63,13 @@ pub enum ToolError {
     Cancelled,
     #[error("tool execution failed: {0}")]
     Execution(String),
+    #[error("extension failed: {code}; effects_unknown={effects_unknown}")]
+    ExtensionFailure {
+        code: &'static str,
+        effects_unknown: bool,
+    },
+    #[error("external tool reported failure; its detail is untrusted")]
+    ExtensionReportedFailure(String),
 }
 
 impl ToolError {
@@ -82,7 +89,9 @@ impl ToolError {
             | Self::Verification(_)
             | Self::ProcessJob(_)
             | Self::MissingPreparedMutation
-            | Self::Execution(_) => ExecutionOutcome::Failed,
+            | Self::Execution(_)
+            | Self::ExtensionFailure { .. }
+            | Self::ExtensionReportedFailure(_) => ExecutionOutcome::Failed,
         }
     }
 }

@@ -14,7 +14,7 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn run(values: Vec<String>) -> Result<(), Error> {
     if values.is_empty() || values[0] == "help" || values[0] == "--help" {
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it.");
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
@@ -127,6 +127,7 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
             }
             "list" | "status" => {
                 println!("{}", serde_json::to_string_pretty(&local.extension_records()?)?);
+                if action == "status" { println!("{}",serde_json::to_string_pretty(&local.extension_readiness()?)?); }
                 println!("Saved activation is not a connected server or evidence of successful execution.");
             }
             "activate" => {

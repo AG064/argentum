@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BrowserAdapter } from './adapter.mjs';
@@ -38,7 +38,7 @@ test('controlled local auth survives only its explicitly configured persistent p
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const config = {allowedOrigins:[origin], artifactDirectory:join(root,'artifacts'), persistentProfile:join(root,'profile')};
+  const config = {allowedOrigins:[origin], artifactDirectory:join(root,'artifacts'), persistentProfile:join(root,'artifacts','profile')};
   let adapter = new BrowserAdapter(config);
   try {
     const tab = await adapter.call('browser_open', {url:origin});
@@ -51,4 +51,16 @@ test('controlled local auth survives only its explicitly configured persistent p
     assert.match((await adapter.call('browser_observe', {tab_id:reopened.tab_id})).accessibility, /Authenticated synthetic demo/);
     assert.equal(typeof adapter.contextId, 'string');
   } finally { await adapter.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('persistent profiles cannot attach other applications or change cookie origin scope', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'argentum-profile-negative-'));
+  const origin = 'http://127.0.0.1:18080';
+  assert.throws(()=>new BrowserAdapter({allowedOrigins:[origin],artifactDirectory:join(root,'artifacts'),persistentProfile:join(root,'unrelated-profile')}),/dedicated_artifact_scope/);
+  const config = {allowedOrigins:[origin],artifactDirectory:join(root,'artifacts'),persistentProfile:join(root,'artifacts','profile')};
+  await mkdir(config.persistentProfile,{recursive:true});
+  await writeFile(join(config.persistentProfile,'Cookies'),'synthetic_other_application_state');
+  const existing = new BrowserAdapter(config); await assert.rejects(existing.start(),/existing_non_argentum_profile_denied/); assert.equal(existing.context,null); await existing.close();
+  await writeFile(join(config.persistentProfile,'argentum-profile.json'),JSON.stringify({schema_version:1,allowed_origins:['http://127.0.0.1:18081']}));
+  const changed = new BrowserAdapter(config); await assert.rejects(changed.start(),/profile_origin_scope_changed/); assert.equal(changed.context,null); await changed.close();
 });

@@ -92,6 +92,8 @@ pub enum ExtensionOperation {
     },
     DiscoverResources {
         namespace: String,
+        #[serde(default)]
+        cursor: Option<String>,
     },
     ReadResource {
         namespace: String,

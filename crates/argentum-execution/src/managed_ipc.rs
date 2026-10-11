@@ -10,7 +10,7 @@ use crate::process::{ManagedProcessLimits, ProcessError, ProcessSpec};
 pub struct ManagedIpcProcess {
     child: Child,
     containment: super::ProcessContainment,
-    stderr: tokio::task::JoinHandle<Result<crate::process::StreamCapture, ProcessError>>,
+    stderr: Option<tokio::task::JoinHandle<Result<crate::process::StreamCapture, ProcessError>>>,
     pub(crate) process_id: u32,
 }
 
@@ -43,9 +43,22 @@ impl ManagedIpcProcess {
             let mut command = super::configured_command(&spec, true);
             command.stdin(std::process::Stdio::piped());
             let mut child = command.spawn().map_err(ProcessError::Spawn)?;
-            let pid = child.id().ok_or_else(|| {
-                ProcessError::Containment(std::io::Error::other("IPC child has no PID"))
-            })?;
+            let Some(pid) = child.id() else {
+                super::kill_and_reap_child(&mut child).await?;
+                return Err(ProcessError::Containment(std::io::Error::other(
+                    "IPC child has no PID",
+                )));
+            };
+            // Validate all pipes while the process is still suspended. Every
+            // setup error explicitly reaps the exact child, rather than relying
+            // on an eventual asynchronous drop after it has been resumed.
+            let pipes = (child.stdout.take(), child.stdin.take(), child.stderr.take());
+            let (Some(read), Some(write), Some(stderr)) = pipes else {
+                super::kill_and_reap_child(&mut child).await?;
+                return Err(ProcessError::Output(std::io::Error::other(
+                    "IPC standard stream unavailable",
+                )));
+            };
             let (mut containment, _) = match super::ProcessContainment::attach_managed(pid, limits)
             {
                 Ok(value) => value,
@@ -55,9 +68,10 @@ impl ManagedIpcProcess {
                 }
             };
             if !pre_resume_check() {
-                super::terminate_and_close_containment(&mut containment)
-                    .map_err(ProcessError::Containment)?;
-                super::kill_and_reap_child(&mut child).await?;
+                let close = super::terminate_and_close_containment(&mut containment);
+                let reap = super::kill_and_reap_child(&mut child).await;
+                close.map_err(ProcessError::Containment)?;
+                reap?;
                 return Err(ProcessError::PreResumeCheckFailed);
             }
             if let Err(error) = super::resume_process_threads(pid) {
@@ -67,15 +81,6 @@ impl ManagedIpcProcess {
                 reap?;
                 return Err(ProcessError::Containment(error));
             }
-            let read = child.stdout.take().ok_or_else(|| {
-                ProcessError::Output(std::io::Error::other("IPC stdout unavailable"))
-            })?;
-            let write = child.stdin.take().ok_or_else(|| {
-                ProcessError::Output(std::io::Error::other("IPC stdin unavailable"))
-            })?;
-            let stderr = child.stderr.take().ok_or_else(|| {
-                ProcessError::Output(std::io::Error::other("IPC stderr unavailable"))
-            })?;
             let stderr = tokio::spawn(super::capture_managed_stream(
                 stderr,
                 crate::process::ProcessStream::Stderr,
@@ -87,7 +92,7 @@ impl ManagedIpcProcess {
                 Self {
                     child,
                     containment,
-                    stderr,
+                    stderr: Some(stderr),
                     process_id: pid,
                 },
                 ManagedIpcStreams {
@@ -102,24 +107,39 @@ impl ManagedIpcProcess {
         self.process_id
     }
 
-    pub async fn terminate_and_wait(mut self) -> Result<(), ProcessError> {
+    pub async fn terminate_and_wait(&mut self) -> Result<(), ProcessError> {
         let close = super::terminate_and_close_containment(&mut self.containment);
         let reap = super::kill_and_reap_child(&mut self.child).await;
+        let capture = if let Some(mut stderr) = self.stderr.take() {
+            match tokio::time::timeout(Duration::from_secs(5), &mut stderr).await {
+                Ok(result) => result
+                    .map_err(|_| {
+                        ProcessError::Output(std::io::Error::other("IPC stderr capture failed"))
+                    })
+                    .and_then(|capture| capture.map(|_| ())),
+                Err(_) => {
+                    stderr.abort();
+                    let _ = stderr.await;
+                    Err(ProcessError::Output(std::io::Error::other(
+                        "IPC stderr did not settle",
+                    )))
+                }
+            }
+        } else {
+            Ok(())
+        };
         close.map_err(ProcessError::Containment)?;
         reap?;
-        match tokio::time::timeout(Duration::from_secs(5), &mut self.stderr).await {
-            Ok(result) => {
-                result.map_err(|_| {
-                    ProcessError::Output(std::io::Error::other("IPC stderr capture failed"))
-                })??;
-            }
-            Err(_) => {
-                self.stderr.abort();
-                return Err(ProcessError::Output(std::io::Error::other(
-                    "IPC stderr did not settle",
-                )));
-            }
+        capture
+    }
+}
+
+impl Drop for ManagedIpcProcess {
+    fn drop(&mut self) {
+        // The owned Job Object and kill-on-drop child retain process-tree
+        // containment. Do not detach a stderr capture on an error path.
+        if let Some(stderr) = &self.stderr {
+            stderr.abort();
         }
-        Ok(())
     }
 }

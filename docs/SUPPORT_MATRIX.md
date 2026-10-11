@@ -30,7 +30,9 @@ newer-runner result. Local build 26100 and remote CI evidence remain separate.
 | llama.cpp Windows sidecar | Pinned optional runtime, separate install/launch consent, template and exact token checks | Runtime/model not bundled; prior local workflow evidence, no new download or inference here |
 | Other saved provider kinds | Inspectable adapters and capability projections | Availability does not establish a supported coding route; use effective status and adapter-specific evidence |
 | Supplemental Rust checks | Owner-enabled constrained library checks against admitted source | Windows-specific restricted execution; unsupported project shapes fail closed |
-| External plugins/MCP/browser/computer use | Not implemented by the native CLI | Roadmap only; historical Node modules are not native capabilities |
+| Portable skills/MCP | Optional `extensions` build, reviewed package/stdio/Streamable HTTP lifecycle | Bounded native model/tool-loop controls; declared subset and trust boundaries in [extension guide](EXTENSIONS_BROWSER.md) |
+| Local browser development | Optional pinned Playwright adapter, owned local preview/context/tabs and current PNG input on ChatGPT route | Offline controls and live application acceptance are separate; not unrestricted web access or native desktop control |
+| Windows desktop/computer use | Not implemented by this milestone | Remains an explicit subsequent roadmap gate |
 
 No release package contains credentials, user stores, model weights, private
 benchmark evidence or another application's sessions. A successful catalogue

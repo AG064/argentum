@@ -903,7 +903,7 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "integration.browser",
             "Browser control",
             HarnessCapabilityKind::Integration,
-            "No browser capability is registered in the active Rust host.",
+            "No direct browser registration. Extensions-enabled builds support the separately owner-reviewed first-party local Playwright adapter through extension.external; inspect its active definition and dependencies.",
         ),
         available_capability(
             "model.reasoning",

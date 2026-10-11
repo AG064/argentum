@@ -30,6 +30,8 @@ pub enum ConnectionError {
     Process(#[from] argentum_execution::ProcessError),
     #[error("extension connection rejected: {0}")]
     Rejected(&'static str),
+    #[error("extension call outcome unavailable: {0}; effects_may_be_unknown; connection retired")]
+    UncertainEffect(&'static str),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +41,7 @@ pub struct ToolHandle {
     pub generation: Uuid,
     pub name: String,
     pub schema_sha256: String,
+    pub definition_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,6 +69,11 @@ pub struct McpSession {
     allowed_resource_prefixes: Vec<String>,
     cancellation: CancellationToken,
     pub accounting: Arc<WireAccounting>,
+    http_accounting: Option<(
+        Arc<std::sync::atomic::AtomicU64>,
+        Arc<std::sync::atomic::AtomicU64>,
+    )>,
+    scoped_secret: Option<Arc<argentum_security::SecretValue>>,
     retired: bool,
 }
 
@@ -85,7 +93,8 @@ impl McpSession {
         if cancellation.is_cancelled() {
             return Err(ConnectionError::Rejected("cancelled_before_spawn"));
         }
-        let (process, pipes) = ManagedIpcProcess::spawn_checked(spec, limits, pre_resume).await?;
+        let (mut process, pipes) =
+            ManagedIpcProcess::spawn_checked(spec, limits, pre_resume).await?;
         let transport = BoundedStdio::new(pipes.read, pipes.write);
         let accounting = Arc::clone(&transport.accounting);
         let client = ClientConfig::new(
@@ -113,6 +122,8 @@ impl McpSession {
                 allowed_resource_prefixes: vec![],
                 cancellation,
                 accounting,
+                http_accounting: None,
+                scoped_secret: None,
                 retired: false,
             }),
             None => {
@@ -132,6 +143,11 @@ impl McpSession {
         if cancellation.is_cancelled() {
             return Err(ConnectionError::Rejected("cancelled_before_connect"));
         }
+        let http_accounting = Some((
+            Arc::clone(&client.request_starts),
+            Arc::clone(&client.received_bytes),
+        ));
+        let scoped_secret = client.scoped_secret();
         let config = ClientConfig::new(
             ClientCapabilities::default(),
             Implementation::new("argentum", env!("CARGO_PKG_VERSION")),
@@ -156,6 +172,8 @@ impl McpSession {
             allowed_resource_prefixes: vec![],
             cancellation,
             accounting: Arc::default(),
+            http_accounting,
+            scoped_secret,
             retired: false,
         })
     }
@@ -176,6 +194,10 @@ impl McpSession {
     }
 
     pub async fn discover_resources(&self) -> Result<Vec<ResourceHandle>, ConnectionError> {
+        if self.allowed_resource_prefixes.is_empty() {
+            return Ok(vec![]);
+        }
+        self.require_server_capability(true)?;
         let mut output = Vec::new();
         let mut cursor = None;
         let mut seen = BTreeSet::new();
@@ -239,6 +261,47 @@ impl McpSession {
         Err(ConnectionError::Rejected("resource_page_limit_exceeded"))
     }
 
+    pub async fn discover_resources_page(
+        &self,
+        cursor: Option<&str>,
+    ) -> Result<Value, ConnectionError> {
+        let resources = self.discover_resources().await?;
+        let fingerprint = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&resources)
+                    .map_err(|_| ConnectionError::Rejected("invalid_resource_catalog"))?
+            )
+        );
+        let offset = match cursor {
+            None => 0,
+            Some(cursor) if cursor.len() <= 1024 => {
+                let (connection, generation, binding, offset): (Uuid, Uuid, String, usize) =
+                    serde_json::from_str(cursor)
+                        .map_err(|_| ConnectionError::Rejected("invalid_resource_page_cursor"))?;
+                if connection != self.connection
+                    || generation != self.generation
+                    || binding != fingerprint
+                    || offset > resources.len()
+                {
+                    return Err(ConnectionError::Rejected(
+                        "resource_catalog_changed_discover_again",
+                    ));
+                }
+                offset
+            }
+            Some(_) => return Err(ConnectionError::Rejected("invalid_resource_page_cursor")),
+        };
+        let end = (offset + 16).min(resources.len());
+        let next = (end < resources.len()).then(|| {
+            serde_json::to_string(&(self.connection, self.generation, fingerprint, end))
+                .expect("bounded resource cursor")
+        });
+        Ok(
+            serde_json::json!({"resources":&resources[offset..end],"next_cursor":next,"catalog_count":resources.len(),"server_data_is_untrusted":true}),
+        )
+    }
+
     pub async fn read_resource(&self, handle: &ResourceHandle) -> Result<Value, ConnectionError> {
         if handle.connection != self.connection || handle.generation != self.generation {
             return Err(ConnectionError::Rejected(
@@ -271,7 +334,7 @@ impl McpSession {
                 "resource_result_capacity_exceeded",
             ));
         }
-        Ok(result)
+        self.redact_result(result)
     }
 
     fn service(&self) -> Result<&RunningService<RoleClient, ClientConfig>, ConnectionError> {
@@ -282,8 +345,25 @@ impl McpSession {
             .as_ref()
             .ok_or(ConnectionError::Rejected("connection_unavailable"))
     }
+    fn require_server_capability(&self, resources: bool) -> Result<(), ConnectionError> {
+        let info = self
+            .service()?
+            .peer_info()
+            .ok_or(ConnectionError::Rejected(
+                "server_negotiation_state_unavailable",
+            ))?;
+        if (resources && info.capabilities.resources.is_none())
+            || (!resources && info.capabilities.tools.is_none())
+        {
+            return Err(ConnectionError::Rejected(
+                "server_does_not_advertise_requested_capability",
+            ));
+        }
+        Ok(())
+    }
 
     async fn catalog(&self) -> Result<BTreeMap<String, DiscoveredTool>, ConnectionError> {
+        self.require_server_capability(false)?;
         let service = self.service()?;
         let mut cursor = None;
         let mut cursors = BTreeSet::new();
@@ -326,6 +406,13 @@ impl McpSession {
                 if bytes.len() > 8192 {
                     return Err(ConnectionError::Rejected("schema_capacity_exceeded"));
                 }
+                let definition = serde_json::to_vec(&tool)
+                    .map_err(|_| ConnectionError::Rejected("invalid_tool_definition"))?;
+                if definition.len() > 16 * 1024 {
+                    return Err(ConnectionError::Rejected(
+                        "tool_definition_capacity_exceeded",
+                    ));
+                }
                 let description = tool.description.as_deref().unwrap_or_default();
                 let mut end = description.len().min(1024);
                 while !description.is_char_boundary(end) {
@@ -339,6 +426,7 @@ impl McpSession {
                             generation: self.generation,
                             name,
                             schema_sha256: format!("{:x}", Sha256::digest(bytes)),
+                            definition_sha256: format!("{:x}", Sha256::digest(definition)),
                         },
                         description: description[..end].to_owned(),
                         input_schema: schema,
@@ -449,24 +537,43 @@ impl McpSession {
         };
         let Some(result) = result else {
             self.cancellation.cancel();
-            return Err(ConnectionError::Rejected(
-                "tool_call_failed_cancelled_or_timed_out_effects_may_be_unknown",
+            return Err(ConnectionError::UncertainEffect(
+                "tool_call_failed_cancelled_or_timed_out",
             ));
         };
-        let result = serde_json::to_value(result)
-            .map_err(|_| ConnectionError::Rejected("invalid_tool_result"))?;
+        let result = serde_json::to_value(result).map_err(|_| {
+            self.cancellation.cancel();
+            ConnectionError::UncertainEffect("invalid_tool_result")
+        })?;
         if serde_json::to_vec(&result)
             .map_err(|_| ConnectionError::Rejected("invalid_tool_result"))?
             .len()
             > MAX_RESULT_BYTES
         {
-            return Err(ConnectionError::Rejected("tool_result_capacity_exceeded"));
+            self.cancellation.cancel();
+            return Err(ConnectionError::UncertainEffect(
+                "tool_result_capacity_exceeded",
+            ));
         }
-        Ok(result)
+        self.redact_result(result)
     }
 
     pub fn cancellation(&self) -> CancellationToken {
         self.cancellation.clone()
+    }
+    pub fn accounting_snapshot(&self) -> Value {
+        use std::sync::atomic::Ordering;
+        if let Some((requests, bytes)) = &self.http_accounting {
+            serde_json::json!({"transport":"streamable_http","physical_request_starts":requests.load(Ordering::Relaxed),"received_bytes":bytes.load(Ordering::Relaxed),"scope":"cumulative_current_connection_not_generation_usage"})
+        } else {
+            serde_json::json!({"transport":"stdio","sent_messages":self.accounting.requests.load(Ordering::Relaxed),"sent_bytes":self.accounting.sent_bytes.load(Ordering::Relaxed),"received_bytes":self.accounting.received_bytes.load(Ordering::Relaxed),"wire_fault":self.accounting.fault.load(Ordering::Relaxed),"scope":"cumulative_current_connection_not_provider_requests"})
+        }
+    }
+    fn redact_result(&self, result: Value) -> Result<Value, ConnectionError> {
+        let Some(secret) = &self.scoped_secret else {
+            return Ok(result);
+        };
+        redact_scoped_value(result, secret.expose())
     }
     pub fn protocol_version(&self) -> Option<String> {
         self.service
@@ -478,16 +585,63 @@ impl McpSession {
     pub async fn retire(&mut self) -> Result<(), ConnectionError> {
         self.retired = true;
         self.cancellation.cancel();
-        if let Some(service) = self.service.take() {
+        let service_result = if let Some(service) = self.service.take() {
             tokio::time::timeout(Duration::from_secs(5), service.cancel())
                 .await
-                .map_err(|_| ConnectionError::Rejected("service_teardown_pending"))?
-                .map_err(|_| ConnectionError::Rejected("service_teardown_failed"))?;
+                .map_err(|_| ConnectionError::Rejected("service_teardown_pending"))
+                .and_then(|result| {
+                    result
+                        .map(|_| ())
+                        .map_err(|_| ConnectionError::Rejected("service_teardown_failed"))
+                })
+        } else {
+            Ok(())
+        };
+        // Service cancellation failure must not skip owned process-tree cleanup.
+        let process_result = if let Some(process) = self.process.as_mut() {
+            match process.terminate_and_wait().await {
+                Ok(()) => {
+                    self.process.take();
+                    Ok(())
+                }
+                Err(error) => Err(ConnectionError::from(error)),
+            }
+        } else {
+            Ok(())
+        };
+        process_result.and(service_result)
+    }
+}
+
+pub(crate) fn redact_scoped_value(value: Value, secret: &str) -> Result<Value, ConnectionError> {
+    if secret.is_empty() {
+        return Ok(value);
+    }
+    match value {
+        Value::String(value) => Ok(Value::String(value.replace(secret, "[REDACTED]"))),
+        Value::Array(values) => values
+            .into_iter()
+            .map(|value| redact_scoped_value(value, secret))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::Array),
+        Value::Object(values) => {
+            let mut output = serde_json::Map::new();
+            for (name, value) in values {
+                if output
+                    .insert(
+                        name.replace(secret, "[REDACTED]"),
+                        redact_scoped_value(value, secret)?,
+                    )
+                    .is_some()
+                {
+                    return Err(ConnectionError::UncertainEffect(
+                        "credential_redaction_collided_result_unavailable",
+                    ));
+                }
+            }
+            Ok(Value::Object(output))
         }
-        if let Some(process) = self.process.take() {
-            process.terminate_and_wait().await?;
-        }
-        Ok(())
+        value => Ok(value),
     }
 }
 
@@ -507,16 +661,113 @@ fn validate_schema(schema: &Value, depth: usize) -> Result<(), ConnectionError> 
                     "referenced_schema_unsupported_inline_schema_required",
                 ));
             }
-            for value in fields.values() {
-                validate_schema(value, depth + 1)?;
+            if let Some(kind) = fields.get("type") {
+                let valid = |value: &Value| {
+                    value.as_str().is_some_and(|name| {
+                        matches!(
+                            name,
+                            "object"
+                                | "array"
+                                | "string"
+                                | "number"
+                                | "integer"
+                                | "boolean"
+                                | "null"
+                        )
+                    })
+                };
+                if !valid(kind)
+                    && !kind
+                        .as_array()
+                        .is_some_and(|values| !values.is_empty() && values.iter().all(valid))
+                {
+                    return Err(ConnectionError::Rejected("malformed_schema_type"));
+                }
+            }
+            if let Some(required) = fields.get("required") {
+                let values = required
+                    .as_array()
+                    .ok_or(ConnectionError::Rejected("malformed_schema_required"))?;
+                let mut names = BTreeSet::new();
+                if values.iter().any(|value| {
+                    value
+                        .as_str()
+                        .is_none_or(|name| name.is_empty() || !names.insert(name))
+                }) {
+                    return Err(ConnectionError::Rejected("malformed_schema_required"));
+                }
+            }
+            for key in ["properties", "patternProperties", "$defs", "definitions"] {
+                if fields.get(key).is_some_and(|value| !value.is_object()) {
+                    return Err(ConnectionError::Rejected("malformed_schema_properties"));
+                }
+            }
+            for key in ["oneOf", "anyOf", "allOf", "prefixItems"] {
+                if fields.get(key).is_some_and(|value| {
+                    !value.as_array().is_some_and(|values| {
+                        !values.is_empty()
+                            && values
+                                .iter()
+                                .all(|value| value.is_object() || value.is_boolean())
+                    })
+                }) {
+                    return Err(ConnectionError::Rejected("malformed_schema_composition"));
+                }
+            }
+            for key in [
+                "minLength",
+                "maxLength",
+                "minItems",
+                "maxItems",
+                "minProperties",
+                "maxProperties",
+            ] {
+                if fields
+                    .get(key)
+                    .is_some_and(|value| value.as_u64().is_none())
+                {
+                    return Err(ConnectionError::Rejected("malformed_schema_bound"));
+                }
+            }
+            for (name, value) in fields {
+                match name.as_str() {
+                    "properties" | "patternProperties" | "$defs" | "definitions"
+                    | "dependentSchemas" => {
+                        let map = value
+                            .as_object()
+                            .ok_or(ConnectionError::Rejected("malformed_schema_properties"))?;
+                        for schema in map.values() {
+                            validate_schema(schema, depth + 1)?;
+                        }
+                    }
+                    "oneOf" | "anyOf" | "allOf" | "prefixItems" => {
+                        let list = value
+                            .as_array()
+                            .ok_or(ConnectionError::Rejected("malformed_schema_composition"))?;
+                        for schema in list {
+                            validate_schema(schema, depth + 1)?;
+                        }
+                    }
+                    "items"
+                    | "contains"
+                    | "additionalProperties"
+                    | "unevaluatedProperties"
+                    | "unevaluatedItems"
+                    | "propertyNames"
+                    | "not"
+                    | "if"
+                    | "then"
+                    | "else" => validate_schema(value, depth + 1)?,
+                    _ => {} // Annotation/enum/const data is not executable schema.
+                }
             }
         }
-        Value::Array(values) => {
-            for value in values {
-                validate_schema(value, depth + 1)?;
-            }
+        Value::Bool(_) if depth > 0 => {}
+        _ => {
+            return Err(ConnectionError::Rejected(
+                "schema_must_be_object_or_boolean",
+            ))
         }
-        _ => {}
     }
     Ok(())
 }
@@ -525,7 +776,20 @@ fn validate_schema(schema: &Value, depth: usize) -> Result<(), ConnectionError> 
 mod tests {
     use super::*;
     #[test]
+    fn scoped_credentials_cannot_be_echoed_into_model_results() {
+        let result = redact_scoped_value(serde_json::json!({"content":[{"text":"secret-synthetic\n"}],"structuredContent":{"secret-synthetic":"secret-synthetic"}}),"secret-synthetic").unwrap();
+        assert!(!serde_json::to_string(&result)
+            .unwrap()
+            .contains("secret-synthetic"));
+        assert!(redact_scoped_value(
+            serde_json::json!({"secret-synthetic":1,"[REDACTED]":2}),
+            "secret-synthetic"
+        )
+        .is_err());
+    }
+    #[test]
     fn malformed_or_external_schema_does_not_become_authority() {
+        assert!(validate_schema(&serde_json::json!({"type":"object","properties":{"type":{"type":"string"},"required":{"type":"string"}},"enum":[{"type":23}]}),0).is_ok(),"property names and enum values are data, not schema keywords");
         assert!(validate_schema(
             &serde_json::json!({"type":"object","properties":{"path":{"type":"string"}}}),
             0
@@ -535,6 +799,10 @@ mod tests {
             serde_json::json!(null),
             serde_json::json!({"type":"array"}),
             serde_json::json!({"type":"object","$ref":"https://example.com/schema"}),
+            serde_json::json!({"type":"object","properties":"not an object"}),
+            serde_json::json!({"type":"object","properties":{"path":{"type":23}}}),
+            serde_json::json!({"type":"object","required":["x","x"]}),
+            serde_json::json!({"type":"object","oneOf":"not an array"}),
         ] {
             assert!(validate_schema(&schema, 0).is_err());
         }

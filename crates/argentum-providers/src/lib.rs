@@ -354,6 +354,14 @@ pub struct ModelImage {
     data_url: String,
     pub sha256: String,
     pub origin: String,
+    extension_binding: Option<ExtensionImageBinding>,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct ExtensionImageBinding {
+    pub namespace: String,
+    pub revision: uuid::Uuid,
+    pub run_id: uuid::Uuid,
+    pub context_id: uuid::Uuid,
 }
 impl std::fmt::Debug for ModelImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -383,6 +391,32 @@ impl ModelImage {
                 "PNG viewport exceeds admitted dimensions",
             ));
         }
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+        decoder.set_limits(png::Limits {
+            bytes: 4 * 1024 * 1024,
+        });
+        let mut reader = decoder
+            .read_info()
+            .map_err(|_| ProviderError::InvalidRequest("PNG header or CRC is invalid"))?;
+        if reader.info().bit_depth != png::BitDepth::Eight
+            || reader.info().animation_control.is_some()
+        {
+            return Err(ProviderError::InvalidRequest(
+                "only static 8-bit screenshot PNG is supported",
+            ));
+        }
+        let size = reader
+            .output_buffer_size()
+            .filter(|size| *size <= 4 * 1024 * 1024)
+            .ok_or(ProviderError::InvalidRequest(
+                "PNG decoded size exceeds limit",
+            ))?;
+        reader
+            .next_frame(&mut vec![0; size])
+            .map_err(|_| ProviderError::InvalidRequest("PNG pixels or CRC are invalid"))?;
+        reader
+            .finish()
+            .map_err(|_| ProviderError::InvalidRequest("PNG end or CRC is invalid"))?;
         use sha2::Digest;
         let hash = format!("{:x}", sha2::Sha256::digest(bytes));
         if hash != expected_sha256 {
@@ -406,7 +440,15 @@ impl ModelImage {
             ),
             sha256: hash,
             origin,
+            extension_binding: None,
         })
+    }
+    pub fn bind_extension(mut self, binding: ExtensionImageBinding) -> Self {
+        self.extension_binding = Some(binding);
+        self
+    }
+    pub fn extension_binding(&self) -> Option<&ExtensionImageBinding> {
+        self.extension_binding.as_ref()
     }
     pub fn data_url(&self) -> &str {
         &self.data_url

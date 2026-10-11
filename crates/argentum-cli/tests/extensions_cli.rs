@@ -96,7 +96,7 @@ async fn exact_cli_persisted_owner_activation_progressive_skill_reaches_next_req
     let observed = Arc::clone(&records);
     let worker = std::thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(30);
-        for round in 0..2 {
+        for round in 0..3 {
             let (mut stream, _) = loop {
                 match listener.accept() {
                     Ok(value) => break value,
@@ -106,6 +106,7 @@ async fn exact_cli_persisted_owner_activation_progressive_skill_reaches_next_req
                     Err(error) => panic!("offline request timeout: {error}"),
                 }
             };
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
@@ -121,9 +122,28 @@ async fn exact_cli_persisted_owner_activation_progressive_skill_reaches_next_req
                 assert!(!serde_json::to_string(&request)
                     .unwrap()
                     .contains("APP_SELECTED_SKILL_MARKER"));
+                tool_frame(json!({"action":"list"}), "skill-1")
+            } else if round == 1 {
+                let body = serde_json::to_string(&request).unwrap();
+                assert!(!body.contains("APP_SELECTED_SKILL_MARKER"));
+                let message = request["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .rev()
+                    .find(|message| message["role"] == "tool")
+                    .unwrap();
+                let list: Value =
+                    serde_json::from_str(message["content"].as_str().unwrap()).unwrap();
+                let selected = list["extensions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|record| record["namespace"] == "cli-control.skills")
+                    .unwrap();
                 tool_frame(
-                    json!({"action":"load_skill","namespace":"cli-control.skills","path":"skills/marker/SKILL.md"}),
-                    "skill-1",
+                    json!({"action":"load_skill","namespace":selected["namespace"],"path":selected["skill_paths"][0]}),
+                    "skill-2",
                 )
             } else {
                 let body = serde_json::to_string(&request).unwrap();
@@ -160,7 +180,7 @@ async fn exact_cli_persisted_owner_activation_progressive_skill_reaches_next_req
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(records.lock().unwrap().len(), 2);
+    assert_eq!(records.lock().unwrap().len(), 3);
     assert_eq!(
         std::fs::read_to_string(ws.join("keep.txt")).unwrap(),
         "UNRELATED_PRESERVED"

@@ -75,12 +75,31 @@ fn public_address(address: IpAddr) -> bool {
                 return public_address(IpAddr::V4(v4));
             }
             let segments = ip.segments();
-            segments[0] & 0xe000 == 0x2000 && !(segments[0] == 0x2001 && segments[1] == 0x0db8)
+            segments[0] & 0xe000 == 0x2000
+                && !(segments[0] == 0x2001 && (segments[1] < 0x0200 || segments[1] == 0x0db8))
+                && segments[0] != 0x2002
+                && !(segments[0] == 0x3fff && segments[1] < 0x1000)
         }
     }
 }
 
 impl ReviewedHttp {
+    pub(crate) fn scoped_secret(&self) -> Option<Arc<SecretValue>> {
+        self.credential
+            .as_ref()
+            .map(|credential| Arc::clone(&credential.secret))
+    }
+    fn sanitized_json(&self, bytes: &[u8]) -> Result<serde_json::Value, HttpError> {
+        let value = serde_json::from_slice(bytes)
+            .map_err(|_| rejected("malformed_http_jsonrpc_response"))?;
+        match &self.credential {
+            Some(credential) => {
+                crate::connection::redact_scoped_value(value, credential.secret.expose())
+                    .map_err(|_| rejected("credential_echo_result_unavailable"))
+            }
+            None => Ok(value),
+        }
+    }
     /// Addresses are owner-reviewed or resolved by the trusted configuring path,
     /// then pinned. Runtime never resolves a new destination from server data.
     pub fn new(
@@ -109,10 +128,12 @@ impl ReviewedHttp {
             if address.port() != port {
                 return Err(rejected("address_port_binding_mismatch"));
             }
-            if host
-                .parse::<IpAddr>()
-                .is_ok_and(|literal| literal != address.ip())
-            {
+            let literal = match url.host() {
+                Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
+                Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+                _ => None,
+            };
+            if literal.is_some_and(|literal| literal != address.ip()) {
                 return Err(rejected("literal_endpoint_address_mismatch"));
             }
             if local_demo {
@@ -277,14 +298,20 @@ impl StreamableHttpClient for ReviewedHttp {
             .to_owned();
         let body = self.bounded_body(response).await?;
         if content_type == "application/json" {
-            let message = serde_json::from_slice(&body)
+            let message = serde_json::from_value(self.sanitized_json(&body)?)
                 .map_err(|_| rejected("malformed_http_jsonrpc_response"))?;
             return Ok(StreamableHttpPostResponse::Json(message, session));
         }
         if content_type != "text/event-stream" {
             return Err(rejected("unsupported_http_response_content_type"));
         }
-        let events = parse_bounded_sse(&body)?;
+        let mut events = parse_bounded_sse(&body)?;
+        for event in &mut events {
+            if let Some(data) = &mut event.data {
+                *data = serde_json::to_string(&self.sanitized_json(data.as_bytes())?)
+                    .map_err(|_| rejected("malformed_http_jsonrpc_response"))?;
+            }
+        }
         Ok(StreamableHttpPostResponse::Sse(
             stream::iter(events.into_iter().map(Ok::<_, SseError>)).boxed(),
             session,
@@ -407,9 +434,22 @@ mod tests {
             "::1",
             "fc00::1",
             "::ffff:127.0.0.1",
+            "2001::1",
+            "2002:c0a8:101::1",
+            "3fff::1",
         ] {
             assert!(!public_address(value.parse().unwrap()), "{value}");
         }
+    }
+    #[test]
+    fn literal_ipv6_endpoint_cannot_ignore_reviewed_public_address_binding() {
+        assert!(ReviewedHttp::new(
+            "https://[::1]/mcp",
+            &["8.8.8.8:443".parse().unwrap()],
+            false,
+            None
+        )
+        .is_err());
     }
     #[test]
     fn bounded_response_stream_framing() {

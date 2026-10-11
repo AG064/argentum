@@ -12,6 +12,7 @@ test-support = []
 
 [dependencies]
 base64 = "=0.22.1"
+png = "=0.18.1"
 ring = "=0.17.14"
 zeroize.workspace = true
 time.workspace = true

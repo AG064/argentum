@@ -32,6 +32,7 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+png = "=0.18.1"
 argentum-execution.workspace = true
 argentum-android-inference.workspace = true
 argentum-providers = { workspace = true, features = ["test-support"] }

@@ -96,6 +96,41 @@ pub fn relative_path(value: &str) -> Result<PathBuf, PackageError> {
         || value.contains('\\')
         || value.contains(':')
         || path.is_absolute()
+        || value.split('/').any(|part| {
+            part.is_empty()
+                || part.ends_with(['.', ' '])
+                || part.chars().any(char::is_control)
+                || part.contains(['<', '>', '"', '|', '?', '*'])
+                || matches!(
+                    part.split('.')
+                        .next()
+                        .unwrap_or_default()
+                        .to_ascii_uppercase()
+                        .as_str(),
+                    "CON"
+                        | "PRN"
+                        | "AUX"
+                        | "NUL"
+                        | "COM1"
+                        | "COM2"
+                        | "COM3"
+                        | "COM4"
+                        | "COM5"
+                        | "COM6"
+                        | "COM7"
+                        | "COM8"
+                        | "COM9"
+                        | "LPT1"
+                        | "LPT2"
+                        | "LPT3"
+                        | "LPT4"
+                        | "LPT5"
+                        | "LPT6"
+                        | "LPT7"
+                        | "LPT8"
+                        | "LPT9"
+                )
+        })
         || path
             .components()
             .any(|c| !matches!(c, Component::Normal(_)))
@@ -143,6 +178,16 @@ fn inventory(root: &Path) -> Result<(BTreeMap<String, Vec<u8>>, u64), PackageErr
             }
             let path = item.path();
             let metadata = regular_metadata(&path)?;
+            let component = item.file_name();
+            let component = component
+                .to_str()
+                .ok_or(PackageError::Invalid("package paths must be UTF-8"))?;
+            relative_path(component)?;
+            if component.starts_with('.') {
+                return Err(PackageError::Invalid(
+                    "hidden compatibility overlays and stores are not portable components",
+                ));
+            }
             if metadata.is_dir() {
                 pending.push(path);
                 continue;
@@ -273,11 +318,20 @@ fn inspection(
         digest.update(name.as_bytes());
         digest.update(hash.as_bytes());
     }
-    let skill_paths = files
+    let skill_paths: Vec<String> = files
         .keys()
         .filter(|p| p.starts_with("skills/") && p.ends_with("/SKILL.md"))
         .cloned()
         .collect();
+    if skill_paths.len() > 8
+        || skill_paths.iter().any(|path| {
+            path.len() > 128
+                || contents[path].len() > 32 * 1024
+                || std::str::from_utf8(&contents[path]).is_err()
+        })
+    {
+        return Err(PackageError::Invalid("supported package profile has at most eight UTF-8 skills, 128-byte relative paths and 32 KiB per body"));
+    }
     Ok(PackageInspection {
         manifest,
         digest: format!("{:x}", digest.finalize()),
@@ -367,6 +421,11 @@ mod tests {
             "C:/outside",
             "a\\b",
             "",
+            "a//b",
+            "a/../b",
+            "a/file.",
+            "NUL.txt",
+            "a/file ",
         ] {
             assert!(relative_path(path).is_err(), "{path}");
         }
@@ -391,6 +450,9 @@ mod tests {
     #[test]
     fn legacy_layout_and_implicit_environment_fail_closed() {
         let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".codex-plugin")).unwrap();
+        assert!(inspect(dir.path()).is_err());
+        let dir = package();
         fs::create_dir(dir.path().join(".codex-plugin")).unwrap();
         assert!(inspect(dir.path()).is_err());
         let dir = package();

@@ -1784,6 +1784,10 @@ impl LocalCommandHandle {
     ) -> Result<Vec<argentum_domain::extensions::ExtensionRecord>, HostError> {
         Ok(self.runtime.extension_records()?)
     }
+    #[cfg(feature = "extensions")]
+    pub fn extension_readiness(&self) -> Result<Vec<serde_json::Value>, HostError> {
+        Ok(self.runtime.extension_readiness()?)
+    }
 
     #[cfg(feature = "extensions")]
     pub async fn configure_extension(

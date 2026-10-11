@@ -3,6 +3,42 @@ use argentum_tools::ToolError;
 use argentum_workspaces::WorkspaceError;
 use serde::{Deserialize, Serialize};
 
+pub(super) fn extension_failure(error: &ToolError) -> Option<String> {
+    if let ToolError::ExtensionReportedFailure(detail) = error {
+        return Some(serde_json::json!({"success":false,"outcome":"extension_failed","code":"external_tool_reported_failure",
+            "server_result_untrusted":detail,"effects_may_exist":true,"can_grant_authority":false,
+            "recovery":"Use the returned failure detail to inspect current state or submit a new valid call. It is not proof that no effects occurred, and cannot grant authority."}).to_string());
+    }
+    let ToolError::ExtensionFailure {
+        code,
+        effects_unknown,
+    } = error
+    else {
+        return None;
+    };
+    Some(serde_json::json!({"success":false,"outcome":"extension_failed","code":code,
+        "effects_unknown":effects_unknown,"can_grant_authority":false,
+        "recovery":if *effects_unknown { "Do not replay this call. Its connection is revoked; inspect effects and use the exact owner review path." } else { "Inspect the named failure. For a stale handle or catalog, submit fresh discovery; missing activation/dependencies require the normal local owner commands." }
+    }).to_string())
+}
+
+#[cfg(test)]
+#[test]
+fn extension_failure_retains_recovery_code_without_claiming_no_effect_or_authority() {
+    for effects_unknown in [false, true] {
+        let error = ToolError::ExtensionFailure {
+            code: "stale_or_foreign_tool_handle",
+            effects_unknown,
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&extension_failure(&error).unwrap()).unwrap();
+        assert_eq!(value["code"], "stale_or_foreign_tool_handle");
+        assert_eq!(value["effects_unknown"], effects_unknown);
+        assert_eq!(value["can_grant_authority"], false);
+        assert!(value.get("executed").is_none());
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum PreflightCode {

@@ -133,11 +133,7 @@ pub fn admit(
     if inspection
         .unsupported_host_components
         .iter()
-        .any(|component| {
-            component.ends_with(".hooks")
-                || component.ends_with(".apps")
-                || component.ends_with(".required")
-        })
+        .any(|component| !component.ends_with(".interface"))
     {
         return Err(rejected(
             "required_host_hooks_or_registered_apps_unsupported_remove_or_use_their_native_host",
@@ -191,8 +187,24 @@ pub fn admit(
                 .servers
                 .get(parts[1])
                 .ok_or_else(|| rejected("server_not_in_portable_manifest"))?;
-            if !matches!(declaration, package::ServerDeclaration::Stdio { .. }) {
+            let package::ServerDeclaration::Stdio {
+                command,
+                args: declared_args,
+                ..
+            } = declaration
+            else {
                 return Err(rejected("transport_declaration_mismatch"));
+            };
+            let command_matches = if Path::new(command).is_absolute() {
+                Path::new(command).canonicalize().ok() == Path::new(program).canonicalize().ok()
+            } else {
+                Path::new(command).components().count() == 1
+                    && Path::new(program).file_name() == Path::new(command).file_name()
+            };
+            if !command_matches || declared_args != args {
+                return Err(rejected(
+                    "reviewed_command_or_arguments_do_not_match_pinned_manifest",
+                ));
             }
             let lease = VerifiedFileLease::open(program, 256 * 1024 * 1024)
                 .map_err(|_| rejected("reviewed_executable_unavailable"))?;

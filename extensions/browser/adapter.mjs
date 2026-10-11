@@ -1,7 +1,7 @@
 // Optional first-party MCP adapter. No browser starts until an admitted tool call.
 // This is reviewed trusted Node/Playwright code, not an OS filesystem sandbox.
 import { randomUUID, createHash } from 'node:crypto';
-import { readFile, mkdir, writeFile, realpath, lstat, open } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, realpath, lstat, open, readdir } from 'node:fs/promises';
 import { resolve, isAbsolute, join, relative, extname } from 'node:path';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
@@ -46,6 +46,7 @@ function validateConfig(config) {
     if (url.origin !== origin || url.hostname !== '127.0.0.1' || !url.port || url.protocol !== 'http:') throw new Error('unsupported_browser_destination_use_exact_loopback_origin');
   }
   if (config.persistentProfile && !isAbsolute(config.persistentProfile)) throw new Error('persistent_profile_must_be_owner_configured_absolute_path');
+  if (config.persistentProfile && resolve(config.persistentProfile) !== resolve(config.artifactDirectory, 'profile')) throw new Error('persistent_profile_must_use_dedicated_artifact_scope_profile_not_another_application');
   if (config.previewWorkspace && (!isAbsolute(config.previewWorkspace) || !Number.isInteger(config.previewPort) || config.previewPort < 1024 || config.previewPort > 65535 || !config.allowedOrigins.includes(`http://127.0.0.1:${config.previewPort}`))) throw new Error('preview_requires_exact_owner_workspace_and_origin');
   return config;
 }
@@ -99,6 +100,7 @@ export class BrowserAdapter {
       } catch { response.writeHead(404); response.end('Preview resource unavailable'); }
     });
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(this.config.previewPort, '127.0.0.1', resolve); });
+    if (this.closed) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); throw new Error('adapter_retired'); }
     this.preview = server;
     return { origin, process_id: process.pid, mode: 'fixed_static_project_preview', arbitrary_process_execution: false };
   }
@@ -107,12 +109,26 @@ export class BrowserAdapter {
     if (this.context) return;
     const options = { headless: true, viewport: { width: 1200, height: 800 }, acceptDownloads: false, serviceWorkers: 'block', timeout: DEADLINE };
     if (this.config.persistentProfile) {
+      await mkdir(this.config.artifactDirectory, { recursive:true });
+      await mkdir(this.config.persistentProfile, { recursive:true });
+      const profile = await lstat(this.config.persistentProfile);
+      if (!profile.isDirectory() || profile.isSymbolicLink() || await realpath(this.config.persistentProfile) !== resolve(await realpath(this.config.artifactDirectory),'profile')) throw new Error('profile_identity_unavailable');
+      const marker = join(this.config.persistentProfile, 'argentum-profile.json');
+      const identity = { schema_version:1, allowed_origins:[...this.config.allowedOrigins].sort() };
+      const contents = await readdir(this.config.persistentProfile);
+      if (!contents.length) await writeFile(marker, JSON.stringify(identity), { flag:'wx' });
+      else {
+        let retained;
+        try { retained = JSON.parse(await readFile(marker,'utf8')); } catch { throw new Error('existing_non_argentum_profile_denied'); }
+        if (JSON.stringify(retained) !== JSON.stringify(identity)) throw new Error('profile_origin_scope_changed_use_a_fresh_profile');
+      }
       this.context = await chromium.launchPersistentContext(this.config.persistentProfile, options);
     } else {
       this.browser = await chromium.launch({ headless: true, timeout: DEADLINE });
       this.context = await this.browser.newContext(options);
     }
     this.contextId = randomUUID();
+    if (this.closed) { await this.context.close(); if (this.browser) await this.browser.close(); this.context = null; this.browser = null; throw new Error('adapter_retired'); }
     this.context.setDefaultTimeout(DEADLINE);
     this.context.setDefaultNavigationTimeout(DEADLINE);
     await this.context.route('**/*', async route => {
@@ -171,6 +187,10 @@ export class BrowserAdapter {
   async requireCurrent(entry, expected) {
     if (await this.observation(entry) !== entry.domDigest || entry.observedRevision !== expected || entry.observedUrl !== entry.page.url()) throw new Error('stale_observation_observe_again');
   }
+  async clearReferences(entry) {
+    const handles = [...entry.references.values()]; entry.references.clear();
+    await Promise.allSettled(handles.map(handle => handle.dispose()));
+  }
   async call(name, supplied) {
     const args = argsFor(name, supplied);
     if (this.closed) throw new Error('adapter_retired');
@@ -198,18 +218,19 @@ export class BrowserAdapter {
     if (name === 'browser_diagnostics') return { tab_id: args.tab_id, diagnostics: [...entry.diagnostics], bounded: true };
     if (name === 'browser_observe') {
       const before = await this.observation(entry);
-      entry.references.clear();
+      await this.clearReferences(entry);
       const elements = entry.page.locator('button, a[href], input:not([type=password]):not([type=file]):not([type=hidden]), select, textarea, [role=button]');
       const count = Math.min(await elements.count(), 64); const targets = [];
       for (let index = 0; index < count; index++) {
         const locator = elements.nth(index);
         if (!await locator.isVisible()) continue;
         const details = await locator.evaluate(element => ({ tag: element.tagName.toLowerCase(), name: (element.getAttribute('aria-label') || element.textContent || element.getAttribute('placeholder') || '').slice(0, 160) }));
-        const reference = `e${index}`; entry.references.set(reference, locator); targets.push({ reference, ...details });
+        const handle = await locator.elementHandle(); if (!handle) continue;
+        const reference = `e${index}`; entry.references.set(reference, handle); targets.push({ reference, ...details });
       }
       const accessibility = (await entry.page.locator('body').ariaSnapshot()).slice(0, MAX_TEXT);
       const after = await this.observation(entry);
-      if (after !== before) { entry.references.clear(); throw new Error('observation_changed_retry'); }
+      if (after !== before) { await this.clearReferences(entry); throw new Error('observation_changed_retry'); }
       entry.revision++; entry.domDigest = after; entry.observedRevision = entry.revision; entry.observedUrl = entry.page.url();
       return { browser_id: this.browserId, context_id: this.contextId, tab_id: args.tab_id, revision: entry.revision, origin: new URL(entry.page.url()).origin, accessibility, targets, bounded: true };
     }
@@ -224,14 +245,14 @@ export class BrowserAdapter {
       return { artifact, sha256: createHash('sha256').update(png).digest('hex'), mime_type: 'image/png', bytes: png.length, browser_id:this.browserId, context_id:this.contextId, origin: new URL(entry.page.url()).origin, tab_id: args.tab_id, revision: args.revision };
     }
     const locator = entry.references.get(args.reference);
-    if (!locator || await locator.count() !== 1) throw new Error('stale_or_unknown_reference');
+    if (!locator || !await locator.evaluate(element => element.isConnected)) throw new Error('stale_or_unknown_reference');
     // Only predetermined Playwright actions. Model input is never evaluated.
     if (args.action === 'click') await locator.click();
     else if (args.action === 'fill') { if (args.value === undefined) throw new Error('fill_requires_value'); await locator.fill(args.value); }
     else if (args.action === 'check') await locator.check();
     else if (args.action === 'uncheck') await locator.uncheck();
     else if (args.action === 'select') { if (args.value === undefined) throw new Error('select_requires_value'); await locator.selectOption(args.value); }
-    this.current(args.tab_id); entry.references.clear(); entry.observedRevision = null;
+    this.current(args.tab_id); await this.clearReferences(entry); entry.observedRevision = null;
     return { performed: args.action, tab_id: args.tab_id, observe_again: true };
   }
   async close() {

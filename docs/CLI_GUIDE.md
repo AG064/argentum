@@ -1,5 +1,9 @@
 # Windows CLI operations
 
+The optional extension-enabled build has a separate [governed extension and
+local browser guide](EXTENSIONS_BROWSER.md). Installation is not execution
+approval. Default core startup remains inert with respect to extensions.
+
 Use `argentum --help` for the version-bound command grammar. `$exe`, `$ws` and
 `$db` below are absolute paths chosen by the owner. Workspace and database
 selection must stay consistent across setup, configuration, chat and headless

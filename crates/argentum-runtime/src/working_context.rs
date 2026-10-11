@@ -560,6 +560,8 @@ impl RuntimeService {
         budget: &argentum_domain::context_budget::ModelBudget,
         request: argentum_providers::ModelRequest,
     ) -> Result<argentum_providers::PreparedProviderRequest, RuntimeError> {
+        #[cfg(feature = "extensions")]
+        self.ensure_extension_images_current(&request)?;
         let limit = self.profile_catalog_context_limit(profile, &request.model)?;
         if limit.is_some_and(|limit| limit == 0 || budget.usable_context_tokens > limit) {
             return Err(RuntimeError::ContextBudget(

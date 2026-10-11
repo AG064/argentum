@@ -5236,6 +5236,8 @@ impl RuntimeService {
             });
         }
         self.ensure_instruction_policy(&policy)?;
+        #[cfg(feature = "extensions")]
+        self.ensure_extension_images_current(prepared.request())?;
         let current_system = model_system_prompt(
             &{
                 let mut system = self.context_system_for_policy(
@@ -7113,7 +7115,7 @@ impl RuntimeService {
                 } else {
                     tool_feedback::invalid_input_feedback(&error, read_path.as_deref())
                 };
-                feedback.unwrap_or_else(|| {
+                feedback.or_else(|| tool_feedback::extension_failure(&error)).unwrap_or_else(|| {
                     serde_json::json!({
                         "success": false,
                         "executed": true,
@@ -8358,6 +8360,14 @@ fn model_request_projection_bytes(request: &ModelRequest) -> usize {
                 .map(|exchange| {
                     serde_json::to_vec(exchange)
                         .map_or(0, |bytes| bytes.len())
+                        .saturating_add(
+                            exchange
+                                .results
+                                .iter()
+                                .flat_map(|result| &result.images)
+                                .map(|image| image.data_url().len())
+                                .sum::<usize>(),
+                        )
                         .saturating_add(exchange.assistant_reasoning.len())
                         .saturating_add(
                             exchange
@@ -8470,7 +8480,7 @@ fn extension_parameters() -> serde_json::Value {
         variant("load_skill",json!({"namespace":namespace,"path":{"type":"string","minLength":1,"maxLength":1024}}),vec!["namespace","path"]),
         variant("discover_tools",json!({"namespace":namespace,"cursor":{"type":["string","null"],"maxLength":1024}}),vec!["namespace"]),
         variant("invoke",json!({"namespace":namespace,"handle":{"type":"object","description":"Copy the complete exact current handle returned by discovery."},"arguments":{"type":"object","description":"Use only the discovered inline schema. No authority, installation or program selection is granted."}}),vec!["namespace","handle","arguments"]),
-        variant("discover_resources",json!({"namespace":namespace}),vec!["namespace"]),
+        variant("discover_resources",json!({"namespace":namespace,"cursor":{"type":["string","null"],"maxLength":1024}}),vec!["namespace"]),
         variant("read_resource",json!({"namespace":namespace,"handle":{"type":"object","description":"Copy the exact current discovered resource handle."}}),vec!["namespace","handle"])
     ]}},"required":["operation"],"additionalProperties":false})
 }
@@ -12851,7 +12861,10 @@ mod tests {
                 .expect("written file"),
             "approved"
         );
-        assert_eq!(runtime.tool_count(), 23);
+        assert_eq!(
+            runtime.tool_count(),
+            23 + usize::from(cfg!(feature = "extensions"))
+        );
         assert!(runtime
             .tools
             .descriptors()
@@ -13725,12 +13738,16 @@ mod tests {
         // by this default policy; it must not enter the advertised model set.
         assert_eq!(
             requests[0].tools.len(),
-            runtime.tools.descriptors().len() - 1
+            runtime.tools.descriptors().len() - 1 - usize::from(cfg!(feature = "extensions"))
         );
         assert!(!requests[0]
             .tools
             .iter()
             .any(|tool| tool.name == "check_rust"));
+        assert!(!requests[0]
+            .tools
+            .iter()
+            .any(|tool| tool.name == "extension"));
         assert!(requests[0]
             .tools
             .iter()
