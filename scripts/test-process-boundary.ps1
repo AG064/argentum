@@ -7,6 +7,7 @@ foreach ($item in @(Get-ChildItem Env: | Where-Object Name -match '(API_KEY|TOKE
     Remove-Item -LiteralPath ("Env:" + $item.Name)
 }
 try {
+    & (Join-Path $PSScriptRoot 'device-security-diagnostics.ps1') *> (Join-Path $OutputDirectory 'device-security.log')
     $compile = Join-Path $OutputDirectory 'compile.log'
     & cargo test -p argentum-execution --lib --no-run --locked --offline -j 2 --message-format=json *> $compile
     if ($LASTEXITCODE -ne 0) { throw 'Fresh diagnostic compilation failed.' }
