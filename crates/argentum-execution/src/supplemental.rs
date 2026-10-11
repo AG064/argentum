@@ -326,18 +326,20 @@ mod tests {
         let (root, ws, owner) = fixture();
         let source = root.path().join("src/lib.rs");
         let changed = source.clone();
-        let change = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            std::fs::write(changed, "pub fn value()->u32{9}\n").unwrap();
+        let change = Box::new(move || {
+            std::fs::write(&changed, "pub fn value()->u32{9}\n").unwrap();
         });
-        let out = execute(
-            ws,
-            owner,
-            "#[test]fn snapshot_value(){assert_eq!(probe_fixture::value(),7);}",
-            RustCheckProfile::Debug,
-        )
-        .await;
-        change.await.unwrap();
+        let out = AFTER_SNAPSHOT_ADMISSION
+            .scope(
+                change,
+                execute(
+                    ws,
+                    owner,
+                    "#[test]fn snapshot_value(){assert_eq!(probe_fixture::value(),7);}",
+                    RustCheckProfile::Debug,
+                ),
+            )
+            .await;
         assert_eq!(out.receipt.state, SupplementalCheckState::Stale);
         assert!(!out.receipt.source_fresh);
         assert_eq!(std::fs::read(source).unwrap(), b"pub fn value()->u32{9}\n");
@@ -462,8 +464,7 @@ mod tests {
     async fn cargo_redirect_added_after_admission_makes_the_result_historical() {
         let (root, ws, owner) = fixture();
         let config = root.path().join(".cargo");
-        let change = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+        let change = Box::new(move || {
             std::fs::create_dir(&config).unwrap();
             std::fs::write(
                 config.join("config.toml"),
@@ -471,14 +472,17 @@ mod tests {
             )
             .unwrap();
         });
-        let out = execute(
-            ws,
-            owner,
-            "#[test]fn admitted_value(){assert_eq!(probe_fixture::value(),7);}",
-            RustCheckProfile::Debug,
-        )
-        .await;
-        change.await.unwrap();
+        let out = AFTER_SNAPSHOT_ADMISSION
+            .scope(
+                change,
+                execute(
+                    ws,
+                    owner,
+                    "#[test]fn admitted_value(){assert_eq!(probe_fixture::value(),7);}",
+                    RustCheckProfile::Debug,
+                ),
+            )
+            .await;
         assert_eq!(out.receipt.state, SupplementalCheckState::Stale);
         assert!(!out.receipt.source_fresh);
     }
@@ -549,6 +553,13 @@ pub async fn run_rust_check(
     {
         windows::run(workspace, owner, request, cancellation, maximum).await
     }
+}
+
+// Test-only, task-local synchronization for concurrent-editor controls. It is
+// absent from release builds and cannot be selected by a check request.
+#[cfg(test)]
+tokio::task_local! {
+    static AFTER_SNAPSHOT_ADMISSION: Box<dyn Fn() + Send + Sync>;
 }
 
 #[cfg(windows)]
@@ -1380,6 +1391,8 @@ mod windows {
             deadline,
             storage: area.root.join("build"),
         };
+        #[cfg(test)]
+        let _ = AFTER_SNAPSHOT_ADMISSION.try_with(|change| change());
         let compile = step(&cargo, args, &step_context, &mut peak).await?;
         let mut receipt = SupplementalCheckReceipt {
             schema_version: 1,
