@@ -766,6 +766,25 @@ mod tests {
         let Some(scratch) = std::env::var_os("ARGENTUM_PROBE_CONTROL_SCRATCH") else {
             return;
         };
+        if std::env::var("ARGENTUM_PROBE_CONTROL_MODE").as_deref() == Ok("childlaunch") {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "process::tests::managed_process_limits_validate_and_derive_local_model_bounds",
+                ])
+                .current_dir(&scratch)
+                .output();
+            match result {
+                Ok(output) => assert!(
+                    output.status.success(),
+                    "LPAC inherited child: status={}; stderr={}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ),
+                Err(error) => panic!("LPAC inherited child creation failed: {error}"),
+            }
+            return;
+        }
         if std::env::var("ARGENTUM_PROBE_CONTROL_MODE").as_deref() == Ok("infinite") {
             loop {
                 std::hint::spin_loop();
@@ -835,6 +854,52 @@ mod tests {
         );
         std::fs::write(PathBuf::from(scratch).join("owned.txt"), b"OWNED_ONLY")
             .expect("owned scratch write");
+    }
+
+    #[tokio::test]
+    async fn lpac_inherited_child_creation_diagnostic() {
+        let root = tempfile::tempdir().unwrap();
+        let exe = root.path().join("child.exe");
+        std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+        let boundary = ProbeSandbox::create(root.path()).unwrap();
+        let environment = BTreeMap::from([
+            ("ARGENTUM_PROBE_CONTROL_MODE".into(), "childlaunch".into()),
+            (
+                "ARGENTUM_PROBE_CONTROL_SCRATCH".into(),
+                root.path().to_string_lossy().into_owned(),
+            ),
+        ]);
+        let spec = ProcessSpec::argv(
+            exe.to_string_lossy(),
+            [
+                "--exact".into(),
+                "probe_sandbox::tests::isolated_child_control".into(),
+                "--nocapture".into(),
+            ],
+            root.path(),
+        )
+        .unwrap()
+        .with_probe_boundary(Arc::clone(&boundary), environment);
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let process = ManagedProcess::spawn_with_output(
+            spec,
+            ManagedProcessLimits::for_fixed_rust_verification().unwrap(),
+            sender,
+        )
+        .await
+        .unwrap();
+        let exit = process.wait().await.unwrap();
+        let mut output = String::new();
+        while let Ok(chunk) = receiver.try_recv() {
+            if output.len() < 16 * 1024 {
+                output.push_str(&chunk.text);
+            }
+        }
+        assert_eq!(
+            exit.exit_code,
+            Some(0),
+            "LPAC inherited child diagnostic: {output}"
+        );
     }
 
     #[tokio::test]

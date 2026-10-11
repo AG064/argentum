@@ -2473,6 +2473,40 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_managed_shell_listener_and_descendant_startup_diagnostic() {
+        let _process_fixture_guard = process_fixture_lock().lock().await;
+        let workspace = workspace();
+        let marker = workspace.path().join("managed-started.txt");
+        let escaped = marker.to_string_lossy().replace('\'', "''");
+        let script = format!("$ErrorActionPreference='Stop'; [Console]::Out.WriteLine('CONTROL_MANAGED_BEFORE'); $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); $listener.Start(); [Console]::Out.WriteLine('CONTROL_LISTENER_STARTED'); $child=Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-Command','exit 0') -WindowStyle Hidden -PassThru; $child.WaitForExit(); [Console]::Out.WriteLine('CONTROL_CHILD_EXIT:'+ $child.ExitCode); Set-Content -LiteralPath '{escaped}' -Value started; $listener.Stop(); [Console]::Out.WriteLine('CONTROL_MANAGED_AFTER')");
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let process = ManagedProcess::spawn_with_output(
+            powershell_spec(&script, workspace.path()),
+            managed_limits(),
+            sender,
+        )
+        .await
+        .expect("managed diagnostic spawn");
+        let exit = tokio::time::timeout(Duration::from_secs(25), process.wait())
+            .await
+            .expect("managed diagnostic deadline")
+            .expect("managed diagnostic wait");
+        let mut output = String::new();
+        while let Ok(chunk) = receiver.try_recv() {
+            if output.len() < 16 * 1024 {
+                output.push_str(&chunk.text);
+            }
+        }
+        assert!(
+            exit.exit_code == Some(0) && marker.exists(),
+            "managed shell diagnostic: exit={:?}; output={output}",
+            exit.exit_code
+        );
+        println!("managed shell diagnostic completed: {output}");
+    }
+
+    #[cfg(windows)]
     async fn wait_for_capture_tasks(
         probe: &OrdinaryCaptureProbe,
         expected: usize,
