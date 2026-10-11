@@ -2447,6 +2447,32 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_background_shell_builtin_startup_diagnostic() {
+        let _process_fixture_guard = process_fixture_lock().lock().await;
+        let workspace = workspace();
+        let marker = workspace.path().join("builtin-started.txt");
+        let escaped = marker.to_string_lossy().replace('\'', "''");
+        let script = format!("$ErrorActionPreference='Stop'; [Console]::Out.WriteLine('CONTROL_BEFORE_CMDLETS'); Get-Command Set-Content,Start-Sleep,Start-Process | ForEach-Object {{ [Console]::Out.WriteLine($_.Name + ':' + $_.Source) }}; Set-Content -LiteralPath '{escaped}' -Value started; [Console]::Out.WriteLine('CONTROL_AFTER_MARKER')");
+        let result = ProcessRunner
+            .run(
+                powershell_spec(&script, workspace.path())
+                    .with_timeout(Duration::from_secs(20))
+                    .unwrap(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            result.exit_code == Some(0) && marker.exists(),
+            "controlled shell failed: exit={:?}; stdout={}; stderr={}",
+            result.exit_code,
+            result.stdout,
+            result.stderr
+        );
+    }
+
+    #[cfg(windows)]
     async fn wait_for_capture_tasks(
         probe: &OrdinaryCaptureProbe,
         expected: usize,
