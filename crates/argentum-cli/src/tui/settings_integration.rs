@@ -1,10 +1,12 @@
 use super::*;
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::AtomicUsize;
+use std::time::Instant;
 
 struct CatalogServer {
     endpoint: String,
     calls: Arc<AtomicUsize>,
+    accepted: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -15,6 +17,8 @@ impl CatalogServer {
         let endpoint = format!("http://{}/v1/", listener.local_addr().unwrap());
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let accepted_connections = accepted.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let done = stop.clone();
         let worker = thread::spawn(move || {
@@ -27,17 +31,24 @@ impl CatalogServer {
                     }
                     Err(e) => panic!("{e}"),
                 };
+                stream.set_nonblocking(false).unwrap();
                 stream.set_read_timeout(Some(WATCHDOG)).unwrap();
+                stream.set_write_timeout(Some(WATCHDOG)).unwrap();
+                accepted_connections.fetch_add(1, Ordering::Release);
                 let mut reader = BufReader::new(&mut stream);
                 let mut first = String::new();
-                reader.read_line(&mut first).unwrap();
+                assert_ne!(reader.read_line(&mut first).unwrap(), 0, "empty request");
                 assert_eq!(
                     first, "GET /v1/models HTTP/1.1\r\n",
                     "settings must not start inference"
                 );
                 loop {
                     let mut line = String::new();
-                    reader.read_line(&mut line).unwrap();
+                    assert_ne!(
+                        reader.read_line(&mut line).unwrap(),
+                        0,
+                        "incomplete headers"
+                    );
                     if line == "\r\n" {
                         break;
                     }
@@ -52,10 +63,42 @@ impl CatalogServer {
         Self {
             endpoint,
             calls,
+            accepted,
             stop,
             worker: Some(worker),
         }
     }
+}
+
+#[test]
+fn catalog_fixture_reads_a_fragmented_request_after_accept() {
+    let server = CatalogServer::start();
+    let address = server
+        .endpoint
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/v1/")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut stream = std::net::TcpStream::connect_timeout(&address, WATCHDOG).unwrap();
+    stream.set_read_timeout(Some(WATCHDOG)).unwrap();
+    stream.set_write_timeout(Some(WATCHDOG)).unwrap();
+    let deadline = Instant::now() + WATCHDOG;
+    while server.accepted.load(Ordering::Acquire) == 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(server.accepted.load(Ordering::Acquire), 1);
+    // The accepted worker has entered read_line with no complete line yet.
+    stream.write_all(b"GET /v1/models HTTP/1.1").unwrap();
+    thread::sleep(Duration::from_millis(50));
+    stream
+        .write_all(b"\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .unwrap();
+    let mut response = String::new();
+    std::io::Read::read_to_string(&mut stream, &mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    assert_eq!(server.calls.load(Ordering::SeqCst), 1);
 }
 impl Drop for CatalogServer {
     fn drop(&mut self) {
