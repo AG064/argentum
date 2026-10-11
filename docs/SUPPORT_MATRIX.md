@@ -9,6 +9,14 @@ An installed x64 Microsoft Visual C++ runtime is a prerequisite; it is not
 bundled. Local runtime evidence is Windows 10.0.26100, not a pristine VM or a
 general Windows minimum-version qualification.
 
+The qualification runner is `windows-2025`. Retained Server 2022 (build 20348)
+failures establish that its LPAC cannot reopen the NUL device: the same child
+works with inherited stdin, but Cargo's output capture fails before execution.
+No additional capability or global device permission is granted to obtain a
+pass. Full process, privacy and workspace test contracts remain unchanged.
+Server 2022 and other Windows environments are not qualified by a successful
+newer-runner result. Local build 26100 and remote CI evidence remain separate.
+
 | Route | Native implementation | Evidence and qualification |
 | --- | --- | --- |
 | Windows x64 MSVC CLI | Setup, chat, headless, JSONL, tools, review, verification, recovery | Primary RC target; local clean-source and package qualification is recorded in the RC document |

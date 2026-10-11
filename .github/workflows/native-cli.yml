@@ -12,7 +12,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   windows-process-boundary:
-    runs-on: windows-2022
+    # Server 2022 LPAC denies reopening NUL, which Cargo's child capture requires.
+    # Qualify the Windows 26100-generation environment without widening LPAC.
+    runs-on: windows-2025
     timeout-minutes: 20
     env:
       CARGO_INCREMENTAL: '0'
@@ -39,7 +41,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   windows:
-    runs-on: windows-2022
+    runs-on: windows-2025
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: '0'
