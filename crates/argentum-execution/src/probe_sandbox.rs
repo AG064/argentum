@@ -767,6 +767,56 @@ mod tests {
             return;
         };
         if std::env::var("ARGENTUM_PROBE_CONTROL_MODE").as_deref() == Ok("childlaunch") {
+            // Distinguish device/pipe setup from process creation under the
+            // same LPAC token. Only synthetic controls and owned handles.
+            let null = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("NUL");
+            println!(
+                "CONTROL_LPAC_NUL_ACCESS: {:?}",
+                null.as_ref()
+                    .map(|_| ())
+                    .map_err(|error| error.raw_os_error())
+            );
+            let args = [
+                "--exact",
+                "process::tests::managed_process_limits_validate_and_derive_local_model_bounds",
+            ];
+            let inherited = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(args)
+                .current_dir(&scratch)
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status();
+            println!("CONTROL_LPAC_INHERITED_STDIO: {inherited:?}");
+            let inherited_input = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(args)
+                .current_dir(&scratch)
+                .stdin(std::process::Stdio::inherit())
+                .output();
+            println!(
+                "CONTROL_LPAC_INHERITED_INPUT_CAPTURE: {:?}",
+                inherited_input
+                    .as_ref()
+                    .map(|output| output.status)
+                    .map_err(|error| error.raw_os_error())
+            );
+            use std::os::windows::process::CommandExt;
+            let no_window = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(args)
+                .current_dir(&scratch)
+                .stdin(std::process::Stdio::inherit())
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            println!(
+                "CONTROL_LPAC_NO_WINDOW_CAPTURE: {:?}",
+                no_window
+                    .as_ref()
+                    .map(|output| output.status)
+                    .map_err(|error| error.raw_os_error())
+            );
             let result = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
