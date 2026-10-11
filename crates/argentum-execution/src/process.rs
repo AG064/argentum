@@ -3480,7 +3480,7 @@ mod tests {
             fs::write(
                 &script,
                 format!(
-                    "Set-Content -LiteralPath '{escaped_marker}' -Value child; Start-Sleep -Seconds 30"
+                    "[System.IO.File]::WriteAllText('{escaped_marker}', 'child'); [System.Threading.Thread]::Sleep(30000)"
                 ),
             )
             .expect("child script");
@@ -3504,7 +3504,11 @@ mod tests {
         }
         assert!(
             markers[..3].iter().all(|marker| marker.exists()),
-            "the first three descendants did not start"
+            "the first three descendants did not start: marker presence {:?}",
+            markers
+                .iter()
+                .map(|marker| marker.exists())
+                .collect::<Vec<_>>()
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(

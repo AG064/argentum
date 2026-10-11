@@ -576,8 +576,25 @@ async fn f07a_production_adapter_approval_wait_expires_without_a_late_effect() {
 }
 
 #[cfg(windows)]
+#[test]
+fn f07a_native_owned_sleep_child_control() {
+    // Like the existing native process fixtures, inert in the ordinary suite.
+    // Only the exact runtime-owned child invocation supplies this bound flag.
+    if std::env::var("ARGENTUM_TEST_GOAL_CHILD").as_deref() != Ok("1") {
+        return;
+    }
+    std::fs::write("owned-process.pid", std::process::id().to_string()).unwrap();
+    std::thread::sleep(Duration::from_secs(30));
+}
+
+#[cfg(windows)]
 #[tokio::test]
 async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue() {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
     let mut server = Server::start();
     let mut harness = Harness::start(&server.endpoint).await;
     harness
@@ -601,11 +618,10 @@ async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue(
     harness
         .view(|view| view.current_a && view.pending_a == [B])
         .await;
-    let program = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
-        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    // This fixture checks native goal cancellation, not discovery of modules
-    // installed on the CI image. Use CLR primitives under the same deadlines.
-    server.replies.send(Reply::Tool(json!({"program":program,"args":["-NoProfile","-NonInteractive","-Command","$env:PSModulePath=$PSHOME+'\\Modules'; [System.IO.File]::WriteAllText('owned-process.pid', [string]$PID); [System.Threading.Thread]::Sleep(30000)"],"timeout_ms":30000}))).unwrap();
+    let program = std::env::current_exe().unwrap();
+    // Native process cancellation must not depend on cold PowerShell startup.
+    // The real provider/tool/approval/process path and deadlines are unchanged.
+    server.replies.send(Reply::Tool(json!({"program":program,"args":["--exact","tui::queue_integration::f07a_native_owned_sleep_child_control","--nocapture"],"environment":{"ARGENTUM_TEST_GOAL_CHILD":"1"},"timeout_ms":30000}))).unwrap();
     let approval = tokio::time::timeout(WATCHDOG, async {
         loop {
             if let AppEvent::ApprovalRequested(request) = harness.events.recv().await.unwrap() {
@@ -637,6 +653,24 @@ async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue(
     })
     .await
     .expect("owned process did not start");
+    // Hold the observed live process identity across cancellation, rather than
+    // re-querying a potentially reused PID through another slow shell.
+    // SAFETY: read-only query access to the child PID observed in this fixture.
+    let raw_process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    assert!(
+        !raw_process.is_null(),
+        "owned process observation failed: {}",
+        std::io::Error::last_os_error()
+    );
+    // SAFETY: successful OpenProcess returned one owned handle.
+    let observed_process = unsafe { OwnedHandle::from_raw_handle(raw_process) };
+    let mut exit_code = 0;
+    // SAFETY: owned handle is live; exit_code is writable DWORD storage.
+    assert_ne!(
+        unsafe { GetExitCodeProcess(observed_process.as_raw_handle(), &mut exit_code) },
+        0
+    );
+    assert_eq!(exit_code, 259, "child exited before deadline cancellation");
     harness
         .view(|view| !view.current_a && view.paused_a && view.pending_a == [B])
         .await;
@@ -645,19 +679,13 @@ async fn f07a_production_adapter_deadline_drains_owned_process_and_pauses_queue(
         .unwrap()
         .unwrap()
         .unwrap();
-    let probe = std::process::Command::new(&program)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!(
-                "try {{ $p=[System.Diagnostics.Process]::GetProcessById({pid}); if (-not $p.HasExited) {{ exit 1 }} }} catch [System.ArgumentException] {{ }}; exit 0"
-            ),
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        probe.status.success(),
+    // SAFETY: the same owned process handle is retained through settlement.
+    assert_ne!(
+        unsafe { GetExitCodeProcess(observed_process.as_raw_handle(), &mut exit_code) },
+        0
+    );
+    assert_ne!(
+        exit_code, 259,
         "owned process survived terminal deadline settlement"
     );
     assert!(marker.exists(), "completed process effect was erased");

@@ -48,3 +48,6 @@ argentum-platform = { workspace = true, features = ["test-support"] }
 argentum-providers = { workspace = true, features = ["test-support"] }
 async-trait.workspace = true
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Threading"] }
