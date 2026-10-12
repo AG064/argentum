@@ -344,23 +344,52 @@ impl RuntimeService {
             return Ok(false);
         }
         let run_account = self.store.goal_run_accounting(run)?;
-        let requests_near = run_account.as_ref().is_some_and(|account| {
+        let scope = self.goal_scope(run)?;
+        let mut requests_near = run_account.as_ref().is_some_and(|account| {
             account
                 .limits
                 .request_limit
                 .is_some_and(|limit| account.counters.request_attempts.saturating_add(2) >= limit)
         });
-        let deadline_near = self
-            .goal_scope(run)?
-            .and_then(|scope| scope.deadline)
-            .is_some_and(|deadline| {
-                deadline.saturating_duration_since(tokio::time::Instant::now())
-                    <= native_handoff_time_reserve(
-                        run_account
-                            .as_ref()
-                            .and_then(|account| account.limits.elapsed_seconds),
-                    )
-            });
+        let mut tools_near = run_account.as_ref().is_some_and(|account| {
+            account
+                .limits
+                .tool_limit
+                .is_some_and(|limit| account.counters.tool_admissions.saturating_add(2) >= limit)
+        });
+        if let Some(scope) = scope.as_ref() {
+            // A run can have a wider ceiling than the remaining aggregate
+            // allowance. Read the same canonical store accounting as dispatch;
+            // a new run must not make the aggregate reserve disappear.
+            let goal = self
+                .store
+                .goal(self.project_id, scope.session)?
+                .ok_or(RuntimeError::GoalMissing)?;
+            let account = goal.accounting.as_ref().ok_or(StoreError::GoalAccounting(
+                "legacy_usage_history_unavailable",
+            ))?;
+            if goal.id != scope.binding.goal_id || account.revision != scope.binding.revision {
+                return Err(StoreError::GoalAccounting("goal_scope_mismatch").into());
+            }
+            requests_near |= account
+                .request_limit
+                .is_some_and(|limit| account.counters.request_attempts.saturating_add(2) >= limit);
+            tools_near |= goal
+                .tool_budget
+                .is_some_and(|limit| account.counters.tool_admissions.saturating_add(2) >= limit);
+        }
+        let deadline_near =
+            scope
+                .as_ref()
+                .and_then(|scope| scope.deadline)
+                .is_some_and(|deadline| {
+                    deadline.saturating_duration_since(tokio::time::Instant::now())
+                        <= native_handoff_time_reserve(
+                            run_account
+                                .as_ref()
+                                .and_then(|account| account.limits.elapsed_seconds),
+                        )
+                });
         let mut claims = self
             .active_supervisors
             .lock()
@@ -375,12 +404,17 @@ impl RuntimeService {
         if matches!(
             delivery.phase,
             DeliveryPhase::Implementation | DeliveryPhase::Feedback
-        ) && (round >= MAX_MODEL_ROUNDS.saturating_sub(2) || deadline_near || requests_near)
+        ) && (round >= MAX_MODEL_ROUNDS.saturating_sub(2)
+            || deadline_near
+            || requests_near
+            || tools_near)
         {
             delivery.handoff_reason = Some(if deadline_near {
                 "scheduled_time_handoff"
-            } else {
+            } else if requests_near || round >= MAX_MODEL_ROUNDS.saturating_sub(2) {
                 "scheduled_request_handoff"
+            } else {
+                "scheduled_tool_handoff"
             });
             return Ok(true);
         }

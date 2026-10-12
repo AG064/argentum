@@ -1803,6 +1803,98 @@ fn milestone_native_project_criterion_does_not_grant_execution() {
 }
 
 #[test]
+fn milestone_native_aggregate_remainder_reserves_a_report_before_hard_limits() {
+    for (limits, expected_reason) in [
+        (
+            "2000000,5,8,32,600,1000000,32,16,300",
+            "scheduled_request_handoff",
+        ),
+        (
+            "2000000,32,8,5,600,1000000,32,16,300",
+            "scheduled_tool_handoff",
+        ),
+    ] {
+        let server = Server::start();
+        let fixture = CliFixture::new(&server.endpoint);
+        let id = prepare(&fixture, 8);
+        json_output(fixture.run(&[
+            "goal",
+            "limits",
+            "--goal-id",
+            &id,
+            "--limits",
+            limits,
+            "--json",
+        ]));
+        let (output, report_only) = thread::scope(|scope| {
+            let child = scope.spawn(|| deliver(&fixture, &id, "8"));
+            let mut report_only = false;
+            let mut observations = 0;
+            let mut reports = 0;
+            let watchdog = Instant::now() + Duration::from_secs(60);
+            while Instant::now() < watchdog {
+                let request = match server.requests.recv_timeout(Duration::from_millis(100)) {
+                    Ok(request) => request,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) if child.is_finished() => break,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(error) => panic!("aggregate fixture transport ended: {error}"),
+                };
+                if observations < 3 {
+                    tool(
+                        &server,
+                        &format!("aggregate-read-{observations}"),
+                        "read_text",
+                        json!({"path":"fixture.txt"}),
+                    );
+                    observations += 1;
+                    continue;
+                }
+                if reports == 0 {
+                    report_only = request["messages"]
+                        .to_string()
+                        .contains("[native_handoff_feedback]")
+                        && request["tools"]
+                            .as_array()
+                            .is_none_or(|tools| tools.is_empty());
+                }
+                text(
+                    &server,
+                    r#"{"status":"continue","remaining":["The public implementation is unfinished."]}"#,
+                    true,
+                );
+                reports += 1;
+            }
+            eprintln!("aggregate control {expected_reason}: observations={observations}, reports={reports}, settled={}", child.is_finished());
+            (child.join().unwrap(), report_only)
+        });
+        let result = json_output(output);
+        assert!(
+            report_only,
+            "aggregate reserve must shape the actual next request: {}",
+            result["invocation"]["stop_reason"]
+        );
+        assert_eq!(
+            result["invocation"]["attempts"][0]["stop_reason"],
+            expected_reason
+        );
+        assert_eq!(result["task_success"], false);
+        assert_eq!(
+            result["goal"]["accounting"]["counters"]["tool_admissions"],
+            3
+        );
+        assert_eq!(
+            result["goal"]["accounting"]["counters"]["request_attempts"],
+            4
+        );
+        assert_eq!(
+            result["goal"]["accounting"]["counters"]["unresolved_tokens"],
+            0
+        );
+        assert!(server.requests.try_recv().is_err());
+    }
+}
+
+#[test]
 fn milestone_native_orientation_handoffs_preserve_novel_reads_until_guarded_implementation() {
     let server = Server::start();
     let fixture = CliFixture::new(&server.endpoint);
