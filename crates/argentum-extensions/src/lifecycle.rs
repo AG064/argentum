@@ -46,6 +46,15 @@ pub struct ExtensionLifecycle {
     connections: BTreeMap<String, OwnedConnection>,
 }
 impl ExtensionLifecycle {
+    /// Inspection does not restore admission or expose an executable session.
+    pub async fn observation(
+        &mut self,
+        key: &str,
+    ) -> Option<crate::connection::ConnectionObservation> {
+        let connection = self.connections.get(key)?;
+        let session = connection.session.lock().await;
+        session.as_ref().map(McpSession::observation)
+    }
     pub fn connection(
         &self,
         namespace: &str,

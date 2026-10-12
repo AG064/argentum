@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$TargetDirectory = '',
-    [ValidateRange(1, 8)][int]$Jobs = 1
+    [ValidateRange(1, 8)][int]$Jobs = 1,
+    [switch]$Extensions
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -27,6 +28,7 @@ try {
     $cargo = (& cargo --version).Trim()
     New-Item -ItemType Directory -Path $output | Out-Null
     $targetArgs = @()
+    $featureArgs = if ($Extensions) { @('--features','argentum-cli/extensions') } else { @() }
     if ($TargetDirectory) {
         if (-not [IO.Path]::IsPathFullyQualified($TargetDirectory)) { throw 'Target directory must be absolute.' }
         $targetArgs = @('--target-dir', [IO.Path]::GetFullPath($TargetDirectory))
@@ -36,18 +38,19 @@ try {
     try {
         $env:CARGO_PROFILE_RELEASE_DEBUG = '0'
         $env:CARGO_INCREMENTAL = '0'
-        & cargo build -p argentum-cli --bin argentum --release --locked -j $Jobs @targetArgs *> (Join-Path $output 'build.log')
+        & cargo build -p argentum-cli --bin argentum --release --locked -j $Jobs @featureArgs @targetArgs *> (Join-Path $output 'build.log')
         if ($LASTEXITCODE -ne 0) { throw 'Cargo build failed. Retain build.log.' }
     } finally {
         [Environment]::SetEnvironmentVariable('CARGO_PROFILE_RELEASE_DEBUG', $previousDebug, 'Process')
         [Environment]::SetEnvironmentVariable('CARGO_INCREMENTAL', $previousIncremental, 'Process')
     }
-    $metadataText = & cargo metadata --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc
+    $metadataText = & cargo metadata --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc @featureArgs
     if ($LASTEXITCODE -ne 0) { throw 'Locked dependency metadata failed.' }
     $metadata = $metadataText | ConvertFrom-Json -Depth 100
     $cli = $metadata.packages | Where-Object name -eq 'argentum-cli'
     $version = $cli.version
-    $package = Join-Path $output "argentum-$version-windows-x64"
+    $suffix = if ($Extensions) { '-extensions' } else { '' }
+    $package = Join-Path $output "argentum-$version-windows-x64$suffix"
     New-Item -ItemType Directory -Path $package | Out-Null
     $targetRoot = if ($TargetDirectory) { [IO.Path]::GetFullPath($TargetDirectory) } else { $metadata.target_directory }
     Copy-Item -LiteralPath (Join-Path $targetRoot 'release/argentum.exe') -Destination (Join-Path $package 'argentum.exe')
@@ -57,6 +60,23 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $package 'docs') | Out-Null
     foreach ($relative in @('CLI_GUIDE.md', 'CHATGPT_SIGN_IN.md', 'SUPPORT_MATRIX.md', 'MIGRATION_NATIVE.md', 'NATIVE_DELIVERY.md')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot "docs/$relative") -Destination (Join-Path $package "docs/$relative")
+    }
+    if ($Extensions) {
+        foreach ($relative in @(& git ls-files -- docs)) {
+            $destination = Join-Path $package $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $sourceRoot $relative) -Destination $destination
+        }
+        foreach ($relative in @('ROADMAP.md','SECURITY.md','CONTRIBUTING.md')) {
+            Copy-Item -LiteralPath (Join-Path $sourceRoot $relative) -Destination (Join-Path $package $relative)
+        }
+        $browser = Join-Path $package 'extensions/browser'
+        New-Item -ItemType Directory -Path $browser -Force | Out-Null
+        foreach ($relative in @('adapter.mjs','package.json','package-lock.json')) {
+            Copy-Item -LiteralPath (Join-Path $sourceRoot "extensions/browser/$relative") -Destination (Join-Path $browser $relative)
+        }
+        # Node, browser binaries, profiles, definitions and state are separate
+        # reviewed owner preparation, never silently bundled or started.
     }
     # Retain actual license/notice bytes for the selected CLI dependency closure.
     # Build dependencies are included conservatively; dev-only and unrelated UI
@@ -120,7 +140,9 @@ try {
         schema_version=1; product='Argentum native CLI'; version=$version
         repository='https://github.com/AG064/argentum'; commit=$commit; tree=$tree
         target='x86_64-pc-windows-msvc'; rustc=$rustc; cargo=$cargo
-        build_arguments=@('build','-p','argentum-cli','--bin','argentum','--release','--locked','-j',[string]$Jobs)
+        build_arguments=@('build','-p','argentum-cli','--bin','argentum','--release','--locked','-j',[string]$Jobs) + $featureArgs
+        features=if ($Extensions) { @('extensions') } else { @() }
+        optional_browser_adapter_included=[bool]$Extensions
         profile_environment=@{CARGO_PROFILE_RELEASE_DEBUG='0';CARGO_INCREMENTAL='0'}
         executable_sha256=$binaryHash; signed=$false; published=$false
         credentials_included=$false; stores_included=$false; models_included=$false

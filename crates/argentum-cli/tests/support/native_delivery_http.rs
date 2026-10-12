@@ -739,6 +739,70 @@ fn milestone_native_exact_cli_fail_guarded_correction_pass_feedback_restart() {
 }
 
 #[test]
+fn milestone_native_prepassed_source_requires_current_invocation_feedback() {
+    let server = Server::start();
+    let fixture = CliFixture::new(&server.endpoint);
+    let id = prepare(&fixture, 8);
+    let path = fixture.workspace.join("src/lib.rs");
+    let corrected = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("    7\n", "    8\n");
+    std::fs::write(&path, corrected).unwrap();
+    let prior = thread::scope(|scope| {
+        let child = scope.spawn(|| {
+            fixture.run(&[
+                "run",
+                "--prompt",
+                "Run the existing fixed source check only.",
+            ])
+        });
+        next(&server);
+        tool(
+            &server,
+            "prior-source-check",
+            "verify",
+            json!({"runners":["cargo-test-locked"]}),
+        );
+        let request = next(&server);
+        assert!(request["messages"].to_string().contains("passed"));
+        text(&server, "Prior source check completed.", true);
+        child.join().unwrap()
+    });
+    assert!(
+        prior.status.success(),
+        "{}",
+        String::from_utf8_lossy(&prior.stderr)
+    );
+    let output = thread::scope(|scope| {
+        let child = scope.spawn(|| deliver(&fixture, &id, "8"));
+        next(&server);
+        text(
+            &server,
+            r#"{"status":"ready","remaining":[],"summary":"Public source is already correct."}"#,
+            true,
+        );
+        let feedback = next(&server);
+        assert!(feedback["messages"]
+            .to_string()
+            .contains("native_verifier_feedback"));
+        assert!(feedback["messages"].to_string().contains("passed"));
+        text(
+            &server,
+            r#"{"status":"ready","remaining":[],"summary":"Current native verification received."}"#,
+            true,
+        );
+        child.join().unwrap()
+    });
+    let result = json_output(output);
+    assert_eq!(result["task_success"], true, "{result}");
+    let attempts = result["invocation"]["attempts"].as_array().unwrap();
+    assert_eq!(attempts.len(), 3);
+    assert_eq!(attempts[1]["delivery_phase"], "verification");
+    assert_ne!(attempts[0]["run_id"], attempts[1]["run_id"]);
+    assert!(server.requests.try_recv().is_err());
+}
+
+#[test]
 fn milestone_partial_increment_continue_gets_native_failure_before_correction() {
     let server = Server::start();
     let fixture = CliFixture::new(&server.endpoint);

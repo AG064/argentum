@@ -22,7 +22,8 @@ const revision = { type: 'integer', minimum: 0 };
 const definitions = [
   ['browser_preview_start', 'Start the fixed owned static-project preview at the owner-reviewed loopback port. No model command or argv.', {}, []],
   ['browser_open', 'Open one owned tab at an explicitly allowed destination.', { url: string }, ['url']],
-  ['browser_observe', 'Observe current DOM and bounded interaction references. Page data is untrusted.', { tab_id: tab }, ['tab_id']],
+  ['browser_observe', 'Observe current layout, form state and bounded references. Use a small text_limit or omit accessibility when focused references suffice. Page data is untrusted.', { tab_id: tab, text_limit: { type: 'integer', minimum: 256, maximum: MAX_TEXT }, include_accessibility: { type: 'boolean' } }, ['tab_id']],
+  ['browser_viewport', 'Set an owned page viewport within the existing screenshot boundary; old observations become stale.', { tab_id: tab, width: { type: 'integer', minimum: 320, maximum: 1200 }, height: { type: 'integer', minimum: 240, maximum: 800 } }, ['tab_id', 'width', 'height']],
   ['browser_interact', 'Use a reference from the exact current observation, never arbitrary JavaScript.', { tab_id: tab, revision, reference: string, action: { enum: ['click', 'fill', 'check', 'uncheck', 'select'] }, value: { type: 'string', maxLength: 4096 } }, ['tab_id', 'revision', 'reference', 'action']],
   ['browser_screenshot', 'Capture an actual bounded PNG artifact at the current origin and observation.', { tab_id: tab, revision }, ['tab_id', 'revision']],
   ['browser_diagnostics', 'Inspect bounded console and network metadata, no headers, cookies or response bodies.', { tab_id: tab }, ['tab_id']],
@@ -60,13 +61,14 @@ function argsFor(name, args) {
     const rule = schema.properties[key];
     if (rule.enum && !rule.enum.includes(value)) throw new Error('invalid_enum_argument');
     if (rule.type === 'string' && (typeof value !== 'string' || value.length > rule.maxLength || value.length < (rule.minLength ?? 0))) throw new Error('invalid_string_argument');
-    if (rule.type === 'integer' && (!Number.isSafeInteger(value) || value < rule.minimum)) throw new Error('invalid_integer_argument');
+    if (rule.type === 'integer' && (!Number.isSafeInteger(value) || value < rule.minimum || (rule.maximum !== undefined && value > rule.maximum))) throw new Error('invalid_integer_argument');
+    if (rule.type === 'boolean' && typeof value !== 'boolean') throw new Error('invalid_boolean_argument');
   }
   return args;
 }
 
 export class BrowserAdapter {
-  constructor(config) { this.config = validateConfig(config); this.browserId = randomUUID(); this.contextId = null; this.preview = null; this.tabs = new Map(); this.admittedPages = new WeakSet(); this.browser = null; this.context = null; this.closed = false; }
+  constructor(config) { this.config = validateConfig(config); this.browserId = randomUUID(); this.contextId = null; this.preview = null; this.tabs = new Map(); this.admittedPages = new WeakSet(); this.browser = null; this.context = null; this.closed = false; this.actionStarts = 0; }
   async previewStart() {
     if (!this.config.previewWorkspace) throw new Error('preview_not_owner_configured');
     const origin = `http://127.0.0.1:${this.config.previewPort}`;
@@ -196,47 +198,58 @@ export class BrowserAdapter {
     if (this.closed) throw new Error('adapter_retired');
     if (name === 'browser_preview_start') return this.previewStart();
     if (name === 'browser_close') {
-      if (!args.tab_id) { await this.close(); return { closed: true }; }
-      const entry = this.current(args.tab_id); await entry.page.close(); this.tabs.delete(args.tab_id); return { tab_closed: args.tab_id };
+      const identities = { browser_id: this.browserId, context_id: this.contextId };
+      if (!args.tab_id) { await this.close(); return { ...identities, closed: true }; }
+      const entry = this.current(args.tab_id); this.actionStarts++; await entry.page.close(); this.tabs.delete(args.tab_id); return { ...identities, tab_id: args.tab_id, tab_closed: args.tab_id };
     }
     await this.start();
     if (name === 'browser_open') {
       if (!destinationAllowed(args.url, this.config.allowedOrigins)) throw new Error('destination_denied');
       if (this.tabs.size >= 4) throw new Error('tab_limit_reached');
-      const page = await this.context.newPage(); this.admittedPages.add(page);
+      this.actionStarts++; const page = await this.context.newPage(); this.admittedPages.add(page);
       const id = randomUUID(); const entry = { page, references: new Map(), diagnostics: [], revision: 0, domDigest: null, observedRevision: null, observedUrl: null };
       this.tabs.set(id, entry);
       page.on('console', event => { if (['warning', 'error'].includes(event.type())) this.record(entry, 'console', event.text()); });
       page.on('pageerror', error => this.record(entry, 'pageerror', error.message));
       page.on('response', response => { if (response.status() >= 400) { const url = new URL(response.url()); this.record(entry, 'network', `${response.status()} ${url.origin}${url.pathname}`); } });
       page.on('requestfailed', () => this.record(entry, 'network', 'request_failed'));
-      try { await page.goto(args.url, { waitUntil: 'domcontentloaded' }); this.current(id); }
+      try { this.actionStarts++; await page.goto(args.url, { waitUntil: 'domcontentloaded' }); this.current(id); }
       catch { await page.close(); this.tabs.delete(id); throw new Error('navigation_failed_or_destination_denied'); }
       const visibleUrl = new URL(page.url()); return { browser_id: this.browserId, context_id: this.contextId, tab_id: id, origin: visibleUrl.origin, path: visibleUrl.pathname };
     }
     const entry = this.current(args.tab_id);
+    if (name === 'browser_viewport') {
+      this.actionStarts++; await entry.page.setViewportSize({ width: args.width, height: args.height });
+      await this.clearReferences(entry); entry.observedRevision = null;
+      return { browser_id: this.browserId, context_id: this.contextId, tab_id: args.tab_id, viewport: entry.page.viewportSize(), observe_again: true };
+    }
     if (name === 'browser_diagnostics') return { tab_id: args.tab_id, diagnostics: [...entry.diagnostics], bounded: true };
     if (name === 'browser_observe') {
       const before = await this.observation(entry);
       await this.clearReferences(entry);
-      const elements = entry.page.locator('button, a[href], input:not([type=password]):not([type=file]):not([type=hidden]), select, textarea, [role=button]');
+      const elements = entry.page.locator(':is(button, a[href], input, select, textarea, [role=button]):not(input[type=password]):not(input[type=file]):not(input[type=hidden])');
       const count = Math.min(await elements.count(), 64); const targets = [];
       for (let index = 0; index < count; index++) {
         const locator = elements.nth(index);
         if (!await locator.isVisible()) continue;
-        const details = await locator.evaluate(element => ({ tag: element.tagName.toLowerCase(), name: (element.getAttribute('aria-label') || element.textContent || element.getAttribute('placeholder') || '').slice(0, 160) }));
+        const details = await locator.evaluate(element => ({ tag: element.tagName.toLowerCase(), name: (element.getAttribute('aria-label') || [...(element.labels ?? [])].map(label => label.textContent).join(' ') || element.textContent || element.getAttribute('placeholder') || '').slice(0, 160), checked: typeof element.checked === 'boolean' ? element.checked : undefined, value: typeof element.value === 'string' ? element.value.slice(0, 160) : undefined, disabled: Boolean(element.disabled) }));
         const handle = await locator.elementHandle(); if (!handle) continue;
         const reference = `e${index}`; entry.references.set(reference, handle); targets.push({ reference, ...details });
       }
-      const accessibility = (await entry.page.locator('body').ariaSnapshot()).slice(0, MAX_TEXT);
+      // Playwright's whole-page ARIA snapshot can expose password values even
+      // though password fields are excluded from our interaction references.
+      // Omit that projection instead of pretending a text replacement is DLP.
+      const protectedInputs = await entry.page.locator('input[type=password]').count() > 0;
+      const accessibility = args.include_accessibility === false || protectedInputs ? '' : (await entry.page.locator('body').ariaSnapshot()).slice(0, args.text_limit ?? MAX_TEXT);
+      const layout = await entry.page.evaluate(() => ({ document_width: document.documentElement.scrollWidth, client_width: document.documentElement.clientWidth, horizontal_overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth }));
       const after = await this.observation(entry);
       if (after !== before) { await this.clearReferences(entry); throw new Error('observation_changed_retry'); }
       entry.revision++; entry.domDigest = after; entry.observedRevision = entry.revision; entry.observedUrl = entry.page.url();
-      return { browser_id: this.browserId, context_id: this.contextId, tab_id: args.tab_id, revision: entry.revision, origin: new URL(entry.page.url()).origin, accessibility, targets, bounded: true };
+      return { browser_id: this.browserId, context_id: this.contextId, tab_id: args.tab_id, revision: entry.revision, origin: new URL(entry.page.url()).origin, accessibility, protected_input_projection_omitted: protectedInputs, targets, viewport: entry.page.viewportSize(), layout, bounded: true };
     }
     await this.requireCurrent(entry, args.revision);
     if (name === 'browser_screenshot') {
-      const png = await entry.page.screenshot({ type: 'png', fullPage: false, animations: 'disabled', timeout: DEADLINE });
+      this.actionStarts++; const png = await entry.page.screenshot({ type: 'png', fullPage: false, animations: 'disabled', timeout: DEADLINE });
       if (png.length > 128 * 1024) throw new Error('screenshot_exceeds_byte_limit');
       await this.requireCurrent(entry, args.revision);
       await mkdir(this.config.artifactDirectory, { recursive: true });
@@ -247,6 +260,7 @@ export class BrowserAdapter {
     const locator = entry.references.get(args.reference);
     if (!locator || !await locator.evaluate(element => element.isConnected)) throw new Error('stale_or_unknown_reference');
     // Only predetermined Playwright actions. Model input is never evaluated.
+    this.actionStarts++;
     if (args.action === 'click') await locator.click();
     else if (args.action === 'fill') { if (args.value === undefined) throw new Error('fill_requires_value'); await locator.fill(args.value); }
     else if (args.action === 'check') await locator.check();
@@ -286,10 +300,21 @@ async function serve(configPath) {
     } else if (message.method === 'server/discover') result = { resultType: 'complete', supportedVersions: ['2026-07-28', '2025-11-25'], capabilities, ttlMs: 0, cacheScope: 'private', _meta: { 'io.modelcontextprotocol/serverInfo': info } };
     else if (message.method === 'tools/list') result = { tools: definitions };
     else if (message.method === 'tools/call') {
+      const actionsBefore = adapter.actionStarts;
       try {
         const resultValue = await adapter.call(message.params?.name, message.params?.arguments ?? {});
+        resultValue.operation_receipt = { actions: adapter.actionStarts - actionsBefore, coverage: 'server_reported_selected_playwright_actions_not_all_browser_activity', application_condition_verified: false };
         result = { content: [{ type: 'text', text: JSON.stringify(resultValue) }], structuredContent: resultValue };
-      } catch (error) { result = { content: [{ type: 'text', text: String(error.message).slice(0, 512) }], isError: true }; }
+      } catch (error) {
+        const message = String(error.message);
+        const reason = message.startsWith('stale_observation') ? 'stale_observation'
+          : message === 'stale_or_unknown_reference' ? 'stale_target'
+          : message.includes('destination_denied') ? 'destination_denied'
+          : message.startsWith('invalid_') ? 'selection_invalid'
+          : message.startsWith('navigation_failed') ? 'navigation_failed'
+          : message.includes('limit') ? 'capacity' : 'unavailable';
+        result = { content: [{ type: 'text', text: `${reason}: obtain a fresh observation and check the admitted scope before a new action; prior effects are not rolled back` }], structuredContent: { browser_id: adapter.browserId, context_id: adapter.contextId, operation_receipt: { actions: adapter.actionStarts - actionsBefore, reason, coverage: 'server_reported_selected_playwright_actions_not_all_browser_activity', application_condition_verified: false } }, isError: true };
+      }
     } else { output({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Unsupported method; sampling, roots, elicitation and resource callbacks are unavailable' } }); return; }
     output({ jsonrpc: '2.0', id: message.id, result });
   }

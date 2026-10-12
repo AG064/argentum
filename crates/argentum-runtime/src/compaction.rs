@@ -1396,6 +1396,11 @@ impl SummaryStream {
             ));
         }
         match event {
+            ProviderEvent::ImageInputAccepted { .. } => {
+                return Err(RuntimeError::ContextCompaction(
+                    "summarizer emitted forbidden image input",
+                ));
+            }
             ProviderEvent::UsageObservation(usage) => {
                 if let Err(reason) = usage.validate() {
                     self.invalid_usage = true;

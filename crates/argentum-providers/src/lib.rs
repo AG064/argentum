@@ -695,6 +695,12 @@ impl ProviderPreset {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderEvent {
+    /// Exact serialized PNG input, after the one HTTP send returned admitted
+    /// SSE headers. This is not proof that a model perceived the pixels.
+    ImageInputAccepted {
+        sha256: String,
+        encoded_bytes: u64,
+    },
     ChatGptContinuation(Box<ChatGptAssistantState>),
     UsageObservation(argentum_domain::goal_accounting::ObservedUsage),
     UsageUncertain,
@@ -5337,6 +5343,9 @@ mod tests {
             match event {
                 ProviderEvent::Delta(delta) => visible.push_str(&delta),
                 ProviderEvent::ReasoningDelta(delta) => reasoning.push_str(&delta),
+                ProviderEvent::ImageInputAccepted { .. } => {
+                    panic!("text-only local adapter cannot accept image input")
+                }
                 ProviderEvent::Completed => break,
                 ProviderEvent::ToolCall(_)
                 | ProviderEvent::AssistantContinuation(_)

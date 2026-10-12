@@ -47,6 +47,12 @@ repairable failure without another owner prompt. Raw verifier output is not a
 new durable-history source. After restart only actually retained receipt metadata
 is available; the application does not reconstruct missing diagnostics.
 
+A passing receipt from an earlier task remains historical evidence, even when
+its source still matches. Native verification obtains current evidence inside
+this invocation before its feedback/completion stage. Multiple declared checks
+retain separate verifier runs. A check already performed by the model in this
+invocation may be reused only under the same canonical source/runner checks.
+
 Completion requires passing declared checks against current inputs and runner
 definitions, settled accounting, and a model work report acknowledging the
 current feedback with no unfinished work. Any selected owner-attestation

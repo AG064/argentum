@@ -181,6 +181,35 @@ async fn exact_cli_persisted_owner_activation_progressive_skill_reaches_next_req
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(records.lock().unwrap().len(), 3);
+    let inspection = Command::new(exe())
+        .args(["extensions", "receipts", "--workspace"])
+        .arg(&ws)
+        .arg("--database")
+        .arg(&database)
+        .output()
+        .unwrap();
+    assert!(
+        inspection.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inspection.stderr)
+    );
+    let inspected: Value = serde_json::from_slice(&inspection.stdout).unwrap();
+    let receipts = inspected["receipts"].as_array().unwrap();
+    assert_eq!(
+        receipts
+            .iter()
+            .filter(|item| item["receipt"]["stage"] == "completed")
+            .count(),
+        2
+    );
+    assert!(
+        receipts
+            .iter()
+            .any(|item| item["receipt"]["kind"] == "skill"
+                && item["receipt"]["outcome"] == "returned")
+    );
+    assert!(!String::from_utf8_lossy(&inspection.stdout).contains("APP_SELECTED_SKILL_MARKER"));
+    assert_eq!(inspected["inference_dispatched"], false);
     assert_eq!(
         std::fs::read_to_string(ws.join("keep.txt")).unwrap(),
         "UNRELATED_PRESERVED"

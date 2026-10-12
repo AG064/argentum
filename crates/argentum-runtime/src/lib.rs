@@ -3406,6 +3406,22 @@ impl RuntimeService {
             .settle_run(run_id)
             .await
             .map_err(|error_value| RuntimeError::Tool(ToolError::ProcessJob(error_value)))?;
+        #[cfg(feature = "extensions")]
+        if let Some(owner) = self.extension_owner.get() {
+            let settlement = owner.finish_run(run_id).await?;
+            for receipt in settlement.receipts {
+                self.emit_for_run(
+                    AppEvent::ExtensionOperationRecorded {
+                        run_id,
+                        receipt: Box::new(receipt),
+                    },
+                    run_id,
+                )?;
+            }
+            if let Some(error) = settlement.failure {
+                return Err(error.into());
+            }
+        }
         let reason = match &result {
             Ok(RunCompletion::Complete) => "task_finished_goal_not_verified",
             Ok(RunCompletion::Cancelled) => "cancelled",
@@ -3984,6 +4000,8 @@ impl RuntimeService {
                         argentum_domain::recovery::RecoveryRequestState::Dispatched,
                     )?;
                     self.mark_goal_dispatch(charge.as_ref())?;
+                    #[cfg(feature = "extensions")]
+                    self.record_extension_image_dispatch(prepared.request(), context.run_id, request_id)?;
                     stream.attempt_had_response_events = false;
                     let round_result = self
                         .stream_model_round(
@@ -4579,6 +4597,44 @@ impl RuntimeService {
             )?;
         }
         match event {
+            ProviderEvent::ImageInputAccepted {
+                sha256,
+                encoded_bytes,
+            } if !round.completed => {
+                if sha256.len() != 64
+                    || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    || encoded_bytes > 175_024
+                {
+                    return Err(ProviderError::InvalidResponse(
+                        "invalid image transport observation".into(),
+                    )
+                    .into());
+                }
+                #[cfg(feature = "extensions")]
+                {
+                    let mut receipt =
+                        argentum_domain::extensions::ExtensionOperationReceipt::requested(
+                            request_id,
+                            argentum_domain::extensions::ExtensionOperationKind::BrowserScreenshot,
+                        );
+                    receipt.stage = argentum_domain::extensions::ExtensionReceiptStage::ImageAcceptedByTransport;
+                    receipt.outcome =
+                        argentum_domain::extensions::ExtensionReceiptOutcome::Returned;
+                    receipt.image = Some(argentum_domain::extensions::ExtensionImageObservation {
+                        sha256: Sha256Digest(sha256),
+                        encoded_bytes,
+                        context_id: None,
+                        request_id,
+                    });
+                    self.emit_for_run(
+                        AppEvent::ExtensionOperationRecorded {
+                            run_id: context.run_id,
+                            receipt: Box::new(receipt),
+                        },
+                        context.run_id,
+                    )?;
+                }
+            }
             ProviderEvent::UsageObservation(usage) if !round.completed => {
                 if let Err(reason) = usage.validate() {
                     stream.invalid_usage = true;
@@ -4740,6 +4796,7 @@ impl RuntimeService {
             | ProviderEvent::ChatGptContinuation(_)
             | ProviderEvent::Usage(_)
             | ProviderEvent::UsageObservation(_)
+            | ProviderEvent::ImageInputAccepted { .. }
             | ProviderEvent::Completed => {
                 return Err(ProviderError::InvalidResponse(
                     "provider emitted events after completion".into(),
@@ -5657,6 +5714,7 @@ impl RuntimeService {
             AppEvent::ModelRequestAttempt { .. }
                 | AppEvent::SteeringChanged(_)
                 | AppEvent::SummaryTransportObserved { .. }
+                | AppEvent::ExtensionOperationRecorded { .. }
         ) {
             self.store
                 .append_context_neutral_event_scoped_record(&scope, &event)?
@@ -7164,6 +7222,11 @@ impl RuntimeService {
         instruction_check: Option<&instructions::InstructionCheck>,
         expected_policy: Option<&HarnessExecutionPolicy>,
     ) -> Result<Result<ToolResult, ToolError>, RuntimeError> {
+        #[cfg(feature = "extensions")]
+        self.record_extension_stage(
+            &request,
+            argentum_domain::extensions::ExtensionReceiptStage::Requested,
+        )?;
         let _activity = self
             .context_activity
             .try_read()
@@ -7332,8 +7395,25 @@ impl RuntimeService {
         };
         let started_at = now();
         let started = std::time::Instant::now();
+        #[cfg(feature = "extensions")]
+        self.record_extension_stage(
+            &request,
+            argentum_domain::extensions::ExtensionReceiptStage::Admitted,
+        )?;
         let mut result = self.tools.execute(request.clone(), context).await;
         self.store.ensure_run_generation(request.run_id)?;
+        #[cfg(feature = "extensions")]
+        if matches!(&request.input, ToolInput::Extension { .. }) {
+            if let Some(receipt) = self.extension_owner().take_receipt(request.call_id)? {
+                self.emit_for_run(
+                    AppEvent::ExtensionOperationRecorded {
+                        run_id: request.run_id,
+                        receipt: Box::new(receipt),
+                    },
+                    request.run_id,
+                )?;
+            }
+        }
         if result.is_ok() {
             for binding in &bindings {
                 let current = self.current_snapshot(&binding.relative_path)?;
@@ -10294,6 +10374,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ContextRequestAccounted { .. }
         | AppEvent::ModelRequestAttempt { .. }
         | AppEvent::SummaryTransportObserved { .. }
+        | AppEvent::ExtensionOperationRecorded { .. }
         | AppEvent::GoalRequestAccounting { .. }
         | AppEvent::PlatformAuthorityChanged(_)
         | AppEvent::WorkspaceStateLoaded(_)
@@ -10397,6 +10478,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         AppEvent::ContextRequestAccounted { run_id, .. }
         | AppEvent::ModelRequestAttempt { run_id, .. }
         | AppEvent::SummaryTransportObserved { run_id, .. }
+        | AppEvent::ExtensionOperationRecorded { run_id, .. }
         | AppEvent::GoalRequestAccounting { run_id, .. } => Some(*run_id),
         AppEvent::SteeringChanged(status) => Some(status.run_id),
         AppEvent::PlanUpdated { run_id, .. }

@@ -273,6 +273,49 @@ async fn actual_cli_preview_observation_interaction_feedback_and_owned_teardown(
         std::net::TcpStream::connect(("127.0.0.1", port)).is_err(),
         "owned preview must settle"
     );
+    let inspection = Command::new(
+        std::env::var_os("ARGENTUM_NEXT01_CLI_EXE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_argentum").into()),
+    )
+    .args(["extensions", "receipts", "--workspace"])
+    .arg(&ws)
+    .arg("--database")
+    .arg(root.path().join("store.sqlite3"))
+    .output()
+    .unwrap();
+    assert!(
+        inspection.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inspection.stderr)
+    );
+    let inspected: Value = serde_json::from_slice(&inspection.stdout).unwrap();
+    let receipts = inspected["receipts"].as_array().unwrap();
+    let completed = receipts
+        .iter()
+        .filter(|item| item["receipt"]["stage"] == "completed")
+        .collect::<Vec<_>>();
+    assert_eq!(completed.len(), 9);
+    assert!(completed
+        .iter()
+        .all(|item| item["receipt"]["application_condition_verified"] == false));
+    assert!(completed
+        .iter()
+        .any(|item| item["receipt"]["transport"]["mcp_request_starts"]
+            .as_u64()
+            .unwrap_or(0)
+            > 2));
+    assert!(completed
+        .iter()
+        .any(|item| item["receipt"]["server_report"]["actions"]
+            .as_u64()
+            .unwrap_or(0)
+            > 1));
+    assert!(receipts
+        .iter()
+        .any(|item| item["receipt"]["stage"] == "teardown"
+            && item["receipt"]["outcome"] == "drained"));
+    assert!(!String::from_utf8_lossy(&inspection.stdout).contains("Actual app control"));
 }
 fn invoke(handles: &BTreeMap<String, Value>, name: &str, arguments: Value) -> Value {
     json!({"action":"invoke","namespace":"browser-control.stdio","handle":handles.get(name).expect("scoped discovered handle"),"arguments":arguments})

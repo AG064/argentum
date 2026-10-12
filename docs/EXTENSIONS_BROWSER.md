@@ -1,6 +1,10 @@
 # Optional governed extensions and local browser work
 
 Build `argentum-cli` with `--features extensions` to include this workflow.
+The portable packager's explicit `-Extensions` switch identifies this feature
+selection in provenance and includes the adapter source/lock, not Node, browser
+binaries, profiles, credentials or owner definitions. Default packaging is
+unchanged and excludes this feature.
 The default CLI does not link the external MCP client. Starting either build
 does not install packages, start a browser/server, download dependencies or
 contact an extension endpoint. Activation and actual execution are separate.
@@ -26,6 +30,7 @@ Use absolute owner-selected paths and the same workspace/database throughout:
 & $exe extensions install --source $package --sha256 $digest --source-id $source --revision $revision --workspace $ws --database $db
 & $exe extensions configure --file $definition --workspace $ws --database $db
 & $exe extensions status --workspace $ws --database $db
+& $exe extensions receipts --run-id $run --workspace $ws --database $db
 & $exe extensions activate package.server --workspace $ws --database $db
 & $exe extensions disable package.server --workspace $ws --database $db
 & $exe extensions remove package.server --workspace $ws --database $db
@@ -120,6 +125,52 @@ WebSockets, worker traffic, downloads and upload targets are unavailable.
 Browser routing/CSP is not an OS network sandbox or a claim that Chromium makes
 no background network requests. Teardown closes owned tabs, browser and preview;
 cancellation also drains the containing process tree.
+
+The existing browser operations include bounded `browser_viewport` selection:
+320 through 1200 pixels wide and 240 through 800 high, retaining the admitted
+PNG boundary. Resizing invalidates old observations and references. Observe
+again before an effect. `browser_observe` returns viewport/layout and current
+form state; `text_limit` and `include_accessibility` can narrow its projection
+without disabling source/target freshness. Whole-page ARIA output is omitted
+when password inputs are present because that API can disclose their values;
+this is an explicit omission, not a universal redaction guarantee.
+
+## Native delivery and private-safe evidence
+
+Use the existing `goal deliver` workflow for a finite multi-stage objective,
+not an ordinary one-shot `run` expecting an automatic supervisor. See
+[native delivery](NATIVE_DELIVERY.md). Each admitted model run drains its own
+extension connection, browser and preview at settlement or handoff. A next run
+uses the still-current exact owner activation but must rediscover and reopen
+with new connection/page/observation handles. Old images are not replayed.
+Feedback-stage work also receives scheduled request/time handoffs; aggregate
+limits and current verification remain authoritative.
+
+Typed operation receipts are retained in the existing event store and exposed
+by `extensions receipts`, optionally for one project-scoped run. Inspection
+starts no extension/provider request. The bounded event window reports
+truncation explicitly; missing historical detail is never reconstructed.
+
+Requested/admitted/completed stages are distinct. Client send counters separate
+MCP request attempts, notifications, responses, completed messages and observed
+same-RPC-ID repeats. HTTP attempts, including teardown, are separate from MCP
+messages. These count the inspected client transport layer, not packets,
+provider generations or server effects. Incomplete framing/write/identity
+coverage is explicit. Cumulative counters are scoped to connection identity:
+do not add the same snapshot once per tool call.
+
+Browser/context/page/generation, selected Playwright-action counts and closed
+failure reasons are marked server-reported. They are not independently observed
+application correctness or complete browser activity. A successful tool return
+does not satisfy fixed source verification. Closed failure feedback asks for
+fresh observation/scope before a newly submitted action; it promises no rollback.
+
+Image preparation and the actual serialized PNG input accepted by the Responses
+HTTP/SSE transport are separate typed receipts, joined by request identity and
+image SHA. Header acceptance is not terminal provider usage or proof that the
+model understood the pixels. Current binding and actual terminal usage must
+still be inspected. The receipts contain no raw arguments/results, selectors,
+typed text, page bodies, cookies, credentials, private URLs or arbitrary errors.
 
 For real visual model input, first prepare a private artifact directory:
 

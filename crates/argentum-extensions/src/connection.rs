@@ -77,6 +77,29 @@ pub struct McpSession {
     retired: bool,
 }
 
+/// Read-only counters remain inspectable after owned connection teardown.
+#[derive(Clone)]
+pub struct ConnectionObservation {
+    pub connection: Uuid,
+    pub generation: Uuid,
+    accounting: Arc<WireAccounting>,
+    http: Option<(
+        Arc<std::sync::atomic::AtomicU64>,
+        Arc<std::sync::atomic::AtomicU64>,
+    )>,
+}
+impl ConnectionObservation {
+    pub fn snapshot(&self) -> argentum_domain::extensions::ExtensionTransportObservation {
+        let mut snapshot = self.accounting.snapshot();
+        if let Some((requests, bytes)) = &self.http {
+            use std::sync::atomic::Ordering;
+            snapshot.http_request_starts = Some(requests.load(Ordering::Relaxed));
+            snapshot.received_bytes = bytes.load(Ordering::Relaxed);
+        }
+        snapshot
+    }
+}
+
 impl McpSession {
     /// The caller must consume an exact current owner activation approval and
     /// recheck it in pre_resume. Process limits are not an access sandbox.
@@ -148,6 +171,7 @@ impl McpSession {
             Arc::clone(&client.received_bytes),
         ));
         let scoped_secret = client.scoped_secret();
+        let accounting = Arc::clone(&client.accounting);
         let config = ClientConfig::new(
             ClientCapabilities::default(),
             Implementation::new("argentum", env!("CARGO_PKG_VERSION")),
@@ -171,7 +195,7 @@ impl McpSession {
             allowed_tools,
             allowed_resource_prefixes: vec![],
             cancellation,
-            accounting: Arc::default(),
+            accounting,
             http_accounting,
             scoped_secret,
             retired: false,
@@ -560,6 +584,14 @@ impl McpSession {
 
     pub fn cancellation(&self) -> CancellationToken {
         self.cancellation.clone()
+    }
+    pub fn observation(&self) -> ConnectionObservation {
+        ConnectionObservation {
+            connection: self.connection,
+            generation: self.generation,
+            accounting: Arc::clone(&self.accounting),
+            http: self.http_accounting.clone(),
+        }
     }
     pub fn accounting_snapshot(&self) -> Value {
         use std::sync::atomic::Ordering;

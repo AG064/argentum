@@ -2174,6 +2174,10 @@ pub type UiCommand = AppCommand;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppEvent {
+    ExtensionOperationRecorded {
+        run_id: RunId,
+        receipt: Box<extensions::ExtensionOperationReceipt>,
+    },
     SummaryTransportObserved {
         session_id: SessionId,
         run_id: RunId,
@@ -2389,6 +2393,7 @@ impl AppEvent {
             Self::ModelUsageUpdated { .. } => "model_usage_updated",
             Self::ToolStarted(_) => "tool_started",
             Self::ToolFinished(_) => "tool_finished",
+            Self::ExtensionOperationRecorded { .. } => "extension_operation_recorded",
             Self::ApprovalRequested(_) => "approval_requested",
             Self::ApprovalResolved { .. } => "approval_resolved",
             Self::ApprovalGrantIssued(_) => "approval_grant_issued",

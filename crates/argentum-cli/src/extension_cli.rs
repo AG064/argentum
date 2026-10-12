@@ -14,7 +14,7 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn run(values: Vec<String>) -> Result<(), Error> {
     if values.is_empty() || values[0] == "help" || values[0] == "--help" {
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
@@ -32,6 +32,7 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 "--workspace",
                 "--database",
                 "--file",
+                "--run-id",
             ]
             .contains(&value.as_str())
             {
@@ -48,6 +49,9 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
             return Err("only one namespace is accepted".into());
         }
         index += 1;
+    }
+    if flags.contains_key("--run-id") && action != "receipts" {
+        return Err("--run-id is accepted only by extensions receipts".into());
     }
     if action == "inspect" {
         let source = PathBuf::from(
@@ -124,6 +128,11 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 std::fs::create_dir_all(&media)?;
                 argentum_execution::ensure_owner_only_directory(&media)?;
                 println!("{}", serde_json::to_string_pretty(&serde_json::json!({"directory":media,"owner_only":true,"execution_authorized":false,"profile_state_exported":false}))?);
+            }
+            "receipts" => {
+                let run = flags.get("--run-id").map(|value| argentum_domain::RunId::parse_str(value))
+                    .transpose().map_err(|_| "invalid receipt run ID")?;
+                println!("{}", serde_json::to_string_pretty(&local.extension_receipts(run)?)?);
             }
             "list" | "status" => {
                 println!("{}", serde_json::to_string_pretty(&local.extension_records()?)?);

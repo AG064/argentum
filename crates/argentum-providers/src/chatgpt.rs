@@ -48,6 +48,49 @@ pub(super) struct ChatGptProvider {
     #[cfg(test)]
     test_endpoint: Option<Url>,
 }
+fn serialized_image_observations(body: &[u8]) -> Result<Vec<(String, u64)>, ProviderError> {
+    use base64::Engine;
+    use sha2::Digest;
+    let value: Value =
+        serde_json::from_slice(body).map_err(|_| invalid("Prepared Responses JSON unavailable"))?;
+    let mut output = Vec::new();
+    for part in value
+        .get("input")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| {
+            item.get("content")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+    {
+        if part.get("type").and_then(Value::as_str) != Some("input_image") {
+            continue;
+        }
+        let url = part
+            .get("image_url")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid("Serialized image input missing"))?;
+        let data = url
+            .strip_prefix("data:image/png;base64,")
+            .filter(|data| data.len() <= 175_000)
+            .ok_or_else(|| invalid("Serialized image input exceeds admitted PNG boundary"))?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|_| invalid("Serialized PNG encoding invalid"))?;
+        if bytes.len() > 128 * 1024 || output.len() >= 16 {
+            return Err(invalid("Serialized image input capacity exceeded"));
+        }
+        output.push((
+            format!("{:x}", sha2::Sha256::digest(&bytes)),
+            url.len() as u64,
+        ));
+    }
+    Ok(output)
+}
+
 fn invalid(message: &'static str) -> ProviderError {
     ProviderError::InvalidResponse(message.into())
 }
@@ -249,6 +292,7 @@ impl ChatGptProvider {
         body: Bytes,
         sender: mpsc::Sender<ProviderEvent>,
     ) -> Result<(), ProviderError> {
+        let image_observations = serialized_image_observations(&body)?;
         let token = self.auth.bearer_for(&self.account).await.map_err(|_| {
             ProviderError::CredentialsRequired {
                 provider_id: "chatgpt".into(),
@@ -303,6 +347,15 @@ impl ChatGptProvider {
             return Err(ProviderError::InvalidResponse(format!(
                 "ChatGPT non-SSE HTTP 200{detail}; no completed response"
             )));
+        }
+        for (sha256, encoded_bytes) in image_observations {
+            sender
+                .send(ProviderEvent::ImageInputAccepted {
+                    sha256,
+                    encoded_bytes,
+                })
+                .await
+                .map_err(|_| ProviderError::RequestCancelled)?;
         }
         let mut source = response.bytes_stream();
         let mut decoder = ResponseSseDecoder::default();
@@ -1175,6 +1228,10 @@ mod tests {
             .find(|part| part["type"] == "input_image")
             .unwrap();
         assert_eq!(image_part["image_url"], image.data_url());
+        assert_eq!(
+            serialized_image_observations(&wire).unwrap(),
+            vec![(expected.clone(), image.data_url().len() as u64)]
+        );
         assert!(!serde_json::to_string(&request)
             .unwrap()
             .contains(image.data_url()));

@@ -100,3 +100,163 @@ pub enum ExtensionOperation {
         handle: Value,
     },
 }
+
+/// Closed, body-free metadata. These receipts are observations, never grants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionOperationKind {
+    ConnectionTeardown,
+    List,
+    Skill,
+    Catalog,
+    Invoke,
+    ResourceCatalog,
+    ResourceRead,
+    BrowserPreview,
+    BrowserOpen,
+    BrowserObserve,
+    BrowserInteract,
+    BrowserViewport,
+    BrowserScreenshot,
+    BrowserDiagnostics,
+    BrowserClose,
+}
+
+impl ExtensionOperation {
+    pub fn receipt_kind(&self) -> ExtensionOperationKind {
+        use ExtensionOperationKind as K;
+        match self {
+            Self::List => K::List,
+            Self::LoadSkill { .. } => K::Skill,
+            Self::DiscoverTools { .. } => K::Catalog,
+            Self::DiscoverResources { .. } => K::ResourceCatalog,
+            Self::ReadResource { .. } => K::ResourceRead,
+            Self::Invoke { handle, .. } => match handle.get("name").and_then(Value::as_str) {
+                Some("browser_preview_start") => K::BrowserPreview,
+                Some("browser_open") => K::BrowserOpen,
+                Some("browser_observe") => K::BrowserObserve,
+                Some("browser_interact") => K::BrowserInteract,
+                Some("browser_viewport") => K::BrowserViewport,
+                Some("browser_screenshot") => K::BrowserScreenshot,
+                Some("browser_diagnostics") => K::BrowserDiagnostics,
+                Some("browser_close") => K::BrowserClose,
+                _ => K::Invoke,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionReceiptStage {
+    Requested,
+    Admitted,
+    Completed,
+    Teardown,
+    ImagePreparedForDispatch,
+    ImageAcceptedByTransport,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionReceiptOutcome {
+    Pending,
+    Returned,
+    Rejected,
+    ServerFailed,
+    Cancelled,
+    Unavailable,
+    Drained,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionTransportObservation {
+    pub mcp_request_starts: u64,
+    pub mcp_notification_starts: u64,
+    pub mcp_response_starts: u64,
+    pub tool_call_starts: u64,
+    pub completed_messages: u64,
+    pub repeated_request_ids: u64,
+    pub sent_bytes: u64,
+    pub received_bytes: u64,
+    pub http_request_starts: Option<u64>,
+    pub coverage_incomplete: bool,
+}
+
+/// Server claims are kept separate from host transport and image validation.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionBrowserReport {
+    pub browser_id: Option<Uuid>,
+    pub context_id: Option<Uuid>,
+    pub page_id: Option<Uuid>,
+    pub observation_generation: Option<u64>,
+    pub actions: Option<u64>,
+    pub viewport_width: Option<u32>,
+    pub viewport_height: Option<u32>,
+    pub closed: Option<bool>,
+    pub screenshot_sha256: Option<Sha256Digest>,
+    pub screenshot_bytes: Option<u64>,
+    pub failure: Option<BrowserFailureReason>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserFailureReason {
+    StaleObservation,
+    StaleTarget,
+    DestinationDenied,
+    SelectionInvalid,
+    NavigationFailed,
+    Capacity,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionImageObservation {
+    pub sha256: Sha256Digest,
+    pub encoded_bytes: u64,
+    pub context_id: Option<Uuid>,
+    pub request_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionOperationReceipt {
+    pub version: u8,
+    pub call_id: Uuid,
+    pub kind: ExtensionOperationKind,
+    pub stage: ExtensionReceiptStage,
+    pub outcome: ExtensionReceiptOutcome,
+    pub connection_id: Option<Uuid>,
+    pub connection_generation: Option<Uuid>,
+    pub definition_revision: Option<Uuid>,
+    /// None is unavailable, not proof that nothing was dispatched.
+    pub tool_dispatch_observed: Option<bool>,
+    pub transport: Option<ExtensionTransportObservation>,
+    pub server_report: Option<ExtensionBrowserReport>,
+    pub image: Option<ExtensionImageObservation>,
+    pub application_condition_verified: bool,
+}
+
+impl ExtensionOperationReceipt {
+    pub fn requested(call_id: Uuid, kind: ExtensionOperationKind) -> Self {
+        Self {
+            version: 1,
+            call_id,
+            kind,
+            stage: ExtensionReceiptStage::Requested,
+            outcome: ExtensionReceiptOutcome::Pending,
+            connection_id: None,
+            connection_generation: None,
+            definition_revision: None,
+            tool_dispatch_observed: None,
+            transport: None,
+            server_report: None,
+            image: None,
+            application_condition_verified: false,
+        }
+    }
+}

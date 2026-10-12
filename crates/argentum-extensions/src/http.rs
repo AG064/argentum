@@ -52,6 +52,7 @@ pub struct ReviewedHttp {
     credential: Option<Arc<ScopedCredential>>,
     pub request_starts: Arc<AtomicU64>,
     pub received_bytes: Arc<AtomicU64>,
+    pub accounting: Arc<crate::wire::WireAccounting>,
 }
 
 fn public_address(address: IpAddr) -> bool {
@@ -172,6 +173,7 @@ impl ReviewedHttp {
             credential: credential.map(Arc::new),
             request_starts: Arc::default(),
             received_bytes: Arc::default(),
+            accounting: Arc::default(),
         })
     }
 
@@ -256,12 +258,17 @@ impl StreamableHttpClient for ReviewedHttp {
         let request = self
             .request(reqwest::Method::POST, uri, session, auth_header, headers)?
             .header("content-type", "application/json")
-            .body(body);
+            .body(body.clone());
+        self.accounting.observe_send(&body);
+        self.accounting
+            .sent_bytes
+            .fetch_add(body.len() as u64, Ordering::Relaxed);
         self.request_starts.fetch_add(1, Ordering::Relaxed);
-        let response = request
-            .send()
-            .await
-            .map_err(|_| rejected("http_request_failed_usage_and_effects_may_be_unknown"))?;
+        let response = request.send().await.map_err(|_| {
+            self.accounting.incomplete.store(1, Ordering::Relaxed);
+            rejected("http_request_failed_usage_and_effects_may_be_unknown")
+        })?;
+        self.accounting.requests.fetch_add(1, Ordering::Relaxed);
         match response.status().as_u16() {
             202 | 204 => return Ok(StreamableHttpPostResponse::Accepted),
             200 => {}

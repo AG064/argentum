@@ -1,4 +1,8 @@
 //! Optional extension broker using the existing store, authority and lifecycle.
+use argentum_domain::extensions::{
+    ExtensionBrowserReport, ExtensionOperationReceipt, ExtensionReceiptOutcome,
+    ExtensionReceiptStage,
+};
 use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionOperation, ExtensionRecord, ExtensionTransport},
     ProjectId, Sha256Digest, ToolRequest,
@@ -38,9 +42,97 @@ fn mcp_failure(error: argentum_extensions::connection::ConnectionError) -> ToolE
     }
 }
 
+fn browser_report(value: &serde_json::Value) -> Option<ExtensionBrowserReport> {
+    let value = value
+        .get("structuredContent")
+        .filter(|value| value.is_object())?;
+    let id = |field| {
+        value
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .and_then(|id| Uuid::parse_str(id).ok())
+    };
+    let sha = value
+        .get("sha256")
+        .and_then(serde_json::Value::as_str)
+        .filter(|sha| sha.len() == 64 && sha.bytes().all(|c| c.is_ascii_hexdigit()))
+        .map(|sha| Sha256Digest(sha.to_owned()));
+    Some(ExtensionBrowserReport {
+        browser_id: id("browser_id"),
+        context_id: id("context_id"),
+        page_id: id("tab_id"),
+        observation_generation: value.get("revision").and_then(serde_json::Value::as_u64),
+        actions: value
+            .get("operation_receipt")
+            .and_then(|v| v.get("actions"))
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| *n <= 64),
+        viewport_width: value
+            .get("viewport")
+            .and_then(|v| v.get("width"))
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| *n <= 1200)
+            .map(|n| n as u32),
+        viewport_height: value
+            .get("viewport")
+            .and_then(|v| v.get("height"))
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| *n <= 800)
+            .map(|n| n as u32),
+        closed: value.get("closed").and_then(serde_json::Value::as_bool),
+        screenshot_sha256: sha,
+        screenshot_bytes: value
+            .get("bytes")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| *n <= 128 * 1024),
+        failure: value
+            .get("operation_receipt")
+            .and_then(|v| v.get("reason"))
+            .cloned()
+            .and_then(|v| serde_json::from_value(v).ok()),
+    })
+}
+
 #[cfg(all(test, windows))]
 mod image_authority_tests {
     use super::*;
+    #[test]
+    fn receipts_never_project_private_browser_fields_or_false_host_verification() {
+        let id = Uuid::new_v4();
+        let reported = json!({"structuredContent":{
+            "browser_id":id,"context_id":id,"tab_id":id,"revision":3,
+            "url":"PRIVATE_URL_CANARY","selector":"PRIVATE_SELECTOR_CANARY",
+            "value":"PRIVATE_TYPED_CANARY","cookies":["PRIVATE_COOKIE_CANARY"],
+            "operation_receipt":{"actions":2,"reason":"stale_observation"},
+            "application_condition_verified":true,"viewport":{"width":390,"height":800}}});
+        let mut receipt = ExtensionOperationReceipt::requested(
+            Uuid::new_v4(),
+            argentum_domain::extensions::ExtensionOperationKind::BrowserObserve,
+        );
+        receipt.server_report = browser_report(&reported);
+        let encoded = serde_json::to_string(&receipt).unwrap();
+        assert!(!encoded.contains("PRIVATE_"));
+        assert!(!receipt.application_condition_verified);
+        assert_eq!(
+            receipt
+                .server_report
+                .as_ref()
+                .unwrap()
+                .observation_generation,
+            Some(3)
+        );
+        assert_eq!(
+            receipt.server_report.as_ref().unwrap().failure,
+            Some(argentum_domain::extensions::BrowserFailureReason::StaleObservation)
+        );
+        let invalid = browser_report(&json!({"structuredContent":{"browser_id":"private","viewport":{"width":u64::MAX},"operation_receipt":{"actions":u64::MAX,"reason":"PRIVATE_ERROR_CANARY"},"sha256":"PRIVATE_KEY_CANARY"}})).unwrap();
+        assert!(
+            invalid.browser_id.is_none()
+                && invalid.actions.is_none()
+                && invalid.failure.is_none()
+                && invalid.screenshot_sha256.is_none()
+        );
+    }
     #[tokio::test]
     async fn captured_pixels_require_current_run_context_revision_and_policy_on_dispatch() {
         let (root, runtime) = crate::tests::composed_runtime().await;
@@ -212,9 +304,61 @@ pub(crate) struct ExtensionOwner {
     tokens: Mutex<BTreeMap<String, CancellationToken>>,
     secrets: Mutex<Option<Arc<dyn argentum_platform::SecretStore>>>,
     image_contexts: Mutex<BTreeMap<String, Uuid>>,
+    receipts: Mutex<BTreeMap<Uuid, ExtensionOperationReceipt>>,
+}
+
+pub(crate) struct RunExtensionSettlement {
+    pub receipts: Vec<ExtensionOperationReceipt>,
+    pub failure: Option<ToolError>,
 }
 
 impl ExtensionOwner {
+    pub async fn finish_run(&self, run: Uuid) -> Result<RunExtensionSettlement, ToolError> {
+        let keys = self
+            .tokens
+            .lock()
+            .map_err(|_| ToolError::Execution("extension_state_unavailable".into()))?
+            .keys()
+            .filter(|key| key.ends_with(&format!("@{run}")))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut receipts = Vec::new();
+        let mut failure = None;
+        for key in keys {
+            let mut lifecycle = self.lifecycle.lock().await;
+            let observation = lifecycle.observation(&key).await;
+            let result = lifecycle.retire(&key).await;
+            let mut receipt = ExtensionOperationReceipt::requested(
+                run,
+                argentum_domain::extensions::ExtensionOperationKind::ConnectionTeardown,
+            );
+            receipt.stage = ExtensionReceiptStage::Teardown;
+            receipt.outcome = if result.is_ok() {
+                ExtensionReceiptOutcome::Drained
+            } else {
+                ExtensionReceiptOutcome::Unavailable
+            };
+            if let Some(observation) = observation {
+                receipt.connection_id = Some(observation.connection);
+                receipt.connection_generation = Some(observation.generation);
+                receipt.transport = Some(observation.snapshot());
+            }
+            receipts.push(receipt);
+            if let Err(error) = result {
+                failure.get_or_insert_with(|| mcp_failure(error));
+                continue;
+            }
+            self.tokens
+                .lock()
+                .map_err(|_| ToolError::Execution("extension_state_unavailable".into()))?
+                .remove(&key);
+            self.image_contexts
+                .lock()
+                .map_err(|_| ToolError::Execution("extension_state_unavailable".into()))?
+                .remove(&key);
+        }
+        Ok(RunExtensionSettlement { receipts, failure })
+    }
     pub fn new(store: Store, project: ProjectId, workspace: WorkspaceManager) -> Self {
         Self {
             store,
@@ -225,6 +369,7 @@ impl ExtensionOwner {
             tokens: Mutex::new(BTreeMap::new()),
             secrets: Mutex::new(None),
             image_contexts: Mutex::new(BTreeMap::new()),
+            receipts: Mutex::new(BTreeMap::new()),
         }
     }
     fn current(&self, namespace: &str) -> Result<ExtensionRecord, ToolError> {
@@ -502,6 +647,116 @@ impl ExtensionExecutor for ExtensionOwner {
         request: &ToolRequest,
         context: &ToolContext,
     ) -> Result<ToolResult, ToolError> {
+        let mut receipt =
+            ExtensionOperationReceipt::requested(request.call_id, operation.receipt_kind());
+        let namespace = match &operation {
+            ExtensionOperation::List => None,
+            ExtensionOperation::LoadSkill { namespace, .. }
+            | ExtensionOperation::DiscoverTools { namespace, .. }
+            | ExtensionOperation::Invoke { namespace, .. }
+            | ExtensionOperation::DiscoverResources { namespace, .. }
+            | ExtensionOperation::ReadResource { namespace, .. } => Some(namespace.clone()),
+        };
+        if let Some(namespace) = &namespace {
+            receipt.definition_revision = self
+                .store
+                .extension_record(self.project, namespace)
+                .ok()
+                .flatten()
+                .map(|record| record.revision);
+        }
+        {
+            let mut receipts = self
+                .receipts
+                .lock()
+                .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?;
+            if receipts.len() >= 128 || receipts.contains_key(&request.call_id) {
+                return Err(ToolError::Execution(
+                    "extension_receipt_capacity_or_duplicate".into(),
+                ));
+            }
+            receipts.insert(request.call_id, receipt.clone());
+        }
+        let key = namespace
+            .as_ref()
+            .map(|namespace| format!("{namespace}@{}", request.run_id));
+        let before = if let Some(key) = &key {
+            self.lifecycle.lock().await.observation(key).await
+        } else {
+            None
+        };
+        let before_calls = before
+            .as_ref()
+            .map(|value| value.snapshot().tool_call_starts)
+            .unwrap_or(0);
+        let result = self.execute_body(operation, request, context).await;
+        receipt.stage = ExtensionReceiptStage::Completed;
+        receipt.outcome = match &result {
+            Ok(_) => ExtensionReceiptOutcome::Returned,
+            Err(ToolError::Cancelled) => ExtensionReceiptOutcome::Cancelled,
+            Err(ToolError::ExtensionReportedFailure(_)) => ExtensionReceiptOutcome::ServerFailed,
+            Err(ToolError::ExtensionFailure {
+                effects_unknown: true,
+                ..
+            }) => ExtensionReceiptOutcome::Unavailable,
+            Err(_) => ExtensionReceiptOutcome::Rejected,
+        };
+        let after = if let Some(key) = &key {
+            self.lifecycle.lock().await.observation(key).await
+        } else {
+            None
+        };
+        if let Some(observation) = after.as_ref().or(before.as_ref()) {
+            receipt.connection_id = Some(observation.connection);
+            receipt.connection_generation = Some(observation.generation);
+            let snapshot = observation.snapshot();
+            receipt.tool_dispatch_observed = if snapshot.coverage_incomplete
+                && receipt.outcome == ExtensionReceiptOutcome::Unavailable
+            {
+                None
+            } else {
+                Some(snapshot.tool_call_starts > before_calls)
+            };
+            receipt.transport = Some(snapshot);
+        } else if receipt.outcome != ExtensionReceiptOutcome::Unavailable {
+            receipt.tool_dispatch_observed = Some(false);
+        }
+        receipt.server_report = self
+            .receipts
+            .lock()
+            .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?
+            .get(&request.call_id)
+            .and_then(|receipt| receipt.server_report.clone());
+        if let Ok(result) = &result {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&result.output) {
+                receipt.server_report = browser_report(&value);
+            }
+        }
+        self.receipts
+            .lock()
+            .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?
+            .insert(request.call_id, receipt);
+        result
+    }
+}
+
+impl ExtensionOwner {
+    pub fn take_receipt(
+        &self,
+        call_id: Uuid,
+    ) -> Result<Option<ExtensionOperationReceipt>, ToolError> {
+        Ok(self
+            .receipts
+            .lock()
+            .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?
+            .remove(&call_id))
+    }
+    async fn execute_body(
+        &self,
+        operation: ExtensionOperation,
+        request: &ToolRequest,
+        context: &ToolContext,
+    ) -> Result<ToolResult, ToolError> {
         if context.cancellation.is_cancelled() {
             return Err(ToolError::Cancelled);
         }
@@ -625,6 +880,16 @@ impl ExtensionExecutor for ExtensionOwner {
                     }
                 };
                 if result.get("isError").and_then(serde_json::Value::as_bool) == Some(true) {
+                    if let Some(receipt) = self
+                        .receipts
+                        .lock()
+                        .map_err(|_| {
+                            ToolError::Execution("extension_receipt_state_unavailable".into())
+                        })?
+                        .get_mut(&request.call_id)
+                    {
+                        receipt.server_report = browser_report(&result);
+                    }
                     let detail = serde_json::to_string(&result)
                         .unwrap_or_else(|_| "result unavailable".into());
                     let mut end = detail.len().min(4096);
@@ -727,6 +992,63 @@ impl ExtensionExecutor for ExtensionOwner {
 }
 
 impl super::RuntimeService {
+    pub(crate) fn record_extension_stage(
+        &self,
+        request: &ToolRequest,
+        stage: ExtensionReceiptStage,
+    ) -> Result<(), super::RuntimeError> {
+        if let argentum_domain::ToolInput::Extension { operation } = &request.input {
+            let mut receipt =
+                ExtensionOperationReceipt::requested(request.call_id, operation.receipt_kind());
+            receipt.stage = stage;
+            self.emit_for_run(
+                argentum_domain::AppEvent::ExtensionOperationRecorded {
+                    run_id: request.run_id,
+                    receipt: Box::new(receipt),
+                },
+                request.run_id,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn record_extension_image_dispatch(
+        &self,
+        request: &argentum_providers::ModelRequest,
+        run: Uuid,
+        request_id: Uuid,
+    ) -> Result<(), super::RuntimeError> {
+        for image in request
+            .tool_exchanges
+            .iter()
+            .flat_map(|exchange| &exchange.results)
+            .flat_map(|result| &result.images)
+        {
+            let Some(binding) = image.extension_binding() else {
+                continue;
+            };
+            let mut receipt = ExtensionOperationReceipt::requested(
+                request_id,
+                argentum_domain::extensions::ExtensionOperationKind::BrowserScreenshot,
+            );
+            receipt.stage = ExtensionReceiptStage::ImagePreparedForDispatch;
+            receipt.definition_revision = Some(binding.revision);
+            receipt.image = Some(argentum_domain::extensions::ExtensionImageObservation {
+                sha256: Sha256Digest(image.sha256.clone()),
+                encoded_bytes: image.data_url().len() as u64,
+                context_id: Some(binding.context_id),
+                request_id,
+            });
+            self.emit_for_run(
+                argentum_domain::AppEvent::ExtensionOperationRecorded {
+                    run_id: run,
+                    receipt: Box::new(receipt),
+                },
+                run,
+            )?;
+        }
+        Ok(())
+    }
     pub(crate) async fn revoke_extensions(&self) -> Result<(), super::RuntimeError> {
         self.extension_owner().revoke_all().await?;
         Ok(())
@@ -931,6 +1253,42 @@ impl super::RuntimeService {
     }
     pub fn extension_records(&self) -> Result<Vec<ExtensionRecord>, super::RuntimeError> {
         Ok(self.store.extension_records(self.project_id)?)
+    }
+    pub fn extension_receipts(
+        &self,
+        run: Option<Uuid>,
+    ) -> Result<serde_json::Value, super::RuntimeError> {
+        let session = self.active_session()?;
+        let window = match run {
+            Some(run) => self.store.run_event_window(
+                self.project_id,
+                run,
+                argentum_domain::final_result::FINAL_RESULT_MAX_EVENT_RECORDS,
+            )?,
+            None => self.store.session_event_window(
+                self.project_id,
+                session,
+                argentum_store::MAX_SESSION_EVENT_WINDOW,
+            )?,
+        };
+        let receipts = window
+            .records
+            .iter()
+            .filter_map(|record| {
+                if let argentum_domain::AppEvent::ExtensionOperationRecorded { run_id, receipt } =
+                    &record.event
+                {
+                    Some(json!({"sequence":record.sequence,"run_id":run_id,"receipt":receipt}))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        Ok(
+            json!({"receipts":receipts,"window_truncated":window.truncated,
+            "coverage":"bounded_current_session_window_not_reconstructed_history",
+            "inference_dispatched":false,"extension_dispatched":false}),
+        )
     }
     pub fn extension_readiness(&self) -> Result<Vec<serde_json::Value>, super::RuntimeError> {
         let policy = self.execution_policy()?;
