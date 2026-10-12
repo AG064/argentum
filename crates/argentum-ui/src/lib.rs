@@ -156,6 +156,7 @@ impl UiHandle {
             AppEvent::ContextRequestAccounted { .. }
             | AppEvent::SummaryTransportObserved { .. }
             | AppEvent::ModelRequestAttempt { .. }
+            | AppEvent::ExtensionOperationRecorded { .. }
             | AppEvent::GoalRequestAccounting { .. } => {}
             // The current Slint client has no supplemental-check surface. The
             // typed receipt remains in the shared store/review; it is not a

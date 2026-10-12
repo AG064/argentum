@@ -108,9 +108,9 @@ try {
         $files = @($files | Sort-Object FullName -Unique)
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
         if (-not $files.Count) {
-            # These two exact crate revisions declare dual terms but omit a
-            # license file both in the crate and upstream tree. Select their
-            # declared Apache option explicitly, not a guessed license.
+            # Exact crate archives can omit license text. Retain the pinned
+            # upstream terms when present; use the already declared Apache
+            # selection only for the two existing audited dual-license entries.
             $ledger = Get-Content -Raw -LiteralPath (Join-Path $sourceRoot 'third-party/missing-license-texts.json') | ConvertFrom-Json
             $entry = @($ledger.packages | Where-Object { $_.name -eq $dependency.name -and $_.version -eq $dependency.version })
             if ($entry.Count -ne 1 -or $entry[0].declared -ne $dependency.license) {
@@ -118,11 +118,21 @@ try {
             }
             $vcs = Get-Content -Raw -LiteralPath (Join-Path $directory '.cargo_vcs_info.json') | ConvertFrom-Json
             if ($vcs.git.sha1 -ne $entry[0].vcs) { throw 'License declaration source revision mismatch.' }
-            $terms = Join-Path $sourceRoot "third-party/$($ledger.text)"
-            if ((Get-FileHash -LiteralPath $terms -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledger.text_sha256) {
+            $specificText = $entry[0].PSObject.Properties['text']
+            $text = if ($specificText) { $specificText.Value } else { $ledger.text }
+            $textHash = if ($specificText) { $entry[0].text_sha256 } else { $ledger.text_sha256 }
+            $termsRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'third-party'))
+            $terms = [IO.Path]::GetFullPath((Join-Path $termsRoot $text))
+            if (-not $terms.StartsWith($termsRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or
+                -not (Test-Path -LiteralPath $terms -PathType Leaf) -or
+                ((Get-Item -LiteralPath $terms).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'Retained dependency terms must be a regular contained first-party ledger file.'
+            }
+            if ((Get-FileHash -LiteralPath $terms -Algorithm SHA256).Hash.ToLowerInvariant() -ne $textHash) {
                 throw 'Retained standard license text identity mismatch.'
             }
-            Copy-Item -LiteralPath $terms -Destination (Join-Path $destination 'LICENSE-APACHE')
+            $licenseName = if ($specificText) { 'LICENSE-UPSTREAM' } else { 'LICENSE-APACHE' }
+            Copy-Item -LiteralPath $terms -Destination (Join-Path $destination $licenseName)
             Copy-Item -LiteralPath $dependency.manifest_path -Destination (Join-Path $destination 'Cargo.toml.upstream')
             Copy-Item -LiteralPath (Join-Path $directory 'README.md') -Destination (Join-Path $destination 'README.upstream.md')
             $entry[0] | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $destination 'license-selection.json') -Encoding utf8NoBOM

@@ -5,6 +5,16 @@
   "terms_source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
   "packages": [
     {
+      "name": "rmcp",
+      "version": "3.5.1",
+      "declared": "Apache-2.0",
+      "selected": "upstream transition terms retained verbatim",
+      "vcs": "79437f291b2c44053d00dcd5db969fd0cca7c887",
+      "text": "licenses/rmcp-3.5.1.txt",
+      "text_sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "grant_source": "https://github.com/modelcontextprotocol/rust-sdk/blob/79437f291b2c44053d00dcd5db969fd0cca7c887/LICENSE"
+    },
+    {
       "name": "eventsource-stream",
       "version": "0.2.3",
       "declared": "MIT OR Apache-2.0",
