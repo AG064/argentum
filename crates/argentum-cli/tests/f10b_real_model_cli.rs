@@ -367,6 +367,18 @@ impl OfflineVerifierServer {
         Self::start_mode(true, None)
     }
 
+    fn start_positive_with_preparation<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            true,
+            None,
+            false,
+            None,
+            Duration::from_secs(10),
+            false,
+            prepare,
+        )
+    }
+
     fn start_positive_after_edit_failure() -> Self {
         Self::start_mode_variant_with_stop(true, None, false, Some(1))
     }
@@ -419,6 +431,27 @@ impl OfflineVerifierServer {
         lifetime: Duration,
         synthetic_usage: bool,
     ) -> Self {
+        Self::start_mode_variant_bounded_prepared(
+            positive,
+            rejected_request,
+            project_runner,
+            stop_after,
+            lifetime,
+            synthetic_usage,
+            |_| (),
+        )
+        .0
+    }
+
+    fn start_mode_variant_bounded_prepared<T>(
+        positive: bool,
+        rejected_request: Option<usize>,
+        project_runner: bool,
+        stop_after: Option<usize>,
+        lifetime: Duration,
+        synthetic_usage: bool,
+        prepare: impl FnOnce(&str) -> T,
+    ) -> (Self, T) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("F10B verifier listener");
         listener
             .set_nonblocking(true)
@@ -427,6 +460,10 @@ impl OfflineVerifierServer {
             "http://{}/v1/",
             listener.local_addr().expect("F10B verifier address")
         );
+        // No worker or exchange clock exists during local configuration.
+        // Preparation must not dispatch; the listener only reserves its address.
+        // A preparation failure drops the listener without leaving a worker.
+        let prepared = prepare(&endpoint);
         let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let recorded = requests.clone();
         let request_bodies = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
@@ -512,13 +549,14 @@ impl OfflineVerifierServer {
                 logical_index += 1;
             }
         });
-        Self {
+        let server = Self {
             endpoint,
             requests,
             request_bodies,
             stop,
             worker: Some(worker),
-        }
+        };
+        (server, prepared)
     }
 
     fn finish(self) -> Vec<Value> {
@@ -3828,24 +3866,85 @@ fn f18a_final_result_reports_provider_failure_after_committed_edit() {
 }
 
 #[test]
-fn f18a_final_result_preserves_failed_verifier_against_model_success_claim() {
-    let server = OfflineVerifierServer::start_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_fixtures();
-    write_behavior_fixture_with_spec(
-        &fixture.workspace,
-        BEHAVIOR_SOURCE_DEFECT,
-        BEHAVIOR_FAILURE_ACCEPTANCE_SPEC,
+fn offline_verifier_preparation_does_not_consume_the_exchange_lifetime() {
+    let lifetime = Duration::from_secs(1);
+    let preparation = Duration::from_millis(1200);
+
+    // Negative control: the legacy clock runs while local setup is pending.
+    let mut early =
+        OfflineVerifierServer::start_mode_variant_bounded(true, None, false, None, lifetime, false);
+    std::thread::sleep(preparation);
+    early.worker.take().unwrap().join().unwrap();
+    let address = early
+        .endpoint
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/v1/")
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(TcpStream::connect_timeout(&address, Duration::from_secs(5)).is_err());
+    assert!(early.finish().is_empty());
+
+    // Same exchange limit; only move local preparation before worker creation.
+    let (server, prepared) = OfflineVerifierServer::start_mode_variant_bounded_prepared(
+        true,
+        None,
+        false,
+        None,
+        lifetime,
+        false,
+        |_| {
+            std::thread::sleep(preparation);
+            true
+        },
     );
-    fixture.save_provider_as("offline-f18a-failed-verifier");
-    fixture.configure_verification_owner();
+    assert!(prepared);
+    let address = server
+        .endpoint
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/v1/")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(5)).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let body = br#"{"messages":[]}"#;
+    write!(
+        stream,
+        "POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .unwrap();
+    stream.write_all(body).unwrap();
+    let response = read_bounded(stream);
+    assert!(response.starts_with(b"HTTP/1.1 200 OK"));
+    assert_eq!(server.finish().len(), 1);
+}
+
+#[test]
+fn f18a_final_result_preserves_failed_verifier_against_model_success_claim() {
+    let (server, fixture) = OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_fixtures();
+        write_behavior_fixture_with_spec(
+            &fixture.workspace,
+            BEHAVIOR_SOURCE_DEFECT,
+            BEHAVIOR_FAILURE_ACCEPTANCE_SPEC,
+        );
+        fixture.save_provider_as("offline-f18a-failed-verifier");
+        fixture.configure_verification_owner();
+        fixture
+    });
 
     let output = fixture.run(&["run", "--final-result", "--prompt", verification_prompt()]);
-    assert!(
-        output.status.success(),
-        "F18A failed verifier control failed"
-    );
+    assert_success(&output, "F18A failed verifier control");
     let stdout = String::from_utf8(output.stdout).expect("F18A failed verifier UTF-8");
     assert_eq!(stdout.matches('\n').count(), 1);
     let result: Value = serde_json::from_str(stdout.trim_end()).expect("F18A failed JSON");

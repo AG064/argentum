@@ -36,6 +36,9 @@ function Export-TestDiagnostics {
         $records += [ordered]@{ name=$log.Name; raw_bytes=$log.Length; raw_sha256=(Get-FileHash -LiteralPath $log.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); retained_tail_lines=$tail.Count; retained_failure_sections=$sectionCount; retained_total_lines=$sanitized.Count; section_scan_available=($log.Length -le 64MB) }
     }
     $records | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $diagnostics 'log-index.json') -Encoding utf8NoBOM
+    foreach ($receipt in @(Get-ChildItem -LiteralPath $EvidenceDirectory -Filter '*null-scope.json' -File)) {
+        Copy-Item -LiteralPath $receipt.FullName -Destination $diagnostics
+    }
     if (Test-Path -LiteralPath (Join-Path $EvidenceDirectory 'environment.json')) {
         Copy-Item -LiteralPath (Join-Path $EvidenceDirectory 'environment.json') -Destination $diagnostics
     }

@@ -61,6 +61,8 @@ checks do not erase the frozen live `goal_deadline_exceeded` outcome. No
 successful final completion, full visual acceptance or resolved final usage is
 claimed.
 See [the retained NEXT01 acceptance record](docs/NEXT01_ACCEPTANCE.md).
+The [separate NEXT01 draft](https://github.com/AG064/argentum/pull/681) remains
+feature review, not core release inclusion.
 Desktop/computer-use qualification and daily Codex replacement remain later
 gates, not consequences of the platform/product naming decision.
 

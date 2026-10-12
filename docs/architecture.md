@@ -45,6 +45,10 @@ check confirmed that `rmcp` is absent by default and present with
 Playwright's adapter and browser installation are separate optional preparation,
 not default CLI runtime/package payloads.
 
+RELEASE01 does not include NEXT01's external extension/browser implementation.
+That optional development work uses the same governed runtime and has separate
+acceptance and packaging; it is not a Genesis runtime fork.
+
 ## Runtime and authority
 
 ```text

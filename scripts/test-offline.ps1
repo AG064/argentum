@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$TargetDirectory = '',
     [string]$TargetName = '',
-    [ValidateRange(1, 8)][int]$Jobs = 1
+    [ValidateRange(1, 8)][int]$Jobs = 1,
+    [switch]$CiNullAccess
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -71,8 +72,11 @@ try {
         }
         $started = [DateTime]::UtcNow
         $log = Join-Path $output ("{0:d3}-{1}.log" -f $number, $artifact.target.name)
-        & $exe --test-threads=1 *> $log
-        $code = $LASTEXITCODE
+        $execute = { & $exe --test-threads=1 *> $log; $LASTEXITCODE }
+        if ($CiNullAccess -and $artifact.target.name -in @('argentum_execution', 'tool_catalog_http_cli')) {
+            . (Join-Path $PSScriptRoot 'ci-null-scope.ps1')
+            $code = Invoke-CiNullScope -Body $execute -ReceiptPath (Join-Path $output ("{0:d3}-null-scope.json" -f $number))
+        } else { $code = & $execute }
         $results += [ordered]@{
             package_id=$artifact.package_id; target=$artifact.target.name
             executable=$exe; executable_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
