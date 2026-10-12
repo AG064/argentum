@@ -168,6 +168,20 @@ repetitions. The test-clock dependency is dev-only and absent from the inspected
 normal CLI graph. The executable remains unchanged; both failed CI runs remain
 retained, and subsequent hosted qualification is separate evidence.
 
+Run `38215155604` retained another test-only failure: the concurrent-target
+control relied on a 50 ms gap between body chunks, so its intended no-clobber
+condition was not consistently established. The fixture now explicitly gates
+the remaining body. It observes the actual private part file, creates the
+competing target, then releases transfer and requires the unchanged no-clobber
+error, target bytes and part cleanup. Integrity and preservation cases use the
+production envelope under bounded fixture watchdogs; deadline-specific cases
+still explicitly use their original 250 ms policy. Test futures are boxed to
+avoid a Windows debug-stack overflow without increasing stack limits.
+Production code remains unchanged. The full 188-case provider suite passed
+with one existing ignored case, and seven controls passed twenty repetitions
+with strict lint. This correction does not rebuild the optimized executable or
+change the selected provider, permission policy, live limits or prior results.
+
 ### Separate native continuation and acceptance
 
 The owner activated only the changed exact browser definition in a real local

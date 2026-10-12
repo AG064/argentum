@@ -790,16 +790,29 @@ mod tests {
     struct DownloadServer {
         endpoint: String,
         first_chunk: Option<tokio::sync::oneshot::Receiver<()>>,
+        continue_download: Option<mpsc::Sender<()>>,
         handle: thread::JoinHandle<()>,
     }
 
     impl DownloadServer {
         async fn wait_for_first_chunk(&mut self) {
-            self.first_chunk
-                .take()
-                .expect("first fixture chunk receiver")
-                .await
-                .expect("first fixture chunk");
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                self.first_chunk
+                    .take()
+                    .expect("first fixture chunk receiver"),
+            )
+            .await
+            .expect("first fixture chunk watchdog")
+            .expect("first fixture chunk");
+        }
+
+        fn continue_download(&self) {
+            self.continue_download
+                .as_ref()
+                .expect("gated fixture release sender")
+                .send(())
+                .expect("release gated fixture");
         }
 
         fn finish(self) {
@@ -848,9 +861,22 @@ mod tests {
     }
 
     fn spawn_download_server(chunks: Vec<Vec<u8>>, pause: Duration) -> DownloadServer {
+        spawn_download_server_with_gate(chunks, pause, false)
+    }
+
+    fn spawn_gated_download_server(chunks: Vec<Vec<u8>>) -> DownloadServer {
+        spawn_download_server_with_gate(chunks, Duration::ZERO, true)
+    }
+
+    fn spawn_download_server_with_gate(
+        chunks: Vec<Vec<u8>>,
+        pause: Duration,
+        gated: bool,
+    ) -> DownloadServer {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind download fixture");
         let address = listener.local_addr().expect("download fixture address");
         let (first_sender, first_chunk) = tokio::sync::oneshot::channel();
+        let (continue_download, continue_receiver) = mpsc::channel();
         let handle = thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept download fixture");
             read_request_headers(&mut stream);
@@ -870,6 +896,11 @@ mod tests {
                         .expect("first fixture chunk sender")
                         .send(())
                         .expect("record first fixture chunk");
+                    if gated {
+                        continue_receiver
+                            .recv_timeout(Duration::from_secs(30))
+                            .expect("release gated response");
+                    }
                 }
                 if index + 1 != chunks.len() {
                     thread::sleep(pause);
@@ -879,6 +910,7 @@ mod tests {
         DownloadServer {
             endpoint: format!("http://{address}/fixture.gguf"),
             first_chunk: Some(first_chunk),
+            continue_download: gated.then_some(continue_download),
             handle,
         }
     }
@@ -901,7 +933,7 @@ mod tests {
                 .send(())
                 .expect("record first chunked response");
             continue_receiver
-                .recv_timeout(Duration::from_secs(2))
+                .recv_timeout(Duration::from_secs(30))
                 .expect("continue chunked response");
             stream
                 .write_all(b"2\r\nbc\r\n0\r\n\r\n")
@@ -930,6 +962,7 @@ mod tests {
         DownloadServer {
             endpoint: format!("http://{address}/fixture.gguf"),
             first_chunk: Some(first_chunk),
+            continue_download: None,
             handle,
         }
     }
@@ -1023,7 +1056,7 @@ mod tests {
     }
 
     async fn wait_for_part_contents(directory: &TempDir, expected: &[u8]) {
-        tokio::time::timeout(Duration::from_secs(1), async {
+        tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 let found = std::fs::read_dir(directory.path())
                     .expect("fixture directory entries")
@@ -1059,15 +1092,34 @@ mod tests {
         directory: &TempDir,
         endpoint: &str,
     ) -> Result<PathBuf, ProviderError> {
-        let target = directory.path().join(offer.filename);
-        download_model_with_policy(
+        Box::pin(fixture_download_with_policy(
             offer,
-            target,
-            Url::parse(endpoint).expect("fixture download URL"),
-            fixture_policy(),
-            fixture_download_url,
+            directory,
+            endpoint,
+            DownloadPolicy::model(),
+        ))
+        .await
+    }
+
+    async fn fixture_download_with_policy(
+        offer: LocalModelOffer,
+        directory: &TempDir,
+        endpoint: &str,
+        policy: DownloadPolicy,
+    ) -> Result<PathBuf, ProviderError> {
+        let target = directory.path().join(offer.filename);
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            Box::pin(download_model_with_policy(
+                offer,
+                target,
+                Url::parse(endpoint).expect("fixture download URL"),
+                policy,
+                fixture_download_url,
+            )),
         )
         .await
+        .expect("fixture download watchdog")
     }
 
     #[test]
@@ -1280,7 +1332,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             Duration::from_millis(500),
-            fixture_download(offer, &directory, &server.endpoint),
+            fixture_download_with_policy(offer, &directory, &server.endpoint, fixture_policy()),
         )
         .await;
 
@@ -1306,7 +1358,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             Duration::from_millis(500),
-            fixture_download(offer, &directory, &server.endpoint),
+            fixture_download_with_policy(offer, &directory, &server.endpoint, fixture_policy()),
         )
         .await;
 
@@ -1350,7 +1402,7 @@ mod tests {
                 offer,
                 target,
                 Url::parse(&endpoint).expect("fixture download URL"),
-                fixture_policy(),
+                DownloadPolicy::model(),
                 fixture_download_url,
             )
             .await
@@ -1391,32 +1443,36 @@ mod tests {
         let offer = fixture_offer(bytes);
         let directory = tempfile::tempdir().expect("fixture directory");
         let target = directory.path().join(offer.filename);
-        let mut server = spawn_download_server(
-            vec![bytes[..1].to_vec(), bytes[1..].to_vec()],
-            Duration::from_millis(50),
-        );
+        let mut server =
+            spawn_gated_download_server(vec![bytes[..1].to_vec(), bytes[1..].to_vec()]);
         let endpoint = server.endpoint.clone();
         let download = tokio::spawn(async move {
             download_model_with_policy(
                 offer,
                 target,
                 Url::parse(&endpoint).expect("fixture download URL"),
-                fixture_policy(),
+                DownloadPolicy::model(),
                 fixture_download_url,
             )
             .await
         });
 
         server.wait_for_first_chunk().await;
+        wait_for_part_contents(&directory, &bytes[..1]).await;
         let target = directory.path().join(offer.filename);
+        assert!(!target.exists(), "gated body cannot already be published");
         std::fs::write(&target, b"concurrent target").expect("concurrent target bytes");
+        server.continue_download();
 
         let result = download.await.expect("download task");
 
-        assert!(matches!(
-            result,
-            Err(ProviderError::LocalModelDownloadDestinationInvalid)
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(ProviderError::LocalModelDownloadDestinationInvalid)
+            ),
+            "actual download result: {result:?}"
+        );
         assert_eq!(
             std::fs::read(&target).expect("concurrent target bytes"),
             b"concurrent target"
