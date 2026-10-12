@@ -1,5 +1,10 @@
 # Implementation provenance
 
+Argentum is the shared native platform; Argentum Genesis is its CLI/TUI product
+in the same canonical repository, not a separate runtime fork. The explicitly
+legacy TypeScript product's existing branch, immutable revisions and releases
+are linked in [the migration record](MIGRATION_NATIVE.md).
+
 The native Cargo workspace supersedes the historical TypeScript/Node/Tauri
 root product. Earlier versions remain in Git history and versioned releases;
 their browser, plugin and channel modules are not advertised as native features.

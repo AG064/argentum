@@ -64,6 +64,9 @@ is the next evidence-quality priority supported by this run.
 Local stdio is owner-reviewed current-user code, not an OS access sandbox.
 Browser routing is not OS network isolation, universal redaction or Windows
 desktop support. Generic model shell/argv remains disabled in the verification
-workflow. RELEASE01 hosted qualification is still failed; this development
-delivery does not reopen or relabel it. The next Windows desktop milestone in
+workflow. RELEASE01's subsequently completed core qualification is recorded in
+[the RC record](releases/0.1.0-rc.1.md), separately from this NEXT01 delivery.
+It does not relabel this frozen deadline failure, resolve unknown final usage,
+include these features in the core RC or establish browser/desktop acceptance.
+The next Windows desktop milestone in
 `NEXT_WINDOWS_DESKTOP_MILESTONE.md` is inactive until separately forwarded.
