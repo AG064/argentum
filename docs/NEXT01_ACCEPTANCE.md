@@ -142,6 +142,19 @@ Extension/browser and Windows process-boundary jobs passed. The main Windows
 workspace/test/lint/policy/package job is pending at this qualification draft.
 The earlier source failure and superseded cancelled runs remain preserved.
 
+The initial source run subsequently finished with one failing HTTP/CLI target;
+the other 51 targets exited successfully. Its older synthetic compaction
+controller submitted an edit during a planned report-only handoff, then waited
+for a response that could not follow that rejected effect. Actual local request
+capture showed `handoff=true, tools=0`. The corrected test controller consumes
+the read feedback, returns a report-only response and waits for a new admitted
+coding turn before submitting a new edit with the exact observed preimage.
+No production code, guard, allowance or optimized executable changed for this
+correction. All six original compaction modes and the complete 89-case HTTP/CLI
+suite passed against the final packaged executable, with format and feature
+strict lint. The failed source run is retained; a later qualification is
+separate evidence, not a relabelled pass.
+
 ### Separate native continuation and acceptance
 
 The owner activated only the changed exact browser definition in a real local

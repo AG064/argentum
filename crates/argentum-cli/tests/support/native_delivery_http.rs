@@ -505,7 +505,37 @@ fn milestone_delayed_deepseek_terminal_compaction_recovery_edit_verification() {
                 "read_text",
                 json!({"path":"src/lib.rs"}),
             );
-            let read = tool_reply(&next(&server), "new-observation");
+            let observed = next(&server);
+            let read = tool_reply(&observed, "new-observation");
+            println!(
+                "delayed-compaction-control stage=post-read mode={mode} handoff={} tools={}",
+                observed["messages"]
+                    .to_string()
+                    .contains("[native_handoff_feedback]"),
+                observed["tools"].as_array().map_or(0, Vec::len)
+            );
+            if observed["messages"]
+                .to_string()
+                .contains("[native_handoff_feedback]")
+            {
+                assert!(observed["tools"]
+                    .as_array()
+                    .is_none_or(|tools| tools.is_empty()));
+                assert!(read["sha256"].is_string());
+                // The current observation reached the report-only turn. Do
+                // not submit an edit to a request that advertises no effects.
+                // Retain its exact preimage for a newly submitted edit in the
+                // next admitted coding run; the ordinary stale check remains.
+                text(
+                    &server,
+                    r#"{"status":"continue","remaining":["Submit the pending guarded public-source change and verify it."]}"#,
+                    true,
+                );
+                let resumed = next_coding_after_reported_handoff(&server);
+                assert!(resumed["tools"].as_array().is_some_and(|tools| tools
+                    .iter()
+                    .any(|tool| tool["function"]["name"] == "edit_text")));
+            }
             tool(
                 &server,
                 "new-valid-edit",
