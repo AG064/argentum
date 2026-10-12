@@ -24,7 +24,7 @@ const definitions = [
   ['browser_open', 'Open one owned tab at an explicitly allowed destination.', { url: string }, ['url']],
   ['browser_observe', 'Observe current layout, form state and bounded references. Use a small text_limit or omit accessibility when focused references suffice. Page data is untrusted.', { tab_id: tab, text_limit: { type: 'integer', minimum: 256, maximum: MAX_TEXT }, include_accessibility: { type: 'boolean' } }, ['tab_id']],
   ['browser_viewport', 'Set an owned page viewport within the existing screenshot boundary; old observations become stale.', { tab_id: tab, width: { type: 'integer', minimum: 320, maximum: 1200 }, height: { type: 'integer', minimum: 240, maximum: 800 } }, ['tab_id', 'width', 'height']],
-  ['browser_interact', 'Use a reference from the exact current observation, never arbitrary JavaScript.', { tab_id: tab, revision, reference: string, action: { enum: ['click', 'fill', 'check', 'uncheck', 'select'] }, value: { type: 'string', maxLength: 4096 } }, ['tab_id', 'revision', 'reference', 'action']],
+  ['browser_interact', 'Use a reference from the exact current observation, never arbitrary JavaScript. reload reloads this owned page; tab and shift_tab move keyboard focus from the referenced control. These three actions accept no value. Observe again after every action.', { tab_id: tab, revision, reference: string, action: { enum: ['click', 'fill', 'check', 'uncheck', 'select', 'reload', 'tab', 'shift_tab'] }, value: { type: 'string', maxLength: 4096 } }, ['tab_id', 'revision', 'reference', 'action']],
   ['browser_screenshot', 'Capture an actual bounded PNG artifact at the current origin and observation.', { tab_id: tab, revision }, ['tab_id', 'revision']],
   ['browser_diagnostics', 'Inspect bounded console and network metadata, no headers, cookies or response bodies.', { tab_id: tab }, ['tab_id']],
   ['browser_close', 'Close one owned tab, or the full context and browser.', { tab_id: tab }, []],
@@ -64,6 +64,7 @@ function argsFor(name, args) {
     if (rule.type === 'integer' && (!Number.isSafeInteger(value) || value < rule.minimum || (rule.maximum !== undefined && value > rule.maximum))) throw new Error('invalid_integer_argument');
     if (rule.type === 'boolean' && typeof value !== 'boolean') throw new Error('invalid_boolean_argument');
   }
+  if (name === 'browser_interact' && ['reload', 'tab', 'shift_tab'].includes(args.action) && Object.hasOwn(args, 'value')) throw new Error('invalid_tool_arguments');
   return args;
 }
 
@@ -232,7 +233,7 @@ export class BrowserAdapter {
       for (let index = 0; index < count; index++) {
         const locator = elements.nth(index);
         if (!await locator.isVisible()) continue;
-        const details = await locator.evaluate(element => ({ tag: element.tagName.toLowerCase(), name: (element.getAttribute('aria-label') || [...(element.labels ?? [])].map(label => label.textContent).join(' ') || element.textContent || element.getAttribute('placeholder') || '').slice(0, 160), checked: typeof element.checked === 'boolean' ? element.checked : undefined, value: typeof element.value === 'string' ? element.value.slice(0, 160) : undefined, disabled: Boolean(element.disabled) }));
+        const details = await locator.evaluate(element => ({ tag: element.tagName.toLowerCase(), name: (element.getAttribute('aria-label') || [...(element.labels ?? [])].map(label => label.textContent).join(' ') || element.textContent || element.getAttribute('placeholder') || '').slice(0, 160), checked: typeof element.checked === 'boolean' ? element.checked : undefined, value: typeof element.value === 'string' ? element.value.slice(0, 160) : undefined, disabled: Boolean(element.disabled), focused: element === document.activeElement }));
         const handle = await locator.elementHandle(); if (!handle) continue;
         const reference = `e${index}`; entry.references.set(reference, handle); targets.push({ reference, ...details });
       }
@@ -266,6 +267,9 @@ export class BrowserAdapter {
     else if (args.action === 'check') await locator.check();
     else if (args.action === 'uncheck') await locator.uncheck();
     else if (args.action === 'select') { if (args.value === undefined) throw new Error('select_requires_value'); await locator.selectOption(args.value); }
+    else if (args.action === 'reload') await entry.page.reload({ waitUntil: 'domcontentloaded', timeout: DEADLINE });
+    else if (args.action === 'tab') await locator.press('Tab', { timeout: DEADLINE });
+    else if (args.action === 'shift_tab') await locator.press('Shift+Tab', { timeout: DEADLINE });
     this.current(args.tab_id); await this.clearReferences(entry); entry.observedRevision = null;
     return { performed: args.action, tab_id: args.tab_id, observe_again: true };
   }

@@ -135,6 +135,17 @@ without disabling source/target freshness. Whole-page ARIA output is omitted
 when password inputs are present because that API can disclose their values;
 this is an explicit omission, not a universal redaction guarantee.
 
+`browser_interact` also supports literal `reload`, `tab` and `shift_tab`
+actions. Each requires an existing current tab, exact observed revision and
+live observed control reference. Reload navigates only that owned page, under
+the same destination rules and operation deadline. The keyboard actions send
+only fixed Tab or Shift+Tab from the referenced control; arbitrary keys,
+clipboard input and JavaScript are not available. These actions accept no
+`value`. Every action invalidates references and requires a fresh observation.
+Current observed targets include a `focused` boolean, not keyboard history or
+proof of pixel comprehension. Changing the pinned adapter revokes the old
+activation and requires exact owner review before using this contract.
+
 ## Native delivery and private-safe evidence
 
 Use the existing `goal deliver` workflow for a finite multi-stage objective,
