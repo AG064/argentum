@@ -803,6 +803,87 @@ fn milestone_native_prepassed_source_requires_current_invocation_feedback() {
 }
 
 #[test]
+fn milestone_native_time_handoff_returns_fresh_feedback_before_the_run_deadline() {
+    let server = Server::start();
+    let fixture = CliFixture::new(&server.endpoint);
+    let id = prepare(&fixture, 8);
+    let path = fixture.workspace.join("src/lib.rs");
+    let corrected = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("    7\n", "    8\n");
+    std::fs::write(&path, corrected).unwrap();
+    json_output(fixture.run(&[
+        "goal",
+        "limits",
+        "--goal-id",
+        &id,
+        "--limits",
+        "2000000,32,8,32,600,1000000,32,16,18",
+        "--json",
+    ]));
+    let output = thread::scope(|scope| {
+        let child = scope.spawn(|| deliver(&fixture, &id, "8"));
+        let initial = next(&server);
+        assert!(!initial["messages"]
+            .to_string()
+            .contains("native_handoff_feedback"));
+        assert!(!initial["tools"].as_array().unwrap().is_empty());
+        // Controlled local provider latency crosses the scheduled reserve, but
+        // leaves time for the single report-only request and owned settlement.
+        thread::sleep(std::time::Duration::from_secs(13));
+        tool(
+            &server,
+            "timed-read",
+            "read_text",
+            json!({"path":"src/lib.rs"}),
+        );
+        let handoff = next(&server);
+        assert!(handoff["messages"]
+            .to_string()
+            .contains("native_handoff_feedback"));
+        assert!(handoff["tools"]
+            .as_array()
+            .is_none_or(|tools| tools.is_empty()));
+        assert!(tool_reply(&handoff, "timed-read")["sha256"].is_string());
+        thread::sleep(std::time::Duration::from_secs(2));
+        text(
+            &server,
+            r#"{"status":"ready","remaining":[],"summary":"Current public source observed."}"#,
+            true,
+        );
+        let feedback = next(&server);
+        assert!(feedback["messages"]
+            .to_string()
+            .contains("native_verifier_feedback"));
+        assert!(feedback["messages"].to_string().contains("passed"));
+        text(
+            &server,
+            r#"{"status":"ready","remaining":[],"summary":"Current source verification received."}"#,
+            true,
+        );
+        child.join().unwrap()
+    });
+    let result = json_output(output);
+    assert_eq!(result["task_success"], true, "{result}");
+    let attempts = result["invocation"]["attempts"].as_array().unwrap();
+    assert_eq!(attempts.len(), 3);
+    assert_eq!(attempts[0]["stop_reason"], "scheduled_time_handoff");
+    assert_eq!(attempts[1]["delivery_phase"], "verification");
+    assert_eq!(attempts[2]["outcome"], "verified");
+    let status = json_output(fixture.run(&["goal", "status", "--json"]));
+    let counters = &status["goal"]["accounting"]["counters"];
+    assert_eq!(counters["request_attempts"], 3);
+    assert_eq!(counters["unresolved_tokens"], 0);
+    assert_eq!(counters["outstanding_tokens"], 0);
+    assert_eq!(
+        status["goal"]["accounting"]["per_run"]["elapsed_seconds"],
+        18
+    );
+    assert_eq!(status["supervision"]["completion_current"], true);
+    assert!(server.requests.try_recv().is_err());
+}
+
+#[test]
 fn milestone_partial_increment_continue_gets_native_failure_before_correction() {
     let server = Server::start();
     let fixture = CliFixture::new(&server.endpoint);

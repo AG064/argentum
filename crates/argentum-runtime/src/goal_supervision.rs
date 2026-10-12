@@ -69,6 +69,13 @@ fn parse_work_report(text: &str) -> (bool, bool) {
 
 const MAX_EVIDENCE_INSPECTION: usize = 1_000;
 
+fn native_handoff_time_reserve(elapsed_seconds: Option<u64>) -> std::time::Duration {
+    // The handoff still needs a provider turn to consume fresh tool feedback.
+    // A fixed thirty-second tail was insufficient on the uncapped route. Reserve
+    // a bounded third of this admitted run, not extra time or provider authority.
+    std::time::Duration::from_secs(elapsed_seconds.map_or(0, |seconds| seconds.div_ceil(3).min(90)))
+}
+
 enum SupervisorCompletionCommit {
     Committed(Box<Goal>, Box<GoalInvocation>),
     Stopped(GoalInvocationState, &'static str),
@@ -348,7 +355,11 @@ impl RuntimeService {
             .and_then(|scope| scope.deadline)
             .is_some_and(|deadline| {
                 deadline.saturating_duration_since(tokio::time::Instant::now())
-                    <= std::time::Duration::from_secs(30)
+                    <= native_handoff_time_reserve(
+                        run_account
+                            .as_ref()
+                            .and_then(|account| account.limits.elapsed_seconds),
+                    )
             });
         let mut claims = self
             .active_supervisors
@@ -2362,7 +2373,23 @@ fn runtime_stop_reason(error: &RuntimeError) -> &'static str {
 
 #[cfg(test)]
 mod native_report_tests {
-    use super::parse_work_report;
+    use super::{native_handoff_time_reserve, parse_work_report};
+
+    #[test]
+    fn native_handoff_reserve_uses_admitted_run_time_without_widening_it() {
+        for (limit, expected) in [
+            (None, 0),
+            (Some(0), 0),
+            (Some(1), 1),
+            (Some(18), 6),
+            (Some(120), 40),
+            (Some(295), 90),
+            (Some(300), 90),
+            (Some(u64::MAX), 90),
+        ] {
+            assert_eq!(native_handoff_time_reserve(limit).as_secs(), expected);
+        }
+    }
 
     #[test]
     fn native_report_rejects_prose_duplicate_keys_and_unfinished_ready() {
