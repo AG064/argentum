@@ -9,10 +9,10 @@ An installed x64 Microsoft Visual C++ runtime is a prerequisite; it is not
 bundled. Local runtime evidence is Windows 10.0.26100, not a pristine VM or a
 general Windows minimum-version qualification.
 
-The attempted qualification runner is `windows-2025`. Retained Server 2022
+The qualification runner is `windows-2025`. Retained Server 2022
 and newer-runner failures establish that their LPAC cannot reopen the NUL
 device: the same child works with inherited stdin, but Cargo's output capture
-fails before execution. The runner change has not established qualification.
+failed before execution. The runner change alone did not establish qualification.
 Those historical runs made no device-permission exception. The owner subsequently
 approved a temporary NUL-only DACL change on the disposable hosted job, documented
 in [CI host preparation](CI_NULL_DEVICE.md). Its actual apply/restoration and
@@ -22,6 +22,16 @@ capability, file, registry, network or integrity-label permission was expanded.
 Full process, privacy and workspace test contracts remain unchanged.
 Server 2022 and other Windows environments are not qualified by a successful
 newer-runner result. Local build 26100 and remote CI evidence remain separate.
+
+Final dated qualification, 2026-10-12: the RELEASE01 Genesis core CLI at
+`9eb7e4497060bc7408d3e5702d62298a7a58a777` passed both
+[PR 38171425611](https://github.com/AG064/argentum/actions/runs/38171425611) and
+[push 38171419947](https://github.com/AG064/argentum/actions/runs/38171419947)
+under the approved disposable NUL-only condition. Earlier failures above remain
+historical failures. See [the exact RC binding](releases/0.1.0-rc.1.md).
+CLI qualification is independent of desktop/browser acceptance. NEXT01's
+optional feature source and failed frozen live completion do not change this
+core RC scope or establish full computer use/Codex replacement.
 
 | Route | Native implementation | Evidence and qualification |
 | --- | --- | --- |

@@ -1,5 +1,49 @@
 # Native architecture
 
+## Platform and frontend ownership
+
+[AG064/argentum](https://github.com/AG064/argentum) is the canonical native
+platform repository. Argentum Genesis names the CLI/TUI frontend, not another
+runtime. Future desktop frontends and optional browser/extension capabilities
+compose the same domain, harness, runtime, providers, tools, store, security and
+platform authority. They must not maintain separate copies of that core.
+
+Existing crate names and useful boundaries remain. In particular,
+`argentum-cli` owns the command host and terminal/JSONL presentation;
+`argentum-app` and `argentum-ui` retain the Slint frontend. Sharing the command
+host does not make desktop visual/device qualification part of Genesis
+release acceptance. General computer use and full Codex replacement remain
+separate unqualified workflows.
+
+## Default CLI dependency and package boundary
+
+Verified on 2026-10-12 without a rebuild: the Cargo workspace has
+`default-members = ["crates/argentum-cli"]`, and the CLI has `default = []`.
+The Windows normal/build selection was inspected with:
+
+```powershell
+cargo tree -p argentum-cli --target x86_64-pc-windows-msvc --edges normal,build --locked --offline
+```
+
+This selected graph excludes `argentum-app`, `argentum-ui`, Slint and its
+`i-slint-*` crates, `argentum-android`, JNI, Android activity, native llama.cpp
+and external MCP. It does include `argentum-android-inference`'s shared Rust
+contracts; that crate's llama.cpp dependency is Android-target-specific.
+Its name is not a reason to move or duplicate working code.
+
+`scripts/package-windows-cli.ps1` selects
+`cargo build -p argentum-cli --bin argentum --release --locked -j $Jobs`
+without `--workspace` or optional features. Merely defining a workspace
+dependency, retaining a workspace member or listing it in Cargo.lock does not
+mean it is linked into the CLI. Whole-workspace and feature-enabled builds
+have different selections and require their own dependency/license review.
+
+RELEASE01 does not include NEXT01's external extension/browser implementation.
+That optional development work uses the same governed runtime and has separate
+acceptance and packaging; it is not a Genesis runtime fork.
+
+## Runtime and authority
+
 ```text
 trusted local owner path        task / JSONL client
          |                            |

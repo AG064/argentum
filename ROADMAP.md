@@ -1,10 +1,25 @@
-# Argentum two-track roadmap
+# Argentum platform / Genesis CLI two-track roadmap
 
 Dates and source presence are not acceptance. Windows CLI release readiness and
 readiness to replace the owner's Codex environment are separate gates. The
 owner has not adopted Argentum as the daily environment.
 
-## Track A: native CLI release
+## Repository and release organization
+
+`AG064/argentum` is the canonical native platform repository. Argentum Genesis
+is its CLI/TUI product, not a separate repository, permanent CLI branch or
+runtime fork. CLI, future desktop and optional browser/extension work share
+the existing native core and keep useful Cargo boundaries.
+Use feature branches for reviewed development and release-maintenance branches
+only for an actual supported version that needs them.
+
+Genesis may release independently of desktop/browser acceptance. The default
+CLI build/package selects only its required dependency graph, not every
+workspace member; see [architecture](docs/architecture.md). The previous
+TypeScript product is explicitly legacy, with
+[verified preserved source and release links](docs/MIGRATION_NATIVE.md).
+
+## Track A: Genesis native CLI release (RELEASE01)
 
 `0.1.0-rc.1` reconciles the accepted native implementation into a clean reviewed
 branch, preserving the old product in history. Required gates are locked fresh
@@ -20,6 +35,11 @@ device/release qualification and other desktop platforms have their own gates.
 MILESTONE01 remains assisted delivery. No new live benchmark is authorized by
 this roadmap or release preparation.
 
+The final RELEASE01 core source qualification at `9eb7e44` passed hosted
+checks and unsigned packaging on 2026-10-12; exact source, run and artifact
+identities are in the RC record. This does not publish a release, qualify
+desktop/browser work or change any earlier failed result.
+
 ## Existing foundations, not missing-work claims
 
 Native `argentum-harness` and `argentum-lifecycle` already implement registry
@@ -33,7 +53,16 @@ The historical `src/core/plugin-loader.ts`, `src/mcp/{server,types}.ts`,
 exist in the pre-transition history. They are reference designs, not native
 implementations to expose through an ungoverned Node runtime.
 
-## Track B: workflow capability and personal replacement
+## Track B: shared-platform capability and personal replacement (NEXT01 onward)
+
+NEXT01's optional governed extension/browser implementation remains separate
+from the RELEASE01 core RC. Its offline controls and supplemental contribution
+checks do not erase the frozen live `goal_deadline_exceeded` outcome. No
+successful final completion, full visual acceptance or resolved final usage is
+claimed.
+See [the separate NEXT01 draft](https://github.com/AG064/argentum/pull/681).
+Desktop/computer-use qualification and daily Codex replacement remain later
+gates, not consequences of the platform/product naming decision.
 
 | Milestone | Dependency and boundary | Real acceptance workflow |
 | --- | --- | --- |

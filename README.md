@@ -1,15 +1,21 @@
-# Argentum native CLI
+# Argentum platform / Genesis CLI
 
-Argentum is a local-first Rust coding-agent harness. The `0.1.0-rc.1` source
-transition is a Windows x64 CLI prerelease candidate, not a published release
-or a claim that it replaces Codex. Argentum by AG064
-(https://github.com/AG064/argentum).
+Argentum is the local-first native Rust platform in the canonical
+[AG064/argentum repository](https://github.com/AG064/argentum).
+Argentum Genesis is its CLI/TUI product, not a separate repository or runtime
+fork. The executable remains `argentum` and the Cargo package remains
+`argentum-cli`. The `0.1.0-rc.1` transition is a Windows x64 CLI prerelease
+candidate, not a published release or a claim that it replaces Codex.
 
 The native command host owns providers, scoped policy, guarded file changes,
 verification, cancellation, durable history and recovery. The Slint and Android
 hosts remain source modules, not release-qualified products in this CLI package.
-The historical TypeScript product remains in earlier Git revisions and releases;
-its plugins, channels and browser features are not native CLI capabilities.
+The CLI, future desktop frontend and optional browser/extension capabilities
+share this native core. Genesis may release independently of desktop/browser
+acceptance. The previous TypeScript/Node/Tauri product is explicitly legacy;
+its preserved branch, immutable revisions and existing releases are linked in
+[the migration record](docs/MIGRATION_NATIVE.md). Its feature list is not the
+native CLI's feature list.
 
 The Windows x64 package requires the Universal CRT and Microsoft Visual C++
 x64 runtime (`VCRUNTIME140.dll`). These system/runtime components are not
@@ -27,7 +33,7 @@ git clone https://github.com/AG064/argentum.git
 cd argentum
 # Until the native transition is merged, select the reviewed native PR branch.
 git switch codex/release01-native-cli-20261010
-cargo build -p argentum-cli --release --locked
+cargo build -p argentum-cli --bin argentum --release --locked
 & '.\target\release\argentum.exe' --help
 ```
 
@@ -35,6 +41,14 @@ To prepare a versioned portable package, use
 `scripts/package-windows-cli.ps1 -OutputDirectory C:\temporary\package`.
 The script refuses dirty source and existing output, produces checksums and
 source provenance, and neither signs nor publishes anything.
+
+The workspace defaults to `argentum-cli` with no default optional features.
+Workspace membership does not include every crate in the CLI binary. The
+Windows normal/build dependency selection excludes Slint, the desktop host,
+Android JNI/llama.cpp and external MCP; packaging selects this same CLI target
+without optional features. See [the verified boundaries](docs/architecture.md).
+Governed extension/browser development is separate NEXT01 work, not part of
+this RELEASE01 core package or its release qualification.
 
 ## First run
 
@@ -83,6 +97,12 @@ implemented in this native release. No hidden telemetry upload, self-update,
 model-owned shell approval, push, merge or publication capability is added.
 
 ## Development and licensing
+
+Use reviewable feature branches in this repository. Create release-maintenance
+branches only for an actual supported version that needs them. Do not create a
+permanent CLI-only branch, a separate Genesis repository or frontend-specific
+copies of the shared runtime. Existing transition branches are review branches,
+not permanent product lines.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes focused tests and contribution
 requirements. [SECURITY.md](SECURITY.md) defines the actual trust boundary and
