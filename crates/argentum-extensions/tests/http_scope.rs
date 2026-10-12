@@ -47,11 +47,7 @@ impl Server {
                     .unwrap();
                 let mut bytes = Vec::new();
                 let mut buffer = [0; 4096];
-                let split;
-                loop {
-                    let Ok(count) = socket.read(&mut buffer) else {
-                        break;
-                    };
+                while let Ok(count) = socket.read(&mut buffer) {
                     if count == 0 {
                         break;
                     }
@@ -67,7 +63,7 @@ impl Server {
                 let Some(end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") else {
                     continue;
                 };
-                split = end + 4;
+                let split = end + 4;
                 let header = String::from_utf8_lossy(&bytes[..end]);
                 let authorized = header.lines().any(|line| {
                     line.eq_ignore_ascii_case("authorization: Bearer synthetic-test-value")

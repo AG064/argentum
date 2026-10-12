@@ -17,96 +17,6 @@ pub(crate) fn migrate(connection: &rusqlite::Connection) -> Result<(), StoreErro
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use argentum_domain::{
-        extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},
-        ApprovalMode, HarnessExecutionPolicy, SandboxScope, Sha256Digest,
-    };
-    #[test]
-    fn activation_is_atomic_revision_bound_and_survives_reopen_without_cross_project_access() {
-        let root = tempfile::tempdir().unwrap();
-        let ws = root.path().join("workspace");
-        std::fs::create_dir(&ws).unwrap();
-        let other = root.path().join("other");
-        std::fs::create_dir(&other).unwrap();
-        let db = root.path().join("store.sqlite3");
-        let store = Store::open(&db).unwrap();
-        let project = store.resolve_workspace(&ws).unwrap().snapshot.project.id;
-        let other = store.resolve_workspace(&other).unwrap().snapshot.project.id;
-        let original = ExtensionRecord {
-            definition: ExtensionDefinition {
-                namespace: "control.skills".into(),
-                package_root: ws.to_string_lossy().into_owned(),
-                package_sha256: Sha256Digest("a".repeat(64)),
-                source_id: "synthetic".into(),
-                source_revision: "v1".into(),
-                transport: ExtensionTransport::Skills,
-                allowed_tools: vec![],
-                resource_prefixes: vec![],
-                trust: ExtensionTrust::ReadOnlyInstructions,
-                image_scope: None,
-            },
-            revision: uuid::Uuid::new_v4(),
-            active: false,
-            approval_binding: None,
-        };
-        store
-            .save_extension_record(project, &original, None)
-            .unwrap();
-        let policy = HarnessExecutionPolicy {
-            profile_id: "custom".into(),
-            source_profile_id: None,
-            sandbox_scope: SandboxScope::WorkspaceWrite,
-            approval_mode: ApprovalMode::Always,
-            capability_enabled: std::collections::BTreeMap::from([(
-                "extension.external".into(),
-                true,
-            )]),
-        };
-        let mut active = original.clone();
-        active.revision = uuid::Uuid::new_v4();
-        active.active = true;
-        active.approval_binding = Some(Sha256Digest("b".repeat(64)));
-        assert!(store
-            .save_extension_activation(project, &active, uuid::Uuid::new_v4(), &policy)
-            .is_err());
-        assert_eq!(
-            store.extension_record(project, "control.skills").unwrap(),
-            Some(original.clone())
-        );
-        assert!(store.load_execution_policy(project).unwrap().is_none());
-        store
-            .save_extension_activation(project, &active, original.revision, &policy)
-            .unwrap();
-        drop(store);
-        let store = Store::open(&db).unwrap();
-        assert_eq!(
-            store.extension_record(project, "control.skills").unwrap(),
-            Some(active.clone())
-        );
-        assert_eq!(store.load_execution_policy(project).unwrap(), Some(policy));
-        assert!(store
-            .extension_record(other, "control.skills")
-            .unwrap()
-            .is_none());
-        let previous = active.revision;
-        active.active = false;
-        active.approval_binding = None;
-        active.revision = uuid::Uuid::new_v4();
-        store
-            .save_extension_record(project, &active, Some(previous))
-            .unwrap();
-        drop(store);
-        let store = Store::open(&db).unwrap();
-        assert_eq!(
-            store.extension_record(project, "control.skills").unwrap(),
-            Some(active)
-        );
-    }
-}
-
 impl Store {
     /// The runtime has consumed a current exact owner proof. Commit activation
     /// and its capability policy together, or leave both unchanged.
@@ -261,5 +171,95 @@ impl Store {
             ));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argentum_domain::{
+        extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},
+        ApprovalMode, HarnessExecutionPolicy, SandboxScope, Sha256Digest,
+    };
+    #[test]
+    fn activation_is_atomic_revision_bound_and_survives_reopen_without_cross_project_access() {
+        let root = tempfile::tempdir().unwrap();
+        let ws = root.path().join("workspace");
+        std::fs::create_dir(&ws).unwrap();
+        let other = root.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        let db = root.path().join("store.sqlite3");
+        let store = Store::open(&db).unwrap();
+        let project = store.resolve_workspace(&ws).unwrap().snapshot.project.id;
+        let other = store.resolve_workspace(&other).unwrap().snapshot.project.id;
+        let original = ExtensionRecord {
+            definition: ExtensionDefinition {
+                namespace: "control.skills".into(),
+                package_root: ws.to_string_lossy().into_owned(),
+                package_sha256: Sha256Digest("a".repeat(64)),
+                source_id: "synthetic".into(),
+                source_revision: "v1".into(),
+                transport: ExtensionTransport::Skills,
+                allowed_tools: vec![],
+                resource_prefixes: vec![],
+                trust: ExtensionTrust::ReadOnlyInstructions,
+                image_scope: None,
+            },
+            revision: uuid::Uuid::new_v4(),
+            active: false,
+            approval_binding: None,
+        };
+        store
+            .save_extension_record(project, &original, None)
+            .unwrap();
+        let policy = HarnessExecutionPolicy {
+            profile_id: "custom".into(),
+            source_profile_id: None,
+            sandbox_scope: SandboxScope::WorkspaceWrite,
+            approval_mode: ApprovalMode::Always,
+            capability_enabled: std::collections::BTreeMap::from([(
+                "extension.external".into(),
+                true,
+            )]),
+        };
+        let mut active = original.clone();
+        active.revision = uuid::Uuid::new_v4();
+        active.active = true;
+        active.approval_binding = Some(Sha256Digest("b".repeat(64)));
+        assert!(store
+            .save_extension_activation(project, &active, uuid::Uuid::new_v4(), &policy)
+            .is_err());
+        assert_eq!(
+            store.extension_record(project, "control.skills").unwrap(),
+            Some(original.clone())
+        );
+        assert!(store.load_execution_policy(project).unwrap().is_none());
+        store
+            .save_extension_activation(project, &active, original.revision, &policy)
+            .unwrap();
+        drop(store);
+        let store = Store::open(&db).unwrap();
+        assert_eq!(
+            store.extension_record(project, "control.skills").unwrap(),
+            Some(active.clone())
+        );
+        assert_eq!(store.load_execution_policy(project).unwrap(), Some(policy));
+        assert!(store
+            .extension_record(other, "control.skills")
+            .unwrap()
+            .is_none());
+        let previous = active.revision;
+        active.active = false;
+        active.approval_binding = None;
+        active.revision = uuid::Uuid::new_v4();
+        store
+            .save_extension_record(project, &active, Some(previous))
+            .unwrap();
+        drop(store);
+        let store = Store::open(&db).unwrap();
+        assert_eq!(
+            store.extension_record(project, "control.skills").unwrap(),
+            Some(active)
+        );
     }
 }
