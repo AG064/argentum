@@ -56,10 +56,12 @@ implementations to expose through an ungoverned Node runtime.
 ## Track B: shared-platform capability and personal replacement (NEXT01 onward)
 
 NEXT01's optional governed extension/browser implementation remains separate
-from the RELEASE01 core RC. Its offline controls and supplemental contribution
-checks do not erase the frozen live `goal_deadline_exceeded` outcome. No
-successful final completion, full visual acceptance or resolved final usage is
-claimed.
+from the RELEASE01 core RC. Its packaged successor and supplemental contribution
+checks do not erase the frozen live `goal_deadline_exceeded` outcome. One exact
+historical reservation was owner-accepted without inventing provider usage.
+The separate native continuation also failed at its unchanged deadline and left
+a new missing-usage hold. The subsequent handoff repair is offline-qualified,
+not a successful live completion or full visual-acceptance claim.
 See [the retained NEXT01 acceptance record](docs/NEXT01_ACCEPTANCE.md).
 The [separate NEXT01 draft](https://github.com/AG064/argentum/pull/681) remains
 feature review, not core release inclusion.

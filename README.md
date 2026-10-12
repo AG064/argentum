@@ -48,8 +48,10 @@ Windows normal/build dependency selection excludes Slint, the desktop host,
 Android JNI/llama.cpp and external MCP; packaging selects this same CLI target
 without optional features. See [the verified boundaries](docs/architecture.md).
 NEXT01 adds an explicit `extensions` feature in this development branch, not
-in the RELEASE01 core package. Its frozen live attempt failed at the deadline;
-see [NEXT01 acceptance](docs/NEXT01_ACCEPTANCE.md).
+in the RELEASE01 core package. The packaged successor passes offline native
+and browser controls, but live completion is not qualified: the original and
+separate continuation both hit their deadlines, and a new usage hold remains.
+See [the dated NEXT01 evidence](docs/NEXT01_ACCEPTANCE.md).
 
 ## First run
 

@@ -36,6 +36,12 @@ before the coding round, time or context reserve is exhausted. A context handoff
 is scheduled only while the complete request still fits. It never discards
 mandatory exchanges, repairs old digests or overrides a capacity failure.
 
+Coding and feedback reserve a bounded third of the admitted per-run time,
+rounded up and capped at 90 seconds, for a report-only turn carrying unseen
+tool feedback and owned settlement. This does not increase any deadline,
+request allowance or output limit. A provider can still exceed the remaining
+time; missing terminal usage remains a hold, not a fabricated settlement.
+
 The model reports a bounded JSON work status: `ready`, `continue` or `blocked`,
 an explicit `remaining` list, and an optional short summary. This report is an
 untrusted work claim. Prose, plans, malformed reports and unfinished work cannot
