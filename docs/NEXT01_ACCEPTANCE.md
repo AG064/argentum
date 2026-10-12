@@ -155,6 +155,19 @@ suite passed against the final packaged executable, with format and feature
 strict lint. The failed source run is retained; a later qualification is
 separate evidence, not a relabelled pass.
 
+The next source run `38210569405` passed the corrected 89-case HTTP/CLI target
+and the hosted extension/browser and process-boundary jobs. It failed two
+unchanged provider publication-barrier controls that had passed in the prior
+run. Those controls raced real I/O/ACL setup against 100/250 ms fixture
+deadlines. Their test-only correction uses the existing production policy to
+reach the actual barrier under a bounded watchdog, then drives expiry with a
+paused test clock. Time resumes for the original real post-return observation.
+No production deadline or publication code changed. All 188 provider tests
+passed with one existing ignored case; seven focused controls passed twelve
+repetitions. The test-clock dependency is dev-only and absent from the inspected
+normal CLI graph. The executable remains unchanged; both failed CI runs remain
+retained, and subsequent hosted qualification is separate evidence.
+
 ### Separate native continuation and acceptance
 
 The owner activated only the changed exact browser definition in a real local

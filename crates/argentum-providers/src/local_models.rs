@@ -1459,7 +1459,9 @@ mod tests {
         let directory = tempfile::tempdir().expect("fixture directory");
         let target = directory.path().join(offer.filename);
         let gate = PublicationGate::new();
-        let mut policy = fixture_policy();
+        // This control tests the atomic publication gap, not a 250ms transfer.
+        // Use the actual production envelope and a bounded barrier watchdog.
+        let mut policy = DownloadPolicy::model();
         policy.hooks.publication_gate = Some(gate.clone());
         let server = spawn_download_server(vec![bytes.to_vec()], Duration::ZERO);
         let endpoint = server.endpoint.clone();
@@ -1477,7 +1479,7 @@ mod tests {
             }
         });
 
-        tokio::time::timeout(Duration::from_secs(1), gate.wait_until_reached())
+        tokio::time::timeout(Duration::from_secs(30), gate.wait_until_reached())
             .await
             .expect("download reached the pre-publication barrier");
         std::fs::write(&target, b"created in final gap").expect("concurrent target bytes");
@@ -1504,8 +1506,11 @@ mod tests {
         let directory = tempfile::tempdir().expect("fixture directory");
         let target = directory.path().join(offer.filename);
         let gate = PublicationGate::new();
-        let mut policy = fixture_policy();
-        policy.total_timeout = Duration::from_millis(100);
+        // Let real loopback I/O and owner-ACL setup reach the intended boundary
+        // before driving the actual deadline with the test-only Tokio clock.
+        let mut policy = DownloadPolicy::model();
+        let total_timeout = policy.total_timeout;
+        let timeout_ms = total_timeout.as_millis() as u64;
         policy.hooks.publication_gate = Some(gate.clone());
         let server = spawn_download_server(vec![bytes.to_vec()], Duration::ZERO);
         let endpoint = server.endpoint.clone();
@@ -1523,16 +1528,25 @@ mod tests {
             }
         });
 
-        tokio::time::timeout(Duration::from_secs(1), gate.wait_until_reached())
+        tokio::time::timeout(Duration::from_secs(30), gate.wait_until_reached())
             .await
             .expect("download reached the pre-publication barrier");
-        let result = download.await.expect("deadline download task");
+        tokio::time::pause();
+        tokio::time::sleep(total_timeout).await;
+        let result = tokio::time::timeout(Duration::from_secs(1), download)
+            .await
+            .expect("the expired download settled")
+            .expect("deadline download task");
 
         assert!(matches!(
             result,
-            Err(ProviderError::LocalModelDownloadDeadline { timeout_ms: 100 })
+            Err(ProviderError::LocalModelDownloadDeadline { timeout_ms: observed })
+                if observed == timeout_ms
         ));
         assert!(!target.exists(), "deadline returned after publication");
+        // Keep the post-return observation in wall time, as before, so a late
+        // blocking effect cannot hide behind the paused test clock.
+        tokio::time::resume();
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(
             !target.exists(),
