@@ -28,7 +28,6 @@ jobs:
   stale-issues:
     name: Mark Stale Issues
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event.inputs.operation != 'close-only'
     steps:
       - name: Mark stale issues
         uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899
@@ -46,8 +45,10 @@ jobs:
             If the issue is indeed stale, it will be closed automatically in the next 14 days.
 
             Thanks for helping keep things organized! 🙏
-          days-before-stale: 60
-          days-before-close: 14
+          days-before-issue-stale: ${{ github.event.inputs.operation == 'close-only' && -1 || 60 }}
+          days-before-issue-close: 14
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
           only-labels: ""
           remove-stale-when-updated: true
           debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
@@ -73,38 +74,18 @@ jobs:
             let us know and we'll give it the attention it deserves.
 
             If this PR is no longer being pursued, please feel free to close it.
-            It will be closed automatically in 14 days if there's no further activity.
+            This workflow does not automatically close pull requests.
 
             Thanks for your contributions! 🙏
-          days-before-stale: 30
-          days-before-close: 14
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          days-before-pr-stale: 30
+          days-before-pr-close: -1
+          exempt-draft-pr: true
           remove-stale-when-updated: true
           debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
           operations-per-run: 100
-          start-date: "2024-01-01Z00:00:00Z" # Don't mark old PRs as stale
-
-  close-stale:
-    name: Close Stale Items
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event.inputs.operation == 'close-only' || github.event.inputs.operation == 'full'
-    steps:
-      - name: Close stale issues
-        uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-issue-label: "status: stale"
-          close-issue-message: |
-            👋 This issue has been automatically closed because it has been stale
-            for 14 days with no activity.
-
-            If you believe this was closed in error or you want to revive the discussion,
-            please feel free to reopen it with a comment.
-
-            Thanks for understanding! The Argentum team
-          days-before-stale: 0
-          days-before-close: 0
-          debug-only: ${{ github.event.inputs.operation == 'dry-run' }}
-          operations-per-run: 50
+          start-date: "2024-01-01T00:00:00Z"
 
   stale-summary:
     name: Stale Summary
