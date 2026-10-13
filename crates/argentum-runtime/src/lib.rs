@@ -4826,9 +4826,9 @@ impl RuntimeService {
                 .filter(|descriptor| {
                     harness.capability_is_enabled(policy, &descriptor.capability_id)
                 })
-                // The verification profile keeps execution.argv enabled only
-                // as the registered verifier dependency. It is not a model
-                // facing arbitrary-process tool in that profile.
+                // Retained verification-derived policies may still have argv
+                // enabled from the former registry dependency. Never expose
+                // arbitrary processes through that fixed-verification scope.
                 .filter(|descriptor| {
                     let fixed_verification_scope = policy.profile_id == "verification"
                         || policy.source_profile_id.as_deref() == Some("verification");

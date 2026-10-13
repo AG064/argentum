@@ -3,11 +3,13 @@ param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$TargetDirectory = '',
     [ValidateRange(1, 8)][int]$Jobs = 1,
-    [switch]$Extensions
+    [switch]$Extensions,
+    [switch]$DesktopControl
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'Windows MSVC packaging requires PowerShell 7 on Windows.' }
+if ($DesktopControl) { $Extensions = $true }
 $sourceRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not [IO.Path]::IsPathFullyQualified($OutputDirectory) -or
@@ -28,7 +30,7 @@ try {
     $cargo = (& cargo --version).Trim()
     New-Item -ItemType Directory -Path $output | Out-Null
     $targetArgs = @()
-    $featureArgs = if ($Extensions) { @('--features','argentum-cli/extensions') } else { @() }
+    $featureArgs = if ($DesktopControl) { @('--features','argentum-cli/desktop-control') } elseif ($Extensions) { @('--features','argentum-cli/extensions') } else { @() }
     if ($TargetDirectory) {
         if (-not [IO.Path]::IsPathFullyQualified($TargetDirectory)) { throw 'Target directory must be absolute.' }
         $targetArgs = @('--target-dir', [IO.Path]::GetFullPath($TargetDirectory))
@@ -49,7 +51,7 @@ try {
     $metadata = $metadataText | ConvertFrom-Json -Depth 100
     $cli = $metadata.packages | Where-Object name -eq 'argentum-cli'
     $version = $cli.version
-    $suffix = if ($Extensions) { '-extensions' } else { '' }
+    $suffix = if ($DesktopControl) { '-windows-desktop' } elseif ($Extensions) { '-extensions' } else { '' }
     $package = Join-Path $output "argentum-$version-windows-x64$suffix"
     New-Item -ItemType Directory -Path $package | Out-Null
     $targetRoot = if ($TargetDirectory) { [IO.Path]::GetFullPath($TargetDirectory) } else { $metadata.target_directory }
@@ -77,6 +79,16 @@ try {
         }
         # Node, browser binaries, profiles, definitions and state are separate
         # reviewed owner preparation, never silently bundled or started.
+    }
+    if ($DesktopControl) {
+        $desktop = Join-Path $package 'extensions/windows-desktop'
+        New-Item -ItemType Directory -Path $desktop -Force | Out-Null
+        & (Join-Path $sourceRoot 'extensions/windows-desktop/build.ps1') -OutputDirectory $desktop | Out-Null
+        foreach ($relative in @('Adapter.cs','build.ps1')) {
+            Copy-Item -LiteralPath (Join-Path $sourceRoot "extensions/windows-desktop/$relative") -Destination (Join-Path $desktop $relative)
+        }
+        # No application, owner configuration, document, screen, account or
+        # campaign state is part of this optional package.
     }
     # Retain actual license/notice bytes for the selected CLI dependency closure.
     # Build dependencies are included conservatively; dev-only and unrelated UI
@@ -151,8 +163,9 @@ try {
         repository='https://github.com/AG064/argentum'; commit=$commit; tree=$tree
         target='x86_64-pc-windows-msvc'; rustc=$rustc; cargo=$cargo
         build_arguments=@('build','-p','argentum-cli','--bin','argentum','--release','--locked','-j',[string]$Jobs) + $featureArgs
-        features=if ($Extensions) { @('extensions') } else { @() }
+        features=if ($DesktopControl) { @('desktop-control','extensions') } elseif ($Extensions) { @('extensions') } else { @() }
         optional_browser_adapter_included=[bool]$Extensions
+        optional_windows_desktop_adapter_included=[bool]$DesktopControl
         profile_environment=@{CARGO_PROFILE_RELEASE_DEBUG='0';CARGO_INCREMENTAL='0'}
         executable_sha256=$binaryHash; signed=$false; published=$false
         credentials_included=$false; stores_included=$false; models_included=$false

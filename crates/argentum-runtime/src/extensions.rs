@@ -1,7 +1,7 @@
 //! Optional extension broker using the existing store, authority and lifecycle.
 use argentum_domain::extensions::{
-    ExtensionBrowserReport, ExtensionOperationReceipt, ExtensionReceiptOutcome,
-    ExtensionReceiptStage,
+    DesktopFailureReason, ExtensionBrowserReport, ExtensionDesktopReport,
+    ExtensionOperationReceipt, ExtensionReceiptOutcome, ExtensionReceiptStage,
 };
 use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionOperation, ExtensionRecord, ExtensionTransport},
@@ -91,6 +91,94 @@ fn browser_report(value: &serde_json::Value) -> Option<ExtensionBrowserReport> {
             .cloned()
             .and_then(|v| serde_json::from_value(v).ok()),
     })
+}
+
+fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
+    let value = value
+        .get("structuredContent")
+        .filter(|value| value.is_object())?;
+    let reason = value.get("reason").and_then(serde_json::Value::as_str);
+    let failure = reason.map(|reason| match reason {
+        "stale_observation_reobserve"
+        | "stale_element_or_geometry_reobserve"
+        | "stale_image_observation" => DesktopFailureReason::StaleObservation,
+        "owner_input_takeover"
+        | "foreground_takeover_paused"
+        | "owner_takeover_paused"
+        | "owner_input_during_launch_paused" => DesktopFailureReason::OwnerTakeover,
+        "primitive_action_limit"
+        | "primitive_action_limit_no_partial_batch"
+        | "capture_geometry_capacity"
+        | "image_byte_capacity" => DesktopFailureReason::Capacity,
+        "provider_timeout_effect_uncertain_connection_retired"
+        | "input_timeout_effect_uncertain"
+        | "partial_text_effect_uncertain"
+        | "owned_cleanup_identity_uncertain"
+        | "owned_cleanup_timeout_uncertain"
+        | "owned_cleanup_failure_uncertain_connection_retired" => {
+            DesktopFailureReason::UncertainEffect
+        }
+        "pattern_unavailable_no_implicit_fallback"
+        | "owned_window_unavailable_no_attach"
+        | "capture_scope_unavailable"
+        | "capture_unavailable" => DesktopFailureReason::Unavailable,
+        _ => DesktopFailureReason::Denied,
+    });
+    Some(ExtensionDesktopReport {
+        context_id: value
+            .get("context_id")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|id| Uuid::parse_str(id).ok()),
+        observation_generation: value.get("generation").and_then(serde_json::Value::as_u64),
+        process_id: value
+            .get("process_id")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|id| u32::try_from(id).ok()),
+        process_creation: value
+            .get("process_creation")
+            .and_then(serde_json::Value::as_u64),
+        primitive_actions: value
+            .get("actions")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| *n <= 1024),
+        api_returned_actions: value
+            .get("api_returned_actions")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|n| {
+                value
+                    .get("actions")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some_and(|reserved| reserved <= 1024 && *n <= reserved)
+            }),
+        api_returned: value
+            .get("api_returned")
+            .and_then(serde_json::Value::as_bool),
+        closed: value.get("closed").and_then(serde_json::Value::as_bool),
+        failure,
+    })
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn desktop_receipts_do_not_project_private_text_or_false_verification() {
+    let report = desktop_report(&json!({"structuredContent":{"generation":3,"actions":17,"api_returned_actions":12,"process_id":42,"api_returned":true,"observed_outcome_verified":true,"text":"PRIVATE_DOCUMENT_CANARY","reason":"provider_timeout_effect_uncertain_connection_retired"}})).unwrap();
+    assert_eq!(report.primitive_actions, Some(17));
+    assert_eq!(report.api_returned_actions, Some(12));
+    assert_eq!(report.failure, Some(DesktopFailureReason::UncertainEffect));
+    let encoded = serde_json::to_string(&report).unwrap();
+    assert!(!encoded.contains("PRIVATE_DOCUMENT_CANARY"));
+    assert!(!encoded.contains("observed_outcome_verified"));
+    let invalid = desktop_report(&json!({"structuredContent":{"actions":1025,"process_id":u64::MAX,"reason":"PRIVATE_ERROR_CANARY"}})).unwrap();
+    assert!(invalid.primitive_actions.is_none() && invalid.process_id.is_none());
+    assert_eq!(invalid.failure, Some(DesktopFailureReason::Denied));
+    let cleanup = desktop_report(&json!({"structuredContent":{"reason":"owned_cleanup_failure_uncertain_connection_retired"}})).unwrap();
+    assert_eq!(cleanup.failure, Some(DesktopFailureReason::UncertainEffect));
+    assert!(
+        desktop_report(&json!({"structuredContent":{"actions":2,"api_returned_actions":3}}))
+            .unwrap()
+            .api_returned_actions
+            .is_none()
+    );
 }
 
 #[cfg(all(test, windows))]
@@ -727,9 +815,27 @@ impl ExtensionExecutor for ExtensionOwner {
             .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?
             .get(&request.call_id)
             .and_then(|receipt| receipt.server_report.clone());
+        receipt.desktop_report = self
+            .receipts
+            .lock()
+            .map_err(|_| ToolError::Execution("extension_receipt_state_unavailable".into()))?
+            .get(&request.call_id)
+            .and_then(|receipt| receipt.desktop_report.clone());
         if let Ok(result) = &result {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&result.output) {
-                receipt.server_report = browser_report(&value);
+                use argentum_domain::extensions::ExtensionOperationKind as K;
+                if matches!(
+                    receipt.kind,
+                    K::DesktopLaunch
+                        | K::DesktopObserve
+                        | K::DesktopAction
+                        | K::DesktopScreenshot
+                        | K::DesktopClose
+                ) {
+                    receipt.desktop_report = desktop_report(&value);
+                } else {
+                    receipt.server_report = browser_report(&value);
+                }
             }
         }
         self.receipts
@@ -889,6 +995,31 @@ impl ExtensionOwner {
                         .get_mut(&request.call_id)
                     {
                         receipt.server_report = browser_report(&result);
+                        if record.definition.trust == argentum_domain::extensions::ExtensionTrust::ReviewedWindowsApplication {
+                            receipt.desktop_report = desktop_report(&result);
+                        }
+                    }
+                    if record.definition.trust
+                        == argentum_domain::extensions::ExtensionTrust::ReviewedWindowsApplication
+                        && desktop_report(&result).is_some_and(|report| {
+                            report.failure == Some(DesktopFailureReason::UncertainEffect)
+                        })
+                    {
+                        let mut held = record.clone();
+                        held.active = false;
+                        held.approval_binding = None;
+                        held.revision = Uuid::new_v4();
+                        self.store
+                            .save_extension_record(self.project, &held, Some(record.revision))
+                            .map_err(|_| {
+                                ToolError::Execution(
+                                    "desktop_uncertain_effect_hold_could_not_be_recorded".into(),
+                                )
+                            })?;
+                        return Err(ToolError::ExtensionFailure {
+                            code: "desktop_effect_uncertain_connection_retired",
+                            effects_unknown: true,
+                        });
                     }
                     let detail = serde_json::to_string(&result)
                         .unwrap_or_else(|_| "result unavailable".into());
@@ -900,7 +1031,12 @@ impl ExtensionOwner {
                         detail[..end].to_owned(),
                     ));
                 }
-                if record.definition.image_scope.is_some() && handle.name == "browser_open" {
+                if record.definition.image_scope.is_some()
+                    && (handle.name == "browser_open"
+                        || (handle.name == "desktop_launch"
+                            && record.definition.trust
+                                == argentum_domain::extensions::ExtensionTrust::ReviewedWindowsApplication))
+                {
                     let image_context = result
                         .get("structuredContent")
                         .and_then(|value| value.get("context_id"))
@@ -1068,7 +1204,8 @@ impl super::RuntimeService {
         else {
             return Ok(vec![]);
         };
-        if handle.get("name").and_then(serde_json::Value::as_str) != Some("browser_screenshot") {
+        let image_tool = handle.get("name").and_then(serde_json::Value::as_str);
+        if image_tool != Some("browser_screenshot") && image_tool != Some("desktop_screenshot") {
             return Ok(vec![]);
         }
         let owner = self.extension_owner();

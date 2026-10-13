@@ -24,6 +24,121 @@ fn json(output: Output) -> serde_json::Value {
 }
 
 #[test]
+fn fixed_verification_survives_generic_argv_disable_and_fresh_process_readback() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let database_dir = tempfile::tempdir().expect("database directory");
+    let database = database_dir.path().join("argentum.db");
+    // Supported trusted owner API only in this disposable test store. Production
+    // activation and project-runner approval are not simulated by this fixture.
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let mut config = argentum_cli::HostConfig::in_memory(workspace.path());
+        config.database = Some(database.clone());
+        let mut host = argentum_cli::CommandHost::start(config).unwrap();
+        let owner = host.local_handle();
+        owner
+            .dispatch(argentum_domain::AppCommand::SelectExecutionProfile {
+                profile_id: "verification".into(),
+            })
+            .await
+            .unwrap();
+        // Emulate a retained policy from before the obsolete dependency repair.
+        owner
+            .dispatch(argentum_domain::AppCommand::SetHarnessCapabilityEnabled {
+                capability_id: "execution.argv".into(),
+                enabled: true,
+            })
+            .await
+            .unwrap();
+        host.shutdown().await.unwrap();
+    });
+    // The actual CLI command that previously failed, in a new process.
+    json(run_cli(
+        workspace.path(),
+        &database,
+        &["harness", "capability", "execution.argv", "disable"],
+    ));
+    let policy = json(run_cli(
+        workspace.path(),
+        &database,
+        &["permissions", "list"],
+    ));
+    assert_eq!(policy["selected"]["profile_id"], "custom");
+    assert_eq!(
+        policy["selected"]["capability_enabled"]["execution.argv"],
+        false
+    );
+    assert_eq!(
+        policy["selected"]["capability_enabled"]["verification.runner"],
+        true
+    );
+    let tools = json(run_cli(workspace.path(), &database, &["tool", "list"]));
+    let tools = tools["tools"].as_array().unwrap();
+    for id in [
+        "verify",
+        "start_verification",
+        "poll_process_job",
+        "cancel_process_job",
+    ] {
+        assert!(tools
+            .iter()
+            .any(|tool| tool["id"] == id && tool["enabled"] == true));
+    }
+    for id in ["execute_argv", "execute_shell"] {
+        assert!(tools
+            .iter()
+            .any(|tool| tool["id"] == id && tool["enabled"] == false));
+    }
+    let retained = [
+        "extension.external",
+        "verification.runner",
+        "tool.read-text",
+    ];
+    let capabilities = tools
+        .iter()
+        .map(|tool| tool["capability_id"].as_str().unwrap())
+        .filter(|id| !retained.contains(id))
+        .collect::<std::collections::BTreeSet<_>>();
+    // Match the owner script's restriction sequence through fresh CLI processes.
+    for id in capabilities {
+        json(run_cli(
+            workspace.path(),
+            &database,
+            &["harness", "capability", id, "disable"],
+        ));
+    }
+    let restricted = json(run_cli(workspace.path(), &database, &["tool", "list"]));
+    let restricted = restricted["tools"].as_array().unwrap();
+    assert!(restricted
+        .iter()
+        .filter(|tool| tool["enabled"] == true)
+        .all(|tool| { retained.contains(&tool["capability_id"].as_str().unwrap()) }));
+    for id in ["verify", "read_text"] {
+        assert!(restricted
+            .iter()
+            .any(|tool| tool["id"] == id && tool["enabled"] == true));
+    }
+    let grants = json(run_cli(
+        workspace.path(),
+        &database,
+        &["permissions", "grants"],
+    ));
+    assert!(grants["grants"].as_array().unwrap().is_empty());
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let mut config = argentum_cli::HostConfig::in_memory(workspace.path());
+        config.database = Some(database.clone());
+        let mut host = argentum_cli::CommandHost::start(config).unwrap();
+        assert_eq!(
+            host.execution_policy()
+                .unwrap()
+                .source_profile_id
+                .as_deref(),
+            Some("verification")
+        );
+        host.shutdown().await.unwrap();
+    });
+}
+
+#[test]
 fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
     let workspace = tempfile::tempdir().expect("workspace");
     let database_dir = tempfile::tempdir().expect("database directory");
@@ -31,7 +146,7 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
 
     let tools = json(run_cli(workspace.path(), &database, &["tool", "list"]));
     let tools = tools["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 23);
+    assert_eq!(tools.len(), 23 + usize::from(cfg!(feature = "extensions")));
     for id in [
         "start_verification",
         "poll_process_job",

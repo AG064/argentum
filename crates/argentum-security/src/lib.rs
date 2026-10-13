@@ -959,6 +959,23 @@ mod tests {
                 .expect("arbitrary process decision"),
             AuthorizationDecision::Prompt
         );
+
+        let mut restricted_verification = customized_verification.clone();
+        restricted_verification
+            .policy
+            .capability_enabled
+            .insert("execution.argv".into(), false);
+        assert_eq!(
+            ExecutionAuthorizer::authorize(&restricted_verification, &[])
+                .expect("fixed verifier without generic argv"),
+            AuthorizationDecision::AllowedByPolicy
+        );
+        restricted_verification.target = "fixed runners: project:next02-artifact".into();
+        assert_eq!(
+            ExecutionAuthorizer::authorize(&restricted_verification, &[])
+                .expect("project verifier still needs exact approval"),
+            AuthorizationDecision::Prompt
+        );
     }
 
     #[test]

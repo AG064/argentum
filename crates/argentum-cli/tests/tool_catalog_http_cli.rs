@@ -1138,8 +1138,7 @@ impl CliFixture {
                 .await
                 .unwrap();
             for tool in host.tool_descriptors() {
-                // execution.argv remains the fixed-verifier dependency. The
-                // verification source profile filters its generic model tool.
+                // Fixed verification must not depend on generic argv exposure.
                 if !matches!(
                     tool.id.as_str(),
                     "read_text"
@@ -1150,7 +1149,6 @@ impl CliFixture {
                         | "start_verification"
                         | "poll_process_job"
                         | "cancel_process_job"
-                        | "execute_argv"
                 ) {
                     owner
                         .dispatch(AppCommand::SetHarnessCapabilityEnabled {
@@ -1161,6 +1159,16 @@ impl CliFixture {
                         .unwrap();
                 }
             }
+            let policy = host.execution_policy().unwrap();
+            assert_eq!(
+                policy.capability_enabled.get("execution.argv"),
+                Some(&false)
+            );
+            assert_eq!(
+                policy.capability_enabled.get("verification.runner"),
+                Some(&true)
+            );
+            assert_eq!(policy.source_profile_id.as_deref(), Some("verification"));
             host.shutdown().await.unwrap();
         });
     }
@@ -1183,7 +1191,7 @@ impl CliFixture {
                 .into_iter()
                 .map(|tool| tool.capability_id)
                 .collect::<Vec<_>>();
-            // Verification depends on argv; disable the dependent first.
+            // Stable ordering, independent of generic-command enablement.
             tool_caps.sort_by_key(|id| usize::from(id != "verification.runner"));
             for capability_id in tool_caps {
                 if !matches!(capability_id.as_str(), "tool.read-text" | "tool.edit-text") {

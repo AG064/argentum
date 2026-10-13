@@ -993,7 +993,7 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "Verification runners",
             HarnessCapabilityKind::Review,
             "Fixed fmt, check, test, and clippy runners produce durable evidence.",
-            vec!["execution.argv"],
+            vec![],
         ),
         optional_rust_check_capability(),
     ]
@@ -1281,12 +1281,7 @@ fn verification_execution_profile() -> ExecutionProfileRegistration {
     for enabled in profile.capability_enabled.values_mut() {
         *enabled = false;
     }
-    for capability_id in [
-        "tool.read-text",
-        "tool.edit-text",
-        "execution.argv",
-        "verification.runner",
-    ] {
+    for capability_id in ["tool.read-text", "tool.edit-text", "verification.runner"] {
         profile
             .capability_enabled
             .insert(capability_id.to_owned(), true);
@@ -1715,6 +1710,32 @@ mod tests {
     }
 
     #[test]
+    fn fixed_verification_is_independent_of_generic_argv_enablement() {
+        let registry = HarnessRegistry::built_in().expect("registry");
+        for profile_id in ["verification", "developer"] {
+            let policy = registry
+                .apply_execution_profile(&HarnessExecutionPolicy::default(), profile_id)
+                .expect("profile");
+            let policy = registry
+                .set_capability_enabled(&policy, "execution.argv", false)
+                .expect("disable arbitrary commands without disabling verification");
+            assert!(registry.capability_is_enabled(&policy, "verification.runner"));
+            assert!(!registry.capability_is_enabled(&policy, "execution.argv"));
+            assert_eq!(policy.source_profile_id.as_deref(), Some(profile_id));
+            let restored = registry.reconcile_execution_policy(&policy);
+            assert_eq!(restored, policy);
+            let disabled = registry
+                .set_capability_enabled(&restored, "verification.runner", false)
+                .expect("disable verification");
+            let enabled = registry
+                .set_capability_enabled(&disabled, "verification.runner", true)
+                .expect("enable fixed verification without generic commands");
+            assert!(registry.capability_is_enabled(&enabled, "verification.runner"));
+            assert!(!registry.capability_is_enabled(&enabled, "execution.argv"));
+        }
+    }
+
+    #[test]
     fn malformed_execution_policy_is_bounded_to_registered_configurable_capabilities() {
         let registry = HarnessRegistry::built_in().expect("registry");
         let mut policy = HarnessExecutionPolicy {
@@ -1790,7 +1811,7 @@ mod tests {
                 argentum_domain::SandboxScope::WorkspaceWrite,
                 argentum_domain::ApprovalMode::Never,
                 false,
-                true,
+                false,
             ),
             (
                 "full-access",

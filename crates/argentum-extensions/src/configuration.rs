@@ -66,6 +66,13 @@ pub fn admit(
     definition: &ExtensionDefinition,
     workspace: &Path,
 ) -> Result<AdmittedDefinition, ConnectionError> {
+    if definition.trust == ExtensionTrust::ReviewedWindowsApplication
+        && (!cfg!(feature = "desktop-control") || !cfg!(windows))
+    {
+        return Err(rejected(
+            "windows_application_control_not_implemented_in_this_build",
+        ));
+    }
     let parts: Vec<_> = definition.namespace.split('.').collect();
     if parts.len() != 2
         || parts.iter().any(|part| !package::valid_id(part))
@@ -92,7 +99,11 @@ pub fn admit(
         if !Path::new(&scope.directory).is_absolute()
             || scope.origins.is_empty()
             || scope.origins.len() > 16
-            || definition.trust != ExtensionTrust::ReviewedCurrentUserCode
+            || !matches!(
+                definition.trust,
+                ExtensionTrust::ReviewedCurrentUserCode
+                    | ExtensionTrust::ReviewedWindowsApplication
+            )
         {
             return Err(rejected(
                 "image_scope_requires_explicit_owned_directory_and_trusted_producer",
@@ -174,8 +185,11 @@ pub fn admit(
             environment,
             inputs,
         } => {
-            if definition.trust != ExtensionTrust::ReviewedCurrentUserCode
-                || !Path::new(program).is_absolute()
+            if !matches!(
+                definition.trust,
+                ExtensionTrust::ReviewedCurrentUserCode
+                    | ExtensionTrust::ReviewedWindowsApplication
+            ) || !Path::new(program).is_absolute()
                 || !digest_valid(program_sha256)
                 || inputs.len() > 4096
             {

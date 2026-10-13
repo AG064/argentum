@@ -36,6 +36,9 @@ pub struct ExtensionImageScope {
 pub enum ExtensionTrust {
     ReadOnlyInstructions,
     ReviewedCurrentUserCode,
+    /// Optional Windows application adapter. Exact activation is independent
+    /// of a browser or other reviewed-code connection.
+    ReviewedWindowsApplication,
     ReviewedRemoteService,
 }
 
@@ -120,6 +123,11 @@ pub enum ExtensionOperationKind {
     BrowserScreenshot,
     BrowserDiagnostics,
     BrowserClose,
+    DesktopLaunch,
+    DesktopObserve,
+    DesktopAction,
+    DesktopScreenshot,
+    DesktopClose,
 }
 
 impl ExtensionOperation {
@@ -140,6 +148,11 @@ impl ExtensionOperation {
                 Some("browser_screenshot") => K::BrowserScreenshot,
                 Some("browser_diagnostics") => K::BrowserDiagnostics,
                 Some("browser_close") => K::BrowserClose,
+                Some("desktop_launch") => K::DesktopLaunch,
+                Some("desktop_observe") => K::DesktopObserve,
+                Some("desktop_action") => K::DesktopAction,
+                Some("desktop_screenshot") => K::DesktopScreenshot,
+                Some("desktop_close") => K::DesktopClose,
                 _ => K::Invoke,
             },
         }
@@ -222,6 +235,34 @@ pub struct ExtensionImageObservation {
     pub request_id: Uuid,
 }
 
+/// Producer-reported native observations, never host verification or authority.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionDesktopReport {
+    pub context_id: Option<Uuid>,
+    pub observation_generation: Option<u64>,
+    pub process_id: Option<u32>,
+    pub process_creation: Option<u64>,
+    pub primitive_actions: Option<u64>,
+    /// Producer-reported API returns, not observed application outcomes.
+    #[serde(default)]
+    pub api_returned_actions: Option<u64>,
+    pub api_returned: Option<bool>,
+    pub closed: Option<bool>,
+    pub failure: Option<DesktopFailureReason>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesktopFailureReason {
+    StaleObservation,
+    OwnerTakeover,
+    Capacity,
+    UncertainEffect,
+    Unavailable,
+    Denied,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionOperationReceipt {
@@ -237,6 +278,8 @@ pub struct ExtensionOperationReceipt {
     pub tool_dispatch_observed: Option<bool>,
     pub transport: Option<ExtensionTransportObservation>,
     pub server_report: Option<ExtensionBrowserReport>,
+    #[serde(default)]
+    pub desktop_report: Option<ExtensionDesktopReport>,
     pub image: Option<ExtensionImageObservation>,
     pub application_condition_verified: bool,
 }
@@ -255,6 +298,7 @@ impl ExtensionOperationReceipt {
             tool_dispatch_observed: None,
             transport: None,
             server_report: None,
+            desktop_report: None,
             image: None,
             application_condition_verified: false,
         }

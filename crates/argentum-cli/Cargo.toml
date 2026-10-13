@@ -13,6 +13,7 @@ path = "src/lib.rs"
 default = []
 local-llama-cpp = ["argentum-providers/local-llama-cpp"]
 extensions = ["argentum-runtime/extensions", "dep:argentum-extensions", "dep:argentum-execution"]
+desktop-control = ["extensions", "argentum-extensions/desktop-control"]
 
 [[bin]]
 name = "argentum"
