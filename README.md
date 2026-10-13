@@ -48,9 +48,11 @@ Windows normal/build dependency selection excludes Slint, the desktop host,
 Android JNI/llama.cpp and external MCP; packaging selects this same CLI target
 without optional features. See [the verified boundaries](docs/architecture.md).
 NEXT01 adds an explicit `extensions` feature in this development branch, not
-in the RELEASE01 core package. The packaged successor passes offline native
-and browser controls, but live completion is not qualified: the original and
-separate continuation both hit their deadlines, and a new usage hold remains.
+in the RELEASE01 core package. Its supported local-browser contribution reached
+post-recovery native completion on 2026-10-13, with current source verification,
+model acknowledgement and independent rendered acceptance. Historical deadline
+failures and estimated-usage dispositions remain recorded; this was assisted
+completion of retained work, not uninterrupted autonomy or general reliability.
 See [the dated NEXT01 evidence](docs/NEXT01_ACCEPTANCE.md).
 
 ## First run
@@ -97,7 +99,7 @@ Read [release status](docs/releases/0.1.0-rc.1.md),
 [migration](docs/MIGRATION_NATIVE.md), and [the two-track roadmap](ROADMAP.md).
 Browser automation, external plugins/MCP and general computer use are not
 included in the RELEASE01 core release. NEXT01's optional implementation and
-its incomplete live acceptance remain separate. No hidden telemetry upload, self-update,
+bounded post-recovery acceptance remain separate. No hidden telemetry upload, self-update,
 model-owned shell approval, push, merge or publication capability is added.
 
 ## Development and licensing

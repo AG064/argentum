@@ -279,3 +279,66 @@ resume until its new accounting hold has a separately supported owner decision.
 Local stdio remains reviewed current-user code, not an OS sandbox. No Windows
 desktop/computer-use implementation, release, signing or owner-adoption claim
 is made, and the separate desktop milestone remains inactive.
+
+## Post-recovery native completion, 2026-10-13
+
+The dated records above remain historical outcomes, not replacement successes.
+The original retained local-browser objective is now complete through normal
+`goal deliver`, using the same goal, source and secure Sol configuration. No
+supervisor edited the application, supplied per-action browser prompts, ran the
+missing native verifier or substituted its final answer.
+
+The accepted `06eb7a206...` executable was used before further changes. A
+concrete browser-contract gap then required fixed literal reload and Tab/Shift+Tab
+actions with fresh references and unchanged destinations. Its changed definition
+received exact owner activation. A subsequent actual CLI negative control also
+demonstrated that report scheduling ignored a smaller aggregate remainder. The
+narrow repair reads canonical same-goal/session/revision request/tool accounting;
+it changes no hard admission, cancellation, stale-write or completion guard.
+
+The separate optimized development executable has SHA-256
+`f7414ebb1de05247a667b7e9fb5477e50e5b63607ba6e1d8b28343e45141ea6d`, actually
+compiled from `25958335f232d98dab410f9f5a16d3f406a80d5c`. Its ZIP SHA-256 is
+`d8ecee40ee52504cc2be6f71a4ec1b9d3b021800c1eb350788cb9f056de52a89`.
+All 501 member hashes, System32 launch, 15 exact native controls and the actual
+synthetic-provider browser CLI control passed. Eight affected real browser
+controls, strict lint and format passed. Scoped review was parent-only.
+[Hosted source run 38319361184](https://github.com/AG064/argentum/actions/runs/38319361184)
+passed all three jobs. Later documentation does not create a new binary binding.
+
+The owner authorized request increments 128 to 160 to 192 and tool ceilings
+128 to 160 to 192. All consumption remained cumulative. Total time stayed 3600
+seconds, with the same per-run 32 requests, 128 tools and 295 seconds, unchanged
+model/output settings and no permission expansion. Missing terminal usage for
+three historical requests was retained through individually authorized full
+reservation dispositions: 312000, 400606 and 267297 estimated client units.
+Actual usage for those requests remains unknown, not measured billing truth.
+The last stream failure was EOF before its completed/usage event; its partial
+tools were not executed and its Failed outcome remains unchanged.
+
+The final native invocation used 14 requests and 164.328 conservative seconds,
+with implementation, current verification and feedback handoffs. Its new
+`project:pantry-source` receipt passed in 209 ms with exit zero and identical
+before/after input identity. The final model report acknowledged that receipt
+and correctly said it certifies syntax/protected structure, not browser semantics.
+Fresh-process status confirms current completion, a retired owner claim and no
+outstanding or unresolved units. Owned browser/preview work drained.
+
+Earlier same-source DOM, reload, focus and image evidence retains its actual run
+scope. One 43001-byte wide PNG showing purchased state and visible keyboard
+focus passed the actual image-input path on five completed requests. Wide/narrow
+captures and viewport observations from preceding retained runs were not relabelled
+as final-invocation captures. The final invocation obtained current diagnostics
+and an explicit successful browser close. Transport acceptance is not pixel
+comprehension; redacted action arguments and raw diagnostics are not reconstructed.
+Independent source and rendered acceptance passed after final settlement,
+including combined filters/empty state, purchase/reset reload persistence,
+low-stock display and no horizontal overflow at 1200 and 390 pixels.
+
+Final cumulative use: 165 physical generations, 1726.235 conservative foreground
+seconds, 1724.752 canonical seconds, 171 tool admissions and zero catalogues.
+The application source/protected inputs and original Git indexes are unchanged.
+All prior artifacts, failures and charge uncertainty remain retained. Live work
+stopped at completion rather than consuming the unused allowance. This closes
+the permitted NEXT01 local workflow only: no new release, signing, core RC
+inclusion, desktop/computer-use, owner adoption or full Codex-replacement claim.

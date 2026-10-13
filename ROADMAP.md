@@ -57,11 +57,12 @@ implementations to expose through an ungoverned Node runtime.
 
 NEXT01's optional governed extension/browser implementation remains separate
 from the RELEASE01 core RC. Its packaged successor and supplemental contribution
-checks do not erase the frozen live `goal_deadline_exceeded` outcome. One exact
-historical reservation was owner-accepted without inventing provider usage.
-The separate native continuation also failed at its unchanged deadline and left
-a new missing-usage hold. The subsequent handoff repair is offline-qualified,
-not a successful live completion or full visual-acceptance claim.
+checks do not erase the frozen live `goal_deadline_exceeded` outcomes. Exact
+owner-approved dispositions retain missing-usage reservations without inventing
+provider usage. The supported local-browser contribution reached post-recovery
+native completion on 2026-10-13 with current source verification and model
+feedback, plus independent rendered acceptance. This is assisted completion of
+retained work, not an uninterrupted run or a representative reliability rate.
 See [the retained NEXT01 acceptance record](docs/NEXT01_ACCEPTANCE.md).
 The [separate NEXT01 draft](https://github.com/AG064/argentum/pull/681) remains
 feature review, not core release inclusion.
@@ -121,5 +122,7 @@ resource use and latency reported separately. Freeze model/provider/settings
 and disclose feature differences. Exposed benchmark wins or passing synthetic
 checks cannot establish product superiority or personal replacement readiness.
 
-The next substantial implementation is [B1/B2 foundations](docs/NEXT_EXTENSION_BROWSER_MILESTONE.md).
-This roadmap does not authorize its live allowance or implementation during RELEASE01.
+The [B1/B2 brief](docs/NEXT_EXTENSION_BROWSER_MILESTONE.md) and dated NEXT01
+evidence preserve the delivered local profile and its limits. The separate
+Windows desktop milestone remains inactive until explicitly authorized. This
+roadmap neither starts NEXT02 nor adds a live allowance or core release feature.
