@@ -111,6 +111,8 @@ try:
     base.denied(f.act(state,select,'invoke'),'stale')
     report['controls'].append('stale_menu_reference_denied')
     state, doc = f.locate(lambda e: 'TextPatternIdentifiers.Pattern' in e['patterns'])
+    assert doc['targeted_text_input_enabled'] and 'TargetedTextInput' in doc['patterns']
+    assert doc['targeted_text_max_utf16']==256
     text = 'Native menu control\nUnicode: café 日本語\n'
     result = f.act(state,doc,'replace_selection',value=text)
     assert not result['isError'],result

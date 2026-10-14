@@ -66,6 +66,11 @@ Observe after each effect and every handoff. No implied fallback is performed.
 `replace_selection` is separately owner-enabled targeted text input. It accepts
 at most 256 UTF-16 code units, LF as one native Enter and Tab; CR and other
 control characters are rejected. It uses no clipboard or editor-internal API.
+When that unchanged route is enabled and its current HWND/class/focus checks pass,
+observation advertises `TargetedTextInput`, `targeted_text_input_enabled: true`
+and the 256-code-unit bound. It remains usable without UIA TextPattern, while an
+unfocused, unadmitted or disabled control advertises no such route. Capability
+metadata never grants authority and every effect repeats the actual validation.
 Every primitive is admitted against a durable finite campaign ledger before
 input; API-return counts and observed outcomes remain separate. A text batch
 reserves all its characters once, with interruptible per-character checks. An
