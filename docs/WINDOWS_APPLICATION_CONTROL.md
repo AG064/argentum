@@ -71,6 +71,22 @@ observation advertises `TargetedTextInput`, `targeted_text_input_enabled: true`
 and the 256-code-unit bound. It remains usable without UIA TextPattern, while an
 unfocused, unadmitted or disabled control advertises no such route. Capability
 metadata never grants authority and every effect repeats the actual validation.
+The submitted observation still passes the full structure/name/geometry guard
+before admission. Within one admitted text batch, each character uses a fresh
+same-target identity snapshot. This keeps PID, HWND, runtime ID, automation ID,
+class, role, geometry, focus, password and enabled-state checks while allowing
+the text's own accessible-name and unrelated chrome updates. It does not replace
+the observation, rebaseline user input, or authorize a changed target. Unavailable
+identity or a changed target remains an uncertain partial effect, not success.
+An unpredictable per-batch window property also detects target destruction and
+HWND recycling; it is removed at cleanup and is never model supplied. An admitted
+message can trigger application callbacks, so uncertain partial effects are not
+claimed to have left the application's internal state unchanged.
+For the explicitly admitted Scintilla control, LF and Tab use only targeted
+standard Enter/Tab down/up messages; ordinary text uses WM_CHAR. Both messages
+are reserved and counted as separate primitive API returns. No global keyboard
+state, shortcut combination or arbitrary key code is available. Native editor
+indentation/tab preferences still apply and API returns do not certify content.
 Every primitive is admitted against a durable finite campaign ledger before
 input; API-return counts and observed outcomes remain separate. A text batch
 reserves all its characters once, with interruptible per-character checks. An

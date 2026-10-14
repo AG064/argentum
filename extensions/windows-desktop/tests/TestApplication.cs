@@ -18,6 +18,24 @@ internal static class TestApplication
         var unexpected=new Button { Text="Unexpected dialog" };
         buttons.Controls.Add(save); buttons.Controls.Add(replace); buttons.Controls.Add(hang); buttons.Controls.Add(unexpected);
         form.Controls.Add(editor); form.Controls.Add(buttons);
+        bool textBatchControl=false;
+        editor.TextChanged+=(s,e)=> {
+            if(textBatchControl) return;
+            textBatchControl=true;
+            if(args.Contains("--text-batch-chrome")) {
+                buttons.Controls.Add(new Label { Text="Synthetic chrome update",Width=40 });
+            } else if(args.Contains("--text-batch-replace")) {
+                var bounds=editor.Bounds;
+                form.Controls.Remove(editor);editor.Dispose();
+                editor=new TextBox { Name="Document",Multiline=true,Dock=DockStyle.None,Bounds=bounds,Text="Untouched replacement" };
+                form.Controls.Add(editor);editor.BringToFront();editor.Focus();
+            } else if(args.Contains("--text-batch-focus")) {
+                var other=new TextBox { Name="Other target",Dock=DockStyle.Bottom };
+                form.Controls.Add(other);other.Focus();
+            } else if(args.Contains("--text-batch-move")) {
+                editor.Dock=DockStyle.None;editor.SetBounds(10,50,600,350);
+            }
+        };
         if(args.Contains("--password-probe")) {
             var password=new TextBox { AccessibleName="Synthetic password control",UseSystemPasswordChar=true,Text="NOT_A_REAL_SECRET",Dock=DockStyle.Bottom };
             form.Controls.Add(password);

@@ -39,6 +39,9 @@ namespace Argentum.WindowsDesktop
         [DllImport("user32.dll")] internal static extern IntPtr GetWindowDpiAwarenessContext(IntPtr window);
         [DllImport("user32.dll")] internal static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr window, uint flags);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] internal static extern bool SetProp(IntPtr window,string name,IntPtr value);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern IntPtr GetProp(IntPtr window,string name);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern IntPtr RemoveProp(IntPtr window,string name);
         [DllImport("user32.dll")] internal static extern IntPtr GetWindow(IntPtr window,uint command);
         [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
         [DllImport("user32.dll")] internal static extern bool GetWindowRect(IntPtr window, out Rect rect);
@@ -536,18 +539,48 @@ namespace Argentum.WindowsDesktop
                     var hwnd=new IntPtr(o.Element.Current.NativeWindowHandle);
                     if (o.Window!=root || hwnd==IntPtr.Zero || !OwnedWindow(Native.GetAncestor(hwnd,2)) || !o.Element.Current.HasKeyboardFocus || !Native.IsWindowEnabled(hwnd) || !config.TextControlClasses.Contains(o.Element.Current.ClassName)) throw new Denied("targeted_text_control_unavailable");
                     if (value.Length>256) throw new Denied("targeted_text_batch_capacity");
-                    if (ledger.Attempts+value.Length>config.MaximumActions) throw new Denied("primitive_action_limit_no_partial_batch");
+                    var admitted=o.Element.Current;
+                    var identityRequest=new CacheRequest { TreeScope=TreeScope.Element };
+                    foreach(var property in new[] { AutomationElement.RuntimeIdProperty, AutomationElement.ProcessIdProperty, AutomationElement.NativeWindowHandleProperty, AutomationElement.AutomationIdProperty, AutomationElement.ClassNameProperty, AutomationElement.ControlTypeProperty, AutomationElement.BoundingRectangleProperty, AutomationElement.HasKeyboardFocusProperty, AutomationElement.IsEnabledProperty, AutomationElement.IsOffscreenProperty, AutomationElement.IsPasswordProperty }) identityRequest.Add(property);
+                    string admittedId=admitted.AutomationId, admittedClass=admitted.ClassName;
+                    var admittedType=admitted.ControlType;
+                    int batchPrimitives=value.Sum(ch=>admittedClass=="Scintilla" && (ch=='\n' || ch=='\t')?2:1);
+                    if(ledger.Attempts+batchPrimitives>config.MaximumActions) throw new Denied("primitive_action_limit_no_partial_batch");
                     // Reserve the whole bounded batch before any input. Persist
                     // returned counts once at settlement rather than one HDD
                     // flush per character. Reservation is conservative: it is
                     // not a claim that every character was applied.
-                    ledger.ReserveBatch(value.Length,config.MaximumActions);
-                    try { foreach(char ch in value) {
-                        Foreground(); if (o.StructureEpoch!=Interlocked.Read(ref structureEpoch) || !o.RuntimeId.SequenceEqual(o.Element.GetRuntimeId()) || !o.Element.Current.HasKeyboardFocus || !Native.IsWindow(hwnd)) throw new Denied("partial_text_effect_uncertain");
+                    string windowTicket="Argentum.TextBatch."+Guid.NewGuid().ToString("N");
+                    var ticketValue=new IntPtr(1);
+                    if(!Native.SetProp(hwnd,windowTicket,ticketValue)) throw new Denied("targeted_text_identity_unavailable");
+                    try { ledger.ReserveBatch(batchPrimitives,config.MaximumActions);foreach(char ch in value) {
+                        Foreground();
+                        if(Native.GetProp(hwnd,windowTicket)!=ticketValue) throw new Denied("partial_text_effect_uncertain");
+                        // Current() already validated the submitted observation.
+                        // Text itself changes accessible names and unrelated chrome
+                        // structure. During this admitted batch bind each character
+                        // to a fresh identity snapshot of the same target instead.
+                        // Never replace the observation or its original identity.
+                        try {
+                            var latest=o.Element.GetUpdatedCache(identityRequest);var c=latest.Cached;uint pid;
+                            Native.GetWindowThreadProcessId(hwnd,out pid);
+                            if(!o.RuntimeId.SequenceEqual((int[])latest.GetCachedPropertyValue(AutomationElement.RuntimeIdProperty)) || c.ProcessId!=process.Id || c.NativeWindowHandle!=hwnd.ToInt32() || c.AutomationId!=admittedId || c.ClassName!=admittedClass || c.ControlType!=admittedType || c.BoundingRectangle!=o.Geometry || !c.HasKeyboardFocus || !c.IsEnabled || c.IsOffscreen || c.IsPassword || pid!=process.Id || !Native.IsWindow(hwnd) || !Native.IsWindowEnabled(hwnd) || Native.GetAncestor(hwnd,2)!=root) throw new Denied("partial_text_effect_uncertain");
+                        } catch(Denied) { throw; }
+                        catch(Exception) { throw new Denied("partial_text_effect_uncertain"); }
                         UIntPtr result;
-                        if (Native.SendMessageTimeout(hwnd,0x0102,new UIntPtr(ch=='\n'?'\r':ch),IntPtr.Zero,2,250,out result)==IntPtr.Zero) { Stopped=true; throw new Denied("input_timeout_effect_uncertain"); }
+                        // Scintilla handles Enter/Tab as native key commands and
+                        // ignores their WM_CHAR forms. Only these two previously
+                        // admitted control characters use a targeted key message.
+                        bool textKey=admittedClass=="Scintilla" && (ch=='\n' || ch=='\t');
+                        if (Native.SendMessageTimeout(hwnd,textKey?0x0100u:0x0102u,new UIntPtr(ch=='\n'?'\r':ch),textKey?new IntPtr(1):IntPtr.Zero,2,250,out result)==IntPtr.Zero) { Stopped=true; throw new Denied("input_timeout_effect_uncertain"); }
                         ledger.Returned(false);
-                    } } finally { ledger.CommitReturns(); }
+                        if(textKey) {
+                            Foreground();
+                            if(Native.GetProp(hwnd,windowTicket)!=ticketValue || !Native.IsWindow(hwnd) || !Native.IsWindowEnabled(hwnd) || Native.GetAncestor(hwnd,2)!=root) throw new Denied("partial_text_effect_uncertain");
+                            if(Native.SendMessageTimeout(hwnd,0x0101,new UIntPtr(ch=='\n'?'\r':ch),new IntPtr(unchecked((int)0xc0000001)),2,250,out result)==IntPtr.Zero) { Stopped=true;throw new Denied("input_timeout_effect_uncertain"); }
+                            ledger.Returned(false);
+                        }
+                    } } finally { try { ledger.CommitReturns(); } finally { if(Native.GetProp(hwnd,windowTicket)==ticketValue) Native.RemoveProp(hwnd,windowTicket); } }
                 }
                 else throw new Denied("pattern_unavailable_no_implicit_fallback");
                 if(action!="replace_selection") ledger.Returned();
