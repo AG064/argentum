@@ -29,6 +29,14 @@ not title-based authority on their own. Replaced elements, current bounds,
 runtime identity and structure generations invalidate references. The UIA worker
 owns all COM observations in one MTA, away from the status UI.
 
+Owner lookup walks bounded actual top-level parent and `GW_OWNER` links, with
+the pinned process required at every link and the exact root required at the end.
+This supports explicitly owned overlapped dialogs without admitting unrelated
+same-process windows. `GA_ROOTOWNER` alone can omit an overlapped window's explicit
+owner. A null foreground during activation is unavailable, not proof of takeover;
+no effect is admitted. Real input or a nonzero foreign foreground still latches
+pause and requires owner resume. Input time is not reset by ordinary actions.
+
 This is reviewed ordinary-user code and application policy, not an OS filesystem
 or network sandbox. An ordinary editor can still access resources available to
 that OS account. No elevation, UIAccess, secure desktop, shell launch, settings,
@@ -69,6 +77,32 @@ returns. Neither is proof of an observed document change. File-dialog path check
 require the actual writable, owned filename edit, not a similarly named label.
 Teardown is idempotent across the UI watchdog and worker. Incomplete cleanup is
 reported as uncertain rather than a closed application.
+
+For native editors without TextPattern, `targeted_menu_input` and `menu_paths`
+require separate exact owner activation and default to disabled. The first scope
+is five closed English standard menu paths: File/Open..., File/Save As...,
+Edit/Select All, Search/Find..., and Search/Find Next. Every path component must
+also be owner-admitted. There are no caller-supplied command IDs, arbitrary menu
+paths, application-internal APIs, shell/run commands or keyboard sequences.
+
+Observation exposes available commands from the current owned standard Win32
+menu as `Win32.MenuCommand` with `TargetedMenuInvoke`; only `invoke` is accepted.
+These are current menu metadata, not claims that a popup is visibly expanded.
+Their reported geometry is the owned root, never a click coordinate. References
+bind root/runtime/structure/geometry plus exact menu handles, path, enabled state
+and command identity. A changed menu is rejected until a new observation.
+Select All additionally requires the current admitted non-sensitive text control
+to have focus. Normal UIA text-selection forms remain valid when supported.
+
+The adapter posts one bounded standard WM_COMMAND to that exact owned HWND;
+it does not synthesize global input or rebaseline the owner-input guard. A queued
+command's API return is not its observed completion. Reobserve after every effect;
+file-dialog destination checks, accounting, cancellation and owned teardown still
+apply. Receipts retain only a closed menu-action enum, not menu text, command IDs,
+paths or document content, and never turn producer claims into verification.
+Freshness and provider-failure categories are bounded and body-free. Transient
+read-only inspection failure requires fresh inspection, not reuse of old targets
+or an automatic repeat of a mutation whose effects could be unknown.
 
 Images use the already supported current run/context/activation image-input
 path. The marker origin `https://windows.argentum.invalid` is a disclosure identity,

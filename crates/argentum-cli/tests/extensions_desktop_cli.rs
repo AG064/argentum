@@ -20,6 +20,7 @@ mod http_support;
 #[tokio::test]
 #[ignore = "requires explicitly reviewed native adapter and owned synthetic app on interactive Windows"]
 async fn actual_cli_native_observation_save_verification_feedback_and_teardown() {
+    let native_menus = std::env::var_os("ARGENTUM_NEXT02_NATIVE_MENUS").is_some();
     let adapter =
         PathBuf::from(std::env::var_os("ARGENTUM_NEXT02_ADAPTER").expect("reviewed adapter"));
     let app = PathBuf::from(
@@ -68,7 +69,7 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
     let mut ledger_bytes = identity.to_vec();
     ledger_bytes.extend([0u8; 8]);
     std::fs::write(&ledger, ledger_bytes).unwrap();
-    std::fs::write(&config,serde_json::to_vec(&json!({"program":app,"sha256":app_sha,"working_directory":ws,"artifact_directory":root.path().join("images"),"action_ledger":ledger,"campaign_id":campaign,"arguments":[],"documents":["input.txt","output.txt"],"save_destinations":["output.txt"],"dialogs":["Save As"],"actions":["select_all","replace_selection","invoke","set_value"],"invokable_names":["Save As","Save"],"text_control_classes":["WindowsForms10.EDIT.app.0.34f5582_r6_ad1"],"targeted_text_input":true,"maximum_actions":128,"lifetime_seconds":180})).unwrap()).unwrap();
+    std::fs::write(&config,serde_json::to_vec(&json!({"program":app,"sha256":app_sha,"working_directory":ws,"artifact_directory":root.path().join("images"),"action_ledger":ledger,"campaign_id":campaign,"arguments":if native_menus { vec!["--native-menu-controls"] } else { vec![] },"documents":["input.txt","output.txt"],"save_destinations":["output.txt"],"dialogs":["Save As"],"actions":["select_all","replace_selection","invoke","set_value"],"invokable_names":["Save As","Save","File","Save As...","Edit","Select All"],"text_control_classes":["WindowsForms10.EDIT.app.0.34f5582_r6_ad1"],"targeted_text_input":true,"targeted_menu_input":native_menus,"menu_paths":if native_menus { vec![vec!["Edit","Select All"],vec!["File","Save As..."]] }else{vec![]},"maximum_actions":128,"lifetime_seconds":180})).unwrap()).unwrap();
     let args = vec!["--config".to_owned(), config.display().to_string()];
     let package = root.path().join("package");
     std::fs::create_dir(&package).unwrap();
@@ -176,6 +177,7 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
         let mut state = Value::Null;
         let deadline = Instant::now() + Duration::from_secs(180);
         let mut round = 0;
+        let mut document_readback_seen = false;
         for request_index in 0..32 {
             let mut advance = true;
             let (mut stream, _) = loop {
@@ -240,7 +242,7 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
                     "native observation feedback at round {round}: {previous}"
                 );
             }
-            if round == 7 {
+            if round == 7 && !document_readback_seen {
                 assert!(
                     state["elements"].as_array().unwrap().iter().any(|element| {
                         element["text"].as_str().is_some_and(|text| {
@@ -249,6 +251,7 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
                     }),
                     "actual UIA post-action readback: {state}"
                 );
+                document_readback_seen = true;
             }
             if round == 15 {
                 assert!(
@@ -269,6 +272,27 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
                 1 => Some(invoke("desktop_launch", json!({"document":"input.txt"}))),
                 2 | 4 | 6 | 8 | 10 | 12 => {
                     Some(invoke("desktop_observe", json!({"text_limit":256})))
+                }
+                3 if native_menus => {
+                    let target =
+                        state["elements"].as_array().unwrap().iter().find(|e| {
+                            e["role"] == "Win32.MenuCommand" && e["name"] == "Select All"
+                        });
+                    if let Some(target) = target {
+                        Some(invoke(
+                            "desktop_action",
+                            json!({"generation":state["generation"],"reference":target["reference"],"action":"invoke"}),
+                        ))
+                    } else {
+                        let offset = state["next_offset"]
+                            .as_u64()
+                            .expect("current native selection page");
+                        advance = false;
+                        Some(invoke(
+                            "desktop_observe",
+                            json!({"offset":offset,"element_limit":32,"text_limit":256}),
+                        ))
+                    }
                 }
                 3 | 5 => {
                     let target = state["elements"]
@@ -292,20 +316,27 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
                     Some(invoke("desktop_action", args))
                 }
                 7 | 11 => {
-                    let name = if round == 7 { "Save As" } else { "Save" };
+                    let name = if round == 7 && native_menus {
+                        "Save As..."
+                    } else if round == 7 {
+                        "Save As"
+                    } else {
+                        "Save"
+                    };
                     let target = state["elements"]
                         .as_array()
                         .unwrap()
                         .iter()
                         .find(|element| {
                             element["name"] == name
-                                && element["patterns"].as_array().is_some_and(|patterns| {
-                                    patterns.iter().any(|pattern| {
-                                        pattern
-                                            .as_str()
-                                            .is_some_and(|name| name.contains("InvokePattern"))
-                                    })
-                                })
+                                && (element["role"] == "Win32.MenuCommand"
+                                    || element["patterns"].as_array().is_some_and(|patterns| {
+                                        patterns.iter().any(|pattern| {
+                                            pattern
+                                                .as_str()
+                                                .is_some_and(|name| name.contains("InvokePattern"))
+                                        })
+                                    }))
                         });
                     if let Some(target) = target {
                         Some(invoke(
@@ -428,4 +459,16 @@ async fn actual_cli_native_observation_save_verification_feedback_and_teardown()
             .unwrap_or(0)
             > 20));
     assert!(!receipt.to_string().contains("Owner: reviewed"));
+    if native_menus {
+        for command in ["select_all", "save_as"] {
+            assert!(
+                receipt["receipts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|r| r["receipt"]["desktop_report"]["menu_action"] == command),
+                "typed native menu admission is absent: {command}"
+            );
+        }
+    }
 }

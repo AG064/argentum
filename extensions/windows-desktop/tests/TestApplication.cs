@@ -29,6 +29,24 @@ internal static class TestApplication
             form.Shown+=(s,e)=>decoyTimer.Start();
         }
         save.Click+=(s,e)=> { using(var dialog=new SaveFileDialog { InitialDirectory=Path.GetDirectoryName(args[args.Length-1]), Filter="Text files|*.txt", Title="Save As" }) { if(dialog.ShowDialog(form)==DialogResult.OK) File.WriteAllText(dialog.FileName,editor.Text); } };
+        if(args.Contains("--native-menu-controls")) {
+            var selectAll=new MenuItem("Select &All",(s,e)=>editor.SelectAll());
+            var saveAs=new MenuItem("Save &As...",(s,e)=>save.PerformClick());
+            var open=new MenuItem("&Open...",(s,e)=> { using(var dialog=new OpenFileDialog { InitialDirectory=Path.GetDirectoryName(args[args.Length-1]),Title="Open" }) { if(dialog.ShowDialog(form)==DialogResult.OK) editor.Text=File.ReadAllText(dialog.FileName); } });
+            var find=new MenuItem("&Find...",(s,e)=> {
+                using(var dialog=new Form { Text="Find",Width=360,Height=150,Owner=form }) {
+                    var field=new TextBox { Name="Find text",Dock=DockStyle.Top };
+                    var next=new Button { Text="Find Next",Dock=DockStyle.Bottom };
+                    var close=new Button { Text="Close",Dock=DockStyle.Bottom };
+                    next.Click+=(ns,ne)=> { int index=editor.Text.IndexOf(field.Text,StringComparison.Ordinal); if(index>=0) editor.Select(index,field.Text.Length); };
+                    close.Click+=(cs,ce)=>dialog.Close();
+                    dialog.Controls.Add(field);dialog.Controls.Add(close);dialog.Controls.Add(next);
+                    dialog.ShowDialog(form);
+                }
+            });
+            form.Menu=new MainMenu(new[] { new MenuItem("&File",new[]{open,saveAs}),new MenuItem("&Edit",new[]{selectAll}),new MenuItem("&Search",new[]{find,new MenuItem("Find &Next",(s,e)=>editor.Select(0,1))}) });
+            form.Shown+=(s,e)=>editor.Focus();
+        }
         replace.Click+=(s,e)=> { form.Controls.Remove(editor); editor.Dispose(); editor=new TextBox { Name="Document",Multiline=true,Dock=DockStyle.Fill,Text="Replacement control" }; form.Controls.Add(editor); editor.BringToFront(); };
         hang.Click+=(s,e)=>Thread.Sleep(15000);
         unexpected.Click+=(s,e)=>MessageBox.Show(form,"Synthetic boundary control","Unexpected owned dialog");

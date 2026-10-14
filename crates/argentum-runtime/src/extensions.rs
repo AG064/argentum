@@ -100,6 +100,11 @@ fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
     let reason = value.get("reason").and_then(serde_json::Value::as_str);
     let failure = reason.map(|reason| match reason {
         "stale_observation_reobserve"
+        | "stale_native_menu_reobserve"
+        | "stale_structure_reobserve"
+        | "stale_runtime_identity_reobserve"
+        | "stale_geometry_reobserve"
+        | "stale_fingerprint_reobserve"
         | "stale_element_or_geometry_reobserve"
         | "stale_image_observation" => DesktopFailureReason::StaleObservation,
         "owner_input_takeover"
@@ -119,6 +124,7 @@ fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
             DesktopFailureReason::UncertainEffect
         }
         "pattern_unavailable_no_implicit_fallback"
+        | "foreground_unavailable_reobserve"
         | "owned_window_unavailable_no_attach"
         | "capture_scope_unavailable"
         | "capture_unavailable" => DesktopFailureReason::Unavailable,
@@ -153,6 +159,10 @@ fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
         api_returned: value
             .get("api_returned")
             .and_then(serde_json::Value::as_bool),
+        menu_action: value
+            .get("native_menu_action")
+            .cloned()
+            .and_then(|action| serde_json::from_value(action).ok()),
         closed: value.get("closed").and_then(serde_json::Value::as_bool),
         failure,
     })
@@ -179,6 +189,43 @@ fn desktop_receipts_do_not_project_private_text_or_false_verification() {
             .api_returned_actions
             .is_none()
     );
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn native_menu_receipts_are_closed_non_secret_and_not_verification() {
+    use argentum_domain::extensions::DesktopMenuAction;
+    for (name, expected) in [
+        ("open", DesktopMenuAction::Open),
+        ("save_as", DesktopMenuAction::SaveAs),
+        ("select_all", DesktopMenuAction::SelectAll),
+        ("find", DesktopMenuAction::Find),
+        ("find_next", DesktopMenuAction::FindNext),
+    ] {
+        let report = desktop_report(&json!({"structuredContent": {
+            "native_menu_action": name, "api_returned": true,
+            "observed_outcome_verified": true, "command_id": 123,
+            "menu_path": ["PRIVATE_MENU_CANARY"], "value": "PRIVATE_TEXT_CANARY"
+        }}))
+        .unwrap();
+        assert_eq!(report.menu_action, Some(expected));
+        let encoded = serde_json::to_string(&report).unwrap();
+        assert!(!encoded.contains("PRIVATE_") && !encoded.contains("command_id"));
+        assert!(!encoded.contains("observed_outcome_verified"));
+    }
+    let invalid = desktop_report(&json!({"structuredContent": {
+        "native_menu_action": "PRIVATE_ACTION_CANARY",
+        "reason": "stale_native_menu_reobserve"
+    }}))
+    .unwrap();
+    assert!(invalid.menu_action.is_none());
+    assert_eq!(
+        invalid.failure,
+        Some(DesktopFailureReason::StaleObservation)
+    );
+    assert!(!serde_json::to_string(&invalid)
+        .unwrap()
+        .contains("PRIVATE_"));
 }
 
 #[cfg(all(test, windows))]

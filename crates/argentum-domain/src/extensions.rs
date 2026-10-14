@@ -248,8 +248,22 @@ pub struct ExtensionDesktopReport {
     #[serde(default)]
     pub api_returned_actions: Option<u64>,
     pub api_returned: Option<bool>,
+    /// Producer-reported queue admission, not observed application success.
+    /// Closed values retain no menu text, document contents or command IDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu_action: Option<DesktopMenuAction>,
     pub closed: Option<bool>,
     pub failure: Option<DesktopFailureReason>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesktopMenuAction {
+    Open,
+    SaveAs,
+    SelectAll,
+    Find,
+    FindNext,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
