@@ -2455,7 +2455,6 @@ impl Fixture {
                     "tool.edit-text",
                     "tool.search-text",
                     "tool.search-filenames",
-                    "execution.argv",
                     "verification.runner",
                     "model.delegate-readonly",
                 ] {
@@ -2465,6 +2464,11 @@ impl Fixture {
                         "F19A owner capability {capability_id}"
                     );
                 }
+                assert_eq!(
+                    policy.capability_enabled.get("execution.argv"),
+                    Some(&false),
+                    "F19A fixed verification must not expose generic process execution"
+                );
                 host.shutdown()
                     .await
                     .expect("F19A delegation owner shutdown");
