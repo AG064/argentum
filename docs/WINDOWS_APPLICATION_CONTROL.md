@@ -1,8 +1,10 @@
 # Optional Windows application control
 
-NEXT02 is implementation work, separate from completed NEXT01 and the core RC.
-Real-editor/model acceptance is not yet qualified. Do not infer desktop parity
-or a general computer-use sandbox from source or synthetic controls.
+NEXT02's declared native-editor workflow reached assisted post-repair completion
+on 2026-10-16, separate from completed NEXT01 and the core RC. See the exact
+[artifact, native verification and qualification record](NEXT02_ACCEPTANCE.md).
+Do not infer desktop parity, uninterrupted autonomy or a general computer-use
+sandbox from this bounded acceptance.
 
 The explicit `argentum-cli/desktop-control` feature uses the existing extension
 broker, lifecycle, exact local activation, process leases, policy, accounting,

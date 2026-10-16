@@ -124,5 +124,7 @@ checks cannot establish product superiority or personal replacement readiness.
 
 The [B1/B2 brief](docs/NEXT_EXTENSION_BROWSER_MILESTONE.md) and dated NEXT01
 evidence preserve the delivered local profile and its limits. The separate
-Windows desktop milestone remains inactive until explicitly authorized. This
-roadmap neither starts NEXT02 nor adds a live allowance or core release feature.
+Windows desktop milestone's declared native-editor profile reached assisted
+post-repair completion on 2026-10-16; see [NEXT02 acceptance](docs/NEXT02_ACCEPTANCE.md).
+This does not pass every B4 display/platform/reliability gate or start B5.
+The roadmap adds no live allowance, later campaign or core release feature.

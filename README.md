@@ -55,6 +55,14 @@ failures and estimated-usage dispositions remain recorded; this was assisted
 completion of retained work, not uninterrupted autonomy or general reliability.
 See [the dated NEXT01 evidence](docs/NEXT01_ACCEPTANCE.md).
 
+NEXT02 adds an explicitly selected `desktop-control` feature, not a default core
+dependency. Its declared native-editor workflow reached assisted post-repair
+completion on 2026-10-16, with current verification, model acknowledgement,
+independent saved-artifact review and scoped image evidence. This does not qualify
+general desktop parity or change release status. See
+[the dated NEXT02 evidence](docs/NEXT02_ACCEPTANCE.md) and
+[its application boundary](docs/WINDOWS_APPLICATION_CONTROL.md).
+
 ## First run
 
 Run from any directory. Supply the same workspace and database on every command
