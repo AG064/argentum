@@ -81,6 +81,7 @@ namespace Argentum.WindowsDesktop
 
     internal sealed class Config
     {
+        internal const int MaximumSupportedActions = 1536;
         public string Program, Sha256, WorkingDirectory, ArtifactDirectory, ActionLedger, CampaignId;
         public string[] Arguments, Documents, SaveDestinations, Dialogs, Actions, InvokableNames, TextControlClasses;
         public bool TargetedTextInput, TargetedMenuInput;
@@ -93,7 +94,7 @@ namespace Argentum.WindowsDesktop
             var map = Json.Read(Encoding.UTF8.GetString(bytes));
             Json.Keys(map, "program", "sha256", "working_directory", "artifact_directory", "action_ledger", "campaign_id", "arguments", "documents", "save_destinations", "dialogs", "actions", "invokable_names", "text_control_classes", "targeted_text_input", "targeted_menu_input", "menu_paths", "maximum_actions", "lifetime_seconds");
             var c = new Config { Program=Json.Text(map,"program"), Sha256=Json.Text(map,"sha256"), WorkingDirectory=Json.Text(map,"working_directory"), ArtifactDirectory=Json.Text(map,"artifact_directory"), Arguments=Json.Strings(map,"arguments"), Documents=Json.Strings(map,"documents"), Dialogs=Json.Strings(map,"dialogs"), Actions=Json.Strings(map,"actions"), InvokableNames=Json.Strings(map,"invokable_names"), TargetedTextInput=Json.Boolean(map,"targeted_text_input"), MaximumActions=Json.Number(map,"maximum_actions"), LifetimeSeconds=Json.Number(map,"lifetime_seconds") };
-            if (!Path.IsPathRooted(c.Program) || !Path.IsPathRooted(c.WorkingDirectory) || !Path.IsPathRooted(c.ArtifactDirectory) || c.Documents.Length == 0 || c.Documents.Length > 8 || c.Arguments.Length > 16 || c.MaximumActions < 1 || c.MaximumActions > 1024 || c.LifetimeSeconds < 1 || c.LifetimeSeconds > 295 || c.Actions.Any(a => !Adapter.ActionSet.Contains(a))) throw new Denied("invalid_configuration");
+            if (!Path.IsPathRooted(c.Program) || !Path.IsPathRooted(c.WorkingDirectory) || !Path.IsPathRooted(c.ArtifactDirectory) || c.Documents.Length == 0 || c.Documents.Length > 8 || c.Arguments.Length > 16 || c.MaximumActions < 1 || c.MaximumActions > MaximumSupportedActions || c.LifetimeSeconds < 1 || c.LifetimeSeconds > 295 || c.Actions.Any(a => !Adapter.ActionSet.Contains(a))) throw new Denied("invalid_configuration");
             c.TextControlClasses=Json.Strings(map,"text_control_classes");
             c.TargetedMenuInput=map.ContainsKey("targeted_menu_input") && Json.Boolean(map,"targeted_menu_input");
             if(map.ContainsKey("menu_paths")) {
@@ -170,7 +171,7 @@ namespace Argentum.WindowsDesktop
             if(file.Length!=40) { file.Dispose(); throw new Denied("action_ledger_invalid_unknown_is_not_zero"); }
             var bytes=new byte[40]; if(file.Read(bytes,0,40)!=40 || !bytes.Take(32).SequenceEqual(identity)) { file.Dispose(); throw new Denied("action_ledger_scope_changed"); }
             Attempts=BitConverter.ToInt32(bytes,32); ApiReturns=BitConverter.ToInt32(bytes,36);
-            if(Attempts<0 || Attempts>1024 || ApiReturns<0 || ApiReturns>Attempts) { file.Dispose(); throw new Denied("action_accounting_invalid"); }
+            if(Attempts<0 || Attempts>Config.MaximumSupportedActions || ApiReturns<0 || ApiReturns>Attempts) { file.Dispose(); throw new Denied("action_accounting_invalid"); }
         }
         private void Persist()
         {

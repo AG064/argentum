@@ -103,6 +103,10 @@ reserves all its characters once, with interruptible per-character checks. An
 unused reservation is not a claim that the input was applied. Counter records
 bind the explicit campaign, application hash and actual task directory. Missing,
 malformed, wrong-scope or exclusively owned ledgers fail closed, not reset to zero.
+Configuration requires an explicit action ceiling of 1 through 1,536. This
+implementation capacity does not increase any existing campaign's selected limit.
+A changed ceiling still requires exact owner activation, and restart retains all
+prior reservations and API returns, including counts above a newly lowered limit.
 Typed receipts keep reserved primitives separate from producer-reported API
 returns. Neither is proof of an observed document change. File-dialog path checks
 require the actual writable, owned filename edit, not a similarly named label.
