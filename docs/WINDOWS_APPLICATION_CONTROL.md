@@ -92,6 +92,11 @@ their five-second total bound. A text batch with actual returned input primitive
 may progress for at most twenty seconds, inside the broker's thirty-second call
 limit. Only returned native primitives renew progress, never model or UI claims.
 The per-message 250 ms timeout, target checks, takeover and cancellation remain.
+Foreground child HWNDs returned by semantic UIA actions are normalized to their
+top-level window only after checking the raw handle's process. Dialog names and
+ownership are checked on that window, not its focused button. Foreign handles
+are never normalized into an admitted parent; the owner-chain walk checks each
+raw process identity before following a parent. No focus is stolen or inferred.
 Every primitive is admitted against a durable finite campaign ledger before
 input; API-return counts and observed outcomes remain separate. A text batch
 reserves all its characters once, with interruptible per-character checks. An

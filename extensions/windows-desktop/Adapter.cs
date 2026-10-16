@@ -231,7 +231,7 @@ namespace Argentum.WindowsDesktop
         {
             if (Stopped || DateTime.UtcNow >= deadline) throw new Denied("cancelled_or_deadline");
             if (resumeRequested) {
-                if(root==IntPtr.Zero || Native.GetForegroundWindow()!=root) throw new Denied("owner_resume_waiting_for_owned_focus");
+                if(root==IntPtr.Zero || CurrentForeground()!=root) throw new Denied("owner_resume_waiting_for_owned_focus");
                 resumeRequested=false; lastInput=Native.InputTime(); Paused=false; observations.Clear(); generation++;
             }
             if (Paused) throw new Denied("owner_takeover_paused");
@@ -248,6 +248,8 @@ namespace Argentum.WindowsDesktop
             // instead, keeping every link inside the pinned live process.
             var visited=new HashSet<IntPtr>();
             for(int depth=0;window!=IntPtr.Zero && depth<16;depth++) {
+                uint rawPid;Native.GetWindowThreadProcessId(window,out rawPid);
+                if(rawPid!=process.Id) return false;
                 window=Native.GetAncestor(window,2);
                 if(window==IntPtr.Zero || !Native.IsWindow(window) || !visited.Add(window)) return false;
                 uint pid; Native.GetWindowThreadProcessId(window,out pid);
@@ -257,10 +259,20 @@ namespace Argentum.WindowsDesktop
             }
             return false;
         }
+        private IntPtr CurrentForeground()
+        {
+            var window=Native.GetForegroundWindow();
+            if(window==IntPtr.Zero) return window;
+            uint pid;Native.GetWindowThreadProcessId(window,out pid);
+            if(process==null || pid!=process.Id) return window;
+            // UIA can focus a child control as the foreground HWND. Normalize
+            // only after its process identity is checked, never by title/name.
+            return Native.GetAncestor(window,2);
+        }
         private void Foreground()
         {
             Alive();
-            var window=Native.GetForegroundWindow();
+            var window=CurrentForeground();
             // Windows can report no foreground during activation transitions.
             // Admit no effect; this is unavailable, not proof of owner takeover.
             // Real input still latches pause in Alive and a foreign HWND below
@@ -298,11 +310,11 @@ namespace Argentum.WindowsDesktop
                 throw new Denied("owned_window_unavailable_no_attach");
             }
             if(Native.InputTime()!=lastInput) { Paused=true; throw new Denied("owner_input_during_launch_paused"); }
-            if(Native.GetForegroundWindow()!=root) {
+            if(CurrentForeground()!=root) {
                 ledger.Admit(config.MaximumActions);
                 try { AutomationElement.FromHandle(root).SetFocus(); }
                 catch(InvalidOperationException) { Paused=true; throw new Denied("initial_focus_unavailable_owner_resume_required"); }
-                if(Native.GetForegroundWindow()!=root) { Paused=true; throw new Denied("initial_focus_unavailable_owner_resume_required"); }
+                if(CurrentForeground()!=root) { Paused=true; throw new Denied("initial_focus_unavailable_owner_resume_required"); }
                 ledger.Returned();
                 // UIA's initial focus implementation can update last-input state.
                 // This is one explicit owned launch focus, never a retry loop.
@@ -334,7 +346,7 @@ namespace Argentum.WindowsDesktop
             int elementLimit=args.ContainsKey("element_limit") ? Json.Number(args,"element_limit") : 16;
             if(offset<0 || offset>127 || elementLimit<1 || elementLimit>32) throw new Denied("observation_page_invalid");
             observations.Clear(); sensitiveSurface=false; generation++;
-            var current=Native.GetForegroundWindow(); var anchor=AutomationElement.FromHandle(current);
+            var current=CurrentForeground(); var anchor=AutomationElement.FromHandle(current);
             var queue=new Queue<AutomationElement>(); queue.Enqueue(anchor);
             var result=new List<Dictionary<string,object>>(); int examined=0, textBudget=limit; bool traversalTruncated=false;
             while(queue.Count>0 && examined++ < 256 && result.Count < 128-config.MenuPaths.Length) {
@@ -403,7 +415,7 @@ namespace Argentum.WindowsDesktop
             if(!o.RuntimeId.SequenceEqual(o.Element.GetRuntimeId())) throw new Denied("stale_runtime_identity_reobserve");
             if(o.Geometry!=c.BoundingRectangle) throw new Denied("stale_geometry_reobserve");
             if(o.Fingerprint!=Fingerprint(o.Element)) throw new Denied("stale_fingerprint_reobserve");
-            if(c.ProcessId!=process.Id || c.IsPassword || !c.IsEnabled || c.IsOffscreen || o.Window!=Native.GetForegroundWindow() || !OwnedWindow(o.Window)) throw new Denied("stale_element_or_geometry_reobserve");
+            if(c.ProcessId!=process.Id || c.IsPassword || !c.IsEnabled || c.IsOffscreen || o.Window!=CurrentForeground() || !OwnedWindow(o.Window)) throw new Denied("stale_element_or_geometry_reobserve");
             return o;
         }
         private void AdmitAction()
@@ -595,7 +607,7 @@ namespace Argentum.WindowsDesktop
             Json.Keys(args,"generation"); Foreground();
             if (Json.Number(args,"generation")!=generation || observations.Count==0) throw new Denied("stale_image_observation");
             if(observationIncomplete || observations.Values.Any(o=>o.StructureEpoch!=Interlocked.Read(ref structureEpoch) || o.Fingerprint!=Fingerprint(o.Element))) throw new Denied("capture_observation_stale_or_incomplete");
-            IntPtr window=Native.GetForegroundWindow(); uint affinity; int cloaked; Native.Rect rect;
+            IntPtr window=CurrentForeground(); uint affinity; int cloaked; Native.Rect rect;
             if (!Native.GetWindowDisplayAffinity(window,out affinity) || affinity!=0 || Native.DwmGetWindowAttribute(window,14,out cloaked,4)!=0 || cloaked!=0 || !Native.GetWindowRect(window,out rect)) throw new Denied("capture_scope_unavailable");
             if (sensitiveSurface) throw new Denied("password_surface_capture_denied");
             int width=rect.Right-rect.Left,height=rect.Bottom-rect.Top;
@@ -615,7 +627,7 @@ namespace Argentum.WindowsDesktop
             using(var bitmap=new Bitmap(surfaceWidth,surfaceHeight)) {
                 using(var graphics=Graphics.FromImage(bitmap)) { IntPtr dc=graphics.GetHdc(); try { if (!Native.PrintWindow(window,dc,2)) throw new Denied("capture_unavailable"); } finally { graphics.ReleaseHdc(dc); } }
                 Foreground(); Native.Rect after; Native.GetWindowRect(window,out after);
-                if (window!=Native.GetForegroundWindow() || rect.Left!=after.Left || rect.Top!=after.Top || rect.Right!=after.Right || rect.Bottom!=after.Bottom) throw new Denied("capture_geometry_changed");
+                if (window!=CurrentForeground() || rect.Left!=after.Left || rect.Top!=after.Top || rect.Right!=after.Right || rect.Bottom!=after.Bottom) throw new Denied("capture_geometry_changed");
                 double scale=Math.Min(1,Math.Min(1200.0/surfaceWidth,800.0/surfaceHeight));
                 imageWidth=(int)(surfaceWidth*scale);imageHeight=(int)(surfaceHeight*scale);
                 using(var resized=new Bitmap(bitmap,new Size(imageWidth,imageHeight))) using(var stream=new MemoryStream()) { resized.Save(stream,ImageFormat.Png); bytes=stream.ToArray(); }
