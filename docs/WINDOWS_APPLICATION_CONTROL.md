@@ -87,6 +87,11 @@ standard Enter/Tab down/up messages; ordinary text uses WM_CHAR. Both messages
 are reserved and counted as separate primitive API returns. No global keyboard
 state, shortcut combination or arbitrary key code is available. Native editor
 indentation/tab preferences still apply and API returns do not certify content.
+Provider inactivity remains bounded to five seconds. Ordinary operations retain
+their five-second total bound. A text batch with actual returned input primitives
+may progress for at most twenty seconds, inside the broker's thirty-second call
+limit. Only returned native primitives renew progress, never model or UI claims.
+The per-message 250 ms timeout, target checks, takeover and cancellation remain.
 Every primitive is admitted against a durable finite campaign ledger before
 input; API-return counts and observed outcomes remain separate. A text batch
 reserves all its characters once, with interruptible per-character checks. An

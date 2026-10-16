@@ -20,6 +20,8 @@ internal static class TestApplication
         form.Controls.Add(editor); form.Controls.Add(buttons);
         bool textBatchControl=false;
         editor.TextChanged+=(s,e)=> {
+            if(args.Contains("--text-batch-slow")) Thread.Sleep(35);
+            if(args.Contains("--text-batch-ceiling")) Thread.Sleep(120);
             if(textBatchControl) return;
             textBatchControl=true;
             if(args.Contains("--text-batch-chrome")) {

@@ -212,6 +212,7 @@ namespace Argentum.WindowsDesktop
         private readonly string context = Guid.NewGuid().ToString();
         private readonly Dictionary<string,Observation> observations = new Dictionary<string,Observation>();
         internal volatile bool Stopped;
+        internal Action PrimitiveReturned;
         internal volatile bool Paused;
         private volatile bool resumeRequested;
         internal int? LaunchExitCode;
@@ -574,11 +575,13 @@ namespace Argentum.WindowsDesktop
                         bool textKey=admittedClass=="Scintilla" && (ch=='\n' || ch=='\t');
                         if (Native.SendMessageTimeout(hwnd,textKey?0x0100u:0x0102u,new UIntPtr(ch=='\n'?'\r':ch),textKey?new IntPtr(1):IntPtr.Zero,2,250,out result)==IntPtr.Zero) { Stopped=true; throw new Denied("input_timeout_effect_uncertain"); }
                         ledger.Returned(false);
+                        if(PrimitiveReturned!=null) PrimitiveReturned();
                         if(textKey) {
                             Foreground();
                             if(Native.GetProp(hwnd,windowTicket)!=ticketValue || !Native.IsWindow(hwnd) || !Native.IsWindowEnabled(hwnd) || Native.GetAncestor(hwnd,2)!=root) throw new Denied("partial_text_effect_uncertain");
                             if(Native.SendMessageTimeout(hwnd,0x0101,new UIntPtr(ch=='\n'?'\r':ch),new IntPtr(unchecked((int)0xc0000001)),2,250,out result)==IntPtr.Zero) { Stopped=true;throw new Denied("input_timeout_effect_uncertain"); }
                             ledger.Returned(false);
+                            if(PrimitiveReturned!=null) PrimitiveReturned();
                         }
                     } } finally { try { ledger.CommitReturns(); } finally { if(Native.GetProp(hwnd,windowTicket)==ticketValue) Native.RemoveProp(hwnd,windowTicket); } }
                 }
@@ -664,21 +667,26 @@ namespace Argentum.WindowsDesktop
 
     internal sealed class UiaDispatcher : IDisposable
     {
-        private sealed class Work { internal Func<object> Run; internal object Result; internal Exception Failure; internal readonly ManualResetEventSlim Done=new ManualResetEventSlim(); }
+        private sealed class Work { internal Func<object> Run; internal object Result; internal Exception Failure; internal long LastProgress=Stopwatch.GetTimestamp(); internal readonly ManualResetEventSlim Done=new ManualResetEventSlim(); }
         private readonly BlockingCollection<Work> queue=new BlockingCollection<Work>(1);
         private readonly Thread thread;
         private readonly Adapter adapter;
         internal UiaDispatcher(Adapter value)
         {
             adapter=value;
-            thread=new Thread(()=> { try { foreach(var work in queue.GetConsumingEnumerable()) { try { if(adapter.Stopped) throw new Denied("cancelled"); work.Result=work.Run(); } catch(Exception e) { work.Failure=e; } finally { work.Done.Set(); } } } finally { try { adapter.RemoveObservers(); } catch(Exception) {} } }) { IsBackground=true };
+            thread=new Thread(()=> { try { foreach(var work in queue.GetConsumingEnumerable()) { try { if(adapter.Stopped) throw new Denied("cancelled"); adapter.PrimitiveReturned=()=>Interlocked.Exchange(ref work.LastProgress,Stopwatch.GetTimestamp());work.Result=work.Run(); } catch(Exception e) { work.Failure=e; } finally { adapter.PrimitiveReturned=null;work.Done.Set(); } } } finally { try { adapter.RemoveObservers(); } catch(Exception) {} } }) { IsBackground=true };
             thread.SetApartmentState(ApartmentState.MTA); thread.Start();
         }
         internal object Invoke(string name,Dictionary<string,object> args)
         {
             if(adapter.Stopped) throw new Denied("connection_retired");
             var work=new Work { Run=()=>adapter.Call(name,args) }; queue.Add(work);
-            if(!work.Done.Wait(5000)) { adapter.Stopped=true; queue.CompleteAdding(); throw new Denied("provider_timeout_effect_uncertain_connection_retired"); }
+            bool textBatch=name=="desktop_action" && args.ContainsKey("action") && args["action"] as string=="replace_selection";
+            var elapsed=Stopwatch.StartNew();
+            while(!work.Done.Wait(100)) {
+                long idleMilliseconds=(Stopwatch.GetTimestamp()-Interlocked.Read(ref work.LastProgress))*1000/Stopwatch.Frequency;
+                if(elapsed.ElapsedMilliseconds>=(textBatch?20000:5000) || idleMilliseconds>=5000) { adapter.Stopped=true;queue.CompleteAdding();throw new Denied("provider_timeout_effect_uncertain_connection_retired"); }
+            }
             if(work.Failure is Denied) throw work.Failure;
             if(work.Failure!=null) {
                 if(name=="desktop_close") { adapter.Stopped=true; throw new Denied("owned_cleanup_failure_uncertain_connection_retired"); }
