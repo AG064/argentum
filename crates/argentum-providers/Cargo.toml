@@ -25,6 +25,8 @@ argentum-security.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
+# Keep the previous Rust DEFLATE backend explicit after zip's feature migration.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 getrandom.workspace = true
 reqwest.workspace = true
 reqwest-eventsource.workspace = true
@@ -43,6 +45,7 @@ zip.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

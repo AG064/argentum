@@ -45,6 +45,8 @@ mod local_runtime;
 mod runtime_bundles;
 
 pub use android_local::AndroidLlamaCppProvider;
+#[cfg(test)]
+mod tls_contract_tests;
 mod tool_contract;
 mod usage_accounting;
 pub use local_models::{

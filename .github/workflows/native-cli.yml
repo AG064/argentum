@@ -31,8 +31,10 @@ jobs:
         run: cargo fetch --locked
       - name: Check and lint optional feature
         run: |
-          cargo check -p argentum-cli --features extensions --all-targets --locked -j 2
-          cargo clippy -p argentum-cli --features extensions --all-targets --locked -j 2 -- -D warnings
+          cargo check -p argentum-cli --features extensions --all-targets --locked --offline -j 1
+          cargo clippy -p argentum-cli --features extensions --all-targets --locked --offline -j 1 -- -D warnings
+          cargo check -p argentum-cli --features desktop-control --all-targets --locked --offline -j 1
+          cargo clippy -p argentum-cli --features desktop-control --all-targets --locked --offline -j 1 -- -D warnings
       - name: Prepare pinned isolated browser controls
         shell: pwsh
         run: |
@@ -51,7 +53,7 @@ jobs:
           $node = (Get-Command node -CommandType Application).Source
           & $node --test extensions/browser/adapter.test.mjs extensions/browser/browser-controls.test.mjs extensions/browser/preview-auth-controls.test.mjs extensions/browser/completion-controls.test.mjs extensions/browser/reload-focus-controls.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Browser controls failed' }
-          ./scripts/test-extensions-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/extension-cli-tests" -Node $node -BrowserCache $env:ARGENTUM_PLAYWRIGHT_BROWSERS_PATH -Jobs 2
+          ./scripts/test-extensions-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/extension-cli-tests" -Node $node -BrowserCache $env:ARGENTUM_PLAYWRIGHT_BROWSERS_PATH -Jobs 1
       - name: Retain synthetic feature evidence, not a release
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -115,12 +117,12 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Check native workspace
-        run: cargo check --workspace --all-targets --locked -j 2
+        run: cargo check --workspace --all-targets --locked --offline -j 1
       - name: Credential-free tests
         shell: pwsh
-        run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 2 -CiNullAccess
+        run: ./scripts/test-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/offline-tests" -Jobs 1 -CiNullAccess
       - name: Strict Clippy
-        run: cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked --offline -j 1 -- -D warnings
       - name: Retain bounded test diagnostics on success or failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -132,14 +134,51 @@ jobs:
       - name: Install pinned dependency-policy tool
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Advisory, source and license policy
-        run: cargo deny check
+        shell: pwsh
+        run: |
+          cargo deny fetch
+          if ($LASTEXITCODE -ne 0) { throw 'Current dependency-policy data fetch failed' }
+          $cargoRoot = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
+          $databases = @(Get-ChildItem -LiteralPath (Join-Path $cargoRoot 'advisory-dbs') -Directory)
+          if (-not $databases.Count) { throw 'Fetched advisory database identity unavailable' }
+          $revisions = @($databases | ForEach-Object {
+            $revision = (& git -C $_.FullName rev-parse HEAD).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Advisory revision readback failed' }
+            [ordered]@{ database=$_.Name; revision=$revision }
+          })
+          [ordered]@{ source=$env:GITHUB_SHA; retrieved_at=[DateTime]::UtcNow.ToString('o'); databases=$revisions; policy_sha256=(Get-FileHash deny.toml).Hash.ToLowerInvariant(); lock_sha256=(Get-FileHash Cargo.lock).Hash.ToLowerInvariant() } |
+            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$env:RUNNER_TEMP/dependency-policy-inputs.json" -Encoding utf8NoBOM
+          cargo deny --locked --offline check
+          if ($LASTEXITCODE -ne 0) { throw 'Locked dependency policy failed' }
+      - name: Retain dependency-policy input identity
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-policy-inputs-${{ github.run_id }}
+          path: ${{ runner.temp }}/dependency-policy-inputs.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Prepare unsigned CLI package only
         shell: pwsh
+        env:
+          CARGO_NET_OFFLINE: 'true'
         run: ./scripts/package-windows-cli.ps1 -OutputDirectory "$env:RUNNER_TEMP/native-cli-package"
+      - name: Prepare unsigned optional desktop successor only
+        shell: pwsh
+        env:
+          CARGO_NET_OFFLINE: 'true'
+        run: ./scripts/package-windows-cli.ps1 -DesktopControl -Jobs 1 -OutputDirectory "$env:RUNNER_TEMP/native-desktop-package"
       - name: Retain build evidence, not a public release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-cli-windows-x64-unsigned
           path: ${{ runner.temp }}/native-cli-package
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain optional desktop build evidence, not a public release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-cli-windows-x64-desktop-unsigned
+          path: ${{ runner.temp }}/native-desktop-package
           if-no-files-found: error
           retention-days: 14

@@ -676,13 +676,26 @@ fn runtime_offer_is_trusted(offer: &LocalRuntimeOffer) -> bool {
         .any(|candidate| candidate == offer)
 }
 
-fn validated_entry_path(entry: &zip::read::ZipFile<'_>) -> Result<PathBuf, ProviderError> {
+fn validated_entry_path<R: Read>(
+    entry: &zip::read::ZipFile<'_, R>,
+) -> Result<PathBuf, ProviderError> {
+    let name = entry
+        .name()
+        .map_err(|_| ProviderError::LocalRuntimeBundleInvalid)?;
+    // zip 9 normalizes roots, drive prefixes and parent segments. Validate
+    // the original component contract before asking it for a relative path.
+    let drive_prefix =
+        name.as_bytes().get(1) == Some(&b':') && name.as_bytes()[0].is_ascii_alphabetic();
     if entry.encrypted()
         || entry.is_symlink()
         || (!entry.is_file() && !entry.is_dir())
         || entry.size() > MAX_RUNTIME_FILE_BYTES
-        || entry.name().contains('\\')
-        || entry.name().contains('\0')
+        || name.contains('\\')
+        || name.contains('\0')
+        || Path::new(name.as_ref())
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        || drive_prefix
     {
         return Err(ProviderError::LocalRuntimeBundleInvalid);
     }
@@ -1270,6 +1283,194 @@ mod tests {
         });
         let wrong_offer = fixture_offer(&wrong, b"expected");
         assert!(inspect_runtime_archive(&wrong_path, &wrong_offer).is_err());
+    }
+
+    #[test]
+    fn archive_supported_compression_and_unicode_survive_extraction() {
+        let directory = tempfile::tempdir().expect("fixture directory");
+        let executable = b"verified server";
+        for method in [
+            zip::CompressionMethod::Stored,
+            zip::CompressionMethod::Deflated,
+        ] {
+            let (path, bytes) = write_archive(&directory, "formats.zip", |writer| {
+                let options = SimpleFileOptions::default().compression_method(method);
+                writer
+                    .start_file("llama-server.exe", options)
+                    .expect("launcher");
+                writer.write_all(executable).expect("launcher bytes");
+                writer
+                    .start_file("data/café-日本語.txt", options)
+                    .expect("Unicode path");
+                writer
+                    .write_all("café 日本語".as_bytes())
+                    .expect("Unicode bytes");
+            });
+            let offer = fixture_offer(&bytes, executable);
+            let session =
+                extract_runtime_session(&path, &offer, directory.path()).expect("extract");
+            assert_eq!(
+                std::fs::read(session.path().join(offer.executable)).expect("launcher"),
+                executable
+            );
+            assert_eq!(
+                std::fs::read_to_string(session.path().join("data/café-日本語.txt"))
+                    .expect("Unicode file"),
+                "café 日本語"
+            );
+            assert_eq!(std::fs::read(&path).expect("unchanged archive"), bytes);
+        }
+    }
+
+    #[test]
+    fn archive_rejects_unsafe_names_and_entry_count_before_extraction() {
+        let directory = tempfile::tempdir().expect("fixture directory");
+        for name in [
+            "../escape.txt",
+            "data/../escape.txt",
+            "./escape.txt",
+            "/escape.txt",
+            "C:/escape.txt",
+            "C:escape.txt",
+            "data\\escape.txt",
+        ] {
+            // Newer writers normalize names. Inject exact raw header bytes so
+            // these controls exercise the consumer, not writer sanitization.
+            let placeholder = "x".repeat(name.len());
+            let (path, mut bytes) = write_archive(&directory, "unsafe.zip", |writer| {
+                writer
+                    .start_file(&placeholder, SimpleFileOptions::default())
+                    .expect("unsafe fixture");
+                writer.write_all(b"server").expect("fixture bytes");
+                writer
+                    .start_file("llama-server.exe", SimpleFileOptions::default())
+                    .expect("launcher");
+                writer.write_all(b"server").expect("launcher bytes");
+            });
+            let positions: Vec<_> = bytes
+                .windows(placeholder.len())
+                .enumerate()
+                .filter_map(|(offset, part)| (part == placeholder.as_bytes()).then_some(offset))
+                .collect();
+            assert_eq!(positions.len(), 2, "local and central names");
+            for offset in positions {
+                bytes[offset..offset + name.len()].copy_from_slice(name.as_bytes());
+            }
+            std::fs::write(&path, &bytes).expect("literal unsafe names");
+            let mut fixture = ZipArchive::new(Cursor::new(&bytes)).expect("raw archive fixture");
+            assert_eq!(
+                fixture
+                    .by_index(0)
+                    .expect("raw entry")
+                    .name()
+                    .expect("name"),
+                name
+            );
+            let offer = fixture_offer(&bytes, b"server");
+            assert!(
+                extract_runtime_session(&path, &offer, directory.path()).is_err(),
+                "accepted {name}"
+            );
+        }
+        let (path, bytes) = write_archive(&directory, "too-many.zip", |writer| {
+            for index in 0..=MAX_RUNTIME_ENTRIES {
+                writer
+                    .start_file(format!("entry-{index}"), SimpleFileOptions::default())
+                    .expect("entry");
+            }
+        });
+        assert!(extract_runtime_session(
+            &path,
+            &fixture_offer(&bytes, b"server"),
+            directory.path()
+        )
+        .is_err());
+        assert!(!directory.path().join("escape.txt").exists());
+        assert!(!std::fs::read_dir(directory.path())
+            .expect("fixture entries")
+            .any(|entry| entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".argentum-runtime-")));
+    }
+
+    #[test]
+    fn archive_rejects_crc_malformed_and_oversized_metadata() {
+        let directory = tempfile::tempdir().expect("fixture directory");
+        let executable = b"verified server";
+        let (path, mut bytes) = write_archive(&directory, "crc.zip", |writer| {
+            writer
+                .start_file(
+                    "llama-server.exe",
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+                )
+                .expect("launcher");
+            writer.write_all(executable).expect("launcher bytes");
+        });
+        let start = bytes
+            .windows(executable.len())
+            .position(|part| part == executable)
+            .expect("stored payload");
+        bytes[start] = b'V';
+        std::fs::write(&path, &bytes).expect("corrupt fixture");
+        // Both host digests match the changed data; only the stored CRC is stale.
+        assert!(
+            inspect_runtime_archive(&path, &fixture_offer(&bytes, b"Verified server")).is_err()
+        );
+
+        let malformed = b"not a ZIP archive";
+        std::fs::write(&path, malformed).expect("malformed fixture");
+        assert!(inspect_runtime_archive(&path, &fixture_offer(malformed, executable)).is_err());
+
+        let (path, mut bytes) = write_archive(&directory, "size.zip", |writer| {
+            writer
+                .start_file("llama-server.exe", SimpleFileOptions::default())
+                .expect("launcher");
+            writer.write_all(executable).expect("launcher bytes");
+        });
+        let central = bytes
+            .windows(4)
+            .position(|part| part == b"PK\x01\x02")
+            .expect("central header");
+        let oversized = u32::try_from(MAX_RUNTIME_FILE_BYTES + 1)
+            .expect("fixture size")
+            .to_le_bytes();
+        bytes[central + 24..central + 28].copy_from_slice(&oversized);
+        std::fs::write(&path, &bytes).expect("oversized metadata");
+        assert!(inspect_runtime_archive(&path, &fixture_offer(&bytes, executable)).is_err());
+
+        let (path, mut bytes) = write_archive(&directory, "expanded.zip", |writer| {
+            for name in ["llama-server.exe", "first.dll", "second.dll"] {
+                writer
+                    .start_file(name, SimpleFileOptions::default())
+                    .expect("entry");
+                writer.write_all(executable).expect("entry bytes");
+            }
+        });
+        let headers: Vec<_> = bytes
+            .windows(4)
+            .enumerate()
+            .filter_map(|(offset, part)| (part == b"PK\x01\x02").then_some(offset))
+            .collect();
+        assert_eq!(headers.len(), 3);
+        for offset in &headers[1..] {
+            bytes[offset + 24..offset + 28].copy_from_slice(
+                &u32::try_from(MAX_RUNTIME_FILE_BYTES)
+                    .expect("file limit")
+                    .to_le_bytes(),
+            );
+        }
+        // Individual declared sizes fit, but their sum plus the launcher does not.
+        let mut fixture = ZipArchive::new(Cursor::new(&bytes)).expect("size fixture");
+        for index in 1..3 {
+            assert_eq!(
+                fixture.by_index(index).expect("size entry").size(),
+                MAX_RUNTIME_FILE_BYTES
+            );
+        }
+        std::fs::write(&path, &bytes).expect("expanded metadata");
+        assert!(inspect_runtime_archive(&path, &fixture_offer(&bytes, executable)).is_err());
     }
 
     #[test]

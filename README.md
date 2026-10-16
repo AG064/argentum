@@ -62,6 +62,8 @@ independent saved-artifact review and scoped image evidence. This does not quali
 general desktop parity or change release status. See
 [the dated NEXT02 evidence](docs/NEXT02_ACCEPTANCE.md) and
 [its application boundary](docs/WINDOWS_APPLICATION_CONTROL.md).
+The [separate dependency maintenance](docs/NEXT02_DEPENDENCY_MAINTENANCE.md)
+preserves that acceptance and requires its own source/package qualification.
 
 ## First run
 
