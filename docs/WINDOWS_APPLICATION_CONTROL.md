@@ -50,6 +50,9 @@ HWND, not global SendInput. Its first supported scope is synthetic documents.
 ## Normal model tools
 
 - `desktop_launch`: one exact admitted document and a new owned application.
+  The input schema enumerates configured basenames before any launch. Submit
+  that exact choice, not an absolute/qualified path. Discovery does not expose
+  full paths or grant access; the unchanged effect validator checks membership.
 - `desktop_observe`: bounded semantic UIA state, opaque references, current
   generation, supported patterns and untrusted document text. Responses page
   within the actual duplicated MCP byte bound. Follow `next_offset`; a new

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Linq;
 using Argentum.WindowsDesktop;
 
 internal static class TestLedger
@@ -82,6 +83,20 @@ internal static class TestLedger
         Seed(cfg,1,2);Reject(()=>{using(var ledger=new ActionLedger(cfg)) {}},"action_accounting_invalid");
         Seed(cfg,742,490);cfg.CampaignId=Guid.NewGuid().ToString();
         Reject(()=>{using(var ledger=new ActionLedger(cfg)) {}},"action_ledger_scope_changed");
+        cfg.Documents=new[]{"input.txt","output.txt","caf\u00e9.txt"};
+        var tools=typeof(Argentum.WindowsDesktop.Program).GetMethod("Tools",BindingFlags.Static|BindingFlags.NonPublic);
+        var advertised=(object[])Json.Serializer.DeserializeObject(Json.Write(tools.Invoke(null,new object[]{cfg.Documents})));
+        var launch=advertised.Cast<Dictionary<string,object>>().Single(t=>(string)t["name"]=="desktop_launch");
+        var schema=(Dictionary<string,object>)launch["inputSchema"];
+        var properties=(Dictionary<string,object>)schema["properties"];
+        var document=(Dictionary<string,object>)properties["document"];
+        Require(((object[])document["enum"]).Cast<string>().SequenceEqual(cfg.Documents));
+        Require((string)document["type"]=="string" && (int)document["maxLength"]==128);
+        Require(cfg.Document("caf\u00e9.txt")==Path.Combine(cfg.WorkingDirectory,"caf\u00e9.txt"));
+        Reject(()=>cfg.Document(Path.Combine(cfg.WorkingDirectory,"input.txt")),"document_not_owner_admitted");
+        Reject(()=>cfg.Document("../input.txt"),"document_not_owner_admitted");
+        Reject(()=>cfg.Document("other.txt"),"document_not_owner_admitted");
+        Console.WriteLine("Passed: serialized launch choices exactly match admitted basenames; qualified and unknown documents remain denied.");
         Console.WriteLine("Passed: explicit limits, batch pre-admission, durable >1024 fresh-process reload, lowered-limit retention, 1536 boundary, invalid counters and scope denial. No native effects.");
         return 0;
     }
