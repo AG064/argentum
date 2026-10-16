@@ -4281,62 +4281,61 @@ fn grant_lookup_native_child_cli_verifies_with_older_and_record_1618_owner_grant
 #[test]
 fn grant_lookup_native_child_cli_denies_revoked_or_changed_runner_without_process_start() {
     for changed in [false, true] {
-        let (server, (fixture, runner)) =
-            OfflineVerifierServer::start_project_history_positive(|endpoint| {
-                let fixture =
-                    Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-                grant_lookup_project_fixture(&fixture);
-                grant_lookup_seed_irrelevant_history(&fixture, false);
-                let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
-                assert_success(
-                    &fixture.run(&["verification", "approve", &runner, "--json"]),
-                    "negative lookup approval",
-                );
-                if changed {
-                    let path = fixture.workspace.join(".agents/verification.yaml");
-                    let text = std::fs::read_to_string(&path)
-                        .unwrap()
-                        .replace("--offline, -j", "--offline, --lib, -j");
-                    std::fs::write(path, text).unwrap();
-                } else {
-                    let store = argentum_store::Store::open(&fixture.database).unwrap();
-                    let project = store
-                        .resolve_workspace(&fixture.workspace)
-                        .unwrap()
-                        .snapshot
-                        .project
-                        .id;
-                    let broker = argentum_security::CapabilityBroker::new(
-                        &fixture.workspace,
-                        argentum_security::ApprovalPolicy::default(),
+        let (server, fixture) = OfflineVerifierServer::start_project_history_positive(|endpoint| {
+            let fixture =
+                Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+            grant_lookup_project_fixture(&fixture);
+            grant_lookup_seed_irrelevant_history(&fixture, false);
+            let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
+            assert_success(
+                &fixture.run(&["verification", "approve", &runner, "--json"]),
+                "negative lookup approval",
+            );
+            if changed {
+                let path = fixture.workspace.join(".agents/verification.yaml");
+                let text = std::fs::read_to_string(&path)
+                    .unwrap()
+                    .replace("--offline, -j", "--offline, --lib, -j");
+                std::fs::write(path, text).unwrap();
+            } else {
+                let store = argentum_store::Store::open(&fixture.database).unwrap();
+                let project = store
+                    .resolve_workspace(&fixture.workspace)
+                    .unwrap()
+                    .snapshot
+                    .project
+                    .id;
+                let broker = argentum_security::CapabilityBroker::new(
+                    &fixture.workspace,
+                    argentum_security::ApprovalPolicy::default(),
+                )
+                .unwrap();
+                let workspace = argentum_workspaces::WorkspaceManager::new(broker);
+                let tools = argentum_tools::ToolRegistry::with_builtins(workspace.clone());
+                let selected = [argentum_domain::VerificationRunnerId::Project(
+                    F16A_PROJECT_RUNNER_ID.into(),
+                )];
+                let subject = argentum_domain::GrantSubject::Action {
+                    tool_id: "verify".into(),
+                    target: format!("fixed runners: {runner}"),
+                    binding: tools.verification_binding(&workspace, &selected).unwrap(),
+                };
+                let grant = store
+                    .authorization_grants(
+                        project,
+                        &[argentum_domain::Capability::ExternalProcess],
+                        &[subject],
                     )
+                    .unwrap()
+                    .into_iter()
+                    .next()
                     .unwrap();
-                    let workspace = argentum_workspaces::WorkspaceManager::new(broker);
-                    let tools = argentum_tools::ToolRegistry::with_builtins(workspace.clone());
-                    let selected = [argentum_domain::VerificationRunnerId::Project(
-                        F16A_PROJECT_RUNNER_ID.into(),
-                    )];
-                    let subject = argentum_domain::GrantSubject::Action {
-                        tool_id: "verify".into(),
-                        target: format!("fixed runners: {runner}"),
-                        binding: tools.verification_binding(&workspace, &selected).unwrap(),
-                    };
-                    let grant = store
-                        .authorization_grants(
-                            project,
-                            &[argentum_domain::Capability::ExternalProcess],
-                            &[subject],
-                        )
-                        .unwrap()
-                        .into_iter()
-                        .next()
-                        .unwrap();
-                    store
-                        .revoke_approval_grant(project, grant.id, argentum_domain::now())
-                        .unwrap();
-                }
-                (fixture, runner)
-            });
+                store
+                    .revoke_approval_grant(project, grant.id, argentum_domain::now())
+                    .unwrap();
+            }
+            fixture
+        });
         let output = fixture.run(&[
             "run",
             "--prompt",
