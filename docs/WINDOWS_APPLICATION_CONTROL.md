@@ -123,6 +123,18 @@ Edit/Select All, Search/Find..., and Search/Find Next. Every path component must
 also be owner-admitted. There are no caller-supplied command IDs, arbitrary menu
 paths, application-internal APIs, shell/run commands or keyboard sequences.
 
+When the explicit native route is enabled, its top-level UIA menu parents are
+reported as `native_menu_parent_only` with no actionable patterns. Invoking or
+expanding those parents is denied before a primitive is admitted. Use the current
+`Win32.MenuCommand` reference instead. The real-editor control reproduced a
+semantic parent expansion changing Windows input state and causing the next
+takeover check to pause, while explicit command invocation did not. No input
+timestamp is rebaselined and no popup or foreign window is newly admitted.
+Other controls and configurations without the explicit native route keep their
+existing semantic patterns and validation.
+Current native commands precede semantic rows in the bounded observation pages,
+so discovery exposes the supported route before the non-actionable parent labels.
+
 Observation exposes available commands from the current owned standard Win32
 menu as `Win32.MenuCommand` with `TargetedMenuInvoke`; only `invoke` is accepted.
 These are current menu metadata, not claims that a popup is visibly expanded.

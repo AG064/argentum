@@ -146,7 +146,7 @@ fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
         primitive_actions: value
             .get("actions")
             .and_then(serde_json::Value::as_u64)
-            .filter(|n| *n <= 1024),
+            .filter(|n| *n <= 1536),
         api_returned_actions: value
             .get("api_returned_actions")
             .and_then(serde_json::Value::as_u64)
@@ -154,7 +154,7 @@ fn desktop_report(value: &serde_json::Value) -> Option<ExtensionDesktopReport> {
                 value
                     .get("actions")
                     .and_then(serde_json::Value::as_u64)
-                    .is_some_and(|reserved| reserved <= 1024 && *n <= reserved)
+                    .is_some_and(|reserved| reserved <= 1536 && *n <= reserved)
             }),
         api_returned: value
             .get("api_returned")
@@ -178,8 +178,14 @@ fn desktop_receipts_do_not_project_private_text_or_false_verification() {
     let encoded = serde_json::to_string(&report).unwrap();
     assert!(!encoded.contains("PRIVATE_DOCUMENT_CANARY"));
     assert!(!encoded.contains("observed_outcome_verified"));
-    let invalid = desktop_report(&json!({"structuredContent":{"actions":1025,"process_id":u64::MAX,"reason":"PRIVATE_ERROR_CANARY"}})).unwrap();
+    let boundary =
+        desktop_report(&json!({"structuredContent":{"actions":1536,"api_returned_actions":1536}}))
+            .unwrap();
+    assert_eq!(boundary.primitive_actions, Some(1536));
+    assert_eq!(boundary.api_returned_actions, Some(1536));
+    let invalid = desktop_report(&json!({"structuredContent":{"actions":1537,"api_returned_actions":1537,"process_id":u64::MAX,"reason":"PRIVATE_ERROR_CANARY"}})).unwrap();
     assert!(invalid.primitive_actions.is_none() && invalid.process_id.is_none());
+    assert!(invalid.api_returned_actions.is_none());
     assert_eq!(invalid.failure, Some(DesktopFailureReason::Denied));
     let cleanup = desktop_report(&json!({"structuredContent":{"reason":"owned_cleanup_failure_uncertain_connection_retired"}})).unwrap();
     assert_eq!(cleanup.failure, Some(DesktopFailureReason::UncertainEffect));

@@ -38,6 +38,7 @@ class Fixture(base.Fixture):
         cfg['invokable_names'] += ['File','Open...','Open','Save As...','Edit','Select All','Search','Find...','Find Next','Close']
         cfg['invokable_names'] = list(dict.fromkeys(cfg['invokable_names']))
         cfg['dialogs'] += ['Open','Find']
+        cfg['actions'] = list(dict.fromkeys(cfg['actions'] + ['expand']))
         self.config.write_text(json.dumps(cfg), encoding='utf-8')
         super().start()
     def observe(self, offset=0):
@@ -99,6 +100,14 @@ report = dict(provider_requests=0, real_task_access=False, controls=[])
 try:
     f.launch()
     original_root = base.own_window(f.app_pid)
+    assert f.observe()['elements'][0]['role']=='Win32.MenuCommand'
+    state, parent = f.locate(lambda e: e['role']=='ControlType.MenuItem' and e['name']=='Search')
+    assert parent['native_menu_parent_only'] and not parent['patterns']
+    parent_tick = input_tick()
+    rejected = f.act(state,parent,'expand')
+    base.denied(rejected,'native_menu_parent_not_actionable_use_current_command')
+    assert rejected['structuredContent']['actions']==state['actions'] and input_tick()==parent_tick
+    report['controls'].append('semantic_menu_parent_denied_before_input_use_explicit_command')
     state, select = f.menu('Select All')
     base.denied(f.act(state,select,'set_value',value='not a menu action'),'invoke_only')
     tick = input_tick()
