@@ -359,12 +359,16 @@ impl DelegationVerifierServer {
 }
 
 impl OfflineVerifierServer {
-    fn start() -> Self {
-        Self::start_mode(false, None)
-    }
-
-    fn start_positive() -> Self {
-        Self::start_mode(true, None)
+    fn start<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            false,
+            None,
+            false,
+            None,
+            Duration::from_secs(10),
+            false,
+            prepare,
+        )
     }
 
     fn start_positive_with_preparation<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
@@ -379,48 +383,55 @@ impl OfflineVerifierServer {
         )
     }
 
-    fn start_positive_after_edit_failure() -> Self {
-        Self::start_mode_variant_with_stop(true, None, false, Some(1))
-    }
-
-    fn start_positive_with_transient_rejection(rejected_request: usize) -> Self {
-        Self::start_mode(true, Some(rejected_request))
-    }
-
-    fn start_project_positive() -> Self {
-        Self::start_mode_variant(true, None, true)
-    }
-
-    fn start_mode(positive: bool, rejected_request: Option<usize>) -> Self {
-        Self::start_mode_variant(positive, rejected_request, false)
-    }
-
-    fn start_mode_variant(
-        positive: bool,
-        rejected_request: Option<usize>,
-        project_runner: bool,
-    ) -> Self {
-        Self::start_mode_variant_with_stop(positive, rejected_request, project_runner, None)
-    }
-
-    fn start_mode_variant_with_stop(
-        positive: bool,
-        rejected_request: Option<usize>,
-        project_runner: bool,
-        stop_after: Option<usize>,
-    ) -> Self {
-        Self::start_mode_variant_bounded(
-            positive,
-            rejected_request,
-            project_runner,
-            stop_after,
+    fn start_positive_after_edit_failure<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            true,
+            None,
+            false,
+            Some(1),
             Duration::from_secs(10),
             false,
+            prepare,
         )
     }
 
-    fn start_project_history_positive() -> Self {
-        Self::start_mode_variant_bounded(true, None, true, None, Duration::from_secs(120), true)
+    fn start_positive_with_transient_rejection<T>(
+        rejected_request: usize,
+        prepare: impl FnOnce(&str) -> T,
+    ) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            true,
+            Some(rejected_request),
+            false,
+            None,
+            Duration::from_secs(10),
+            false,
+            prepare,
+        )
+    }
+
+    fn start_project_positive<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            true,
+            None,
+            true,
+            None,
+            Duration::from_secs(10),
+            false,
+            prepare,
+        )
+    }
+
+    fn start_project_history_positive<T>(prepare: impl FnOnce(&str) -> T) -> (Self, T) {
+        Self::start_mode_variant_bounded_prepared(
+            true,
+            None,
+            true,
+            None,
+            Duration::from_secs(120),
+            true,
+            prepare,
+        )
     }
 
     fn start_mode_variant_bounded(
@@ -3135,13 +3146,14 @@ fn f10b_selected_minimax_windows_cli_typed_verification_acceptance() {
 
 #[test]
 fn f10b_child_cli_verifier_requires_owner_authority_without_spawning_target() {
-    let server = OfflineVerifierServer::start();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_fixtures();
-    write_behavior_fixture(&fixture.workspace, BEHAVIOR_SOURCE_DEFECT);
-    fixture.save_provider_as("offline-f10b");
-    fixture.configure_owner(true);
+    let (server, fixture) = OfflineVerifierServer::start(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_fixtures();
+        write_behavior_fixture(&fixture.workspace, BEHAVIOR_SOURCE_DEFECT);
+        fixture.save_provider_as("offline-f10b");
+        fixture.configure_owner(true);
+        fixture
+    });
 
     let original_source =
         std::fs::read(fixture.workspace.join("src/lib.rs")).expect("F10B child verifier source");
@@ -3217,13 +3229,14 @@ fn f10b_child_cli_verifier_requires_owner_authority_without_spawning_target() {
 
 #[test]
 fn f10b_child_cli_verifier_owner_profile_completes_read_edit_and_passed_feedback() {
-    let server = OfflineVerifierServer::start_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    let _selected_skill_digest = fixture.prepare_f14a_skills();
-    fixture.save_provider_as("offline-f10b");
-    fixture.configure_verification_owner();
+    let (server, fixture) = OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        let _selected_skill_digest = fixture.prepare_f14a_skills();
+        fixture.save_provider_as("offline-f10b");
+        fixture.configure_verification_owner();
+        fixture
+    });
 
     let original_manifest =
         std::fs::read(fixture.workspace.join("Cargo.toml")).expect("F10B positive manifest");
@@ -3395,12 +3408,13 @@ fn f10b_child_cli_verifier_owner_profile_completes_read_edit_and_passed_feedback
 
 #[test]
 fn f18a_child_cli_final_result_and_read_only_lookup_preserve_authoritative_records() {
-    let server = OfflineVerifierServer::start_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    fixture.save_provider_as("offline-f18a");
-    fixture.configure_verification_owner();
+    let (server, fixture) = OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        fixture.save_provider_as("offline-f18a");
+        fixture.configure_verification_owner();
+        fixture
+    });
     let original_unrelated =
         std::fs::read(fixture.workspace.join("unrelated.txt")).expect("F18A unrelated file");
     let original_index =
@@ -3479,12 +3493,13 @@ fn f18a_child_cli_final_result_and_read_only_lookup_preserve_authoritative_recor
 
 #[test]
 fn f18b_schema_validated_model_answer_preserves_authoritative_effects_and_lookup() {
-    let server = OfflineVerifierServer::start_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    fixture.save_provider_as("offline-f18b");
-    fixture.configure_verification_owner();
+    let (server, fixture) = OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        fixture.save_provider_as("offline-f18b");
+        fixture.configure_verification_owner();
+        fixture
+    });
     std::fs::create_dir_all(fixture.workspace.join("contracts")).expect("F18B contracts path");
     let schema_path = fixture.workspace.join("contracts/answer.schema.json");
     let schema = r#"{
@@ -3566,14 +3581,15 @@ fn f18b_schema_validated_model_answer_preserves_authoritative_effects_and_lookup
 
 #[test]
 fn f18b_invalid_schema_stops_before_inference_and_invalid_answer_retains_effects() {
-    let invalid_schema_server = OfflineVerifierServer::start_positive();
-    let invalid_schema_fixture = Fixture::with_endpoint_and_credential(
-        &invalid_schema_server.endpoint,
-        SYNTHETIC_CREDENTIAL_CANARY,
-    );
-    invalid_schema_fixture.prepare_verification_fixtures();
-    invalid_schema_fixture.save_provider_as("offline-f18b-invalid-schema");
-    invalid_schema_fixture.configure_verification_owner();
+    let (invalid_schema_server, invalid_schema_fixture) =
+        OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+            let fixture =
+                Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+            fixture.prepare_verification_fixtures();
+            fixture.save_provider_as("offline-f18b-invalid-schema");
+            fixture.configure_verification_owner();
+            fixture
+        });
     std::fs::write(
         invalid_schema_fixture.workspace.join("invalid.schema.json"),
         r#"{"type":"object","properties":{},"allOf":[]}"#,
@@ -3594,14 +3610,15 @@ fn f18b_invalid_schema_stops_before_inference_and_invalid_answer_retains_effects
     assert!(invalid_schema_server.requests.lock().unwrap().is_empty());
     assert!(invalid_schema_server.finish().is_empty());
 
-    let invalid_answer_server = OfflineVerifierServer::start_positive();
-    let invalid_answer_fixture = Fixture::with_endpoint_and_credential(
-        &invalid_answer_server.endpoint,
-        SYNTHETIC_CREDENTIAL_CANARY,
-    );
-    invalid_answer_fixture.prepare_verification_fixtures();
-    invalid_answer_fixture.save_provider_as("offline-f18b-invalid-answer");
-    invalid_answer_fixture.configure_verification_owner();
+    let (invalid_answer_server, invalid_answer_fixture) =
+        OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+            let fixture =
+                Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+            fixture.prepare_verification_fixtures();
+            fixture.save_provider_as("offline-f18b-invalid-answer");
+            fixture.configure_verification_owner();
+            fixture
+        });
     std::fs::write(
         invalid_answer_fixture.workspace.join("answer.schema.json"),
         r#"{"type":"object","properties":{"summary":{"type":"integer"},"changed":{"type":"boolean"},"verified":{"type":"boolean"}},"required":["summary","changed","verified"],"additionalProperties":false}"#,
@@ -3797,12 +3814,13 @@ fn f18b_contract_applies_only_to_f19a_parent_terminal_answer() {
 
 #[test]
 fn f18a_final_result_reports_unapproved_verifier_without_launching_it() {
-    let server = OfflineVerifierServer::start();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    fixture.save_provider_as("offline-f18a-approval");
-    fixture.configure_owner(true);
+    let (server, fixture) = OfflineVerifierServer::start(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        fixture.save_provider_as("offline-f18a-approval");
+        fixture.configure_owner(true);
+        fixture
+    });
 
     let output = fixture.run(&[
         "run",
@@ -3832,12 +3850,13 @@ fn f18a_final_result_reports_unapproved_verifier_without_launching_it() {
 
 #[test]
 fn f18a_final_result_reports_provider_failure_after_committed_edit() {
-    let server = OfflineVerifierServer::start_positive_after_edit_failure();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    fixture.save_provider_as("offline-f18a-post-edit-failure");
-    fixture.configure_verification_owner();
+    let (server, fixture) = OfflineVerifierServer::start_positive_after_edit_failure(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        fixture.save_provider_as("offline-f18a-post-edit-failure");
+        fixture.configure_verification_owner();
+        fixture
+    });
 
     let output = fixture.run(&["run", "--final-result", "--prompt", verification_prompt()]);
     assert!(!output.status.success(), "F18A post-edit failure succeeded");
@@ -3983,21 +4002,22 @@ fn f18a_final_result_preserves_failed_verifier_against_model_success_claim() {
 
 #[test]
 fn f16a_child_cli_project_verifier_denies_without_owner_approval() {
-    let server = OfflineVerifierServer::start_project_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    std::fs::create_dir_all(fixture.workspace.join(".agents"))
-        .expect("F16A denial agents directory");
-    std::fs::write(
+    let (server, fixture) = OfflineVerifierServer::start_project_positive(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        std::fs::create_dir_all(fixture.workspace.join(".agents"))
+            .expect("F16A denial agents directory");
+        std::fs::write(
         fixture.workspace.join(".agents/verification.yaml"),
         format!(
             "version: 1\nrunners:\n  - id: {F16A_PROJECT_RUNNER_ID}\n    label: F16A project cargo tests\n    program: cargo\n    args: [test, --workspace, --locked, --offline]\n    cwd: .\n    timeout_ms: 300000\n    output_limit: 524288\n"
         ),
     )
     .expect("F16A denial project definition");
-    fixture.save_provider_as("offline-f16a-denial");
-    fixture.configure_verification_owner();
+        fixture.save_provider_as("offline-f16a-denial");
+        fixture.configure_verification_owner();
+        fixture
+    });
 
     let output = fixture.run(&[
         "run",
@@ -4025,23 +4045,24 @@ fn f16a_child_cli_project_verifier_denies_without_owner_approval() {
 
 #[test]
 fn f16a_child_cli_project_verifier_requires_registration_and_owner_approval() {
-    let server = OfflineVerifierServer::start_project_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    std::fs::create_dir_all(fixture.workspace.join(".agents")).expect("F16A agents directory");
-    std::fs::write(
+    let (server, (fixture, approval)) = OfflineVerifierServer::start_project_positive(|endpoint| {
+        let fixture = Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+        fixture.prepare_verification_fixtures();
+        std::fs::create_dir_all(fixture.workspace.join(".agents")).expect("F16A agents directory");
+        std::fs::write(
         fixture.workspace.join(".agents/verification.yaml"),
         format!(
             "version: 1\nrunners:\n  - id: {F16A_PROJECT_RUNNER_ID}\n    label: F16A project cargo tests\n    program: cargo\n    args: [test, --workspace, --locked, --offline]\n    cwd: .\n    timeout_ms: 300000\n    output_limit: 524288\n"
         ),
     )
     .expect("F16A project verification definition");
-    fixture.save_provider_as("offline-f16a");
-    fixture.configure_verification_owner();
+        fixture.save_provider_as("offline-f16a");
+        fixture.configure_verification_owner();
 
-    let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
-    let approval = fixture.run(&["verification", "approve", &runner, "--json"]);
+        let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
+        let approval = fixture.run(&["verification", "approve", &runner, "--json"]);
+        (fixture, approval)
+    });
     assert_success(&approval, "F16A project owner approval");
     let approval_json: Value =
         serde_json::from_slice(&approval.stdout).expect("F16A project approval JSON");
@@ -4169,60 +4190,64 @@ fn grant_lookup_seed_irrelevant_history(fixture: &Fixture, after_approval: bool)
 #[test]
 fn grant_lookup_native_child_cli_verifies_with_older_and_record_1618_owner_grants() {
     for older in [false, true] {
-        let server = OfflineVerifierServer::start_project_history_positive();
-        let fixture =
-            Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-        grant_lookup_project_fixture(&fixture);
-        if !older {
-            grant_lookup_seed_irrelevant_history(&fixture, false);
-        }
-        let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
-        assert_success(
-            &fixture.run(&["verification", "approve", &runner, "--json"]),
-            "lookup exact owner approval",
-        );
-        if older {
-            grant_lookup_seed_irrelevant_history(&fixture, true);
-        }
-        let history: Value =
-            serde_json::from_slice(&fixture.run(&["permissions", "grants", "--json"]).stdout)
+        let (server, (fixture, runner, goal_id)) =
+            OfflineVerifierServer::start_project_history_positive(|endpoint| {
+                let fixture =
+                    Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+                grant_lookup_project_fixture(&fixture);
+                if !older {
+                    grant_lookup_seed_irrelevant_history(&fixture, false);
+                }
+                let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
+                assert_success(
+                    &fixture.run(&["verification", "approve", &runner, "--json"]),
+                    "lookup exact owner approval",
+                );
+                if older {
+                    grant_lookup_seed_irrelevant_history(&fixture, true);
+                }
+                let history: Value = serde_json::from_slice(
+                    &fixture.run(&["permissions", "grants", "--json"]).stdout,
+                )
                 .unwrap();
-        assert_eq!(history["grants"].as_array().unwrap().len(), 1000);
-        assert_eq!(history["coverage"]["total_count"], 1618);
-        assert_eq!(history["coverage"]["complete"], false);
-        let goal_output = fixture.run(&[
-            "goal",
-            "set",
-            "Scoped native task verification",
-            "--token-budget",
-            "500000",
-            "--tool-budget",
-            "256",
-            "--time-budget",
-            "30",
-            "--json",
-        ]);
-        assert_success(&goal_output, "native goal accounting setup");
-        let goal: Value = serde_json::from_slice(&goal_output.stdout).unwrap();
-        let goal_id = goal["goal"]["id"].as_str().unwrap();
-        assert_success(
-            &fixture.run(&[
-                "goal",
-                "limits",
-                "--goal-id",
-                goal_id,
-                "--limits",
-                "500000,32,1,256,30,500000,32,256,25",
-                "--json",
-            ]),
-            "native goal accounting limits",
-        );
+                assert_eq!(history["grants"].as_array().unwrap().len(), 1000);
+                assert_eq!(history["coverage"]["total_count"], 1618);
+                assert_eq!(history["coverage"]["complete"], false);
+                let goal_output = fixture.run(&[
+                    "goal",
+                    "set",
+                    "Scoped native task verification",
+                    "--token-budget",
+                    "500000",
+                    "--tool-budget",
+                    "256",
+                    "--time-budget",
+                    "30",
+                    "--json",
+                ]);
+                assert_success(&goal_output, "native goal accounting setup");
+                let goal: Value = serde_json::from_slice(&goal_output.stdout).unwrap();
+                let goal_id = goal["goal"]["id"].as_str().unwrap();
+                assert_success(
+                    &fixture.run(&[
+                        "goal",
+                        "limits",
+                        "--goal-id",
+                        goal_id,
+                        "--limits",
+                        "500000,32,1,256,30,500000,32,256,25",
+                        "--json",
+                    ]),
+                    "native goal accounting limits",
+                );
+                (fixture, runner, goal_id.to_owned())
+            });
         // Project receipt completion is checked explicitly, not represented as
         // an unsupported project criterion in the built-in goal supervisor.
         let output = fixture.run(&[
             "run",
             "--goal",
-            goal_id,
+            &goal_id,
             "--prompt",
             "Use the registered project verifier after the guarded fixture edit.",
             "--json",
@@ -4256,59 +4281,62 @@ fn grant_lookup_native_child_cli_verifies_with_older_and_record_1618_owner_grant
 #[test]
 fn grant_lookup_native_child_cli_denies_revoked_or_changed_runner_without_process_start() {
     for changed in [false, true] {
-        let server = OfflineVerifierServer::start_project_history_positive();
-        let fixture =
-            Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-        grant_lookup_project_fixture(&fixture);
-        grant_lookup_seed_irrelevant_history(&fixture, false);
-        let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
-        assert_success(
-            &fixture.run(&["verification", "approve", &runner, "--json"]),
-            "negative lookup approval",
-        );
-        if changed {
-            let path = fixture.workspace.join(".agents/verification.yaml");
-            let text = std::fs::read_to_string(&path)
-                .unwrap()
-                .replace("--offline, -j", "--offline, --lib, -j");
-            std::fs::write(path, text).unwrap();
-        } else {
-            let store = argentum_store::Store::open(&fixture.database).unwrap();
-            let project = store
-                .resolve_workspace(&fixture.workspace)
-                .unwrap()
-                .snapshot
-                .project
-                .id;
-            let broker = argentum_security::CapabilityBroker::new(
-                &fixture.workspace,
-                argentum_security::ApprovalPolicy::default(),
-            )
-            .unwrap();
-            let workspace = argentum_workspaces::WorkspaceManager::new(broker);
-            let tools = argentum_tools::ToolRegistry::with_builtins(workspace.clone());
-            let selected = [argentum_domain::VerificationRunnerId::Project(
-                F16A_PROJECT_RUNNER_ID.into(),
-            )];
-            let subject = argentum_domain::GrantSubject::Action {
-                tool_id: "verify".into(),
-                target: format!("fixed runners: {runner}"),
-                binding: tools.verification_binding(&workspace, &selected).unwrap(),
-            };
-            let grant = store
-                .authorization_grants(
-                    project,
-                    &[argentum_domain::Capability::ExternalProcess],
-                    &[subject],
-                )
-                .unwrap()
-                .into_iter()
-                .next()
-                .unwrap();
-            store
-                .revoke_approval_grant(project, grant.id, argentum_domain::now())
-                .unwrap();
-        }
+        let (server, (fixture, runner)) =
+            OfflineVerifierServer::start_project_history_positive(|endpoint| {
+                let fixture =
+                    Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+                grant_lookup_project_fixture(&fixture);
+                grant_lookup_seed_irrelevant_history(&fixture, false);
+                let runner = format!("project:{F16A_PROJECT_RUNNER_ID}");
+                assert_success(
+                    &fixture.run(&["verification", "approve", &runner, "--json"]),
+                    "negative lookup approval",
+                );
+                if changed {
+                    let path = fixture.workspace.join(".agents/verification.yaml");
+                    let text = std::fs::read_to_string(&path)
+                        .unwrap()
+                        .replace("--offline, -j", "--offline, --lib, -j");
+                    std::fs::write(path, text).unwrap();
+                } else {
+                    let store = argentum_store::Store::open(&fixture.database).unwrap();
+                    let project = store
+                        .resolve_workspace(&fixture.workspace)
+                        .unwrap()
+                        .snapshot
+                        .project
+                        .id;
+                    let broker = argentum_security::CapabilityBroker::new(
+                        &fixture.workspace,
+                        argentum_security::ApprovalPolicy::default(),
+                    )
+                    .unwrap();
+                    let workspace = argentum_workspaces::WorkspaceManager::new(broker);
+                    let tools = argentum_tools::ToolRegistry::with_builtins(workspace.clone());
+                    let selected = [argentum_domain::VerificationRunnerId::Project(
+                        F16A_PROJECT_RUNNER_ID.into(),
+                    )];
+                    let subject = argentum_domain::GrantSubject::Action {
+                        tool_id: "verify".into(),
+                        target: format!("fixed runners: {runner}"),
+                        binding: tools.verification_binding(&workspace, &selected).unwrap(),
+                    };
+                    let grant = store
+                        .authorization_grants(
+                            project,
+                            &[argentum_domain::Capability::ExternalProcess],
+                            &[subject],
+                        )
+                        .unwrap()
+                        .into_iter()
+                        .next()
+                        .unwrap();
+                    store
+                        .revoke_approval_grant(project, grant.id, argentum_domain::now())
+                        .unwrap();
+                }
+                (fixture, runner)
+            });
         let output = fixture.run(&[
             "run",
             "--prompt",
@@ -4336,13 +4364,16 @@ fn grant_lookup_native_child_cli_denies_revoked_or_changed_runner_without_proces
 
 #[test]
 fn f14a_child_cli_selected_skill_completes_read_edit_and_typed_verification() {
-    let server = OfflineVerifierServer::start_positive();
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    let selected_skill_digest = fixture.prepare_f14a_skills();
-    fixture.save_provider_as("offline-f14a");
-    fixture.configure_verification_owner();
+    let (server, (fixture, selected_skill_digest)) =
+        OfflineVerifierServer::start_positive_with_preparation(|endpoint| {
+            let fixture =
+                Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+            fixture.prepare_verification_fixtures();
+            let digest = fixture.prepare_f14a_skills();
+            fixture.save_provider_as("offline-f14a");
+            fixture.configure_verification_owner();
+            (fixture, digest)
+        });
 
     let original_manifest =
         std::fs::read(fixture.workspace.join("Cargo.toml")).expect("F14A original manifest");
@@ -4810,12 +4841,15 @@ fn child_cli_distinct_rejection_targets_continue_but_identical_targets_stop() {
 
 #[test]
 fn f11_offline_child_cli_retries_transient_rejection_before_typed_verification() {
-    let server = OfflineVerifierServer::start_positive_with_transient_rejection(2);
-    let fixture =
-        Fixture::with_endpoint_and_credential(&server.endpoint, SYNTHETIC_CREDENTIAL_CANARY);
-    fixture.prepare_verification_fixtures();
-    fixture.save_provider_as("offline-f11");
-    fixture.configure_verification_owner();
+    let (server, fixture) =
+        OfflineVerifierServer::start_positive_with_transient_rejection(2, |endpoint| {
+            let fixture =
+                Fixture::with_endpoint_and_credential(endpoint, SYNTHETIC_CREDENTIAL_CANARY);
+            fixture.prepare_verification_fixtures();
+            fixture.save_provider_as("offline-f11");
+            fixture.configure_verification_owner();
+            fixture
+        });
 
     let original_source =
         std::fs::read(fixture.workspace.join("src/lib.rs")).expect("F11 original source");

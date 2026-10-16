@@ -95,6 +95,14 @@ Results are reported by the maintenance follow-up PR and exact artifact
 provenance. A source document or successful subset is not proof of those gates.
 No new live autonomy result or full security certification is claimed.
 
+Local combined qualification also exposed an existing mock-server setup race:
+CLI fixtures started their bounded exchange clock before owner preparation.
+These cases now reuse the existing prepared-server path, including retry,
+answer-contract, project-approval and grant-history controls. The exchange/read/write and child
+process limits, assertions, request counts and real-model ignores are unchanged.
+The existing same-bound negative/positive preparation control remains required;
+the original failed run is retained separately from affected-case requalification.
+
 Primary selection references: [Rustls 0.23.46 release](https://github.com/rustls/rustls/releases/tag/v%2F0.23.46),
 [RustSec 0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html),
 [0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html),
