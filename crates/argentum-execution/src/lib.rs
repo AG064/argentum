@@ -1,4 +1,8 @@
+#[cfg(feature = "artifact-render")]
+mod artifact_render;
 mod diagnostics;
+#[cfg(feature = "artifact-render")]
+pub use artifact_render::*;
 mod executable;
 mod git;
 mod jobs;

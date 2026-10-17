@@ -278,7 +278,8 @@ impl ProcessSpec {
         boundary: std::sync::Arc<crate::probe_sandbox::ProbeSandbox>,
         environment: BTreeMap<String, String>,
     ) -> Self {
-        // Only the internal fixed Rust-check builder can call this. No caller-supplied env map.
+        // Only internal fixed Rust-check/PDF-worker builders can call this.
+        // Neither path accepts a model-supplied environment map.
         self.environment = environment;
         self.probe_boundary = Some(boundary);
         self

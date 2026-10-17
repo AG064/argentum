@@ -6,6 +6,8 @@ use std::pin::Pin;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(feature = "artifacts")]
+mod artifact_cli;
 #[cfg(feature = "extensions")]
 mod extension_cli;
 mod model_picker;
@@ -56,6 +58,34 @@ fn main() -> ExitCode {
 
 #[tokio::main]
 async fn run_main() -> ExitCode {
+    if env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("artifacts")) {
+        #[cfg(feature = "artifacts")]
+        {
+            let arguments = env::args_os()
+                .skip(2)
+                .map(|s| {
+                    s.into_string()
+                        .map_err(|_| "artifact arguments must be UTF-8".into())
+                })
+                .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>();
+            let result = match arguments {
+                Ok(arguments) => artifact_cli::run(arguments).await,
+                Err(error) => Err(error),
+            };
+            return match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("argentum: {error}");
+                    ExitCode::FAILURE
+                }
+            };
+        }
+        #[cfg(not(feature = "artifacts"))]
+        {
+            eprintln!("argentum: this build omits optional local artifacts");
+            return ExitCode::FAILURE;
+        }
+    }
     if env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("extensions")) {
         #[cfg(feature = "extensions")]
         {

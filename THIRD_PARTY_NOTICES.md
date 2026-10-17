@@ -1,5 +1,16 @@
 # Third-party notices
 
+## Optional local artifact assets
+
+The explicitly selected local artifact package includes PDFium chromium/8100
+(Windows x64, non-V8/non-XFA) from bblanchon/pdfium-binaries and Noto Sans from
+Google Fonts revision 2984c575fdce412ee02b2baaba67672b9a9434d8. Exact upstream
+URLs, byte bounds and SHA-256 pins are in `third-party/local-artifact-assets.json`.
+PDFium's upstream license and bundled component notices are retained with the
+optional package. Noto Sans is under SIL Open Font License 1.1; its exact OFL
+text is included as `artifacts/OFL-NotoSans.txt`. These are not default core
+startup dependencies, owner credentials, connected accounts or model downloads.
+
 Argentum by AG064 (https://github.com/AG064/argentum).
 First-party code uses the exact root LICENSE: MIT-derived terms with an additional
 mandatory acknowledgement. Cargo `license-file` points to that preserved text;

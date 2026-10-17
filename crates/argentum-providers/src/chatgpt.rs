@@ -1158,6 +1158,29 @@ mod tests {
 
     #[test]
     fn current_broker_png_reaches_actual_responses_input_and_wire_accounting() {
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 1, 1);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(&[20, 30, 40]).unwrap();
+        }
+        assert_current_png_wire(&png);
+    }
+
+    #[test]
+    #[ignore = "requires a real retained local-artifact PNG; explicit offline qualification"]
+    fn rendered_artifact_png_reaches_actual_responses_input_and_wire_accounting() {
+        let path = std::env::var_os("ARGENTUM_TEST_ARTIFACT_PNG")
+            .expect("an actual rendered artifact PNG is required");
+        let png = std::fs::read(path).unwrap();
+        assert!(png.len() <= 128 * 1024);
+        assert!(png.len() > 100, "not the one-pixel control");
+        assert_current_png_wire(&png);
+    }
+
+    fn assert_current_png_wire(png: &[u8]) {
         let profile = ProviderPreset::ChatGpt.profile(None, None).unwrap();
         let mut request = request();
         let (calls, output, _, _) = completed(&response(), &request.model).unwrap();
@@ -1177,20 +1200,10 @@ mod tests {
             uuid::Uuid::new_v4(),
         )
         .unwrap();
-        // Generate a valid static PNG, including pixels and checked CRCs. The
-        // previous header-only fixture had an invalid IDAT and is not accepted.
-        let mut png = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(&mut png, 1, 1);
-            encoder.set_color(png::ColorType::Rgb);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header().unwrap();
-            writer.write_image_data(&[20, 30, 40]).unwrap();
-        }
         use sha2::Digest;
-        let expected = format!("{:x}", sha2::Sha256::digest(&png));
-        let image = ModelImage::from_png(&png, &expected, "http://127.0.0.1:18080".into()).unwrap();
-        let mut corrupt = png.clone();
+        let expected = format!("{:x}", sha2::Sha256::digest(png));
+        let image = ModelImage::from_png(png, &expected, "http://127.0.0.1:18080".into()).unwrap();
+        let mut corrupt = png.to_vec();
         let last = corrupt.len() - 1;
         corrupt[last] ^= 1;
         let corrupt_sha = format!("{:x}", sha2::Sha256::digest(&corrupt));
@@ -1198,7 +1211,7 @@ mod tests {
             ModelImage::from_png(&corrupt, &corrupt_sha, "http://127.0.0.1:18080".into()).is_err()
         );
         assert!(
-            ModelImage::from_png(&png, &"0".repeat(64), "http://127.0.0.1:18080".into()).is_err()
+            ModelImage::from_png(png, &"0".repeat(64), "http://127.0.0.1:18080".into()).is_err()
         );
         request.tool_exchanges.push(ModelToolExchange {
             chatgpt_continuation: Some(Box::new(state)),
@@ -1255,7 +1268,7 @@ mod tests {
             wire.len() as u64
         );
         assert!(
-            ModelImage::from_png(&png, &"0".repeat(64), "http://127.0.0.1:18080".into()).is_err()
+            ModelImage::from_png(png, &"0".repeat(64), "http://127.0.0.1:18080".into()).is_err()
         );
         let exchange = request.tool_exchanges.pop().unwrap();
         request.history.push(ModelMessage {

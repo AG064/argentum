@@ -4,12 +4,15 @@ param(
     [string]$TargetDirectory = '',
     [ValidateRange(1, 8)][int]$Jobs = 1,
     [switch]$Extensions,
-    [switch]$DesktopControl
+    [switch]$DesktopControl,
+    [switch]$Artifacts,
+    [string]$ArtifactAssets = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'Windows MSVC packaging requires PowerShell 7 on Windows.' }
 if ($DesktopControl) { $Extensions = $true }
+if ($Artifacts) { $Extensions = $true }
 $sourceRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not [IO.Path]::IsPathFullyQualified($OutputDirectory) -or
@@ -30,7 +33,10 @@ try {
     $cargo = (& cargo --version).Trim()
     New-Item -ItemType Directory -Path $output | Out-Null
     $targetArgs = @()
-    $featureArgs = if ($DesktopControl) { @('--features','argentum-cli/desktop-control') } elseif ($Extensions) { @('--features','argentum-cli/extensions') } else { @() }
+    $selectedFeatures=@()
+    if ($DesktopControl) { $selectedFeatures+='argentum-cli/desktop-control' } elseif ($Extensions) { $selectedFeatures+='argentum-cli/extensions' }
+    if ($Artifacts) { $selectedFeatures+='argentum-cli/artifacts' }
+    $featureArgs=if($selectedFeatures.Count){@('--features',($selectedFeatures -join ','))}else{@()}
     if ($TargetDirectory) {
         if (-not [IO.Path]::IsPathFullyQualified($TargetDirectory)) { throw 'Target directory must be absolute.' }
         $targetArgs = @('--target-dir', [IO.Path]::GetFullPath($TargetDirectory))
@@ -42,6 +48,10 @@ try {
         $env:CARGO_INCREMENTAL = '0'
         & cargo build -p argentum-cli --bin argentum --release --locked -j $Jobs @featureArgs @targetArgs *> (Join-Path $output 'build.log')
         if ($LASTEXITCODE -ne 0) { throw 'Cargo build failed. Retain build.log.' }
+        if ($Artifacts) {
+            & cargo build -p argentum-artifacts --bin argentum-pdf-worker --release --locked -j $Jobs @targetArgs *> (Join-Path $output 'worker-build.log')
+            if ($LASTEXITCODE -ne 0) { throw 'Artifact worker build failed. Retain worker-build.log.' }
+        }
     } finally {
         [Environment]::SetEnvironmentVariable('CARGO_PROFILE_RELEASE_DEBUG', $previousDebug, 'Process')
         [Environment]::SetEnvironmentVariable('CARGO_INCREMENTAL', $previousIncremental, 'Process')
@@ -52,6 +62,7 @@ try {
     $cli = $metadata.packages | Where-Object name -eq 'argentum-cli'
     $version = $cli.version
     $suffix = if ($DesktopControl) { '-windows-desktop' } elseif ($Extensions) { '-extensions' } else { '' }
+    if($Artifacts){$suffix+='-artifacts'}
     $package = Join-Path $output "argentum-$version-windows-x64$suffix"
     New-Item -ItemType Directory -Path $package | Out-Null
     $targetRoot = if ($TargetDirectory) { [IO.Path]::GetFullPath($TargetDirectory) } else { $metadata.target_directory }
@@ -89,6 +100,27 @@ try {
         }
         # No application, owner configuration, document, screen, account or
         # campaign state is part of this optional package.
+    }
+    if ($Artifacts) {
+        if(-not [IO.Path]::IsPathFullyQualified($ArtifactAssets)){throw 'Optional artifacts require an explicitly prepared absolute asset directory.'}
+        $pins=Get-Content -Raw -LiteralPath (Join-Path $sourceRoot 'third-party/local-artifact-assets.json') | ConvertFrom-Json
+        foreach($entry in @(@{path='bin/pdfium.dll';sha=$pins.pdfium.dll_sha256},@{path='NotoSans.ttf';sha=$pins.font.sha256},@{path='OFL.txt';sha=$pins.font.license_sha256})){
+            $file=Join-Path $ArtifactAssets $entry.path
+            if((Get-Item -LiteralPath $file).Attributes -band [IO.FileAttributes]::ReparsePoint -or
+               (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha){throw 'Artifact asset identity mismatch'}
+        }
+        $artifactDirectory=Join-Path $package 'artifacts'
+        New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
+        Copy-Item -LiteralPath (Join-Path $targetRoot 'release/argentum-pdf-worker.exe') -Destination (Join-Path $artifactDirectory 'argentum-pdf-worker.exe')
+        Copy-Item -LiteralPath (Join-Path $ArtifactAssets 'bin/pdfium.dll') -Destination (Join-Path $artifactDirectory 'pdfium.dll')
+        Copy-Item -LiteralPath (Join-Path $ArtifactAssets 'NotoSans.ttf') -Destination (Join-Path $artifactDirectory 'NotoSans.ttf')
+        Copy-Item -LiteralPath (Join-Path $ArtifactAssets 'OFL.txt') -Destination (Join-Path $artifactDirectory 'OFL-NotoSans.txt')
+        Copy-Item -LiteralPath (Join-Path $ArtifactAssets 'LICENSE') -Destination (Join-Path $artifactDirectory 'LICENSE-PDFium.txt')
+        Copy-Item -LiteralPath (Join-Path $ArtifactAssets 'licenses') -Destination (Join-Path $artifactDirectory 'licenses') -Recurse
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'third-party/local-artifact-assets.json') -Destination (Join-Path $artifactDirectory 'asset-provenance.json')
+        foreach($entry in @(@{path='pdfium.dll';sha=$pins.pdfium.dll_sha256},@{path='NotoSans.ttf';sha=$pins.font.sha256},@{path='OFL-NotoSans.txt';sha=$pins.font.license_sha256})){
+            if((Get-FileHash -LiteralPath (Join-Path $artifactDirectory $entry.path)).Hash.ToLowerInvariant() -ne $entry.sha){throw 'Copied artifact asset identity mismatch'}
+        }
     }
     # Retain actual license/notice bytes for the selected CLI dependency closure.
     # Build dependencies are included conservatively; dev-only and unrelated UI
@@ -163,9 +195,10 @@ try {
         repository='https://github.com/AG064/argentum'; commit=$commit; tree=$tree
         target='x86_64-pc-windows-msvc'; rustc=$rustc; cargo=$cargo
         build_arguments=@('build','-p','argentum-cli','--bin','argentum','--release','--locked','-j',[string]$Jobs) + $featureArgs
-        features=if ($DesktopControl) { @('desktop-control','extensions') } elseif ($Extensions) { @('extensions') } else { @() }
+        features=@($selectedFeatures | ForEach-Object {$_ -replace '^argentum-cli/',''})
         optional_browser_adapter_included=[bool]$Extensions
         optional_windows_desktop_adapter_included=[bool]$DesktopControl
+        optional_local_artifacts_included=[bool]$Artifacts
         profile_environment=@{CARGO_PROFILE_RELEASE_DEBUG='0';CARGO_INCREMENTAL='0'}
         executable_sha256=$binaryHash; signed=$false; published=$false
         credentials_included=$false; stores_included=$false; models_included=$false

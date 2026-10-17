@@ -128,6 +128,9 @@ pub enum ExtensionOperationKind {
     DesktopAction,
     DesktopScreenshot,
     DesktopClose,
+    ArtifactOpen,
+    ArtifactRender,
+    ArtifactPage,
 }
 
 impl ExtensionOperation {
@@ -153,6 +156,9 @@ impl ExtensionOperation {
                 Some("desktop_action") => K::DesktopAction,
                 Some("desktop_screenshot") => K::DesktopScreenshot,
                 Some("desktop_close") => K::DesktopClose,
+                Some("artifact_open") => K::ArtifactOpen,
+                Some("artifact_render") => K::ArtifactRender,
+                Some("artifact_page") => K::ArtifactPage,
                 _ => K::Invoke,
             },
         }

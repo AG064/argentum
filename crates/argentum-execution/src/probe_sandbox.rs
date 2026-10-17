@@ -673,48 +673,7 @@ impl ProbeChild {
             // Require an actual access-check denial to an Everyone + ALL_APPLICATION_PACKAGES
             // descriptor, in addition to the successfully installed opt-out creation attribute.
             // This checks effective restriction without pretending a failed query returned a flag.
-            let mut impersonation = std::ptr::null_mut();
-            checked(DuplicateToken(
-                token.as_raw_handle(),
-                SecurityImpersonation,
-                &mut impersonation,
-            ))?;
-            let impersonation = owned(impersonation)?;
-            let descriptor = wide("O:SYG:SYD:(A;;0x1;;;WD)(A;;0x1;;;AC)");
-            let mut sd = std::ptr::null_mut();
-            checked(ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                descriptor.as_ptr(),
-                SDDL_REVISION_1,
-                &mut sd,
-                std::ptr::null_mut(),
-            ))?;
-            let mapping = GENERIC_MAPPING {
-                GenericRead: 1,
-                GenericWrite: 2,
-                GenericExecute: 4,
-                GenericAll: 7,
-            };
-            let mut privileges = [0usize; 128];
-            let mut length = std::mem::size_of_val(&privileges) as u32;
-            let mut granted = 0;
-            let mut access = 0;
-            let result = AccessCheck(
-                sd,
-                impersonation.as_raw_handle(),
-                1,
-                &mapping,
-                privileges.as_mut_ptr().cast(),
-                &mut length,
-                &mut granted,
-                &mut access,
-            );
-            LocalFree(sd);
-            checked(result)?;
-            if access != 0 || granted != 0 {
-                return Err(io::Error::other(
-                    "check token retains all-applications access",
-                ));
-            }
+            verify_no_all_app_packages(token.as_raw_handle())?;
         }
         Ok(())
     }
@@ -746,6 +705,59 @@ impl ProbeChild {
         }
         unsafe { checked(TerminateProcess(self.process.as_raw_handle(), 1)) }
     }
+}
+
+/// Effective ALL_APPLICATION_PACKAGES denial shared by the suspended-child
+/// broker and the fixed PDF worker. Do not replace this with the unsupported
+/// class-46 query, or merely test TokenIsAppContainer (which also admits AC).
+pub(crate) fn verify_no_all_app_packages(token: HANDLE) -> io::Result<()> {
+    // SAFETY: caller retains a live TOKEN_QUERY|TOKEN_DUPLICATE handle. The
+    // descriptor, impersonation token and privilege storage are locally owned.
+    unsafe {
+        let mut impersonation = std::ptr::null_mut();
+        checked(DuplicateToken(
+            token,
+            SecurityImpersonation,
+            &mut impersonation,
+        ))?;
+        let impersonation = owned(impersonation)?;
+        let descriptor = wide("O:SYG:SYD:(A;;0x1;;;WD)(A;;0x1;;;AC)");
+        let mut sd = std::ptr::null_mut();
+        checked(ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            descriptor.as_ptr(),
+            SDDL_REVISION_1,
+            &mut sd,
+            std::ptr::null_mut(),
+        ))?;
+        let mapping = GENERIC_MAPPING {
+            GenericRead: 1,
+            GenericWrite: 2,
+            GenericExecute: 4,
+            GenericAll: 7,
+        };
+        let mut privileges = [0usize; 128];
+        let mut length = std::mem::size_of_val(&privileges) as u32;
+        let mut granted = 0;
+        let mut access = 0;
+        let result = AccessCheck(
+            sd,
+            impersonation.as_raw_handle(),
+            1,
+            &mapping,
+            privileges.as_mut_ptr().cast(),
+            &mut length,
+            &mut granted,
+            &mut access,
+        );
+        LocalFree(sd);
+        checked(result)?;
+        if access != 0 || granted != 0 {
+            return Err(io::Error::other(
+                "check token retains all-applications access",
+            ));
+        }
+    }
+    Ok(())
 }
 impl Drop for ProbeChild {
     fn drop(&mut self) {

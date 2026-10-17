@@ -11,6 +11,47 @@ concurrency:
   group: native-cli-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  local-artifacts:
+    # Optional local profile, no personal accounts or live model requests.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - name: Prepare pinned dependencies and local artifact assets
+        shell: pwsh
+        run: |
+          cargo fetch --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Rust preparation failed' }
+          ./scripts/prepare-artifact-assets.ps1 -OutputDirectory "$env:RUNNER_TEMP/artifact-assets"
+      - name: Check and lint optional local artifact profile
+        run: |
+          cargo check -p argentum-cli --features artifacts --all-targets --locked --offline -j 1
+          cargo clippy -p argentum-cli --features artifacts --all-targets --locked --offline -j 1 -- -D warnings
+          cargo clippy -p argentum-artifacts --all-targets --locked --offline -j 1 -- -D warnings
+      - name: Actual local artifact CLI and worker controls
+        shell: pwsh
+        run: |
+          ./scripts/test-local-artifacts-offline.ps1 -OutputDirectory "$env:RUNNER_TEMP/local-artifact-controls" -AssetsDirectory "$env:RUNNER_TEMP/artifact-assets" -CiNullAccess
+          cargo test -p argentum-runtime --features extensions --lib extensions::image_authority_tests --locked --offline -j 1 -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Image authority controls failed' }
+      - name: Retain synthetic artifact evidence, not a release
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: optional-local-artifact-controls-${{ github.run_id }}
+          path: ${{ runner.temp }}/local-artifact-controls
+          if-no-files-found: warn
+          retention-days: 14
   extensions:
     # Separate optional feature qualification, never the core RC artifact.
     runs-on: windows-2025
@@ -168,6 +209,13 @@ jobs:
         env:
           CARGO_NET_OFFLINE: 'true'
         run: ./scripts/package-windows-cli.ps1 -DesktopControl -Jobs 1 -OutputDirectory "$env:RUNNER_TEMP/native-desktop-package"
+      - name: Prepare unsigned optional local artifact successor only
+        shell: pwsh
+        env:
+          CARGO_NET_OFFLINE: 'true'
+        run: |
+          ./scripts/prepare-artifact-assets.ps1 -OutputDirectory "$env:RUNNER_TEMP/package-artifact-assets"
+          ./scripts/package-windows-cli.ps1 -DesktopControl -Artifacts -ArtifactAssets "$env:RUNNER_TEMP/package-artifact-assets" -Jobs 1 -OutputDirectory "$env:RUNNER_TEMP/native-local-artifact-package"
       - name: Retain build evidence, not a public release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -180,5 +228,12 @@ jobs:
         with:
           name: native-cli-windows-x64-desktop-unsigned
           path: ${{ runner.temp }}/native-desktop-package
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain optional local artifact build evidence, not a public release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-cli-windows-x64-local-artifacts-unsigned
+          path: ${{ runner.temp }}/native-local-artifact-package
           if-no-files-found: error
           retention-days: 14

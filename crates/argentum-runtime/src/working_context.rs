@@ -537,6 +537,10 @@ impl RuntimeService {
         budget: &argentum_domain::context_budget::ModelBudget,
         request: &argentum_providers::ModelRequest,
     ) -> Result<argentum_domain::context_budget::RequestAccounting, RuntimeError> {
+        #[cfg(feature = "extensions")]
+        let artifact_view = self.artifact_image_request_view(request)?;
+        #[cfg(feature = "extensions")]
+        let request = artifact_view.as_ref().unwrap_or(request);
         let limit = self.profile_catalog_context_limit(profile, &request.model)?;
         if limit.is_some_and(|limit| limit == 0 || budget.usable_context_tokens > limit) {
             return Err(RuntimeError::ContextBudget(
@@ -560,6 +564,10 @@ impl RuntimeService {
         budget: &argentum_domain::context_budget::ModelBudget,
         request: argentum_providers::ModelRequest,
     ) -> Result<argentum_providers::PreparedProviderRequest, RuntimeError> {
+        #[cfg(feature = "extensions")]
+        let request = self
+            .artifact_image_request_view(&request)?
+            .unwrap_or(request);
         #[cfg(feature = "extensions")]
         self.ensure_extension_images_current(&request)?;
         let limit = self.profile_catalog_context_limit(profile, &request.model)?;
