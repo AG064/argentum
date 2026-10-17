@@ -99,6 +99,11 @@ verified or silently replayed. Actual native completion additionally requires
 current approved-runner receipts, normal feedback, model acknowledgement,
 settled accounting and a terminal goal with no remaining work.
 
-The declared profile is implemented and under qualification. Passing local
-controls alone is not live native acceptance, Google/connected-app acceptance,
-general document compatibility, release readiness or a reliability rate.
+The declared profile completed one frozen local workflow on 2026-10-17 after
+offline qualification and exact owner approval. The model read both sources,
+authored the brief, received actual page pixels, obtained current fixed-verifier
+results and acknowledged them before normal completed-goal delivery. Independent
+content, rendering and preservation review passed. See [the scoped acceptance
+record](NEXT03_LOCAL_ACCEPTANCE.md) for provenance and separate evidence dimensions.
+This does not establish Google/connected-app acceptance, general document
+compatibility, release readiness or a reliability rate.

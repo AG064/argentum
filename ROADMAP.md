@@ -88,7 +88,12 @@ account connection and live acceptance. The optional Google draft is deferred,
 not accepted or deleted. The narrower implementation uses two bounded local
 inputs, model-authored Markdown, pinned PDF creation/rendering, current native
 verification and image evidence. See [the declared boundary](docs/LOCAL_ARTIFACTS.md).
-Local success does not qualify B3's remote revocation/mutation or sharing gates.
+One frozen local workflow completed on 2026-10-17 with current native receipts,
+model acknowledgement, actual page-image delivery and independent content,
+rendering and Git-preservation review. See [the scoped acceptance record](docs/NEXT03_LOCAL_ACCEPTANCE.md).
+This local success does not qualify B3's remote revocation/mutation or sharing
+gates, general document compatibility or release readiness. Google remains
+deferred; no later milestone or allowance is activated.
 
 ### Compatibility and maintained foundations
 

@@ -67,11 +67,14 @@ preserves that acceptance and requires its own source/package qualification.
 
 ## First run
 
-NEXT03's optional `artifacts` development feature targets local Markdown-to-PDF
-delivery through the same native runtime. It requires no Google account.
+NEXT03's optional `artifacts` development feature completed one bounded local
+Markdown-to-PDF workflow through the same native runtime on 2026-10-17.
+It requires no Google account.
 Its pinned worker, image and verification boundaries are described in
 [local artifacts](docs/LOCAL_ARTIFACTS.md). Qualification is separate from the
 accepted NEXT01/NEXT02 workflows, connected-app acceptance and the core RC.
+See [the scoped acceptance record](docs/NEXT03_LOCAL_ACCEPTANCE.md), including
+independent review, assistance and exact compiled-package provenance.
 
 Run from any directory. Supply the same workspace and database on every command
 when using an explicit store. Choose a new database for initial evaluation,
