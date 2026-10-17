@@ -364,11 +364,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "skrifa 0.44.0",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
  "tokio-util",
- "ttf-parser",
  "uuid",
  "windows-sys 0.61.2",
 ]

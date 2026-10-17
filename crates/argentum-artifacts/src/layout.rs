@@ -4,6 +4,10 @@ use crate::{
     ArtifactError as Error, Result,
 };
 use serde::{Deserialize, Serialize};
+use skrifa::{
+    instance::{LocationRef, Size},
+    FontRef, MetadataProvider,
+};
 
 pub const PAGE_WIDTH: f32 = 595.0;
 pub const PAGE_HEIGHT: f32 = 842.0;
@@ -39,7 +43,7 @@ pub struct Layout {
 }
 
 struct Composer<'a> {
-    face: ttf_parser::Face<'a>,
+    face: FontRef<'a>,
     pages: Vec<Page>,
     y: f32,
 }
@@ -47,6 +51,14 @@ struct Composer<'a> {
 impl Composer<'_> {
     fn measure(&self, text: &str, size: f32) -> Result<f32> {
         let mut width = 0f32;
+        let charmap = self.face.charmap();
+        let metrics = self
+            .face
+            .glyph_metrics(Size::unscaled(), LocationRef::default());
+        let units = self
+            .face
+            .metrics(Size::unscaled(), LocationRef::default())
+            .units_per_em;
         for c in text.chars() {
             // Initial profile is horizontal precomposed Latin/Greek/Cyrillic.
             // Unsupported shaping is an error, never a missing-glyph substitute.
@@ -57,15 +69,16 @@ impl Composer<'_> {
             {
                 return Err(Error::Contract("unsupported shaping or character in the initial PDF font profile; source was not changed"));
             }
-            let glyph = self
-                .face
-                .glyph_index(c)
+            let glyph = charmap
+                .map(c)
                 .ok_or(Error::Contract("font has no glyph for source character"))?;
-            let advance = self
-                .face
-                .glyph_hor_advance(glyph)
+            let advance = metrics
+                .advance_width(glyph)
                 .ok_or(Error::Contract("font advance is unavailable"))?;
-            width += f32::from(advance) * size / f32::from(self.face.units_per_em());
+            if !advance.is_finite() || advance < 0.0 {
+                return Err(Error::Contract("font advance is invalid"));
+            }
+            width += advance * size / f32::from(units);
         }
         if !width.is_finite() {
             return Err(Error::Contract("invalid measured line width"));
@@ -226,8 +239,14 @@ pub fn compose(document: &Document, font: &[u8]) -> Result<Layout> {
     if document.schema_version != 1 || document.blocks.len() > crate::markdown::MAX_BLOCKS {
         return Err(Error::Contract("invalid layout document"));
     }
-    let face =
-        ttf_parser::Face::parse(font, 0).map_err(|_| Error::Contract("pinned font is invalid"))?;
+    let face = FontRef::new(font).map_err(|_| Error::Contract("pinned font is invalid"))?;
+    if face
+        .metrics(Size::unscaled(), LocationRef::default())
+        .units_per_em
+        == 0
+    {
+        return Err(Error::Contract("font units are invalid"));
+    }
     let mut c = Composer {
         face,
         pages: vec![Page::default()],

@@ -20,7 +20,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
-ttf-parser = "=0.25.1"
+skrifa = "=0.44.0"
 
 [target.'cfg(windows)'.dependencies]
 libloading = "=0.8.9"
