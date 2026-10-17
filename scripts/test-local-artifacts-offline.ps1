@@ -5,6 +5,7 @@ param(
     [string]$TargetDirectory='',
     [string]$CliExecutable='',
     [string]$WorkerExecutable='',
+    [switch]$PackagedAssets,
     [switch]$CiNullAccess
 )
 Set-StrictMode -Version Latest
@@ -34,14 +35,16 @@ try {
     if(-not $WorkerExecutable){$WorkerExecutable=Join-Path $target 'debug/argentum-pdf-worker.exe'}
     $saved['PATH']=$env:PATH
     $env:PATH=(Split-Path -Parent $CliExecutable)+[IO.Path]::PathSeparator+$env:PATH
-    foreach($file in @($CliExecutable,$WorkerExecutable,(Join-Path $AssetsDirectory 'bin/pdfium.dll'),(Join-Path $AssetsDirectory 'NotoSans.ttf'))){
+    $dllRelative=if($PackagedAssets){'pdfium.dll'}else{'bin/pdfium.dll'}
+    $pdfium=Join-Path $AssetsDirectory $dllRelative
+    foreach($file in @($CliExecutable,$WorkerExecutable,$pdfium,(Join-Path $AssetsDirectory 'NotoSans.ttf'))){
         if(-not [IO.Path]::IsPathFullyQualified($file) -or -not (Test-Path -LiteralPath $file -PathType Leaf)){throw 'An explicit qualification component is unavailable'}
     }
     foreach($item in @(Get-ChildItem Env: | Where-Object Name -Match '(API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|ACCESS_KEY)')){
         $saved[$item.Name]=$item.Value;Remove-Item -LiteralPath ('Env:'+$item.Name)
     }
     $values=@{ARGENTUM_TEST_ARTIFACT_CLI_EXE=$CliExecutable;ARGENTUM_TEST_ARTIFACT_WORKER_EXE=$WorkerExecutable;
-        ARGENTUM_TEST_PDFIUM_DLL=(Join-Path $AssetsDirectory 'bin/pdfium.dll');ARGENTUM_TEST_ARTIFACT_FONT=(Join-Path $AssetsDirectory 'NotoSans.ttf');
+        ARGENTUM_TEST_PDFIUM_DLL=$pdfium;ARGENTUM_TEST_ARTIFACT_FONT=(Join-Path $AssetsDirectory 'NotoSans.ttf');
         ARGENTUM_TEST_ARTIFACT_RETAIN=(Join-Path $output 'roundtrip')}
     foreach($name in $values.Keys){if(-not $saved.ContainsKey($name)){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')};[Environment]::SetEnvironmentVariable($name,$values[$name],'Process')}
     $saved['ARGENTUM_TEST_ARTIFACT_PNG']=[Environment]::GetEnvironmentVariable('ARGENTUM_TEST_ARTIFACT_PNG','Process')
@@ -52,6 +55,11 @@ try {
     $selected=@($artifacts | Where-Object {$names -contains $_.target.name} | Sort-Object executable -Unique)
     if($selected.Count -ne $names.Count){throw 'Each current control executable must have a compiler-authored identity'}
     $body={
+        # The fixed verifier resolver intentionally rejects executables under
+        # CWD. CI builds under source/target; run controls in their disposable
+        # evidence directory, not the source checkout. Keep the resolver intact.
+        Push-Location $output
+        try {
         $results=[Collections.Generic.List[object]]::new()
         foreach($artifact in $selected){
             $log=Join-Path $output ($artifact.target.name+'.log')
@@ -78,6 +86,7 @@ try {
         $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'results.json') -Encoding utf8NoBOM
         Get-Content -LiteralPath $log -Tail 12 | Write-Host
         if(@($results | Where-Object exit_code -ne 0).Count){return 1};return 0
+        } finally { Pop-Location }
     }
     if($CiNullAccess){. (Join-Path $PSScriptRoot 'ci-null-scope.ps1');$code=Invoke-CiNullScope -Body $body -ReceiptPath (Join-Path $output 'null-scope.json')}
     else{$code=& $body}
