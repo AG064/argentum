@@ -1,0 +1,35 @@
+[package]
+name = "argentum-artifacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+
+[dependencies]
+argentum-execution = { workspace = true, features = ["artifact-render"] }
+argentum-extensions = { workspace = true, features = ["server-support"] }
+argentum-workspaces.workspace = true
+argentum-domain.workspace = true
+argentum-security.workspace = true
+pulldown-cmark.workspace = true
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "transport-async-rw"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+ttf-parser = "=0.25.1"
+
+[target.'cfg(windows)'.dependencies]
+libloading = "=0.8.9"
+png = "=0.18.1"
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "argentum-pdf-worker"
+path = "src/bin/pdf_worker.rs"

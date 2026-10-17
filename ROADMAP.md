@@ -83,6 +83,13 @@ depend on B2. Large capabilities should land as complete vertical workflows,
 not dozens of registered names with no end-to-end path. Modules stay optional
 and disabled until their actual policy/permission and installation checks pass.
 
+NEXT03 now separates a local artifact-delivery prerequisite from Google-specific
+account connection and live acceptance. The optional Google draft is deferred,
+not accepted or deleted. The narrower implementation uses two bounded local
+inputs, model-authored Markdown, pinned PDF creation/rendering, current native
+verification and image evidence. See [the declared boundary](docs/LOCAL_ARTIFACTS.md).
+Local success does not qualify B3's remote revocation/mutation or sharing gates.
+
 ### Compatibility and maintained foundations
 
 Portable Agent Plugins use root `plugin.json`, optional `mcp.json`, `skills/`

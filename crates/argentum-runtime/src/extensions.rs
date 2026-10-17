@@ -398,6 +398,106 @@ mod image_authority_tests {
             actual,
             super::super::model_request_projection_bytes(&no_pixels) + bytes
         );
+        // Local artifact replacement retires only superseded future pixels,
+        // never old charges or text. Browser images retain their existing gate.
+        assert!(runtime
+            .artifact_image_request_view(&request)
+            .unwrap()
+            .is_none());
+        {
+            let old_revision = record.revision;
+            let mut artifact_record = record.clone();
+            artifact_record.revision = Uuid::new_v4();
+            artifact_record
+                .definition
+                .allowed_tools
+                .push("artifact_page".into());
+            artifact_record
+                .definition
+                .image_scope
+                .as_mut()
+                .unwrap()
+                .origins
+                .push("https://local-artifacts.argentum.invalid".into());
+            artifact_record.approval_binding = Some(
+                admit(&artifact_record.definition, runtime.workspace.root())
+                    .unwrap()
+                    .binding,
+            );
+            runtime
+                .store
+                .save_extension_record(runtime.project_id, &artifact_record, Some(old_revision))
+                .unwrap();
+            let mut artifact_request = request.clone();
+            let mut artifact_image =
+                artifact_request.tool_exchanges[0].results[0].images[0].clone();
+            artifact_image.origin = "https://local-artifacts.argentum.invalid".into();
+            artifact_request.tool_exchanges[0].results[0].images[0] = artifact_image
+                .bind_extension(argentum_providers::ExtensionImageBinding {
+                    namespace: record.definition.namespace.clone(),
+                    revision: artifact_record.revision,
+                    run_id: run,
+                    context_id: context,
+                });
+            runtime
+                .extension_owner()
+                .image_contexts
+                .lock()
+                .unwrap()
+                .insert(format!("image-control.stdio@{run}"), Uuid::new_v4());
+            assert!(runtime
+                .ensure_extension_images_current(&artifact_request)
+                .is_err());
+            let filtered = runtime
+                .artifact_image_request_view(&artifact_request)
+                .unwrap()
+                .unwrap();
+            assert!(filtered.tool_exchanges[0].results[0].images.is_empty());
+            assert!(filtered.tool_exchanges[0].results[0]
+                .content
+                .contains("artifact_image_retired"));
+            assert_eq!(
+                artifact_request.tool_exchanges[0].results[0].images.len(),
+                1,
+                "original evidence was not modified"
+            );
+            let previous = artifact_record.revision;
+            artifact_record.active = false;
+            artifact_record.approval_binding = None;
+            artifact_record.revision = Uuid::new_v4();
+            runtime
+                .store
+                .save_extension_record(runtime.project_id, &artifact_record, Some(previous))
+                .unwrap();
+            assert!(
+                runtime
+                    .artifact_image_request_view(&artifact_request)
+                    .is_err(),
+                "retirement cannot conceal revocation"
+            );
+            let previous = artifact_record.revision;
+            record.revision = Uuid::new_v4();
+            runtime
+                .store
+                .save_extension_record(runtime.project_id, &record, Some(previous))
+                .unwrap();
+            request.tool_exchanges[0].results[0].images[0] = request.tool_exchanges[0].results[0]
+                .images[0]
+                .clone()
+                .bind_extension(argentum_providers::ExtensionImageBinding {
+                    namespace: record.definition.namespace.clone(),
+                    revision: record.revision,
+                    run_id: run,
+                    context_id: context,
+                });
+            runtime
+                .extension_owner()
+                .image_contexts
+                .lock()
+                .unwrap()
+                .insert(format!("image-control.stdio@{run}"), context);
+            runtime.ensure_extension_images_current(&request).unwrap();
+        }
         request.continuation_scope.as_mut().unwrap().run_id = Uuid::new_v4();
         assert!(runtime.ensure_extension_images_current(&request).is_err());
         request.continuation_scope.as_mut().unwrap().run_id = run;
@@ -1086,6 +1186,8 @@ impl ExtensionOwner {
                 }
                 if record.definition.image_scope.is_some()
                     && (handle.name == "browser_open"
+                        || (matches!(handle.name.as_str(), "artifact_open" | "artifact_render")
+                            && record.definition.trust == argentum_domain::extensions::ExtensionTrust::ReviewedCurrentUserCode)
                         || (handle.name == "desktop_launch"
                             && record.definition.trust
                                 == argentum_domain::extensions::ExtensionTrust::ReviewedWindowsApplication))
@@ -1258,7 +1360,10 @@ impl super::RuntimeService {
             return Ok(vec![]);
         };
         let image_tool = handle.get("name").and_then(serde_json::Value::as_str);
-        if image_tool != Some("browser_screenshot") && image_tool != Some("desktop_screenshot") {
+        if image_tool != Some("browser_screenshot")
+            && image_tool != Some("desktop_screenshot")
+            && image_tool != Some("artifact_page")
+        {
             return Ok(vec![]);
         }
         let owner = self.extension_owner();
@@ -1346,6 +1451,91 @@ impl super::RuntimeService {
         }
         Ok(vec![image])
     }
+    /// Retire only superseded local-artifact pixels before accounting and wire
+    /// preparation. Historical text and all past charges remain unchanged. A
+    /// revoked/foreign producer still fails closed rather than being filtered.
+    pub(crate) fn artifact_image_request_view(
+        &self,
+        request: &argentum_providers::ModelRequest,
+    ) -> Result<Option<argentum_providers::ModelRequest>, super::RuntimeError> {
+        const ORIGIN: &str = "https://local-artifacts.argentum.invalid";
+        let owner = self.extension_owner();
+        let contexts = owner
+            .image_contexts
+            .lock()
+            .map_err(|_| super::RuntimeError::StateLockPoisoned)?
+            .clone();
+        let mut retired = std::collections::BTreeSet::new();
+        for image in request
+            .tool_exchanges
+            .iter()
+            .flat_map(|e| &e.results)
+            .flat_map(|r| &r.images)
+        {
+            if image.origin != ORIGIN {
+                continue;
+            }
+            let Some(binding) = image.extension_binding() else {
+                continue;
+            };
+            if request
+                .continuation_scope
+                .is_none_or(|s| s.run_id != binding.run_id)
+            {
+                continue;
+            }
+            if contexts
+                .get(&format!("{}@{}", binding.namespace, binding.run_id))
+                .is_none_or(|current| *current == binding.context_id)
+            {
+                continue;
+            }
+            let record = owner.current(&binding.namespace)?;
+            if record.revision != binding.revision
+                || record.definition.trust
+                    != argentum_domain::extensions::ExtensionTrust::ReviewedCurrentUserCode
+                || !record
+                    .definition
+                    .allowed_tools
+                    .iter()
+                    .any(|t| t == "artifact_page")
+                || record
+                    .definition
+                    .image_scope
+                    .as_ref()
+                    .is_none_or(|s| !s.origins.iter().any(|o| o == ORIGIN))
+                || self
+                    .execution_policy()?
+                    .capability_enabled
+                    .get("extension.external")
+                    != Some(&true)
+            {
+                return Err(ToolError::Execution(
+                    "artifact_image_producer_or_policy_changed_no_dispatch".into(),
+                )
+                .into());
+            }
+            retired.insert((binding.namespace.clone(), binding.context_id));
+        }
+        if retired.is_empty() {
+            return Ok(None);
+        }
+        let mut view = request.clone();
+        for result in view.tool_exchanges.iter_mut().flat_map(|e| &mut e.results) {
+            let before = result.images.len();
+            result.images.retain(|image| {
+                image.origin != ORIGIN
+                    || image
+                        .extension_binding()
+                        .is_none_or(|b| !retired.contains(&(b.namespace.clone(), b.context_id)))
+            });
+            if result.images.len() != before {
+                result.content.push_str("\n[artifact_image_retired] The selected PDF changed. These page pixels are historical and were omitted from this request. Inspect the current artifact. Earlier request charges are unchanged.");
+            }
+        }
+        Ok(Some(view))
+    }
+
     pub(crate) fn ensure_extension_images_current(
         &self,
         request: &argentum_providers::ModelRequest,

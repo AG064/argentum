@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use rmcp::service::{RxJsonRpcMessage, TxJsonRpcMessage};
+use rmcp::service::{RxJsonRpcMessage, ServiceRole, TxJsonRpcMessage};
 use rmcp::transport::Transport;
 use rmcp::RoleClient;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -88,14 +88,15 @@ impl WireAccounting {
     }
 }
 
-pub struct BoundedStdio {
+pub struct BoundedStdio<Role: ServiceRole = RoleClient> {
     reader: BufReader<Box<dyn AsyncRead + Send + Unpin>>,
     writer: Arc<Mutex<Option<Box<dyn AsyncWrite + Send + Unpin>>>>,
     pub accounting: Arc<WireAccounting>,
+    role: std::marker::PhantomData<fn() -> Role>,
 }
 
-impl BoundedStdio {
-    pub fn new<R, W>(read: R, write: W) -> Self
+impl<Role: ServiceRole> BoundedStdio<Role> {
+    fn with_role<R, W>(read: R, write: W) -> Self
     where
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
@@ -104,6 +105,7 @@ impl BoundedStdio {
             reader: BufReader::new(Box::new(read)),
             writer: Arc::new(Mutex::new(Some(Box::new(write)))),
             accounting: Arc::default(),
+            role: std::marker::PhantomData,
         }
     }
 
@@ -135,11 +137,32 @@ impl BoundedStdio {
     }
 }
 
-impl Transport<RoleClient> for BoundedStdio {
+impl BoundedStdio<RoleClient> {
+    pub fn new<R, W>(read: R, write: W) -> Self
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+        W: AsyncWrite + Send + Unpin + 'static,
+    {
+        Self::with_role(read, write)
+    }
+}
+
+#[cfg(feature = "server-support")]
+impl BoundedStdio<rmcp::RoleServer> {
+    pub fn new_server<R, W>(read: R, write: W) -> Self
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+        W: AsyncWrite + Send + Unpin + 'static,
+    {
+        Self::with_role(read, write)
+    }
+}
+
+impl<Role: ServiceRole> Transport<Role> for BoundedStdio<Role> {
     type Error = io::Error;
     fn send(
         &mut self,
-        item: TxJsonRpcMessage<RoleClient>,
+        item: TxJsonRpcMessage<Role>,
     ) -> impl std::future::Future<Output = io::Result<()>> + Send + 'static {
         let writer = Arc::clone(&self.writer);
         let accounting = Arc::clone(&self.accounting);
@@ -176,7 +199,7 @@ impl Transport<RoleClient> for BoundedStdio {
             Ok(())
         }
     }
-    async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
+    async fn receive(&mut self) -> Option<RxJsonRpcMessage<Role>> {
         let frame = self.frame().await?;
         match serde_json::from_slice(&frame) {
             Ok(value) => Some(value),
@@ -197,6 +220,31 @@ impl Transport<RoleClient> for BoundedStdio {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "server-support")]
+    #[tokio::test]
+    async fn server_role_reuses_bounded_framing_and_rejects_oversize_input() {
+        let (read, mut source) = tokio::io::duplex(512);
+        let mut wire = BoundedStdio::new_server(read, tokio::io::sink());
+        source
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n")
+            .await
+            .unwrap();
+        assert!(wire.receive().await.is_some());
+        let message: TxJsonRpcMessage<rmcp::RoleServer> = serde_json::from_value(
+            serde_json::json!({"jsonrpc":"2.0","id":1,"result":{"tools":[]}}),
+        )
+        .unwrap();
+        wire.send(message).await.unwrap();
+        assert_eq!(wire.accounting.snapshot().mcp_response_starts, 1);
+        let writer = tokio::spawn(async move {
+            let _ = source.write_all(&vec![b'x'; MAX_MESSAGE_BYTES + 1]).await;
+            let _ = source.shutdown().await;
+        });
+        assert!(wire.receive().await.is_none());
+        assert_eq!(wire.accounting.fault.load(Ordering::Relaxed), 1);
+        drop(wire);
+        writer.await.unwrap();
+    }
     #[tokio::test]
     async fn send_boundary_separates_requests_notifications_repeats_and_closed_writer() {
         let mut wire = BoundedStdio::new(tokio::io::empty(), tokio::io::sink());

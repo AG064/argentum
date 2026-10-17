@@ -14,6 +14,7 @@ default = []
 local-llama-cpp = ["argentum-providers/local-llama-cpp"]
 extensions = ["argentum-runtime/extensions", "dep:argentum-extensions", "dep:argentum-execution"]
 desktop-control = ["extensions", "argentum-extensions/desktop-control"]
+artifacts = ["extensions", "dep:argentum-artifacts", "tokio/signal"]
 
 [[bin]]
 name = "argentum"
@@ -24,6 +25,7 @@ argentum-android-inference.workspace = true
 argentum-domain.workspace = true
 argentum-extensions = { workspace = true, optional = true }
 argentum-execution = { workspace = true, optional = true }
+argentum-artifacts = { workspace = true, optional = true }
 argentum-platform.workspace = true
 argentum-providers.workspace = true
 argentum-runtime.workspace = true
