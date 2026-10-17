@@ -1728,7 +1728,11 @@ mod tests {
         let target = directory.path().join("bundle.zip");
         let gate = PublicationGate::new();
         let mut policy = fixture_policy();
-        policy.total_timeout = Duration::from_millis(100);
+        // Real filesystem/network setup is not the subject of this control.
+        // Reach the exact publication boundary first, then expire the real
+        // Tokio deadline deterministically instead of racing Windows I/O.
+        let total_timeout = Duration::from_secs(30);
+        policy.total_timeout = total_timeout;
         policy.hooks.publication_gate = Some(gate.clone());
         let server = spawn_download_server(vec![archive], Duration::ZERO);
         let endpoint = server.endpoint.clone();
@@ -1746,17 +1750,19 @@ mod tests {
             }
         });
 
-        tokio::time::timeout(Duration::from_secs(1), gate.wait_until_reached())
+        tokio::time::timeout(Duration::from_secs(10), gate.wait_until_reached())
             .await
             .expect("download reached the pre-publication barrier");
+        tokio::time::pause();
+        tokio::time::advance(total_timeout).await;
         let result = download.await.expect("deadline download task");
 
         assert!(matches!(
             result,
-            Err(ProviderError::LocalRuntimeDownloadDeadline { timeout_ms: 100 })
+            Err(ProviderError::LocalRuntimeDownloadDeadline { timeout_ms: 30_000 })
         ));
         assert!(!target.exists(), "deadline returned after publication");
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::advance(Duration::from_millis(50)).await;
         assert!(
             !target.exists(),
             "publication continued after deadline result"
