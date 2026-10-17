@@ -22,7 +22,9 @@ fn configuration() -> (tempfile::TempDir, PathBuf, PathBuf) {
     ] {
         std::fs::write(ws.join(name), body).unwrap();
     }
-    let worker = PathBuf::from(env!("CARGO_BIN_EXE_argentum-pdf-worker"));
+    let worker = std::env::var_os("ARGENTUM_TEST_ARTIFACT_WORKER_EXE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_argentum-pdf-worker").into());
     let config = Configuration {
         schema_version: 1,
         workspace: ws.clone(),

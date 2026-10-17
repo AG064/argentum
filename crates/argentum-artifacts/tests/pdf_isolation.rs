@@ -4,6 +4,12 @@ use argentum_artifacts::sha256;
 use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
 
+fn worker() -> PathBuf {
+    std::env::var_os("ARGENTUM_TEST_ARTIFACT_WORKER_EXE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_argentum-pdf-worker").into())
+}
+
 fn pdf(javascript: bool) -> Vec<u8> {
     let catalog = if javascript {
         "<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript << /Names [(control) 6 0 R] >> >> >>"
@@ -41,9 +47,7 @@ fn pdf(javascript: bool) -> Vec<u8> {
 
 #[test]
 fn worker_refuses_direct_owner_execution() {
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_argentum-pdf-worker"))
-        .output()
-        .unwrap();
+    let result = std::process::Command::new(worker()).output().unwrap();
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("isolated LPAC"));
 }
@@ -56,7 +60,7 @@ async fn markdown_creation_round_trips_real_unicode_table_and_pages() {
     let font = PathBuf::from(
         std::env::var_os("ARGENTUM_TEST_ARTIFACT_FONT").expect("pinned font required"),
     );
-    let worker = PathBuf::from(env!("CARGO_BIN_EXE_argentum-pdf-worker"));
+    let worker = worker();
     let worker_sha = sha256(&std::fs::read(&worker).unwrap());
     let temp = tempfile::tempdir().unwrap();
     let markdown="# Handover\n\nRésumé from Pärnu for Õun.\n\n## Facts\n\n| Fact | Value |\n|---|---|\n| Budget | 32 requests |\n| Status | Review required |\n\n- Preserve inputs\n- Verify the final PDF\n";
@@ -139,7 +143,7 @@ async fn actual_lpac_pdf_render_and_negative_controls() {
     let dll = PathBuf::from(
         std::env::var_os("ARGENTUM_TEST_PDFIUM_DLL").expect("pinned DLL is required"),
     );
-    let worker = PathBuf::from(env!("CARGO_BIN_EXE_argentum-pdf-worker"));
+    let worker = worker();
     let worker_sha = sha256(&std::fs::read(&worker).unwrap());
     let temp = tempfile::tempdir().unwrap();
     for (name, bytes, pass) in [
