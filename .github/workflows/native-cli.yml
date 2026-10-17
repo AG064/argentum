@@ -139,7 +139,9 @@ jobs:
           retention-days: 14
   windows:
     runs-on: windows-2025
-    timeout-minutes: 90
+    # Full cold tests/policy plus three serial optimized profiles exceeded 90m.
+    # Keep every gate; this is CI build headroom, not a native/live limit change.
+    timeout-minutes: 120
     env:
       CARGO_INCREMENTAL: '0'
       CARGO_PROFILE_DEV_DEBUG: '0'
