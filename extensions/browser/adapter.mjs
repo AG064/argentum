@@ -14,6 +14,9 @@ const { chromium } = await import('playwright');
 
 const MAX_FRAME = 256 * 1024;
 const MAX_TEXT = 12 * 1024;
+const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+const PRIVATE_PREVIEW_COMPONENT = /^(credentials?|secrets?|tokens?)(\.|$)/i;
+const TOKEN_STYLESHEET_LEAF = /^tokens?\.css$/i;
 const DEADLINE = 10_000;
 const SCHEMA = { type: 'object', additionalProperties: false };
 const string = { type: 'string', minLength: 1, maxLength: 2048 };
@@ -37,8 +40,28 @@ export function destinationAllowed(value, origins) {
   } catch { return false; }
 }
 
+function validateReviewedStylesheet(style) {
+  if (!style || typeof style !== 'object' || Array.isArray(style)
+    || Object.keys(style).sort().join(',') !== 'bytes,path,sha256'
+    || typeof style.path !== 'string' || style.path.length > 1024
+    || typeof style.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(style.sha256)
+    || !Number.isSafeInteger(style.bytes) || style.bytes < 0 || style.bytes > MAX_PREVIEW_BYTES) {
+    throw new Error('invalid_reviewed_stylesheet');
+  }
+  const parts = style.path.split('/');
+  const device = /^(?:con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/i;
+  if (isAbsolute(style.path) || /[\x00-\x1f\\:<>"|?*]/.test(style.path)
+    || parts.some(part => !part || part.startsWith('.') || /[ .]$/.test(part) || device.test(part))
+    || !TOKEN_STYLESHEET_LEAF.test(parts.at(-1))
+    || parts.slice(0, -1).some(part => PRIVATE_PREVIEW_COMPONENT.test(part))) {
+    throw new Error('invalid_reviewed_stylesheet');
+  }
+  // This is disclosure permission for exact reviewed bytes, not secret detection.
+  return Object.freeze({ path: style.path, sha256: style.sha256, bytes: style.bytes });
+}
+
 function validateConfig(config) {
-  const allowed = ['allowedOrigins', 'artifactDirectory', 'persistentProfile', 'previewWorkspace', 'previewPort'];
+  const allowed = ['allowedOrigins', 'artifactDirectory', 'persistentProfile', 'previewWorkspace', 'previewPort', 'reviewedStylesheet'];
   if (Object.keys(config).some(k => !allowed.includes(k)) || !Array.isArray(config.allowedOrigins) || config.allowedOrigins.length > 16 || !isAbsolute(config.artifactDirectory)) throw new Error('invalid_browser_configuration');
   for (const origin of config.allowedOrigins) {
     const url = new URL(origin);
@@ -49,6 +72,10 @@ function validateConfig(config) {
   if (config.persistentProfile && !isAbsolute(config.persistentProfile)) throw new Error('persistent_profile_must_be_owner_configured_absolute_path');
   if (config.persistentProfile && resolve(config.persistentProfile) !== resolve(config.artifactDirectory, 'profile')) throw new Error('persistent_profile_must_use_dedicated_artifact_scope_profile_not_another_application');
   if (config.previewWorkspace && (!isAbsolute(config.previewWorkspace) || !Number.isInteger(config.previewPort) || config.previewPort < 1024 || config.previewPort > 65535 || !config.allowedOrigins.includes(`http://127.0.0.1:${config.previewPort}`))) throw new Error('preview_requires_exact_owner_workspace_and_origin');
+  if (Object.hasOwn(config, 'reviewedStylesheet')) {
+    if (!config.previewWorkspace) throw new Error('reviewed_stylesheet_requires_preview');
+    return { ...config, reviewedStylesheet: validateReviewedStylesheet(config.reviewedStylesheet) };
+  }
   return config;
 }
 
@@ -86,8 +113,13 @@ export class BrowserAdapter {
         if (within.startsWith('..') || isAbsolute(within)) throw new Error('path_denied');
         const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
         const contentType = types[extname(path).toLowerCase()]; if (!contentType) throw new Error('unsupported_preview_file');
-        if (within.split(/[\\/]/).some(part => /^(credentials?|secrets?|tokens?)(\.|$)/i.test(part))) throw new Error('private_preview_resource_denied');
-        const metadata = await lstat(path, { bigint:true }); if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 4n * 1024n * 1024n) throw new Error('preview_file_capacity_exceeded');
+        const style = this.config.reviewedStylesheet;
+        // Match both the literal decoded request and canonical admitted file. An
+        // alias, traversal-normalized URL or different file is not this grant.
+        const reviewedStyle = style && within.replaceAll('\\', '/') === style.path
+          && decodeURIComponent(request.url.split('?')[0]) === `/${style.path}`;
+        if (within.split(/[\\/]/).some(part => PRIVATE_PREVIEW_COMPONENT.test(part)) && !reviewedStyle) throw new Error('private_preview_resource_denied');
+        const metadata = await lstat(path, { bigint:true }); if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > BigInt(MAX_PREVIEW_BYTES)) throw new Error('preview_file_capacity_exceeded');
         const file = await open(path, 'r'); let bytes;
         try {
           const held = await file.stat({ bigint:true });
@@ -98,7 +130,9 @@ export class BrowserAdapter {
           if (after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs) throw new Error('preview_source_changed');
           bytes = buffer.subarray(0, read.bytesRead);
         } finally { await file.close(); }
-        response.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Argentum-Source-Sha256': createHash('sha256').update(bytes).digest('hex') });
+        const sourceDigest = createHash('sha256').update(bytes).digest('hex');
+        if (reviewedStyle && (bytes.length !== style.bytes || sourceDigest !== style.sha256)) throw new Error('reviewed_stylesheet_content_changed');
+        response.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Argentum-Source-Sha256': sourceDigest });
         response.end(request.method === 'HEAD' ? undefined : bytes);
       } catch { response.writeHead(404); response.end('Preview resource unavailable'); }
     });
