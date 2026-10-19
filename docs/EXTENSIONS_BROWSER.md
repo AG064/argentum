@@ -30,11 +30,50 @@ Use absolute owner-selected paths and the same workspace/database throughout:
 & $exe extensions install --source $package --sha256 $digest --source-id $source --revision $revision --workspace $ws --database $db
 & $exe extensions configure --file $definition --workspace $ws --database $db
 & $exe extensions status --workspace $ws --database $db
+& $exe extensions list --workspace $ws --database $db --json
+& $exe extensions status --workspace $ws --database $db --json
 & $exe extensions receipts --run-id $run --workspace $ws --database $db
 & $exe extensions activate package.server --workspace $ws --database $db
 & $exe extensions disable package.server --workspace $ws --database $db
 & $exe extensions remove package.server --workspace $ws --database $db
 ```
+
+### Machine-readable inventory and local status
+
+An extensions-enabled CLI with CLIJSON01 supports `--json` only for `list` and
+`status`. This is a new opt-in output contract; earlier mixed-format output did
+not support that flag. Unflagged commands keep their existing human output.
+Duplicate flags, a namespace argument in JSON query mode, and `--json` on other
+extension actions are rejected before host startup. This does not enable JSON
+activation, key entry, configuration or other owner operations.
+
+Successful JSON mode emits one complete document and a newline. Its versioned
+envelope contains `schema_version: 1`, `command` (`extensions.list` or
+`extensions.status`), the existing native `records`, and structured
+`qualification` text. Status also includes the existing native `readiness` array.
+Parse the whole successful stdout once; no banner, second value or human trailer
+is appended. Check the exit status. Ordinary operation, serialization and shutdown
+failures use the existing nonzero/stderr path without first writing a success
+document. A broken output pipe can still leave partial transport bytes and is
+an I/O failure, not successful delivery.
+
+Output is buffered before emission and capped at 8 MiB plus 4 KiB, including its
+newline. The budget follows the native maximum of 32 records with compact
+128 KiB persisted payloads, reserves equal space for local-readiness metadata,
+and adds the envelope allowance. It does not change store limits, silently omit
+records or invent a second readiness calculation. An oversized result fails in
+full rather than being reported as a complete smaller inventory.
+
+Machine-readable output is not an execution/permission ticket, a live server or
+account check, or a promise of no filesystem/database activity. The commands
+retain normal local host discovery, startup bookkeeping and shutdown. Records
+and readiness are sequential native observations, not an atomic cross-source
+snapshot. Compare the relevant values and revision identities, not unrelated
+host-generation metadata from different invocations. Saved activation is not a
+connected server or proof of successful execution; local definition readiness
+does not establish connectivity or account entitlement, and credential presence
+is not inspected. The formatting mode starts no provider, catalogue, extension
+server, browser, verifier or credential helper.
 
 Installation is immutable and never starts code. Configuration is a typed
 `ExtensionDefinition`; updates use the same configure command and revoke the

@@ -1,8 +1,9 @@
 //! Optional local CLI commands. No install/configuration starts an extension.
 use argentum_cli::{CommandHost, HostConfig};
-use argentum_domain::extensions::ExtensionDefinition;
+use argentum_domain::extensions::{ExtensionDefinition, ExtensionRecord};
 use argentum_extensions::package;
 use argentum_platform::AppPaths;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -12,17 +13,113 @@ use std::{
 
 type Error = Box<dyn std::error::Error>;
 
+const ACTIVATION_QUALIFICATION: &str =
+    "Saved activation is not a connected server or evidence of successful execution.";
+// Store::extension_records and save_extension_record retain at most 32 compact
+// 128 KiB records. Reserve the same budget for canonical readiness metadata and
+// 4 KiB for the envelope. This bounds formatting, not the underlying inventory:
+// an unexpectedly larger result fails as a whole instead of dropping records.
+const QUERY_JSON_MAX_BYTES: usize = 2 * 32 * 128 * 1024 + 4096;
+
+#[derive(Serialize)]
+struct ExtensionQueryDocument<'a> {
+    schema_version: u8,
+    command: &'static str,
+    records: &'a [ExtensionRecord],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    readiness: Option<&'a [serde_json::Value]>,
+    qualification: QueryQualification,
+}
+
+#[derive(Serialize)]
+struct QueryQualification {
+    activation: &'static str,
+    readiness: &'static str,
+    host_lifecycle: &'static str,
+    observation: &'static str,
+}
+
+struct QueryBuffer {
+    bytes: Vec<u8>,
+    limit: usize,
+}
+
+impl Write for QueryBuffer {
+    fn write(&mut self, input: &[u8]) -> io::Result<usize> {
+        if input.len() > self.limit.saturating_sub(self.bytes.len()) {
+            return Err(io::Error::other("extension query JSON exceeds byte limit"));
+        }
+        self.bytes
+            .try_reserve(input.len())
+            .map_err(io::Error::other)?;
+        self.bytes.extend_from_slice(input);
+        Ok(input.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn encode_query_json<T: Serialize>(value: &T, limit: usize) -> Result<Vec<u8>, Error> {
+    let mut output = QueryBuffer {
+        bytes: Vec::new(),
+        limit: limit
+            .checked_sub(1)
+            .ok_or("extension query JSON byte limit is zero")?,
+    };
+    serde_json::to_writer(&mut output, value)?;
+    output.bytes.try_reserve(1).map_err(io::Error::other)?;
+    output.bytes.push(b'\n');
+    Ok(output.bytes)
+}
+
+fn finish_extension_command(
+    result: Result<(), Error>,
+    shutdown: Result<(), Error>,
+    buffered_json: Option<&[u8]>,
+    output: &mut impl Write,
+) -> Result<(), Error> {
+    match (result, shutdown) {
+        (Ok(()), Ok(())) => {
+            if let Some(bytes) = buffered_json {
+                output.write_all(bytes)?;
+                output.flush()?;
+            }
+            Ok(())
+        }
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
+        (Err(error), Err(shutdown)) => Err(io::Error::other(format!(
+            "extension command failed: {error}; cleanup failed: {shutdown}"
+        ))
+        .into()),
+    }
+}
+
 pub async fn run(values: Vec<String>) -> Result<(), Error> {
     if values.is_empty() || values[0] == "help" || values[0] == "--help" {
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
+        if values.iter().any(|value| value == "--json") {
+            return Err("--json is accepted only by extensions list and status".into());
+        }
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
     let mut flags = BTreeMap::new();
     let mut subject = None;
+    let mut json_mode = false;
     let mut index = 1;
     while index < values.len() {
         let value = &values[index];
+        if value == "--json" {
+            if json_mode {
+                return Err("duplicate extension --json option".into());
+            }
+            json_mode = true;
+            index += 1;
+            continue;
+        }
         if value.starts_with("--") {
             if ![
                 "--source",
@@ -49,6 +146,12 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
             return Err("only one namespace is accepted".into());
         }
         index += 1;
+    }
+    if json_mode && !matches!(action.as_str(), "list" | "status") {
+        return Err("--json is accepted only by extensions list and status".into());
+    }
+    if json_mode && subject.is_some() {
+        return Err("extension JSON queries do not accept a namespace".into());
     }
     if flags.contains_key("--run-id") && action != "receipts" {
         return Err("--run-id is accepted only by extensions receipts".into());
@@ -86,6 +189,7 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         .ok_or("extension persistence requires a database")?;
     let mut host = CommandHost::start_composed(config).await?;
     host.disconnect_approval_responder();
+    let mut buffered_json = None;
     let result: Result<(), Error> = async {
         let local = host.local_handle();
         match action.as_str() {
@@ -135,9 +239,27 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 println!("{}", serde_json::to_string_pretty(&local.extension_receipts(run)?)?);
             }
             "list" | "status" => {
-                println!("{}", serde_json::to_string_pretty(&local.extension_records()?)?);
-                if action == "status" { println!("{}",serde_json::to_string_pretty(&local.extension_readiness()?)?); }
-                println!("Saved activation is not a connected server or evidence of successful execution.");
+                if json_mode {
+                    let records = local.extension_records()?;
+                    let readiness = if action == "status" { Some(local.extension_readiness()?) } else { None };
+                    let document = ExtensionQueryDocument {
+                        schema_version: 1,
+                        command: if action == "list" { "extensions.list" } else { "extensions.status" },
+                        records: &records,
+                        readiness: readiness.as_deref(),
+                        qualification: QueryQualification {
+                            activation: ACTIVATION_QUALIFICATION,
+                            readiness: "Local definition readiness is not live connectivity or account entitlement; credential presence is not inspected.",
+                            host_lifecycle: "Normal local host discovery, startup bookkeeping and shutdown still occur; this is not an inert database reader or permission ticket.",
+                            observation: "Native records and readiness are sequential observations, not an atomic cross-source snapshot.",
+                        },
+                    };
+                    buffered_json = Some(encode_query_json(&document, QUERY_JSON_MAX_BYTES)?);
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&local.extension_records()?)?);
+                    if action == "status" { println!("{}",serde_json::to_string_pretty(&local.extension_readiness()?)?); }
+                    println!("{ACTIVATION_QUALIFICATION}");
+                }
             }
             "activate" => {
                 let namespace = subject.as_deref().ok_or("activate requires a namespace")?;
@@ -167,14 +289,119 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         }
         Ok(())
     }.await;
-    let shutdown = host.shutdown().await;
-    match (result, shutdown) {
-        (Ok(()), Ok(())) => Ok(()),
-        (Err(error), Ok(())) => Err(error),
-        (Ok(()), Err(error)) => Err(error.into()),
-        (Err(error), Err(shutdown)) => Err(io::Error::other(format!(
-            "extension command failed: {error}; cleanup failed: {shutdown}"
-        ))
-        .into()),
+    let shutdown = host
+        .shutdown()
+        .await
+        .map_err(|error| -> Error { error.into() });
+    finish_extension_command(
+        result,
+        shutdown,
+        buffered_json.as_deref(),
+        &mut io::stdout().lock(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    fn failure(message: &str) -> Error {
+        io::Error::other(message.to_owned()).into()
+    }
+
+    #[test]
+    fn query_encoding_is_one_complete_document_with_a_counted_newline() {
+        let value = serde_json::json!({"name":"Märk \"quoted\"\nC:\\fixture","records":[]});
+        let expected = serde_json::to_vec(&value).unwrap();
+        let encoded = encode_query_json(&value, expected.len() + 1).unwrap();
+        assert_eq!(encoded.len(), expected.len() + 1);
+        assert_eq!(encoded.last(), Some(&b'\n'));
+        let mut parser = serde_json::Deserializer::from_slice(&encoded);
+        assert_eq!(serde_json::Value::deserialize(&mut parser).unwrap(), value);
+        parser.end().unwrap();
+        assert!(encode_query_json(&value, expected.len()).is_err());
+        assert!(encode_query_json(&value, 0).is_err());
+    }
+
+    #[test]
+    fn actual_query_budget_accepts_its_boundary_and_rejects_overflow() {
+        let fits = "x".repeat(QUERY_JSON_MAX_BYTES - 3);
+        assert_eq!(
+            encode_query_json(&fits, QUERY_JSON_MAX_BYTES)
+                .unwrap()
+                .len(),
+            QUERY_JSON_MAX_BYTES
+        );
+        let overflow = format!("{fits}x");
+        assert!(encode_query_json(&overflow, QUERY_JSON_MAX_BYTES).is_err());
+    }
+
+    #[test]
+    fn native_serialization_and_shutdown_failures_emit_no_success_document() {
+        struct Reject;
+        impl Serialize for Reject {
+            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("synthetic serialization failure"))
+            }
+        }
+        let serialized = encode_query_json(&Reject, QUERY_JSON_MAX_BYTES).unwrap_err();
+        let mut output = Vec::new();
+        assert!(finish_extension_command(Err(serialized), Ok(()), None, &mut output).is_err());
+        assert!(output.is_empty());
+        let bytes = b"{\"records\":[]}\n";
+        for (operation_failed, shutdown_failed) in [(true, false), (false, true), (true, true)] {
+            let result = if operation_failed {
+                Err(failure("native operation failure"))
+            } else {
+                Ok(())
+            };
+            let shutdown = if shutdown_failed {
+                Err(failure("native shutdown failure"))
+            } else {
+                Ok(())
+            };
+            let error =
+                finish_extension_command(result, shutdown, Some(bytes), &mut output).unwrap_err();
+            assert!(output.is_empty());
+            if operation_failed {
+                assert!(error.to_string().contains("native operation failure"));
+            }
+            if shutdown_failed {
+                assert!(error.to_string().contains("native shutdown failure"));
+            }
+        }
+        finish_extension_command(Ok(()), Ok(()), Some(bytes), &mut output).unwrap();
+        assert_eq!(output, bytes);
+    }
+
+    #[test]
+    fn partial_stdout_delivery_is_an_io_failure_not_success() {
+        struct BrokenPipe(Vec<u8>);
+        impl Write for BrokenPipe {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                let count = bytes.len().min(3_usize.saturating_sub(self.0.len()));
+                if count == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::BrokenPipe,
+                        "synthetic closed stdout",
+                    ));
+                }
+                self.0.extend_from_slice(&bytes[..count]);
+                Ok(count)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut pipe = BrokenPipe(Vec::new());
+        let error =
+            finish_extension_command(Ok(()), Ok(()), Some(b"{\"records\":[]}\n"), &mut pipe)
+                .unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<io::Error>().unwrap().kind(),
+            io::ErrorKind::BrokenPipe
+        );
+        assert_eq!(pipe.0.len(), 3);
     }
 }
