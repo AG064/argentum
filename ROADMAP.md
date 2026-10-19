@@ -97,6 +97,12 @@ deferred; no later milestone or allowance is activated.
 
 ### Compatibility and maintained foundations
 
+The [Genesis integration](docs/GENESIS_INTEGRATION01.md) consolidates accepted
+project-input verification and continuation repairs on the retained native
+lineage, with a separately identified package and scoped review. It preserves
+the closed historical outcomes and does not activate B5, another live task,
+default-branch cutover or release publication.
+
 Portable Agent Plugins use root `plugin.json`, optional `mcp.json`, `skills/`
 and assets. OpenAI-specific hooks/presentation/mappings are host extensions;
 `.codex-plugin` is a compatibility layout, not universal portability. Inventory

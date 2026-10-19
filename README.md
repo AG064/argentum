@@ -108,6 +108,12 @@ requiring an unavailable owner responder fails explicitly with
 
 ## Evidence and limits
 
+The [clean-source integration record](docs/GENESIS_INTEGRATION01.md) separates
+accepted runtime repairs, the generic optional-adapter capture correction and
+retained later native changes from task-local configuration and private
+evidence. Its integrated packages require their own source-bound qualification;
+historical live acceptance is not transferred to a new executable.
+
 This transition reuses accepted native workflow evidence and adds clean-source,
 package and credential-free loopback qualification. It makes no new live
 provider requests. MILESTONE01 was an assisted delivery with review and recovery
