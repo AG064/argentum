@@ -4,6 +4,8 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$BrowserCache,
     [string]$TargetDirectory = '',
+    [string]$CliExecutable = '',
+    [string]$AdapterPath = '',
     [ValidateRange(1, 8)][int]$Jobs = 1
 )
 Set-StrictMode -Version Latest
@@ -16,6 +18,9 @@ if(-not [IO.Path]::IsPathFullyQualified($OutputDirectory) -or
    (Test-Path -LiteralPath $output)){throw 'Use a fresh absolute evidence directory outside source.'}
 if(-not [IO.Path]::IsPathFullyQualified($Node) -or -not (Test-Path -LiteralPath $Node -PathType Leaf) -or
    -not [IO.Path]::IsPathFullyQualified($BrowserCache) -or -not (Test-Path -LiteralPath $BrowserCache -PathType Container)){throw 'Existing reviewed Node and browser cache required; no installation or provider request.'}
+foreach($selected in @($CliExecutable,$AdapterPath)){
+    if($selected -and (-not [IO.Path]::IsPathFullyQualified($selected) -or -not (Test-Path -LiteralPath $selected -PathType Leaf))){throw 'Selected packaged components must be existing absolute files.'}
+}
 New-Item -ItemType Directory -Path $output | Out-Null
 $targetArgs=@()
 if($TargetDirectory){
@@ -39,19 +44,24 @@ try {
     foreach($entry in @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(CARGO_PROFILE_|CARGO_BUILD_|CARGO_TARGET_|RUSTFLAGS$|RUSTDOCFLAGS$|CARGO_ENCODED_RUST|RUSTC$|RUSTDOC$|CARGO_INCREMENTAL$|ARGENTUM_NEXT01_)' -or $_.Name -match '(API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|ACCESS_KEY)' })){
         $saved[$entry.Name]=$entry.Value; Remove-Item -LiteralPath ('Env:'+$entry.Name)
     }
-    foreach($name in @('ARGENTUM_NEXT01_NODE','ARGENTUM_PLAYWRIGHT_BROWSERS_PATH','ARGENTUM_NEXT01_CLI_EXE','ARGENTUM_NEXT01_MCP_FIXTURE_EXE')){
+    foreach($name in @('ARGENTUM_NEXT01_NODE','ARGENTUM_PLAYWRIGHT_BROWSERS_PATH','ARGENTUM_NEXT01_CLI_EXE','ARGENTUM_NEXT01_ADAPTER','ARGENTUM_NEXT01_MCP_FIXTURE_EXE')){
         if(-not $saved.ContainsKey($name)){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
     }
     $env:ARGENTUM_NEXT01_NODE=$Node
     $env:ARGENTUM_PLAYWRIGHT_BROWSERS_PATH=$BrowserCache
-    $env:ARGENTUM_NEXT01_CLI_EXE=Join-Path $target 'debug/argentum.exe'
+    $env:ARGENTUM_NEXT01_CLI_EXE=if($CliExecutable){$CliExecutable}else{Join-Path $target 'debug/argentum.exe'}
+    $env:ARGENTUM_NEXT01_ADAPTER=if($AdapterPath){$AdapterPath}else{Join-Path $source 'extensions/browser/adapter.mjs'}
     $env:ARGENTUM_NEXT01_MCP_FIXTURE_EXE=Join-Path $target 'debug/mcp_fixture.exe'
+    $selectedCliSha=(Get-FileHash -LiteralPath $env:ARGENTUM_NEXT01_CLI_EXE).Hash.ToLowerInvariant()
+    $selectedAdapterSha=(Get-FileHash -LiteralPath $env:ARGENTUM_NEXT01_ADAPTER).Hash.ToLowerInvariant()
     $results=@()
     foreach($artifact in $selected){
         $log=Join-Path $output ($artifact.target.name+'.log')
         $arguments=if($artifact.target.name -eq 'extensions_cli'){@('--test-threads=1')}else{@('--ignored','--test-threads=1')}
         & $artifact.executable @arguments *> $log
-        $results += [ordered]@{target=$artifact.target.name;executable_sha256=(Get-FileHash -LiteralPath $artifact.executable).Hash.ToLowerInvariant();cli_sha256=(Get-FileHash -LiteralPath $env:ARGENTUM_NEXT01_CLI_EXE).Hash.ToLowerInvariant();exit_code=$LASTEXITCODE;log=$log}
+        $results += [ordered]@{target=$artifact.target.name;executable_sha256=(Get-FileHash -LiteralPath $artifact.executable).Hash.ToLowerInvariant();cli_path=$env:ARGENTUM_NEXT01_CLI_EXE;cli_sha256=$selectedCliSha;adapter_path=$env:ARGENTUM_NEXT01_ADAPTER;adapter_sha256=$selectedAdapterSha;exit_code=$LASTEXITCODE;log=$log}
+        if((Get-FileHash -LiteralPath $env:ARGENTUM_NEXT01_CLI_EXE).Hash.ToLowerInvariant() -ne $selectedCliSha -or
+           (Get-FileHash -LiteralPath $env:ARGENTUM_NEXT01_ADAPTER).Hash.ToLowerInvariant() -ne $selectedAdapterSha){throw 'Selected packaged component changed during its controls.'}
         $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'results.json') -Encoding utf8NoBOM
         Get-Content -LiteralPath $log -Tail 20
     }

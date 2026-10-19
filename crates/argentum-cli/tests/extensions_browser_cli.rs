@@ -28,12 +28,17 @@ async fn actual_cli_preview_observation_interaction_feedback_and_owned_teardown(
     // Node's module entry loader does not accept Windows extended path syntax.
     // Use the absolute native spelling in argv, while VerifiedFileLease still
     // binds its canonical physical identity. Do not rewrite arbitrary model args.
-    let adapter = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("extensions/browser/adapter.mjs");
+    let adapter = std::env::var_os("ARGENTUM_NEXT01_ADAPTER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("extensions/browser/adapter.mjs")
+        });
+    assert!(adapter.is_absolute() && adapter.is_file());
     let exe = std::env::var_os("ARGENTUM_NEXT01_CLI_EXE")
         .map(PathBuf::from)
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_argentum").into());
