@@ -13,6 +13,12 @@ use thiserror::Error;
 mod search;
 mod skills;
 mod text;
+mod verification_inputs;
+
+pub use verification_inputs::{
+    default_verification_source_limits, validate_project_verification_inputs,
+    verification_file_identity, PROJECT_VERIFICATION_METHOD,
+};
 
 pub use skills::{
     discover_skills, inspect_skill, select_skill, SelectedSkill, SkillCatalog, SkillError,
@@ -44,6 +50,8 @@ pub enum WorkspaceError {
     FileTooLarge { path: PathBuf, limit_bytes: usize },
     #[error("workspace {0} limit exceeded")]
     LimitExceeded(&'static str),
+    #[error("verification input capture cancelled")]
+    VerificationCancelled,
     #[error("workspace path is a symbolic link: {0}")]
     SymlinkDenied(PathBuf),
     #[error("workspace path is not a regular file: {0}")]

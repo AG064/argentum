@@ -286,12 +286,19 @@ impl RuntimeService {
             .active_supervisors
             .lock()
             .map_err(|_| RuntimeError::StateLockPoisoned)?
-            .values()
-            .find(|claim| claim.current_run == Some(run))
-            .and_then(|claim| claim.delivery.as_ref())
-            .and_then(|delivery| delivery.feedback.clone());
-        feedback.map(|feedback| {
-            let source = self.verification_input_snapshot()?;
+            .iter()
+            .find(|(_, claim)| claim.current_run == Some(run))
+            .and_then(|(session_id, claim)| {
+                claim
+                    .delivery
+                    .as_ref()
+                    .and_then(|delivery| delivery.feedback.clone())
+                    .map(|feedback| (*session_id, claim.goal_id, feedback))
+            });
+        feedback.map(|(session_id, goal_id, feedback)| {
+            let goal = self.store.goal(self.project_id, session_id)?.ok_or(RuntimeError::GoalMissing)?;
+            if goal.id != goal_id { return Err(RuntimeError::SubmissionTargetChanged); }
+            let source = self.verification_input_snapshot(&goal)?;
             let output = serde_json::from_str::<serde_json::Value>(&feedback.output).unwrap_or(serde_json::Value::String(feedback.output));
             Ok(serde_json::json!({"verifier_run_id":feedback.run_id,"current_source_matches":feedback.source.as_ref()==Some(&source),"observed_source":feedback.source,"output":output}))
         }).transpose()
@@ -525,7 +532,7 @@ impl RuntimeService {
         let (current_criteria, completion_current, completion_status) = if let Some(acceptance) =
             goal.acceptance.as_ref()
         {
-            match self.verification_input_snapshot() {
+            match self.verification_input_snapshot(&goal) {
                 Ok(current_source) => {
                     let current_criteria = self.evaluate_goal_criteria(&goal, &current_source)?;
                     let completion_current = goal.completion.as_ref().is_some_and(|completion| {
@@ -549,7 +556,11 @@ impl RuntimeService {
                     };
                     (current_criteria, completion_current, completion_status)
                 }
-                Err(RuntimeError::Tool(ToolError::Workspace(_))) => (
+                Err(RuntimeError::Tool(
+                    ToolError::Workspace(_)
+                    | ToolError::Verification(_)
+                    | ToolError::InvalidInput(_),
+                )) => (
                     acceptance
                         .criteria
                         .iter()
@@ -833,7 +844,11 @@ impl RuntimeService {
                     "invocation_deadline",
                 );
             }
-            let source_before = self.verification_input_snapshot()?;
+            let source_before = self.verification_input_snapshot_for_invocation(
+                &goal,
+                &cancellation,
+                invocation.deadline_at,
+            )?;
             let criteria_before = self.evaluate_goal_criteria(&goal, &source_before)?;
             // A fresh native invocation cannot reuse transient verifier text.
             // Refresh retained failed/cancelled or stale evidence through the actual
@@ -879,7 +894,11 @@ impl RuntimeService {
                         "owner_attestation_required",
                     );
                 }
-                let final_source = self.verification_input_snapshot()?;
+                let final_source = self.verification_input_snapshot_for_invocation(
+                    &goal,
+                    &cancellation,
+                    invocation.deadline_at,
+                )?;
                 if final_source != source_before {
                     return self.settle_supervisor(
                         &invocation,
@@ -1058,7 +1077,11 @@ impl RuntimeService {
                 let (terminal_state, stop_reason) =
                     self.supervisor_stop_disposition(&error, &invocation);
                 let source = self
-                    .verification_input_snapshot()
+                    .verification_input_snapshot_for_invocation(
+                        &goal,
+                        &cancellation,
+                        invocation.deadline_at,
+                    )
                     .unwrap_or_else(|_| source_before.clone());
                 let evaluations = self
                     .evaluate_goal_criteria(&goal, &source)
@@ -1108,7 +1131,11 @@ impl RuntimeService {
                 } else {
                     "cancelled"
                 };
-                let source = self.verification_input_snapshot()?;
+                let source = self.verification_input_snapshot_for_invocation(
+                    &goal,
+                    &cancellation,
+                    invocation.deadline_at,
+                )?;
                 let evaluations = self.evaluate_goal_criteria(&goal, &source)?;
                 let checkpoint = progress_checkpoint(&invocation, source, &evaluations);
                 invocation = self.store.finish_goal_invocation_attempt(
@@ -1139,7 +1166,11 @@ impl RuntimeService {
                     .get(&invocation.session_id)
                     .and_then(|claim| claim.delivery.clone())
                     .ok_or(RuntimeError::StateLockPoisoned)?;
-                let source = self.verification_input_snapshot()?;
+                let source = self.verification_input_snapshot_for_invocation(
+                    &goal,
+                    &cancellation,
+                    invocation.deadline_at,
+                )?;
                 let evaluations = self.evaluate_goal_criteria(&goal, &source)?;
                 let mut delivery = invocation
                     .delivery
@@ -1290,7 +1321,11 @@ impl RuntimeService {
                 continue;
             }
 
-            let verification_source = self.verification_input_snapshot()?;
+            let verification_source = self.verification_input_snapshot_for_invocation(
+                &goal,
+                &cancellation,
+                invocation.deadline_at,
+            )?;
             let pre_verification = self.evaluate_goal_criteria(&goal, &verification_source)?;
             // Native delivery must return current in-application verification,
             // not silently promote a passing receipt from an earlier task into
@@ -1358,7 +1393,11 @@ impl RuntimeService {
             if let Some(Err(error)) = verification_result {
                 let (terminal_state, stop_reason) =
                     self.supervisor_stop_disposition(&error, &invocation);
-                let source = self.verification_input_snapshot()?;
+                let source = self.verification_input_snapshot_for_invocation(
+                    &goal,
+                    &cancellation,
+                    invocation.deadline_at,
+                )?;
                 let evaluations = self.evaluate_goal_criteria(&goal, &source)?;
                 let checkpoint = progress_checkpoint(&invocation, source, &evaluations);
                 let outcome = if matches!(
@@ -1410,7 +1449,11 @@ impl RuntimeService {
                 delivery.feedback = feedback;
             }
 
-            let source_after = self.verification_input_snapshot()?;
+            let source_after = self.verification_input_snapshot_for_invocation(
+                &goal,
+                &cancellation,
+                invocation.deadline_at,
+            )?;
             let evaluations = self.evaluate_goal_criteria(&goal, &source_after)?;
             let checkpoint = progress_checkpoint(&invocation, source_after.clone(), &evaluations);
             if phase == Some(DeliveryPhase::Verification)
@@ -1506,7 +1549,11 @@ impl RuntimeService {
                         "owner_attestation_required",
                     );
                 }
-                let final_source = self.verification_input_snapshot()?;
+                let final_source = self.verification_input_snapshot_for_invocation(
+                    &goal,
+                    &cancellation,
+                    invocation.deadline_at,
+                )?;
                 if final_source != source_after {
                     invocation = self.store.finish_goal_invocation_attempt(
                         invocation.id,
@@ -1727,10 +1774,38 @@ impl RuntimeService {
                 "invocation_deadline",
             ));
         }
-        if self.verification_input_snapshot()? != *source {
+        let goal = self
+            .store
+            .goal(invocation.project_id, invocation.session_id)?
+            .ok_or(RuntimeError::GoalMissing)?;
+        if goal.id != invocation.goal_id {
+            return Err(RuntimeError::SubmissionTargetChanged);
+        }
+        if self.verification_input_snapshot_for_invocation(
+            &goal,
+            cancellation,
+            invocation.deadline_at,
+        )? != *source
+        {
             return Ok(SupervisorCompletionCommit::Stopped(
                 GoalInvocationState::ReviewRequired,
                 "completion_source_changed",
+            ));
+        }
+        let current_evaluations = self.evaluate_goal_criteria(&goal, source)?;
+        if !criteria_pass(&current_evaluations)
+            || current_evaluations
+                .iter()
+                .map(|item| item.evidence_id)
+                .collect::<Vec<_>>()
+                != evaluations
+                    .iter()
+                    .map(|item| item.evidence_id)
+                    .collect::<Vec<_>>()
+        {
+            return Ok(SupervisorCompletionCommit::Stopped(
+                GoalInvocationState::ReviewRequired,
+                "completion_evidence_or_outputs_changed",
             ));
         }
         if let Some(delivery) = &invocation.delivery {
@@ -1906,7 +1981,7 @@ impl RuntimeService {
                 .ok_or(StoreError::GoalAccounting("acceptance_criteria_missing"))?
                 .criteria,
         )?;
-        if self.verification_input_snapshot()? != binding.source_before {
+        if self.verification_input_snapshot(&goal)? != binding.source_before {
             return Err(StoreError::GoalAccounting("verification_source_changed").into());
         }
         Ok(())
@@ -2069,8 +2144,48 @@ impl RuntimeService {
         });
     }
 
-    fn verification_input_snapshot(&self) -> Result<VerificationInputSnapshot, RuntimeError> {
-        Ok(self.tools.verification_input_snapshot(&self.workspace)?)
+    fn verification_input_snapshot(
+        &self,
+        goal: &Goal,
+    ) -> Result<VerificationInputSnapshot, RuntimeError> {
+        match &goal.acceptance {
+            Some(acceptance) => Ok(self
+                .tools
+                .verification_input_snapshot_for_criteria(&self.workspace, &acceptance.criteria)?),
+            None => Ok(self.tools.verification_input_snapshot(&self.workspace)?),
+        }
+    }
+
+    fn verification_input_snapshot_for_invocation(
+        &self,
+        goal: &Goal,
+        cancellation: &CancellationToken,
+        deadline: time::OffsetDateTime,
+    ) -> Result<VerificationInputSnapshot, RuntimeError> {
+        let cancelled = || {
+            cancellation.is_cancelled()
+                || self.shutdown_cancellation.is_cancelled()
+                || now() >= deadline
+        };
+        match &goal.acceptance {
+            Some(acceptance) => self
+                .tools
+                .verification_input_snapshot_for_criteria_cancellable(
+                    &self.workspace,
+                    &acceptance.criteria,
+                    cancelled,
+                )
+                .map_err(|error| match error {
+                    ToolError::Workspace(
+                        argentum_workspaces::WorkspaceError::VerificationCancelled,
+                    ) if now() >= deadline => RuntimeError::GoalDeadline,
+                    ToolError::Workspace(
+                        argentum_workspaces::WorkspaceError::VerificationCancelled,
+                    ) => ProviderError::RequestCancelled.into(),
+                    error => error.into(),
+                }),
+            None => self.verification_input_snapshot(goal),
+        }
     }
 
     fn evaluate_goal_criteria(
@@ -2127,7 +2242,31 @@ impl RuntimeService {
                         detail: "no_typed_receipt".into(),
                     };
                 };
-                evaluation_from_evidence(criterion, record, source, &self.workspace_key)
+                let mut evaluation =
+                    evaluation_from_evidence(criterion, record, source, &self.workspace_key);
+                if evaluation.state == CriterionEvidenceState::Passed {
+                    match self.tools.verification_output_snapshot(
+                        &self.workspace,
+                        &criterion.input_scope,
+                        true,
+                    ) {
+                        Ok(None) if record.generated_outputs.is_none() => {}
+                        Ok(Some(current))
+                            if record
+                                .generated_outputs
+                                .as_ref()
+                                .is_some_and(|outputs| outputs.after == current) => {}
+                        Ok(_) => {
+                            evaluation.state = CriterionEvidenceState::Stale;
+                            evaluation.detail = "generated_output_identity_changed".into();
+                        }
+                        Err(_) => {
+                            evaluation.state = CriterionEvidenceState::Unknown;
+                            evaluation.detail = "generated_output_identity_unavailable".into();
+                        }
+                    }
+                }
+                evaluation
             })
             .collect())
     }
@@ -2183,9 +2322,17 @@ fn evaluation_from_evidence(
                 CriterionEvidenceState::Unknown,
                 "legacy_receipt_missing_input_provenance",
             ),
+            (Some(before), Some(after)) if before.dependencies != after.dependencies => (
+                CriterionEvidenceState::Stale,
+                "installed_dependencies_changed_during_verification",
+            ),
             (Some(before), Some(after)) if before != after => (
                 CriterionEvidenceState::Stale,
                 "source_changed_during_verification",
+            ),
+            (Some(_), Some(after)) if after.dependencies != source.dependencies => (
+                CriterionEvidenceState::Stale,
+                "installed_dependency_revision_changed",
             ),
             (Some(_), Some(after)) if after != source => {
                 (CriterionEvidenceState::Stale, "source_revision_changed")

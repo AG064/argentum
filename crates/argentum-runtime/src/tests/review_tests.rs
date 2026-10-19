@@ -278,6 +278,7 @@ async fn f20d_failed_state_survives_success_prose_and_changes_are_distinct() {
         input_scope: None,
         input_before: None,
         input_after: None,
+        generated_outputs: None,
     };
     runtime
         .store

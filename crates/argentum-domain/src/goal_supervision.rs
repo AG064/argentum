@@ -21,14 +21,85 @@ pub struct VerificationInputScope {
     pub max_files: u64,
     pub max_total_bytes: u64,
     pub max_file_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_inputs: Option<VerificationProjectInputs>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program_path: Option<String>,
+}
+
+/// Explicit owner-reviewed resource bounds, not inferred package-manager defaults.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationInputLimits {
+    pub max_files: u64,
+    pub max_total_bytes: u64,
+    pub max_file_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationInventoryLimits {
+    pub max_entries: u64,
+    pub max_depth: u32,
+}
+
+/// Source remains the workspace outside these separately observed roots.
+/// Directory roles, bounds and interpretation are part of the approved runner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationProjectInputs {
+    pub program: VerificationProgramIdentity,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixed_files: Vec<VerificationFixedFile>,
+    pub dependency_roots: Vec<String>,
+    pub generated_output_roots: Vec<String>,
+    pub dependency_limits: VerificationInputLimits,
+    pub generated_limits: VerificationInputLimits,
+    pub inventory_limits: VerificationInventoryLimits,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationProgramIdentity {
+    pub sha256: Sha256Digest,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationFixedFile {
+    pub path: String,
+    pub sha256: Sha256Digest,
+    pub bytes: u64,
+}
+
+/// Content identity observed at an endpoint, not proof against transient changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationTreeIdentity {
+    pub path: String,
+    pub exists: bool,
+    pub digest: Sha256Digest,
+    pub file_count: u64,
+    pub total_bytes: u64,
+}
+
+/// Existing generated files are recorded before execution as existing inputs.
+/// After identities bind later output use without calling output changes source edits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationGeneratedOutputs {
+    pub before: Vec<VerificationTreeIdentity>,
+    pub after: Vec<VerificationTreeIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerificationInputSnapshot {
     pub method: String,
     pub digest: Sha256Digest,
+    /// Remaining source only; installed inputs have their own counted identities.
     pub file_count: u64,
     pub total_bytes: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependencies: Vec<VerificationTreeIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

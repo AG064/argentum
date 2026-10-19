@@ -1562,6 +1562,7 @@ mod tests {
                     input_scope: None,
                     input_before: None,
                     input_after: None,
+                    generated_outputs: None,
                 },
             )
             .unwrap();

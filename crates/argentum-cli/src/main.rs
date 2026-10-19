@@ -3182,8 +3182,23 @@ async fn run_verification_command(
                     }
                 }
                 VerificationAction::Approve { runner } => {
+                    let review = host.project_verification_review(&runner)?;
+                    if review.input_scope.project_inputs.is_some() {
+                        if json || !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+                            return Err("local authority is required for scoped project verification review".into());
+                        }
+                        println!("{}", serde_json::to_string_pretty(&review)?);
+                        println!("Review actual source, installed dependencies, generated outputs and all resource bounds. The runner executes current-user code, not an OS filesystem/network sandbox. Identities are endpoint observations, not proof against transient changes.");
+                        print!("Type APPROVE to authorize this exact reviewed project runner: ");
+                        std::io::Write::flush(&mut io::stdout())?;
+                        let mut answer = String::new();
+                        io::stdin().read_line(&mut answer)?;
+                        if answer.trim_end_matches(&['\r', '\n'][..]) != "APPROVE" {
+                            return Err("Project verification approval declined; no grant recorded".into());
+                        }
+                    }
                     host.local_handle()
-                        .dispatch(AppCommand::ApproveProjectVerification { runner })
+                        .dispatch(AppCommand::ApproveProjectVerification { runner, expected_binding: Some(review.binding) })
                         .await?;
                     if json {
                         println!("{}", serde_json::json!({ "approved": true }));
@@ -3203,13 +3218,13 @@ async fn run_verification_command(
                             _ => None,
                         })
                         .ok_or("verification command completed without an evidence snapshot")?;
-                    let revision = host.current_verification_revision()?;
+                    let revision = host.current_verification_revision().ok();
                     let entries = evidence
                         .iter()
                         .map(|item| {
                             serde_json::json!({
                                 "evidence": item,
-                                "fresh": item.is_fresh_for(&revision),
+                                "fresh": host.verification_evidence_is_current(item).unwrap_or(false),
                             })
                         })
                         .collect::<Vec<_>>();
@@ -3219,10 +3234,10 @@ async fn run_verification_command(
                             serde_json::json!({ "current_revision": revision, "evidence": entries })
                         );
                     } else {
-                        println!("Current verification revision: {}", revision.0);
+                        println!("Current verification revision: {}", revision.as_ref().map(|value| value.0.as_str()).unwrap_or("unavailable"));
                         println!("Verification evidence: {}", evidence.len());
                         for item in evidence {
-                            let freshness = if item.is_fresh_for(&revision) {
+                            let freshness = if host.verification_evidence_is_current(&item).unwrap_or(false) {
                                 "fresh"
                             } else {
                                 "stale"

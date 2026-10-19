@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use argentum_domain::{
-    goal_supervision::{VerificationInputScope, VerificationInputSnapshot},
+    goal_supervision::{
+        VerificationGeneratedOutputs, VerificationInputScope, VerificationInputSnapshot,
+        VerificationProjectInputs, VerificationTreeIdentity,
+    },
     now, RunId, Sha256Digest, VerificationEvidence, VerificationRunnerId,
     VerificationRunnerInspection, VerificationState,
 };
@@ -65,6 +68,7 @@ pub struct VerificationRunnerDefinition {
     pub output_limit: usize,
     pub origin: VerificationRunnerOrigin,
     pub resolved_program: Option<PathBuf>,
+    pub input_scope: VerificationInputScope,
     pub unavailable_reason: Option<String>,
 }
 
@@ -93,6 +97,8 @@ struct ProjectVerificationInput {
     cwd: String,
     timeout_ms: u64,
     output_limit: usize,
+    #[serde(default)]
+    inputs: Option<VerificationProjectInputs>,
 }
 
 fn default_project_cwd() -> String {
@@ -179,6 +185,9 @@ impl VerificationRegistry {
             .map_err(|error| VerificationError::Configuration(error.to_string()))?;
         let mut ids = BTreeSet::new();
         for input in config.runners {
+            if let Some(inputs) = &input.inputs {
+                argentum_workspaces::validate_project_verification_inputs(inputs)?;
+            }
             validate_project_id(&input.id)?;
             if !ids.insert(input.id.clone()) {
                 return Err(VerificationError::Configuration(
@@ -241,6 +250,7 @@ impl VerificationRegistry {
                 })?;
             }
             let resolved_program = resolve_fixed_executable(&input.program, &[&root]);
+            let input_scope = project_input_scope(input.inputs, resolved_program.as_deref());
             let id = VerificationRunnerId::Project(input.id);
             registry.runners.insert(
                 id.clone(),
@@ -260,6 +270,7 @@ impl VerificationRegistry {
                         )
                     }),
                     resolved_program,
+                    input_scope,
                 },
             );
         }
@@ -298,6 +309,7 @@ impl VerificationRegistry {
                 approval_required: matches!(definition.origin, VerificationRunnerOrigin::Project),
                 reason: definition.unavailable_reason.clone(),
                 definition_sha256: self.definition_sha256(&definition.id).ok(),
+                input_scope: Some(definition.input_scope.clone()),
             })
             .collect()
     }
@@ -313,7 +325,7 @@ impl VerificationRegistry {
         let definition = self
             .get(id)
             .ok_or_else(|| VerificationError::UnknownRunner(id.id()))?;
-        let scope = verification_input_scope();
+        let scope = &definition.input_scope;
         let mut digest = Sha256::new();
         digest.update(b"argentum-verification-definition-v1\0");
         hash_contract_field(&mut digest, &self.version.to_le_bytes());
@@ -350,6 +362,17 @@ impl VerificationRegistry {
         }
         for value in [scope.max_files, scope.max_total_bytes, scope.max_file_bytes] {
             hash_contract_field(&mut digest, &value.to_le_bytes());
+        }
+        if let Some(inputs) = &scope.project_inputs {
+            hash_contract_field(&mut digest, b"reviewed-project-input-roles-v2");
+            hash_contract_field(
+                &mut digest,
+                scope.program_path.as_deref().unwrap_or("").as_bytes(),
+            );
+            let encoded = serde_json::to_vec(inputs).map_err(|_| {
+                VerificationError::Configuration("project input contract encoding failed".into())
+            })?;
+            hash_contract_field(&mut digest, &encoded);
         }
         if definition.origin == VerificationRunnerOrigin::BuiltIn {
             // Resource-profile changes invalidate old criteria and receipts just
@@ -437,6 +460,7 @@ fn definition(
         origin: VerificationRunnerOrigin::BuiltIn,
         resolved_program: None,
         unavailable_reason: None,
+        input_scope: verification_input_scope(),
     }
 }
 
@@ -515,6 +539,8 @@ pub struct VerificationJob {
     pub workspace_key: String,
     pub definition_sha256: Sha256Digest,
     pub input_scope: VerificationInputScope,
+    pub generated_before: Option<Vec<VerificationTreeIdentity>>,
+    pub cancellation: CancellationToken,
 }
 
 /// Transient compiler output for the current authorized caller. Only `evidence`
@@ -569,11 +595,29 @@ impl VerificationRunner {
         run_id: RunId,
         runner_id: VerificationRunnerId,
     ) -> Result<VerificationJob, VerificationError> {
+        self.prepare_job_with_cancellation(run_id, runner_id, CancellationToken::new())
+    }
+
+    pub fn prepare_job_with_cancellation(
+        &self,
+        run_id: RunId,
+        runner_id: VerificationRunnerId,
+        cancellation: CancellationToken,
+    ) -> Result<VerificationJob, VerificationError> {
         let definition = self
             .registry
             .get(&runner_id)
             .ok_or_else(|| VerificationError::UnknownRunner(runner_id.id()))?;
-        let revision = self.workspace.revision_digest(default_revision_limits())?;
+        let revision = verification_input_snapshot_for_scope(
+            &self.workspace,
+            &definition.input_scope,
+            || cancellation.is_cancelled(),
+        )?;
+        let generated_before =
+            self.workspace
+                .capture_verification_outputs(&definition.input_scope, false, || {
+                    cancellation.is_cancelled()
+                })?;
         let program_path = definition
             .resolved_program
             .clone()
@@ -591,11 +635,13 @@ impl VerificationRunner {
             program,
             args: definition.args.clone(),
             spec,
-            revision_before: revision_snapshot(&revision),
+            revision_before: revision,
             started_at: now(),
-            workspace_key: workspace_key(self.workspace.root()),
+            workspace_key: verification_workspace_key(self.workspace.root()),
             definition_sha256: self.registry.definition_sha256(&runner_id)?,
-            input_scope: verification_input_scope(),
+            input_scope: definition.input_scope.clone(),
+            generated_before,
+            cancellation,
         })
     }
 
@@ -605,8 +651,16 @@ impl VerificationRunner {
         exit: &ManagedProcessExit,
         termination: VerificationJobTermination,
     ) -> Result<VerificationEvidence, VerificationError> {
-        let revision_after = self.workspace.revision_digest(default_revision_limits())?;
-        let state = if job.revision_before.digest != revision_after.digest {
+        let revision_after =
+            verification_input_snapshot_for_scope(&self.workspace, &job.input_scope, || {
+                job.cancellation.is_cancelled()
+            })?;
+        let generated_after = self.workspace.capture_verification_outputs(
+            &job.input_scope,
+            termination == VerificationJobTermination::Completed && exit.exit_code == Some(0),
+            || job.cancellation.is_cancelled(),
+        )?;
+        let state = if job.revision_before != revision_after {
             VerificationState::Stale
         } else {
             match termination {
@@ -641,7 +695,8 @@ impl VerificationRunner {
             definition_sha256: Some(job.definition_sha256.clone()),
             input_scope: Some(job.input_scope.clone()),
             input_before: Some(job.revision_before.clone()),
-            input_after: Some(revision_snapshot(&revision_after)),
+            input_after: Some(revision_after),
+            generated_outputs: generated_evidence(job.generated_before.clone(), generated_after)?,
         })
     }
 
@@ -672,7 +727,16 @@ impl VerificationRunner {
                 .registry
                 .get(runner_id)
                 .ok_or_else(|| VerificationError::UnknownRunner(runner_id.id()))?;
-            let revision_before = self.workspace.revision_digest(default_revision_limits())?;
+            let input_scope = definition.input_scope.clone();
+            let revision_before =
+                verification_input_snapshot_for_scope(&self.workspace, &input_scope, || {
+                    cancellation.is_cancelled()
+                })?;
+            let generated_before =
+                self.workspace
+                    .capture_verification_outputs(&input_scope, false, || {
+                        cancellation.is_cancelled()
+                    })?;
             let started_at = now();
             let program_path = definition
                 .resolved_program
@@ -687,12 +751,23 @@ impl VerificationRunner {
                 .with_timeout(definition.timeout)?
                 .with_output_limit(definition.output_limit)?;
             let process_result = self.process.run(spec, cancellation.clone()).await;
-            let revision_after = self.workspace.revision_digest(default_revision_limits())?;
-            let workspace_key = workspace_key(self.workspace.root());
+            let revision_after =
+                verification_input_snapshot_for_scope(&self.workspace, &input_scope, || {
+                    cancellation.is_cancelled()
+                })?;
+            let output_required = process_result.as_ref().is_ok_and(|result| {
+                result.state == ProcessState::Exited && result.exit_code == Some(0)
+            });
+            let generated_after = self.workspace.capture_verification_outputs(
+                &input_scope,
+                output_required,
+                || cancellation.is_cancelled(),
+            )?;
+            let generated = generated_evidence(generated_before, generated_after)?;
+            let workspace_key = verification_workspace_key(self.workspace.root());
             let definition_sha256 = self.registry.definition_sha256(runner_id)?;
-            let input_scope = verification_input_scope();
-            let input_before = revision_snapshot(&revision_before);
-            let input_after = revision_snapshot(&revision_after);
+            let input_before = revision_before.clone();
+            let input_after = revision_after.clone();
             let mut stdout = None;
             let mut stderr = None;
             let record = match process_result {
@@ -735,6 +810,7 @@ impl VerificationRunner {
                         input_scope: Some(input_scope.clone()),
                         input_before: Some(input_before.clone()),
                         input_after: Some(input_after.clone()),
+                        generated_outputs: generated.clone(),
                     }
                 }
                 Err(ProcessError::Spawn(_) | ProcessError::Containment(_)) => {
@@ -762,6 +838,7 @@ impl VerificationRunner {
                         input_scope: Some(input_scope.clone()),
                         input_before: Some(input_before.clone()),
                         input_after: Some(input_after.clone()),
+                        generated_outputs: generated.clone(),
                     }
                 }
                 Err(error_value) => return Err(error_value.into()),
@@ -791,11 +868,7 @@ fn effective_working_directory(
 }
 
 pub const fn default_revision_limits() -> WorkspaceRevisionLimits {
-    WorkspaceRevisionLimits {
-        max_files: 16_384,
-        max_total_bytes: 64 * 1024 * 1024,
-        max_file_bytes: 16 * 1024 * 1024,
-    }
+    argentum_workspaces::default_verification_source_limits()
 }
 
 fn hash_contract_field(digest: &mut Sha256, value: &[u8]) {
@@ -811,21 +884,120 @@ pub fn verification_input_scope() -> VerificationInputScope {
         max_files: limits.max_files.try_into().unwrap_or(u64::MAX),
         max_total_bytes: limits.max_total_bytes,
         max_file_bytes: limits.max_file_bytes,
+        project_inputs: None,
+        program_path: None,
     }
 }
 
-fn revision_snapshot(
-    revision: &argentum_workspaces::WorkspaceRevision,
-) -> VerificationInputSnapshot {
-    VerificationInputSnapshot {
-        method: "workspace_revision_v1".into(),
-        digest: revision.digest.clone(),
-        file_count: revision.file_count,
-        total_bytes: revision.total_bytes,
+fn project_input_scope(
+    inputs: Option<VerificationProjectInputs>,
+    program: Option<&Path>,
+) -> VerificationInputScope {
+    let mut scope = verification_input_scope();
+    if let Some(inputs) = inputs {
+        scope.method = argentum_workspaces::PROJECT_VERIFICATION_METHOD.into();
+        scope.program_path = program.map(|path| path.to_string_lossy().into_owned());
+        scope.project_inputs = Some(inputs);
+    }
+    scope
+}
+
+/// Canonical execution-input capture shared by goals, ordinary verifiers,
+/// managed jobs and current-evidence inspection. No external-file selector is
+/// added: the sole external file is the already selected verifier executable.
+pub fn verification_input_snapshot_for_scope(
+    workspace: &WorkspaceManager,
+    scope: &VerificationInputScope,
+    mut cancelled: impl FnMut() -> bool,
+) -> Result<VerificationInputSnapshot, VerificationError> {
+    let Some(inputs) = &scope.project_inputs else {
+        if scope.program_path.is_some() {
+            return Err(VerificationError::Configuration(
+                "legacy verifier cannot carry an environment binding".into(),
+            ));
+        }
+        return Ok(workspace.capture_verification_inputs(scope, cancelled)?);
+    };
+    scope
+        .validate()
+        .map_err(|error| VerificationError::Configuration(error.to_string()))?;
+    let program = Path::new(scope.program_path.as_deref().ok_or_else(|| {
+        VerificationError::Configuration("verifier executable binding missing".into())
+    })?);
+    if !program.is_absolute() {
+        return Err(VerificationError::Configuration(
+            "verifier executable must be canonical and absolute".into(),
+        ));
+    }
+    #[cfg(windows)]
+    if !matches!(program.components().next(), Some(std::path::Component::Prefix(prefix))
+        if matches!(prefix.kind(), std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)))
+    {
+        return Err(VerificationError::Configuration(
+            "verifier executable must use a local drive path".into(),
+        ));
+    }
+    if std::fs::canonicalize(program)
+        .map_err(|_| VerificationError::Configuration("verifier executable unavailable".into()))?
+        != program
+    {
+        return Err(VerificationError::Configuration(
+            "verifier executable identity path changed".into(),
+        ));
+    }
+    let mut file = std::fs::File::open(program)
+        .map_err(|_| VerificationError::Configuration("verifier executable unavailable".into()))?;
+    let program_digest = argentum_workspaces::verification_file_identity(
+        &mut file,
+        program,
+        inputs.program.bytes,
+        inputs.dependency_limits.max_file_bytes,
+        &mut cancelled,
+    )?;
+    if program_digest != inputs.program.sha256 {
+        return Err(VerificationError::Configuration(
+            "verifier executable bytes changed".into(),
+        ));
+    }
+    let mut snapshot = workspace.capture_verification_inputs_with_reserved(
+        scope,
+        1,
+        inputs.program.bytes,
+        &mut cancelled,
+    )?;
+    let mut digest = Sha256::new();
+    digest.update(b"argentum-project-inputs-and-verifier-program-v2\0");
+    digest.update(snapshot.digest.0.as_bytes());
+    digest.update(program.to_string_lossy().as_bytes());
+    digest.update(program_digest.0.as_bytes());
+    snapshot.digest = Sha256Digest(format!("{:x}", digest.finalize()));
+    snapshot.dependencies.push(VerificationTreeIdentity {
+        path: "[verifier_program]".into(),
+        exists: true,
+        digest: program_digest,
+        file_count: 1,
+        total_bytes: inputs.program.bytes,
+    });
+    snapshot
+        .validate_for_scope(scope)
+        .map_err(|error| VerificationError::Configuration(error.to_string()))?;
+    Ok(snapshot)
+}
+
+fn generated_evidence(
+    before: Option<Vec<VerificationTreeIdentity>>,
+    after: Option<Vec<VerificationTreeIdentity>>,
+) -> Result<Option<VerificationGeneratedOutputs>, VerificationError> {
+    match (before, after) {
+        (None, None) => Ok(None),
+        (Some(before), Some(after)) => Ok(Some(VerificationGeneratedOutputs { before, after })),
+        _ => Err(VerificationError::Configuration(
+            "generated output capture contract mismatch".into(),
+        )),
     }
 }
 
-fn workspace_key(path: &std::path::Path) -> String {
+pub fn verification_workspace_key(path: &std::path::Path) -> String {
     let key = path.to_string_lossy().replace('\\', "/");
     #[cfg(target_os = "windows")]
     let key = key.to_ascii_lowercase();
@@ -1031,7 +1203,7 @@ mod tests {
         ProcessJobOwner {
             host_generation: manager.host_generation(),
             project_id: Uuid::new_v4(),
-            workspace_key: workspace_key(workspace.root()),
+            workspace_key: verification_workspace_key(workspace.root()),
             session_id: Uuid::new_v4(),
             run_id,
         }
@@ -1238,6 +1410,7 @@ mod tests {
             origin: VerificationRunnerOrigin::BuiltIn,
             resolved_program: None,
             unavailable_reason: None,
+            input_scope: verification_input_scope(),
         }
     }
 
@@ -1308,6 +1481,218 @@ mod tests {
             .revision_digest(default_revision_limits())
             .expect("current revision");
         assert!(!evidence[0].is_fresh_for(&current.digest));
+    }
+
+    #[cfg(windows)]
+    fn scoped_definition(root: &Path, script: &str) -> VerificationRunnerDefinition {
+        use argentum_domain::goal_supervision::{
+            VerificationInputLimits, VerificationInventoryLimits,
+        };
+        let mut definition = test_definition(
+            VerificationRunnerId::Project("scoped-node-control".into()),
+            script,
+        );
+        definition.origin = VerificationRunnerOrigin::Project;
+        definition.cwd = root.to_path_buf();
+        let program = resolve_fixed_executable("powershell.exe", &[root]).unwrap();
+        let mut file = std::fs::File::open(&program).unwrap();
+        let program_bytes = file.metadata().unwrap().len();
+        let program_sha256 = argentum_workspaces::verification_file_identity(
+            &mut file,
+            &program,
+            program_bytes,
+            24 * 1024 * 1024,
+            &mut || false,
+        )
+        .unwrap();
+        definition.input_scope = project_input_scope(
+            Some(VerificationProjectInputs {
+                program: argentum_domain::goal_supervision::VerificationProgramIdentity {
+                    sha256: program_sha256,
+                    bytes: program_bytes,
+                },
+                fixed_files: Vec::new(),
+                dependency_roots: vec!["node_modules".into()],
+                generated_output_roots: vec!["dist".into()],
+                dependency_limits: VerificationInputLimits {
+                    max_files: 16,
+                    max_total_bytes: 32 * 1024 * 1024,
+                    max_file_bytes: 24 * 1024 * 1024,
+                },
+                generated_limits: VerificationInputLimits {
+                    max_files: 16,
+                    max_total_bytes: 1024 * 1024,
+                    max_file_bytes: 1024 * 1024,
+                },
+                inventory_limits: VerificationInventoryLimits {
+                    max_entries: 128,
+                    max_depth: 16,
+                },
+            }),
+            Some(&program),
+        );
+        definition
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn scoped_project_verifier_binds_installed_bytes_and_generated_outputs() {
+        let (directory, workspace) = workspace();
+        std::fs::create_dir(directory.path().join("node_modules")).unwrap();
+        std::fs::File::create(directory.path().join("node_modules/native.dll"))
+            .unwrap()
+            .set_len(18 * 1024 * 1024)
+            .unwrap();
+        let definition = scoped_definition(workspace.root(), "New-Item -ItemType Directory -Path dist -Force | Out-Null; Set-Content -LiteralPath dist/site.txt -Value generated; exit 0");
+        let scope = definition.input_scope.clone();
+        let id = definition.id.clone();
+        let verifier = VerificationRunner::new(
+            workspace.clone(),
+            VerificationRegistry::for_tests(vec![definition]),
+        );
+        let result = verifier
+            .run_batch(
+                Uuid::new_v4(),
+                std::slice::from_ref(&id),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let evidence = &result[0];
+        assert_eq!(evidence.state, VerificationState::Passed);
+        assert_eq!(evidence.input_before, evidence.input_after);
+        assert_eq!(
+            evidence.input_after.as_ref().unwrap().dependencies[0].total_bytes,
+            18 * 1024 * 1024
+        );
+        let outputs = evidence.generated_outputs.as_ref().unwrap();
+        assert!(!outputs.before[0].exists);
+        assert!(outputs.after[0].exists);
+        assert!(evidence.matches_generated_snapshot(
+            &workspace
+                .capture_verification_outputs(&scope, true, || false)
+                .unwrap()
+        ));
+        std::fs::write(
+            directory.path().join("dist/site.txt"),
+            "substituted generated output",
+        )
+        .unwrap();
+        assert!(!evidence.matches_generated_snapshot(
+            &workspace
+                .capture_verification_outputs(&scope, true, || false)
+                .unwrap()
+        ));
+        assert_eq!(
+            evidence.input_after.as_ref().unwrap(),
+            &verification_input_snapshot_for_scope(&workspace, &scope, || false).unwrap()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn scoped_project_contract_changes_the_exact_definition_and_approval_binding() {
+        let (directory, workspace) = workspace();
+        std::fs::create_dir(directory.path().join(".agents")).unwrap();
+        let definition = scoped_definition(workspace.root(), "exit 0");
+        let id = definition.id.clone();
+        let config = |inputs: &Option<VerificationProjectInputs>| {
+            serde_json::json!({"version":1,"runners":[{
+            "id":"scoped-node-control","label":"Scoped project test","program":"powershell.exe",
+            "args":definition.args,"cwd":".","timeout_ms":5000,"output_limit":1024,"inputs":inputs
+        }]}).to_string()
+        };
+        let path = directory.path().join(PROJECT_CONFIG_RELATIVE_PATH);
+        std::fs::write(&path, config(&definition.input_scope.project_inputs)).unwrap();
+        let original = VerificationRegistry::for_workspace(workspace.root()).unwrap();
+        let before = original.definition_sha256(&id).unwrap();
+        let binding = project_verification_binding(&workspace, std::slice::from_ref(&id)).unwrap();
+        let mut inputs = definition.input_scope.project_inputs.clone();
+        inputs.as_mut().unwrap().generated_output_roots = vec!["build".into()];
+        std::fs::write(&path, config(&inputs)).unwrap();
+        assert_ne!(
+            before,
+            VerificationRegistry::for_workspace(workspace.root())
+                .unwrap()
+                .definition_sha256(&id)
+                .unwrap()
+        );
+        assert_ne!(
+            binding,
+            project_verification_binding(&workspace, std::slice::from_ref(&id)).unwrap()
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn scoped_project_rejects_changed_program_and_fixed_controller_before_execution() {
+        use argentum_domain::goal_supervision::VerificationFixedFile;
+        let (directory, workspace) = workspace();
+        std::fs::create_dir(directory.path().join("node_modules")).unwrap();
+        std::fs::write(directory.path().join("controller.js"), "original").unwrap();
+        let mut definition =
+            scoped_definition(workspace.root(), "Set-Content executed.txt unexpected");
+        let original = definition.clone();
+        definition
+            .input_scope
+            .project_inputs
+            .as_mut()
+            .unwrap()
+            .program
+            .sha256 = Sha256Digest("0".repeat(64));
+        let runner = VerificationRunner::new(
+            workspace.clone(),
+            VerificationRegistry::for_tests(vec![definition]),
+        );
+        assert!(runner
+            .run_batch(
+                Uuid::new_v4(),
+                std::slice::from_ref(&original.id),
+                CancellationToken::new()
+            )
+            .await
+            .is_err());
+        assert!(!directory.path().join("executed.txt").exists());
+        let mut definition = original;
+        definition
+            .input_scope
+            .project_inputs
+            .as_mut()
+            .unwrap()
+            .fixed_files = vec![VerificationFixedFile {
+            path: "controller.js".into(),
+            sha256: Sha256Digest(format!("{:x}", Sha256::digest(b"original"))),
+            bytes: 8,
+        }];
+        let scope = definition.input_scope.clone();
+        assert!(verification_input_snapshot_for_scope(&workspace, &scope, || false).is_ok());
+        std::fs::write(directory.path().join("controller.js"), "modified").unwrap();
+        let id = definition.id.clone();
+        let runner =
+            VerificationRunner::new(workspace, VerificationRegistry::for_tests(vec![definition]));
+        assert!(runner
+            .run_batch(Uuid::new_v4(), &[id], CancellationToken::new())
+            .await
+            .is_err());
+        assert!(!directory.path().join("executed.txt").exists());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn scoped_project_failure_is_not_overridden_by_generated_output() {
+        let (directory, workspace) = workspace();
+        std::fs::create_dir(directory.path().join("node_modules")).unwrap();
+        let definition = scoped_definition(workspace.root(), "New-Item -ItemType Directory dist | Out-Null; Set-Content dist/site.txt generated; [Console]::Error.Write('INNER_FAILURE'); exit 9");
+        let id = definition.id.clone();
+        let runner =
+            VerificationRunner::new(workspace, VerificationRegistry::for_tests(vec![definition]));
+        let evidence = runner
+            .run_batch(Uuid::new_v4(), &[id], CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(evidence[0].state, VerificationState::Failed);
+        assert_eq!(evidence[0].exit_code, Some(9));
+        assert!(evidence[0].generated_outputs.as_ref().unwrap().after[0].exists);
     }
 
     #[cfg(windows)]

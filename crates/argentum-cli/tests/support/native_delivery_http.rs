@@ -2,6 +2,9 @@
 use super::instructions_http::Server;
 use super::*;
 
+#[path = "project_inputs_http.rs"]
+mod project_inputs_http;
+
 fn json_output(output: Output) -> Value {
     assert!(
         output.status.success(),

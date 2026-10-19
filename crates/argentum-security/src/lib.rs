@@ -615,6 +615,42 @@ impl CapabilityBroker {
         Ok(files)
     }
 
+    /// Bounded contained inventory for explicitly reviewed verification inputs.
+    /// Unlike ordinary discovery, a link or special entry is incomplete coverage,
+    /// not a reason to silently omit an installed executable input.
+    pub fn list_workspace_files_bounded<C, S>(
+        &self,
+        max_entries: usize,
+        max_depth: usize,
+        mut cancelled: C,
+        mut skip: S,
+    ) -> Result<Vec<PathBuf>, SecurityError>
+    where
+        C: FnMut() -> bool,
+        S: FnMut(&Path) -> bool,
+    {
+        self.require_with_grant(Capability::ReadFiles, &ApprovalGrant::default())?;
+        let mut files = Vec::new();
+        let mut visited = 0;
+        collect_files_bounded(
+            &self.directory,
+            Path::new(""),
+            &self.root,
+            &mut files,
+            &mut visited,
+            max_entries,
+            max_depth,
+            &mut cancelled,
+            &mut skip,
+        )
+        .map_err(|source| SecurityError::WorkspaceOperation {
+            path: self.root.clone(),
+            source,
+        })?;
+        files.sort();
+        Ok(files)
+    }
+
     pub fn authorize(&self, capability: Capability) -> Result<Authorization, SecurityError> {
         self.policy.check(capability)
     }
@@ -662,6 +698,85 @@ fn collect_files(
             collect_files(&entry.open_dir()?, &path, root, files)?;
         } else if file_type.is_file() {
             files.push(root.join(path));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_files_bounded<C, S>(
+    directory: &Dir,
+    relative: &Path,
+    root: &Path,
+    files: &mut Vec<PathBuf>,
+    visited: &mut usize,
+    max_entries: usize,
+    max_depth: usize,
+    cancelled: &mut C,
+    skip: &mut S,
+) -> std::io::Result<()>
+where
+    C: FnMut() -> bool,
+    S: FnMut(&Path) -> bool,
+{
+    if max_entries == 0 || max_depth == 0 || relative.components().count() > max_depth {
+        return Err(std::io::Error::other(
+            "verification inventory bounds exceeded",
+        ));
+    }
+    if cancelled() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "verification inventory cancelled",
+        ));
+    }
+    for entry in directory.entries()? {
+        if cancelled() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "verification inventory cancelled",
+            ));
+        }
+        *visited = visited.saturating_add(1);
+        if *visited > max_entries {
+            return Err(std::io::Error::other(
+                "verification inventory entry limit exceeded",
+            ));
+        }
+        let entry = entry?;
+        let path = relative.join(entry.file_name());
+        if skip(&path) {
+            continue;
+        }
+        if path.components().count() > max_depth {
+            return Err(std::io::Error::other(
+                "verification inventory depth limit exceeded",
+            ));
+        }
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            return Err(std::io::Error::other(
+                "verification inventory contains a link",
+            ));
+        }
+        if file_type.is_dir() {
+            collect_files_bounded(
+                &entry.open_dir()?,
+                &path,
+                root,
+                files,
+                visited,
+                max_entries,
+                max_depth,
+                cancelled,
+                skip,
+            )?;
+        } else if file_type.is_file() {
+            files.push(root.join(path));
+        } else {
+            return Err(std::io::Error::other(
+                "verification inventory contains a special entry",
+            ));
         }
     }
     Ok(())

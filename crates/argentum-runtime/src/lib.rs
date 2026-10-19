@@ -48,7 +48,7 @@ use argentum_store::{
 use argentum_tools::{ToolContext, ToolError, ToolRegistry, ToolRequest, ToolResult};
 use argentum_workspaces::{
     discover_skills, inspect_skill, select_skill, PreparedWorkspacePatch, SelectedSkill,
-    SkillCatalog, SkillError, SkillInspection, WorkspaceManager, WorkspaceRevisionLimits,
+    SkillCatalog, SkillError, SkillInspection, WorkspaceManager,
 };
 use goal_supervision::NativeDeliveryControl;
 use sha2::{Digest, Sha256};
@@ -1910,9 +1910,10 @@ impl RuntimeService {
                 self.publish_transient(AppEvent::VerificationRunnerInspectionSnapshot { runners });
                 Ok(())
             }
-            AppCommand::ApproveProjectVerification { runner } => {
-                self.approve_project_verification(runner, authority)
-            }
+            AppCommand::ApproveProjectVerification {
+                runner,
+                expected_binding,
+            } => self.approve_project_verification(runner, expected_binding, authority),
             AppCommand::LoadVerificationEvidence { run_id } => {
                 let evidence = self
                     .store
@@ -5776,14 +5777,41 @@ impl RuntimeService {
     }
 
     pub fn current_verification_revision(&self) -> Result<Sha256Digest, RuntimeError> {
+        match self.store.goal(self.project_id, self.session_id())? {
+            Some(goal) if goal.acceptance.is_some() => {
+                let criteria = &goal
+                    .acceptance
+                    .as_ref()
+                    .expect("checked acceptance")
+                    .criteria;
+                Ok(self
+                    .tools
+                    .verification_input_snapshot_for_criteria(&self.workspace, criteria)?
+                    .digest)
+            }
+            _ => Ok(self
+                .tools
+                .verification_input_snapshot(&self.workspace)?
+                .digest),
+        }
+    }
+
+    pub fn verification_evidence_is_current(
+        &self,
+        evidence: &argentum_domain::VerificationEvidence,
+    ) -> Result<bool, RuntimeError> {
         Ok(self
-            .workspace
-            .revision_digest(WorkspaceRevisionLimits {
-                max_files: 16_384,
-                max_total_bytes: 64 * 1024 * 1024,
-                max_file_bytes: 16 * 1024 * 1024,
-            })?
-            .digest)
+            .tools
+            .verification_evidence_is_current(&self.workspace, evidence)?)
+    }
+
+    pub fn project_verification_review(
+        &self,
+        runner: &argentum_domain::VerificationRunnerId,
+    ) -> Result<argentum_domain::VerificationRunnerReview, RuntimeError> {
+        Ok(self
+            .tools
+            .project_verification_review(&self.workspace, runner)?)
     }
 
     pub async fn request_tool(&self, request: ToolRequest) -> Result<(), RuntimeError> {
@@ -6644,6 +6672,7 @@ impl RuntimeService {
     fn approve_project_verification(
         &self,
         runner: argentum_domain::VerificationRunnerId,
+        expected_binding: Option<Sha256Digest>,
         authority: Option<VerifiedLocalAuthority>,
     ) -> Result<(), RuntimeError> {
         let binding = self
@@ -6653,6 +6682,16 @@ impl RuntimeService {
             runner_id: runner.id(),
             binding: binding.clone(),
         };
+        let review = self
+            .tools
+            .project_verification_review(&self.workspace, &runner)?;
+        if expected_binding
+            .as_ref()
+            .is_some_and(|expected| expected != &binding)
+            || (review.input_scope.project_inputs.is_some() && expected_binding.is_none())
+        {
+            return Err(RuntimeError::DurableCommandSnapshotChanged);
+        }
         self.authorize_exact_local_action(Some(&action), authority)?;
         let inspection = self.tools.verification_inspection(&self.workspace)?;
         let id = runner.id();

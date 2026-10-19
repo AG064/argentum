@@ -1597,6 +1597,20 @@ impl CommandHost {
         Ok(self.runtime.current_verification_revision()?)
     }
 
+    pub fn project_verification_review(
+        &self,
+        runner: &argentum_domain::VerificationRunnerId,
+    ) -> Result<argentum_domain::VerificationRunnerReview, HostError> {
+        Ok(self.runtime.project_verification_review(runner)?)
+    }
+
+    pub fn verification_evidence_is_current(
+        &self,
+        evidence: &argentum_domain::VerificationEvidence,
+    ) -> Result<bool, HostError> {
+        Ok(self.runtime.verification_evidence_is_current(evidence)?)
+    }
+
     pub async fn harness_lifecycle_snapshot(&self) -> Option<HostLifecycleSnapshot> {
         self.lifecycle_observer().harness_lifecycle_snapshot().await
     }

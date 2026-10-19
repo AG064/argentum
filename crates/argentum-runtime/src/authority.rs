@@ -121,10 +121,23 @@ impl RuntimeService {
                     scope: scope.clone(),
                 }))
             }
-            AppCommand::ApproveProjectVerification { runner } => {
+            AppCommand::ApproveProjectVerification {
+                runner,
+                expected_binding,
+            } => {
                 let binding = self
                     .tools
                     .verification_binding(&self.workspace, std::slice::from_ref(runner))?;
+                let review = self
+                    .tools
+                    .project_verification_review(&self.workspace, runner)?;
+                if expected_binding
+                    .as_ref()
+                    .is_some_and(|expected| expected != &binding)
+                    || (review.input_scope.project_inputs.is_some() && expected_binding.is_none())
+                {
+                    return Err(RuntimeError::DurableCommandSnapshotChanged);
+                }
                 Ok(Some(LocalAuthorityAction::ApproveProjectVerification {
                     runner_id: runner.id(),
                     binding,

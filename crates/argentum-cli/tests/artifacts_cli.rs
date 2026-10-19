@@ -347,6 +347,7 @@ async fn native_goal_returns_current_artifact_failure_and_pass(
     // In-process test-owned authority, never production owner confirmation.
     owner
         .dispatch(AppCommand::ApproveProjectVerification {
+            expected_binding: None,
             runner: VerificationRunnerId::Project("local-artifact".into()),
         })
         .await

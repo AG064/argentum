@@ -45,14 +45,9 @@ fn valid_digest(value: &argentum_domain::Sha256Digest) -> bool {
 }
 
 fn validate_snapshot(snapshot: &VerificationInputSnapshot) -> Result<(), StoreError> {
-    if snapshot.method != "workspace_revision_v1"
-        || !valid_digest(&snapshot.digest)
-        || snapshot.file_count > 16_384
-        || snapshot.total_bytes > 64 * 1024 * 1024
-    {
-        return Err(rejected("invalid_verification_input_snapshot"));
-    }
-    Ok(())
+    snapshot
+        .validate()
+        .map_err(|_| rejected("invalid_verification_input_snapshot"))
 }
 
 fn validate_criteria(criteria: &[GoalCriterion]) -> Result<(), StoreError> {
@@ -65,11 +60,10 @@ fn validate_criteria(criteria: &[GoalCriterion]) -> Result<(), StoreError> {
         if criterion.id.is_nil()
             || criterion.registry_version == 0
             || !valid_digest(&criterion.definition_sha256)
-            || criterion.input_scope.method != "workspace_revision_v1"
-            || criterion.input_scope.excluded_components != [".git", "target"]
-            || criterion.input_scope.max_files != 16_384
-            || criterion.input_scope.max_total_bytes != 64 * 1024 * 1024
-            || criterion.input_scope.max_file_bytes != 16 * 1024 * 1024
+            || criterion.input_scope.validate().is_err()
+            || criteria
+                .first()
+                .is_some_and(|first| first.input_scope != criterion.input_scope)
             || !ids.insert(criterion.id)
             || !runners.insert(criterion.runner.clone())
         {
@@ -848,6 +842,7 @@ impl Store {
                 .optional()?
                 .ok_or_else(|| rejected("completion_evidence_missing"))?;
             let evidence: VerificationEvidence = serde_json::from_str(&payload)?;
+            super::validate_verification_evidence(&evidence)?;
             if evidence.id != evidence_id
                 || evidence.runner != criterion.runner
                 || evidence.registry_version != criterion.registry_version
@@ -987,6 +982,8 @@ mod tests {
                 max_files: 16_384,
                 max_total_bytes: 64 * 1024 * 1024,
                 max_file_bytes: 16 * 1024 * 1024,
+                project_inputs: None,
+                program_path: None,
             },
         }
     }
@@ -997,6 +994,7 @@ mod tests {
             digest: Sha256Digest(byte.to_string().repeat(64)),
             file_count: 2,
             total_bytes: 128,
+            dependencies: Vec::new(),
         }
     }
 
@@ -1043,6 +1041,53 @@ mod tests {
             elapsed_seconds,
             pause_on_session_switch: true,
         }
+    }
+
+    #[test]
+    fn scoped_acceptance_persists_shared_contract_and_rejects_raised_source_bounds() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("scoped.db");
+        let workspace = directory.path().join("workspace");
+        let store = Store::open(&database).unwrap();
+        let (project_id, session_id, goal) = fixture(&store, &workspace);
+        let mut item = criterion(Uuid::new_v4());
+        item.runner = VerificationRunnerId::Project("node-control".into());
+        item.input_scope.method =
+            argentum_domain::verification_inputs::PROJECT_VERIFICATION_METHOD.into();
+        item.input_scope.program_path = Some(
+            std::env::current_exe()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        item.input_scope.project_inputs = Some(
+            serde_json::from_value(serde_json::json!({
+                "program":{"sha256":"b".repeat(64),"bytes":1},
+                "dependency_roots":["node_modules"],"generated_output_roots":["dist"],
+                "dependency_limits":{"max_files":16,"max_total_bytes":1024,"max_file_bytes":1024},
+                "generated_limits":{"max_files":16,"max_total_bytes":1024,"max_file_bytes":1024},
+                "inventory_limits":{"max_entries":128,"max_depth":16}
+            }))
+            .unwrap(),
+        );
+        store
+            .configure_goal_acceptance(project_id, session_id, goal.id, vec![item.clone()], false)
+            .unwrap();
+        drop(store);
+        let reopened = Store::open(&database).unwrap();
+        let stored = reopened.goal(project_id, session_id).unwrap().unwrap();
+        assert_eq!(stored.acceptance.unwrap().criteria, vec![item.clone()]);
+        item.input_scope.max_total_bytes += 1;
+        assert!(matches!(
+            reopened.configure_goal_acceptance(project_id, session_id, goal.id, vec![item], false),
+            Err(StoreError::GoalAccounting("invalid_acceptance_criteria"))
+        ));
+        let mut snapshot = snapshot('c');
+        snapshot.method = argentum_domain::verification_inputs::PROJECT_VERIFICATION_METHOD.into();
+        assert!(
+            validate_snapshot(&snapshot).is_err(),
+            "an unbound installed-input snapshot must not be persisted"
+        );
     }
 
     #[test]
@@ -1486,6 +1531,7 @@ mod tests {
             input_scope: Some(criterion.input_scope.clone()),
             input_before: Some(current.clone()),
             input_after: Some(current.clone()),
+            generated_outputs: None,
         };
         store
             .save_verification_evidence(project_id, session_id, &failed)

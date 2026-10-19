@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use argentum_domain::{
-    goal_supervision::{GoalCriterion, VerificationInputSnapshot},
+    goal_supervision::{
+        GoalCriterion, VerificationInputScope, VerificationInputSnapshot, VerificationTreeIdentity,
+    },
     now,
     process_job_contract::{PollSelection, POLL_WAIT_MS},
     ApprovalGrantRecord, Capability, ExecutionOutcome, GrantScope, GrantSubject,
@@ -421,7 +423,7 @@ impl ToolRegistry {
         runners: &[VerificationRunnerId],
     ) -> Result<Vec<GoalCriterion>, ToolError> {
         registry.validate_batch(runners)?;
-        runners
+        let criteria: Vec<GoalCriterion> = runners
             .iter()
             .map(|runner| {
                 Ok(GoalCriterion {
@@ -429,10 +431,27 @@ impl ToolRegistry {
                     runner: runner.clone(),
                     registry_version: registry.version(),
                     definition_sha256: registry.definition_sha256(runner)?,
-                    input_scope: verification_input_scope(),
+                    input_scope: registry
+                        .get(runner)
+                        .ok_or_else(|| {
+                            ToolError::InvalidInput("verification runner unavailable".into())
+                        })?
+                        .input_scope
+                        .clone(),
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, ToolError>>()?;
+        if let Some(first) = criteria.first() {
+            if criteria
+                .iter()
+                .any(|item| item.input_scope != first.input_scope)
+            {
+                return Err(ToolError::InvalidInput(
+                    "goal verification criteria require one explicit input contract".into(),
+                ));
+            }
+        }
+        Ok(criteria)
     }
 
     pub fn validate_goal_criteria(&self, criteria: &[GoalCriterion]) -> Result<(), ToolError> {
@@ -459,10 +478,26 @@ impl ToolRegistry {
             .map(|criterion| criterion.runner.clone())
             .collect::<Vec<_>>();
         registry.validate_batch(&runners)?;
+        if let Some(first) = criteria.first() {
+            if criteria
+                .iter()
+                .any(|item| item.input_scope != first.input_scope)
+            {
+                return Err(ToolError::InvalidInput(
+                    "goal verification criteria require one explicit input contract".into(),
+                ));
+            }
+        }
         for criterion in criteria {
             if criterion.registry_version != registry.version()
                 || criterion.definition_sha256 != registry.definition_sha256(&criterion.runner)?
-                || criterion.input_scope != verification_input_scope()
+                || criterion.input_scope
+                    != registry
+                        .get(&criterion.runner)
+                        .ok_or_else(|| {
+                            ToolError::InvalidInput("verification runner unavailable".into())
+                        })?
+                        .input_scope
             {
                 return Err(ToolError::InvalidInput(
                     "verification criterion does not match the current registry".into(),
@@ -476,13 +511,134 @@ impl ToolRegistry {
         &self,
         workspace: &WorkspaceManager,
     ) -> Result<VerificationInputSnapshot, ToolError> {
-        let revision = workspace.revision_digest(default_revision_limits())?;
-        Ok(VerificationInputSnapshot {
-            method: "workspace_revision_v1".into(),
-            digest: revision.digest,
-            file_count: revision.file_count,
-            total_bytes: revision.total_bytes,
+        self.verification_input_snapshot_for_scope(workspace, &verification_input_scope())
+    }
+
+    pub fn verification_input_snapshot_for_scope(
+        &self,
+        workspace: &WorkspaceManager,
+        scope: &VerificationInputScope,
+    ) -> Result<VerificationInputSnapshot, ToolError> {
+        self.verification_input_snapshot_for_scope_cancellable(workspace, scope, || false)
+    }
+
+    pub fn verification_input_snapshot_for_scope_cancellable(
+        &self,
+        workspace: &WorkspaceManager,
+        scope: &VerificationInputScope,
+        cancelled: impl FnMut() -> bool,
+    ) -> Result<VerificationInputSnapshot, ToolError> {
+        match argentum_execution::verification_input_snapshot_for_scope(workspace, scope, cancelled)
+        {
+            Ok(snapshot) => Ok(snapshot),
+            Err(VerificationError::Workspace(error)) => Err(ToolError::Workspace(error)),
+            Err(error) => Err(ToolError::Verification(error)),
+        }
+    }
+
+    pub fn verification_input_snapshot_for_criteria(
+        &self,
+        workspace: &WorkspaceManager,
+        criteria: &[GoalCriterion],
+    ) -> Result<VerificationInputSnapshot, ToolError> {
+        self.verification_input_snapshot_for_criteria_cancellable(workspace, criteria, || false)
+    }
+
+    pub fn verification_input_snapshot_for_criteria_cancellable(
+        &self,
+        workspace: &WorkspaceManager,
+        criteria: &[GoalCriterion],
+        cancelled: impl FnMut() -> bool,
+    ) -> Result<VerificationInputSnapshot, ToolError> {
+        let first = criteria
+            .first()
+            .ok_or_else(|| ToolError::InvalidInput("verification criteria missing".into()))?;
+        if criteria
+            .iter()
+            .any(|item| item.input_scope != first.input_scope)
+        {
+            return Err(ToolError::InvalidInput(
+                "goal verification criteria require one explicit input contract".into(),
+            ));
+        }
+        self.verification_input_snapshot_for_scope_cancellable(
+            workspace,
+            &first.input_scope,
+            cancelled,
+        )
+    }
+
+    pub fn verification_output_snapshot(
+        &self,
+        workspace: &WorkspaceManager,
+        scope: &VerificationInputScope,
+        required: bool,
+    ) -> Result<Option<Vec<VerificationTreeIdentity>>, ToolError> {
+        Ok(workspace.capture_verification_outputs(scope, required, || false)?)
+    }
+
+    pub fn project_verification_review(
+        &self,
+        workspace: &WorkspaceManager,
+        runner: &VerificationRunnerId,
+    ) -> Result<argentum_domain::VerificationRunnerReview, ToolError> {
+        let registry = VerificationRegistry::for_workspace(workspace.root())?;
+        let definition = registry
+            .get(runner)
+            .ok_or_else(|| ToolError::InvalidInput("project runner unavailable".into()))?;
+        if definition.origin != argentum_execution::VerificationRunnerOrigin::Project
+            || definition.unavailable_reason.is_some()
+        {
+            return Err(ToolError::InvalidInput("project runner unavailable".into()));
+        }
+        Ok(argentum_domain::VerificationRunnerReview {
+            runner: runner.clone(),
+            program: definition
+                .resolved_program
+                .as_ref()
+                .ok_or_else(|| ToolError::InvalidInput("project executable unavailable".into()))?
+                .to_string_lossy()
+                .into_owned(),
+            args: definition.args.clone(),
+            cwd: definition.cwd.to_string_lossy().into_owned(),
+            timeout_ms: definition
+                .timeout
+                .as_millis()
+                .try_into()
+                .unwrap_or(u64::MAX),
+            output_limit: definition.output_limit as u64,
+            definition_sha256: registry.definition_sha256(runner)?,
+            binding: self.verification_binding(workspace, std::slice::from_ref(runner))?,
+            input_scope: definition.input_scope.clone(),
         })
+    }
+
+    pub fn verification_evidence_is_current(
+        &self,
+        workspace: &WorkspaceManager,
+        evidence: &VerificationEvidence,
+    ) -> Result<bool, ToolError> {
+        let registry = VerificationRegistry::for_workspace(workspace.root())?;
+        let Some(definition) = registry.get(&evidence.runner) else {
+            return Ok(false);
+        };
+        if !evidence.matches_input_contract(
+            registry.version(),
+            &registry.definition_sha256(&evidence.runner)?,
+            &definition.input_scope,
+            &argentum_execution::verification_workspace_key(workspace.root()),
+        ) || evidence.state != argentum_domain::VerificationState::Passed
+        {
+            return Ok(false);
+        }
+        let current =
+            self.verification_input_snapshot_for_scope(workspace, &definition.input_scope)?;
+        if !evidence.has_current_input_snapshot(&current) {
+            return Ok(false);
+        }
+        let outputs =
+            self.verification_output_snapshot(workspace, &definition.input_scope, true)?;
+        Ok(evidence.matches_generated_snapshot(&outputs))
     }
 }
 
@@ -1191,7 +1347,13 @@ async fn execute_builtin(
             let verifier = VerificationRunner::new(context.workspace, registry);
             let mut executions = verifier
                 .run_batch_with_output(request.run_id, &runners, context.cancellation)
-                .await?;
+                .await
+                .map_err(|error| match error {
+                    VerificationError::Workspace(WorkspaceError::VerificationCancelled) => {
+                        ToolError::Cancelled
+                    }
+                    other => ToolError::from(other),
+                })?;
             let disclosure = context
                 .process_jobs
                 .clone()

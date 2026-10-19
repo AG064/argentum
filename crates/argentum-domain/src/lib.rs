@@ -16,6 +16,7 @@ pub mod process_job_contract;
 pub mod recovery;
 pub mod supplemental;
 pub mod text_contract;
+pub mod verification_inputs;
 pub mod working_context;
 
 pub use authority::{
@@ -68,6 +69,20 @@ pub struct ChangePage {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Sha256Digest(pub String);
+
+/// Exact local review data, never an approval or a model-facing action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VerificationRunnerReview {
+    pub runner: VerificationRunnerId,
+    pub program: String,
+    pub args: Vec<String>,
+    pub cwd: String,
+    pub timeout_ms: u64,
+    pub output_limit: u64,
+    pub definition_sha256: Sha256Digest,
+    pub binding: Sha256Digest,
+    pub input_scope: goal_supervision::VerificationInputScope,
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -249,6 +264,8 @@ pub struct VerificationRunnerInspection {
     pub approval_required: bool,
     pub reason: Option<String>,
     pub definition_sha256: Option<Sha256Digest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_scope: Option<goal_supervision::VerificationInputScope>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1695,11 +1712,49 @@ pub struct VerificationEvidence {
     pub input_before: Option<goal_supervision::VerificationInputSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_after: Option<goal_supervision::VerificationInputSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated_outputs: Option<goal_supervision::VerificationGeneratedOutputs>,
 }
 
 impl VerificationEvidence {
+    pub fn matches_input_contract(
+        &self,
+        registry_version: u16,
+        definition: &Sha256Digest,
+        scope: &goal_supervision::VerificationInputScope,
+        workspace_key: &str,
+    ) -> bool {
+        self.registry_version == registry_version
+            && self.definition_sha256.as_ref() == Some(definition)
+            && self.input_scope.as_ref() == Some(scope)
+            && self.workspace_key == workspace_key
+    }
+
+    pub fn has_current_input_snapshot(
+        &self,
+        current: &goal_supervision::VerificationInputSnapshot,
+    ) -> bool {
+        self.input_before.as_ref() == Some(current)
+            && self.input_after.as_ref() == Some(current)
+            && self.revision_before == current.digest
+            && self.revision_after == current.digest
+    }
+
+    pub fn matches_generated_snapshot(
+        &self,
+        current: &Option<Vec<goal_supervision::VerificationTreeIdentity>>,
+    ) -> bool {
+        match (&self.generated_outputs, current) {
+            (None, None) => true,
+            (Some(recorded), Some(current)) => &recorded.after == current,
+            _ => false,
+        }
+    }
+
     pub fn is_fresh_for(&self, revision: &Sha256Digest) -> bool {
         self.state == VerificationState::Passed
+            // A source-only caller cannot certify separately declared outputs.
+            && self.generated_outputs.is_none()
             && self.revision_before == self.revision_after
             && &self.revision_after == revision
     }
@@ -2109,6 +2164,8 @@ pub enum AppCommand {
     InspectVerificationRunners,
     ApproveProjectVerification {
         runner: VerificationRunnerId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_binding: Option<Sha256Digest>,
     },
     LoadVerificationEvidence {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2988,6 +3045,7 @@ mod tests {
             input_scope: None,
             input_before: None,
             input_after: None,
+            generated_outputs: None,
         };
 
         let event = AppEvent::VerificationEvidenceRecorded(evidence.clone());

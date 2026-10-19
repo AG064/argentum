@@ -84,3 +84,58 @@ Unknown usage, revocation, definition changes, stale evidence, nonreducing
 compaction, mandatory-content overflow and genuine no progress remain stops.
 There is no background scheduler, unrestricted model shell, new authority store
 or claim of general autonomous reliability.
+
+## Explicit project input roles
+
+Project runners may opt into `inputs` in `.agents/verification.yaml`. Without
+it, the existing `workspace_revision_v1` source limits and semantics remain
+unchanged. Opt-in is an owner-reviewed execution contract, not a package-manager
+heuristic or a way for model arguments to exclude source.
+
+The declaration contains the selected executable's `program` SHA-256 and byte
+length, optional `fixed_files` with relative paths, SHA-256 and byte lengths,
+explicit `dependency_roots` and `generated_output_roots`, and required
+`dependency_limits`, `generated_limits` and `inventory_limits`. Identity limits
+name `max_files`, `max_total_bytes` and `max_file_bytes`; inventory limits name
+`max_entries` and `max_depth`. No opt-in limit has a silent default. The normal
+bare executable name, fixed arguments, contained working directory, timeout and
+output limit remain part of the runner declaration.
+
+All remaining source, including new and untracked source files, is observed
+under the unchanged 16,384-file, 64 MiB aggregate, 16 MiB per-file source bounds.
+Only the pre-existing `.git` and `target` exclusions and the explicit separate
+roles are outside that source set. Fixed controller/configuration files remain
+source inputs and must match their declared content identities. Do not declare
+an entire mixed source/output directory as generated. For example, if `build/`
+also holds retained TypeScript, name only its actual generated subdirectories.
+
+Installed inputs are streamed from their actual contained files, including
+native libraries and package resolution metadata. A lockfile or cached manifest
+does not stand in for those bytes. The resolved verifier executable is observed
+in the same installed-input byte/file budget. Each declared role is bounded to
+65,536 files, 1 GiB total and 256 MiB per file, with at most eight roots; the
+combined declared source/dependency/output allowance cannot exceed 2 GiB.
+Inventory is bounded to 131,072 entries and depth 128. Declarations may be
+tighter. Links, special entries, missing required inputs, overlaps, unsupported
+paths, exceeded bounds and incomplete capture fail closed. Streaming uses a
+64 KiB buffer and checks cancellation between reads; individual OS file calls
+are not preemptible. Metadata-only readbacks are bounded observations.
+
+Generated outputs have separate before/after identities. A legitimate build
+does not count as source mutation, but a later substituted, missing or changed
+output makes its receipt non-current. Current completion checks the same source,
+installed-input, runner, workspace and output identities, including after a
+fresh process starts. Multiple criteria currently require one shared input
+contract. Changing roles, bounds, fixed identities or the resolved executable
+changes the exact approval binding and criteria definition. Scoped approval
+prints the full escaped review in a real owner console and requires `APPROVE`;
+old approval cannot authorize a changed binding.
+
+These are endpoint observations, not proof that files did not change and change
+back during a process. Existing outputs may be inputs to incremental work, so
+their before identity is retained. This contract does not discover every
+transitive host dependency, prove a test suite is adequate, restrict arbitrary
+current-user verifier code, create an OS sandbox or grant network access.
+Existing process, approval, cancellation, accounting and completion rules still
+apply. Use only reviewed fixed verifier code and declare all relevant project
+inputs. Built-in Rust checks and existing edit representations are unchanged.

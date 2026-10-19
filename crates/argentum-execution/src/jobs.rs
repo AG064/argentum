@@ -543,7 +543,12 @@ impl ProcessJobManager {
         if owner.host_generation != self.host_generation {
             return Err(ProcessJobError::NotFound);
         }
-        let job = verifier.prepare_job(owner.run_id, runner.clone())?;
+        let capture_cancellation = parent_cancellation.child_token();
+        let job = verifier.prepare_job_with_cancellation(
+            owner.run_id,
+            runner.clone(),
+            capture_cancellation.clone(),
+        )?;
         let id = ProcessJobId::new();
         let record = Arc::new(JobRecord {
             owner: owner.clone(),
@@ -555,7 +560,7 @@ impl ProcessJobManager {
             stderr: Mutex::new(StreamBuffer::default()),
             verification: Mutex::new(None),
             detail: Mutex::new(None),
-            cancellation: CancellationToken::new(),
+            cancellation: capture_cancellation,
             changed: Notify::new(),
         });
         {
@@ -721,6 +726,17 @@ impl ProcessJobManager {
                         *stored = Some(evidence);
                     }
                     set_state(&record_for_task, state);
+                }
+                Err(crate::VerificationError::Workspace(
+                    argentum_workspaces::WorkspaceError::VerificationCancelled,
+                )) => {
+                    // No complete post-run identity exists. Preserve cancellation
+                    // without inventing a verification receipt or fresh digest.
+                    set_failed(
+                        &record_for_task,
+                        ProcessJobState::Cancelled,
+                        "Verification input capture cancelled; no complete receipt".into(),
+                    );
                 }
                 Err(error) => set_failed(
                     &record_for_task,

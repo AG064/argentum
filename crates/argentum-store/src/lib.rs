@@ -4769,26 +4769,32 @@ fn validate_verification_evidence(evidence: &VerificationEvidence) -> Result<(),
         evidence.input_before.as_ref(),
         evidence.input_after.as_ref(),
     ) {
-        (None, None, None, None) => evidence.workspace_key.is_empty(),
+        (None, None, None, None) => {
+            evidence.workspace_key.is_empty() && evidence.generated_outputs.is_none()
+        }
         (Some(definition), Some(scope), Some(before), Some(after)) => {
             !evidence.workspace_key.is_empty()
                 && evidence.workspace_key.len() <= 32 * 1024
                 && valid_sha256(definition)
-                && scope.method == "workspace_revision_v1"
-                && scope.excluded_components == [".git", "target"]
-                && scope.max_files == 16_384
-                && scope.max_total_bytes == 64 * 1024 * 1024
-                && scope.max_file_bytes == 16 * 1024 * 1024
-                && before.method == "workspace_revision_v1"
-                && after.method == "workspace_revision_v1"
-                && valid_sha256(&before.digest)
-                && valid_sha256(&after.digest)
+                && scope.validate().is_ok()
+                && before.validate_for_scope(scope).is_ok()
+                && after.validate_for_scope(scope).is_ok()
                 && before.digest == evidence.revision_before
                 && after.digest == evidence.revision_after
                 && before.file_count <= scope.max_files
                 && after.file_count <= scope.max_files
                 && before.total_bytes <= scope.max_total_bytes
                 && after.total_bytes <= scope.max_total_bytes
+                && match (&scope.project_inputs, &evidence.generated_outputs) {
+                    (None, None) => true,
+                    (Some(_), Some(generated)) => generated
+                        .validate_for_scope(
+                            scope,
+                            evidence.state == argentum_domain::VerificationState::Passed,
+                        )
+                        .is_ok(),
+                    _ => false,
+                }
         }
         _ => false,
     };
@@ -6996,6 +7002,72 @@ mod tests {
     }
 
     #[test]
+    fn scoped_receipt_schema_requires_complete_installed_and_generated_identities_after_reload() {
+        use argentum_domain::goal_supervision::{
+            VerificationInputScope, VerificationInputSnapshot,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let workspace = directory.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let database = directory.path().join("scoped-receipts.sqlite3");
+        let store = Store::open(&database).unwrap();
+        let resolution = store.resolve_workspace(&workspace).unwrap();
+        let project = resolution.snapshot.project.id;
+        let session = resolution.snapshot.active_session_id.unwrap();
+        // Structural persistence control only. The CLI control observes real bytes.
+        let scope:VerificationInputScope=serde_json::from_value(serde_json::json!({
+            "method":argentum_domain::verification_inputs::PROJECT_VERIFICATION_METHOD,
+            "excluded_components":[".git","target"],"max_files":16384,"max_total_bytes":67108864,"max_file_bytes":16777216,
+            "program_path":std::env::current_exe().unwrap(),"project_inputs":{
+                "program":{"sha256":"a".repeat(64),"bytes":1},"dependency_roots":["node_modules"],"generated_output_roots":["dist"],
+                "dependency_limits":{"max_files":4,"max_total_bytes":4096,"max_file_bytes":4096},
+                "generated_limits":{"max_files":4,"max_total_bytes":4096,"max_file_bytes":4096},
+                "inventory_limits":{"max_entries":32,"max_depth":8}
+            }
+        })).unwrap();
+        let source:VerificationInputSnapshot=serde_json::from_value(serde_json::json!({
+            "method":scope.method,"digest":"c".repeat(64),"file_count":1,"total_bytes":1,"dependencies":[
+                {"path":"node_modules","exists":true,"digest":"b".repeat(64),"file_count":1,"total_bytes":1},
+                {"path":"[verifier_program]","exists":true,"digest":"a".repeat(64),"file_count":1,"total_bytes":1}
+            ]
+        })).unwrap();
+        let receipt:VerificationEvidence=serde_json::from_value(serde_json::json!({
+            "id":Uuid::new_v4(),"run_id":Uuid::new_v4(),"runner":"project:node-control","registry_version":1,
+            "program":"node.exe","args":["test.js"],"state":"passed","started_at":now(),"duration_ms":1,"exit_code":0,
+            "revision_before":source.digest,"revision_after":source.digest,"stdout_sha256":"d".repeat(64),"stderr_sha256":"e".repeat(64),
+            "stdout_bytes":0,"stderr_bytes":0,"stdout_truncated":false,"stderr_truncated":false,"workspace_key":"ephemeral-workspace",
+            "definition_sha256":"f".repeat(64),"input_scope":scope,"input_before":source,"input_after":source,
+            "generated_outputs":{
+                "before":[{"path":"dist","exists":false,"digest":"a".repeat(64),"file_count":0,"total_bytes":0}],
+                "after":[{"path":"dist","exists":true,"digest":"b".repeat(64),"file_count":1,"total_bytes":1}]
+            }
+        })).unwrap();
+        store
+            .save_verification_evidence(project, session, &receipt)
+            .unwrap();
+        drop(store);
+        let reopened = Store::open(&database).unwrap();
+        assert_eq!(
+            reopened
+                .verification_evidence(project, Some(receipt.run_id), 4)
+                .unwrap(),
+            vec![receipt.clone()]
+        );
+        let mut wrong = receipt.clone();
+        wrong.generated_outputs = None;
+        assert!(validate_verification_evidence(&wrong).is_err());
+        let mut wrong = receipt.clone();
+        wrong.input_after.as_mut().unwrap().dependencies.pop();
+        assert!(validate_verification_evidence(&wrong).is_err());
+        let mut wrong = receipt.clone();
+        wrong.generated_outputs.as_mut().unwrap().after[0].path = "other".into();
+        assert!(validate_verification_evidence(&wrong).is_err());
+        let mut wrong = receipt;
+        wrong.generated_outputs.as_mut().unwrap().after[0].total_bytes = 4097;
+        assert!(validate_verification_evidence(&wrong).is_err());
+    }
+
+    #[test]
     fn phase4_audit_and_verification_evidence_are_bounded_ordered_and_output_safe() {
         let directory = tempfile::tempdir().expect("directory");
         let workspace = directory.path().join("workspace");
@@ -7068,6 +7140,7 @@ mod tests {
             input_scope: None,
             input_before: None,
             input_after: None,
+            generated_outputs: None,
         };
         store
             .save_verification_evidence(project_id, session_id, &evidence)
