@@ -1543,7 +1543,9 @@ mod tests {
             .unwrap()
             .set_len(18 * 1024 * 1024)
             .unwrap();
-        let definition = scoped_definition(workspace.root(), "New-Item -ItemType Directory -Path dist -Force | Out-Null; Set-Content -LiteralPath dist/site.txt -Value generated; exit 0");
+        // These semantic controls need file output, not PowerShell module
+        // discovery. Keep the same bounded child timeout and all assertions.
+        let definition = scoped_definition(workspace.root(), "$dir=[IO.Path]::Combine($PWD.Path,'dist'); [void][IO.Directory]::CreateDirectory($dir); [IO.File]::WriteAllText([IO.Path]::Combine($dir,'site.txt'),'generated'); exit 0");
         let scope = definition.input_scope.clone();
         let id = definition.id.clone();
         let verifier = VerificationRunner::new(
@@ -1682,7 +1684,7 @@ mod tests {
     async fn scoped_project_failure_is_not_overridden_by_generated_output() {
         let (directory, workspace) = workspace();
         std::fs::create_dir(directory.path().join("node_modules")).unwrap();
-        let definition = scoped_definition(workspace.root(), "New-Item -ItemType Directory dist | Out-Null; Set-Content dist/site.txt generated; [Console]::Error.Write('INNER_FAILURE'); exit 9");
+        let definition = scoped_definition(workspace.root(), "$dir=[IO.Path]::Combine($PWD.Path,'dist'); [void][IO.Directory]::CreateDirectory($dir); [IO.File]::WriteAllText([IO.Path]::Combine($dir,'site.txt'),'generated'); [Console]::Error.Write('INNER_FAILURE'); exit 9");
         let id = definition.id.clone();
         let runner =
             VerificationRunner::new(workspace, VerificationRegistry::for_tests(vec![definition]));
