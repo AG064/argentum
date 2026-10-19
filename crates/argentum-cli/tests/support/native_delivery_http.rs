@@ -5,6 +5,9 @@ use super::*;
 #[path = "project_inputs_http.rs"]
 mod project_inputs_http;
 
+#[path = "deadline_admission_http.rs"]
+mod deadline_admission_http;
+
 fn json_output(output: Output) -> Value {
     assert!(
         output.status.success(),

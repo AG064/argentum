@@ -42,6 +42,17 @@ tool feedback and owned settlement. This does not increase any deadline,
 request allowance or output limit. A provider can still exceed the remaining
 time; missing terminal usage remains a hold, not a fabricated settlement.
 
+The enclosing invocation does not receive a new clock after a handoff. Before
+admitting a subsequent implementation stage, native delivery checks the actual
+remaining parent time against that same per-run report reserve. Inside the
+reserve it stops incomplete with `invocation_time_reserve`, preserving the work
+report and settled accounting without dispatching another coding request. A
+fresh explicitly authorized invocation can resume the same goal under its
+remaining aggregate allowance. Initial short invocations, ordinary supervision,
+verification and final feedback retain their existing admission/deadline rules.
+This is not a prediction that the remaining checks will fit or a guarantee
+against provider latency or missing terminal usage.
+
 The model reports a bounded JSON work status: `ready`, `continue` or `blocked`,
 an explicit `remaining` list, and an optional short summary. This report is an
 untrusted work claim. Prose, plans, malformed reports and unfinished work cannot

@@ -76,6 +76,21 @@ fn native_handoff_time_reserve(elapsed_seconds: Option<u64>) -> std::time::Durat
     std::time::Duration::from_secs(elapsed_seconds.map_or(0, |seconds| seconds.div_ceil(3).min(90)))
 }
 
+fn defer_native_implementation_in_parent_reserve(
+    phase: Option<DeliveryPhase>,
+    previous_attempts: usize,
+    run_elapsed_seconds: Option<u64>,
+    parent_remaining: std::time::Duration,
+) -> bool {
+    // A completed handoff does not replenish the enclosing invocation's clock.
+    // Do not spend its report/settlement tail reconstructing another coding
+    // run. Initial explicitly short invocations and terminal verifier/feedback
+    // stages retain their existing admission and hard-deadline behavior.
+    previous_attempts > 0
+        && phase == Some(DeliveryPhase::Implementation)
+        && parent_remaining <= native_handoff_time_reserve(run_elapsed_seconds)
+}
+
 enum SupervisorCompletionCommit {
     Committed(Box<Goal>, Box<GoalInvocation>),
     Stopped(GoalInvocationState, &'static str),
@@ -936,6 +951,18 @@ impl RuntimeService {
             let account = goal.accounting.as_ref().ok_or(StoreError::GoalAccounting(
                 "legacy_usage_history_unavailable",
             ))?;
+            if defer_native_implementation_in_parent_reserve(
+                invocation.delivery.as_ref().map(|delivery| delivery.phase),
+                invocation.attempts.len(),
+                account.per_run.elapsed_seconds,
+                invocation_deadline_duration(invocation.deadline_at),
+            ) {
+                return self.settle_supervisor(
+                    &invocation,
+                    GoalInvocationState::Incomplete,
+                    "invocation_time_reserve",
+                );
+            }
             let task_id = Uuid::new_v4();
             let run_id = Uuid::new_v4();
             self.acquire_supervised_session_run(
@@ -2554,7 +2581,70 @@ fn runtime_stop_reason(error: &RuntimeError) -> &'static str {
 
 #[cfg(test)]
 mod native_report_tests {
-    use super::{native_handoff_time_reserve, parse_work_report};
+    use super::{
+        defer_native_implementation_in_parent_reserve, native_handoff_time_reserve,
+        parse_work_report, DeliveryPhase,
+    };
+
+    #[test]
+    fn native_reentry_respects_the_parent_report_reserve() {
+        use std::time::Duration;
+        for seconds in [0, 1, 45, 57, 89, 90] {
+            assert!(defer_native_implementation_in_parent_reserve(
+                Some(DeliveryPhase::Implementation),
+                1,
+                Some(295),
+                Duration::from_secs(seconds),
+            ));
+        }
+        for duration in [
+            Duration::from_secs(90) + Duration::from_nanos(1),
+            Duration::from_secs(91),
+            Duration::from_secs(295),
+        ] {
+            assert!(!defer_native_implementation_in_parent_reserve(
+                Some(DeliveryPhase::Implementation),
+                1,
+                Some(295),
+                duration,
+            ));
+        }
+        assert!(defer_native_implementation_in_parent_reserve(
+            Some(DeliveryPhase::Implementation),
+            1,
+            Some(18),
+            Duration::from_secs(6),
+        ));
+        assert!(!defer_native_implementation_in_parent_reserve(
+            Some(DeliveryPhase::Implementation),
+            1,
+            Some(18),
+            Duration::from_secs(7),
+        ));
+    }
+
+    #[test]
+    fn native_parent_reserve_does_not_block_initial_or_terminal_stages() {
+        use std::time::Duration;
+        assert!(!defer_native_implementation_in_parent_reserve(
+            Some(DeliveryPhase::Implementation),
+            0,
+            Some(295),
+            Duration::from_secs(1),
+        ));
+        for phase in [
+            None,
+            Some(DeliveryPhase::Verification),
+            Some(DeliveryPhase::Feedback),
+        ] {
+            assert!(!defer_native_implementation_in_parent_reserve(
+                phase,
+                1,
+                Some(295),
+                Duration::from_secs(1),
+            ));
+        }
+    }
 
     #[test]
     fn native_handoff_reserve_uses_admitted_run_time_without_widening_it() {
