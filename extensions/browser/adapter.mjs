@@ -250,7 +250,7 @@ export class BrowserAdapter {
     }
     await this.requireCurrent(entry, args.revision);
     if (name === 'browser_screenshot') {
-      this.actionStarts++; const png = await entry.page.screenshot({ type: 'png', fullPage: false, animations: 'disabled', timeout: DEADLINE });
+      this.actionStarts++; const png = await entry.page.screenshot({ type: 'png', fullPage: false, animations: 'disabled', caret: 'initial', timeout: DEADLINE });
       if (png.length > 128 * 1024) throw new Error('screenshot_exceeds_byte_limit');
       await this.requireCurrent(entry, args.revision);
       await mkdir(this.config.artifactDirectory, { recursive: true });

@@ -28,13 +28,12 @@ test('real rendered interaction, stale reference, screenshot and subresource den
     await adapter.call('browser_interact', { tab_id: opened.tab_id, revision: observation.revision, reference: button.reference, action: 'click' });
     await assert.rejects(adapter.call('browser_interact', { tab_id: opened.tab_id, revision: observation.revision, reference: button.reference, action: 'click' }), /stale_observation/);
     observation = await adapter.call('browser_observe', { tab_id: opened.tab_id }); assert.match(observation.accessibility, /1/);
-    // Playwright restores a file input's style to an empty attribute on its
-    // first screenshot. This is a real DOM change, so old observations fail
-    // closed. A fresh observation admits a new capture, not a silently rebased
-    // old reference.
-    await assert.rejects(adapter.call('browser_screenshot', { tab_id: opened.tab_id, revision: observation.revision }), /stale_observation/);
-    observation = await adapter.call('browser_observe', { tab_id: opened.tab_id });
+    // Capture must not mutate an unchanged page merely to hide the caret.
+    // Preserve the normal caret setting instead of accepting a self-induced
+    // stale failure and contaminating the next observation with that mutation.
+    const beforeCapture = await adapter.tabs.get(opened.tab_id).page.evaluate(() => document.documentElement.outerHTML);
     const capture = await adapter.call('browser_screenshot', { tab_id: opened.tab_id, revision: observation.revision });
+    assert.equal(await adapter.tabs.get(opened.tab_id).page.evaluate(() => document.documentElement.outerHTML), beforeCapture);
     const png = await readFile(join(root, capture.artifact)); assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.equal(capture.origin, origin);
     const popup = observation.targets.find(target => target.name === 'Popup');
     await adapter.call('browser_interact', { tab_id: opened.tab_id, revision: observation.revision, reference: popup.reference, action: 'click' });
