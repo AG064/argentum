@@ -262,7 +262,8 @@ async fn exact_cli_json_queries_frame_native_empty_populated_and_unavailable_sta
 #[test]
 fn exact_cli_invalid_json_options_fail_before_host_or_database_startup() {
     let root = tempfile::tempdir().unwrap();
-    let workspace = root.path().join("workspace-does-not-exist");
+    let workspace = root.path().join("valid-workspace-before-host");
+    std::fs::create_dir(&workspace).unwrap();
     let database = root.path().join("must-not-create.sqlite3");
     for arguments in [
         vec!["list", "--json", "--json"],
@@ -270,6 +271,10 @@ fn exact_cli_invalid_json_options_fail_before_host_or_database_startup() {
         vec!["activate", "dummy.server", "--json"],
         vec!["key", "dummy.server", "--json"],
         vec!["configure", "--json"],
+        vec!["configure", "--file", "--json"],
+        vec!["list", "--database", "--json"],
+        vec!["status", "--workspace", "--json"],
+        vec!["list", "--database", "--json", "--json"],
         vec!["install", "--json"],
         vec!["inspect", "--json"],
         vec!["receipts", "--json"],
@@ -295,7 +300,7 @@ fn exact_cli_invalid_json_options_fail_before_host_or_database_startup() {
             String::from_utf8_lossy(&output.stderr).contains("json")
                 || String::from_utf8_lossy(&output.stderr).contains("JSON")
         );
-        assert!(!workspace.exists() && !database.exists());
+        assert!(workspace.is_dir() && !database.exists());
     }
 }
 

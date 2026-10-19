@@ -106,6 +106,11 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         return Ok(());
     }
     let action = &values[0];
+    if !matches!(action.as_str(), "list" | "status")
+        && values.iter().skip(1).any(|value| value == "--json")
+    {
+        return Err("--json is accepted only by extensions list and status".into());
+    }
     let mut flags = BTreeMap::new();
     let mut subject = None;
     let mut json_mode = false;
@@ -139,6 +144,9 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
             let argument = values
                 .get(index)
                 .ok_or("extension option requires a value")?;
+            if argument == "--json" {
+                return Err("extension option requires a value; --json is a boolean flag".into());
+            }
             if flags.insert(value.clone(), argument.clone()).is_some() {
                 return Err("duplicate extension option".into());
             }

@@ -46,6 +46,8 @@ not support that flag. Unflagged commands keep their existing human output.
 Duplicate flags, a namespace argument in JSON query mode, and `--json` on other
 extension actions are rejected before host startup. This does not enable JSON
 activation, key entry, configuration or other owner operations.
+The reserved `--json` flag cannot be consumed as another option's missing value.
+Use an explicit path such as an absolute filename for files named `--json`.
 
 Successful JSON mode emits one complete document and a newline. Its versioned
 envelope contains `schema_version: 1`, `command` (`extensions.list` or
