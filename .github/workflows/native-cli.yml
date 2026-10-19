@@ -1,9 +1,9 @@
 name: Native CLI qualification
 on:
   push:
-    branches: [development, 'codex/**']
+    branches: [development, 'feature/**', 'fix/**', 'docs/**']
   pull_request:
-    branches: [development]
+    branches: [development, 'feature/**', 'fix/**', 'docs/**']
   workflow_dispatch:
 permissions:
   contents: read

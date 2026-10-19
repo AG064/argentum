@@ -31,8 +31,9 @@ required. Cargo.lock pins the dependency resolution.
 ```powershell
 git clone https://github.com/AG064/argentum.git
 cd argentum
-# Until the native transition is merged, select the reviewed native PR branch.
-git switch codex/release01-native-cli-20261010
+# Until the native transition is merged, select the accepted native baseline.
+git fetch origin af3e8459536677af2050027b57eb968d30cd2f7a
+git switch --detach af3e8459536677af2050027b57eb968d30cd2f7a
 cargo build -p argentum-cli --bin argentum --release --locked
 & '.\target\release\argentum.exe' --help
 ```
@@ -134,6 +135,11 @@ branches only for an actual supported version that needs them. Do not create a
 permanent CLI-only branch, a separate Genesis repository or frontend-specific
 copies of the shared runtime. Existing transition branches are review branches,
 not permanent product lines.
+
+Use descriptive `feature/`, `fix/` or `docs/` names for new work, without
+assistant-branded prefixes. The immutable baseline above preserves the accepted
+native source; to evaluate a later review, select its exact reviewed commit or
+descriptively named branch instead. A branch name alone is not qualification.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes focused tests and contribution
 requirements. [SECURITY.md](SECURITY.md) defines the actual trust boundary and

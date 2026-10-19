@@ -4,6 +4,14 @@ The active product is the native Cargo workspace. The CLI is its default member;
 Slint/Android are separately qualified modules. Earlier TypeScript code is in
 history, not a runtime dependency. Keep changes focused and preserve dirty work.
 
+Name new development branches by purpose, for example `feature/native-preview`,
+`fix/verifier-diagnostics` or `docs/cli-setup`, without assistant-branded prefixes.
+Native CI watches these prefixes as well as `development`. Historical review
+references remain preserved; they are not naming templates for new work.
+Pull-request branch filters match the target base, not the contributing branch.
+Record branch-push source qualification separately from a pull request's
+synthetic merge-source qualification.
+
 Use Rust 1.98.0, rustfmt, Clippy, Git and platform build tools. Run qualification
 in a disposable checkout with output/fixtures outside protected user stores:
 
