@@ -91,7 +91,7 @@
     "better-sqlite3": "^12.10.0",
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.1",
-    "express": "^4.22.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^8.5.1",
     "googleapis": "^171.4.0",
     "grammy": "^1.42.0",
@@ -100,7 +100,7 @@
     "openai": "^6.42.0",
     "pino": "^10.3.1",
     "pino-pretty": "^10.3.1",
-    "sanitize-html": "^2.17.2",
+    "sanitize-html": "^2.18.0",
     "ws": "^8.21.0",
     "yaml": "^2.3.4",
     "zod": "^4.3.6"
