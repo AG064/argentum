@@ -2432,15 +2432,39 @@ mod tests {
 
     #[cfg(windows)]
     fn powershell_spec(script: &str, workspace: &std::path::Path) -> ProcessSpec {
+        powershell_startup_spec(script, workspace, false)
+    }
+
+    #[cfg(windows)]
+    fn powershell_startup_spec(
+        script: &str,
+        workspace: &std::path::Path,
+        diagnostic_markers: bool,
+    ) -> ProcessSpec {
         // Controlled process fixtures need only these OS modules. Installed CI
         // cloud modules must not turn marker/lifetime tests into autoload tests.
         // This is test-only, process-local, and is bound before authorization.
+        let stage = |name: &str| {
+            if diagnostic_markers {
+                format!("[Console]::Out.WriteLine('{name}'); ")
+            } else {
+                String::new()
+            }
+        };
         let script = format!(concat!(
+            "{entry}",
             "$env:PSModulePath=$PSHOME+'\\Modules'; ",
             "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; ",
+            "{management}",
             "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop; ",
+            "{utility}",
             "{script}"
-        ), script = script);
+        ),
+            entry = stage("CONTROL_PROCESS_ENTERED"),
+            management = stage("CONTROL_PRELUDE_MANAGEMENT_IMPORTED"),
+            utility = stage("CONTROL_PRELUDE_UTILITY_IMPORTED"),
+            script = script,
+        );
         ProcessSpec::argv(
             "powershell.exe",
             [
@@ -2453,6 +2477,80 @@ mod tests {
             workspace,
         )
         .expect("PowerShell process spec")
+    }
+
+    #[cfg(windows)]
+    fn startup_diagnostic_summary(result: &ProcessResult, marker_exists: bool) -> String {
+        let stages = [
+            "CONTROL_PROCESS_ENTERED",
+            "CONTROL_PRELUDE_MANAGEMENT_IMPORTED",
+            "CONTROL_PRELUDE_UTILITY_IMPORTED",
+            "CONTROL_BEFORE_EXPLICIT_MODULE",
+            "CONTROL_MANAGEMENT_IMPORTED",
+            "CONTROL_EXPLICIT_AFTER",
+        ];
+        serde_json::json!({
+            "kind": "process_startup_diagnostic",
+            "state": format!("{:?}", result.state),
+            "exit_code": result.exit_code,
+            "duration_ms": result.duration_ms,
+            "marker_exists": marker_exists,
+            "stdout_bytes": result.stdout_bytes,
+            "stderr_bytes": result.stderr_bytes,
+            "stdout_truncated": result.stdout_truncated,
+            "stderr_truncated": result.stderr_truncated,
+            "stdout_sha256": result.stdout_sha256,
+            "stderr_sha256": result.stderr_sha256,
+            "stages": stages.map(|name| serde_json::json!({
+                "name": name, "observed": result.stdout.contains(name)
+            })),
+        })
+        .to_string()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn startup_diagnostic_projection_is_bounded() {
+        let result = ProcessResult {
+            state: ProcessState::TimedOut,
+            exit_code: None,
+            stdout: "CONTROL_PROCESS_ENTERED\r\nsynthetic-private-stream".into(),
+            stderr: "synthetic-private-error".into(),
+            stdout_sha256: Sha256Digest(format!("{:x}", Sha256::digest(b"synthetic stdout"))),
+            stderr_sha256: Sha256Digest(format!("{:x}", Sha256::digest(b"synthetic stderr"))),
+            stdout_bytes: 8192,
+            stderr_bytes: 4096,
+            stdout_truncated: true,
+            stderr_truncated: true,
+            duration_ms: 20001,
+        };
+        let summary = startup_diagnostic_summary(&result, false);
+        assert!(
+            summary.len() < 2048,
+            "must survive the public exporter line cap"
+        );
+        assert!(!summary.contains("synthetic-private"));
+        let value: serde_json::Value = serde_json::from_str(&summary).unwrap();
+        assert_eq!(value["state"], "TimedOut");
+        assert!(value["exit_code"].is_null());
+        assert_eq!(value["duration_ms"], 20001);
+        assert_eq!(value["marker_exists"], false);
+        assert_eq!(value["stages"][0]["observed"], true);
+        assert_eq!(value["stages"][1]["observed"], false);
+        println!("SYNTHETIC_STARTUP_DIAGNOSTIC {summary}");
+
+        let workspace = workspace();
+        let script = "[Console]::Out.Write('unchanged')";
+        let ordinary = powershell_spec(script, workspace.path());
+        let expected = format!(concat!(
+            "$env:PSModulePath=$PSHOME+'\\Modules'; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; ",
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop; ",
+            "{script}"
+        ), script = script);
+        assert_eq!(ordinary.args.len(), 5);
+        assert_eq!(ordinary.args[3], "-Command");
+        assert_eq!(ordinary.args[4], expected);
     }
 
     #[cfg(windows)]
@@ -2496,13 +2594,14 @@ mod tests {
         let script = format!("$ErrorActionPreference='Stop'; [Console]::Out.WriteLine('CONTROL_BEFORE_EXPLICIT_MODULE'); Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; [Console]::Out.WriteLine('CONTROL_MANAGEMENT_IMPORTED'); Set-Content -LiteralPath '{escaped}' -Value started; [Console]::Out.WriteLine('CONTROL_EXPLICIT_AFTER')");
         let result = ProcessRunner
             .run(
-                powershell_spec(&script, workspace.path())
+                powershell_startup_spec(&script, workspace.path(), true)
                     .with_timeout(Duration::from_secs(20))
                     .unwrap(),
                 CancellationToken::new(),
             )
             .await
             .unwrap();
+        println!("{}", startup_diagnostic_summary(&result, marker.exists()));
         assert!(
             result.exit_code == Some(0) && marker.exists(),
             "explicit module control failed: exit={:?}; stdout={}; stderr={}",
