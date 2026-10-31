@@ -4734,6 +4734,23 @@ impl CommonOptions {
     }
 }
 
+/// Canonical retained cursor upper bound, shared by parsing and page dispatch.
+const MAX_CHANGE_PAGE_CURSOR_BYTES: usize = 512;
+
+/// Boolean switches are never accepted as the value of a preceding option.
+/// Without this guard a reserved token such as `--json` could silently satisfy a
+/// missing value and change the meaning of the command.
+const RESERVED_BOOLEAN_FLAGS: &[&str] = &[
+    "--json",
+    "--isolated",
+    "--no-color",
+    "--non-interactive",
+    "--help",
+    "-h",
+    "--version",
+    "-V",
+];
+
 fn parse_args<I, S>(arguments: I) -> Result<Arguments, String>
 where
     I: IntoIterator<Item = S>,
@@ -5030,8 +5047,10 @@ where
                 }
                 index += 1;
                 let cursor = required_value(&values, index, "--cursor")?;
-                if cursor.len() > 256 {
-                    return Err("--cursor exceeds 256 bytes".into());
+                if cursor.len() > MAX_CHANGE_PAGE_CURSOR_BYTES {
+                    return Err(format!(
+                        "--cursor exceeds {MAX_CHANGE_PAGE_CURSOR_BYTES} bytes"
+                    ));
                 }
                 changes_cursor = Some(cursor.to_owned());
             }
@@ -5575,12 +5594,12 @@ where
             }),
             Some("list") if provider_id.is_none() => Ok(Arguments::ProviderList { options, json }),
             Some("add") => {
-                let preset_id = provider_id.ok_or("provider add requires minimax, deepseek, or openai")?;
+                let preset_id = provider_id.ok_or("provider add requires minimax, deepseek, openai, or chatgpt")?;
                 if !matches!(preset_id.as_str(), "minimax" | "deepseek" | "openai" | "chatgpt")
                     || values.iter().any(|value| matches!(value.as_str(), "--endpoint" | "--model"))
                     || provider_label.is_some() || provider_kind.is_some()
                     || provider_endpoint.is_some() || provider_model.is_some() || select_saved_provider {
-                    return Err("provider add accepts only minimax, deepseek, or openai; use provider save for custom configuration".into());
+                    return Err("provider add accepts only minimax, deepseek, openai, or chatgpt; use provider save for custom configuration".into());
                 }
                 Ok(Arguments::ProviderAdd { options, preset_id, json })
             }
@@ -5640,7 +5659,7 @@ where
                 _ => Err("provider credential requires 'set PROFILE_ID' or 'clear PROFILE_ID'".into()),
             },
             _ => Err(
-                "provider requires 'list', 'add', 'save', 'select', 'models', 'model', 'credential', or 'probe'".into(),
+                "provider requires 'list', 'add', 'save', 'select', 'models', 'model', 'budget', 'context', 'credential', 'probe', 'login', 'login-new', 'logout', 'accounts', or 'account'".into(),
             ),
         },
         "sessions" if prompt.is_some() => Err("sessions does not accept a prompt".into()),
@@ -5837,7 +5856,7 @@ where
                 })
             }
             _ => {
-                Err("goal requires 'status', 'set OBJECTIVE', 'limits', 'criteria', 'attest', 'supervise', 'pause', 'resume', or 'clear'".into())
+                Err("goal requires 'status', 'set OBJECTIVE', 'limits', 'criteria', 'attest', 'supervise', 'deliver', 'pause', 'resume', or 'clear'".into())
             }
         },
         "workspace" if prompt.is_some() => Err("workspace does not accept a prompt".into()),
@@ -5952,7 +5971,7 @@ where
                     json,
                 })
             }
-            _ => Err("harness requires 'status', 'profile PROFILE_ID', 'surface SURFACE show|hide', 'execution PROFILE_ID', 'capability CAPABILITY_ID enable|disable', or 'trajectory [SESSION_ID]'".into()),
+            _ => Err("harness requires 'status', 'profile PROFILE_ID', 'surface SURFACE show|hide', 'execution PROFILE_ID', 'capability CAPABILITY_ID enable|disable', 'backend enable|disable', 'module MODULE_ID install|enable|disable|remove', or 'trajectory [SESSION_ID]'".into()),
         },
         "changes" if prompt.is_some() => Err("changes does not accept a prompt".into()),
         "changes" => {
@@ -5974,8 +5993,10 @@ where
                         .parse()
                         .map_err(|_| "--run-id requires a valid UUID")?;
                     if let Some(text) = changes_cursor.as_deref() {
-                        if text.len() > 512 {
-                            return Err("--cursor exceeds the 512-byte limit".into());
+                        if text.len() > MAX_CHANGE_PAGE_CURSOR_BYTES {
+                            return Err(format!(
+                                "--cursor exceeds {MAX_CHANGE_PAGE_CURSOR_BYTES} bytes"
+                            ));
                         }
                         serde_json::from_str::<argentum_domain::ChangePageCursor>(text)
                             .map_err(|_| "--cursor must be a valid page cursor")?;
@@ -5999,7 +6020,7 @@ where
                 (Some("recovery"), Some("restore")) => ChangeAction::RestoreRecovery {
                     operation_id: parse_target("recovery restore")?,
                 },
-                _ => return Err("changes requires 'list RUN_ID', 'diff FILE_CHANGE_ID', 'restore FILE_CHANGE_ID', 'recovery', 'recovery retry OPERATION_ID', or 'recovery restore OPERATION_ID'".into()),
+                _ => return Err("changes requires 'page --run-id RUN_ID', 'list RUN_ID', 'diff FILE_CHANGE_ID', 'restore FILE_CHANGE_ID', 'recovery', 'recovery retry OPERATION_ID', or 'recovery restore OPERATION_ID'".into()),
             };
             Ok(Arguments::Changes { options, action, json })
         }
@@ -6195,6 +6216,171 @@ mod context_variant_tests {
     }
 }
 
+#[cfg(test)]
+mod genesis_polish_parser_tests {
+    use super::*;
+
+    fn error_of(values: &[&str]) -> String {
+        match parse_args(values.iter().copied()) {
+            Ok(arguments) => panic!("expected a parser error, got {arguments:?}"),
+            Err(message) => message,
+        }
+    }
+
+    #[test]
+    fn help_text_lists_implemented_subcommands_and_reserved_commands() {
+        let text = help_text();
+        for expected in [
+            "session inspect|pin|unpin|archive|unarchive SESSION_ID",
+            "session title SESSION_ID TITLE",
+            "verification inspect",
+            "verification approve RUNNER",
+            "instructions [--directory RELATIVE_DIRECTORY]",
+            "--remove-aggregate",
+            "lm-studio",
+            "doctor      Diagnostics, planned for a later phase",
+        ] {
+            assert!(text.contains(expected), "help is missing {expected:?}");
+        }
+        assert!(text.ends_with('\n'));
+        #[cfg(feature = "extensions")]
+        assert!(text.contains("argentum extensions help"));
+        #[cfg(feature = "artifacts")]
+        assert!(text.contains("argentum artifacts help"));
+    }
+
+    #[test]
+    fn fallback_error_messages_list_every_supported_subcommand() {
+        let provider = error_of(&["provider"]);
+        for expected in [
+            "list",
+            "add",
+            "save",
+            "select",
+            "models",
+            "model",
+            "budget",
+            "context",
+            "credential",
+            "probe",
+            "login",
+            "login-new",
+            "logout",
+            "accounts",
+            "account",
+        ] {
+            assert!(
+                provider.contains(expected),
+                "provider error omits {expected}: {provider}"
+            );
+        }
+        assert!(error_of(&["goal"]).contains("deliver"));
+        let harness = error_of(&["harness"]);
+        assert!(harness.contains("backend"));
+        assert!(harness.contains("module"));
+        assert!(error_of(&["changes"]).contains("page"));
+        assert!(error_of(&["provider", "add"]).contains("chatgpt"));
+        assert!(error_of(&["provider", "add", "synthetic-preset"]).contains("chatgpt"));
+        let kind = parse_provider_kind("synthetic-kind").unwrap_err();
+        assert!(kind.contains("lm-studio"), "{kind}");
+    }
+
+    #[test]
+    fn change_page_cursor_bound_accepts_extended_canonical_cursor_and_rejects_overflow() {
+        let run = "01234567-89ab-cdef-0123-456789abcdef";
+        let cursor = argentum_domain::ChangePageCursor {
+            project_id: argentum_domain::ProjectId::new_v4(),
+            session_id: argentum_domain::SessionId::new_v4(),
+            run_id: run.parse().unwrap(),
+            stamp: i64::MIN,
+            sequence: i64::MIN,
+            id: argentum_domain::FileChangeId::new_v4(),
+        };
+        let text = serde_json::to_string(&cursor).unwrap();
+        assert!(
+            text.len() > 256,
+            "fixture must exceed the retired 256-byte bound: {}",
+            text.len()
+        );
+        assert!(text.len() <= MAX_CHANGE_PAGE_CURSOR_BYTES);
+        assert!(matches!(
+            parse_args(["changes", "page", "--run-id", run, "--cursor", &text, "--json"]).unwrap(),
+            Arguments::Changes {
+                action: ChangeAction::Page {
+                    cursor: Some(_),
+                    ..
+                },
+                ..
+            }
+        ));
+        let at_bound = "x".repeat(MAX_CHANGE_PAGE_CURSOR_BYTES);
+        assert!(matches!(
+            parse_args([
+                "changes",
+                "page",
+                "--run-id",
+                run,
+                "--cursor",
+                &at_bound,
+                "--json"
+            ]),
+            Err(message) if message.contains("valid page cursor")
+        ));
+        let overflow = "x".repeat(MAX_CHANGE_PAGE_CURSOR_BYTES + 1);
+        assert!(matches!(
+            parse_args([
+                "changes",
+                "page",
+                "--run-id",
+                run,
+                "--cursor",
+                &overflow,
+                "--json"
+            ]),
+            Err(message) if message.contains("512 bytes")
+        ));
+    }
+
+    #[test]
+    fn reserved_boolean_flags_cannot_satisfy_a_missing_option_value() {
+        let run = "01234567-89ab-cdef-0123-456789abcdef";
+        for flag in RESERVED_BOOLEAN_FLAGS {
+            let message = error_of(&[
+                "changes", "page", "--run-id", run, "--cursor", flag, "--json",
+            ]);
+            assert!(
+                message.contains("--cursor requires a value") && message.contains("boolean flag"),
+                "reserved {flag} was not rejected: {message}"
+            );
+        }
+        let prompt = error_of(&["run", "--prompt", "--json"]);
+        assert!(prompt.contains("--prompt requires a value"), "{prompt}");
+        let accounting = parse_accounting_args(&[
+            "accounting".to_owned(),
+            "inspect".to_owned(),
+            "--workspace".to_owned(),
+            "--json".to_owned(),
+            "--database".to_owned(),
+            r"C:\fixture\state.db".to_owned(),
+            "--session-id".to_owned(),
+            "01234567-89ab-cdef-0123-456789abcdef".to_owned(),
+            "--goal-id".to_owned(),
+            "01234567-89ab-cdef-0123-456789abcdef".to_owned(),
+            "--request-id".to_owned(),
+            "01234567-89ab-cdef-0123-456789abcdef".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(
+            accounting.contains("--workspace needs a value") && accounting.contains("boolean flag"),
+            "{accounting}"
+        );
+        assert!(matches!(
+            parse_args(["run", "--prompt", "ordinary task", "--json"]),
+            Ok(Arguments::Run { prompt, json: true, .. }) if prompt == "ordinary task"
+        ));
+    }
+}
+
 fn parse_accounting_args(values: &[String]) -> Result<Arguments, String> {
     let mode = values
         .get(1)
@@ -6241,6 +6427,11 @@ fn parse_accounting_args(values: &[String]) -> Result<Arguments, String> {
         let value = values
             .get(index + 1)
             .ok_or_else(|| format!("{flag} needs a value"))?;
+        if RESERVED_BOOLEAN_FLAGS.contains(&value.as_str()) {
+            return Err(format!(
+                "{flag} needs a value; {value} is a boolean flag and cannot be consumed as one"
+            ));
+        }
         if fields.insert(flag.as_str(), value.as_str()).is_some() {
             return Err(format!("duplicate {flag}"));
         }
@@ -6451,10 +6642,16 @@ fn parse_recovery_args(values: &[String]) -> Result<Arguments, String> {
 }
 
 fn required_value<'a>(values: &'a [String], index: usize, option: &str) -> Result<&'a str, String> {
-    values
+    let value = values
         .get(index)
         .map(String::as_str)
-        .ok_or_else(|| format!("{option} requires a value"))
+        .ok_or_else(|| format!("{option} requires a value"))?;
+    if RESERVED_BOOLEAN_FLAGS.contains(&value) {
+        return Err(format!(
+            "{option} requires a value; {value} is a boolean flag and cannot be consumed as one"
+        ));
+    }
+    Ok(value)
 }
 
 fn parse_u64_option(value: &str, option: &str) -> Result<u64, String> {
@@ -6475,7 +6672,7 @@ fn parse_provider_kind(value: &str) -> Result<argentum_domain::ProviderKind, Str
         "lm-studio" => Ok(argentum_domain::ProviderKind::LocalLmStudio),
         "openai-compatible" => Ok(argentum_domain::ProviderKind::OpenAiCompatible),
         "anthropic" => Ok(argentum_domain::ProviderKind::Anthropic),
-        _ => Err("--kind must be llama-cpp, openai-compatible, or anthropic".to_owned()),
+        _ => Err("--kind must be llama-cpp, lm-studio, openai-compatible, or anthropic".to_owned()),
     }
 }
 
@@ -6562,11 +6759,7 @@ fn print_skill_summary(summary: &argentum_workspaces::SkillSummary) {
     );
 }
 
-fn print_help() {
-    #[cfg(feature = "extensions")]
-    println!("Optional governed extensions: argentum extensions help. Install/configure is not execution approval; activation requires the local owner console.");
-    println!(
-        "Argentum Genesis command host\n\n\
+const HELP_BODY: &str = "Argentum Genesis command host\n\n\
 Usage:\n  \
 argentum\n  \
 argentum chat [OPTIONS]\n  \
@@ -6600,6 +6793,7 @@ argentum provider model PROFILE_ID --model NAME [OPTIONS]\n  \
 argentum provider budget PROFILE_ID --limits TOTAL,INPUT,MAX_OUTPUT,REQUESTED_OUTPUT,UNCERTAINTY [OPTIONS]\n  \
 argentum provider context llama-cpp [--size 8k|16k|32k|64k|128k|256k] [OPTIONS]\n  \
 argentum context --json [OPTIONS]\n  \
+argentum instructions [--directory RELATIVE_DIRECTORY] [OPTIONS]\n  \
 argentum compact [--deactivate | --goal GOAL_ID] --json [OPTIONS]\n  \
 argentum provider credential set PROFILE_ID < credential.txt\n  \
 argentum provider credential clear PROFILE_ID [OPTIONS]\n  \
@@ -6607,9 +6801,11 @@ argentum workspace status [OPTIONS]\n  \
 argentum workspace set PATH [OPTIONS]\n  \
 argentum sessions [OPTIONS]\n  \
 argentum session select SESSION_ID [OPTIONS]\n  \
+argentum session inspect|pin|unpin|archive|unarchive SESSION_ID [OPTIONS]\n  \
+argentum session title SESSION_ID TITLE [OPTIONS]\n  \
 argentum session fork SOURCE_SESSION_ID --title TITLE [OPTIONS]\n  \
 argentum goal status [OPTIONS]\n  \
-argentum goal limits --goal-id GOAL_ID --limits GOAL_TOKENS,REQUESTS,ITERATIONS,TOOLS,SECONDS,RUN_TOKENS,RUN_REQUESTS,RUN_TOOLS,RUN_SECONDS [OPTIONS]\n  \
+argentum goal limits --goal-id GOAL_ID (--limits GOAL_TOKENS,REQUESTS,ITERATIONS,TOOLS,SECONDS,RUN_TOKENS,RUN_REQUESTS,RUN_TOOLS,RUN_SECONDS | --remove-aggregate) [OPTIONS]\n  \
 argentum goal criteria --goal-id GOAL_ID --runners RUNNER[,RUNNER] [--owner-attestation-required] [OPTIONS]\n  \
 argentum goal attest --goal-id GOAL_ID --summary TEXT [OPTIONS]\n  \
 argentum goal supervise --goal-id GOAL_ID --iterations N --elapsed-seconds N [OPTIONS]\n  \
@@ -6632,6 +6828,8 @@ argentum permissions select PROFILE_ID [OPTIONS]\n  \
 argentum permissions grants [OPTIONS]\n  \
 argentum permissions revoke GRANT_ID [OPTIONS]\n  \
 argentum verification list [OPTIONS]\n  \
+argentum verification inspect [OPTIONS]\n  \
+argentum verification approve RUNNER [OPTIONS]\n  \
 argentum verification status [RUN_ID] [OPTIONS]\n\n\
 argentum changes page --run-id UUID [--limit N] [--cursor TEXT] --json\n  \
 argentum changes list RUN_ID [OPTIONS]\n  \
@@ -6676,7 +6874,7 @@ Options:\n  \
   --answer-schema FILE  Validate the terminal model answer against one bounded workspace schema; requires --final-result\n  \
   --answer-schema-sha256 SHA256  Optionally require the selected schema file digest\n  \
 --label LABEL      Display label for provider save\n  \
---kind KIND        llama-cpp, openai-compatible, or anthropic\n  \
+--kind KIND        llama-cpp, lm-studio, openai-compatible, or anthropic\n  \
 --select           Select a profile when saving it\n  \
 --objective TEXT   Goal objective when using 'goal set'\n  \
 --token-budget N   Maximum model tokens for the goal contract\n  \
@@ -6691,8 +6889,21 @@ Options:\n  \
 --no-color         Disable terminal color\n  \
 --non-interactive  Use the plain line-oriented terminal fallback\n  \
 provider credential set reads the secret from stdin and never accepts it as an option\n  \
--V, --version      Print the Argentum version"
-    );
+-V, --version      Print the Argentum version";
+
+fn help_text() -> String {
+    let mut text = String::new();
+    #[cfg(feature = "extensions")]
+    text.push_str("Optional governed extensions: argentum extensions help. Install/configure is not execution approval; activation requires the local owner console.\n");
+    #[cfg(feature = "artifacts")]
+    text.push_str("Optional local document artifacts: argentum artifacts help. Inspect, serve and verify require an exact owner configuration; serving is not model authority.\n");
+    text.push_str(HELP_BODY);
+    text.push('\n');
+    text
+}
+
+fn print_help() {
+    print!("{}", help_text());
 }
 
 fn print_version() {
