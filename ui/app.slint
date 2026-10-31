@@ -355,6 +355,7 @@ component EmptyHero inherits Rectangle {
     in property <string> project-name: "Argentum";
     in property <string> workspace-label: "Local workspace";
     in property <bool> reduced-motion: false;
+    in property <bool> compact: false;
     callback suggest(string);
 
     background: transparent;
@@ -382,8 +383,8 @@ component EmptyHero inherits Rectangle {
     VerticalLayout {
         padding-left: AgTheme.gutter;
         padding-right: AgTheme.gutter;
-        padding-top: 58px;
-        padding-bottom: 36px;
+        padding-top: root.compact ? 34px : 58px;
+        padding-bottom: root.compact ? 20px : 36px;
         spacing: 0;
 
         Rectangle {
@@ -392,7 +393,7 @@ component EmptyHero inherits Rectangle {
             background: AgTheme.accent;
         }
 
-        Rectangle { height: 18px; }
+        Rectangle { height: root.compact ? 12px : 18px; }
 
         Text {
             text: "ARGENTUM / LOCAL AGENT";
@@ -404,7 +405,7 @@ component EmptyHero inherits Rectangle {
         }
 
         VerticalLayout {
-            padding-top: 16px;
+            padding-top: root.compact ? 10px : 16px;
             spacing: 0;
 
             Text {
@@ -428,7 +429,7 @@ component EmptyHero inherits Rectangle {
             }
         }
 
-        Rectangle { height: 22px; }
+        Rectangle { height: root.compact ? 14px : 22px; }
 
         Text {
             text: "A deliberate workbench for changes that survive review. Tools stay inside "
@@ -442,7 +443,7 @@ component EmptyHero inherits Rectangle {
             wrap: word-wrap;
         }
 
-        Rectangle { height: 12px; }
+        Rectangle { height: root.compact ? 8px : 12px; }
 
         Text {
             text: root.workspace-label;
@@ -453,7 +454,7 @@ component EmptyHero inherits Rectangle {
         }
 
         VerticalLayout {
-            padding-top: 42px;
+            padding-top: root.compact ? 22px : 42px;
             spacing: 0;
             width: min(parent.width, 620px);
 
@@ -480,7 +481,7 @@ component EmptyHero inherits Rectangle {
         }
 
         HorizontalLayout {
-            padding-top: 44px;
+            padding-top: root.compact ? 24px : 44px;
             spacing: 12px;
 
             Text {
@@ -1175,9 +1176,6 @@ export component MainWindow inherits Window {
     private property <bool> inspector-visible: root.width >= 1200px;
     private property <length> inspector-slot: root.inspector-visible ? AgTheme.inspector-width : 0px;
     private property <length> center-width: root.width - AgTheme.rail-width - root.inspector-slot;
-    private property <length> bottom-reserve: root.approval_open
-        ? 110px
-        : (root.error_message != "" ? 56px : 0px);
     private property <string> display-verification-label: root.verification_state == "passed"
         ? "Passed"
         : (root.verification_state == "failed"
@@ -1489,12 +1487,15 @@ export component MainWindow inherits Window {
             height: parent.height;
             background: AgTheme.canvas;
 
-            Rectangle {
-                x: 0px;
-                y: 0px;
+            VerticalLayout {
                 width: parent.width;
-                height: AgTheme.header-height;
-                background: AgTheme.canvas;
+                height: parent.height;
+                spacing: 0;
+
+                Rectangle {
+                    height: AgTheme.header-height;
+                    horizontal-stretch: 1;
+                    background: AgTheme.canvas;
 
                 Rectangle {
                     x: 0px;
@@ -1613,21 +1614,20 @@ export component MainWindow inherits Window {
             }
 
             conversation := ScrollView {
-                x: 0px;
-                y: AgTheme.header-height;
                 width: parent.width;
-                height: parent.height - AgTheme.header-height - AgTheme.composer-height
-                    - root.bottom-reserve;
+                vertical-stretch: 1;
                 viewport-width: self.width;
                 mouse-drag-pan-enabled: true;
 
                 VerticalLayout {
                     width: parent.width;
+                    padding-bottom: 24px;
 
                     if !root.has-conversation: EmptyHero {
                         project-name: root.project_name;
                         workspace-label: root.workspace_label;
                         reduced-motion: root.reduced_motion;
+                        compact: root.height < 940px;
                         suggest(prompt) => { root.draft = prompt; }
                     }
 
@@ -1803,60 +1803,71 @@ export component MainWindow inherits Window {
                 }
             }
 
-            Rectangle {
-                x: 0px;
-                y: root.height - AgTheme.composer-height;
-                width: parent.width;
-                height: AgTheme.composer-height;
-                background: AgTheme.canvas;
+                if root.error_message != "" && !root.approval_open: Rectangle {
+                    height: 56px;
+                    horizontal-stretch: 1;
+
+                    ErrorPanel {
+                        x: AgTheme.gutter;
+                        y: 5px;
+                        width: parent.width - AgTheme.gutter - AgTheme.gutter;
+                        height: 46px;
+                        message: root.error_message;
+                    }
+                }
+
+                if root.approval_open: Rectangle {
+                    height: 110px;
+                    horizontal-stretch: 1;
+
+                    ApprovalPanel {
+                        x: AgTheme.gutter;
+                        y: 6px;
+                        width: parent.width - AgTheme.gutter - AgTheme.gutter;
+                        height: 98px;
+                        action: root.approval_action;
+                        target: root.approval_target;
+                        reason: root.approval_reason;
+                        pending: root.approval_response_pending;
+                        reduced-motion: root.reduced_motion;
+                        approve => { root.approve_tool(root.approval_id); }
+                        reject => { root.reject_tool(root.approval_id); }
+                    }
+                }
 
                 Rectangle {
-                    x: 0px;
-                    y: 0px;
-                    width: parent.width;
-                    height: AgTheme.hairline;
-                    background: AgTheme.line-faint;
-                }
+                    height: AgTheme.composer-height;
+                    horizontal-stretch: 1;
+                    background: AgTheme.canvas;
 
-                ComposerPanel {
-                    x: AgTheme.gutter;
-                    y: 10px;
-                    width: parent.width - AgTheme.gutter - AgTheme.gutter;
-                    draft <=> root.draft;
-                    provider-label: root.provider_label;
-                    project-name: root.project_name;
-                    workspace-label: root.workspace_label;
-                    running: root.running;
-                    approval-pending: root.approval_open;
-                    submission-pending: root.submission_pending;
-                    active-run-id: root.active_run_id;
-                    reduced-motion: root.reduced_motion;
-                    submit(prompt) => {
-                        root.draft = prompt;
-                        root.submit_task(prompt);
+                    Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: AgTheme.hairline;
+                        background: AgTheme.line-faint;
                     }
-                    cancel(run-id) => { root.cancel_run(run-id); }
+
+                    ComposerPanel {
+                        x: AgTheme.gutter;
+                        y: 10px;
+                        width: parent.width - AgTheme.gutter - AgTheme.gutter;
+                        draft <=> root.draft;
+                        provider-label: root.provider_label;
+                        project-name: root.project_name;
+                        workspace-label: root.workspace_label;
+                        running: root.running;
+                        approval-pending: root.approval_open;
+                        submission-pending: root.submission_pending;
+                        active-run-id: root.active_run_id;
+                        reduced-motion: root.reduced_motion;
+                        submit(prompt) => {
+                            root.draft = prompt;
+                            root.submit_task(prompt);
+                        }
+                        cancel(run-id) => { root.cancel_run(run-id); }
+                    }
                 }
-            }
-
-            if root.error_message != "" && !root.approval_open: ErrorPanel {
-                x: AgTheme.gutter;
-                y: root.height - AgTheme.composer-height - 56px;
-                width: parent.width - AgTheme.gutter - AgTheme.gutter;
-                message: root.error_message;
-            }
-
-            if root.approval_open: ApprovalPanel {
-                x: AgTheme.gutter;
-                y: root.height - AgTheme.composer-height - 110px;
-                width: parent.width - AgTheme.gutter - AgTheme.gutter;
-                action: root.approval_action;
-                target: root.approval_target;
-                reason: root.approval_reason;
-                pending: root.approval_response_pending;
-                reduced-motion: root.reduced_motion;
-                approve => { root.approve_tool(root.approval_id); }
-                reject => { root.reject_tool(root.approval_id); }
             }
         }
 
