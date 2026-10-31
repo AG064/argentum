@@ -3,13 +3,15 @@
 //! This binary never opens a workspace, provider, credential store, or network
 //! connection. It renders the generated `MainWindow` with local showcase data.
 //!
-//! Usage: `ui-preview [empty|conversation|approval]`
+//! Usage: `ui-preview [empty|conversation|approval|settings|about|palette] [--reduced-motion]`
+
+use std::time::Duration;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use argentum_ui::{
     ActivityItemView, ConversationMessageView, FileChangeView, InspectorModeView, MainWindow,
-    PlanStepView, SessionItemView,
+    PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView,
 };
 
 fn rows<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
@@ -64,6 +66,59 @@ fn inspector_modes() -> ModelRc<InspectorModeView> {
             label: "Trajectory".into(),
             icon: "timeline".into(),
             detail: "Durable execution records".into(),
+        },
+    ])
+}
+
+fn provider_profiles() -> ModelRc<ProviderProfileView> {
+    rows(vec![
+        ProviderProfileView {
+            id: "lm-studio".into(),
+            label: "LM Studio".into(),
+            kind: "lm-studio".into(),
+            kind_label: "LM Studio".into(),
+            endpoint: "http://127.0.0.1:1234/v1".into(),
+            model: "qwen3-coder-30b".into(),
+            selected: true,
+            credential_supported: false,
+            credential_configured: false,
+        },
+        ProviderProfileView {
+            id: "minimax".into(),
+            label: "MiniMax".into(),
+            kind: "openai-compatible".into(),
+            kind_label: "OpenAI compatible".into(),
+            endpoint: "https://api.minimax.io/v1/".into(),
+            model: "MiniMax-M2.7".into(),
+            selected: false,
+            credential_supported: true,
+            credential_configured: false,
+        },
+    ])
+}
+
+fn provider_models() -> ModelRc<ProviderModelView> {
+    rows(vec![
+        ProviderModelView {
+            id: "qwen3-coder-30b".into(),
+            label: "qwen3-coder-30b".into(),
+            context_window_tokens: 32768,
+            context_window_reported: true,
+            selected: true,
+        },
+        ProviderModelView {
+            id: "qwen3-coder-14b".into(),
+            label: "qwen3-coder-14b".into(),
+            context_window_tokens: 16384,
+            context_window_reported: true,
+            selected: false,
+        },
+        ProviderModelView {
+            id: "llama-3.3-70b".into(),
+            label: "llama-3.3-70b".into(),
+            context_window_tokens: 131072,
+            context_window_reported: true,
+            selected: false,
         },
     ])
 }
@@ -219,19 +274,34 @@ fn plan() -> ModelRc<PlanStepView> {
     ])
 }
 
-fn configure(window: &MainWindow, mode: &str) {
+fn configure(window: &MainWindow, mode: &str, reduced_motion: bool) {
     window.set_project_name("Argentum".into());
-    window.set_workspace_label("workspace/argentum".into());
+    window.set_workspace_label("workspace".into());
     window.set_provider_label("LM Studio".into());
+    window.set_provider_id("lm-studio".into());
+    window.set_provider_kind("lm-studio".into());
+    window.set_provider_kind_label("LM Studio".into());
+    window.set_provider_endpoint("http://127.0.0.1:1234/v1".into());
     window.set_provider_model("qwen3-coder-30b".into());
+    window.set_provider_detail("Connection verified.".into());
     window.set_provider_connected(true);
     window.set_provider_probe_state("connected".into());
+    window.set_provider_profiles(provider_profiles());
+    window.set_provider_models(provider_models());
+    window.set_provider_models_provider_id("lm-studio".into());
+    window.set_context_window_reported(true);
+    window.set_context_window_tokens(32768);
     window.set_inspector_modes(inspector_modes());
     window.set_inspector_collapsed(false);
     window.set_active_inspector("changes".into());
-    window.set_reduced_motion(false);
+    window.set_reduced_motion(reduced_motion);
 
-    if mode == "empty" {
+    let populated = matches!(
+        mode,
+        "conversation" | "tools" | "verification" | "activity" | "approval"
+    );
+
+    if !populated {
         window.set_session_title("New session".into());
         window.set_active_session_id("".into());
         window.set_session_items(sessions(false));
@@ -293,9 +363,36 @@ fn configure(window: &MainWindow, mode: &str) {
     }
 }
 
+fn open_overlay(window: &MainWindow, mode: &str) {
+    match mode {
+        "settings" => window.set_settings_open(true),
+        "about" => window.set_about_open(true),
+        "palette" => window.set_command_palette_open(true),
+        _ => {}
+    }
+}
+
 fn main() -> Result<(), slint::PlatformError> {
-    let mode = std::env::args().nth(1).unwrap_or_else(|| "empty".into());
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let mode = args
+        .iter()
+        .find(|argument| !argument.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| "empty".into());
+    let reduced_motion = args.iter().any(|argument| argument == "--reduced-motion");
+
     let window = MainWindow::new()?;
-    configure(&window, &mode);
-    window.run()
+    configure(&window, &mode, reduced_motion);
+    window.show()?;
+
+    let weak = window.as_weak();
+    let overlay_mode = mode.clone();
+    slint::Timer::single_shot(Duration::from_millis(300), move || {
+        if let Some(window) = weak.upgrade() {
+            open_overlay(&window, &overlay_mode);
+        }
+    });
+
+    slint::run_event_loop()?;
+    Ok(())
 }

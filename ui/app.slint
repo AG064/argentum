@@ -113,13 +113,18 @@ component OutlineButton inherits Rectangle {
     in property <string> icon: "";
     in property <bool> enabled: true;
     in property <bool> reduced-motion: false;
+    out property <bool> has-focus: key-focus.has-focus;
     callback clicked();
+    public function take-focus() { key-focus.focus(); }
 
     height: 38px;
     min-width: 96px;
     border-radius: AgTheme.radius-sm;
     border-width: AgTheme.hairline;
-    border-color: touch.has-hover ? AgTheme.line-strong : AgTheme.line;
+    border-color: root.has-focus
+        ? AgTheme.bone
+        : (touch.has-hover ? AgTheme.line-strong : AgTheme.line);
+    forward-focus: key-focus;
     background: touch.pressed
         ? AgTheme.panel
         : (touch.has-hover ? AgTheme.panel-hover : transparent);
@@ -157,7 +162,26 @@ component OutlineButton inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                if (root.enabled) {
+                    root.clicked();
+                }
+                return accept;
+            }
+            return reject;
+        }
     }
 }
 
@@ -169,7 +193,9 @@ component SolidButton inherits Rectangle {
     in property <color> fill: AgTheme.accent;
     in property <color> foreground: AgTheme.accent-ink;
     in property <color> hover-fill: AgTheme.accent-hover;
+    out property <bool> has-focus: key-focus.has-focus;
     callback clicked();
+    public function take-focus() { key-focus.focus(); }
 
     height: 40px;
     min-width: 108px;
@@ -177,6 +203,7 @@ component SolidButton inherits Rectangle {
     background: touch.pressed
         ? AgTheme.accent-press
         : (touch.has-hover ? root.hover-fill : root.fill);
+    forward-focus: key-focus;
     opacity: root.enabled ? 1.0 : 0.72;
     accessible-role: button;
     accessible-label: root.label;
@@ -211,7 +238,26 @@ component SolidButton inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
+    key-focus := FocusScope {
+        x: 0px;
+        width: 0px;
+        focus-on-click: false;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) {
+                if (root.enabled) {
+                    root.clicked();
+                }
+                return accept;
+            }
+            return reject;
+        }
     }
 }
 
@@ -969,6 +1015,244 @@ component ErrorPanel inherits Rectangle {
     }
 }
 
+component SettingsSectionRow inherits Rectangle {
+    in property <string> index;
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> reduced-motion: false;
+    callback clicked();
+
+    height: 46px;
+    border-radius: AgTheme.radius-sm;
+    background: root.active
+        ? AgTheme.accent-wash
+        : (touch.has-hover ? AgTheme.panel : transparent);
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    animate background {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    if root.active: Rectangle {
+        x: 0px;
+        y: 10px;
+        width: 2px;
+        height: 26px;
+        background: AgTheme.accent;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        Text {
+            text: root.index;
+            width: 20px;
+            color: root.active ? AgTheme.accent : AgTheme.quiet;
+            font-family: AgTheme.font-mono;
+            font-size: 9px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? AgTheme.bone-strong : AgTheme.bone-dim;
+            font-family: AgTheme.font-ui;
+            font-size: 12px;
+            font-weight: root.active ? AgTheme.weight-semibold : AgTheme.weight-regular;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        ShowcaseIcon {
+            name: "chevron-right";
+            size: 11px;
+            tint: root.active ? AgTheme.accent : AgTheme.quiet;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component SettingsInfoLine inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> detail: "";
+    in property <color> value-color: AgTheme.bone;
+
+    background: transparent;
+
+    HorizontalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 16px;
+
+        Text {
+            width: 122px;
+            text: root.label;
+            color: AgTheme.quiet;
+            font-family: AgTheme.font-ui;
+            font-size: 9px;
+            font-weight: AgTheme.weight-semibold;
+            letter-spacing: 1px;
+            vertical-alignment: top;
+            wrap: word-wrap;
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 3px;
+
+            Text {
+                text: root.value != "" ? root.value : "Not reported";
+                color: root.value != "" ? root.value-color : AgTheme.quiet;
+                font-family: AgTheme.font-mono;
+                font-size: 10px;
+                wrap: word-wrap;
+            }
+
+            if root.detail != "": Text {
+                text: root.detail;
+                color: AgTheme.quiet;
+                font-family: AgTheme.font-ui;
+                font-size: 9px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component SettingsToggle inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> reduced-motion: false;
+    callback toggled();
+
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    border-width: AgTheme.hairline;
+    border-color: root.checked ? AgTheme.accent : AgTheme.line-strong;
+    background: root.checked ? AgTheme.accent : AgTheme.panel;
+    accessible-role: checkbox;
+    accessible-label: "Reduced motion";
+    accessible-checked: root.checked;
+    accessible-action-default => { root.toggled(); }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    Rectangle {
+        x: root.checked ? parent.width - self.width - 3px : 3px;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        background: root.checked ? AgTheme.accent-ink : AgTheme.bone-dim;
+        animate x {
+            duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+component CommandRow inherits Rectangle {
+    in property <string> index;
+    in property <string> label;
+    in property <string> detail;
+    in property <string> icon;
+    in property <bool> selected: false;
+    in property <bool> row-visible: true;
+    in property <bool> reduced-motion: false;
+    callback clicked();
+
+    visible: root.row-visible;
+    height: 50px;
+    border-radius: AgTheme.radius-sm;
+    background: root.selected
+        ? AgTheme.accent-wash
+        : (touch.has-hover ? AgTheme.panel : transparent);
+    accessible-role: button;
+    accessible-label: root.label + ". " + root.detail;
+    accessible-action-default => { root.clicked(); }
+    animate background {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    if root.selected: Rectangle {
+        x: 0px;
+        y: 10px;
+        width: 2px;
+        height: 30px;
+        background: AgTheme.accent;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 11px;
+
+        Text {
+            width: 20px;
+            text: root.index;
+            color: root.selected ? AgTheme.accent : AgTheme.quiet;
+            font-family: AgTheme.font-mono;
+            font-size: 9px;
+            vertical-alignment: center;
+        }
+
+        ShowcaseIcon {
+            name: root.icon;
+            size: 14px;
+            tint: root.selected ? AgTheme.accent : AgTheme.muted;
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 3px;
+            alignment: center;
+
+            Text {
+                text: root.label;
+                color: root.selected ? AgTheme.bone-strong : AgTheme.bone-dim;
+                font-family: AgTheme.font-ui;
+                font-size: 12px;
+                font-weight: root.selected ? AgTheme.weight-semibold : AgTheme.weight-medium;
+            }
+
+            Text {
+                text: root.detail;
+                color: AgTheme.quiet;
+                font-family: AgTheme.font-ui;
+                font-size: 9px;
+                overflow: elide;
+            }
+        }
+
+        if root.selected: Text {
+            text: "ENTER";
+            color: AgTheme.accent;
+            font-family: AgTheme.font-mono;
+            font-size: 8px;
+            letter-spacing: 0.8px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "Argentum";
     icon: @image-url("../assets/brand/argentum-256.png");
@@ -1173,7 +1457,8 @@ export component MainWindow inherits Window {
     callback approve_tool(string);
     callback reject_tool(string);
 
-    private property <bool> inspector-visible: root.width >= 1200px;
+    private property <bool> compact-mode: false;
+    private property <bool> inspector-visible: root.width >= 1200px && !root.compact-mode;
     private property <length> inspector-slot: root.inspector-visible ? AgTheme.inspector-width : 0px;
     private property <length> center-width: root.width - AgTheme.rail-width - root.inspector-slot;
     private property <string> display-verification-label: root.verification_state == "passed"
@@ -1191,6 +1476,403 @@ export component MainWindow inherits Window {
     private property <bool> has-conversation: root.conversation_messages.length > 0
         || root.user_prompt != ""
         || root.transcript != "";
+    private property <int> settings-section-index: 0;
+    private property <string> settings-section-label: root.settings-section-index == 0
+        ? "Workspace"
+        : (root.settings-section-index == 1
+            ? "Provider"
+            : (root.settings-section-index == 2
+                ? "Model"
+                : (root.settings-section-index == 3 ? "Appearance" : "About / Version")));
+    private property <int> settings-focus-index: 0;
+    private property <string> settings-primary-label: root.settings-section-index == 0
+        ? "About this build"
+        : (root.settings-section-index == 1
+            ? (root.provider_testing ? "Testing" : "Test connection")
+            : (root.settings-section-index == 2
+                ? (root.provider_models_loading ? "Refreshing" : "Refresh models")
+                : (root.settings-section-index == 3
+                    ? (root.reduced_motion ? "Enable motion" : "Reduce motion")
+                    : "Open About panel")));
+    private property <string> settings-primary-icon: root.settings-section-index == 0
+        ? "session"
+        : (root.settings-section-index == 1
+            ? "verify"
+            : (root.settings-section-index == 2
+                ? "model"
+                : (root.settings-section-index == 3 ? "motion" : "alert")));
+    private property <bool> settings-primary-enabled: root.settings-section-index == 1
+        ? root.provider_id != "" && !root.provider_testing
+        : (root.settings-section-index == 2
+            ? root.provider_id != "" && !root.provider_models_loading
+            : true);
+    private property <string> command-filter: "";
+    private property <string> command-filter-lower: root.command-filter.to-lowercase();
+    private property <bool> show-new: root.command-filter-lower == ""
+        || root.command-filter-lower == "n"
+        || root.command-filter-lower == "ne"
+        || root.command-filter-lower == "new";
+    private property <bool> show-settings: root.command-filter-lower == ""
+        || root.command-filter-lower == "s"
+        || root.command-filter-lower == "se"
+        || root.command-filter-lower == "set"
+        || root.command-filter-lower == "sett"
+        || root.command-filter-lower == "setti"
+        || root.command-filter-lower == "settin"
+        || root.command-filter-lower == "setting"
+        || root.command-filter-lower == "settings";
+    private property <bool> show-model: root.command-filter-lower == ""
+        || root.command-filter-lower == "m"
+        || root.command-filter-lower == "mo"
+        || root.command-filter-lower == "mod"
+        || root.command-filter-lower == "mode"
+        || root.command-filter-lower == "model"
+        || root.command-filter-lower == "ch"
+        || root.command-filter-lower == "cho"
+        || root.command-filter-lower == "choo"
+        || root.command-filter-lower == "choos"
+        || root.command-filter-lower == "choose";
+    private property <bool> show-context: root.command-filter-lower == ""
+        || root.command-filter-lower == "c"
+        || root.command-filter-lower == "co"
+        || root.command-filter-lower == "con"
+        || root.command-filter-lower == "cont"
+        || root.command-filter-lower == "conte"
+        || root.command-filter-lower == "contex"
+        || root.command-filter-lower == "context";
+    private property <bool> show-compact: root.command-filter-lower == ""
+        || root.command-filter-lower == "c"
+        || root.command-filter-lower == "co"
+        || root.command-filter-lower == "com"
+        || root.command-filter-lower == "comp"
+        || root.command-filter-lower == "compa"
+        || root.command-filter-lower == "compac"
+        || root.command-filter-lower == "compact";
+    private property <bool> show-status: root.command-filter-lower == ""
+        || root.command-filter-lower == "st"
+        || root.command-filter-lower == "sta"
+        || root.command-filter-lower == "stat"
+        || root.command-filter-lower == "statu"
+        || root.command-filter-lower == "status";
+    private property <bool> show-about: root.command-filter-lower == ""
+        || root.command-filter-lower == "a"
+        || root.command-filter-lower == "ab"
+        || root.command-filter-lower == "abo"
+        || root.command-filter-lower == "abou"
+        || root.command-filter-lower == "about";
+    private property <bool> show-close: root.command-filter-lower == ""
+        || root.command-filter-lower == "c"
+        || root.command-filter-lower == "cl"
+        || root.command-filter-lower == "clo"
+        || root.command-filter-lower == "clos"
+        || root.command-filter-lower == "close";
+    private property <int> command-selected: 0;
+    private property <bool> keyboard-focus-pending: true;
+
+    function open-settings-at(section-index: int) {
+        root.command-palette-open = false;
+        root.settings-section-index = section-index;
+        root.settings-open = true;
+        root.open-settings();
+        if root.provider_id != "" {
+            root.refresh-provider-models(root.provider_id);
+        }
+    }
+
+    function settings-primary-action() {
+        if root.settings-section-index == 0 || root.settings-section-index == 4 {
+            root.about-open = true;
+        } else if root.settings-section-index == 1 {
+            if root.provider_id != "" {
+                root.probe-provider(root.provider_id);
+            }
+        } else if root.settings-section-index == 2 {
+            if root.provider_id != "" {
+                root.refresh-provider-models(root.provider_id);
+            }
+        } else if root.settings-section-index == 3 {
+            root.reduced-motion = !root.reduced-motion;
+        }
+    }
+
+    function command-visible(index: int) -> bool {
+        if index == 0 { return root.show-new; }
+        if index == 1 { return root.show-settings; }
+        if index == 2 { return root.show-model; }
+        if index == 3 { return root.show-context; }
+        if index == 4 { return root.show-compact; }
+        if index == 5 { return root.show-status; }
+        if index == 6 { return root.show-about; }
+        if index == 7 { return root.show-close; }
+        return false;
+    }
+
+    function first-visible() -> int {
+        if root.show-new { return 0; }
+        if root.show-settings { return 1; }
+        if root.show-model { return 2; }
+        if root.show-context { return 3; }
+        if root.show-compact { return 4; }
+        if root.show-status { return 5; }
+        if root.show-about { return 6; }
+        if root.show-close { return 7; }
+        return 0;
+    }
+
+    function next-visible(start: int) -> int {
+        if start == 0 {
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            return root.first-visible();
+        }
+        if start == 1 {
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            return root.first-visible();
+        }
+        if start == 2 {
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            return root.first-visible();
+        }
+        if start == 3 {
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            return root.first-visible();
+        }
+        if start == 4 {
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            return root.first-visible();
+        }
+        if start == 5 {
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            return root.first-visible();
+        }
+        if start == 6 {
+            if root.show-close { return 7; }
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            return root.first-visible();
+        }
+        if start == 7 {
+            if root.show-new { return 0; }
+            if root.show-settings { return 1; }
+            if root.show-model { return 2; }
+            if root.show-context { return 3; }
+            if root.show-compact { return 4; }
+            if root.show-status { return 5; }
+            if root.show-about { return 6; }
+            if root.show-close { return 7; }
+            return root.first-visible();
+        }
+        return root.first-visible();
+    }
+
+    function previous-visible(start: int) -> int {
+        if start == 0 {
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            return root.last-visible();
+        }
+        if start == 1 {
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            return root.last-visible();
+        }
+        if start == 2 {
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            return root.last-visible();
+        }
+        if start == 3 {
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            return root.last-visible();
+        }
+        if start == 4 {
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            return root.last-visible();
+        }
+        if start == 5 {
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            return root.last-visible();
+        }
+        if start == 6 {
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            if root.show-about { return 6; }
+            return root.last-visible();
+        }
+        if start == 7 {
+            if root.show-about { return 6; }
+            if root.show-status { return 5; }
+            if root.show-compact { return 4; }
+            if root.show-context { return 3; }
+            if root.show-model { return 2; }
+            if root.show-settings { return 1; }
+            if root.show-new { return 0; }
+            if root.show-close { return 7; }
+            return root.last-visible();
+        }
+        return root.last-visible();
+    }
+    function last-visible() -> int {
+        if root.show-close { return 7; }
+        if root.show-about { return 6; }
+        if root.show-status { return 5; }
+        if root.show-compact { return 4; }
+        if root.show-context { return 3; }
+        if root.show-model { return 2; }
+        if root.show-settings { return 1; }
+        if root.show-new { return 0; }
+        return 0;
+    }
+
+    function execute-command(index: int) {
+        if index == 0 {
+            root.command-palette-open = false;
+            root.new_session();
+        } else if index == 1 {
+            root.open-settings-at(0);
+        } else if index == 2 {
+            root.open-settings-at(2);
+        } else if index == 3 {
+            root.open-settings-at(0);
+        } else if index == 4 {
+            root.compact-mode = !root.compact-mode;
+            root.command-palette-open = false;
+        } else if index == 5 {
+            root.open-settings-at(4);
+        } else if index == 6 {
+            root.command-palette-open = false;
+            root.about-open = true;
+        } else {
+            root.command-palette-open = false;
+        }
+    }
+
+    changed settings_open => {
+        if root.settings_open {
+            root.settings-focus-index = 0;
+            settings-focus.focus();
+        } else if !root.about_open && !root.command_palette_open {
+            root.keyboard-focus-pending = true;
+        }
+    }
+
+    changed about_open => {
+        if root.about_open {
+            about-focus.focus();
+        } else if root.settings_open {
+            settings-focus.focus();
+        } else if !root.command_palette_open {
+            root.keyboard-focus-pending = true;
+        }
+    }
+
+    changed command_palette_open => {
+        if root.command_palette_open {
+            root.command-filter = "";
+            root.command-selected = root.first-visible();
+            palette-filter-input.focus();
+        } else if root.settings_open {
+            settings-focus.focus();
+        } else if root.about_open {
+            about-focus.focus();
+        } else {
+            root.keyboard-focus-pending = true;
+        }
+    }
+
+    changed command_filter => {
+        root.command-selected = root.first-visible();
+    }
 
     changed active_inspector => {
         if root.active_inspector == "changes" {
@@ -1208,6 +1890,61 @@ export component MainWindow inherits Window {
         interval: AgTheme.motion-pulse;
         running: (root.running || root.approval_open) && !root.reduced_motion;
         triggered => { root.showcase-pulse = !root.showcase-pulse; }
+    }
+
+    Timer {
+        interval: 200ms;
+        running: root.keyboard-focus-pending;
+        triggered => {
+            root.keyboard-focus-pending = false;
+            app-keyboard.focus();
+        }
+    }
+
+    app-keyboard := FocusScope {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+
+        capture-key-pressed(event) => {
+            if event.text != Key.Escape {
+                return reject;
+            }
+            if root.command_palette_open {
+                root.command_palette_open = false;
+                return accept;
+            }
+            if root.about_open {
+                root.about_open = false;
+                return accept;
+            }
+            if root.settings_open {
+                root.settings_open = false;
+                return accept;
+            }
+            return reject;
+        }
+
+        KeyBinding {
+            keys: @keys(Control + K);
+            activated => {
+                root.settings_open = false;
+                root.about_open = false;
+                root.command_palette_open = !root.command_palette_open;
+                root.command_filter = "";
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Control + ",");
+            activated => {
+                root.command_palette_open = false;
+                root.open-settings-at(0);
+            }
+        }
     }
 
     Rectangle {
@@ -1425,7 +2162,7 @@ export component MainWindow inherits Window {
                     background: settings-touch.has-hover ? AgTheme.panel : transparent;
                     accessible-role: button;
                     accessible-label: "Settings";
-                    accessible-action-default => { root.open_settings(); }
+                    accessible-action-default => { root.open-settings-at(0); }
                     animate background {
                         duration: root.reduced_motion ? 0ms : AgTheme.motion-fast;
                     }
@@ -1463,7 +2200,7 @@ export component MainWindow inherits Window {
 
                     settings-touch := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.open_settings(); }
+                        clicked => { root.open-settings-at(0); }
                     }
                 }
 
@@ -2497,6 +3234,1124 @@ export component MainWindow inherits Window {
                         font-size: 8px;
                         letter-spacing: 0.8px;
                         vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Settings sheet
+        Rectangle {
+            visible: root.settings_open;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: AgTheme.scrim;
+
+            TouchArea {
+                clicked => { root.settings_open = false; }
+            }
+
+            settings-sheet := Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(parent.width - 64px, 940px);
+                height: min(parent.height - 64px, 660px);
+                background: AgTheme.panel;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.line-strong;
+                border-radius: AgTheme.radius-md;
+                clip: true;
+
+                TouchArea {
+                    clicked => { }
+                }
+
+                settings-focus := FocusScope {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    focus-on-click: false;
+                    focus-on-tab-navigation: false;
+
+                    capture-key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.settings_open = false;
+                            return accept;
+                        }
+                        if event.text == Key.Tab {
+                            if event.modifiers.shift {
+                                root.settings-focus-index = root.settings-focus-index == 0
+                                    ? 2
+                                    : root.settings-focus-index - 1;
+                            } else {
+                                root.settings-focus-index = root.settings-focus-index == 2
+                                    ? 0
+                                    : root.settings-focus-index + 1;
+                            }
+                            if root.settings-focus-index == 0 {
+                                settings-close.take-focus();
+                            } else if root.settings-focus-index == 1 {
+                                settings-sections.focus();
+                            } else {
+                                settings-primary.take-focus();
+                            }
+                            return accept;
+                        }
+                        return reject;
+                    }
+
+                    key-pressed(event) => {
+                        if event.text == Key.UpArrow {
+                            root.settings-section-index = max(0, root.settings-section-index - 1);
+                            return accept;
+                        }
+                        if event.text == Key.DownArrow {
+                            root.settings-section-index = min(4, root.settings-section-index + 1);
+                            return accept;
+                        }
+                        return reject;
+                    }
+
+                    VerticalLayout {
+                        padding-left: 28px;
+                        padding-right: 28px;
+                        padding-top: 24px;
+                        padding-bottom: 20px;
+                        spacing: 0;
+
+                        HorizontalLayout {
+                            height: 38px;
+                            spacing: 12px;
+
+                            Text {
+                                text: "SETTINGS";
+                                color: AgTheme.accent;
+                                font-family: AgTheme.font-ui;
+                                font-size: 9px;
+                                font-weight: AgTheme.weight-bold;
+                                letter-spacing: 1.8px;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: "/  " + root.settings-section-label;
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-mono;
+                                font-size: 9px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            settings-close := OutlineButton {
+                                label: "Close";
+                                icon: "close";
+                                reduced-motion: root.reduced_motion;
+                                clicked => { root.settings_open = false; }
+                            }
+                        }
+
+                        Rectangle { height: 16px; }
+
+                        HorizontalLayout {
+                            vertical-stretch: 1;
+                            spacing: 26px;
+
+                            VerticalLayout {
+                                width: 208px;
+                                spacing: 2px;
+
+                                settings-sections := FocusScope {
+                                    vertical-stretch: 1;
+                                    focus-on-click: false;
+                                    focus-on-tab-navigation: true;
+                                    key-pressed(event) => {
+                                        if event.text == Key.UpArrow {
+                                            root.settings-section-index = max(0, root.settings-section-index - 1);
+                                            return accept;
+                                        }
+                                        if event.text == Key.DownArrow {
+                                            root.settings-section-index = min(4, root.settings-section-index + 1);
+                                            return accept;
+                                        }
+                                        return reject;
+                                    }
+
+                                    VerticalLayout {
+                                        spacing: 2px;
+
+                                        SettingsSectionRow {
+                                            index: "01";
+                                            label: "Workspace";
+                                            active: root.settings-section-index == 0;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                root.settings-section-index = 0;
+                                                settings-sections.focus();
+                                            }
+                                        }
+
+                                        SettingsSectionRow {
+                                            index: "02";
+                                            label: "Provider";
+                                            active: root.settings-section-index == 1;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                root.settings-section-index = 1;
+                                                settings-sections.focus();
+                                            }
+                                        }
+
+                                        SettingsSectionRow {
+                                            index: "03";
+                                            label: "Model";
+                                            active: root.settings-section-index == 2;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                root.settings-section-index = 2;
+                                                settings-sections.focus();
+                                            }
+                                        }
+
+                                        SettingsSectionRow {
+                                            index: "04";
+                                            label: "Appearance";
+                                            active: root.settings-section-index == 3;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                root.settings-section-index = 3;
+                                                settings-sections.focus();
+                                            }
+                                        }
+
+                                        SettingsSectionRow {
+                                            index: "05";
+                                            label: "About / Version";
+                                            active: root.settings-section-index == 4;
+                                            reduced-motion: root.reduced_motion;
+                                            clicked => {
+                                                root.settings-section-index = 4;
+                                                settings-sections.focus();
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle { vertical-stretch: 1; }
+
+                                Text {
+                                    text: "UP/DOWN SECTIONS\nTAB CONTROLS\nESC CLOSE";
+                                    color: AgTheme.quiet;
+                                    font-family: AgTheme.font-mono;
+                                    font-size: 8px;
+                                    wrap: word-wrap;
+                                }
+                            }
+
+                            Rectangle {
+                                width: 1px;
+                                background: AgTheme.line;
+                            }
+
+                            ScrollView {
+                                horizontal-stretch: 1;
+                                vertical-stretch: 1;
+                                viewport-width: self.width;
+                                mouse-drag-pan-enabled: true;
+
+                                VerticalLayout {
+                                    padding-left: 2px;
+                                    padding-right: 16px;
+                                    padding-bottom: 20px;
+                                    spacing: 14px;
+
+                                    if root.settings-section-index == 0: VerticalLayout {
+                                        spacing: 12px;
+
+                                        Text {
+                                            text: "WORKSPACE";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        Text {
+                                            text: root.project_name;
+                                            color: AgTheme.bone-strong;
+                                            font-family: AgTheme.font-display;
+                                            font-size: 34px;
+                                            font-weight: AgTheme.weight-bold;
+                                            letter-spacing: -0.8px;
+                                        }
+
+                                        Text {
+                                            text: root.workspace_label;
+                                            color: AgTheme.accent;
+                                            font-family: AgTheme.font-mono;
+                                            font-size: 11px;
+                                        }
+
+                                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                                        SettingsInfoLine {
+                                            label: "SESSION";
+                                            value: root.session_title;
+                                            detail: root.active_session_id != "" ? "ID " + root.active_session_id : "No active session";
+                                        }
+
+                                        SettingsInfoLine {
+                                            label: "RUN STATE";
+                                            value: root.run_state;
+                                            value-color: root.running ? AgTheme.accent : AgTheme.bone;
+                                        }
+
+                                        SettingsInfoLine {
+                                            label: "PROVIDER";
+                                            value: root.provider_label;
+                                            detail: root.provider_connected ? "Connected" : "Not tested";
+                                        }
+
+                                        Text {
+                                            text: "Workspace selection and policy are managed by the native host. This sheet reports the active binding without changing it.";
+                                            color: AgTheme.muted;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+
+                                    if root.settings-section-index == 1: VerticalLayout {
+                                        spacing: 12px;
+
+                                        Text {
+                                            text: "PROVIDER";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        Text {
+                                            text: root.provider_label;
+                                            color: AgTheme.bone-strong;
+                                            font-family: AgTheme.font-display;
+                                            font-size: 34px;
+                                            font-weight: AgTheme.weight-bold;
+                                            letter-spacing: -0.8px;
+                                        }
+
+                                        Text {
+                                            text: root.provider_kind_label + "  /  " + root.provider_probe_state;
+                                            color: root.provider_connected ? AgTheme.accent : AgTheme.amber;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 10px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 0.7px;
+                                        }
+
+                                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                                        SettingsInfoLine {
+                                            label: "ENDPOINT";
+                                            value: root.provider_endpoint;
+                                            value-color: AgTheme.bone-dim;
+                                        }
+
+                                        SettingsInfoLine {
+                                            label: "MODEL";
+                                            value: root.provider_model;
+                                            value-color: AgTheme.bone-dim;
+                                        }
+
+                                        SettingsInfoLine {
+                                            label: "DETAIL";
+                                            value: root.provider_detail;
+                                            value-color: AgTheme.muted;
+                                        }
+
+                                        if root.provider_error != "": Text {
+                                            text: root.provider_error;
+                                            color: AgTheme.coral;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        if root.provider_notice != "": Text {
+                                            text: root.provider_notice;
+                                            color: AgTheme.accent;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        Rectangle { height: 1px; background: AgTheme.line; }
+
+                                        Text {
+                                            text: "PROFILES";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        if root.provider_profiles.length == 0: Text {
+                                            text: "No provider profiles loaded. The current binding is shown above.";
+                                            color: AgTheme.muted;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        for profile in root.provider_profiles: Rectangle {
+                                            height: 54px;
+                                            border-radius: AgTheme.radius-sm;
+                                            background: profile.selected ? AgTheme.accent-wash : AgTheme.ink;
+                                            border-width: AgTheme.hairline;
+                                            border-color: profile.selected ? AgTheme.accent-line : AgTheme.line;
+
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-right: 12px;
+                                                spacing: 10px;
+
+                                                ShowcaseIcon {
+                                                    name: "model";
+                                                    size: 14px;
+                                                    tint: profile.selected ? AgTheme.accent : AgTheme.muted;
+                                                }
+
+                                                VerticalLayout {
+                                                    horizontal-stretch: 1;
+                                                    spacing: 3px;
+                                                    alignment: center;
+
+                                                    Text {
+                                                        text: profile.label;
+                                                        color: profile.selected ? AgTheme.bone-strong : AgTheme.bone-dim;
+                                                        font-family: AgTheme.font-ui;
+                                                        font-size: 11px;
+                                                        font-weight: AgTheme.weight-semibold;
+                                                    }
+
+                                                    Text {
+                                                        text: profile.kind_label + "  /  " + profile.endpoint;
+                                                        color: AgTheme.quiet;
+                                                        font-family: AgTheme.font-mono;
+                                                        font-size: 8px;
+                                                        overflow: elide;
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: profile.selected ? "ACTIVE" : "SELECT";
+                                                    color: profile.selected ? AgTheme.accent : AgTheme.quiet;
+                                                    font-family: AgTheme.font-mono;
+                                                    font-size: 8px;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.select_provider_profile(profile.id); }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: "Credentials and secret values are never shown in this sheet.";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 9px;
+                                        }
+                                    }
+
+                                    if root.settings-section-index == 2: VerticalLayout {
+                                        spacing: 12px;
+
+                                        Text {
+                                            text: "MODEL";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        Text {
+                                            text: root.provider_model != "" ? root.provider_model : "No model selected";
+                                            color: AgTheme.bone-strong;
+                                            font-family: AgTheme.font-display;
+                                            font-size: 32px;
+                                            font-weight: AgTheme.weight-bold;
+                                            letter-spacing: -0.7px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        Text {
+                                            text: root.provider_label;
+                                            color: AgTheme.muted;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                        }
+
+                                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                                        SettingsInfoLine {
+                                            label: "CONTEXT";
+                                            value: root.context_window_reported ? root.context_window_tokens + " tokens" : "";
+                                            value-color: AgTheme.bone-dim;
+                                        }
+
+                                        if root.provider_models_loading: Text {
+                                            text: "Loading models...";
+                                            color: AgTheme.amber;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                        }
+
+                                        if root.provider_models_error != "": Text {
+                                            text: root.provider_models_error;
+                                            color: AgTheme.coral;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        if root.provider_models.length == 0: Text {
+                                            text: "No model list loaded. Refresh to query the selected provider.";
+                                            color: AgTheme.muted;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        for model in root.provider_models: Rectangle {
+                                            height: 52px;
+                                            border-radius: AgTheme.radius-sm;
+                                            background: model.selected ? AgTheme.accent-wash : AgTheme.ink;
+                                            border-width: AgTheme.hairline;
+                                            border-color: model.selected ? AgTheme.accent-line : AgTheme.line;
+
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-right: 12px;
+                                                spacing: 10px;
+
+                                                ShowcaseIcon {
+                                                    name: "model";
+                                                    size: 14px;
+                                                    tint: model.selected ? AgTheme.accent : AgTheme.muted;
+                                                }
+
+                                                VerticalLayout {
+                                                    horizontal-stretch: 1;
+                                                    spacing: 3px;
+                                                    alignment: center;
+
+                                                    Text {
+                                                        text: model.label;
+                                                        color: model.selected ? AgTheme.bone-strong : AgTheme.bone-dim;
+                                                        font-family: AgTheme.font-mono;
+                                                        font-size: 10px;
+                                                        overflow: elide;
+                                                    }
+
+                                                    Text {
+                                                        text: model.context_window_reported
+                                                            ? model.context_window_tokens + " context tokens"
+                                                            : "Context window not reported";
+                                                        color: AgTheme.quiet;
+                                                        font-family: AgTheme.font-ui;
+                                                        font-size: 8px;
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: model.selected ? "ACTIVE" : "USE";
+                                                    color: model.selected ? AgTheme.accent : AgTheme.quiet;
+                                                    font-family: AgTheme.font-mono;
+                                                    font-size: 8px;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.select_provider_model(root.provider_id, model.id); }
+                                            }
+                                        }
+                                    }
+
+                                    if root.settings-section-index == 3: VerticalLayout {
+                                        spacing: 12px;
+
+                                        Text {
+                                            text: "APPEARANCE";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        Text {
+                                            text: "Motion";
+                                            color: AgTheme.bone-strong;
+                                            font-family: AgTheme.font-display;
+                                            font-size: 34px;
+                                            font-weight: AgTheme.weight-bold;
+                                            letter-spacing: -0.8px;
+                                        }
+
+                                        Text {
+                                            text: "Argentum uses motion for run state, focus and sheet transitions. Reduced motion keeps the same information without the pulse.";
+                                            color: AgTheme.muted;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                                        HorizontalLayout {
+                                            height: 44px;
+                                            spacing: 12px;
+
+                                            Text {
+                                                text: "Reduced motion";
+                                                color: AgTheme.bone-dim;
+                                                font-family: AgTheme.font-ui;
+                                                font-size: 12px;
+                                                horizontal-stretch: 1;
+                                                vertical-alignment: center;
+                                            }
+
+                                            SettingsToggle {
+                                                checked: root.reduced_motion;
+                                                reduced-motion: root.reduced_motion;
+                                                toggled => { root.reduced_motion = !root.reduced_motion; }
+                                            }
+                                        }
+
+                                        SettingsInfoLine {
+                                            label: "STATE";
+                                            value: root.reduced_motion ? "Reduced motion" : "Full motion";
+                                            value-color: root.reduced_motion ? AgTheme.accent : AgTheme.bone;
+                                        }
+
+                                        Rectangle { height: 1px; background: AgTheme.line; }
+
+                                        SettingsInfoLine { label: "CANVAS"; value: "#0B0B0E"; value-color: AgTheme.bone-dim; }
+                                        SettingsInfoLine { label: "SIGNAL"; value: "#D8FF57"; value-color: AgTheme.accent; }
+                                    }
+
+                                    if root.settings-section-index == 4: VerticalLayout {
+                                        spacing: 12px;
+
+                                        Text {
+                                            text: "ABOUT / VERSION";
+                                            color: AgTheme.quiet;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 8px;
+                                            font-weight: AgTheme.weight-semibold;
+                                            letter-spacing: 1.4px;
+                                        }
+
+                                        BrandLockup { }
+
+                                        Text {
+                                            text: "0.1.0-rc.1";
+                                            color: AgTheme.accent;
+                                            font-family: AgTheme.font-mono;
+                                            font-size: 12px;
+                                            letter-spacing: 1.2px;
+                                        }
+
+                                        Text {
+                                            text: "A local-first agent workbench for changes that survive review.";
+                                            color: AgTheme.bone-dim;
+                                            font-family: AgTheme.font-ui;
+                                            font-size: 14px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                                        SettingsInfoLine { label: "LICENSE"; value: "MIT"; value-color: AgTheme.bone-dim; }
+                                        SettingsInfoLine { label: "BUILD"; value: "Native Slint host"; value-color: AgTheme.bone-dim; }
+                                        SettingsInfoLine { label: "RUN STATE"; value: root.run_state; value-color: root.running ? AgTheme.accent : AgTheme.bone; }
+                                        SettingsInfoLine {
+                                            label: "PROVIDER";
+                                            value: root.provider_label;
+                                            detail: root.provider_connected ? "Connected" : "Not tested";
+                                        }
+                                        SettingsInfoLine {
+                                            label: "VERIFICATION";
+                                            value: root.display-verification-label;
+                                            detail: root.verification_summary;
+                                            value-color: root.verification_state == "passed" ? AgTheme.accent : (root.verification_state == "failed" ? AgTheme.coral : AgTheme.bone);
+                                        }
+                                        SettingsInfoLine {
+                                            label: "CHANGES";
+                                            value: root.changed_files + " files";
+                                            detail: root.change_summary;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle { height: 16px; }
+
+                        HorizontalLayout {
+                            height: 40px;
+                            spacing: 12px;
+
+                            Text {
+                                text: "LOCAL ONLY  /  NO CREDENTIALS DISPLAYED";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-ui;
+                                font-size: 8px;
+                                letter-spacing: 0.8px;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                            }
+
+                            settings-primary := OutlineButton {
+                                label: root.settings-primary-label;
+                                icon: root.settings-primary-icon;
+                                enabled: root.settings-primary-enabled;
+                                reduced-motion: root.reduced_motion;
+                                clicked => { root.settings-primary-action(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // About panel
+        Rectangle {
+            visible: root.about_open;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: AgTheme.scrim;
+
+            TouchArea {
+                clicked => { root.about_open = false; }
+            }
+
+            about-card := Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(parent.width - 64px, 560px);
+                height: min(parent.height - 64px, 380px);
+                background: AgTheme.panel;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.line-strong;
+                border-radius: AgTheme.radius-md;
+                clip: true;
+
+                TouchArea { clicked => { } }
+
+                about-focus := FocusScope {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    focus-on-click: false;
+                    focus-on-tab-navigation: false;
+
+                    capture-key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.about_open = false;
+                            return accept;
+                        }
+                        if event.text == Key.Tab {
+                            about-close.take-focus();
+                            return accept;
+                        }
+                        return reject;
+                    }
+
+                    VerticalLayout {
+                        padding-left: 30px;
+                        padding-right: 30px;
+                        padding-top: 28px;
+                        padding-bottom: 24px;
+                        spacing: 0;
+
+                        BrandLockup { }
+
+                        Rectangle { height: 26px; }
+
+                        Text {
+                            text: "Argentum";
+                            color: AgTheme.bone-strong;
+                            font-family: AgTheme.font-display;
+                            font-size: 42px;
+                            font-weight: AgTheme.weight-bold;
+                            letter-spacing: -1.2px;
+                        }
+
+                        Text {
+                            text: "0.1.0-rc.1  /  MIT  /  NATIVE SLINT HOST";
+                            color: AgTheme.accent;
+                            font-family: AgTheme.font-mono;
+                            font-size: 9px;
+                            letter-spacing: 1px;
+                        }
+
+                        Rectangle { height: 18px; }
+
+                        Text {
+                            text: "A local-first agent workbench for changes that survive review.";
+                            color: AgTheme.bone-dim;
+                            font-family: AgTheme.font-ui;
+                            font-size: 15px;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                        Rectangle { height: 14px; }
+
+                        HorizontalLayout {
+                            height: 38px;
+                            spacing: 12px;
+
+                            Text {
+                                text: "NO OWNER DATA  /  NO CREDENTIALS";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-ui;
+                                font-size: 8px;
+                                letter-spacing: 0.8px;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                            }
+
+                            about-close := OutlineButton {
+                                label: "Close";
+                                icon: "close";
+                                reduced-motion: root.reduced_motion;
+                                clicked => { root.about_open = false; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Command palette
+        Rectangle {
+            visible: root.command_palette_open;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: AgTheme.scrim;
+
+            TouchArea {
+                clicked => { root.command_palette_open = false; }
+            }
+
+            palette := Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(parent.width - 80px, 720px);
+                height: min(parent.height - 80px, 560px);
+                background: AgTheme.panel;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.line-strong;
+                border-radius: AgTheme.radius-md;
+                clip: true;
+
+                TouchArea { clicked => { } }
+
+                palette-focus := FocusScope {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    focus-on-click: false;
+                    focus-on-tab-navigation: false;
+
+                    capture-key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.command_palette_open = false;
+                            return accept;
+                        }
+                        if event.text == Key.Tab {
+                            palette-filter-input.focus();
+                            return accept;
+                        }
+                        return reject;
+                    }
+
+                    VerticalLayout {
+                        padding-left: 22px;
+                        padding-right: 22px;
+                        padding-top: 20px;
+                        padding-bottom: 18px;
+                        spacing: 0;
+
+                        HorizontalLayout {
+                            height: 20px;
+                            spacing: 10px;
+
+                            Text {
+                                text: "COMMAND PALETTE";
+                                color: AgTheme.accent;
+                                font-family: AgTheme.font-ui;
+                                font-size: 9px;
+                                font-weight: AgTheme.weight-bold;
+                                letter-spacing: 1.6px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            Text {
+                                text: "CTRL K";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-mono;
+                                font-size: 8px;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Rectangle { height: 12px; }
+
+                        Rectangle {
+                            height: 48px;
+                            border-radius: AgTheme.radius-sm;
+                            border-width: AgTheme.hairline;
+                            border-color: palette-filter-input.has-focus ? AgTheme.accent : AgTheme.line;
+                            background: AgTheme.ink;
+
+                            Text {
+                                visible: root.command_filter == "";
+                                x: 14px;
+                                y: 0px;
+                                width: parent.width - 28px;
+                                height: parent.height;
+                                text: "Filter commands...";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-ui;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+
+                            palette-filter-input := TextInput {
+                                x: 14px;
+                                y: 0px;
+                                width: parent.width - 28px;
+                                height: parent.height;
+                                text <=> root.command_filter;
+                                color: AgTheme.bone-strong;
+                                selection-foreground-color: AgTheme.accent-ink;
+                                selection-background-color: AgTheme.accent;
+                                font-family: AgTheme.font-ui;
+                                font-size: 12px;
+                                single-line: true;
+                                accessible-label: "Filter commands";
+                                key-pressed(event) => {
+                                    if event.text == Key.Escape {
+                                        root.command_palette_open = false;
+                                        return accept;
+                                    }
+                                    if event.text == Key.UpArrow {
+                                        root.command-selected = root.previous-visible(root.command-selected - 1);
+                                        return accept;
+                                    }
+                                    if event.text == Key.DownArrow {
+                                        root.command-selected = root.next-visible(root.command-selected + 1);
+                                        return accept;
+                                    }
+                                    if event.text == Key.Return {
+                                        if root.command-visible(root.command-selected) {
+                                            root.execute-command(root.command-selected);
+                                        }
+                                        return accept;
+                                    }
+                                    return reject;
+                                }
+                            }
+                        }
+
+                        Rectangle { height: 12px; }
+
+                        ScrollView {
+                            vertical-stretch: 1;
+                            viewport-width: self.width;
+                            mouse-drag-pan-enabled: true;
+
+                            VerticalLayout {
+                                spacing: 2px;
+
+                                CommandRow {
+                                    index: "01";
+                                    label: "New session";
+                                    detail: "Start a fresh conversation";
+                                    icon: "plus";
+                                    selected: root.command-selected == 0;
+                                    row-visible: root.show-new;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 0;
+                                        root.execute-command(0);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "02";
+                                    label: "Settings";
+                                    detail: "Workspace, provider, model, appearance";
+                                    icon: "settings";
+                                    selected: root.command-selected == 1;
+                                    row-visible: root.show-settings;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 1;
+                                        root.execute-command(1);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "03";
+                                    label: "Choose model";
+                                    detail: "Open the model section";
+                                    icon: "model";
+                                    selected: root.command-selected == 2;
+                                    row-visible: root.show-model;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 2;
+                                        root.execute-command(2);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "04";
+                                    label: "Context";
+                                    detail: "Workspace and session context";
+                                    icon: "workspace";
+                                    selected: root.command-selected == 3;
+                                    row-visible: root.show-context;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 3;
+                                        root.execute-command(3);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "05";
+                                    label: "Compact";
+                                    detail: "Toggle the inspector rail";
+                                    icon: "panel";
+                                    selected: root.command-selected == 4;
+                                    row-visible: root.show-compact;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 4;
+                                        root.execute-command(4);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "06";
+                                    label: "Status";
+                                    detail: "Run, provider and verification state";
+                                    icon: "verify";
+                                    selected: root.command-selected == 5;
+                                    row-visible: root.show-status;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 5;
+                                        root.execute-command(5);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "07";
+                                    label: "About";
+                                    detail: "Product and build identity";
+                                    icon: "session";
+                                    selected: root.command-selected == 6;
+                                    row-visible: root.show-about;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 6;
+                                        root.execute-command(6);
+                                    }
+                                }
+
+                                CommandRow {
+                                    index: "08";
+                                    label: "Close";
+                                    detail: "Close the command palette";
+                                    icon: "close";
+                                    selected: root.command-selected == 7;
+                                    row-visible: root.show-close;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.command-selected = 7;
+                                        root.execute-command(7);
+                                    }
+                                }
+
+                                if !root.show-new && !root.show-settings && !root.show-model
+                                    && !root.show-context && !root.show-compact && !root.show-status
+                                    && !root.show-about && !root.show-close: Text {
+                                    text: "No matching commands.";
+                                    color: AgTheme.muted;
+                                    font-family: AgTheme.font-ui;
+                                    font-size: 12px;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle { height: 10px; }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.line; }
+
+                        Rectangle { height: 10px; }
+
+                        HorizontalLayout {
+                            height: 16px;
+                            spacing: 10px;
+
+                            Text {
+                                text: "UP/DOWN NAVIGATE";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-mono;
+                                font-size: 8px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            Text {
+                                text: "ENTER RUN  /  ESC CLOSE";
+                                color: AgTheme.quiet;
+                                font-family: AgTheme.font-mono;
+                                font-size: 8px;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
             }
