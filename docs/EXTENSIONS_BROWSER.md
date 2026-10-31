@@ -138,11 +138,40 @@ startup behavior. Review source/license/lock and pin the actual Node program,
 adapter, configuration, dependency inputs and browser files in the definition.
 
 Adapter configuration accepts only `allowedOrigins`, `artifactDirectory`,
-optional `persistentProfile`, `previewWorkspace` and `previewPort`. The current
+optional `persistentProfile`, `previewWorkspace`, `previewPort` and
+`reviewedStylesheet`. The current
 profile is local HTTP at exact `127.0.0.1:PORT` origins, not arbitrary web, LAN,
 DNS aliases or private service access. Its fixed preview serves the approved
 static workspace's bounded regular HTML/CSS/JS/JSON/images/fonts. It is an owned
 Node process, not a model-selected command, shell or general development server.
+
+The optional `reviewedStylesheet` declaration permits one explicitly reviewed
+CSS file whose leaf name is `token.css` or `tokens.css`. These names otherwise
+collide with the private-resource guard and remain denied by default. Declare
+its literal normalized preview-root-relative path using forward slashes, the
+SHA-256 of its exact bytes as 64 lowercase hexadecimal digits, and its expected
+byte length (`bytes`, an integer from zero through 4 MiB). For example, the
+declaration's fields are `path: "styles/tokens.css"`, `sha256: <reviewed digest>`
+and `bytes: <reviewed byte count>`; the placeholders are not valid configuration.
+
+This is permission to disclose particular reviewed bytes, not proof that CSS
+contains no secrets. It cannot authorize credential/secret names, protected
+parent directories, other leaf names, dot/traversal paths, Windows device or
+alternate-stream syntax, outside-root files, unsupported types or oversized
+files. The preview checks the digest and length of the existing bounded,
+admitted buffer and serves that same buffer. Missing permission, a different
+literal path, changed bytes or changed length releases no stylesheet body,
+including for HEAD requests. Other static files keep their existing behavior.
+
+The declaration is owner configuration, never a browser tool argument or page
+instruction. Add or change it only through the normal extension configuration
+and exact activation lifecycle, including the configuration file's updated
+`transport.inputs` identity. Configuration updates revoke old activation, and
+configuration/dependency inputs remain held during a connection. Changed
+stylesheet content is blocked until the owner reviews its new digest/length
+and reconfigures and activates the exact updated definition. A build, verifier
+or preparation hook must not rewrite the approval to keep a changed file working.
+No declaration is enabled automatically, and no new approval console is added.
 
 Browser processes/contexts/tabs are task-owned. Profiles are isolated by
 default. Persistence requires the explicit `artifactDirectory/profile` path.
