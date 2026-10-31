@@ -17,6 +17,12 @@ use crate::executable::resolve_fixed_executable;
 use crate::windows_job::ProcessContainment;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
+/// The first `powershell.exe` launch on a cold Windows runner pays .NET CLR, GAC,
+/// AMSI and Defender load cost before any staged marker. Sixty seconds keeps a
+/// hard hang bound while accommodating that cold start; the staged startup
+/// markers remain the diagnosis if it still fails.
+#[cfg(all(test, windows))]
+const STARTUP_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 const DEFAULT_OUTPUT_LIMIT: usize = 256 * 1024;
 const MAX_OUTPUT_LIMIT: usize = 1024 * 1024;
@@ -2569,7 +2575,7 @@ mod tests {
         let result = ProcessRunner
             .run(
                 powershell_spec(&script, workspace.path())
-                    .with_timeout(Duration::from_secs(20))
+                    .with_timeout(STARTUP_DIAGNOSTIC_TIMEOUT)
                     .unwrap(),
                 CancellationToken::new(),
             )
@@ -2595,7 +2601,7 @@ mod tests {
         let result = ProcessRunner
             .run(
                 powershell_startup_spec(&script, workspace.path(), true)
-                    .with_timeout(Duration::from_secs(20))
+                    .with_timeout(STARTUP_DIAGNOSTIC_TIMEOUT)
                     .unwrap(),
                 CancellationToken::new(),
             )
