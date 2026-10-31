@@ -6,6 +6,9 @@ rust-version.workspace = true
 license-file.workspace = true
 build = "build.rs"
 
+[features]
+live-preview = ["slint/live-preview"]
+
 [dependencies]
 argentum-domain.workspace = true
 slint.workspace = true
