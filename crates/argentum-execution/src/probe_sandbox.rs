@@ -34,8 +34,8 @@ use windows_sys::Win32::Security::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, OPEN_EXISTING, READ_CONTROL, WRITE_DAC, WRITE_OWNER,
 };
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::Pipes::CreatePipe;
@@ -257,21 +257,47 @@ impl ProbeSandbox {
         if !root.starts_with(&self.owned_root) && root != self.profile.canonicalize()? {
             return Err(io::Error::other("check ACL target is not owned"));
         }
-        let mut paths = vec![root];
+        let owned = root;
+        let mut paths = vec![owned.clone()];
         let mut count = 0usize;
         while let Some(path) = paths.pop() {
             count += 1;
             if count > 4096 {
                 return Err(io::Error::other("check ACL inventory exceeds its bound"));
             }
-            let metadata = std::fs::symlink_metadata(&path)?;
+            // A finished compiler or linker may unlink its own scratch entry between
+            // enumeration and reopen. Only a vanished child is skipped; the owned root
+            // must stay observable and a reparse point is still rejected.
+            let metadata = match std::fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) if path != owned && error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            };
             if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                 return Err(io::Error::other("check area contains a reparse point"));
             }
-            self.grant_path(&path, writable)?;
+            match self.grant_path(&path, writable) {
+                Ok(()) => {}
+                Err(error) if path != owned && error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            }
             if metadata.is_dir() {
-                for entry in std::fs::read_dir(path)? {
-                    paths.push(entry?.path());
+                let entries = match std::fs::read_dir(&path) {
+                    Ok(entries) => entries,
+                    Err(error) if path != owned && error.kind() == io::ErrorKind::NotFound => {
+                        continue
+                    }
+                    Err(error) => return Err(error),
+                };
+                for entry in entries {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(error) if path != owned && error.kind() == io::ErrorKind::NotFound => {
+                            continue
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    paths.push(entry.path());
                 }
             }
         }
@@ -285,7 +311,7 @@ impl ProbeSandbox {
             CreateFileW(
                 path_wide.as_ptr(),
                 READ_CONTROL | WRITE_DAC | WRITE_OWNER | FILE_READ_ATTRIBUTES,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                 std::ptr::null(),
                 OPEN_EXISTING,
                 FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,

@@ -40,6 +40,8 @@ pub enum RustCheckError {
     Input(&'static str),
     #[error("supplemental Rust check resources are unavailable")]
     Resource,
+    #[error("supplemental Rust check deadline expired before the next admitted phase")]
+    DeadlineExpired,
     #[error(transparent)]
     Workspace(#[from] argentum_workspaces::WorkspaceError),
     #[error(transparent)]
@@ -510,6 +512,99 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn scratch_inventory_tolerates_delete_pending_children_and_still_bounds_entries() {
+        use std::os::windows::fs::OpenOptionsExt;
+        const DELETE: u32 = 0x0001_0000;
+        const FILE_SHARE_READ_WRITE_DELETE: u32 = 0x0000_0007;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let root = tempfile::tempdir().unwrap();
+        let volatile = root.path().join("delete-pending");
+        std::fs::create_dir(&volatile).unwrap();
+        let held = std::fs::OpenOptions::new()
+            .access_mode(DELETE)
+            .share_mode(FILE_SHARE_READ_WRITE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&volatile)
+            .unwrap();
+        // The name still exists but the directory is delete-pending while the
+        // handle is live, so any reopen fails until the last handle closes.
+        std::fs::remove_dir(&volatile).unwrap();
+        let observed = std::fs::read_dir(&volatile).unwrap_err();
+        assert!(
+            matches!(
+                observed.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+            ),
+            "delete-pending child must report a tolerated transient error: {observed}"
+        );
+        for kind in [
+            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::PermissionDenied,
+        ] {
+            assert!(windows::transient_scratch_child(&std::io::Error::from(
+                kind
+            )));
+        }
+        assert!(!windows::transient_scratch_child(&std::io::Error::from(
+            std::io::ErrorKind::InvalidData
+        )));
+        assert!(windows::tree_bytes(root.path()).is_ok());
+        drop(held);
+
+        let bounded = tempfile::tempdir().unwrap();
+        for index in 0..4097 {
+            std::fs::write(bounded.path().join(format!("entry-{index}")), b"").unwrap();
+        }
+        assert!(matches!(
+            windows::tree_bytes(bounded.path()),
+            Err(RustCheckError::Resource)
+        ));
+    }
+
+    #[tokio::test]
+    async fn deadline_between_admitted_phases_returns_a_timed_out_receipt() {
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::Arc;
+        for (permitted_spawns, reason) in [
+            (0_usize, "deadline_expired_before_compile"),
+            (2_usize, "deadline_expired_before_execution"),
+        ] {
+            let (root, ws, owner) = fixture();
+            let before = std::fs::read(root.path().join("src/lib.rs")).unwrap();
+            let hook = Arc::new(AtomicUsize::new(permitted_spawns));
+            let output = DEADLINE_AFTER_STEP
+                .scope(hook, async move {
+                    run_rust_check(
+                        ws,
+                        owner,
+                        RustCheckRequest {
+                            package: "probe_fixture".into(),
+                            profile: RustCheckProfile::Debug,
+                            source: RustCheckSource::new(
+                                "#[test] fn actual_api(){assert_eq!(probe_fixture::value(),7);}"
+                                    .into(),
+                            )
+                            .unwrap(),
+                            replaces: None,
+                        },
+                        CancellationToken::new(),
+                        Duration::from_secs(60),
+                    )
+                    .await
+                })
+                .await
+                .expect("a between-phase deadline must return a receipt, not an error");
+            assert_eq!(output.receipt.state, SupplementalCheckState::TimedOut);
+            assert_eq!(output.receipt.reason_code.as_deref(), Some(reason));
+            assert!(output.receipt.cleanup_complete);
+            assert_eq!(
+                std::fs::read(root.path().join("src/lib.rs")).unwrap(),
+                before
+            );
+        }
+    }
 }
 pub struct RustCheckRequest {
     pub package: String,
@@ -560,6 +655,14 @@ pub async fn run_rust_check(
 #[cfg(test)]
 tokio::task_local! {
     static AFTER_SNAPSHOT_ADMISSION: Box<dyn Fn() + Send + Sync>;
+}
+
+// Test-only injection of a deadline that expires between admitted child phases.
+// The value is the number of child spawns still permitted; production builds
+// cannot select it.
+#[cfg(test)]
+tokio::task_local! {
+    static DEADLINE_AFTER_STEP: std::sync::Arc<std::sync::atomic::AtomicUsize>;
 }
 
 #[cfg(windows)]
@@ -666,6 +769,16 @@ mod windows {
         file.write_all(bytes)?;
         Ok(())
     }
+    /// A compiler or linker child may unlink its own scratch entry between the
+    /// directory snapshot and the reopen. NTFS reports that race as NotFound or,
+    /// while the name is delete-pending, as access denied. Only children are
+    /// sampled this way; the owned root itself must stay observable.
+    pub(super) fn transient_scratch_child(error: &std::io::Error) -> bool {
+        matches!(
+            error.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+        )
+    }
     pub(super) fn tree_bytes(root: &Path) -> Result<u64, RustCheckError> {
         let metadata = std::fs::symlink_metadata(root)?;
         if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -679,13 +792,15 @@ mod windows {
         while let Some(path) = stack.pop() {
             let entries = match std::fs::read_dir(&path) {
                 Ok(entries) => entries,
-                Err(error) if path != root && error.kind() == std::io::ErrorKind::NotFound => {
-                    continue
-                }
+                Err(error) if path != root && transient_scratch_child(&error) => continue,
                 Err(error) => return Err(error.into()),
             };
             for entry in entries {
-                let entry = entry?;
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(error) if path != root && transient_scratch_child(&error) => continue,
+                    Err(error) => return Err(error.into()),
+                };
                 count += 1;
                 if count > 4096 {
                     return Err(RustCheckError::Resource);
@@ -693,7 +808,11 @@ mod windows {
                 // Windows DirEntry metadata is captured by directory enumeration without
                 // reopening a compiler file that may already be delete-pending (Win32 error 5).
                 // It does not follow links. This is sampled accounting, not an atomic disk quota.
-                let metadata = entry.metadata()?;
+                let metadata = match entry.metadata() {
+                    Ok(metadata) => metadata,
+                    Err(error) if path != root && transient_scratch_child(&error) => continue,
+                    Err(error) => return Err(error.into()),
+                };
                 if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                     return Err(RustCheckError::Unavailable(
                         "owned scratch inventory contains a reparse point",
@@ -1241,10 +1360,25 @@ mod windows {
         } = context;
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err(RustCheckError::Unavailable("parent check deadline expired"));
+            return Err(RustCheckError::DeadlineExpired);
         }
         if cancel.is_cancelled() {
             return Err(RustCheckError::Unavailable("check cancelled before spawn"));
+        }
+        #[cfg(test)]
+        if DEADLINE_AFTER_STEP
+            .try_with(|allowed| {
+                allowed
+                    .fetch_update(
+                        std::sync::atomic::Ordering::SeqCst,
+                        std::sync::atomic::Ordering::SeqCst,
+                        |value| value.checked_sub(1),
+                    )
+                    .is_err()
+            })
+            .unwrap_or(false)
+        {
+            return Err(RustCheckError::DeadlineExpired);
         }
         let spec = ProcessSpec::argv(program.to_string_lossy(), args, cwd)?
             .with_timeout(remaining)?
@@ -1393,7 +1527,6 @@ mod windows {
         };
         #[cfg(test)]
         let _ = AFTER_SNAPSHOT_ADMISSION.try_with(|change| change());
-        let compile = step(&cargo, args, &step_context, &mut peak).await?;
         let mut receipt = SupplementalCheckReceipt {
             schema_version: 1,
             id: uuid::Uuid::new_v4(),
@@ -1420,163 +1553,205 @@ mod windows {
             toolchain_selection_sha256: configuration.clone(),
             test_executable_sha256: None,
             state: SupplementalCheckState::CompileFailed,
-            compile_exit_code: compile.exit.exit_code,
+            compile_exit_code: None,
             test_exit_code: None,
             reported_test_count: None,
             duration_ms: 0,
-            stdout_bytes: compile.exit.stdout_bytes,
-            stderr_bytes: compile.exit.stderr_bytes,
-            stdout_sha256: compile.exit.stdout_sha256.clone(),
-            stderr_sha256: compile.exit.stderr_sha256.clone(),
-            output_complete: !compile.exit.stdout_truncated && !compile.exit.stderr_truncated,
-            output_truncated: compile.exit.stdout_truncated || compile.exit.stderr_truncated,
+            stdout_bytes: 0,
+            stderr_bytes: 0,
+            stdout_sha256: digest(b""),
+            stderr_sha256: digest(b""),
+            output_complete: false,
+            output_truncated: false,
             boundary: "windows.lpac.registry-read.no-network.owned-copies.v1".into(),
             reason_code: None,
-            storage_peak_bytes: peak,
+            storage_peak_bytes: 0,
             cleanup_complete: false,
             replacements: request.replaces,
             assertions_authored_by: "model".into(),
             independently_verified: false,
         };
         let mut stdout = String::new();
-        let mut stderr = compile.stderr.clone();
-        for line in compile.stdout.lines() {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-                if let Some(rendered) = value
-                    .get("message")
-                    .and_then(|x| x.get("rendered"))
-                    .and_then(|x| x.as_str())
-                {
-                    stderr.push_str(rendered);
+        let mut stderr = String::new();
+        // A deadline that expires between admitted phases has no killed-child exit
+        // status to report. Return a typed TimedOut receipt rather than an Err that
+        // would strip supplemental_check from the model-visible tool result.
+        let deadline_phase: Option<&'static str> = async {
+            let compile = match step(&cargo, args, &step_context, &mut peak).await {
+                Ok(compile) => compile,
+                Err(RustCheckError::DeadlineExpired) => {
+                    return Ok(Some("deadline_expired_before_compile"))
+                }
+                Err(error) => return Err(error),
+            };
+            receipt.compile_exit_code = compile.exit.exit_code;
+            receipt.stdout_bytes = compile.exit.stdout_bytes;
+            receipt.stderr_bytes = compile.exit.stderr_bytes;
+            receipt.stdout_sha256 = compile.exit.stdout_sha256.clone();
+            receipt.stderr_sha256 = compile.exit.stderr_sha256.clone();
+            receipt.output_complete =
+                !compile.exit.stdout_truncated && !compile.exit.stderr_truncated;
+            receipt.output_truncated =
+                compile.exit.stdout_truncated || compile.exit.stderr_truncated;
+            stderr = compile.stderr.clone();
+            for line in compile.stdout.lines() {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(rendered) = value
+                        .get("message")
+                        .and_then(|x| x.get("rendered"))
+                        .and_then(|x| x.as_str())
+                    {
+                        stderr.push_str(rendered);
+                    }
                 }
             }
-        }
-        if compile.exit.timed_out {
-            receipt.state = SupplementalCheckState::TimedOut;
-        } else if cancel.is_cancelled() {
-            receipt.state = SupplementalCheckState::Cancelled;
-        } else if compile.exit.exit_code == Some(0) && receipt.output_complete {
-            let executables = compile
-                .stdout
-                .lines()
-                .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-                .filter(|x| {
-                    x["reason"] == "compiler-artifact" && x["target"]["name"] == CHECK_TARGET
-                })
-                .filter_map(|x| {
-                    x.get("executable")
-                        .and_then(|x| x.as_str())
-                        .map(PathBuf::from)
-                })
-                .collect::<Vec<_>>();
-            if executables.len() != 1 {
-                return Err(RustCheckError::Unavailable(
-                    "compiled test artifact identity unavailable",
-                ));
-            }
-            let executable = executables[0].canonicalize()?;
-            if !executable.starts_with(area.root.join("build").canonicalize()?) {
-                return Err(RustCheckError::Unavailable(
-                    "test artifact escapes the owned build area",
-                ));
-            }
-            let binary = bounded_file(&executable, CHECK_SCRATCH_BYTES)?;
-            receipt.test_executable_sha256 = Some(digest(&binary));
-            // After compilation, executable input has no write access to its source/build/temp/profile.
-            for p in [
-                area.root.join("build"),
-                area.root.join("cargo-home"),
-                area.root.join("temp"),
-                boundary.profile().to_path_buf(),
-            ] {
-                boundary.grant_tree(&p, false)?;
-            }
-            let list = step(
-                &executable,
-                vec!["--list".into(), "--format=terse".into()],
-                &step_context,
-                &mut peak,
-            )
-            .await?;
-            let names = list
-                .stdout
-                .lines()
-                .filter_map(|x| x.strip_suffix(": test"))
-                .collect::<Vec<_>>();
-            let count = names.len();
-            receipt.test_exit_code = list.exit.exit_code;
-            receipt.reported_test_count = Some(count as u32);
-            receipt.stdout_bytes = list.exit.stdout_bytes;
-            receipt.stderr_bytes = list.exit.stderr_bytes;
-            receipt.stdout_sha256 = list.exit.stdout_sha256.clone();
-            receipt.stderr_sha256 = list.exit.stderr_sha256.clone();
-            receipt.output_truncated = list.exit.stdout_truncated || list.exit.stderr_truncated;
-            receipt.output_complete = !receipt.output_truncated;
-            stdout = list.stdout.clone();
-            stderr.push_str(&list.stderr);
-            receipt.state = if list.exit.timed_out {
-                SupplementalCheckState::TimedOut
+            if compile.exit.timed_out {
+                receipt.state = SupplementalCheckState::TimedOut;
             } else if cancel.is_cancelled() {
-                SupplementalCheckState::Cancelled
-            } else if !receipt.output_complete {
-                SupplementalCheckState::OutputIncomplete
-            } else if list.exit.exit_code != Some(0) {
-                receipt.reason_code = Some("test_inventory_failed".into());
-                SupplementalCheckState::Failed
-            } else if count == 0 {
-                SupplementalCheckState::ZeroTests
-            } else {
-                SupplementalCheckState::OutputIncomplete
-            };
-            if count > 0
-                && count <= 128
-                && list.exit.exit_code == Some(0)
-                && !list.exit.stdout_truncated
-                && !list.exit.stderr_truncated
-            {
-                let executed = step(
+                receipt.state = SupplementalCheckState::Cancelled;
+            } else if compile.exit.exit_code == Some(0) && receipt.output_complete {
+                let executables = compile
+                    .stdout
+                    .lines()
+                    .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+                    .filter(|x| {
+                        x["reason"] == "compiler-artifact" && x["target"]["name"] == CHECK_TARGET
+                    })
+                    .filter_map(|x| {
+                        x.get("executable")
+                            .and_then(|x| x.as_str())
+                            .map(PathBuf::from)
+                    })
+                    .collect::<Vec<_>>();
+                if executables.len() != 1 {
+                    return Err(RustCheckError::Unavailable(
+                        "compiled test artifact identity unavailable",
+                    ));
+                }
+                let executable = executables[0].canonicalize()?;
+                if !executable.starts_with(area.root.join("build").canonicalize()?) {
+                    return Err(RustCheckError::Unavailable(
+                        "test artifact escapes the owned build area",
+                    ));
+                }
+                let binary = bounded_file(&executable, CHECK_SCRATCH_BYTES)?;
+                receipt.test_executable_sha256 = Some(digest(&binary));
+                // After compilation, executable input has no write access to its source/build/temp/profile.
+                for p in [
+                    area.root.join("build"),
+                    area.root.join("cargo-home"),
+                    area.root.join("temp"),
+                    boundary.profile().to_path_buf(),
+                ] {
+                    boundary.grant_tree(&p, false)?;
+                }
+                let list = match step(
                     &executable,
-                    vec!["--test-threads=1".into()],
+                    vec!["--list".into(), "--format=terse".into()],
                     &step_context,
                     &mut peak,
                 )
-                .await?;
-                receipt.test_exit_code = executed.exit.exit_code;
+                .await
+                {
+                    Ok(list) => list,
+                    Err(RustCheckError::DeadlineExpired) => {
+                        return Ok(Some("deadline_expired_before_inventory"))
+                    }
+                    Err(error) => return Err(error),
+                };
+                let names = list
+                    .stdout
+                    .lines()
+                    .filter_map(|x| x.strip_suffix(": test"))
+                    .collect::<Vec<_>>();
+                let count = names.len();
+                receipt.test_exit_code = list.exit.exit_code;
                 receipt.reported_test_count = Some(count as u32);
-                receipt.stdout_bytes = executed.exit.stdout_bytes;
-                receipt.stderr_bytes = executed.exit.stderr_bytes;
-                receipt.stdout_sha256 = executed.exit.stdout_sha256;
-                receipt.stderr_sha256 = executed.exit.stderr_sha256;
-                receipt.output_truncated =
-                    executed.exit.stdout_truncated || executed.exit.stderr_truncated;
+                receipt.stdout_bytes = list.exit.stdout_bytes;
+                receipt.stderr_bytes = list.exit.stderr_bytes;
+                receipt.stdout_sha256 = list.exit.stdout_sha256.clone();
+                receipt.stderr_sha256 = list.exit.stderr_sha256.clone();
+                receipt.output_truncated = list.exit.stdout_truncated || list.exit.stderr_truncated;
                 receipt.output_complete = !receipt.output_truncated;
-                let expected=format!("test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;");
-                let names_finished = names.iter().all(|name| {
-                    executed
-                        .stdout
-                        .lines()
-                        .any(|line| line.trim() == format!("test {name} ... ok"))
-                });
-                receipt.state = if executed.exit.timed_out {
+                stdout = list.stdout.clone();
+                stderr.push_str(&list.stderr);
+                receipt.state = if list.exit.timed_out {
                     SupplementalCheckState::TimedOut
                 } else if cancel.is_cancelled() {
                     SupplementalCheckState::Cancelled
                 } else if !receipt.output_complete {
                     SupplementalCheckState::OutputIncomplete
-                } else if executed.exit.exit_code != Some(0) {
+                } else if list.exit.exit_code != Some(0) {
+                    receipt.reason_code = Some("test_inventory_failed".into());
                     SupplementalCheckState::Failed
-                } else if names_finished
-                    && executed.stdout.lines().any(|x| x.starts_with(&expected))
-                {
-                    SupplementalCheckState::ReportedPass
+                } else if count == 0 {
+                    SupplementalCheckState::ZeroTests
                 } else {
                     SupplementalCheckState::OutputIncomplete
                 };
-                stdout = executed.stdout;
-                stderr.push_str(&executed.stderr);
+                if count > 0
+                    && count <= 128
+                    && list.exit.exit_code == Some(0)
+                    && !list.exit.stdout_truncated
+                    && !list.exit.stderr_truncated
+                {
+                    let executed = match step(
+                        &executable,
+                        vec!["--test-threads=1".into()],
+                        &step_context,
+                        &mut peak,
+                    )
+                    .await
+                    {
+                        Ok(executed) => executed,
+                        Err(RustCheckError::DeadlineExpired) => {
+                            return Ok(Some("deadline_expired_before_execution"))
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    receipt.test_exit_code = executed.exit.exit_code;
+                    receipt.reported_test_count = Some(count as u32);
+                    receipt.stdout_bytes = executed.exit.stdout_bytes;
+                    receipt.stderr_bytes = executed.exit.stderr_bytes;
+                    receipt.stdout_sha256 = executed.exit.stdout_sha256;
+                    receipt.stderr_sha256 = executed.exit.stderr_sha256;
+                    receipt.output_truncated =
+                        executed.exit.stdout_truncated || executed.exit.stderr_truncated;
+                    receipt.output_complete = !receipt.output_truncated;
+                    let expected=format!("test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;");
+                    let names_finished = names.iter().all(|name| {
+                        executed
+                            .stdout
+                            .lines()
+                            .any(|line| line.trim() == format!("test {name} ... ok"))
+                    });
+                    receipt.state = if executed.exit.timed_out {
+                        SupplementalCheckState::TimedOut
+                    } else if cancel.is_cancelled() {
+                        SupplementalCheckState::Cancelled
+                    } else if !receipt.output_complete {
+                        SupplementalCheckState::OutputIncomplete
+                    } else if executed.exit.exit_code != Some(0) {
+                        SupplementalCheckState::Failed
+                    } else if names_finished
+                        && executed.stdout.lines().any(|x| x.starts_with(&expected))
+                    {
+                        SupplementalCheckState::ReportedPass
+                    } else {
+                        SupplementalCheckState::OutputIncomplete
+                    };
+                    stdout = executed.stdout;
+                    stderr.push_str(&executed.stderr);
+                }
+            } else if !receipt.output_complete {
+                receipt.state = SupplementalCheckState::OutputIncomplete;
             }
-        } else if !receipt.output_complete {
-            receipt.state = SupplementalCheckState::OutputIncomplete;
+            Ok(None)
+        }
+        .await?;
+        if let Some(reason) = deadline_phase {
+            receipt.state = SupplementalCheckState::TimedOut;
+            receipt.reason_code = Some(reason.into());
         }
         let after = workspace.revision_digest(crate::default_revision_limits())?;
         receipt.revision_after = after.digest;
