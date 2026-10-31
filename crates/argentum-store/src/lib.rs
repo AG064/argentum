@@ -3197,8 +3197,13 @@ impl Store {
             .map_err(|_| StoreError::LockPoisoned)?;
         connection.execute_batch(
             "PRAGMA journal_mode = WAL;
-             PRAGMA foreign_keys = ON;
-             CREATE TABLE IF NOT EXISTS event_log (
+             PRAGMA foreign_keys = ON;",
+        )?;
+        // A fresh database otherwise commits every CREATE statement on its own.
+        // Keep the base schema and its additive columns atomic and fsync once.
+        let schema = connection.unchecked_transaction()?;
+        schema.execute_batch(
+            "CREATE TABLE IF NOT EXISTS event_log (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  event_type TEXT NOT NULL,
                  created_at INTEGER NOT NULL,
@@ -3389,59 +3394,59 @@ impl Store {
              );",
         )?;
         ensure_column(
-            &connection,
+            &schema,
             "event_log",
             "payload_version",
             "INTEGER NOT NULL DEFAULT 1",
         )?;
-        ensure_column(&connection, "event_log", "workspace_key", "TEXT")?;
-        ensure_column(&connection, "event_log", "project_id", "TEXT")?;
-        ensure_column(&connection, "event_log", "session_id", "TEXT")?;
-        ensure_column(&connection, "event_log", "run_id", "TEXT")?;
+        ensure_column(&schema, "event_log", "workspace_key", "TEXT")?;
+        ensure_column(&schema, "event_log", "project_id", "TEXT")?;
+        ensure_column(&schema, "event_log", "session_id", "TEXT")?;
+        ensure_column(&schema, "event_log", "run_id", "TEXT")?;
         ensure_column(
-            &connection,
+            &schema,
             "conversation_messages",
             "reasoning",
             "TEXT NOT NULL DEFAULT ''",
         )?;
-        ensure_column(&connection, "conversation_messages", "usage", "TEXT")?;
+        ensure_column(&schema, "conversation_messages", "usage", "TEXT")?;
         ensure_column(
-            &connection,
+            &schema,
             "conversation_messages",
             "profile_id",
             "TEXT NOT NULL DEFAULT ''",
         )?;
         ensure_column(
-            &connection,
+            &schema,
             "conversation_messages",
             "model",
             "TEXT NOT NULL DEFAULT ''",
         )?;
         ensure_column(
-            &connection,
+            &schema,
             "sessions",
             "last_activity_at",
             "INTEGER NOT NULL DEFAULT 0",
         )?;
-        ensure_column(&connection, "sessions", "pinned_at", "INTEGER")?;
-        ensure_column(&connection, "sessions", "archived_at", "INTEGER")?;
+        ensure_column(&schema, "sessions", "pinned_at", "INTEGER")?;
+        ensure_column(&schema, "sessions", "archived_at", "INTEGER")?;
         ensure_column(
-            &connection,
+            &schema,
             "sessions",
             "title",
             "TEXT NOT NULL DEFAULT 'New session'",
         )?;
-        connection.execute(
+        schema.execute(
             "UPDATE sessions SET title = json_extract(payload, '$.title')
              WHERE json_extract(payload, '$.title') IS NOT NULL",
             [],
         )?;
-        connection.execute(
+        schema.execute(
             "UPDATE sessions SET last_activity_at = updated_at
              WHERE last_activity_at = 0",
             [],
         )?;
-        connection.execute_batch(
+        schema.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_event_log_workspace_id
                   ON event_log(workspace_key, id);
               CREATE INDEX IF NOT EXISTS idx_project_setup_completion
@@ -3608,45 +3613,46 @@ impl Store {
                  ON goal_invocations(project_id, session_id, goal_id, started_at);
               ",
         )?;
+        schema.commit()?;
+        // The legacy bounded-counter rebuild needs foreign keys disabled before
+        // its own transaction, so it stays outside the schema transaction.
         working_context::upgrade_run_limit(&connection)?;
         // Legacy operations lack recorded provenance. A nullable additive column
         // leaves them unknown without rewriting their numbers or payloads.
+        // The additive migrations below do not touch foreign-key topology, so
+        // they can share one transaction and one commit as well.
+        let additive = connection.unchecked_transaction()?;
         ensure_column(
-            &connection,
+            &additive,
             "change_operations",
             "line_count_availability",
             "TEXT CHECK(line_count_availability IS NULL OR line_count_availability IN ('computed', 'unavailable', 'unknown'))",
         )?;
-        extensions::migrate(&connection)?;
-        connection.execute_batch("PRAGMA user_version = 22;")?;
-        ensure_column(
-            &connection,
-            "goal_invocations",
-            "owner_generation",
-            "INTEGER",
-        )?;
+        extensions::migrate(&additive)?;
+        additive.execute_batch("PRAGMA user_version = 22;")?;
+        ensure_column(&additive, "goal_invocations", "owner_generation", "INTEGER")?;
         // F09 development builds may already have created schema 18 before
         // execution-snapshot binding was added. Keep that interim database
         // readable without weakening the accepted identity.
         ensure_column(
-            &connection,
+            &additive,
             "command_identities",
             "provider_profile_id",
             "TEXT CHECK(provider_profile_id IS NULL OR length(CAST(provider_profile_id AS BLOB)) BETWEEN 1 AND 64)",
         )?;
         ensure_column(
-            &connection,
+            &additive,
             "command_identities",
             "execution_snapshot_sha256",
             "TEXT CHECK(execution_snapshot_sha256 IS NULL OR length(execution_snapshot_sha256) = 64)",
         )?;
         ensure_column(
-            &connection,
+            &additive,
             "command_identities",
             "definition_revision",
             "TEXT",
         )?;
-        connection.execute(
+        additive.execute(
             "INSERT OR IGNORE INTO runtime_store_identity (singleton, store_id, created_at)
              VALUES (1, ?1, ?2)",
             params![Uuid::new_v4().to_string(), now().unix_timestamp()],
@@ -3655,8 +3661,9 @@ impl Store {
         // The update is additive and restart-stable; no task history is inferred.
         let legacy =
             serde_json::to_string(&argentum_domain::goal_accounting::GoalAccounting::new(true))?;
-        connection.execute("UPDATE goals SET payload = json_set(payload, '$.accounting', json(?1)) WHERE json_type(payload, '$.accounting') IS NULL OR json_type(payload, '$.accounting') = 'null'", [&legacy])?;
-        connection.execute("UPDATE goal_history SET payload = json_set(payload, '$.accounting', json(?1)) WHERE json_type(payload, '$.accounting') IS NULL OR json_type(payload, '$.accounting') = 'null'", [&legacy])?;
+        additive.execute("UPDATE goals SET payload = json_set(payload, '$.accounting', json(?1)) WHERE json_type(payload, '$.accounting') IS NULL OR json_type(payload, '$.accounting') = 'null'", [&legacy])?;
+        additive.execute("UPDATE goal_history SET payload = json_set(payload, '$.accounting', json(?1)) WHERE json_type(payload, '$.accounting') IS NULL OR json_type(payload, '$.accounting') = 'null'", [&legacy])?;
+        additive.commit()?;
         Ok(())
     }
 }
@@ -5478,6 +5485,86 @@ mod tests {
             .expect("schema version");
         assert_eq!(payload_version, EVENT_PAYLOAD_VERSION);
         assert_eq!(schema_version, 22);
+    }
+
+    #[test]
+    fn fresh_schema_is_complete_and_reopen_preserves_identity() {
+        let directory = tempfile::tempdir().expect("directory");
+        let database = directory.path().join("fresh.db");
+        let (tables, indexes, identity) = {
+            let store = Store::open(&database).expect("fresh store");
+            let connection = store.connection.lock().expect("connection");
+            let version: u16 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .expect("schema version");
+            assert_eq!(version, 22);
+            let tables: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master
+                     WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("table count");
+            let indexes: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master
+                     WHERE type = 'index' AND sql IS NOT NULL",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("index count");
+            let identity: String = connection
+                .query_row(
+                    "SELECT store_id FROM runtime_store_identity WHERE singleton = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("store identity");
+            (tables, indexes, identity)
+        };
+        assert_eq!((tables, indexes), (31, 29));
+        let store = Store::open(&database).expect("reopened store");
+        let connection = store.connection.lock().expect("connection");
+        let reopened: String = connection
+            .query_row(
+                "SELECT store_id FROM runtime_store_identity WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("store identity after reopen");
+        assert_eq!(reopened, identity);
+    }
+
+    #[test]
+    fn failed_schema_migration_leaves_no_partial_schema() {
+        let directory = tempfile::tempdir().expect("directory");
+        let database = directory.path().join("atomic.db");
+        let connection = Connection::open(&database).expect("database");
+        connection
+            .execute_batch("CREATE TABLE idx_event_log_type (value INTEGER);")
+            .expect("conflicting object");
+        drop(connection);
+
+        assert!(
+            Store::open(&database).is_err(),
+            "conflicting index name must fail the migration"
+        );
+
+        let connection = Connection::open(&database).expect("database after failure");
+        let version: u16 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("schema version");
+        assert_eq!(version, 0);
+        let created: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'event_log'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("event_log count");
+        assert_eq!(created, 0);
     }
 
     #[test]
