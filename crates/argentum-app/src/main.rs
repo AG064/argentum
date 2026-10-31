@@ -119,6 +119,9 @@ fn safe_platform_startup_error(error: &PlatformError) -> String {
         PlatformError::MissingDataDirectory => {
             "Argentum could not locate its application-data directory. Check the account environment and try again.".into()
         }
+        PlatformError::DataDirectoryOverrideNotAbsolute => {
+            "ARGENTUM_DATA_DIR must be an absolute path. Set it to a disposable absolute directory or unset it, then restart Argentum.".into()
+        }
         PlatformError::SecureStorageUnavailable | PlatformError::SecureStorage(_) => {
             "Argentum could not access secure credential storage. Check the operating-system keyring or configure a provider through the host environment.".into()
         }

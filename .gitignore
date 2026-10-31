@@ -1,6 +1,7 @@
 /target/
 /artifacts/
 /build/
+/run/
 /.cargo-local/
 /.cache/
 /.agents/

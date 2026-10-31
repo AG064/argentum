@@ -120,6 +120,29 @@ $env:SLINT_BACKEND='software'
 
 The UI source, live-preview feature, and reload plumbing are renderer independent. The earlier reload proof on the old shell used the default renderer and rendered correctly, which is why both proofs are kept.
 
+## Real-app isolated run
+
+The real desktop host can be run with disposable state without touching the
+owner's application-data directory. `ARGENTUM_DATA_DIR` accepts an absolute
+path and relocates `argentum.db`, `logs`, `workspace.json`, local runtime state
+and model paths for that process. A relative path is rejected with a clear
+startup error. Leaving the variable unset keeps the existing ProjectDirs
+behavior.
+
+```powershell
+$root = 'C:\temp\argentum-desktop-run'
+$env:ARGENTUM_DATA_DIR = Join-Path $root 'data'
+$env:ARGENTUM_WORKSPACE = Join-Path $root 'workspace'
+cargo run -p argentum-app --locked
+```
+
+The desktop startup notes in `platforms/README.md` document the same contract.
+The real-app render evidence is recorded in `REAL-APP-RENDER.md` and
+`evidence/real-app-render.json`. In this desktop session the real host rendered
+the empty state under `SLINT_BACKEND=software`; the default OpenGL/femtovg path
+was blank while the process and window remained healthy. The production backend
+was not changed. Real-app live reload also worked without restarting the process.
+
 ## Interface preservation
 
 The public `MainWindow` interface was compared with the base commit before the visual rewrite.
