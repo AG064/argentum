@@ -13,5 +13,8 @@ time.workspace = true
 tracing.workspace = true
 url.workspace = true
 
+[features]
+live-preview = ["slint/live-preview"]
+
 [build-dependencies]
 slint-build = "1.17"

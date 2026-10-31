@@ -9,6 +9,9 @@ license-file.workspace = true
 name = "argentum"
 path = "src/main.rs"
 
+[features]
+live-preview = ["argentum-ui/live-preview"]
+
 [dependencies]
 argentum-cli.workspace = true
 argentum-domain.workspace = true
