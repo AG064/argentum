@@ -996,7 +996,36 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             vec![],
         ),
         optional_rust_check_capability(),
+        desktop_control_capability(),
     ]
+}
+
+fn desktop_control_capability() -> CapabilityRegistration {
+    #[cfg(feature = "desktop-control")]
+    {
+        let mut capability = disabled_configurable_capability(
+            "desktop.control",
+            "Windows desktop control",
+            HarnessCapabilityKind::Tool,
+            "Optional first-party Windows UI Automation control: bounded window enumeration, tree inspection, semantic invoke, bounded text and key input, and PrintWindow capture. Every call needs a current owner grant. No pointer input, focus stealing, process launch, clipboard, filesystem or network access.",
+            vec!["approval.write"],
+        );
+        capability.available = cfg!(windows);
+        if !cfg!(windows) {
+            capability.unavailable_reason =
+                "Desktop control is Windows-only; this build targets another OS.".into();
+        }
+        capability
+    }
+    #[cfg(not(feature = "desktop-control"))]
+    {
+        unavailable_capability(
+            "desktop.control",
+            "Windows desktop control",
+            HarnessCapabilityKind::Tool,
+            "This build omits the optional desktop-control feature; use an explicitly selected desktop-control build.",
+        )
+    }
 }
 
 fn optional_rust_check_capability() -> CapabilityRegistration {

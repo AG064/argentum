@@ -114,6 +114,13 @@ impl ExecutionAuthorizer {
             return Ok(AuthorizationDecision::AllowedByGrants(grant_ids));
         }
 
+        // Desktop control is never policy-ambient. Even read-only enumeration
+        // can disclose window titles, so every desktop call needs a current
+        // owner grant; approval_mode and the selected profile cannot replace it.
+        if request.capability == Capability::ControlDesktop {
+            return Ok(AuthorizationDecision::Prompt);
+        }
+
         // This is a separate explicit owner enablement, not inherited fixed-verifier authority.
         if request.capability == Capability::ExternalProcess
             && request.tool_id == "check_rust"
