@@ -2416,9 +2416,6 @@ impl RuntimeService {
 
     fn add_provider_preset(&self, preset_id: &str) -> Result<(), RuntimeError> {
         let result = (|| {
-            if !matches!(preset_id, "openai" | "minimax" | "deepseek" | "chatgpt") {
-                return Err(RuntimeError::InvalidProviderId);
-            }
             let active = self
                 .active_session_runs
                 .lock()
@@ -2426,9 +2423,8 @@ impl RuntimeService {
             if !active.is_empty() {
                 return Err(RuntimeError::ExecutionPolicyBusy);
             }
-            let preset = argentum_providers::ProviderPreset::parse(preset_id)
-                .ok_or(RuntimeError::InvalidProviderId)?;
-            let profile = preset.profile(None, None)?;
+            let profile = argentum_providers::provider_profile_from_preset(preset_id, None, None)
+                .map_err(|_| RuntimeError::InvalidProviderId)?;
             let profiles = self.store.add_provider_preset(self.project_id, &profile)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
             Ok(())
