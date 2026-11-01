@@ -15,7 +15,6 @@ use argentum_domain::{
     is_supported_hosted_credential_provider_id, AppCommand, AppEvent, Capability, Goal,
     HarnessExecutionPolicy, HarnessSnapshot, OnboardingSnapshot, PlatformAuthoritySnapshot,
     ProviderKind, ProviderProfile, ProviderStatus, Sha256Digest, ToolDescriptor, WorkspaceSnapshot,
-    HOSTED_CREDENTIAL_PROVIDER_IDS,
 };
 use argentum_platform::ValidatedAndroidAppPaths;
 use argentum_platform::{
@@ -278,7 +277,7 @@ fn load_secure_provider_credentials(
     store: &dyn SecretStore,
     credentials: &mut ProviderCredentials,
 ) {
-    for profile_id in HOSTED_CREDENTIAL_PROVIDER_IDS {
+    for (profile_id, _) in argentum_providers::provider_credential_environment() {
         let Ok(key) = provider_credential_key(profile_id) else {
             continue;
         };
@@ -299,13 +298,8 @@ fn load_secure_provider_credentials(
 fn provider_credentials_from_lookup(
     mut lookup: impl FnMut(&str) -> Result<String, std::env::VarError>,
 ) -> Result<ProviderCredentials, HostError> {
-    const SUPPORTED_KEYS: [(&str, &str); 3] = [
-        ("openai", "OPENAI_API_KEY"),
-        ("minimax", "MINIMAX_API_KEY"),
-        ("deepseek", "DEEPSEEK_API_KEY"),
-    ];
     let credentials = ProviderCredentials::default();
-    for (profile_id, variable) in SUPPORTED_KEYS {
+    for (profile_id, variable) in argentum_providers::provider_credential_environment() {
         match lookup(variable) {
             Ok(value) if !value.trim().is_empty() => {
                 credentials.insert(profile_id, SecretValue::new(value))?;
@@ -338,7 +332,7 @@ pub enum HostError {
     AndroidInference(#[from] InferenceError),
     #[error(transparent)]
     Runtime(#[from] RuntimeError),
-    #[error("secure credentials are supported only for OpenAI, MiniMax, and DeepSeek profiles")]
+    #[error("secure credentials are supported only for catalogued hosted provider profiles")]
     ProviderCredentialUnsupported,
     #[error("provider credential storage is unavailable")]
     ProviderCredentialStorageUnavailable,
