@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -16,6 +17,28 @@ use time::macros::format_description;
 use tracing::warn;
 
 slint::include_modules!();
+
+/// Formats a workspace path for presentation without exposing a raw verbatim
+/// Windows path. The full path remains authoritative elsewhere; this label is
+/// only the final directory name, which is enough for the navigation and
+/// conversation context.
+pub fn display_workspace_label(path: &Path) -> String {
+    let raw = path.display().to_string();
+    let stripped = if let Some(rest) = raw.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{rest}")
+    } else if let Some(rest) = raw.strip_prefix("\\\\?\\") {
+        rest.to_owned()
+    } else {
+        raw
+    };
+
+    Path::new(&stripped)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .unwrap_or(stripped)
+}
 
 const MAX_ACTIVITY_ITEMS: usize = 50;
 const MAX_TRAJECTORY_ITEMS: usize = 200;
@@ -167,7 +190,7 @@ impl UiHandle {
                 self.window
                     .set_project_name(snapshot.project.name.clone().into());
                 self.window.set_workspace_label(
-                    snapshot.project.workspace_root.display().to_string().into(),
+                    display_workspace_label(&snapshot.project.workspace_root).into(),
                 );
                 let active_session_id = snapshot
                     .active_session_id
@@ -246,14 +269,11 @@ impl UiHandle {
                 self.apply_active_runs_snapshot(runs);
             }
             AppEvent::ProjectCreated(project) => {
+                let workspace_label = display_workspace_label(&project.workspace_root);
                 self.window.set_project_name(project.name.clone().into());
                 self.window
-                    .set_workspace_label(project.workspace_root.display().to_string().into());
-                self.push_activity(
-                    "Project created",
-                    project.workspace_root.display().to_string(),
-                    "neutral",
-                );
+                    .set_workspace_label(workspace_label.clone().into());
+                self.push_activity("Project created", workspace_label, "neutral");
             }
             AppEvent::SessionCreated(session) => {
                 self.window.set_submission_pending(false);

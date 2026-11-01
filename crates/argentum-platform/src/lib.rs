@@ -31,12 +31,15 @@ pub use authority::{
 };
 
 const MAX_WORKSPACE_CONFIG_BYTES: u64 = 8 * 1024;
+const DATA_DIR_ENV: &str = "ARGENTUM_DATA_DIR";
 pub const SECRET_SERVICE: &str = "com.argentum.Argentum";
 
 #[derive(Debug, Error)]
 pub enum PlatformError {
     #[error("the operating system did not provide an application data directory")]
     MissingDataDirectory,
+    #[error("ARGENTUM_DATA_DIR must be an absolute path")]
+    DataDirectoryOverrideNotAbsolute,
     #[error("secure storage is not available in this build")]
     SecureStorageUnavailable,
     #[error("secure storage operation failed: {0}")]
@@ -103,6 +106,17 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn discover() -> Result<Self, PlatformError> {
+        Self::discover_with_override(std::env::var_os(DATA_DIR_ENV).as_deref().map(Path::new))
+    }
+
+    fn discover_with_override(override_path: Option<&Path>) -> Result<Self, PlatformError> {
+        if let Some(path) = override_path {
+            if !path.is_absolute() {
+                return Err(PlatformError::DataDirectoryOverrideNotAbsolute);
+            }
+            return Ok(Self::from_data_dir(path));
+        }
+
         let dirs = ProjectDirs::from("com", "Argentum", "Argentum")
             .ok_or(PlatformError::MissingDataDirectory)?;
         Ok(Self::from_data_dir(dirs.data_dir()))
@@ -905,6 +919,44 @@ fn replace_vault_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_paths_discover_uses_an_absolute_data_dir_override() {
+        let data = tempfile::tempdir().expect("data directory");
+        let paths = AppPaths::discover_with_override(Some(data.path()))
+            .expect("absolute data directory override");
+
+        assert_eq!(paths.data_dir, data.path());
+        assert_eq!(paths.database, data.path().join("argentum.db"));
+        assert_eq!(paths.logs_dir, data.path().join("logs"));
+        assert_eq!(paths.workspace_config, data.path().join("workspace.json"));
+    }
+
+    #[test]
+    fn app_paths_discover_rejects_a_relative_data_dir_override() {
+        let error = AppPaths::discover_with_override(Some(Path::new("relative-data")))
+            .expect_err("relative data directory override");
+
+        assert!(matches!(
+            error,
+            PlatformError::DataDirectoryOverrideNotAbsolute
+        ));
+        assert!(error.to_string().contains("absolute"));
+    }
+
+    #[test]
+    fn app_paths_discover_without_override_keeps_project_dirs() {
+        let dirs = ProjectDirs::from("com", "Argentum", "Argentum").expect("project directories");
+        let paths = AppPaths::discover_with_override(None).expect("default data directory");
+
+        assert_eq!(paths.data_dir, dirs.data_dir());
+        assert_eq!(paths.database, dirs.data_dir().join("argentum.db"));
+        assert_eq!(paths.logs_dir, dirs.data_dir().join("logs"));
+        assert_eq!(
+            paths.workspace_config,
+            dirs.data_dir().join("workspace.json")
+        );
+    }
 
     #[test]
     fn workspace_selection_persists_as_a_bounded_validated_path() {

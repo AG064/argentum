@@ -5,6 +5,7 @@ use argentum_app::{run_native_host, NativeHostError, NativeHostOptions};
 use argentum_cli::{HostConfig, HostError};
 use argentum_domain::{ProviderKind, ProviderProfile};
 use argentum_platform::{AppPaths, PlatformError};
+use argentum_ui::display_workspace_label;
 use slint::ComponentHandle;
 
 mod legacy_compat;
@@ -64,7 +65,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_native_host(
         host_config,
         NativeHostOptions {
-            workspace_label: display_workspace(&workspace_root),
+            workspace_label: display_workspace_label(&workspace_root),
             seed_profiles,
             inference_foreground: None,
         },
@@ -118,6 +119,9 @@ fn safe_platform_startup_error(error: &PlatformError) -> String {
         }
         PlatformError::MissingDataDirectory => {
             "Argentum could not locate its application-data directory. Check the account environment and try again.".into()
+        }
+        PlatformError::DataDirectoryOverrideNotAbsolute => {
+            "ARGENTUM_DATA_DIR must be an absolute path. Set it to a disposable absolute directory or unset it, then restart Argentum.".into()
         }
         PlatformError::SecureStorageUnavailable | PlatformError::SecureStorage(_) => {
             "Argentum could not access secure credential storage. Check the operating-system keyring or configure a provider through the host environment.".into()
@@ -180,17 +184,6 @@ fn parse_window_size(value: &str) -> Option<slint::LogicalSize> {
     Some(slint::LogicalSize::new(width as f32, height as f32))
 }
 
-fn display_workspace(path: &Path) -> String {
-    let raw = path.display().to_string();
-    if let Some(rest) = raw.strip_prefix("\\\\?\\UNC\\") {
-        format!("\\\\{rest}")
-    } else if let Some(rest) = raw.strip_prefix("\\\\?\\") {
-        rest.to_owned()
-    } else {
-        raw
-    }
-}
-
 fn select_workspace(
     explicit: Option<PathBuf>,
     persisted: Option<&Path>,
@@ -245,25 +238,13 @@ fn legacy_minimax_profile() -> ProviderProfile {
 #[cfg(test)]
 mod tests {
     use super::{
-        display_workspace, legacy_minimax_profile, parse_window_size, safe_startup_error,
-        select_workspace, WorkspaceSource,
+        legacy_minimax_profile, parse_window_size, safe_startup_error, select_workspace,
+        WorkspaceSource,
     };
     use argentum_app::ui_bridge::append_matching_stream_delta;
     use argentum_domain::AppEvent;
     use argentum_platform::PlatformError;
     use std::path::{Path, PathBuf};
-
-    #[test]
-    fn display_workspace_removes_windows_extended_path_prefixes() {
-        assert_eq!(
-            display_workspace(Path::new(r"\\?\C:\projects\example")),
-            r"C:\projects\example"
-        );
-        assert_eq!(
-            display_workspace(Path::new(r"\\?\UNC\server\share")),
-            r"\\server\share"
-        );
-    }
 
     #[test]
     fn preview_window_size_is_bounded_and_explicit() {
