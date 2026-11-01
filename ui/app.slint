@@ -7,7 +7,7 @@ import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsFiel
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
 import { InspectorSurface } from "surfaces/inspector.slint";
-import { ActivityItemView, ConversationMessageView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView, TrajectoryItemView } from "view-models.slint";
+import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 import { DiagnosticRecordView } from "view-models.slint";
 
@@ -81,9 +81,12 @@ component SessionItem inherits Rectangle {
     in property <bool> active: false;
     in property <string> title;
     in property <string> detail;
+    in property <bool> pinned: false;
+    in property <bool> archived: false;
     in property <bool> reduced-motion: false;
     out property <bool> has-focus: key-focus.has-focus;
     callback clicked();
+    callback actions();
 
     height: AgTheme.space-16;
     border-radius: AgTheme.radius-xs;
@@ -110,10 +113,18 @@ component SessionItem inherits Rectangle {
         background: AgTheme.silver-300;
     }
 
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            key-focus.focus();
+            root.clicked();
+        }
+    }
+
     HorizontalLayout {
         padding-left: AgTheme.space-3;
-        padding-right: AgTheme.space-3;
-        spacing: AgTheme.space-3;
+        padding-right: AgTheme.space-2;
+        spacing: AgTheme.space-2;
         alignment: stretch;
 
         Rectangle {
@@ -143,18 +154,20 @@ component SessionItem inherits Rectangle {
 
             Text {
                 text: root.detail;
-                color: AgTheme.text-muted;
+                color: root.pinned ? AgTheme.silver-300 : AgTheme.text-muted;
                 font-size: AgTheme.type-compact;
                 overflow: elide;
             }
         }
-    }
 
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            key-focus.focus();
-            root.clicked();
+        IconButton {
+            glyph: "more";
+            hint: "Session actions";
+            target-size: 32px;
+            tint: root.active ? AgTheme.silver-200 : AgTheme.silver-500;
+            visible: touch.has-hover || root.active || root.has-focus;
+            reduced-motion: root.reduced-motion;
+            clicked => { root.actions(); }
         }
     }
 
@@ -477,6 +490,20 @@ export component MainWindow inherits Window {
     in-out property <string> session_title: "New session";
     in-out property <string> active_session_id: "";
     in-out property <[SessionItemView]> session_items: [];
+    in-out property <string> session_query: "";
+    in-out property <string> session_filter: "active";
+    in-out property <bool> session_actions_open: false;
+    in-out property <string> session_actions_id: "";
+    in-out property <string> session_actions_title: "";
+    in-out property <bool> session_actions_pinned: false;
+    in-out property <bool> session_actions_archived: false;
+    in-out property <bool> session_actions_active: false;
+    in-out property <bool> session_action_pending: false;
+    in-out property <string> session_action_error: "";
+    in-out property <bool> session_rename_open: false;
+    in-out property <string> session_rename_draft: "";
+    in-out property <bool> session_fork_open: false;
+    in-out property <string> session_fork_draft: "";
     in-out property <bool> goal_available: false;
     in-out property <string> goal_objective: "";
     in-out property <string> goal_draft: "";
@@ -523,6 +550,19 @@ export component MainWindow inherits Window {
     in-out property <string> recovery_operation_id: "";
     in-out property <string> verification_state: "pending";
     in-out property <string> verification_summary: "No automated checks were run";
+    in-out property <[VerificationRunnerView]> verification_runners: [];
+    in-out property <int> verification_runner_count: 0;
+    in-out property <bool> verification_runners_loading: false;
+    in-out property <string> verification_runners_error: "";
+    in-out property <string> verification_approve_pending: "";
+    in-out property <bool> verification_review_open: false;
+    in-out property <string> verification_review_runner: "";
+    in-out property <string> verification_review_command: "";
+    in-out property <string> verification_review_scope: "";
+    in-out property <string> verification_review_binding: "";
+    in-out property <[VerificationEvidenceView]> verification_evidence: [];
+    in-out property <bool> verification_evidence_loading: false;
+    in-out property <string> verification_evidence_error: "";
     in-out property <string> active_run_id: "";
     in-out property <bool> running: false;
     in-out property <bool> submission_pending: false;
@@ -531,10 +571,21 @@ export component MainWindow inherits Window {
     in-out property <string> active_inspector: "";
     in-out property <bool> approval_open: false;
     in-out property <string> approval_id: "";
+    in-out property <string> approval_tool_id: "";
     in-out property <string> approval_action: "";
     in-out property <string> approval_target: "";
     in-out property <string> approval_reason: "";
+    in-out property <string> approval_binding: "";
+    in-out property <string> approval_capabilities: "";
+    in-out property <string> approval_request_scope: "once";
+    in-out property <string> approval_scope: "once";
+    in-out property <[ApprovalScopeChoiceView]> approval_scope_choices: [];
     in-out property <bool> approval_response_pending: false;
+    in-out property <[ApprovalGrantView]> approval_grants: [];
+    in-out property <bool> approval_grants_loading: false;
+    in-out property <string> approval_grants_error: "";
+    in-out property <bool> approval_grants_incomplete: false;
+    in-out property <string> approval_grant_pending: "";
     in-out property <bool> about_open: false;
     in-out property <bool> settings_open: false;
     in-out property <bool> command_palette_open: false;
@@ -579,7 +630,9 @@ export component MainWindow inherits Window {
         ? "Passed"
         : (root.verification_state == "failed"
             ? "Failed"
-             : (root.verification_state == "ready" ? "Ready" : "Not run"));
+            : (root.verification_state == "stale"
+                ? "Stale"
+                : (root.verification_state == "ready" ? "Ready" : "Not run")));
     private property <bool> phone_layout: root.width < AgTheme.tablet-breakpoint
         || (root.height < AgTheme.mobile-landscape-height-breakpoint
             && root.width < AgTheme.shell-navigation-breakpoint);
@@ -600,6 +653,12 @@ export component MainWindow inherits Window {
     callback cancel_run(string);
     callback new_session();
     callback select_session(string);
+    callback search_sessions(string);
+    callback set_session_filter(string);
+    callback rename_session(string, string);
+    callback set_session_pinned(string, bool);
+    callback set_session_archived(string, bool);
+    callback fork_session(string, string);
     callback set_goal(string, int, int, int);
     callback pause_goal();
     callback resume_goal();
@@ -632,8 +691,14 @@ export component MainWindow inherits Window {
     callback load_change_recovery();
     callback retry_change_recovery(string);
     callback request_recovery_restore(string);
-    callback approve_tool(string);
+    callback approve_tool(string, string);
     callback reject_tool(string);
+    callback refresh_approval_grants();
+    callback revoke_approval_grant(string);
+    callback refresh_verification();
+    callback review_verification_runner(string);
+    callback approve_verification_runner(string);
+    callback cancel_verification_review();
 
     app-keyboard := FocusScope {
         x: 0px;
@@ -652,6 +717,14 @@ export component MainWindow inherits Window {
             }
             if root.settings_open {
                 root.settings_open = false;
+                return accept;
+            }
+            if root.session_actions_open {
+                root.session_actions_open = false;
+                return accept;
+            }
+            if root.verification_review_open {
+                root.cancel_verification_review();
                 return accept;
             }
             if root.about_open {
@@ -763,6 +836,30 @@ export component MainWindow inherits Window {
 
                 SectionHeading { label: "Sessions"; detail: root.session_items.length; }
 
+                SettingsField {
+                    label: "";
+                    placeholder: "Search sessions";
+                    field-height: AgTheme.control-height;
+                    value <=> root.session_query;
+                    edited(value) => { root.search_sessions(value); }
+                }
+
+                MenuRow {
+                    icon: "sessions";
+                    label: "Filter";
+                    detail: root.session_filter == "active"
+                        ? "Active"
+                        : (root.session_filter == "archived" ? "Archived" : "All");
+                    active: root.session_filter != "active";
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.session_filter = root.session_filter == "active"
+                            ? "archived"
+                            : (root.session_filter == "archived" ? "all" : "active");
+                        root.set_session_filter(root.session_filter);
+                    }
+                }
+
                 ScrollView {
                     vertical-stretch: 1;
                     viewport-width: self.width;
@@ -771,15 +868,36 @@ export component MainWindow inherits Window {
                     VerticalLayout {
                         spacing: AgTheme.space-1;
 
+                        if root.session_items.length == 0: Text {
+                            text: root.session_query == "" ? "No sessions in this view" : "No sessions match";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+
                         for session in root.session_items: SessionItem {
                             active: session.active;
                             title: session.title;
                             detail: session.active ? root.run_state : session.detail;
+                            pinned: session.pinned;
+                            archived: session.archived;
                             reduced-motion: root.reduced_motion;
                             clicked => {
                                 if (!session.active) {
                                     root.select_session(session.id);
                                 }
+                            }
+                            actions => {
+                                root.session_actions_id = session.id;
+                                root.session_actions_title = session.title;
+                                root.session_actions_pinned = session.pinned;
+                                root.session_actions_archived = session.archived;
+                                root.session_actions_active = session.active;
+                                root.session_rename_open = false;
+                                root.session_fork_open = false;
+                                root.session_action_error = "";
+                                root.session_actions_open = true;
                             }
                         }
                     }
@@ -1298,6 +1416,19 @@ export component MainWindow inherits Window {
                 verification-state: root.verification_state;
                 verification-label: root.verification_label;
                 verification-summary: root.verification_summary;
+                verification-runners: root.verification_runners;
+                verification-runner-count: root.verification_runner_count;
+                verification-runners-loading: root.verification_runners_loading;
+                verification-runners-error: root.verification_runners_error;
+                verification-approve-pending: root.verification_approve_pending;
+                verification-review-open: root.verification_review_open;
+                verification-review-runner: root.verification_review_runner;
+                verification-review-command: root.verification_review_command;
+                verification-review-scope: root.verification_review_scope;
+                verification-review-binding: root.verification_review_binding;
+                verification-evidence: root.verification_evidence;
+                verification-evidence-loading: root.verification_evidence_loading;
+                verification-evidence-error: root.verification_evidence_error;
                 active-session-id: root.active_session_id;
                 reduced-motion: root.reduced_motion;
                 select-mode(mode) => { root.set_inspector_surface(mode); }
@@ -1312,6 +1443,10 @@ export component MainWindow inherits Window {
                 load-change-recovery => { root.load_change_recovery(); }
                 retry-change-recovery(operation-id) => { root.retry_change_recovery(operation-id); }
                 request-recovery-restore(operation-id) => { root.request_recovery_restore(operation-id); }
+                refresh-verification => { root.refresh_verification(); }
+                review-verification-runner(runner) => { root.review_verification_runner(runner); }
+                approve-verification-runner(runner) => { root.approve_verification_runner(runner); }
+                cancel-verification-review => { root.cancel_verification_review(); }
                 set-goal(objective, token-budget, tool-budget, time-budget-seconds) => {
                     root.set_goal(objective, token-budget, tool-budget, time-budget-seconds);
                 }
@@ -1325,6 +1460,7 @@ export component MainWindow inherits Window {
             visible: root.drawer_open
                 || root.settings_open
                 || root.about_open
+                || root.session_actions_open
                 || root.command_palette_open
                 || root.model_menu_open
                 || root.context_menu_open
@@ -1347,6 +1483,7 @@ export component MainWindow inherits Window {
                     }
                     root.settings_open = false;
                     root.about_open = false;
+                    root.session_actions_open = false;
                     root.command_palette_open = false;
                     root.model_menu_open = false;
                     root.context_menu_open = false;
@@ -1418,12 +1555,26 @@ export component MainWindow inherits Window {
                             active: session.active;
                             title: session.title;
                             detail: session.active ? root.run_state : session.detail;
+                            pinned: session.pinned;
+                            archived: session.archived;
                             reduced-motion: root.reduced_motion;
                             clicked => {
                                 if (!session.active) {
                                     root.drawer_open = false;
                                     root.select_session(session.id);
                                 }
+                            }
+                            actions => {
+                                root.drawer_open = false;
+                                root.session_actions_id = session.id;
+                                root.session_actions_title = session.title;
+                                root.session_actions_pinned = session.pinned;
+                                root.session_actions_archived = session.archived;
+                                root.session_actions_active = session.active;
+                                root.session_rename_open = false;
+                                root.session_fork_open = false;
+                                root.session_action_error = "";
+                                root.session_actions_open = true;
                             }
                         }
                     }
@@ -1515,6 +1666,19 @@ export component MainWindow inherits Window {
                 verification-state: root.verification_state;
                 verification-label: root.verification_label;
                 verification-summary: root.verification_summary;
+                verification-runners: root.verification_runners;
+                verification-runner-count: root.verification_runner_count;
+                verification-runners-loading: root.verification_runners_loading;
+                verification-runners-error: root.verification_runners_error;
+                verification-approve-pending: root.verification_approve_pending;
+                verification-review-open: root.verification_review_open;
+                verification-review-runner: root.verification_review_runner;
+                verification-review-command: root.verification_review_command;
+                verification-review-scope: root.verification_review_scope;
+                verification-review-binding: root.verification_review_binding;
+                verification-evidence: root.verification_evidence;
+                verification-evidence-loading: root.verification_evidence_loading;
+                verification-evidence-error: root.verification_evidence_error;
                 active-session-id: root.active_session_id;
                 touch-mode: root.phone_layout;
                 reduced-motion: root.reduced_motion;
@@ -1530,6 +1694,10 @@ export component MainWindow inherits Window {
                 load-change-recovery => { root.load_change_recovery(); }
                 retry-change-recovery(operation-id) => { root.retry_change_recovery(operation-id); }
                 request-recovery-restore(operation-id) => { root.request_recovery_restore(operation-id); }
+                refresh-verification => { root.refresh_verification(); }
+                review-verification-runner(runner) => { root.review_verification_runner(runner); }
+                approve-verification-runner(runner) => { root.approve_verification_runner(runner); }
+                cancel-verification-review => { root.cancel_verification_review(); }
                 set-goal(objective, token-budget, tool-budget, time-budget-seconds) => {
                     root.set_goal(objective, token-budget, tool-budget, time-budget-seconds);
                 }
@@ -1728,6 +1896,145 @@ export component MainWindow inherits Window {
                         root.provider_notice = "";
                         root.probe_provider(root.provider_id);
                     }
+                }
+            }
+        }
+
+        if root.session_actions_open: Rectangle {
+            x: root.phone_layout
+                ? root.phone_gutter
+                : min(root.width - AgTheme.model-menu-width - AgTheme.space-3, AgTheme.navigation-width + AgTheme.space-3);
+            y: root.phone_layout
+                ? max(root.safe_area_top + AgTheme.space-2, root.height - root.safe_area_bottom - AgTheme.mobile-menu-sheet-height)
+                : AgTheme.header-height + AgTheme.space-2;
+            width: root.phone_layout
+                ? root.width - root.phone_gutter * 2
+                : AgTheme.model-menu-width;
+            height: root.phone_layout
+                ? min(AgTheme.mobile-menu-sheet-height, root.height - root.safe_area_top - root.safe_area_bottom - AgTheme.space-4)
+                : min(AgTheme.model-menu-panel-height, root.height - AgTheme.header-height - AgTheme.space-6);
+            border-radius: root.phone_layout ? AgTheme.radius-lg : AgTheme.radius-xs;
+            border-width: AgTheme.hairline;
+            border-color: AgTheme.silver-600;
+            background: AgTheme.raised;
+
+            Rectangle { x: 12px; y: 0px; width: 42px; height: 2px; background: AgTheme.silver-300; }
+
+            VerticalLayout {
+                padding: AgTheme.space-3;
+                spacing: AgTheme.space-2;
+
+                PanelHeader {
+                    icon: "sessions";
+                    title: "Session actions";
+                    detail: root.session_actions_title;
+                    close => { root.session_actions_open = false; }
+                }
+
+                MenuRow {
+                    icon: "command";
+                    label: "Rename session";
+                    detail: root.session_rename_open ? "Close title field" : "Change the session title";
+                    active: root.session_rename_open;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.session_rename_open = !root.session_rename_open;
+                        root.session_fork_open = false;
+                        root.session_rename_draft = root.session_actions_title;
+                        root.session_action_error = "";
+                    }
+                }
+
+                if root.session_rename_open: VerticalLayout {
+                    spacing: AgTheme.space-2;
+                    SettingsField {
+                        label: "Session title";
+                        placeholder: "Session title";
+                        value <=> root.session_rename_draft;
+                    }
+                    ActionButton {
+                        label: "Save title";
+                        enabled: root.session_rename_draft != "" && !root.session_action_pending;
+                        primary: true;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.rename_session(root.session_actions_id, root.session_rename_draft);
+                            root.session_rename_open = false;
+                        }
+                    }
+                }
+
+                MenuRow {
+                    icon: "check";
+                    label: root.session_actions_pinned ? "Unpin session" : "Pin session";
+                    detail: root.session_actions_pinned ? "Pinned sessions stay at the top" : "Keep this session at the top";
+                    active: root.session_actions_pinned;
+                    enabled: !root.session_action_pending;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.set_session_pinned(root.session_actions_id, !root.session_actions_pinned);
+                    }
+                }
+
+                MenuRow {
+                    icon: "changes";
+                    label: root.session_actions_archived ? "Unarchive session" : "Archive session";
+                    detail: root.session_actions_active
+                        ? "Select another session first"
+                        : (root.session_actions_archived ? "Return it to the active list" : "Hide it from the active list");
+                    active: root.session_actions_archived;
+                    enabled: !root.session_actions_active && !root.session_action_pending;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.set_session_archived(root.session_actions_id, !root.session_actions_archived);
+                    }
+                }
+
+                MenuRow {
+                    icon: "new-task";
+                    label: "Fork session";
+                    detail: root.session_fork_open ? "Close fork field" : "Copy this session into a new branch";
+                    active: root.session_fork_open;
+                    enabled: !root.session_action_pending;
+                    reduced-motion: root.reduced_motion;
+                    clicked => {
+                        root.session_fork_open = !root.session_fork_open;
+                        root.session_rename_open = false;
+                        root.session_fork_draft = root.session_actions_title + " fork";
+                        root.session_action_error = "";
+                    }
+                }
+
+                if root.session_fork_open: VerticalLayout {
+                    spacing: AgTheme.space-2;
+                    SettingsField {
+                        label: "Fork title";
+                        placeholder: "Fork title";
+                        value <=> root.session_fork_draft;
+                    }
+                    ActionButton {
+                        label: root.session_action_pending ? "Creating fork" : "Create fork";
+                        enabled: root.session_fork_draft != "" && !root.session_action_pending;
+                        primary: true;
+                        reduced-motion: root.reduced_motion;
+                        clicked => {
+                            root.fork_session(root.session_actions_id, root.session_fork_draft);
+                            root.session_fork_open = false;
+                        }
+                    }
+                }
+
+                if root.session_action_pending: Text {
+                    text: "Applying session change";
+                    color: AgTheme.text-muted;
+                    font-size: AgTheme.type-compact;
+                }
+
+                if root.session_action_error != "": Text {
+                    text: root.session_action_error;
+                    color: AgTheme.red-100;
+                    font-size: AgTheme.type-compact;
+                    wrap: word-wrap;
                 }
             }
         }
@@ -2456,6 +2763,94 @@ export component MainWindow inherits Window {
                             }
                         }
 
+                        SectionHeading {
+                            label: "Approval grants";
+                            detail: root.approval_grants_incomplete
+                                ? root.approval_grants.length + " shown"
+                                : root.approval_grants.length;
+                        }
+
+                        Text {
+                            text: "Persistent grants issued by this owner. Revoking takes effect immediately.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.approval_grants_loading: Text {
+                            text: "Loading approval grants";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        if root.approval_grants_error != "": Text {
+                            text: root.approval_grants_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if !root.approval_grants_loading && root.approval_grants.length == 0: Text {
+                            text: "No approval grants recorded.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for grant in root.approval_grants: Rectangle {
+                            min-height: 112px;
+                            border-radius: AgTheme.radius-md;
+                            border-width: AgTheme.hairline;
+                            border-color: AgTheme.border-subtle;
+                            background: AgTheme.chrome;
+
+                            VerticalLayout {
+                                padding: AgTheme.space-3;
+                                spacing: AgTheme.space-1;
+
+                                Text {
+                                    text: grant.capability + " | " + grant.scope;
+                                    color: AgTheme.white-100;
+                                    font-size: AgTheme.type-body;
+                                    font-weight: AgTheme.weight-semibold;
+                                }
+
+                                Text {
+                                    text: grant.subject;
+                                    color: AgTheme.text-secondary;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    text: grant.reason;
+                                    color: AgTheme.text-muted;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: AgTheme.space-2;
+                                    Text {
+                                        text: grant.created;
+                                        color: AgTheme.text-tertiary;
+                                        font-size: AgTheme.type-metadata;
+                                        vertical-alignment: center;
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    ActionButton {
+                                        label: root.approval_grant_pending == grant.id ? "Revoking" : "Revoke";
+                                        enabled: root.approval_grant_pending == "";
+                                        fill: AgTheme.surface-soft;
+                                        outline-color: AgTheme.border-default;
+                                        reduced-motion: root.reduced_motion;
+                                        clicked => { root.revoke_approval_grant(grant.id); }
+                                    }
+                                }
+                            }
+                        }
+
                         SectionHeading { label: "Interface"; detail: "Local preferences"; }
 
                         Text {
@@ -2801,6 +3196,41 @@ export component MainWindow inherits Window {
                             }
                         }
 
+                        VerticalLayout {
+                            spacing: AgTheme.space-2;
+                            Text { text: "Binding"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; }
+                            Text { text: root.approval_binding; color: AgTheme.text-secondary; font-family: AgTheme.font-code; font-size: AgTheme.type-metadata; wrap: word-wrap; }
+                            if root.approval_capabilities != "": Text {
+                                text: "Capabilities: " + root.approval_capabilities;
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: AgTheme.space-2;
+                            Text { text: "Scope"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; font-weight: AgTheme.weight-semibold; }
+                            Text {
+                                text: root.approval_request_scope == root.approval_scope
+                                    ? "The runtime requested this scope."
+                                    : "Requested " + root.approval_request_scope + "; the owner is choosing a different scope.";
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: AgTheme.space-2;
+                                for choice in root.approval_scope_choices: ContextButton {
+                                    label: choice.label;
+                                    selected: root.approval_scope == choice.id;
+                                    enabled: !root.approval_response_pending;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => { root.approval_scope = choice.id; }
+                                }
+                            }
+                        }
+
                         Text { text: root.approval_reason; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
                     }
                 }
@@ -2809,7 +3239,7 @@ export component MainWindow inherits Window {
                     spacing: AgTheme.space-2;
                     reject-button := ActionButton { label: root.approval_response_pending ? "Responding" : "Reject"; enabled: !root.approval_response_pending; fill: AgTheme.surface-soft; outline-color: AgTheme.border-default; target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height; clicked => { root.reject_tool(root.approval_id); } }
                     Rectangle { horizontal-stretch: 1; }
-                    ActionButton { label: root.approval_response_pending ? "Responding" : "Approve once"; icon: "check"; enabled: !root.approval_response_pending; primary: true; target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height; clicked => { root.approve_tool(root.approval_id); } }
+                    ActionButton { label: root.approval_response_pending ? "Responding" : "Approve"; icon: "check"; enabled: !root.approval_response_pending; primary: true; target-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height; clicked => { root.approve_tool(root.approval_id, root.approval_scope); } }
                 }
             }
         }

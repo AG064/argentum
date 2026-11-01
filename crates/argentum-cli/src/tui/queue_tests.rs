@@ -26,6 +26,8 @@ fn select(state: &mut TuiState, target: &SubmissionTarget) {
             title: "fixture".into(),
             created_at: argentum_domain::now(),
             updated_at: argentum_domain::now(),
+            pinned: false,
+            archived: false,
         }],
         active_session_id: Some(target.session_id),
     }));
@@ -298,6 +300,7 @@ fn session_switch_keeps_approval_replies_bound_to_the_correct_request() {
         binding: argentum_domain::Sha256Digest("a".repeat(64)),
         reason: "fixture".into(),
         capabilities: vec![argentum_domain::Capability::WriteFiles],
+        scope: argentum_domain::ApprovalScope::Once,
         expires_at: None,
     };
     let approval_a = make_approval(a.run_id);

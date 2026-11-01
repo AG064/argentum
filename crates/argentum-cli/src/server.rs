@@ -778,6 +778,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ListExecutionAudit { .. }
         | AppCommand::ListVerificationRunners
         | AppCommand::InspectVerificationRunners
+        | AppCommand::ReviewProjectVerification { .. }
         | AppCommand::LoadVerificationEvidence { .. }
         | AppCommand::SetSurfaceVisibility { .. }
         | AppCommand::SetInspectorSurface { .. }

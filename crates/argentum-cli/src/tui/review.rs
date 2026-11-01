@@ -785,6 +785,7 @@ mod tests {
             binding: argentum_domain::Sha256Digest("a".repeat(64)),
             reason: "fixture".into(),
             capabilities: vec![argentum_domain::Capability::WriteFiles],
+            scope: argentum_domain::ApprovalScope::Once,
             expires_at: None,
         };
         let mut wrong_request = request.clone();

@@ -963,6 +963,7 @@ fn owned_host_fixture_process() {
             binding: Sha256Digest("a".repeat(64)),
             reason: "exercise abandoned approval retirement".into(),
             capabilities: vec![Capability::ExecuteCommands, Capability::ExternalProcess],
+            scope: argentum_domain::ApprovalScope::Once,
             expires_at: None,
         }),
     );
@@ -982,6 +983,7 @@ fn owned_host_fixture_process() {
             binding: Sha256Digest("b".repeat(64)),
             reason: "exercise claimed approval recovery".into(),
             capabilities: vec![Capability::ExecuteCommands, Capability::ExternalProcess],
+            scope: argentum_domain::ApprovalScope::Once,
             expires_at: None,
         }),
     );

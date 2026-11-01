@@ -3,7 +3,7 @@ import { AgTheme } from "../tokens.slint";
 import { ActionButton } from "../components/buttons.slint";
 import { InlineState } from "../components/inline-state.slint";
 import { SettingsField, SectionHeading } from "../components/surfaces.slint";
-import { FileChangeView } from "../view-models.slint";
+import { FileChangeView, VerificationEvidenceView, VerificationRunnerView } from "../view-models.slint";
 
 export component ReviewSurface inherits Rectangle {
     in property <bool> goal-available: false;
@@ -41,6 +41,19 @@ export component ReviewSurface inherits Rectangle {
     in property <string> verification-state: "pending";
     in property <string> verification-label: "Not run";
     in property <string> verification-summary: "No automated checks were run";
+    in property <[VerificationRunnerView]> verification-runners: [];
+    in property <int> verification-runner-count: 0;
+    in property <bool> verification-runners-loading: false;
+    in property <string> verification-runners-error: "";
+    in property <string> verification-approve-pending: "";
+    in property <bool> verification-review-open: false;
+    in property <string> verification-review-runner: "";
+    in property <string> verification-review-command: "";
+    in property <string> verification-review-scope: "";
+    in property <string> verification-review-binding: "";
+    in property <[VerificationEvidenceView]> verification-evidence: [];
+    in property <bool> verification-evidence-loading: false;
+    in property <string> verification-evidence-error: "";
     in property <bool> touch-mode: false;
     in property <bool> reduced-motion: false;
     callback set-goal(string, int, int, int);
@@ -52,6 +65,10 @@ export component ReviewSurface inherits Rectangle {
     callback load-change-recovery();
     callback retry-change-recovery(string);
     callback request-recovery-restore(string);
+    callback refresh-verification();
+    callback review-verification-runner(string);
+    callback approve-verification-runner(string);
+    callback cancel-verification-review();
 
     background: transparent;
 
@@ -256,7 +273,7 @@ export component ReviewSurface inherits Rectangle {
 
             HorizontalLayout {
                 height: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
-                SectionHeading { label: "Checks"; horizontal-stretch: 1; }
+                SectionHeading { label: "Checks"; detail: root.verification-runner-count; horizontal-stretch: 1; }
                 InlineState {
                     label: root.verification-label;
                     attention: root.verification-state == "failed";
@@ -268,6 +285,223 @@ export component ReviewSurface inherits Rectangle {
                 font-family: AgTheme.font-ui;
                 font-size: AgTheme.type-body;
                 wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: AgTheme.space-2;
+                ActionButton {
+                    label: root.verification-runners-loading ? "Loading checks" : "Refresh checks";
+                    enabled: !root.verification-runners-loading;
+                    fill: AgTheme.surface-soft;
+                    outline-color: AgTheme.border-default;
+                    reduced-motion: root.reduced-motion;
+                    clicked => { root.refresh-verification(); }
+                }
+            }
+
+            if root.verification-runners-error != "": Text {
+                text: root.verification-runners-error;
+                color: AgTheme.text-danger;
+                font-size: AgTheme.type-compact;
+                wrap: word-wrap;
+            }
+
+            if root.verification-review-open: Rectangle {
+                border-radius: AgTheme.radius-md;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.red-600;
+                background: AgTheme.chrome;
+
+                VerticalLayout {
+                    padding: AgTheme.space-3;
+                    spacing: AgTheme.space-2;
+
+                    Text {
+                        text: "Review exact runner";
+                        color: AgTheme.white-100;
+                        font-size: AgTheme.type-section-title;
+                        font-weight: AgTheme.weight-semibold;
+                    }
+                    Text {
+                        text: root.verification-review-runner;
+                        color: AgTheme.text-secondary;
+                        font-size: AgTheme.type-compact;
+                    }
+                    Text {
+                        text: root.verification-review-command;
+                        color: AgTheme.text-secondary;
+                        font-family: AgTheme.font-code;
+                        font-size: AgTheme.type-metadata;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.verification-review-scope;
+                        color: AgTheme.text-muted;
+                        font-size: AgTheme.type-compact;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: "Binding " + root.verification-review-binding;
+                        color: AgTheme.text-tertiary;
+                        font-family: AgTheme.font-code;
+                        font-size: AgTheme.type-metadata;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: "The runner executes current-user code, not an operating-system sandbox.";
+                        color: AgTheme.text-muted;
+                        font-size: AgTheme.type-compact;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: AgTheme.space-2;
+                        ActionButton {
+                            label: "Cancel";
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced-motion;
+                            clicked => { root.cancel-verification-review(); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        ActionButton {
+                            label: root.verification-approve-pending == "" ? "Approve exact runner" : "Approving";
+                            primary: true;
+                            enabled: root.verification-approve-pending == "";
+                            reduced-motion: root.reduced-motion;
+                            clicked => { root.approve-verification-runner(root.verification-review-runner); }
+                        }
+                    }
+                }
+            }
+
+            if root.verification-runners-loading: Text {
+                text: "Loading verification runners";
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+            }
+
+            for runner in root.verification-runners: Rectangle {
+                min-height: 92px;
+                border-radius: AgTheme.radius-md;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.border-subtle;
+                background: AgTheme.chrome;
+
+                VerticalLayout {
+                    padding: AgTheme.space-3;
+                    spacing: AgTheme.space-1;
+
+                    HorizontalLayout {
+                        spacing: AgTheme.space-2;
+                        Text {
+                            text: runner.id;
+                            color: AgTheme.white-100;
+                            font-size: AgTheme.type-body;
+                            font-weight: AgTheme.weight-semibold;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        InlineState {
+                            label: runner.state;
+                            attention: runner.state == "Unavailable";
+                        }
+                    }
+
+                    Text {
+                        text: runner.detail;
+                        color: AgTheme.text-muted;
+                        font-size: AgTheme.type-compact;
+                        wrap: word-wrap;
+                    }
+
+                    if runner.available && runner.approval_required && !runner.approved: ActionButton {
+                        label: root.verification-approve-pending == runner.id ? "Reviewing" : "Review exact runner";
+                        enabled: root.verification-approve-pending == "";
+                        fill: AgTheme.surface-soft;
+                        outline-color: AgTheme.border-default;
+                        reduced-motion: root.reduced-motion;
+                        clicked => { root.review-verification-runner(runner.id); }
+                    }
+
+                    if runner.approved: Text {
+                        text: "Owner grant recorded for this exact runner.";
+                        color: AgTheme.silver-300;
+                        font-size: AgTheme.type-compact;
+                    }
+                }
+            }
+
+            Rectangle { height: AgTheme.hairline; background: AgTheme.border-subtle; }
+
+            SectionHeading { label: "Evidence"; detail: root.verification-evidence.length; }
+
+            if root.verification-evidence-loading: Text {
+                text: "Loading recorded checks";
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+            }
+
+            if root.verification-evidence-error != "": Text {
+                text: root.verification-evidence-error;
+                color: AgTheme.text-danger;
+                font-size: AgTheme.type-compact;
+                wrap: word-wrap;
+            }
+
+            if !root.verification-evidence-loading && root.verification-evidence.length == 0: Text {
+                text: "No automated checks were recorded for this run.";
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-body;
+                wrap: word-wrap;
+            }
+
+            for item in root.verification-evidence: Rectangle {
+                min-height: 76px;
+                border-radius: AgTheme.radius-md;
+                border-width: AgTheme.hairline;
+                border-color: AgTheme.border-subtle;
+                background: AgTheme.chrome;
+
+                VerticalLayout {
+                    padding: AgTheme.space-3;
+                    spacing: AgTheme.space-1;
+
+                    HorizontalLayout {
+                        spacing: AgTheme.space-2;
+                        Text {
+                            text: item.runner;
+                            color: AgTheme.text-primary;
+                            font-size: AgTheme.type-body;
+                            vertical-alignment: center;
+                        }
+                        InlineState {
+                            label: item.state;
+                            attention: item.state == "Failed" || item.state == "Timed out" || item.state == "Could not start";
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: item.fresh ? "Current" : "Stale";
+                            color: item.fresh ? AgTheme.silver-300 : AgTheme.red-100;
+                            font-size: AgTheme.type-metadata;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Text {
+                        text: item.detail;
+                        color: AgTheme.text-muted;
+                        font-size: AgTheme.type-compact;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: item.recorded;
+                        color: AgTheme.text-tertiary;
+                        font-size: AgTheme.type-metadata;
+                    }
+                }
             }
         }
     }

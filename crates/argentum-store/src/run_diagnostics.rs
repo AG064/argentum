@@ -1468,6 +1468,7 @@ mod tests {
                 binding: Sha256Digest("a".repeat(64)),
                 reason: canaries[6].into(),
                 capabilities: Vec::new(),
+                scope: argentum_domain::ApprovalScope::Once,
                 expires_at: None,
             }),
         );
