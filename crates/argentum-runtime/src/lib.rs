@@ -8606,8 +8606,101 @@ fn extension_parameters() -> serde_json::Value {
 
 fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinition> {
     let path = serde_json::json!({ "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES });
+    let desktop_rect = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "left": { "type": "integer" },
+            "top": { "type": "integer" },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["left", "top", "width", "height"],
+        "additionalProperties": false
+    });
+    let desktop_window = serde_json::json!({
+        "type": "object",
+        "description": "Copy the complete window identity from the current desktop_list_windows result. Omit, rename or reformat no field.",
+        "properties": {
+            "hwnd": { "type": "string", "pattern": "^0x[0-9a-f]{1,16}$" },
+            "process_id": { "type": "integer", "minimum": 1 },
+            "title": { "type": "string", "maxLength": 256 },
+            "class_name": { "type": "string", "maxLength": 256 },
+            "bounds": desktop_rect.clone()
+        },
+        "required": ["hwnd", "process_id", "title", "class_name", "bounds"],
+        "additionalProperties": false
+    });
+    let desktop_element = serde_json::json!({
+        "type": "object",
+        "description": "Copy the complete element identity from the current desktop_inspect result. A changed tree path or property is rejected before input.",
+        "properties": {
+            "tree_path": { "type": "array", "maxItems": 8, "items": { "type": "integer", "minimum": 0, "maximum": 255 } },
+            "automation_id": { "type": "string", "maxLength": 256 },
+            "control_type": { "type": "integer" },
+            "class_name": { "type": "string", "maxLength": 256 },
+            "name": { "type": "string", "maxLength": 256 },
+            "bounds": desktop_rect
+        },
+        "required": ["tree_path", "automation_id", "control_type", "class_name", "name", "bounds"],
+        "additionalProperties": false
+    });
     let parameters = match descriptor.id.as_str() {
         "extension" => extension_parameters(),
+        "desktop_list_windows" => serde_json::json!({
+            "type": "object",
+            "description": "Enumerate top-level windows. Read-only. Every desktop call still requires a current owner grant.",
+            "properties": { "max_windows": { "type": "integer", "minimum": 1, "maximum": 64 } },
+            "required": ["max_windows"],
+            "additionalProperties": false
+        }),
+        "desktop_inspect" => serde_json::json!({
+            "type": "object",
+            "description": "Read a bounded UI Automation control view for one current window identity. Read-only.",
+            "properties": {
+                "window": desktop_window,
+                "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
+                "max_elements": { "type": "integer", "minimum": 1, "maximum": 256 }
+            },
+            "required": ["window", "max_depth", "max_elements"],
+            "additionalProperties": false
+        }),
+        "desktop_invoke" => serde_json::json!({
+            "type": "object",
+            "description": "Semantic UI Automation activation of one observed element. No pointer click or focus stealing.",
+            "properties": { "window": desktop_window, "element": desktop_element },
+            "required": ["window", "element"],
+            "additionalProperties": false
+        }),
+        "desktop_type_text" => serde_json::json!({
+            "type": "object",
+            "description": "Write at most 1024 UTF-16 code units. mode=value uses ValuePattern and needs no global input; mode=keys requires the element to be focused and the window to be foreground. No clipboard.",
+            "properties": {
+                "window": desktop_window,
+                "element": desktop_element,
+                "text": { "type": "string", "maxLength": 4096 },
+                "mode": { "type": "string", "enum": ["value", "keys"], "default": "value" }
+            },
+            "required": ["window", "element", "text"],
+            "additionalProperties": false
+        }),
+        "desktop_press_keys" => serde_json::json!({
+            "type": "object",
+            "description": "Send 1-8 bounded chords to the already focused element. Examples: Enter, Ctrl+S, Shift+Tab. No Windows key or global shell shortcuts.",
+            "properties": {
+                "window": desktop_window,
+                "element": desktop_element,
+                "keys": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 32 } }
+            },
+            "required": ["window", "element", "keys"],
+            "additionalProperties": false
+        }),
+        "desktop_screenshot" => serde_json::json!({
+            "type": "object",
+            "description": "PrintWindow capture of one current visible window into a bounded PNG. No screen-region grab.",
+            "properties": { "window": desktop_window },
+            "required": ["window"],
+            "additionalProperties": false
+        }),
         "list_directory" => serde_json::json!({
             "type": "object", "properties": { "path": path, "max_entries": { "type": "integer", "minimum": 1, "maximum": 1024 } },
             "required": ["path", "max_entries"], "additionalProperties": false
@@ -8814,6 +8907,12 @@ fn tool_action(input: &ToolInput) -> &'static str {
         ToolInput::PollProcessJob { .. } => "Poll owned verification job",
         ToolInput::CancelProcessJob { .. } => "Cancel owned verification job",
         ToolInput::Extension { .. } => "Use reviewed extension",
+        ToolInput::DesktopListWindows { .. } => "List desktop windows",
+        ToolInput::DesktopInspect { .. } => "Inspect desktop element tree",
+        ToolInput::DesktopInvoke { .. } => "Invoke desktop element",
+        ToolInput::DesktopTypeText { .. } => "Type bounded desktop text",
+        ToolInput::DesktopPressKeys { .. } => "Press bounded desktop keys",
+        ToolInput::DesktopScreenshot { .. } => "Capture desktop window",
     }
 }
 
@@ -8881,6 +8980,55 @@ fn tool_target(input: &ToolInput) -> String {
         ToolInput::Extension { operation } => format!(
             "reviewed extension operation {:x}",
             Sha256::digest(serde_json::to_vec(operation).unwrap_or_default())
+        ),
+        ToolInput::DesktopListWindows { max_windows } => {
+            format!("desktop window enumeration; limit {max_windows}")
+        }
+        ToolInput::DesktopInspect {
+            window,
+            max_depth,
+            max_elements,
+        } => format!(
+            "desktop window {} pid {}; depth {max_depth}; elements {max_elements}",
+            window.hwnd, window.process_id
+        ),
+        ToolInput::DesktopInvoke { window, element } => format!(
+            "desktop window {} pid {}; element path {:?}; automation {}",
+            window.hwnd,
+            window.process_id,
+            element.tree_path,
+            truncate_utf8_bytes(element.automation_id.clone(), 64)
+        ),
+        ToolInput::DesktopTypeText {
+            window,
+            element,
+            text,
+            mode,
+        } => format!(
+            "desktop window {} pid {}; element path {:?}; {mode:?}; {} UTF-16 code units",
+            window.hwnd,
+            window.process_id,
+            element.tree_path,
+            text.encode_utf16().count()
+        ),
+        ToolInput::DesktopPressKeys {
+            window,
+            element,
+            keys,
+        } => format!(
+            "desktop window {} pid {}; element path {:?}; {} chord(s): {}",
+            window.hwnd,
+            window.process_id,
+            element.tree_path,
+            keys.len(),
+            keys.iter()
+                .map(|key| truncate_utf8_bytes(key.clone(), 32))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        ToolInput::DesktopScreenshot { window } => format!(
+            "desktop window {} pid {}; PrintWindow capture",
+            window.hwnd, window.process_id
         ),
         ToolInput::ListDirectory { path, .. }
         | ToolInput::FileMetadata { path }
@@ -9118,6 +9266,12 @@ fn parse_model_tool_input(call: &ModelToolCall) -> Result<ToolInput, ModelInputF
         ),
         "cancel_process_job" => ("cancel_process_job", &["job_id"]),
         "extension" => ("extension", &["operation"]),
+        "desktop_list_windows" => ("desktop_list_windows", &["max_windows"]),
+        "desktop_inspect" => ("desktop_inspect", &["window", "max_depth", "max_elements"]),
+        "desktop_invoke" => ("desktop_invoke", &["window", "element"]),
+        "desktop_type_text" => ("desktop_type_text", &["window", "element", "text", "mode"]),
+        "desktop_press_keys" => ("desktop_press_keys", &["window", "element", "keys"]),
+        "desktop_screenshot" => ("desktop_screenshot", &["window"]),
         _ => return Err(model_input_failure(PreflightCode::InvalidArguments, None)),
     };
     let mut value = serde_json::from_str::<serde_json::Value>(&call.arguments)
@@ -9180,6 +9334,12 @@ fn validate_model_tool_object(
         "check_rust" => &["package", "test_source"],
         "poll_process_job" => &["job_id", "stdout_cursor", "stderr_cursor", "wait_ms"],
         "cancel_process_job" => &["job_id"],
+        "desktop_list_windows" => &["max_windows"],
+        "desktop_inspect" => &["window", "max_depth", "max_elements"],
+        "desktop_invoke" => &["window", "element"],
+        "desktop_type_text" => &["window", "element", "text"],
+        "desktop_press_keys" => &["window", "element", "keys"],
+        "desktop_screenshot" => &["window"],
         _ => &[],
     };
     for field in required {
@@ -9268,6 +9428,25 @@ fn validate_model_tool_object(
             ("wait_ms", "integer"),
         ],
         "cancel_process_job" => &[("job_id", "string")],
+        "desktop_list_windows" => &[("max_windows", "integer")],
+        "desktop_inspect" => &[
+            ("window", "object"),
+            ("max_depth", "integer"),
+            ("max_elements", "integer"),
+        ],
+        "desktop_invoke" => &[("window", "object"), ("element", "object")],
+        "desktop_type_text" => &[
+            ("window", "object"),
+            ("element", "object"),
+            ("text", "string"),
+            ("mode", "string"),
+        ],
+        "desktop_press_keys" => &[
+            ("window", "object"),
+            ("element", "object"),
+            ("keys", "array"),
+        ],
+        "desktop_screenshot" => &[("window", "object")],
         _ => &[],
     };
     for (field, expected) in types {
@@ -9799,6 +9978,12 @@ fn validate_model_tool_input(
         | ToolInput::CheckRust { .. }
         | ToolInput::PollProcessJob { .. }
         | ToolInput::CancelProcessJob { .. } => Vec::new(),
+        ToolInput::DesktopListWindows { .. }
+        | ToolInput::DesktopInspect { .. }
+        | ToolInput::DesktopInvoke { .. }
+        | ToolInput::DesktopTypeText { .. }
+        | ToolInput::DesktopPressKeys { .. }
+        | ToolInput::DesktopScreenshot { .. } => Vec::new(),
         ToolInput::Extension { .. } => Vec::new(),
     };
     for path in paths {
@@ -13859,7 +14044,10 @@ mod tests {
         // by this default policy; it must not enter the advertised model set.
         assert_eq!(
             requests[0].tools.len(),
-            runtime.tools.descriptors().len() - 1 - usize::from(cfg!(feature = "extensions"))
+            runtime.tools.descriptors().len()
+                - 1
+                - usize::from(cfg!(feature = "extensions"))
+                - 6 * usize::from(cfg!(feature = "desktop-control"))
         );
         assert!(!requests[0]
             .tools

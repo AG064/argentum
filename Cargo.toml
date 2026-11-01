@@ -70,6 +70,7 @@ keyring = { version = "3.6", default-features = false, features = ["apple-native
 jni = "0.22"
 llama-cpp-2 = { version = "=0.1.156", default-features = false }
 pulldown-cmark = "0.13"
+png = "=0.18.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 reqwest-eventsource = "0.6"
 regex = "1"
@@ -91,5 +92,6 @@ tempfile = "3"
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 zeroize = { version = "1", features = ["derive"] }
+windows = "0.62.2"
 windows-sys = "0.61.2"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2", "deflate-zopfli"] }

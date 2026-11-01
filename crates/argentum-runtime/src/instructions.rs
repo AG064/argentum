@@ -203,7 +203,13 @@ fn file_paths(input: &ToolInput) -> (Vec<(&str, bool)>, bool) {
         | CheckRust { .. }
         | PollProcessJob { .. }
         | CancelProcessJob { .. }
-        | Extension { .. } => (vec![], false),
+        | Extension { .. }
+        | DesktopListWindows { .. }
+        | DesktopInspect { .. }
+        | DesktopInvoke { .. }
+        | DesktopTypeText { .. }
+        | DesktopPressKeys { .. }
+        | DesktopScreenshot { .. } => (vec![], false),
     }
 }
 
