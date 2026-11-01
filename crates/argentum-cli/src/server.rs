@@ -771,9 +771,12 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ClearGoal
         | AppCommand::ProbeProvider { .. }
         | AppCommand::ListProviderProfiles
+        | AppCommand::ListProviderPresets
         | AppCommand::ListProviderModels { .. }
         | AppCommand::LoadOnboarding
         | AppCommand::ListHarnessState
+        | AppCommand::LoadBrowserStatus
+        | AppCommand::LoadDesktopStatus
         | AppCommand::ListApprovalGrants
         | AppCommand::ListExecutionAudit { .. }
         | AppCommand::ListVerificationRunners
@@ -3221,6 +3224,13 @@ mod tests {
         let responses = submit_task_responses(providers).await;
 
         assert_failed_command_outcome(&responses, "test provider failure");
+    }
+
+    #[test]
+    fn capability_inspection_commands_are_permitted() {
+        assert!(jsonl_command_is_permitted(&AppCommand::ListProviderPresets));
+        assert!(jsonl_command_is_permitted(&AppCommand::LoadBrowserStatus));
+        assert!(jsonl_command_is_permitted(&AppCommand::LoadDesktopStatus));
     }
 
     #[test]

@@ -116,6 +116,31 @@ export struct ProviderModelView {
     selected: bool,
 }
 
+export struct ProviderPresetView {
+    id: string,
+    label: string,
+    kind: string,
+    kind_label: string,
+    endpoint: string,
+    default_model: string,
+    credential: string,
+    api_key_env: string,
+    docs_url: string,
+    group: string,
+    group_label: string,
+    local: bool,
+    supported: bool,
+    notes: string,
+}
+
+export struct DesktopToolView {
+    id: string,
+    title: string,
+    summary: string,
+    risk: string,
+    requires_approval: bool,
+}
+
 export struct HarnessProfileView {
     id: string,
     label: string,
