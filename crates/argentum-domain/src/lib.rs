@@ -71,7 +71,7 @@ pub struct ChangePage {
 pub struct Sha256Digest(pub String);
 
 /// Exact local review data, never an approval or a model-facing action.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerificationRunnerReview {
     pub runner: VerificationRunnerId,
     pub program: String,
@@ -233,6 +233,27 @@ impl<'de> Deserialize<'de> for VerificationRunnerId {
                 Ok(Self::Project(value[8..].to_owned()))
             }
             _ => Err(serde::de::Error::custom("unknown verification runner ID")),
+        }
+    }
+}
+
+impl std::str::FromStr for VerificationRunnerId {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "cargo-fmt-check" => Ok(Self::CargoFmtCheck),
+            "cargo-check-locked" => Ok(Self::CargoCheckLocked),
+            "cargo-test-locked" => Ok(Self::CargoTestLocked),
+            "cargo-clippy-strict" => Ok(Self::CargoClippyStrict),
+            value
+                if value
+                    .strip_prefix("project:")
+                    .is_some_and(|id| !id.is_empty()) =>
+            {
+                Ok(Self::Project(value[8..].to_owned()))
+            }
+            _ => Err(()),
         }
     }
 }
@@ -895,6 +916,10 @@ pub struct SessionSummary {
     pub title: String,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1065,6 +1090,8 @@ impl From<&Session> for SessionSummary {
             title: session.title.clone(),
             created_at: session.created_at,
             updated_at: session.updated_at,
+            pinned: false,
+            archived: false,
         }
     }
 }
@@ -1519,11 +1546,16 @@ pub struct ApprovalRequest {
     pub binding: Sha256Digest,
     pub reason: String,
     pub capabilities: Vec<Capability>,
+    /// Scope requested by the runtime for this decision. The owner may narrow
+    /// it but never silently widen it.
+    #[serde(default)]
+    pub scope: ApprovalScope,
     pub expires_at: Option<OffsetDateTime>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApprovalScope {
+    #[default]
     Once,
     Action,
     ToolCall,
@@ -1531,6 +1563,33 @@ pub enum ApprovalScope {
     Session,
     Workspace,
     PersistentProfile,
+}
+
+impl ApprovalScope {
+    pub const fn id(&self) -> &'static str {
+        match self {
+            Self::Once => "once",
+            Self::Action => "action",
+            Self::ToolCall => "tool-call",
+            Self::Run => "run",
+            Self::Session => "session",
+            Self::Workspace => "workspace",
+            Self::PersistentProfile => "persistent-profile",
+        }
+    }
+
+    pub fn from_id(value: &str) -> Option<Self> {
+        match value {
+            "once" => Some(Self::Once),
+            "action" => Some(Self::Action),
+            "tool-call" => Some(Self::ToolCall),
+            "run" => Some(Self::Run),
+            "session" => Some(Self::Session),
+            "workspace" => Some(Self::Workspace),
+            "persistent-profile" => Some(Self::PersistentProfile),
+            _ => None,
+        }
+    }
 }
 
 impl ApprovalScope {
@@ -2162,6 +2221,9 @@ pub enum AppCommand {
     },
     ListVerificationRunners,
     InspectVerificationRunners,
+    ReviewProjectVerification {
+        runner: VerificationRunnerId,
+    },
     ApproveProjectVerification {
         runner: VerificationRunnerId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2376,12 +2438,19 @@ pub enum AppEvent {
     SupplementalCheckRecorded(supplemental::SupplementalCheckReceipt),
     VerificationEvidenceSnapshot {
         evidence: Vec<VerificationEvidence>,
+        /// Freshness computed by the runtime against the current workspace
+        /// input contract, in the same order as `evidence`.
+        #[serde(default)]
+        freshness: Vec<bool>,
     },
     VerificationRunnersSnapshot {
         runners: Vec<VerificationRunnerId>,
     },
     VerificationRunnerInspectionSnapshot {
         runners: Vec<VerificationRunnerInspection>,
+    },
+    VerificationRunnerReviewSnapshot {
+        review: VerificationRunnerReview,
     },
     ProviderStatus(ProviderStatus),
     ProviderCredentialStatus {
@@ -2473,6 +2542,7 @@ impl AppEvent {
             Self::VerificationRunnerInspectionSnapshot { .. } => {
                 "verification_runner_inspection_snapshot"
             }
+            Self::VerificationRunnerReviewSnapshot { .. } => "verification_runner_review_snapshot",
             Self::ProviderStatus(_) => "provider_status",
             Self::ProviderCredentialStatus { .. } => "provider_credential_status",
             Self::ProviderProfilesSnapshot { .. } => "provider_profiles_snapshot",

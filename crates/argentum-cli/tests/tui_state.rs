@@ -66,6 +66,8 @@ fn initialized_state() -> TuiState {
             title: "fixture".into(),
             created_at: argentum_domain::now(),
             updated_at: argentum_domain::now(),
+            pinned: false,
+            archived: false,
         }],
         active_session_id: Some(id),
     }));
@@ -137,6 +139,8 @@ fn domain_events_render_session_stream_tools_and_approvals() {
             title: "Working session".into(),
             created_at: now,
             updated_at: now,
+            pinned: false,
+            archived: false,
         }],
         active_session_id: Some(session_id),
     }));
@@ -178,6 +182,7 @@ fn domain_events_render_session_stream_tools_and_approvals() {
             binding: argentum_domain::Sha256Digest("0".repeat(64)),
             reason: "User requested the change".into(),
             capabilities: vec![argentum_domain::Capability::WriteFiles],
+            scope: argentum_domain::ApprovalScope::Once,
             expires_at: None,
         },
     ));
@@ -231,6 +236,7 @@ fn approval_reply_dispatches_the_existing_typed_approval_command() {
             binding: argentum_domain::Sha256Digest("0".repeat(64)),
             reason: "User requested the change".into(),
             capabilities: vec![argentum_domain::Capability::WriteFiles],
+            scope: argentum_domain::ApprovalScope::Once,
             expires_at: None,
         },
     ));
@@ -249,7 +255,7 @@ fn approval_reply_dispatches_the_existing_typed_approval_command() {
 fn composer_limit_counts_utf8_bytes_without_splitting_characters() {
     let mut state = TuiState::new(PathBuf::from("workspace"), true);
     state.apply_input(InputEvent::Text("a".repeat(131_071)));
-    state.apply_input(InputEvent::Text("é".into()));
+    state.apply_input(InputEvent::Text("Ã©".into()));
 
     assert_eq!(state.composer().len(), 131_071);
 }

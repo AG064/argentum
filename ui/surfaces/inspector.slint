@@ -1,5 +1,5 @@
 import { AgTheme } from "../tokens.slint";
-import { ActivityItemView, FileChangeView, InspectorModeView, TrajectoryItemView } from "../view-models.slint";
+import { ActivityItemView, FileChangeView, InspectorModeView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "../view-models.slint";
 import { IconButton } from "../components/buttons.slint";
 import { AgIcon } from "../components/icon.slint";
 import { ActivitySurface } from "activity.slint";
@@ -118,6 +118,19 @@ export component InspectorSurface inherits Rectangle {
     in property <string> verification-state: "pending";
     in property <string> verification-label: "Not run";
     in property <string> verification-summary: "No automated checks were run";
+    in property <[VerificationRunnerView]> verification-runners: [];
+    in property <int> verification-runner-count: 0;
+    in property <bool> verification-runners-loading: false;
+    in property <string> verification-runners-error: "";
+    in property <string> verification-approve-pending: "";
+    in property <bool> verification-review-open: false;
+    in property <string> verification-review-runner: "";
+    in property <string> verification-review-command: "";
+    in property <string> verification-review-scope: "";
+    in property <string> verification-review-binding: "";
+    in property <[VerificationEvidenceView]> verification-evidence: [];
+    in property <bool> verification-evidence-loading: false;
+    in property <string> verification-evidence-error: "";
     in property <string> active-session-id: "";
     in property <bool> touch-mode: false;
     in property <bool> reduced-motion: false;
@@ -129,6 +142,10 @@ export component InspectorSurface inherits Rectangle {
     callback load-change-recovery();
     callback retry-change-recovery(string);
     callback request-recovery-restore(string);
+    callback refresh-verification();
+    callback review-verification-runner(string);
+    callback approve-verification-runner(string);
+    callback cancel-verification-review();
     callback set-goal(string, int, int, int);
     callback pause-goal();
     callback resume-goal();
@@ -211,6 +228,19 @@ export component InspectorSurface inherits Rectangle {
             verification-state: root.verification-state;
             verification-label: root.verification-label;
             verification-summary: root.verification-summary;
+            verification-runners: root.verification-runners;
+            verification-runner-count: root.verification-runner-count;
+            verification-runners-loading: root.verification-runners-loading;
+            verification-runners-error: root.verification-runners-error;
+            verification-approve-pending: root.verification-approve-pending;
+            verification-review-open: root.verification-review-open;
+            verification-review-runner: root.verification-review-runner;
+            verification-review-command: root.verification-review-command;
+            verification-review-scope: root.verification-review-scope;
+            verification-review-binding: root.verification-review-binding;
+            verification-evidence: root.verification-evidence;
+            verification-evidence-loading: root.verification-evidence-loading;
+            verification-evidence-error: root.verification-evidence-error;
             touch-mode: root.touch-mode;
             reduced-motion: root.reduced-motion;
             set-goal(objective, token-budget, tool-budget, time-budget-seconds) => {
@@ -224,6 +254,10 @@ export component InspectorSurface inherits Rectangle {
             load-change-recovery => { root.load-change-recovery(); }
             retry-change-recovery(operation-id) => { root.retry-change-recovery(operation-id); }
             request-recovery-restore(operation-id) => { root.request-recovery-restore(operation-id); }
+            refresh-verification => { root.refresh-verification(); }
+            review-verification-runner(runner) => { root.review-verification-runner(runner); }
+            approve-verification-runner(runner) => { root.approve-verification-runner(runner); }
+            cancel-verification-review => { root.cancel-verification-review(); }
         }
 
         if root.active-mode == "activity": ActivitySurface {

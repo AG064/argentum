@@ -3214,6 +3214,7 @@ async fn run_verification_command(
                         .find_map(|event| match event {
                             argentum_domain::AppEvent::VerificationEvidenceSnapshot {
                                 evidence,
+                                ..
                             } => Some(evidence),
                             _ => None,
                         })
@@ -8593,6 +8594,8 @@ mod tests {
                 title: "Inspect workspace".into(),
                 created_at: timestamp,
                 updated_at: timestamp,
+                pinned: false,
+                archived: false,
             }],
             active_session_id: Some(session_id),
         };

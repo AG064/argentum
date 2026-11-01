@@ -4930,15 +4930,25 @@ fn load_sessions(
     project_id: ProjectId,
 ) -> Result<Vec<SessionSummary>, StoreError> {
     let mut statement = connection.prepare(
-        "SELECT payload FROM sessions
+        "SELECT payload, pinned_at, archived_at FROM sessions
          WHERE project_id = ?1
          ORDER BY created_at ASC, id ASC",
     )?;
-    let rows = statement.query_map([project_id.to_string()], |row| row.get::<_, String>(0))?;
+    let rows = statement.query_map([project_id.to_string()], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Option<i64>>(1)?,
+            row.get::<_, Option<i64>>(2)?,
+        ))
+    })?;
     let mut sessions = Vec::new();
     for row in rows {
-        let session = serde_json::from_str::<Session>(&row?)?;
-        sessions.push(SessionSummary::from(&session));
+        let (payload, pinned_at, archived_at) = row?;
+        let session = serde_json::from_str::<Session>(&payload)?;
+        let mut summary = SessionSummary::from(&session);
+        summary.pinned = pinned_at.is_some();
+        summary.archived = archived_at.is_some();
+        sessions.push(summary);
     }
     Ok(sessions)
 }

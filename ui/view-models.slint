@@ -58,6 +58,42 @@ export struct SessionItemView {
     title: string,
     detail: string,
     active: bool,
+    pinned: bool,
+    archived: bool,
+}
+
+export struct ApprovalGrantView {
+    id: string,
+    capability: string,
+    scope: string,
+    subject: string,
+    reason: string,
+    created: string,
+    binding: string,
+}
+
+export struct ApprovalScopeChoiceView {
+    id: string,
+    label: string,
+}
+
+export struct VerificationRunnerView {
+    id: string,
+    origin: string,
+    state: string,
+    detail: string,
+    available: bool,
+    approval_required: bool,
+    approved: bool,
+    definition: string,
+}
+
+export struct VerificationEvidenceView {
+    runner: string,
+    state: string,
+    fresh: bool,
+    detail: string,
+    recorded: string,
 }
 
 export struct ProviderProfileView {

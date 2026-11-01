@@ -4,13 +4,14 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use argentum_domain::{
-    ActiveRunState, AppCommand, AppEvent, ApprovalId, ChangeOperationId, ChangeRecoveryState,
-    ChangeSetSnapshot, ConversationMessageStatus, ConversationRole, FileChangeId, FileChangeKind,
-    FileChangeRecord, Goal, HarnessAvailability, HarnessCapabilityState,
-    HarnessExecutionProfileSummary, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
-    HarnessSurfaceState, ProviderKind, ProviderModel, ProviderProfile, RunId, SessionId, SurfaceId,
+    ActiveRunState, AppCommand, AppEvent, ApprovalGrantRecord, ApprovalId, ApprovalScope,
+    ChangeOperationId, ChangeRecoveryState, ChangeSetSnapshot, ConversationMessageStatus,
+    ConversationRole, FileChangeId, FileChangeKind, FileChangeRecord, Goal, GrantScope,
+    GrantSubject, HarnessAvailability, HarnessCapabilityState, HarnessExecutionProfileSummary,
+    HarnessProfileSummary, HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, ProviderKind,
+    ProviderModel, ProviderProfile, RunId, SessionArchiveFilter, SessionId, SurfaceId,
     TaskLifecycle, ToolResultState, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot,
-    TrajectoryState,
+    TrajectoryState, VerificationEvidence, VerificationRunnerInspection, VerificationState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use time::macros::format_description;
@@ -61,6 +62,11 @@ struct ProjectionState {
     pending_run_sessions: VecDeque<SessionId>,
     approval_sessions: HashMap<ApprovalId, SessionId>,
     provider_credentials: HashMap<String, bool>,
+    workspace: Option<argentum_domain::WorkspaceSnapshot>,
+    grants: Vec<ApprovalGrantRecord>,
+    verification_runners: Vec<VerificationRunnerInspection>,
+    verification_evidence: Vec<VerificationEvidence>,
+    verification_freshness: Vec<bool>,
 }
 
 impl UiHandle {
@@ -198,7 +204,8 @@ impl UiHandle {
                     .unwrap_or_default();
                 self.window
                     .set_active_session_id(active_session_id.clone().into());
-                self.window.set_session_items(session_item_model(snapshot));
+                self.projection().workspace = Some(snapshot.clone());
+                self.refresh_session_items();
                 if let Some(active_session_uuid) = snapshot.active_session_id {
                     if let Some(session) = snapshot
                         .sessions
@@ -284,6 +291,10 @@ impl UiHandle {
                 self.push_activity("Session created", session.title.clone(), "neutral");
             }
             AppEvent::SessionForked(fork) => {
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
                 self.push_activity(
                     "Conversation fork created",
                     format!(
@@ -411,6 +422,34 @@ impl UiHandle {
             AppEvent::Error { message, .. } => {
                 self.window.set_submission_pending(false);
                 self.window.set_approval_response_pending(false);
+                if self.window.get_session_action_pending() {
+                    self.window.set_session_action_pending(false);
+                    self.window
+                        .set_session_action_error(present_error(message).into());
+                }
+                if self.window.get_approval_grants_loading()
+                    || !self.window.get_approval_grant_pending().is_empty()
+                {
+                    self.window.set_approval_grants_loading(false);
+                    self.window
+                        .set_approval_grant_pending(SharedString::default());
+                    self.window
+                        .set_approval_grants_error(present_error(message).into());
+                }
+                if self.window.get_verification_runners_loading()
+                    || !self.window.get_verification_approve_pending().is_empty()
+                {
+                    self.window.set_verification_runners_loading(false);
+                    self.window
+                        .set_verification_approve_pending(SharedString::default());
+                    self.window
+                        .set_verification_runners_error(present_error(message).into());
+                }
+                if self.window.get_verification_evidence_loading() {
+                    self.window.set_verification_evidence_loading(false);
+                    self.window
+                        .set_verification_evidence_error(present_error(message).into());
+                }
                 let consumes_provider_error = self.window.get_provider_error_consumes_next()
                     && message == self.window.get_provider_error().as_str();
                 let provider_pending = self.window.get_provider_pending().to_string();
@@ -594,11 +633,29 @@ impl UiHandle {
                 self.window.set_approval_open(true);
                 self.window.set_approval_id(request.id.to_string().into());
                 self.window
+                    .set_approval_tool_id(request.tool_id.clone().into());
+                self.window
                     .set_approval_action(request.action.clone().into());
                 self.window
                     .set_approval_target(request.target.clone().into());
                 self.window
                     .set_approval_reason(request.reason.clone().into());
+                self.window
+                    .set_approval_binding(request.binding.0.clone().into());
+                self.window.set_approval_capabilities(
+                    request
+                        .capabilities
+                        .iter()
+                        .map(|capability| capability.label())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .into(),
+                );
+                self.window
+                    .set_approval_request_scope(request.scope.id().into());
+                self.window.set_approval_scope(request.scope.id().into());
+                self.window
+                    .set_approval_scope_choices(request_scope_choices(request.scope.clone()));
                 self.window
                     .set_run_state(TaskLifecycle::WaitingForApproval.label().into());
                 self.window.set_running(true);
@@ -813,22 +870,181 @@ impl UiHandle {
                     if *passed { "success" } else { "error" },
                 );
             }
+            AppEvent::ApprovalGrantsSnapshot { grants, coverage } => {
+                self.projection().grants = grants.clone();
+                self.window.set_approval_grants_loading(false);
+                self.window
+                    .set_approval_grants_error(SharedString::default());
+                self.window.set_approval_grants_incomplete(
+                    coverage.as_ref().is_some_and(|coverage| !coverage.complete),
+                );
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+            }
+            AppEvent::ApprovalGrantIssued(grant) => {
+                {
+                    let mut projection = self.projection();
+                    if !projection
+                        .grants
+                        .iter()
+                        .any(|existing| existing.id == grant.id)
+                    {
+                        projection.grants.push(grant.clone());
+                    }
+                }
+                self.window.set_approval_grants_loading(false);
+                self.window
+                    .set_approval_grants_error(SharedString::default());
+                self.window
+                    .set_verification_approve_pending(SharedString::default());
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+                self.push_activity(
+                    "Grant recorded",
+                    format!(
+                        "{} | {}",
+                        grant.capability.label(),
+                        grant_scope_label(grant.scope)
+                    ),
+                    "complete",
+                );
+            }
+            AppEvent::ApprovalGrantRevoked { grant_id, .. } => {
+                {
+                    let mut projection = self.projection();
+                    projection.grants.retain(|grant| grant.id != *grant_id);
+                }
+                self.window
+                    .set_approval_grant_pending(SharedString::default());
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+                self.push_activity("Grant revoked", grant_id.to_string(), "neutral");
+            }
+            AppEvent::VerificationRunnersSnapshot { runners } => {
+                self.window
+                    .set_verification_runner_count(saturating_i32(runners.len() as u32));
+                self.window.set_verification_runners_loading(false);
+            }
+            AppEvent::VerificationRunnerInspectionSnapshot { runners } => {
+                self.projection().verification_runners = runners.clone();
+                self.window.set_verification_runners_loading(false);
+                self.window
+                    .set_verification_runners_error(SharedString::default());
+                self.refresh_verification_runners();
+            }
+            AppEvent::VerificationRunnerReviewSnapshot { review } => {
+                let scope = &review.input_scope;
+                let mut scope_detail = format!(
+                    "{} | {} | max {} files, {} bytes",
+                    review.cwd, scope.method, scope.max_files, scope.max_total_bytes
+                );
+                if scope.project_inputs.is_some() {
+                    scope_detail.push_str(" | project inputs reviewed");
+                }
+                if let Some(program_path) = &scope.program_path {
+                    scope_detail.push_str(&format!(" | program {program_path}"));
+                }
+                self.window
+                    .set_verification_review_runner(review.runner.id().into());
+                self.window.set_verification_review_command(
+                    format!("{} {}", review.program, review.args.join(" "))
+                        .trim()
+                        .into(),
+                );
+                self.window
+                    .set_verification_review_scope(scope_detail.into());
+                self.window
+                    .set_verification_review_binding(review.binding.0.clone().into());
+                self.window.set_verification_review_open(true);
+                self.window
+                    .set_verification_approve_pending(SharedString::default());
+            }
+            AppEvent::VerificationEvidenceSnapshot {
+                evidence,
+                freshness,
+            } => {
+                self.projection().verification_evidence = evidence.clone();
+                self.projection().verification_freshness = freshness.clone();
+                self.window.set_verification_evidence_loading(false);
+                self.window
+                    .set_verification_evidence_error(SharedString::default());
+                self.refresh_verification_evidence();
+            }
+            AppEvent::SessionRowUpdated(row) => {
+                if let Some(workspace) = self.projection().workspace.as_mut() {
+                    if let Some(session) = workspace
+                        .sessions
+                        .iter_mut()
+                        .find(|session| session.id == row.id)
+                    {
+                        session.title = row.title.clone();
+                        session.pinned = row.pinned;
+                        session.archived = row.archived;
+                    }
+                }
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
+                self.refresh_session_items();
+            }
+            AppEvent::SessionMetadataChanged {
+                session_id,
+                title,
+                pinned,
+                archived,
+            } => {
+                if let Some(workspace) = self.projection().workspace.as_mut() {
+                    if let Some(session) = workspace
+                        .sessions
+                        .iter_mut()
+                        .find(|session| session.id == *session_id)
+                    {
+                        session.title = title.clone();
+                        session.pinned = *pinned;
+                        session.archived = *archived;
+                    }
+                }
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
+                self.refresh_session_items();
+            }
+            AppEvent::SessionListLoaded(snapshot) => {
+                let rows = snapshot
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        let detail = if row.selected {
+                            "Current".to_owned()
+                        } else if row.pinned {
+                            "Pinned session".to_owned()
+                        } else if row.archived {
+                            "Archived session".to_owned()
+                        } else {
+                            "Saved session".to_owned()
+                        };
+                        SessionItemView {
+                            id: row.id.to_string().into(),
+                            title: row.title.clone().into(),
+                            detail: detail.into(),
+                            active: row.selected,
+                            pinned: row.pinned,
+                            archived: row.archived,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                self.window
+                    .set_session_items(ModelRc::new(VecModel::from(rows)));
+            }
             AppEvent::PlatformAuthorityChanged(_)
             | AppEvent::AnswerContractAccepted { .. }
             | AppEvent::AnswerContractEvaluated { .. }
             | AppEvent::GoalInvocationSnapshot { .. }
-            | AppEvent::ApprovalGrantIssued(_)
-            | AppEvent::ApprovalGrantRevoked { .. }
-            | AppEvent::ApprovalGrantsSnapshot { .. }
             | AppEvent::ExecutionAuditRecorded(_)
             | AppEvent::ExecutionAuditSnapshot { .. }
             | AppEvent::VerificationEvidenceRecorded(_)
-            | AppEvent::VerificationEvidenceSnapshot { .. }
-            | AppEvent::VerificationRunnersSnapshot { .. }
-            | AppEvent::VerificationRunnerInspectionSnapshot { .. }
-            | AppEvent::SessionMetadataChanged { .. }
-            | AppEvent::SessionListLoaded(_)
-            | AppEvent::SessionRowUpdated(_)
             | AppEvent::OnboardingSnapshotLoaded(_) => {}
             AppEvent::LayoutChanged(profile) => {
                 let active_inspector = profile.active_inspector.map(surface_id).unwrap_or_default();
@@ -1467,6 +1683,48 @@ impl UiHandle {
         self.window.set_trajectory_error(SharedString::default());
     }
 
+    fn refresh_session_items(&self) {
+        let projection = self.projection();
+        let Some(snapshot) = projection.workspace.as_ref() else {
+            return;
+        };
+        let query = self.window.get_session_query().to_string();
+        let filter = session_filter_from_id(self.window.get_session_filter().as_str());
+        let model = session_item_model(snapshot, &query, filter);
+        drop(projection);
+        self.window.set_session_items(model);
+    }
+
+    fn refresh_approval_grants(&self) {
+        let projection = self.projection();
+        let model = approval_grant_model(&projection.grants);
+        drop(projection);
+        self.window.set_approval_grants(model);
+    }
+
+    fn refresh_verification_runners(&self) {
+        let projection = self.projection();
+        let model = verification_runner_model(&projection.verification_runners, &projection.grants);
+        drop(projection);
+        self.window.set_verification_runners(model);
+    }
+
+    fn refresh_verification_evidence(&self) {
+        let projection = self.projection();
+        let model = verification_evidence_model(
+            &projection.verification_evidence,
+            &projection.verification_freshness,
+        );
+        let (state, summary) = verification_evidence_summary(
+            &projection.verification_evidence,
+            &projection.verification_freshness,
+        );
+        drop(projection);
+        self.window.set_verification_evidence(model);
+        self.window.set_verification_state(state.into());
+        self.window.set_verification_summary(summary.into());
+    }
+
     fn reset_session_view(&self) {
         self.window.set_user_prompt(SharedString::default());
         self.window
@@ -1918,22 +2176,297 @@ fn without_reasoning_markers(text: &str) -> String {
     text.replace("<think>", "").replace("</think>", "")
 }
 
-fn session_item_model(snapshot: &argentum_domain::WorkspaceSnapshot) -> ModelRc<SessionItemView> {
-    let rows = snapshot
+fn session_item_model(
+    snapshot: &argentum_domain::WorkspaceSnapshot,
+    query: &str,
+    filter: SessionArchiveFilter,
+) -> ModelRc<SessionItemView> {
+    let query = query.trim().to_lowercase();
+    let mut sessions = snapshot
         .sessions
         .iter()
-        .rev()
+        .filter(|session| match filter {
+            SessionArchiveFilter::Active => !session.archived,
+            SessionArchiveFilter::Archived => session.archived,
+            SessionArchiveFilter::All => true,
+        })
+        .filter(|session| query.is_empty() || session.title.to_lowercase().contains(&query))
+        .collect::<Vec<_>>();
+    sessions.sort_by(|left, right| {
+        right
+            .pinned
+            .cmp(&left.pinned)
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+    });
+    let rows = sessions
+        .into_iter()
         .map(|session| {
             let active = Some(session.id) == snapshot.active_session_id;
+            let detail = if active {
+                "Current".to_owned()
+            } else if session.pinned {
+                "Pinned session".to_owned()
+            } else if session.archived {
+                "Archived session".to_owned()
+            } else {
+                "Saved session".to_owned()
+            };
             SessionItemView {
                 id: session.id.to_string().into(),
                 title: session.title.clone().into(),
-                detail: if active { "Current" } else { "Saved session" }.into(),
+                detail: detail.into(),
                 active,
+                pinned: session.pinned,
+                archived: session.archived,
             }
         })
         .collect::<Vec<_>>();
     ModelRc::new(VecModel::from(rows))
+}
+
+fn session_filter_from_id(value: &str) -> SessionArchiveFilter {
+    match value {
+        "archived" => SessionArchiveFilter::Archived,
+        "all" => SessionArchiveFilter::All,
+        _ => SessionArchiveFilter::Active,
+    }
+}
+
+fn format_record_time(value: time::OffsetDateTime) -> String {
+    value
+        .format(format_description!(
+            "[year]-[month]-[day] [hour]:[minute] UTC"
+        ))
+        .unwrap_or_else(|_| value.unix_timestamp().to_string())
+}
+
+fn grant_scope_label(scope: GrantScope) -> &'static str {
+    match scope {
+        GrantScope::Action => "Action",
+        GrantScope::ToolCall => "Tool call",
+        GrantScope::Run => "Run",
+        GrantScope::Session => "Session",
+        GrantScope::Workspace => "Workspace",
+        GrantScope::PersistentProfile => "Profile",
+    }
+}
+
+fn grant_subject_label(subject: &GrantSubject) -> String {
+    match subject {
+        GrantSubject::Action {
+            tool_id, target, ..
+        } => {
+            format!("{tool_id} | {target}")
+        }
+        GrantSubject::ToolCall { tool_call_id } => format!("Tool call {tool_call_id}"),
+        GrantSubject::Run { run_id } => format!("Run {run_id}"),
+        GrantSubject::Session { session_id } => format!("Session {session_id}"),
+        GrantSubject::Workspace { project_id } => format!("Workspace {project_id}"),
+        GrantSubject::PersistentProfile { profile_id } => format!("Profile {profile_id}"),
+    }
+}
+
+fn grant_subject_binding(subject: &GrantSubject) -> String {
+    match subject {
+        GrantSubject::Action { binding, .. } => binding.0.clone(),
+        _ => String::new(),
+    }
+}
+
+fn request_scope_choices(scope: ApprovalScope) -> ModelRc<ApprovalScopeChoiceView> {
+    let mut choices = vec![scope];
+    for candidate in [ApprovalScope::Once, ApprovalScope::Session] {
+        if !choices.contains(&candidate) {
+            choices.push(candidate);
+        }
+    }
+    let rows = choices
+        .into_iter()
+        .map(|scope| ApprovalScopeChoiceView {
+            id: scope.id().into(),
+            label: match scope {
+                ApprovalScope::Once => "Once",
+                ApprovalScope::Session => "This session",
+                ApprovalScope::Action => "This action",
+                ApprovalScope::ToolCall => "This tool call",
+                ApprovalScope::Run => "This run",
+                ApprovalScope::Workspace => "This workspace",
+                ApprovalScope::PersistentProfile => "This profile",
+            }
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn approval_grant_model(grants: &[ApprovalGrantRecord]) -> ModelRc<ApprovalGrantView> {
+    let rows = grants
+        .iter()
+        .filter(|grant| grant.revoked_at.is_none())
+        .map(|grant| ApprovalGrantView {
+            id: grant.id.to_string().into(),
+            capability: grant.capability.label().into(),
+            scope: grant_scope_label(grant.scope).into(),
+            subject: grant_subject_label(&grant.subject).into(),
+            reason: grant.reason.clone().into(),
+            created: format_record_time(grant.created_at).into(),
+            binding: grant_subject_binding(&grant.subject).into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_grant_for(grant: &ApprovalGrantRecord, runner_id: &str) -> bool {
+    if grant.revoked_at.is_some() {
+        return false;
+    }
+    matches!(
+        &grant.subject,
+        GrantSubject::Action { tool_id, target, .. }
+            if tool_id == "verify" && target == &format!("fixed runners: {runner_id}")
+    )
+}
+
+fn verification_runner_model(
+    runners: &[VerificationRunnerInspection],
+    grants: &[ApprovalGrantRecord],
+) -> ModelRc<VerificationRunnerView> {
+    let rows = runners
+        .iter()
+        .map(|runner| {
+            let approved = grants
+                .iter()
+                .any(|grant| verification_grant_for(grant, &runner.id));
+            let state = if !runner.available {
+                "Unavailable"
+            } else if runner.approval_required && !approved {
+                "Approval required"
+            } else if runner.approval_required {
+                "Approved"
+            } else {
+                "Available"
+            };
+            let detail = runner.reason.clone().unwrap_or_else(|| {
+                format!(
+                    "{} | {}",
+                    runner.origin,
+                    runner
+                        .definition_sha256
+                        .as_ref()
+                        .map(|digest| digest.0.clone())
+                        .unwrap_or_else(|| "definition pending".into())
+                )
+            });
+            VerificationRunnerView {
+                id: runner.id.clone().into(),
+                origin: runner.origin.clone().into(),
+                state: state.into(),
+                detail: detail.into(),
+                available: runner.available,
+                approval_required: runner.approval_required,
+                approved,
+                definition: runner
+                    .definition_sha256
+                    .as_ref()
+                    .map(|digest| digest.0.clone())
+                    .unwrap_or_default()
+                    .into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_state_label(state: VerificationState) -> &'static str {
+    match state {
+        VerificationState::Passed => "Passed",
+        VerificationState::Failed => "Failed",
+        VerificationState::Cancelled => "Cancelled",
+        VerificationState::TimedOut => "Timed out",
+        VerificationState::SpawnFailed => "Could not start",
+        VerificationState::Stale => "Stale",
+    }
+}
+
+fn verification_evidence_model(
+    evidence: &[VerificationEvidence],
+    freshness: &[bool],
+) -> ModelRc<VerificationEvidenceView> {
+    let rows = evidence
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let fresh = freshness.get(index).copied().unwrap_or(false);
+            let detail = format!(
+                "{} | {} ms | exit {} | {}",
+                item.runner.id(),
+                item.duration_ms,
+                item.exit_code
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "none".into()),
+                if fresh {
+                    "current inputs"
+                } else {
+                    "inputs changed"
+                }
+            );
+            VerificationEvidenceView {
+                runner: item.runner.id().to_owned().into(),
+                state: verification_state_label(item.state).into(),
+                fresh,
+                detail: detail.into(),
+                recorded: format_record_time(item.started_at).into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_evidence_summary(
+    evidence: &[VerificationEvidence],
+    freshness: &[bool],
+) -> (&'static str, String) {
+    if evidence.is_empty() {
+        return (
+            "not_run",
+            "No automated checks were recorded for this run.".to_owned(),
+        );
+    }
+    let mut failed = 0usize;
+    let mut fresh_passed = 0usize;
+    for (index, item) in evidence.iter().enumerate() {
+        let fresh = freshness.get(index).copied().unwrap_or(false);
+        match item.state {
+            VerificationState::Passed if fresh => fresh_passed += 1,
+            VerificationState::Passed => {}
+            _ => failed += 1,
+        }
+    }
+    if failed > 0 {
+        (
+            "failed",
+            format!(
+                "{failed} of {} recorded checks did not pass.",
+                evidence.len()
+            ),
+        )
+    } else if fresh_passed == evidence.len() {
+        (
+            "passed",
+            format!(
+                "All {} recorded checks passed on current inputs.",
+                evidence.len()
+            ),
+        )
+    } else {
+        (
+            "stale",
+            format!(
+                "{} recorded checks passed but their inputs changed.",
+                evidence.len()
+            ),
+        )
+    }
 }
 
 fn provider_profile_model_with_credentials(
@@ -2470,6 +3003,214 @@ where
         select_dispatch(AppCommand::SelectSession { session_id });
     });
 
+    let search_dispatch = dispatch.clone();
+    let search_window = window.as_weak();
+    window.on_search_sessions(move |query| {
+        let filter = search_window
+            .upgrade()
+            .map(|window| session_filter_from_id(window.get_session_filter().as_str()))
+            .unwrap_or_default();
+        search_dispatch(AppCommand::ListSessions {
+            query: query.to_string(),
+            filter,
+            limit: 50,
+            cursor: None,
+        });
+    });
+
+    let filter_dispatch = dispatch.clone();
+    let filter_window = window.as_weak();
+    window.on_set_session_filter(move |filter| {
+        let query = filter_window
+            .upgrade()
+            .map(|window| window.get_session_query().to_string())
+            .unwrap_or_default();
+        filter_dispatch(AppCommand::ListSessions {
+            query,
+            filter: session_filter_from_id(filter.as_str()),
+            limit: 50,
+            cursor: None,
+        });
+    });
+
+    let title_dispatch = dispatch.clone();
+    let title_window = window.as_weak();
+    window.on_rename_session(move |session_id, title| {
+        let Ok(session_id) = session_id.to_string().parse() else {
+            return;
+        };
+        let title = title.trim().to_owned();
+        if title.is_empty() {
+            return;
+        }
+        if let Some(window) = title_window.upgrade() {
+            if window.get_session_action_pending() {
+                return;
+            }
+            window.set_session_action_pending(true);
+            window.set_session_action_error(SharedString::default());
+        }
+        title_dispatch(AppCommand::SetSessionTitle { session_id, title });
+    });
+
+    let pin_dispatch = dispatch.clone();
+    let pin_window = window.as_weak();
+    window.on_set_session_pinned(move |session_id, pinned| {
+        let Ok(session_id) = session_id.to_string().parse() else {
+            return;
+        };
+        if let Some(window) = pin_window.upgrade() {
+            if window.get_session_action_pending() {
+                return;
+            }
+            window.set_session_action_pending(true);
+            window.set_session_action_error(SharedString::default());
+        }
+        pin_dispatch(AppCommand::SetSessionPinned { session_id, pinned });
+    });
+
+    let archive_dispatch = dispatch.clone();
+    let archive_window = window.as_weak();
+    window.on_set_session_archived(move |session_id, archived| {
+        let Ok(session_id) = session_id.to_string().parse() else {
+            return;
+        };
+        if let Some(window) = archive_window.upgrade() {
+            if window.get_session_action_pending() {
+                return;
+            }
+            window.set_session_action_pending(true);
+            window.set_session_action_error(SharedString::default());
+        }
+        archive_dispatch(AppCommand::SetSessionArchived {
+            session_id,
+            archived,
+        });
+    });
+
+    let fork_dispatch = dispatch.clone();
+    let fork_window = window.as_weak();
+    window.on_fork_session(move |session_id, title| {
+        let Ok(source_session_id) = session_id.to_string().parse() else {
+            return;
+        };
+        let title = title.trim().to_owned();
+        if title.is_empty() {
+            return;
+        }
+        if let Some(window) = fork_window.upgrade() {
+            if window.get_session_action_pending() {
+                return;
+            }
+            window.set_session_action_pending(true);
+            window.set_session_action_error(SharedString::default());
+        }
+        fork_dispatch(AppCommand::ForkSession {
+            source_session_id,
+            title,
+            expected_last_message_id: None,
+        });
+    });
+
+    let grants_dispatch = dispatch.clone();
+    let grants_window = window.as_weak();
+    window.on_refresh_approval_grants(move || {
+        if let Some(window) = grants_window.upgrade() {
+            window.set_approval_grants_loading(true);
+            window.set_approval_grants_error(SharedString::default());
+        }
+        grants_dispatch(AppCommand::ListApprovalGrants);
+    });
+
+    let revoke_dispatch = dispatch.clone();
+    let revoke_window = window.as_weak();
+    window.on_revoke_approval_grant(move |grant_id| {
+        let Ok(grant_id) = grant_id.to_string().parse::<argentum_domain::GrantId>() else {
+            return;
+        };
+        if let Some(window) = revoke_window.upgrade() {
+            if !window.get_approval_grant_pending().is_empty() {
+                return;
+            }
+            window.set_approval_grant_pending(grant_id.to_string().into());
+            window.set_approval_grants_error(SharedString::default());
+        }
+        revoke_dispatch(AppCommand::RevokeApprovalGrant { grant_id });
+    });
+
+    let verification_dispatch = dispatch.clone();
+    let verification_window = window.as_weak();
+    window.on_refresh_verification(move || {
+        let active_run_id = verification_window
+            .upgrade()
+            .map(|window| window.get_active_run_id().to_string())
+            .unwrap_or_default();
+        if let Some(window) = verification_window.upgrade() {
+            window.set_verification_runners_loading(true);
+            window.set_verification_runners_error(SharedString::default());
+            window.set_verification_evidence_loading(true);
+            window.set_verification_evidence_error(SharedString::default());
+            window.set_approval_grants_loading(true);
+        }
+        verification_dispatch(AppCommand::ListVerificationRunners);
+        verification_dispatch(AppCommand::InspectVerificationRunners);
+        verification_dispatch(AppCommand::ListApprovalGrants);
+        verification_dispatch(AppCommand::LoadVerificationEvidence {
+            run_id: active_run_id.parse().ok(),
+        });
+    });
+
+    let review_dispatch = dispatch.clone();
+    let review_window = window.as_weak();
+    window.on_review_verification_runner(move |runner| {
+        let Ok(runner) = runner
+            .to_string()
+            .parse::<argentum_domain::VerificationRunnerId>()
+        else {
+            return;
+        };
+        if let Some(window) = review_window.upgrade() {
+            window.set_verification_approve_pending(runner.id().into());
+            window.set_verification_runners_error(SharedString::default());
+        }
+        review_dispatch(AppCommand::ReviewProjectVerification { runner });
+    });
+
+    let approve_verification_dispatch = dispatch.clone();
+    let approve_verification_window = window.as_weak();
+    window.on_approve_verification_runner(move |runner| {
+        let Ok(runner) = runner
+            .to_string()
+            .parse::<argentum_domain::VerificationRunnerId>()
+        else {
+            return;
+        };
+        let binding = approve_verification_window
+            .upgrade()
+            .map(|window| window.get_verification_review_binding().to_string())
+            .unwrap_or_default();
+        if binding.is_empty() {
+            return;
+        }
+        if let Some(window) = approve_verification_window.upgrade() {
+            window.set_verification_approve_pending(runner.id().into());
+            window.set_verification_review_open(false);
+            window.set_verification_runners_error(SharedString::default());
+        }
+        approve_verification_dispatch(AppCommand::ApproveProjectVerification {
+            runner,
+            expected_binding: Some(argentum_domain::Sha256Digest(binding)),
+        });
+    });
+
+    let cancel_review_window = window.as_weak();
+    window.on_cancel_verification_review(move || {
+        if let Some(window) = cancel_review_window.upgrade() {
+            window.set_verification_review_open(false);
+            window.set_verification_approve_pending(SharedString::default());
+        }
+    });
+
     let set_goal_dispatch = dispatch.clone();
     let set_goal_window = window.as_weak();
     window.on_set_goal(
@@ -2803,6 +3544,19 @@ where
             };
             Some(surface)
         };
+        if surface == Some(SurfaceId::Changes) {
+            window.set_verification_runners_loading(true);
+            window.set_verification_runners_error(SharedString::default());
+            window.set_verification_evidence_loading(true);
+            window.set_verification_evidence_error(SharedString::default());
+            inspector_dispatch(AppCommand::ListVerificationRunners);
+            inspector_dispatch(AppCommand::InspectVerificationRunners);
+            inspector_dispatch(AppCommand::ListApprovalGrants);
+            let active_run_id = window.get_active_run_id().to_string();
+            inspector_dispatch(AppCommand::LoadVerificationEvidence {
+                run_id: active_run_id.parse().ok(),
+            });
+        }
         inspector_dispatch(AppCommand::SetInspectorSurface { surface });
     });
 
@@ -2875,11 +3629,12 @@ where
 
     let approve_dispatch = dispatch.clone();
     let approve_window = window.as_weak();
-    window.on_approve_tool(move |approval_id| {
+    window.on_approve_tool(move |approval_id, scope| {
         let Ok(approval_id) = approval_id.to_string().parse() else {
             warn!("approval requested without a valid approval id");
             return;
         };
+        let scope = ApprovalScope::from_id(scope.as_str()).unwrap_or_default();
         let Some(window) = approve_window.upgrade() else {
             return;
         };
@@ -2887,10 +3642,7 @@ where
             return;
         }
         window.set_approval_response_pending(true);
-        approve_dispatch(AppCommand::ApproveTool {
-            approval_id,
-            scope: argentum_domain::ApprovalScope::Once,
-        });
+        approve_dispatch(AppCommand::ApproveTool { approval_id, scope });
     });
 
     let reject_dispatch = dispatch.clone();
@@ -2917,9 +3669,14 @@ where
             window.set_harness_loading(true);
             window.set_harness_pending("list".into());
             window.set_harness_error(SharedString::default());
+            window.set_approval_grants_loading(true);
+            window.set_approval_grants_error(SharedString::default());
         }
         settings_dispatch(AppCommand::ListProviderProfiles);
         settings_dispatch(AppCommand::ListHarnessState);
+        settings_dispatch(AppCommand::ListApprovalGrants);
+        settings_dispatch(AppCommand::ListVerificationRunners);
+        settings_dispatch(AppCommand::InspectVerificationRunners);
     });
 }
 
@@ -3231,25 +3988,72 @@ mod tests {
                 SessionSummary {
                     id: older_id,
                     title: "Older".into(),
-                    created_at: timestamp,
-                    updated_at: timestamp,
+                    created_at: timestamp - time::Duration::seconds(1),
+                    updated_at: timestamp - time::Duration::seconds(1),
+                    pinned: false,
+                    archived: false,
                 },
                 SessionSummary {
                     id: newer_id,
                     title: "Newer".into(),
                     created_at: timestamp,
                     updated_at: timestamp,
+                    pinned: false,
+                    archived: false,
                 },
             ],
             active_session_id: Some(older_id),
         };
 
-        let model = session_item_model(&snapshot);
+        let model = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
 
         assert_eq!(model.row_data(0).expect("newest session").title, "Newer");
         assert!(!model.row_data(0).expect("newest session").active);
         assert_eq!(model.row_data(1).expect("active session").title, "Older");
         assert!(model.row_data(1).expect("active session").active);
+    }
+
+    #[test]
+    fn session_model_orders_pinned_first_and_filters_archived() {
+        let project_id = ProjectId::new_v4();
+        let timestamp = now();
+        let session = |title: &str, pinned: bool, archived: bool, age: i64| SessionSummary {
+            id: SessionId::new_v4(),
+            title: title.into(),
+            created_at: timestamp - time::Duration::seconds(age),
+            updated_at: timestamp - time::Duration::seconds(age),
+            pinned,
+            archived,
+        };
+        let snapshot = WorkspaceSnapshot {
+            project: Project {
+                id: project_id,
+                name: "Workspace".into(),
+                workspace_root: PathBuf::from("workspace"),
+                created_at: timestamp,
+            },
+            sessions: vec![
+                session("Archived", false, true, 1),
+                session("Newer", false, false, 2),
+                session("Pinned", true, false, 30),
+            ],
+            active_session_id: None,
+        };
+
+        let active = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
+        assert_eq!(active.row_count(), 2);
+        assert_eq!(active.row_data(0).expect("pinned").title, "Pinned");
+        assert!(active.row_data(0).expect("pinned").pinned);
+        assert_eq!(active.row_data(1).expect("newer").title, "Newer");
+
+        let archived = session_item_model(&snapshot, "", SessionArchiveFilter::Archived);
+        assert_eq!(archived.row_count(), 1);
+        assert_eq!(archived.row_data(0).expect("archived").title, "Archived");
+        assert!(archived.row_data(0).expect("archived").archived);
+
+        let searched = session_item_model(&snapshot, "pin", SessionArchiveFilter::All);
+        assert_eq!(searched.row_count(), 1);
+        assert_eq!(searched.row_data(0).expect("search").title, "Pinned");
     }
 
     #[test]
@@ -3417,7 +4221,8 @@ mod tests {
         // Approval actions share one immediate response latch.
         commands.borrow_mut().clear();
         let approval_id = "00000000-0000-0000-0000-000000000091";
-        ui.window().invoke_approve_tool(approval_id.into());
+        ui.window()
+            .invoke_approve_tool(approval_id.into(), "once".into());
         ui.window().invoke_reject_tool(approval_id.into());
         assert!(ui.window().get_approval_response_pending());
         assert_eq!(commands.borrow().len(), 1);
@@ -3650,28 +4455,23 @@ mod tests {
             .invoke_set_inspector_surface("trajectory".into());
         ui.window()
             .invoke_set_inspector_surface(SharedString::default());
-        assert!(matches!(
-            commands.borrow().first(),
-            Some(AppCommand::SetInspectorSurface {
-                surface: Some(SurfaceId::Activity),
+        let surfaces = commands
+            .borrow()
+            .iter()
+            .filter_map(|command| match command {
+                AppCommand::SetInspectorSurface { surface } => Some(*surface),
+                _ => None,
             })
-        ));
-        assert!(matches!(
-            commands.borrow().get(1),
-            Some(AppCommand::SetInspectorSurface {
-                surface: Some(SurfaceId::Changes),
-            })
-        ));
-        assert!(matches!(
-            commands.borrow().get(2),
-            Some(AppCommand::SetInspectorSurface {
-                surface: Some(SurfaceId::Trajectory),
-            })
-        ));
-        assert!(matches!(
-            commands.borrow().get(3),
-            Some(AppCommand::SetInspectorSurface { surface: None })
-        ));
+            .collect::<Vec<_>>();
+        assert_eq!(
+            surfaces,
+            vec![
+                Some(SurfaceId::Activity),
+                Some(SurfaceId::Changes),
+                Some(SurfaceId::Trajectory),
+                None
+            ]
+        );
 
         let mut inspector_layout = LayoutProfile::default();
         inspector_layout.visible.insert(SurfaceId::Activity, true);

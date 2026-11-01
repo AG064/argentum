@@ -1910,6 +1910,13 @@ impl RuntimeService {
                 self.publish_transient(AppEvent::VerificationRunnerInspectionSnapshot { runners });
                 Ok(())
             }
+            AppCommand::ReviewProjectVerification { runner } => {
+                let review = self
+                    .tools
+                    .project_verification_review(&self.workspace, &runner)?;
+                self.publish_transient(AppEvent::VerificationRunnerReviewSnapshot { review });
+                Ok(())
+            }
             AppCommand::ApproveProjectVerification {
                 runner,
                 expected_binding,
@@ -1918,7 +1925,18 @@ impl RuntimeService {
                 let evidence = self
                     .store
                     .verification_evidence(self.project_id, run_id, 1000)?;
-                self.publish_transient(AppEvent::VerificationEvidenceSnapshot { evidence });
+                let freshness = evidence
+                    .iter()
+                    .map(|item| {
+                        self.tools
+                            .verification_evidence_is_current(&self.workspace, item)
+                            .unwrap_or(false)
+                    })
+                    .collect();
+                self.publish_transient(AppEvent::VerificationEvidenceSnapshot {
+                    evidence,
+                    freshness,
+                });
                 Ok(())
             }
             AppCommand::LoadTrajectory { session_id } => {
@@ -6179,6 +6197,7 @@ impl RuntimeService {
             binding: tool_binding(&request.input)?,
             reason,
             capabilities: descriptor.capabilities,
+            scope: ApprovalScope::Once,
             expires_at: None,
         })
     }
@@ -6440,6 +6459,7 @@ impl RuntimeService {
             binding: restore_binding("restore_file", &binding),
             reason: "Restore this file to its retained pre-change state.".into(),
             capabilities: vec![argentum_domain::Capability::WriteFiles],
+            scope: ApprovalScope::Once,
             expires_at: None,
         };
         let responder = self.require_approval_responder(&approval, None)?;
@@ -6648,6 +6668,7 @@ impl RuntimeService {
             binding: restore_binding("recovery_restore", &binding),
             reason: "Resolve the conflicted operation with a fresh approved restore.".into(),
             capabilities: vec![argentum_domain::Capability::WriteFiles],
+            scope: ApprovalScope::Once,
             expires_at: None,
         };
         let responder = self.require_approval_responder(&approval, None)?;
@@ -6727,6 +6748,8 @@ impl RuntimeService {
         };
         self.store.save_approval_grant(self.project_id, &grant)?;
         self.emit(AppEvent::ApprovalGrantIssued(grant))?;
+        let runners = self.tools.verification_inspection(&self.workspace)?;
+        self.publish_transient(AppEvent::VerificationRunnerInspectionSnapshot { runners });
         Ok(())
     }
 
@@ -10433,6 +10456,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::VerificationEvidenceSnapshot { .. }
         | AppEvent::VerificationRunnersSnapshot { .. }
         | AppEvent::VerificationRunnerInspectionSnapshot { .. }
+        | AppEvent::VerificationRunnerReviewSnapshot { .. }
         | AppEvent::ProviderStatus(_)
         | AppEvent::ProviderCredentialStatus { .. }
         | AppEvent::ProviderProfilesSnapshot { .. }
@@ -10562,6 +10586,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::VerificationEvidenceSnapshot { .. }
         | AppEvent::VerificationRunnersSnapshot { .. }
         | AppEvent::VerificationRunnerInspectionSnapshot { .. }
+        | AppEvent::VerificationRunnerReviewSnapshot { .. }
         | AppEvent::ProviderStatus(_)
         | AppEvent::ProviderCredentialStatus { .. }
         | AppEvent::ProviderProfilesSnapshot { .. }

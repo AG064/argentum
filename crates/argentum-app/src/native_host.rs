@@ -968,6 +968,7 @@ fn is_direct_local_callback(command: &AppCommand) -> bool {
         AppCommand::SelectExecutionProfile { .. }
             | AppCommand::SetHarnessCapabilityEnabled { .. }
             | AppCommand::ApproveTool { .. }
+            | AppCommand::ApproveProjectVerification { .. }
             | AppCommand::SetOnboardingPermission { .. }
     )
 }
