@@ -1172,6 +1172,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         Arguments::Tools { options, json } => {
             run_tool_list_command(options, json).await?;
         }
+        Arguments::Desktop { options, json } => {
+            run_desktop_status_command(options, json).await?;
+        }
         Arguments::Instructions { options, directory } => {
             Box::pin(run_instruction_preview_command(
                 options.host_config()?,
@@ -3017,6 +3020,81 @@ async fn run_tool_list_command(
     .await
 }
 
+async fn run_desktop_status_command(
+    options: CommonOptions,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = options.host_config()?;
+    with_one_shot_host(config, move |host| {
+        Box::pin(async move {
+            let built = cfg!(all(windows, feature = "desktop-control"));
+            let harness = host.harness_snapshot()?;
+            let capability = harness
+                .capabilities
+                .iter()
+                .find(|capability| capability.id == "desktop.control");
+            let tools = host
+                .tool_descriptors()
+                .into_iter()
+                .filter(|descriptor| descriptor.capability_id == "desktop.control")
+                .map(|descriptor| {
+                    serde_json::json!({
+                        "id": descriptor.id,
+                        "title": descriptor.title,
+                        "summary": descriptor.summary,
+                        "capabilities": descriptor.capabilities,
+                        "risk": descriptor.risk,
+                        "requires_approval": descriptor.requires_approval,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let reason = if built {
+                capability
+                    .map(|capability| capability.unavailable_reason.clone())
+                    .unwrap_or_else(|| "desktop.control is not registered in this harness".into())
+            } else {
+                "This binary was not built with --features desktop-control.".into()
+            };
+            let report = serde_json::json!({
+                "feature": "desktop-control",
+                "built": built,
+                "available": built && !tools.is_empty(),
+                "capability_id": "desktop.control",
+                "capability_enabled": capability.is_some_and(|capability| capability.enabled),
+                "capability_availability": capability.map(|capability| capability.availability),
+                "reason": reason,
+                "tools": tools,
+                "note": "Status only. No window was enumerated and no desktop input was sent.",
+            });
+            if json {
+                println!("{report}");
+            } else if built {
+                println!(
+                    "Desktop control: built; capability {}; {} tool(s)",
+                    if report["capability_enabled"] == true {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
+                    report["tools"].as_array().map_or(0, Vec::len)
+                );
+                for tool in report["tools"].as_array().into_iter().flatten() {
+                    println!(
+                        "  {}: {}",
+                        tool["id"].as_str().unwrap_or("unknown"),
+                        tool["summary"].as_str().unwrap_or("")
+                    );
+                }
+                println!("No desktop input was sent.");
+            } else {
+                println!("Desktop control: not built (--features desktop-control).");
+            }
+            Ok(())
+        })
+    })
+    .await
+}
+
 async fn run_permissions_command(
     options: CommonOptions,
     action: PermissionAction,
@@ -4577,6 +4655,10 @@ enum Arguments {
         options: CommonOptions,
         json: bool,
     },
+    Desktop {
+        options: CommonOptions,
+        json: bool,
+    },
     Permissions {
         options: CommonOptions,
         action: PermissionAction,
@@ -4985,6 +5067,7 @@ where
     let mut harness_action = None;
     let mut harness_target = None;
     let mut harness_visibility = None;
+    let mut desktop_action = None;
     let mut changes_action = None;
     let mut changes_subaction = None;
     let mut changes_target = None;
@@ -5382,6 +5465,9 @@ where
             value if command == "tool" && tool_action.is_none() => {
                 tool_action = Some(value.to_owned())
             }
+            value if command == "desktop" && desktop_action.is_none() => {
+                desktop_action = Some(value.to_owned())
+            }
             value if command == "permissions" && permission_action.is_none() => {
                 permission_action = Some(value.to_owned())
             }
@@ -5530,6 +5616,7 @@ where
                     | "provider"
                     | "harness"
                     | "tool"
+                    | "desktop"
                     | "instructions"
                     | "context"
                     | "compact"
@@ -5626,6 +5713,11 @@ where
             Ok(Arguments::Tools { options, json })
         }
         "tool" => Err("tool requires 'list'".into()),
+        "desktop" if prompt.is_some() => Err("desktop does not accept a prompt".into()),
+        "desktop" if desktop_action.as_deref() == Some("status") => {
+            Ok(Arguments::Desktop { options, json })
+        }
+        "desktop" => Err("desktop requires 'status'".into()),
         "permissions" if prompt.is_some() => {
             Err("permissions does not accept a prompt".into())
         }
@@ -6982,6 +7074,7 @@ argentum harness backend enable|disable [OPTIONS]\n  \
 argentum harness module MODULE_ID install|enable|disable|remove [OPTIONS]\n  \
 argentum harness trajectory [SESSION_ID] [OPTIONS]\n  \
 argentum tool list [OPTIONS]\n  \
+argentum desktop status [OPTIONS]\n  \
 argentum permissions list [OPTIONS]\n  \
 argentum permissions select PROFILE_ID [OPTIONS]\n  \
 argentum permissions grants [OPTIONS]\n  \
@@ -7016,6 +7109,7 @@ session     Select the active session for the current workspace\n  \
 goal        Manage the active session goal contract\n  \
 harness     Inspect composition, presentation, execution policy, and surfaces\n  \
 tool        List registered developer tools and current availability\n  \
+desktop     Show optional Windows desktop-control build status (status)\n  \
 instructions Preview selected project instruction metadata (--directory RELATIVE_DIRECTORY)\n  \
 context     Preview selected working-context metadata; no tool bodies or token estimates\n  \
 permissions Inspect profiles, select local authority, and manage grants\n  \

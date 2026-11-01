@@ -6,7 +6,7 @@ rust-version.workspace = true
 license-file.workspace = true
 
 [features]
-desktop-control = []
+desktop-control = ["dep:windows", "dep:png"]
 server-support = ["rmcp/server"]
 
 [dependencies]
@@ -31,3 +31,21 @@ uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+png = { workspace = true, optional = true }
+windows = { workspace = true, optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_Xps",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_Threading",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }

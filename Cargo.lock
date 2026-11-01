@@ -464,6 +464,7 @@ dependencies = [
  "async-trait",
  "futures-util",
  "http",
+ "png",
  "reqwest",
  "rmcp",
  "serde",
@@ -476,6 +477,7 @@ dependencies = [
  "tokio-util",
  "url",
  "uuid",
+ "windows",
 ]
 
 [[package]]
@@ -647,6 +649,7 @@ version = "0.1.0-rc.1"
 dependencies = [
  "argentum-domain",
  "argentum-execution",
+ "argentum-extensions",
  "argentum-security",
  "argentum-workspaces",
  "async-trait",

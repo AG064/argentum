@@ -67,7 +67,7 @@ pub fn admit(
     workspace: &Path,
 ) -> Result<AdmittedDefinition, ConnectionError> {
     if definition.trust == ExtensionTrust::ReviewedWindowsApplication
-        && (!cfg!(feature = "desktop-control") || !cfg!(windows))
+        && !crate::desktop_control_available()
     {
         return Err(rejected(
             "windows_application_control_not_implemented_in_this_build",

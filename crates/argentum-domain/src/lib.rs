@@ -8,6 +8,7 @@ use uuid::Uuid;
 mod authority;
 pub mod context_budget;
 pub mod context_summary;
+pub mod desktop;
 pub mod extensions;
 pub mod final_result;
 pub mod goal_accounting;
@@ -404,6 +405,33 @@ pub enum ToolInput {
     Extension {
         operation: extensions::ExtensionOperation,
     },
+    DesktopListWindows {
+        max_windows: u16,
+    },
+    DesktopInspect {
+        window: Box<desktop::DesktopWindowIdentity>,
+        max_depth: u8,
+        max_elements: u16,
+    },
+    DesktopInvoke {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+    },
+    DesktopTypeText {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+        text: String,
+        #[serde(default)]
+        mode: desktop::DesktopTextMode,
+    },
+    DesktopPressKeys {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+        keys: Vec<String>,
+    },
+    DesktopScreenshot {
+        window: Box<desktop::DesktopWindowIdentity>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -471,6 +499,7 @@ pub enum Capability {
     Network,
     ExternalProcess,
     UseExtensions,
+    ControlDesktop,
 }
 
 impl Capability {
@@ -486,6 +515,7 @@ impl Capability {
             Self::Network => "Network",
             Self::ExternalProcess => "External process",
             Self::UseExtensions => "Use reviewed extension tools",
+            Self::ControlDesktop => "Control the Windows desktop",
         }
     }
 }

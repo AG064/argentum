@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(all(windows, feature = "desktop-control"))]
+use argentum_domain::desktop::{MAX_DESKTOP_KEYS, MAX_DESKTOP_TEXT_UTF16};
 use argentum_domain::{
     goal_supervision::{
         GoalCriterion, VerificationInputScope, VerificationInputSnapshot, VerificationTreeIdentity,
@@ -373,6 +375,12 @@ impl ToolRegistry {
             | ToolInput::PollProcessJob { .. }
             | ToolInput::CancelProcessJob { .. }
             | ToolInput::Extension { .. } => None,
+            ToolInput::DesktopListWindows { .. }
+            | ToolInput::DesktopInspect { .. }
+            | ToolInput::DesktopInvoke { .. }
+            | ToolInput::DesktopTypeText { .. }
+            | ToolInput::DesktopPressKeys { .. }
+            | ToolInput::DesktopScreenshot { .. } => None,
         };
         Ok(patch)
     }
@@ -668,6 +676,18 @@ enum BuiltinTool {
     CancelProcessJob,
     #[cfg(feature = "extensions")]
     Extension,
+    #[cfg(feature = "desktop-control")]
+    DesktopListWindows,
+    #[cfg(feature = "desktop-control")]
+    DesktopInspect,
+    #[cfg(feature = "desktop-control")]
+    DesktopInvoke,
+    #[cfg(feature = "desktop-control")]
+    DesktopTypeText,
+    #[cfg(feature = "desktop-control")]
+    DesktopPressKeys,
+    #[cfg(feature = "desktop-control")]
+    DesktopScreenshot,
 }
 
 impl BuiltinTool {
@@ -696,12 +716,78 @@ impl BuiltinTool {
         Self::CancelProcessJob,
         #[cfg(feature = "extensions")]
         Self::Extension,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopListWindows,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopInspect,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopInvoke,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopTypeText,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopPressKeys,
+        #[cfg(feature = "desktop-control")]
+        Self::DesktopScreenshot,
     ];
 
     fn descriptor(self) -> ToolDescriptor {
         let (id, capability_id, title, summary, capabilities, risk) = match self {
             #[cfg(feature = "extensions")]
             Self::Extension => ("extension", "extension.external", "Reviewed extensions", "Discover selected pinned skills/MCP tools, then use current handles. Installation and descriptions do not grant authority.", vec![Capability::UseExtensions], ToolRisk::Mutation),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopListWindows => (
+                "desktop_list_windows",
+                "desktop.control",
+                "List desktop windows",
+                "Enumerate up to 64 top-level windows with fresh HWND, PID, title, class, screen bounds and visible/responding/minimized/cloaked/elevated flags. Read-only: no input, capture, process launch, clipboard, filesystem or network access.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::ReadOnly,
+            ),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopInspect => (
+                "desktop_inspect",
+                "desktop.control",
+                "Inspect desktop element tree",
+                "Read a bounded UI Automation control view (depth 1-8, at most 256 elements) with name, control type, automation id, class, screen bounds, enabled/focusable/focused/offscreen/password flags and supported safe patterns. Names are untrusted application text. No element values are read.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::ReadOnly,
+            ),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopInvoke => (
+                "desktop_invoke",
+                "desktop.control",
+                "Invoke desktop element",
+                "Activate one observed element through its UI Automation Invoke or SelectionItem pattern after revalidating window and element identity. Semantic activation only: no pointer click, coordinate input or focus stealing.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::Mutation,
+            ),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopTypeText => (
+                "desktop_type_text",
+                "desktop.control",
+                "Type bounded desktop text",
+                "Write at most 1024 UTF-16 code units through ValuePattern (default, no global input) or, when explicitly selected, bounded Unicode key input to the already focused element in the already foreground target. No clipboard and no control characters other than newline and tab.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::Mutation,
+            ),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopPressKeys => (
+                "desktop_press_keys",
+                "desktop.control",
+                "Press bounded desktop keys",
+                "Send 1-8 bounded key chords to the already focused element in the already foreground target. Closed vocabulary: Ctrl/Shift/Alt plus letters, digits, navigation, editing and F1-F12. No Windows key, Alt+Tab, Alt+F4, Ctrl+Esc or secure attention sequence.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::Mutation,
+            ),
+            #[cfg(feature = "desktop-control")]
+            Self::DesktopScreenshot => (
+                "desktop_screenshot",
+                "desktop.control",
+                "Capture desktop window",
+                "Capture one observed visible window with PrintWindow only into a bounded PNG (at most 32 KiB after bounded downscaling, at most 8 MP). No screen-region grab, minimized/cloaked capture or stale pixels.",
+                vec![Capability::ControlDesktop],
+                ToolRisk::ReadOnly,
+            ),
             Self::ListDirectory => (
                 "list_directory",
                 "tool.list-directory",
@@ -883,6 +969,18 @@ impl BuiltinTool {
                 ToolRisk::Verification,
             ),
         };
+        #[cfg(feature = "desktop-control")]
+        let desktop = matches!(
+            self,
+            Self::DesktopListWindows
+                | Self::DesktopInspect
+                | Self::DesktopInvoke
+                | Self::DesktopTypeText
+                | Self::DesktopPressKeys
+                | Self::DesktopScreenshot
+        );
+        #[cfg(not(feature = "desktop-control"))]
+        let desktop = false;
         ToolDescriptor {
             id: id.into(),
             capability_id: capability_id.into(),
@@ -890,7 +988,7 @@ impl BuiltinTool {
             summary: summary.into(),
             capabilities,
             risk,
-            requires_approval: risk.requires_risk_approval(),
+            requires_approval: risk.requires_risk_approval() || desktop,
         }
     }
 }
@@ -940,6 +1038,12 @@ fn tool_id_for_input(input: &ToolInput) -> &'static str {
         ToolInput::PollProcessJob { .. } => "poll_process_job",
         ToolInput::CancelProcessJob { .. } => "cancel_process_job",
         ToolInput::Extension { .. } => "extension",
+        ToolInput::DesktopListWindows { .. } => "desktop_list_windows",
+        ToolInput::DesktopInspect { .. } => "desktop_inspect",
+        ToolInput::DesktopInvoke { .. } => "desktop_invoke",
+        ToolInput::DesktopTypeText { .. } => "desktop_type_text",
+        ToolInput::DesktopPressKeys { .. } => "desktop_press_keys",
+        ToolInput::DesktopScreenshot { .. } => "desktop_screenshot",
     }
 }
 
@@ -1583,6 +1687,149 @@ async fn execute_builtin(
                 },
             })
         }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopListWindows { max_windows } => {
+            let cancellation = context.cancellation.clone();
+            let list = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::list_windows(max_windows, &cancellation)
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Listed desktop windows",
+                serde_json::to_string(&list)
+                    .map_err(|_| ToolError::Execution("window list encoding failed".into()))?,
+            ))
+        }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopInspect {
+            window,
+            max_depth,
+            max_elements,
+        } => {
+            let cancellation = context.cancellation.clone();
+            let inspection = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::inspect(
+                    &window,
+                    max_depth,
+                    max_elements,
+                    &cancellation,
+                )
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Inspected desktop element tree",
+                serde_json::to_string(&inspection)
+                    .map_err(|_| ToolError::Execution("inspection encoding failed".into()))?,
+            ))
+        }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopInvoke { window, element } => {
+            let cancellation = context.cancellation.clone();
+            let receipt = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::invoke(&window, &element, &cancellation)
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Invoked desktop element",
+                serde_json::to_string(&receipt)
+                    .map_err(|_| ToolError::Execution("action receipt encoding failed".into()))?,
+            ))
+        }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopTypeText {
+            window,
+            element,
+            text,
+            mode,
+        } => {
+            if text.len() > MAX_DESKTOP_TEXT_UTF16 * 4 {
+                return Err(ToolError::InvalidInput(
+                    "text exceeds 1024 UTF-16 code units".into(),
+                ));
+            }
+            let cancellation = context.cancellation.clone();
+            let receipt = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::type_text(
+                    &window,
+                    &element,
+                    &text,
+                    mode,
+                    &cancellation,
+                )
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Typed bounded desktop text",
+                serde_json::to_string(&receipt)
+                    .map_err(|_| ToolError::Execution("text receipt encoding failed".into()))?,
+            ))
+        }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopPressKeys {
+            window,
+            element,
+            keys,
+        } => {
+            if keys.is_empty() || keys.len() > usize::from(MAX_DESKTOP_KEYS) {
+                return Err(ToolError::InvalidInput(
+                    "key count must be between 1 and 8".into(),
+                ));
+            }
+            let cancellation = context.cancellation.clone();
+            let receipt = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::press_keys(&window, &element, &keys, &cancellation)
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Pressed bounded desktop keys",
+                serde_json::to_string(&receipt)
+                    .map_err(|_| ToolError::Execution("key receipt encoding failed".into()))?,
+            ))
+        }
+        #[cfg(all(windows, feature = "desktop-control"))]
+        ToolInput::DesktopScreenshot { window } => {
+            let cancellation = context.cancellation.clone();
+            let capture = tokio::task::spawn_blocking(move || {
+                argentum_extensions::desktop::capture(&window, &cancellation)
+            })
+            .await
+            .map_err(|_| ToolError::Execution("desktop worker failed".into()))?
+            .map_err(desktop_tool_error)?;
+            Ok(success(
+                "Captured desktop window",
+                serde_json::to_string(&capture)
+                    .map_err(|_| ToolError::Execution("capture encoding failed".into()))?,
+            ))
+        }
+        #[cfg(any(not(windows), not(feature = "desktop-control")))]
+        ToolInput::DesktopListWindows { .. }
+        | ToolInput::DesktopInspect { .. }
+        | ToolInput::DesktopInvoke { .. }
+        | ToolInput::DesktopTypeText { .. }
+        | ToolInput::DesktopPressKeys { .. }
+        | ToolInput::DesktopScreenshot { .. } => Err(ToolError::NotRegistered(
+            "desktop control is not compiled in this build".into(),
+        )),
+    }
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+fn desktop_tool_error(error: argentum_extensions::desktop::DesktopError) -> ToolError {
+    use argentum_extensions::desktop::DesktopError;
+    match error {
+        DesktopError::Cancelled => ToolError::Cancelled,
+        DesktopError::InvalidInput(reason) => ToolError::InvalidInput(reason.into()),
+        other => ToolError::Execution(other.to_string()),
     }
 }
 

@@ -146,7 +146,11 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
 
     let tools = json(run_cli(workspace.path(), &database, &["tool", "list"]));
     let tools = tools["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 23 + usize::from(cfg!(feature = "extensions")));
+    assert_eq!(
+        tools.len(),
+        23 + usize::from(cfg!(feature = "extensions"))
+            + 6 * usize::from(cfg!(feature = "desktop-control"))
+    );
     for id in [
         "start_verification",
         "poll_process_job",
