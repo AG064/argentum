@@ -497,6 +497,27 @@ pub struct ProviderRequestValidation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderGroup {
+    Hosted,
+    Aggregator,
+    Local,
+    Custom,
+    Unsupported,
+}
+
+impl ProviderGroup {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hosted => "hosted",
+            Self::Aggregator => "aggregator",
+            Self::Local => "local",
+            Self::Custom => "custom",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderPreset {
     ChatGpt,
     OpenAiCompatible,
@@ -504,81 +525,506 @@ pub enum ProviderPreset {
     OpenAi,
     DeepSeek,
     LlamaCpp,
-    #[doc(hidden)]
     LmStudio,
+    Catalog(&'static ProviderPresetInfo),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProviderPresetInfo {
     pub id: &'static str,
     pub label: &'static str,
+    pub kind: ProviderKind,
     pub default_endpoint: Option<&'static str>,
     pub default_model: &'static str,
     pub credential_profile_id: Option<&'static str>,
+    pub api_key_env: Option<&'static str>,
+    pub docs_url: &'static str,
+    pub local: bool,
+    pub supported: bool,
+    pub group: ProviderGroup,
+    pub notes: &'static str,
 }
 
-const PROVIDER_PRESET_INFOS: [ProviderPresetInfo; 6] = [
+// One explicit constructor keeps every catalog row readable and const-evaluable.
+#[allow(clippy::too_many_arguments)]
+const fn preset(
+    id: &'static str,
+    label: &'static str,
+    kind: ProviderKind,
+    default_endpoint: Option<&'static str>,
+    default_model: &'static str,
+    credential_profile_id: Option<&'static str>,
+    api_key_env: Option<&'static str>,
+    docs_url: &'static str,
+    local: bool,
+    supported: bool,
+    group: ProviderGroup,
+    notes: &'static str,
+) -> ProviderPresetInfo {
     ProviderPresetInfo {
-        id: "openai-compatible",
-        label: "OpenAI compatible",
-        default_endpoint: None,
-        default_model: "model",
-        credential_profile_id: None,
-    },
-    ProviderPresetInfo {
-        id: "minimax",
-        label: "MiniMax",
-        default_endpoint: Some("https://api.minimax.io/v1/"),
-        default_model: "MiniMax-M2.7",
-        credential_profile_id: Some("minimax"),
-    },
-    ProviderPresetInfo {
-        id: "openai",
-        label: "OpenAI API",
-        default_endpoint: Some("https://api.openai.com/v1/"),
-        default_model: "gpt-5.6",
-        credential_profile_id: Some("openai"),
-    },
-    ProviderPresetInfo {
-        id: "deepseek",
-        label: "DeepSeek",
-        default_endpoint: Some("https://api.deepseek.com/"),
-        default_model: "deepseek-flash",
-        credential_profile_id: Some("deepseek"),
-    },
-    ProviderPresetInfo {
-        id: "llama-cpp",
-        label: "llama.cpp",
-        default_endpoint: Some("local://llama-cpp/"),
-        default_model: "Qwen3.5-0.8B-Q8_0.gguf",
-        credential_profile_id: None,
-    },
-    ProviderPresetInfo {
-        id: "chatgpt",
-        label: "ChatGPT plan",
-        default_endpoint: Some("https://api.openai.com/v1/"),
-        default_model: "gpt-6-luna",
-        credential_profile_id: None,
-    },
+        id,
+        label,
+        kind,
+        default_endpoint,
+        default_model,
+        credential_profile_id,
+        api_key_env,
+        docs_url,
+        local,
+        supported,
+        group,
+        notes,
+    }
+}
+
+pub const PROVIDER_CATALOG: [ProviderPresetInfo; 28] = [
+    preset(
+        "openai-compatible",
+        "OpenAI compatible",
+        ProviderKind::OpenAiCompatible,
+        None,
+        "model",
+        None,
+        None,
+        "https://platform.openai.com/docs/api-reference/chat",
+        false,
+        true,
+        ProviderGroup::Custom,
+        "Requires an explicit endpoint. Use provider save for a custom route.",
+    ),
+    preset(
+        "minimax",
+        "MiniMax",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.minimax.io/v1/"),
+        "MiniMax-M2.7",
+        Some("minimax"),
+        Some("MINIMAX_API_KEY"),
+        "https://platform.minimax.io/docs",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "openai",
+        "OpenAI API",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.openai.com/v1/"),
+        "gpt-5.6",
+        Some("openai"),
+        Some("OPENAI_API_KEY"),
+        "https://platform.openai.com/docs",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "deepseek",
+        "DeepSeek",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.deepseek.com/"),
+        "deepseek-flash",
+        Some("deepseek"),
+        Some("DEEPSEEK_API_KEY"),
+        "https://api-docs.deepseek.com",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "llama-cpp",
+        "llama.cpp",
+        ProviderKind::LocalLlamaCpp,
+        Some("local://llama-cpp/"),
+        "Qwen3.5-0.8B-Q8_0.gguf",
+        None,
+        None,
+        "https://github.com/ggml-org/llama.cpp",
+        true,
+        true,
+        ProviderGroup::Local,
+        "",
+    ),
+    preset(
+        "lm-studio",
+        "LM Studio",
+        ProviderKind::LocalLmStudio,
+        Some("http://127.0.0.1:1234/v1/"),
+        "local-model",
+        None,
+        None,
+        "https://lmstudio.ai/docs",
+        true,
+        true,
+        ProviderGroup::Local,
+        "",
+    ),
+    preset(
+        "chatgpt",
+        "ChatGPT plan",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.openai.com/v1/"),
+        "gpt-6-luna",
+        None,
+        None,
+        "https://chatgpt.com",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "Uses browser sign-in instead of an API key.",
+    ),
+    preset(
+        "anthropic",
+        "Anthropic",
+        ProviderKind::Anthropic,
+        Some("https://api.anthropic.com/v1/"),
+        "claude-sonnet-5-5",
+        Some("anthropic"),
+        Some("ANTHROPIC_API_KEY"),
+        "https://docs.anthropic.com",
+        false,
+        false,
+        ProviderGroup::Unsupported,
+        "Native Anthropic text adapter is not registered for coding dispatch; no structured-tool route.",
+    ),
+    preset(
+        "google-gemini",
+        "Google Gemini",
+        ProviderKind::OpenAiCompatible,
+        Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
+        "gemini-4-argon",
+        Some("google-gemini"),
+        Some("GEMINI_API_KEY"),
+        "https://ai.google.dev/gemini-api/docs/openai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "Uses the Gemini OpenAI-compatible endpoint.",
+    ),
+    preset(
+        "openrouter",
+        "OpenRouter",
+        ProviderKind::OpenAiCompatible,
+        Some("https://openrouter.ai/api/v1/"),
+        "openai/gpt-5.6",
+        Some("openrouter"),
+        Some("OPENROUTER_API_KEY"),
+        "https://openrouter.ai/docs",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "Model IDs use the vendor/model form.",
+    ),
+    preset(
+        "groq",
+        "Groq",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.groq.com/openai/v1/"),
+        "openai/gpt-oss-120b",
+        Some("groq"),
+        Some("GROQ_API_KEY"),
+        "https://console.groq.com/docs",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "mistral",
+        "Mistral",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.mistral.ai/v1/"),
+        "devstral-latest",
+        Some("mistral"),
+        Some("MISTRAL_API_KEY"),
+        "https://docs.mistral.ai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "xai",
+        "xAI",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.x.ai/v1/"),
+        "grok-4.6",
+        Some("xai"),
+        Some("XAI_API_KEY"),
+        "https://docs.x.ai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "together",
+        "Together AI",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.together.xyz/v1/"),
+        "Qwen/Qwen3-Coder-Next-FP8",
+        Some("together"),
+        Some("TOGETHER_API_KEY"),
+        "https://docs.together.ai",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "fireworks",
+        "Fireworks AI",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.fireworks.ai/inference/v1/"),
+        "accounts/fireworks/models/kimi-k3",
+        Some("fireworks"),
+        Some("FIREWORKS_API_KEY"),
+        "https://docs.fireworks.ai",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "Model IDs use the accounts/fireworks/models form.",
+    ),
+    preset(
+        "cerebras",
+        "Cerebras",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.cerebras.ai/v1/"),
+        "gpt-oss-120b",
+        Some("cerebras"),
+        Some("CEREBRAS_API_KEY"),
+        "https://inference-docs.cerebras.ai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "perplexity",
+        "Perplexity",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.perplexity.ai/"),
+        "sonar-pro",
+        Some("perplexity"),
+        Some("PERPLEXITY_API_KEY"),
+        "https://docs.perplexity.ai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "cohere",
+        "Cohere",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.cohere.com/compatibility/v1/"),
+        "command-a-plus-05-2026",
+        Some("cohere"),
+        Some("COHERE_API_KEY"),
+        "https://docs.cohere.com/docs/compatibility-api",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "Uses the Cohere compatibility API.",
+    ),
+    preset(
+        "moonshot",
+        "Moonshot AI",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.moonshot.ai/v1/"),
+        "kimi-k3",
+        Some("moonshot"),
+        Some("MOONSHOT_API_KEY"),
+        "https://platform.moonshot.ai/docs",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "zai",
+        "Z.AI (GLM)",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.z.ai/api/paas/v4/"),
+        "glm-5.3",
+        Some("zai"),
+        Some("ZAI_API_KEY"),
+        "https://docs.z.ai",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "International endpoint; mainland accounts use open.bigmodel.cn.",
+    ),
+    preset(
+        "qwen",
+        "Qwen (DashScope)",
+        ProviderKind::OpenAiCompatible,
+        Some("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/"),
+        "qwen3.8-max",
+        Some("qwen"),
+        Some("DASHSCOPE_API_KEY"),
+        "https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "International DashScope endpoint; mainland accounts use dashscope.aliyuncs.com.",
+    ),
+    preset(
+        "github-models",
+        "GitHub Models",
+        ProviderKind::OpenAiCompatible,
+        Some("https://models.github.ai/inference/"),
+        "openai/gpt-4.1",
+        Some("github-models"),
+        Some("GITHUB_TOKEN"),
+        "https://docs.github.com/en/github-models",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "Uses a GitHub token with the models:read permission.",
+    ),
+    preset(
+        "opencode-zen",
+        "OpenCode Zen",
+        ProviderKind::OpenAiCompatible,
+        Some("https://opencode.ai/inference/openai/v1/"),
+        "claude-sonnet-5-5",
+        Some("opencode-zen"),
+        Some("OPENCODE_API_KEY"),
+        "https://opencode.ai/docs/providers/",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "ollama",
+        "Ollama",
+        ProviderKind::OpenAiCompatible,
+        Some("http://127.0.0.1:11434/v1/"),
+        "gpt-oss:20b",
+        None,
+        None,
+        "https://docs.ollama.com/api/openai-compatibility",
+        true,
+        true,
+        ProviderGroup::Local,
+        "Local server; no credential is required.",
+    ),
+    preset(
+        "vllm",
+        "vLLM",
+        ProviderKind::OpenAiCompatible,
+        Some("http://127.0.0.1:8000/v1/"),
+        "local-model",
+        None,
+        None,
+        "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html",
+        true,
+        true,
+        ProviderGroup::Local,
+        "Local server; use provider save when it does not listen on port 8000.",
+    ),
+    preset(
+        "azure-openai",
+        "Azure OpenAI",
+        ProviderKind::OpenAiCompatible,
+        None,
+        "gpt-5.6",
+        None,
+        Some("AZURE_OPENAI_API_KEY"),
+        "https://learn.microsoft.com/azure/ai-foundry/openai/api-version-lifecycle",
+        false,
+        false,
+        ProviderGroup::Unsupported,
+        "Requires an api-key header and a resource-specific endpoint; not a Bearer OpenAI-compatible route.",
+    ),
+    preset(
+        "amazon-bedrock",
+        "Amazon Bedrock",
+        ProviderKind::Unknown,
+        None,
+        "n/a",
+        None,
+        None,
+        "https://docs.aws.amazon.com/bedrock/",
+        false,
+        false,
+        ProviderGroup::Unsupported,
+        "Requires AWS SigV4 credentials; not an OpenAI-compatible endpoint.",
+    ),
+    preset(
+        "google-vertex",
+        "Google Vertex AI",
+        ProviderKind::Unknown,
+        None,
+        "n/a",
+        None,
+        None,
+        "https://cloud.google.com/vertex-ai/generative-ai/docs",
+        false,
+        false,
+        ProviderGroup::Unsupported,
+        "Requires Google service-account credentials; not an OpenAI-compatible endpoint.",
+    ),
 ];
 
-const LM_STUDIO_COMPATIBILITY_INFO: ProviderPresetInfo = ProviderPresetInfo {
-    id: "lm-studio",
-    label: "LM Studio",
-    default_endpoint: Some("http://127.0.0.1:1234/v1/"),
-    default_model: "local-model",
-    credential_profile_id: None,
-};
-
 pub fn provider_presets() -> &'static [ProviderPresetInfo] {
-    &PROVIDER_PRESET_INFOS
+    &PROVIDER_CATALOG
 }
 
 pub fn provider_preset(id: &str) -> Option<ProviderPresetInfo> {
-    ProviderPreset::parse(id).map(ProviderPreset::info)
+    provider_catalog_entry(id).copied()
+}
+
+pub fn provider_credential_environment() -> Vec<(&'static str, &'static str)> {
+    PROVIDER_CATALOG
+        .iter()
+        .filter(|preset| preset.supported && preset.credential_profile_id.is_some())
+        .filter_map(|preset| preset.api_key_env.map(|variable| (preset.id, variable)))
+        .collect()
+}
+
+fn provider_catalog_entry(id: &str) -> Option<&'static ProviderPresetInfo> {
+    PROVIDER_CATALOG
+        .iter()
+        .find(|preset| preset.id == id.trim())
+}
+
+pub fn provider_profile_from_preset(
+    id: &str,
+    endpoint: Option<&str>,
+    model: Option<&str>,
+) -> Result<ProviderProfile, ProviderError> {
+    let info = provider_catalog_entry(id).ok_or_else(|| ProviderError::InvalidProfile {
+        field: "id",
+        reason: "unknown provider preset",
+    })?;
+    if !info.supported {
+        return Err(ProviderError::UnsupportedProviderKind {
+            provider_id: info.id.into(),
+        });
+    }
+    ProviderPreset::Catalog(info).profile(endpoint, model)
 }
 
 impl ProviderPreset {
+    fn id(self) -> &'static str {
+        match self {
+            Self::ChatGpt => "chatgpt",
+            Self::OpenAiCompatible => "openai-compatible",
+            Self::MiniMax => "minimax",
+            Self::OpenAi => "openai",
+            Self::DeepSeek => "deepseek",
+            Self::LlamaCpp => "llama-cpp",
+            Self::LmStudio => "lm-studio",
+            Self::Catalog(info) => info.id,
+        }
+    }
+
     pub fn parse(id: &str) -> Option<Self> {
         match id.trim() {
             "chatgpt" => Some(Self::ChatGpt),
@@ -588,24 +1034,17 @@ impl ProviderPreset {
             "deepseek" => Some(Self::DeepSeek),
             "llama-cpp" => Some(Self::LlamaCpp),
             "lm-studio" => Some(Self::LmStudio),
-            _ => None,
+            other => provider_catalog_entry(other).map(Self::Catalog),
         }
     }
 
     pub fn info(self) -> ProviderPresetInfo {
-        match self {
-            Self::ChatGpt => PROVIDER_PRESET_INFOS[5],
-            Self::OpenAiCompatible => PROVIDER_PRESET_INFOS[0],
-            Self::MiniMax => PROVIDER_PRESET_INFOS[1],
-            Self::OpenAi => PROVIDER_PRESET_INFOS[2],
-            Self::DeepSeek => PROVIDER_PRESET_INFOS[3],
-            Self::LlamaCpp => PROVIDER_PRESET_INFOS[4],
-            Self::LmStudio => LM_STUDIO_COMPATIBILITY_INFO,
-        }
+        *provider_catalog_entry(self.id()).expect("provider preset is catalogued")
     }
 
     fn is_hosted(self) -> bool {
-        matches!(self, Self::MiniMax | Self::OpenAi | Self::DeepSeek)
+        let info = self.info();
+        !info.local && info.credential_profile_id.is_some()
     }
 
     pub fn profile(
@@ -619,18 +1058,16 @@ impl ProviderPreset {
                 .or(info.default_endpoint)
                 .ok_or_else(|| ProviderError::InvalidProfile {
                     field: "endpoint",
-                    reason: "generic OpenAI-compatible preset requires an explicit endpoint",
+                    reason: if info.id == "openai-compatible" {
+                        "generic OpenAI-compatible preset requires an explicit endpoint"
+                    } else {
+                        "this provider preset requires an explicit endpoint"
+                    },
                 })?;
         normalize_provider_profile(ProviderProfile {
             id: info.id.into(),
             label: info.label.into(),
-            kind: if matches!(self, Self::LmStudio) {
-                ProviderKind::LocalLmStudio
-            } else if matches!(self, Self::LlamaCpp) {
-                ProviderKind::LocalLlamaCpp
-            } else {
-                ProviderKind::OpenAiCompatible
-            },
+            kind: info.kind,
             endpoint: endpoint.into(),
             model: model.unwrap_or(info.default_model).into(),
             selected: false,
@@ -650,17 +1087,15 @@ impl ProviderPreset {
                 reason: "profile identity does not match the provider preset",
             });
         }
-        let expected_kind = if matches!(self, Self::LmStudio) {
-            ProviderKind::LocalLmStudio
-        } else if matches!(self, Self::LlamaCpp) {
-            ProviderKind::LocalLlamaCpp
-        } else {
-            ProviderKind::OpenAiCompatible
-        };
-        if profile.kind != expected_kind {
+        if profile.kind != info.kind {
             return Err(ProviderError::InvalidProfile {
                 field: "kind",
                 reason: "profile kind does not match the provider preset",
+            });
+        }
+        if info.id == "chatgpt" {
+            return Err(ProviderError::CredentialsRequired {
+                provider_id: "chatgpt".into(),
             });
         }
         if self.is_hosted() {
@@ -672,16 +1107,15 @@ impl ProviderPreset {
             validate_hosted_credential_origin(&profile)?;
         }
 
-        match self {
-            Self::ChatGpt => Err(ProviderError::CredentialsRequired {
-                provider_id: "chatgpt".into(),
-            }),
-            Self::LlamaCpp => Ok(Arc::new(LocalLlamaCppProvider::unconfigured(profile.model))),
-            Self::LmStudio => Ok(Arc::new(LocalLmStudioProvider::new(
+        match info.kind {
+            ProviderKind::LocalLlamaCpp => {
+                Ok(Arc::new(LocalLlamaCppProvider::unconfigured(profile.model)))
+            }
+            ProviderKind::LocalLmStudio => Ok(Arc::new(LocalLmStudioProvider::new(
                 &profile.endpoint,
                 &profile.model,
             )?)),
-            Self::OpenAiCompatible | Self::MiniMax | Self::OpenAi | Self::DeepSeek => Ok(Arc::new(
+            ProviderKind::OpenAiCompatible => Ok(Arc::new(
                 OpenAiCompatibleProvider::new(
                     &profile.endpoint,
                     &profile.model,
@@ -689,8 +1123,13 @@ impl ProviderPreset {
                     ProviderKind::OpenAiCompatible,
                     info.label,
                 )?
-                .with_hidden_tagged_reasoning(matches!(self, Self::MiniMax | Self::DeepSeek)),
+                .with_hidden_tagged_reasoning(matches!(info.id, "minimax" | "deepseek")),
             )),
+            ProviderKind::Anthropic | ProviderKind::Unknown => {
+                Err(ProviderError::UnsupportedProviderKind {
+                    provider_id: profile.id,
+                })
+            }
         }
     }
 }
@@ -2557,22 +2996,27 @@ impl ProviderCredentials {
 }
 
 fn is_canonical_hosted_profile_id(profile_id: &str) -> bool {
-    matches!(profile_id, "openai" | "minimax" | "deepseek")
+    provider_catalog_entry(profile_id)
+        .is_some_and(|preset| preset.credential_profile_id.is_some() && !preset.local)
 }
 
 fn validate_hosted_credential_origin(profile: &ProviderProfile) -> Result<(), ProviderError> {
+    let Some(preset) = provider_catalog_entry(&profile.id) else {
+        return Ok(());
+    };
+    let Some(default_endpoint) = preset.default_endpoint else {
+        return Ok(());
+    };
+    let expected = Url::parse(default_endpoint).map_err(|_| ProviderError::InvalidProfile {
+        field: "endpoint",
+        reason: "the provider preset endpoint is invalid",
+    })?;
     let endpoint = Url::parse(&profile.endpoint).map_err(|_| ProviderError::InvalidProfile {
         field: "endpoint",
         reason: "use a valid HTTP or HTTPS URL",
     })?;
-    let expected_host = match profile.id.as_str() {
-        "openai" => "api.openai.com",
-        "minimax" => "api.minimax.io",
-        "deepseek" => "api.deepseek.com",
-        _ => return Ok(()),
-    };
     if endpoint.scheme() != "https"
-        || endpoint.host_str() != Some(expected_host)
+        || endpoint.host_str() != expected.host_str()
         || endpoint.port().is_some()
     {
         return Err(ProviderError::UnsafeHostedEndpoint {
@@ -6568,127 +7012,136 @@ mod tests {
     }
 
     #[test]
-    fn provider_presets_expose_the_required_ids_and_canonical_metadata() {
-        let ids = provider_presets()
-            .iter()
-            .map(|preset| preset.id)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            ids,
-            vec![
-                "openai-compatible",
-                "minimax",
-                "openai",
-                "deepseek",
-                "llama-cpp",
-                "chatgpt"
-            ]
+    fn provider_presets_expose_a_broad_unique_catalog() {
+        let presets = provider_presets();
+        assert!(
+            presets.len() >= 20,
+            "catalog must cover at least 20 providers"
         );
+        let mut ids = presets.iter().map(|preset| preset.id).collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), presets.len(), "catalog ids must be unique");
+        for required in [
+            "openai-compatible",
+            "minimax",
+            "openai",
+            "deepseek",
+            "llama-cpp",
+            "lm-studio",
+            "chatgpt",
+            "anthropic",
+            "google-gemini",
+            "openrouter",
+            "groq",
+            "ollama",
+        ] {
+            assert!(provider_preset(required).is_some(), "missing {required}");
+        }
 
         let minimax = provider_preset("minimax").expect("MiniMax preset");
         assert_eq!(minimax.label, "MiniMax");
         assert_eq!(minimax.default_endpoint, Some("https://api.minimax.io/v1/"));
         assert_eq!(minimax.credential_profile_id, Some("minimax"));
+        assert_eq!(minimax.api_key_env, Some("MINIMAX_API_KEY"));
+        assert_eq!(minimax.kind, ProviderKind::OpenAiCompatible);
 
         let openai = provider_preset("openai").expect("OpenAI preset");
-        assert_eq!(openai.label, "OpenAI API");
         assert_eq!(openai.default_endpoint, Some("https://api.openai.com/v1/"));
-        assert_eq!(openai.credential_profile_id, Some("openai"));
 
         let deepseek = provider_preset("deepseek").expect("DeepSeek preset");
-        assert_eq!(deepseek.label, "DeepSeek");
-        assert_eq!(deepseek.default_endpoint, Some("https://api.deepseek.com/"));
         assert_eq!(deepseek.default_model, "deepseek-flash");
-        assert_eq!(deepseek.credential_profile_id, Some("deepseek"));
 
         let lm_studio = provider_preset("lm-studio").expect("LM Studio preset");
-        assert_eq!(lm_studio.label, "LM Studio");
+        assert!(lm_studio.local);
         assert_eq!(
             lm_studio.default_endpoint,
             Some("http://127.0.0.1:1234/v1/")
         );
-        assert_eq!(lm_studio.credential_profile_id, None);
+
+        let anthropic = provider_preset("anthropic").expect("Anthropic preset");
+        assert_eq!(anthropic.kind, ProviderKind::Anthropic);
+        assert_eq!(
+            anthropic.default_endpoint,
+            Some("https://api.anthropic.com/v1/")
+        );
     }
 
     #[test]
-    fn provider_presets_build_normalized_profiles_without_changing_identity() {
-        assert!(ProviderPreset::OpenAiCompatible
-            .profile(None, None)
-            .is_err());
-
-        let generic = ProviderPreset::OpenAiCompatible
-            .profile(Some("https://example.test/v1"), Some(" custom-model "))
-            .expect("generic profile");
-        assert_eq!(generic.id, "openai-compatible");
-        assert_eq!(generic.label, "OpenAI compatible");
-        assert_eq!(generic.endpoint, "https://example.test/v1/");
-        assert_eq!(generic.model, "custom-model");
-        assert_eq!(generic.kind, ProviderKind::OpenAiCompatible);
-
-        for preset in [
-            ProviderPreset::MiniMax,
-            ProviderPreset::OpenAi,
-            ProviderPreset::DeepSeek,
-            ProviderPreset::LlamaCpp,
-            ProviderPreset::ChatGpt,
-        ] {
-            let profile = preset.profile(None, None).expect("canonical profile");
-            assert_eq!(profile.id, preset.info().id);
-            assert_eq!(profile.label, preset.info().label);
-            assert_eq!(profile.endpoint, preset.info().default_endpoint.unwrap());
-            assert_eq!(profile.model, preset.info().default_model);
+    fn catalog_hosted_credentials_match_the_domain_list() {
+        let mut hosted = provider_presets()
+            .iter()
+            .filter(|preset| preset.supported && preset.credential_profile_id.is_some())
+            .map(|preset| preset.id)
+            .collect::<Vec<_>>();
+        hosted.sort_unstable();
+        let mut domain = argentum_domain::HOSTED_CREDENTIAL_PROVIDER_IDS.to_vec();
+        domain.sort_unstable();
+        assert_eq!(hosted, domain);
+        for preset in provider_presets()
+            .iter()
+            .filter(|preset| preset.credential_profile_id.is_some())
+        {
+            assert!(
+                preset.api_key_env.is_some(),
+                "{} needs an environment variable",
+                preset.id
+            );
+            assert!(
+                !preset.docs_url.is_empty(),
+                "{} needs a docs URL",
+                preset.id
+            );
         }
     }
 
     #[test]
-    fn provider_preset_factory_preserves_provider_specific_behavior() {
-        let profile = ProviderPreset::MiniMax
-            .profile(None, None)
-            .expect("MiniMax profile");
-        let provider = ProviderPreset::MiniMax
-            .build_provider(&profile, Some(SecretValue::new("test-secret")))
-            .expect("MiniMax provider");
-        let status = provider.status();
-        assert_eq!(status.profile_id, "openai-compatible");
-        assert_eq!(status.label, "MiniMax");
-        assert_eq!(status.endpoint, "https://api.minimax.io/v1/");
+    fn catalog_presets_build_profiles_and_reject_unsupported_routes() {
+        let groq = provider_profile_from_preset("groq", None, None).expect("Groq profile");
+        assert_eq!(groq.id, "groq");
+        assert_eq!(groq.kind, ProviderKind::OpenAiCompatible);
+        assert_eq!(groq.endpoint, "https://api.groq.com/openai/v1/");
+        assert_eq!(groq.model, "openai/gpt-oss-120b");
 
-        let local_profile = ProviderPreset::LlamaCpp
-            .profile(None, None)
-            .expect("llama.cpp profile");
-        let local_provider = ProviderPreset::LlamaCpp
-            .build_provider(&local_profile, None)
-            .expect("llama.cpp provider");
-        assert_eq!(local_provider.id(), "llama-cpp");
-        assert_eq!(local_provider.status().label, "llama.cpp");
+        let ollama = provider_profile_from_preset("ollama", None, None).expect("Ollama profile");
+        assert_eq!(ollama.kind, ProviderKind::OpenAiCompatible);
+        assert_eq!(ollama.endpoint, "http://127.0.0.1:11434/v1/");
+
+        let error = provider_profile_from_preset("amazon-bedrock", None, None)
+            .expect_err("Bedrock is unsupported");
+        assert!(matches!(
+            error,
+            ProviderError::UnsupportedProviderKind { .. }
+        ));
+
+        assert!(provider_profile_from_preset("openai-compatible", None, None).is_err());
+        assert!(provider_profile_from_preset("synthetic", None, None).is_err());
     }
 
     #[test]
-    fn active_local_preset_is_llama_cpp_and_excludes_lm_studio() {
-        let ids = provider_presets()
-            .iter()
-            .map(|preset| preset.id)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            ids,
-            vec![
-                "openai-compatible",
-                "minimax",
-                "openai",
-                "deepseek",
-                "llama-cpp",
-                "chatgpt"
-            ]
-        );
-        assert!(provider_presets()
-            .iter()
-            .all(|preset| preset.id != "lm-studio"));
+    fn catalog_hosted_presets_require_credentials_and_exact_origins() {
+        let profile = provider_profile_from_preset("groq", None, None).expect("Groq profile");
+        let error = ProviderPreset::parse("groq")
+            .expect("Groq preset")
+            .build_provider(&profile, None)
+            .err()
+            .expect("Groq needs a key");
+        assert!(matches!(error, ProviderError::CredentialsRequired { .. }));
 
-        let local = provider_preset("llama-cpp").expect("llama.cpp preset");
-        assert_eq!(local.label, "llama.cpp");
-        assert_eq!(local.default_endpoint, Some("local://llama-cpp/"));
-        assert_eq!(local.default_model, "Qwen3.5-0.8B-Q8_0.gguf");
-        assert_eq!(local.credential_profile_id, None);
+        let mut unsafe_profile = profile.clone();
+        unsafe_profile.endpoint = "https://example.test/v1/".into();
+        let error = ProviderPreset::parse("groq")
+            .expect("Groq preset")
+            .build_provider(&unsafe_profile, Some(SecretValue::new("test-secret")))
+            .err()
+            .expect("Groq must reject a different host");
+        assert!(matches!(error, ProviderError::UnsafeHostedEndpoint { .. }));
+
+        let local = provider_profile_from_preset("ollama", None, None).expect("Ollama profile");
+        assert!(ProviderPreset::parse("ollama")
+            .expect("Ollama preset")
+            .build_provider(&local, None)
+            .is_ok());
     }
 
     #[test]

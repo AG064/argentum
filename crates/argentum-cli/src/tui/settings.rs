@@ -174,7 +174,7 @@ pub(super) fn open(
             }
             for p in argentum_providers::provider_presets()
                 .iter()
-                .filter(|p| matches!(p.id, "minimax" | "deepseek" | "openai" | "chatgpt"))
+                .filter(|p| p.supported && p.default_endpoint.is_some())
             {
                 if !local
                     .provider_profiles()?
