@@ -2,10 +2,19 @@
 //! Installation is not execution approval. External code is never host policy.
 pub mod configuration;
 pub mod connection;
+#[cfg(all(windows, feature = "desktop-control"))]
+pub mod desktop;
 pub mod http;
 pub mod lifecycle;
 pub mod package;
 pub mod wire;
+
+/// The first-party desktop path exists only when the optional Windows feature
+/// compiled the real implementation. Callers must not infer authority from the
+/// feature flag alone.
+pub const fn desktop_control_available() -> bool {
+    cfg!(all(windows, feature = "desktop-control"))
+}
 
 pub const SDK_VERSION: &str = "rmcp/3.5.1";
 pub const MODERN_PROTOCOL: &str = "2026-07-28";

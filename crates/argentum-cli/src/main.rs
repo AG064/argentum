@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "artifacts")]
 mod artifact_cli;
 #[cfg(feature = "extensions")]
+mod extension_browser_cli;
+#[cfg(feature = "extensions")]
 mod extension_cli;
 mod model_picker;
 
@@ -860,6 +862,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         Arguments::ProviderList { options, json } => {
             run_provider_profile_command(options, AppCommand::ListProviderProfiles, json).await?;
         }
+        Arguments::ProviderPresets { json } => {
+            print_provider_presets(json).await?;
+        }
         Arguments::ProviderBudget {
             options,
             profile_id,
@@ -1168,6 +1173,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         }
         Arguments::Tools { options, json } => {
             run_tool_list_command(options, json).await?;
+        }
+        Arguments::Desktop { options, json } => {
+            run_desktop_status_command(options, json).await?;
         }
         Arguments::Instructions { options, directory } => {
             Box::pin(run_instruction_preview_command(
@@ -1770,6 +1778,26 @@ fn ensure_local_coding_budget(host: &CommandHost) -> Result<bool, Box<dyn std::e
     Ok(true)
 }
 
+fn format_provider_catalog_selection() -> String {
+    let mut output = String::from("  Catalog (type any supported id):\n");
+    for (group, title) in [
+        (argentum_providers::ProviderGroup::Hosted, "hosted"),
+        (argentum_providers::ProviderGroup::Aggregator, "aggregators"),
+        (argentum_providers::ProviderGroup::Local, "local"),
+    ] {
+        let ids = argentum_providers::provider_presets()
+            .iter()
+            .filter(|preset| preset.supported && preset.group == group)
+            .map(|preset| preset.id)
+            .collect::<Vec<_>>();
+        if ids.is_empty() {
+            continue;
+        }
+        output.push_str(&format!("    {title}: {}\n", ids.join(", ")));
+    }
+    output
+}
+
 async fn prompt_provider<R, W>(
     host: &CommandHost,
     state: &SetupState,
@@ -1844,6 +1872,7 @@ where
         "Start llama.cpp text-only chat (no coding tools)"
     };
     write_setup_text(writer, &format!("  minimax   Add or configure MiniMax coding (API key required)\n  deepseek  Add or configure DeepSeek coding (API key required)\n  chatgpt   ChatGPT coding through browser sign-in (no API key)\n  server    Connect an OpenAI-compatible HTTP server\n  local     {local_action}\n  /cancel   Exit setup and keep saved settings\n")).await?;
+    write_setup_text(writer, &format_provider_catalog_selection()).await?;
     let default_id = profiles
         .iter()
         .find(|profile| {
@@ -1897,15 +1926,34 @@ where
         if provider_id == "server" {
             provider_id = prompt_compatible_server(host, reader, writer).await?;
             profiles = host.provider_profiles()?;
-        } else if matches!(provider_id.as_str(), "minimax" | "deepseek" | "chatgpt")
-            && !profiles.iter().any(|p| p.id == provider_id)
-        {
-            host.client()
-                .dispatch(AppCommand::AddProviderPreset {
-                    preset_id: provider_id.clone(),
-                })
+        } else if let Some(preset) = argentum_providers::provider_preset(&provider_id) {
+            if !preset.supported {
+                write_setup_text(
+                    writer,
+                    &format!("{} is not supported: {}\n", preset.label, preset.notes),
+                )
                 .await?;
-            profiles = host.provider_profiles()?;
+                continue;
+            }
+            if preset.default_endpoint.is_none() {
+                write_setup_text(
+                    writer,
+                    &format!(
+                        "{} requires an explicit endpoint. Choose server or use 'argentum provider save'.\n",
+                        preset.label
+                    ),
+                )
+                .await?;
+                continue;
+            }
+            if !profiles.iter().any(|p| p.id == provider_id) {
+                host.client()
+                    .dispatch(AppCommand::AddProviderPreset {
+                        preset_id: provider_id.clone(),
+                    })
+                    .await?;
+                profiles = host.provider_profiles()?;
+            }
         }
         if let Some(profile) = profiles.iter().find(|profile| profile.id == provider_id) {
             if profile.id == "chatgpt" && !host.provider_credential_configured("chatgpt") {
@@ -2974,6 +3022,81 @@ async fn run_tool_list_command(
     .await
 }
 
+async fn run_desktop_status_command(
+    options: CommonOptions,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = options.host_config()?;
+    with_one_shot_host(config, move |host| {
+        Box::pin(async move {
+            let built = cfg!(all(windows, feature = "desktop-control"));
+            let harness = host.harness_snapshot()?;
+            let capability = harness
+                .capabilities
+                .iter()
+                .find(|capability| capability.id == "desktop.control");
+            let tools = host
+                .tool_descriptors()
+                .into_iter()
+                .filter(|descriptor| descriptor.capability_id == "desktop.control")
+                .map(|descriptor| {
+                    serde_json::json!({
+                        "id": descriptor.id,
+                        "title": descriptor.title,
+                        "summary": descriptor.summary,
+                        "capabilities": descriptor.capabilities,
+                        "risk": descriptor.risk,
+                        "requires_approval": descriptor.requires_approval,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let reason = if built {
+                capability
+                    .map(|capability| capability.unavailable_reason.clone())
+                    .unwrap_or_else(|| "desktop.control is not registered in this harness".into())
+            } else {
+                "This binary was not built with --features desktop-control.".into()
+            };
+            let report = serde_json::json!({
+                "feature": "desktop-control",
+                "built": built,
+                "available": built && !tools.is_empty(),
+                "capability_id": "desktop.control",
+                "capability_enabled": capability.is_some_and(|capability| capability.enabled),
+                "capability_availability": capability.map(|capability| capability.availability),
+                "reason": reason,
+                "tools": tools,
+                "note": "Status only. No window was enumerated and no desktop input was sent.",
+            });
+            if json {
+                println!("{report}");
+            } else if built {
+                println!(
+                    "Desktop control: built; capability {}; {} tool(s)",
+                    if report["capability_enabled"] == true {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
+                    report["tools"].as_array().map_or(0, Vec::len)
+                );
+                for tool in report["tools"].as_array().into_iter().flatten() {
+                    println!(
+                        "  {}: {}",
+                        tool["id"].as_str().unwrap_or("unknown"),
+                        tool["summary"].as_str().unwrap_or("")
+                    );
+                }
+                println!("No desktop input was sent.");
+            } else {
+                println!("Desktop control: not built (--features desktop-control).");
+            }
+            Ok(())
+        })
+    })
+    .await
+}
+
 async fn run_permissions_command(
     options: CommonOptions,
     action: PermissionAction,
@@ -3978,6 +4101,82 @@ fn format_provider_profiles_human(profiles: &[argentum_domain::ProviderProfile])
     output
 }
 
+async fn print_provider_presets(json: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let presets = argentum_providers::provider_presets();
+    if json {
+        let rows = presets
+            .iter()
+            .map(|preset| {
+                serde_json::json!({
+                    "id": preset.id,
+                    "label": preset.label,
+                    "kind": provider_kind_argument(preset.kind),
+                    "endpoint": preset.default_endpoint,
+                    "default_model": preset.default_model,
+                    "credential_required": preset.credential_profile_id.is_some(),
+                    "api_key_env": preset.api_key_env,
+                    "local": preset.local,
+                    "supported": preset.supported,
+                    "group": preset.group.as_str(),
+                    "docs_url": preset.docs_url,
+                    "notes": preset.notes,
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut stdout = tokio::io::stdout();
+        stdout.write_all(&serde_json::to_vec(&rows)?).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
+    } else {
+        print!("{}", format_provider_presets_human(presets));
+    }
+    Ok(())
+}
+
+fn format_provider_presets_human(presets: &[argentum_providers::ProviderPresetInfo]) -> String {
+    let mut output = String::new();
+    for (group, title) in [
+        (argentum_providers::ProviderGroup::Hosted, "Hosted"),
+        (argentum_providers::ProviderGroup::Aggregator, "Aggregators"),
+        (argentum_providers::ProviderGroup::Local, "Local"),
+        (argentum_providers::ProviderGroup::Custom, "Custom"),
+        (
+            argentum_providers::ProviderGroup::Unsupported,
+            "Unsupported",
+        ),
+    ] {
+        let rows = presets
+            .iter()
+            .filter(|preset| preset.group == group)
+            .collect::<Vec<_>>();
+        if rows.is_empty() {
+            continue;
+        }
+        output.push_str(&format!("{title}:\n"));
+        for preset in rows {
+            let credential = match (preset.credential_profile_id, preset.api_key_env) {
+                (Some(_), Some(variable)) => format!("key: {variable}"),
+                (Some(_), None) => "credential required".to_owned(),
+                (None, _) if preset.local => "local".to_owned(),
+                (None, _) => "no key".to_owned(),
+            };
+            output.push_str(&format!(
+                "  {:<18} {:<20} {:<18} {}  {}  [{}]\n",
+                preset.id,
+                preset.label,
+                provider_kind_argument(preset.kind),
+                preset.default_endpoint.unwrap_or("(explicit endpoint)"),
+                preset.default_model,
+                credential
+            ));
+            if !preset.supported {
+                output.push_str(&format!("    unsupported: {}\n", preset.notes));
+            }
+        }
+    }
+    output
+}
+
 fn provider_kind_argument(kind: argentum_domain::ProviderKind) -> &'static str {
     match kind {
         argentum_domain::ProviderKind::LocalLmStudio => "lm-studio",
@@ -4362,6 +4561,9 @@ enum Arguments {
         options: CommonOptions,
         json: bool,
     },
+    ProviderPresets {
+        json: bool,
+    },
     ProviderSave {
         options: CommonOptions,
         profile: argentum_domain::ProviderProfile,
@@ -4453,6 +4655,10 @@ enum Arguments {
         json: bool,
     },
     Tools {
+        options: CommonOptions,
+        json: bool,
+    },
+    Desktop {
         options: CommonOptions,
         json: bool,
     },
@@ -4864,6 +5070,7 @@ where
     let mut harness_action = None;
     let mut harness_target = None;
     let mut harness_visibility = None;
+    let mut desktop_action = None;
     let mut changes_action = None;
     let mut changes_subaction = None;
     let mut changes_target = None;
@@ -5261,6 +5468,9 @@ where
             value if command == "tool" && tool_action.is_none() => {
                 tool_action = Some(value.to_owned())
             }
+            value if command == "desktop" && desktop_action.is_none() => {
+                desktop_action = Some(value.to_owned())
+            }
             value if command == "permissions" && permission_action.is_none() => {
                 permission_action = Some(value.to_owned())
             }
@@ -5409,6 +5619,7 @@ where
                     | "provider"
                     | "harness"
                     | "tool"
+                    | "desktop"
                     | "instructions"
                     | "context"
                     | "compact"
@@ -5505,6 +5716,11 @@ where
             Ok(Arguments::Tools { options, json })
         }
         "tool" => Err("tool requires 'list'".into()),
+        "desktop" if prompt.is_some() => Err("desktop does not accept a prompt".into()),
+        "desktop" if desktop_action.as_deref() == Some("status") => {
+            Ok(Arguments::Desktop { options, json })
+        }
+        "desktop" => Err("desktop requires 'status'".into()),
         "permissions" if prompt.is_some() => {
             Err("permissions does not accept a prompt".into())
         }
@@ -5594,13 +5810,47 @@ where
                 json,
             }),
             Some("list") if provider_id.is_none() => Ok(Arguments::ProviderList { options, json }),
+            Some("presets") if provider_id.is_none() => {
+                if values.iter().any(|value| {
+                    matches!(
+                        value.as_str(),
+                        "--endpoint" | "--model" | "--label" | "--kind" | "--select" | "--limits"
+                    )
+                }) {
+                    return Err("provider presets accepts only --json".into());
+                }
+                Ok(Arguments::ProviderPresets { json })
+            }
             Some("add") => {
-                let preset_id = provider_id.ok_or("provider add requires minimax, deepseek, openai, or chatgpt")?;
-                if !matches!(preset_id.as_str(), "minimax" | "deepseek" | "openai" | "chatgpt")
-                    || values.iter().any(|value| matches!(value.as_str(), "--endpoint" | "--model"))
-                    || provider_label.is_some() || provider_kind.is_some()
-                    || provider_endpoint.is_some() || provider_model.is_some() || select_saved_provider {
-                    return Err("provider add accepts only minimax, deepseek, openai, or chatgpt; use provider save for custom configuration".into());
+                let preset_id = provider_id.ok_or(
+                    "provider add requires a preset id; run 'argentum provider presets'",
+                )?;
+                if values
+                    .iter()
+                    .any(|value| matches!(value.as_str(), "--endpoint" | "--model"))
+                    || provider_label.is_some()
+                    || provider_kind.is_some()
+                    || provider_endpoint.is_some()
+                    || provider_model.is_some()
+                    || select_saved_provider
+                {
+                    return Err("provider add uses the catalog defaults; use provider save for custom configuration".into());
+                }
+                let Some(preset) = argentum_providers::provider_preset(&preset_id) else {
+                    return Err(format!(
+                        "unknown provider preset '{preset_id}'; run 'argentum provider presets'"
+                    ));
+                };
+                if !preset.supported {
+                    return Err(format!(
+                        "provider preset '{preset_id}' is unsupported: {}",
+                        preset.notes
+                    ));
+                }
+                if preset.default_endpoint.is_none() {
+                    return Err(format!(
+                        "provider preset '{preset_id}' requires an explicit endpoint; use provider save"
+                    ));
                 }
                 Ok(Arguments::ProviderAdd { options, preset_id, json })
             }
@@ -5660,7 +5910,7 @@ where
                 _ => Err("provider credential requires 'set PROFILE_ID' or 'clear PROFILE_ID'".into()),
             },
             _ => Err(
-                "provider requires 'list', 'add', 'save', 'select', 'models', 'model', 'budget', 'context', 'credential', 'probe', 'login', 'login-new', 'logout', 'accounts', or 'account'".into(),
+                "provider requires 'presets', 'list', 'add', 'save', 'select', 'models', 'model', 'budget', 'context', 'credential', 'probe', 'login', 'login-new', 'logout', 'accounts', or 'account'".into(),
             ),
         },
         "sessions" if prompt.is_some() => Err("sessions does not accept a prompt".into()),
@@ -6280,8 +6530,10 @@ mod genesis_polish_parser_tests {
         assert!(harness.contains("backend"));
         assert!(harness.contains("module"));
         assert!(error_of(&["changes"]).contains("page"));
-        assert!(error_of(&["provider", "add"]).contains("chatgpt"));
-        assert!(error_of(&["provider", "add", "synthetic-preset"]).contains("chatgpt"));
+        assert!(error_of(&["provider", "add"]).contains("preset id"));
+        assert!(
+            error_of(&["provider", "add", "synthetic-preset"]).contains("unknown provider preset")
+        );
         let kind = parse_provider_kind("synthetic-kind").unwrap_err();
         assert!(kind.contains("lm-studio"), "{kind}");
     }
@@ -6782,7 +7034,8 @@ argentum terminal-diagnostic --synthetic --output ABSOLUTE_NEW_FILE\n  \
 argentum local-chat [OPTIONS]  (llama.cpp coding with policy-controlled tools)\n  \
 argentum local-text [OPTIONS]  (explicit text-only mode, no tools)\n  \
 argentum provider save PROFILE_ID --label LABEL --kind KIND --endpoint URL --model NAME [--select] [OPTIONS]\n  \
-argentum provider add minimax|deepseek|openai|chatgpt [OPTIONS]\n  \
+argentum provider presets [--json] [OPTIONS]\n  \
+argentum provider add PRESET_ID [OPTIONS]\n  \
 argentum provider login chatgpt [OPTIONS]  (browser consent, no API key)\n  \
 argentum provider login-new chatgpt [OPTIONS]\n  \
 argentum provider accounts chatgpt [OPTIONS]\n  \
@@ -6824,6 +7077,7 @@ argentum harness backend enable|disable [OPTIONS]\n  \
 argentum harness module MODULE_ID install|enable|disable|remove [OPTIONS]\n  \
 argentum harness trajectory [SESSION_ID] [OPTIONS]\n  \
 argentum tool list [OPTIONS]\n  \
+argentum desktop status [OPTIONS]\n  \
 argentum permissions list [OPTIONS]\n  \
 argentum permissions select PROFILE_ID [OPTIONS]\n  \
 argentum permissions grants [OPTIONS]\n  \
@@ -6858,6 +7112,7 @@ session     Select the active session for the current workspace\n  \
 goal        Manage the active session goal contract\n  \
 harness     Inspect composition, presentation, execution policy, and surfaces\n  \
 tool        List registered developer tools and current availability\n  \
+desktop     Show optional Windows desktop-control build status (status)\n  \
 instructions Preview selected project instruction metadata (--directory RELATIVE_DIRECTORY)\n  \
 context     Preview selected working-context metadata; no tool bodies or token estimates\n  \
 permissions Inspect profiles, select local authority, and manage grants\n  \
@@ -8305,8 +8560,22 @@ mod tests {
             parse_args(["provider", "add", "deepseek", "--json"]).unwrap(),
             Arguments::ProviderAdd { preset_id, json: true, .. } if preset_id == "deepseek"
         ));
+        assert!(matches!(
+            parse_args(["provider", "add", "groq", "--json"]).unwrap(),
+            Arguments::ProviderAdd { preset_id, json: true, .. } if preset_id == "groq"
+        ));
+        assert!(matches!(
+            parse_args(["provider", "presets", "--json"]).unwrap(),
+            Arguments::ProviderPresets { json: true, .. }
+        ));
+        assert!(matches!(
+            parse_args(["provider", "presets"]).unwrap(),
+            Arguments::ProviderPresets { json: false, .. }
+        ));
         assert!(parse_args(["provider", "add"]).is_err());
         assert!(parse_args(["provider", "add", "unknown"]).is_err());
+        assert!(parse_args(["provider", "add", "amazon-bedrock"]).is_err());
+        assert!(parse_args(["provider", "add", "openai-compatible"]).is_err());
         assert!(parse_args([
             "provider",
             "add",

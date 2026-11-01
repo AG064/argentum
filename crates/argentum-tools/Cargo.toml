@@ -7,10 +7,12 @@ license-file.workspace = true
 
 [features]
 extensions = []
+desktop-control = ["dep:argentum-extensions", "argentum-extensions/desktop-control"]
 
 [dependencies]
 argentum-domain.workspace = true
 argentum-execution.workspace = true
+argentum-extensions = { workspace = true, optional = true }
 argentum-security.workspace = true
 argentum-workspaces.workspace = true
 async-trait.workspace = true

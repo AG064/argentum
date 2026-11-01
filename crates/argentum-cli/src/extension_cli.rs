@@ -102,7 +102,7 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         if values.iter().any(|value| value == "--json") {
             return Err("--json is accepted only by extensions list and status".into());
         }
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. The optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions browser setup --source extensions/browser --node FILE --origin http://127.0.0.1:PORT [--origin ...] [--artifact-directory DIR] [--preview-workspace DIR --preview-port PORT] [--reviewed-stylesheet REL_PATH] [--browser-cache DIR] [--input FILE ...] --workspace DIR [--database FILE]\nextensions browser status --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. Browser setup is inert and loopback-only; the optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
@@ -114,6 +114,8 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
     let mut flags = BTreeMap::new();
     let mut subject = None;
     let mut json_mode = false;
+    let mut origins = Vec::new();
+    let mut inputs = Vec::new();
     let mut index = 1;
     while index < values.len() {
         let value = &values[index];
@@ -122,6 +124,22 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 return Err("duplicate extension --json option".into());
             }
             json_mode = true;
+            index += 1;
+            continue;
+        }
+        if value == "--origin" || value == "--input" {
+            index += 1;
+            let argument = values
+                .get(index)
+                .ok_or("extension option requires a value")?;
+            if argument == "--json" {
+                return Err("extension option requires a value; --json is a boolean flag".into());
+            }
+            if value == "--origin" {
+                origins.push(argument.clone());
+            } else {
+                inputs.push(argument.clone());
+            }
             index += 1;
             continue;
         }
@@ -135,6 +153,13 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 "--database",
                 "--file",
                 "--run-id",
+                "--node",
+                "--artifact-directory",
+                "--preview-workspace",
+                "--preview-port",
+                "--reviewed-stylesheet",
+                "--browser-cache",
+                "--license",
             ]
             .contains(&value.as_str())
             {
@@ -163,6 +188,9 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
     }
     if flags.contains_key("--run-id") && action != "receipts" {
         return Err("--run-id is accepted only by extensions receipts".into());
+    }
+    if (!origins.is_empty() || !inputs.is_empty()) && action != "browser" {
+        return Err("--origin and --input are accepted only by extensions browser setup".into());
     }
     if action == "inspect" {
         let source = PathBuf::from(
@@ -231,6 +259,24 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 let definition: ExtensionDefinition = serde_json::from_slice(&bytes)?;
                 println!("{}", serde_json::to_string_pretty(&local.configure_extension(definition).await?)?);
                 println!("Configuration saved inactive. No server, browser, catalogue or model request started.");
+            }
+            "browser" => {
+                let subcommand = subject
+                    .as_deref()
+                    .ok_or("browser requires setup or status")?;
+                crate::extension_browser_cli::run(
+                    subcommand,
+                    &crate::extension_browser_cli::BrowserRequest {
+                        flags: &flags,
+                        origins: &origins,
+                        inputs: &inputs,
+                        workspace: &workspace,
+                        paths: &paths,
+                        database: &database,
+                        local: &local,
+                    },
+                )
+                .await?;
             }
             "prepare-media" => {
                 let namespace = subject.as_deref().ok_or("prepare-media requires a namespace")?;

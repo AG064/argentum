@@ -8,6 +8,7 @@ use uuid::Uuid;
 mod authority;
 pub mod context_budget;
 pub mod context_summary;
+pub mod desktop;
 pub mod extensions;
 pub mod final_result;
 pub mod goal_accounting;
@@ -425,6 +426,33 @@ pub enum ToolInput {
     Extension {
         operation: extensions::ExtensionOperation,
     },
+    DesktopListWindows {
+        max_windows: u16,
+    },
+    DesktopInspect {
+        window: Box<desktop::DesktopWindowIdentity>,
+        max_depth: u8,
+        max_elements: u16,
+    },
+    DesktopInvoke {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+    },
+    DesktopTypeText {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+        text: String,
+        #[serde(default)]
+        mode: desktop::DesktopTextMode,
+    },
+    DesktopPressKeys {
+        window: Box<desktop::DesktopWindowIdentity>,
+        element: Box<desktop::DesktopElementIdentity>,
+        keys: Vec<String>,
+    },
+    DesktopScreenshot {
+        window: Box<desktop::DesktopWindowIdentity>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -492,6 +520,7 @@ pub enum Capability {
     Network,
     ExternalProcess,
     UseExtensions,
+    ControlDesktop,
 }
 
 impl Capability {
@@ -507,6 +536,7 @@ impl Capability {
             Self::Network => "Network",
             Self::ExternalProcess => "External process",
             Self::UseExtensions => "Use reviewed extension tools",
+            Self::ControlDesktop => "Control the Windows desktop",
         }
     }
 }
@@ -1976,10 +2006,29 @@ pub const DEFAULT_LLAMA_CPP_ENDPOINT: &str = "local://llama-cpp/";
 pub const DEFAULT_LLAMA_CPP_MODEL: &str = "Qwen3.5-0.8B-Q8_0.gguf";
 pub const DEFAULT_LM_STUDIO_ENDPOINT: &str = "http://127.0.0.1:1234/v1/";
 pub const DEFAULT_MODEL: &str = DEFAULT_LLAMA_CPP_MODEL;
-pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 3] = ["openai", "minimax", "deepseek"];
+pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 18] = [
+    "openai",
+    "minimax",
+    "deepseek",
+    "google-gemini",
+    "openrouter",
+    "groq",
+    "mistral",
+    "xai",
+    "together",
+    "fireworks",
+    "cerebras",
+    "perplexity",
+    "cohere",
+    "moonshot",
+    "zai",
+    "qwen",
+    "github-models",
+    "opencode-zen",
+];
 
 pub fn is_supported_hosted_credential_provider_id(profile_id: &str) -> bool {
-    matches!(profile_id, "openai" | "minimax" | "deepseek")
+    HOSTED_CREDENTIAL_PROVIDER_IDS.contains(&profile_id)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
