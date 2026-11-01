@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "artifacts")]
 mod artifact_cli;
 #[cfg(feature = "extensions")]
+mod extension_browser_cli;
+#[cfg(feature = "extensions")]
 mod extension_cli;
 mod model_picker;
 
