@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::rc::Rc;
@@ -6,12 +7,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use argentum_domain::{
     ActiveRunState, AppCommand, AppEvent, ApprovalGrantRecord, ApprovalId, ApprovalScope,
     ChangeOperationId, ChangeRecoveryState, ChangeSetSnapshot, ConversationMessageStatus,
-    ConversationRole, FileChangeId, FileChangeKind, FileChangeRecord, Goal, GrantScope,
-    GrantSubject, HarnessAvailability, HarnessCapabilityState, HarnessExecutionProfileSummary,
-    HarnessProfileSummary, HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, ProviderKind,
-    ProviderModel, ProviderProfile, RunId, SessionArchiveFilter, SessionId, SurfaceId,
-    TaskLifecycle, ToolResultState, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot,
-    TrajectoryState, VerificationEvidence, VerificationRunnerInspection, VerificationState,
+    ConversationRole, DesktopToolSummary, FileChangeId, FileChangeKind, FileChangeRecord, Goal,
+    GrantScope, GrantSubject, HarnessAvailability, HarnessCapabilityState,
+    HarnessExecutionProfileSummary, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
+    HarnessSurfaceState, ProviderKind, ProviderModel, ProviderPresetSummary, ProviderProfile,
+    RunId, SessionArchiveFilter, SessionId, SurfaceId, TaskLifecycle, ToolResultState,
+    TrajectoryEntry, TrajectoryKind, TrajectorySnapshot, TrajectoryState, VerificationEvidence,
+    VerificationRunnerInspection, VerificationState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use time::macros::format_description;
@@ -43,6 +45,10 @@ pub fn display_workspace_label(path: &Path) -> String {
 
 const MAX_ACTIVITY_ITEMS: usize = 50;
 const MAX_TRAJECTORY_ITEMS: usize = 200;
+
+thread_local! {
+    static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
+}
 
 #[derive(Clone)]
 pub struct UiHandle {
@@ -450,6 +456,25 @@ impl UiHandle {
                     self.window
                         .set_verification_evidence_error(present_error(message).into());
                 }
+                if self.window.get_provider_presets_loading()
+                    || !self.window.get_provider_preset_pending().is_empty()
+                {
+                    self.window.set_provider_presets_loading(false);
+                    self.window
+                        .set_provider_preset_pending(SharedString::default());
+                    self.window
+                        .set_provider_presets_error(present_error(message).into());
+                }
+                if self.window.get_browser_status_loading() {
+                    self.window.set_browser_status_loading(false);
+                    self.window
+                        .set_browser_status_error(present_error(message).into());
+                }
+                if self.window.get_desktop_status_loading() {
+                    self.window.set_desktop_status_loading(false);
+                    self.window
+                        .set_desktop_status_error(present_error(message).into());
+                }
                 let consumes_provider_error = self.window.get_provider_error_consumes_next()
                     && message == self.window.get_provider_error().as_str();
                 let provider_pending = self.window.get_provider_pending().to_string();
@@ -579,6 +604,116 @@ impl UiHandle {
             }
             AppEvent::ProviderProfilesSnapshot { profiles } => {
                 self.apply_provider_profiles(profiles);
+                if !self.window.get_provider_preset_pending().is_empty() {
+                    self.window
+                        .set_provider_preset_pending(SharedString::default());
+                    self.window.set_provider_presets_loading(false);
+                    self.window.set_provider_preset_notice(
+                        "Provider added. Review its credential and model before use.".into(),
+                    );
+                }
+            }
+            AppEvent::ProviderPresetsSnapshot { presets } => {
+                PROVIDER_PRESETS.with(|store| {
+                    *store.borrow_mut() = presets.clone();
+                });
+                self.window
+                    .set_provider_presets(provider_preset_model(presets));
+                self.window
+                    .set_provider_presets_hosted(provider_preset_model_for_group(
+                        presets, "hosted",
+                    ));
+                self.window
+                    .set_provider_presets_aggregator(provider_preset_model_for_group(
+                        presets,
+                        "aggregator",
+                    ));
+                self.window
+                    .set_provider_presets_local(provider_preset_model_for_group(presets, "local"));
+                self.window
+                    .set_provider_presets_custom(provider_preset_model_for_group(
+                        presets, "custom",
+                    ));
+                self.window
+                    .set_provider_presets_unsupported(provider_preset_model_for_group(
+                        presets,
+                        "unsupported",
+                    ));
+                self.window.set_provider_presets_loading(false);
+                self.window
+                    .set_provider_presets_error(SharedString::default());
+            }
+            AppEvent::BrowserStatusSnapshot {
+                extensions_built,
+                configured,
+                saved_active,
+                definition_ready,
+                readiness_detail,
+                allowed_tools,
+                qualification,
+            } => {
+                self.window.set_browser_status_loading(false);
+                self.window
+                    .set_browser_status_error(SharedString::default());
+                self.window.set_browser_extensions_built(*extensions_built);
+                self.window.set_browser_configured(*configured);
+                self.window.set_browser_saved_active(*saved_active);
+                self.window.set_browser_definition_ready(*definition_ready);
+                self.window
+                    .set_browser_readiness_detail(readiness_detail.clone().into());
+                self.window
+                    .set_browser_allowed_tools(allowed_tools.join(", ").into());
+                self.window
+                    .set_browser_qualification(qualification.clone().into());
+                let browser_summary = if !*extensions_built {
+                    "Not built"
+                } else if !*configured {
+                    "Not configured"
+                } else if *saved_active {
+                    "Configured, active"
+                } else {
+                    "Configured, inactive"
+                };
+                self.window.set_browser_summary(browser_summary.into());
+            }
+            AppEvent::DesktopStatusSnapshot {
+                built,
+                available,
+                capability_enabled,
+                capability_availability,
+                reason,
+                tools,
+            } => {
+                self.window.set_desktop_status_loading(false);
+                self.window
+                    .set_desktop_status_error(SharedString::default());
+                self.window.set_desktop_built(*built);
+                self.window.set_desktop_available(*available);
+                self.window
+                    .set_desktop_capability_enabled(*capability_enabled);
+                self.window
+                    .set_desktop_capability_availability(capability_availability.clone().into());
+                let desktop_summary = if !*built {
+                    "Not built".to_owned()
+                } else if *available {
+                    "Optional Windows capability".to_owned()
+                } else {
+                    "Not available".to_owned()
+                };
+                let desktop_capability_text = format!(
+                    "Capability: {} | {}",
+                    if *capability_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
+                    capability_availability
+                );
+                self.window.set_desktop_summary(desktop_summary.into());
+                self.window
+                    .set_desktop_capability_text(desktop_capability_text.into());
+                self.window.set_desktop_reason(reason.clone().into());
+                self.window.set_desktop_tools(desktop_tool_model(tools));
             }
             AppEvent::ProviderModelsSnapshot {
                 provider_id,
@@ -2491,6 +2626,72 @@ fn provider_profile_model_with_credentials(
     ModelRc::new(VecModel::from(rows))
 }
 
+fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
+    let credential = if preset.credential_profile_id.as_deref() == Some("chatgpt") {
+        "Browser sign-in (CLI-only in this build)".to_owned()
+    } else if let Some(variable) = &preset.api_key_env {
+        format!("API key from {variable}")
+    } else if preset.credential_profile_id.is_some() {
+        "Saved credential required".to_owned()
+    } else {
+        "No credential required".to_owned()
+    };
+    let group_label = match preset.group.as_str() {
+        "hosted" => "Hosted",
+        "aggregator" => "Aggregator",
+        "local" => "Local",
+        "custom" => "Custom",
+        _ => "Unsupported",
+    };
+    ProviderPresetView {
+        id: preset.id.clone().into(),
+        label: preset.label.clone().into(),
+        kind: provider_kind_id(preset.kind).into(),
+        kind_label: provider_kind_label(preset.kind).into(),
+        endpoint: preset.endpoint.clone().unwrap_or_default().into(),
+        default_model: preset.default_model.clone().into(),
+        credential: credential.into(),
+        api_key_env: preset.api_key_env.clone().unwrap_or_default().into(),
+        docs_url: preset.docs_url.clone().into(),
+        group: preset.group.clone().into(),
+        group_label: group_label.into(),
+        local: preset.local,
+        supported: preset.supported,
+        notes: preset.notes.clone().into(),
+    }
+}
+
+fn provider_preset_model(presets: &[ProviderPresetSummary]) -> ModelRc<ProviderPresetView> {
+    let rows = presets.iter().map(provider_preset_view).collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn provider_preset_model_for_group(
+    presets: &[ProviderPresetSummary],
+    group: &str,
+) -> ModelRc<ProviderPresetView> {
+    let filtered = presets
+        .iter()
+        .filter(|preset| preset.group == group)
+        .cloned()
+        .collect::<Vec<_>>();
+    provider_preset_model(&filtered)
+}
+
+fn desktop_tool_model(tools: &[DesktopToolSummary]) -> ModelRc<DesktopToolView> {
+    let rows = tools
+        .iter()
+        .map(|tool| DesktopToolView {
+            id: tool.id.clone().into(),
+            title: tool.title.clone().into(),
+            summary: tool.summary.clone().into(),
+            risk: tool.risk.clone().into(),
+            requires_approval: tool.requires_approval,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn provider_profile_view_model_with_credentials(
     profiles: &[ProviderProfileView],
     credentials: &HashMap<String, bool>,
@@ -3370,6 +3571,67 @@ where
         select_model_dispatch(AppCommand::SelectProviderModel { provider_id, model });
     });
 
+    let refresh_presets_dispatch = dispatch.clone();
+    let refresh_presets_window = window.as_weak();
+    window.on_refresh_provider_presets(move || {
+        if let Some(window) = refresh_presets_window.upgrade() {
+            window.set_provider_presets_loading(true);
+            window.set_provider_presets_error(SharedString::default());
+        }
+        refresh_presets_dispatch(AppCommand::ListProviderPresets);
+    });
+
+    let add_preset_dispatch = dispatch.clone();
+    let add_preset_window = window.as_weak();
+    window.on_add_provider_preset(move |preset_id| {
+        let preset_id = preset_id.trim().to_owned();
+        if preset_id.is_empty() {
+            return;
+        }
+        if let Some(window) = add_preset_window.upgrade() {
+            if window.get_running() || !window.get_provider_preset_pending().is_empty() {
+                return;
+            }
+            window.set_provider_preset_pending(preset_id.clone().into());
+            window.set_provider_preset_notice(SharedString::default());
+            window.set_provider_presets_error(SharedString::default());
+        }
+        add_preset_dispatch(AppCommand::AddProviderPreset { preset_id });
+    });
+
+    let select_preset_window = window.as_weak();
+    window.on_select_provider_preset(move |preset_id| {
+        let Some(window) = select_preset_window.upgrade() else {
+            return;
+        };
+        let preset_id = preset_id.to_string();
+        PROVIDER_PRESETS.with(|store| {
+            if let Some(preset) = store.borrow().iter().find(|preset| preset.id == preset_id) {
+                window.set_provider_preset_detail(provider_preset_view(preset));
+            }
+        });
+    });
+
+    let refresh_browser_dispatch = dispatch.clone();
+    let refresh_browser_window = window.as_weak();
+    window.on_refresh_browser_status(move || {
+        if let Some(window) = refresh_browser_window.upgrade() {
+            window.set_browser_status_loading(true);
+            window.set_browser_status_error(SharedString::default());
+        }
+        refresh_browser_dispatch(AppCommand::LoadBrowserStatus);
+    });
+
+    let refresh_desktop_dispatch = dispatch.clone();
+    let refresh_desktop_window = window.as_weak();
+    window.on_refresh_desktop_status(move || {
+        if let Some(window) = refresh_desktop_window.upgrade() {
+            window.set_desktop_status_loading(true);
+            window.set_desktop_status_error(SharedString::default());
+        }
+        refresh_desktop_dispatch(AppCommand::LoadDesktopStatus);
+    });
+
     let refresh_harness_dispatch = dispatch.clone();
     let refresh_harness_window = window.as_weak();
     window.on_refresh_harness(move || {
@@ -3671,12 +3933,21 @@ where
             window.set_harness_error(SharedString::default());
             window.set_approval_grants_loading(true);
             window.set_approval_grants_error(SharedString::default());
+            window.set_provider_presets_loading(true);
+            window.set_provider_presets_error(SharedString::default());
+            window.set_browser_status_loading(true);
+            window.set_browser_status_error(SharedString::default());
+            window.set_desktop_status_loading(true);
+            window.set_desktop_status_error(SharedString::default());
         }
         settings_dispatch(AppCommand::ListProviderProfiles);
+        settings_dispatch(AppCommand::ListProviderPresets);
         settings_dispatch(AppCommand::ListHarnessState);
         settings_dispatch(AppCommand::ListApprovalGrants);
         settings_dispatch(AppCommand::ListVerificationRunners);
         settings_dispatch(AppCommand::InspectVerificationRunners);
+        settings_dispatch(AppCommand::LoadBrowserStatus);
+        settings_dispatch(AppCommand::LoadDesktopStatus);
     });
 }
 
@@ -4011,6 +4282,76 @@ mod tests {
         assert!(!model.row_data(0).expect("newest session").active);
         assert_eq!(model.row_data(1).expect("active session").title, "Older");
         assert!(model.row_data(1).expect("active session").active);
+    }
+
+    #[test]
+    fn provider_preset_projection_preserves_credentials_and_groups() {
+        let preset = ProviderPresetSummary {
+            id: "deepseek".into(),
+            label: "DeepSeek".into(),
+            kind: ProviderKind::OpenAiCompatible,
+            endpoint: Some("https://api.deepseek.com/v1/".into()),
+            default_model: "deepseek-chat".into(),
+            credential_profile_id: Some("deepseek".into()),
+            api_key_env: Some("DEEPSEEK_API_KEY".into()),
+            docs_url: "https://api-docs.deepseek.com".into(),
+            local: false,
+            supported: true,
+            group: "hosted".into(),
+            notes: String::new(),
+        };
+        let view = provider_preset_view(&preset);
+        assert_eq!(view.id.as_str(), "deepseek");
+        assert_eq!(view.credential.as_str(), "API key from DEEPSEEK_API_KEY");
+        assert_eq!(view.api_key_env.as_str(), "DEEPSEEK_API_KEY");
+        assert_eq!(view.group_label.as_str(), "Hosted");
+        assert!(view.supported);
+
+        let chatgpt = ProviderPresetSummary {
+            id: "chatgpt".into(),
+            label: "ChatGPT".into(),
+            kind: ProviderKind::OpenAiCompatible,
+            endpoint: Some("https://api.openai.com/v1/".into()),
+            default_model: "gpt-5".into(),
+            credential_profile_id: Some("chatgpt".into()),
+            api_key_env: None,
+            docs_url: String::new(),
+            local: false,
+            supported: true,
+            group: "hosted".into(),
+            notes: String::new(),
+        };
+        assert_eq!(
+            provider_preset_view(&chatgpt).credential.as_str(),
+            "Browser sign-in (CLI-only in this build)"
+        );
+    }
+
+    #[test]
+    fn desktop_status_projection_lists_tools_and_capability() {
+        let tools = vec![
+            DesktopToolSummary {
+                id: "desktop_inspect".into(),
+                title: "Inspect desktop".into(),
+                summary: "Inspect one owned window".into(),
+                risk: "Read only".into(),
+                requires_approval: true,
+            },
+            DesktopToolSummary {
+                id: "desktop_invoke".into(),
+                title: "Invoke desktop".into(),
+                summary: "Invoke one owned control".into(),
+                risk: "Mutation".into(),
+                requires_approval: true,
+            },
+        ];
+        let model = desktop_tool_model(&tools);
+        assert_eq!(model.row_count(), 2);
+        assert_eq!(
+            model.row_data(0).expect("first tool").id.as_str(),
+            "desktop_inspect"
+        );
+        assert!(model.row_data(1).expect("second tool").requires_approval);
     }
 
     #[test]

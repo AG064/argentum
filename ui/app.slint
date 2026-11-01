@@ -7,7 +7,7 @@ import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsFiel
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
 import { InspectorSurface } from "surfaces/inspector.slint";
-import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderModelView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
+import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 import { DiagnosticRecordView } from "view-models.slint";
 
@@ -183,6 +183,59 @@ component SessionItem inherits Rectangle {
             }
             return reject;
         }
+    }
+}
+
+component PresetRow inherits Rectangle {
+    in property <ProviderPresetView> preset;
+    in property <bool> selected: false;
+    in property <bool> reduced-motion: false;
+    callback clicked();
+
+    height: AgTheme.space-16;
+    border-radius: AgTheme.radius-xs;
+    border-width: 1px;
+    border-color: root.selected ? AgTheme.border-subtle : transparent;
+    background: root.selected
+        ? AgTheme.surface-soft
+        : (touch.has-hover ? AgTheme.hover : transparent);
+    accessible-role: button;
+    accessible-label: root.preset.label + ", " + root.preset.credential;
+    accessible-action-default => { root.clicked(); }
+    animate background, border-color {
+        duration: root.reduced-motion ? 0ms : AgTheme.motion-fast;
+    }
+
+    HorizontalLayout {
+        padding-left: AgTheme.space-3;
+        padding-right: AgTheme.space-3;
+        spacing: AgTheme.space-3;
+        alignment: stretch;
+
+        VerticalLayout {
+            spacing: AgTheme.space-1;
+            alignment: center;
+
+            Text {
+                text: root.preset.label;
+                color: root.selected ? AgTheme.white-100 : AgTheme.text-secondary;
+                font-size: AgTheme.type-body;
+                font-weight: root.selected ? AgTheme.weight-semibold : AgTheme.weight-medium;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.preset.kind_label + " | " + root.preset.credential;
+                color: AgTheme.text-muted;
+                font-size: AgTheme.type-compact;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }
 
@@ -446,6 +499,52 @@ export component MainWindow inherits Window {
     in-out property <bool> provider_error_consumes_next: false;
     in-out property <[ProviderProfileView]> provider_profiles: [];
     in-out property <[ProviderModelView]> provider_models: [];
+    in-out property <[ProviderPresetView]> provider_presets: [];
+    in-out property <[ProviderPresetView]> provider_presets_hosted: [];
+    in-out property <[ProviderPresetView]> provider_presets_aggregator: [];
+    in-out property <[ProviderPresetView]> provider_presets_local: [];
+    in-out property <[ProviderPresetView]> provider_presets_custom: [];
+    in-out property <[ProviderPresetView]> provider_presets_unsupported: [];
+    in-out property <bool> provider_presets_loading: false;
+    in-out property <string> provider_presets_error: "";
+    in-out property <ProviderPresetView> provider_preset_detail: {
+        id: "",
+        label: "",
+        kind: "",
+        kind_label: "",
+        endpoint: "",
+        default_model: "",
+        credential: "",
+        api_key_env: "",
+        docs_url: "",
+        group: "",
+        group_label: "",
+        local: false,
+        supported: false,
+        notes: "",
+    };
+    in-out property <string> provider_preset_pending: "";
+    in-out property <string> provider_preset_notice: "";
+    in-out property <bool> browser_status_loading: false;
+    in-out property <string> browser_summary: "Not built";
+    in-out property <string> browser_status_error: "";
+    in-out property <bool> browser_extensions_built: false;
+    in-out property <bool> browser_configured: false;
+    in-out property <bool> browser_saved_active: false;
+    in-out property <bool> browser_definition_ready: false;
+    in-out property <string> browser_readiness_detail: "";
+    in-out property <string> browser_allowed_tools: "";
+    in-out property <string> browser_qualification: "";
+    in-out property <bool> desktop_status_loading: false;
+    in-out property <string> desktop_status_error: "";
+    in-out property <bool> desktop_built: false;
+    in-out property <bool> desktop_available: false;
+    in-out property <bool> desktop_capability_enabled: false;
+    in-out property <string> desktop_capability_availability: "";
+    in-out property <string> desktop_reason: "";
+    in-out property <string> desktop_summary: "Not built";
+    in-out property <string> desktop_capability_text: "";
+    in-out property <[DesktopToolView]> desktop_tools: [];
     in-out property <bool> provider_models_loading: false;
     in-out property <bool> provider_model_selecting: false;
     in-out property <string> provider_models_pending: "";
@@ -673,6 +772,11 @@ export component MainWindow inherits Window {
     callback select_provider_profile(string);
     callback refresh_provider_models(string);
     callback select_provider_model(string, string);
+    callback refresh_provider_presets();
+    callback add_provider_preset(string);
+    callback select_provider_preset(string);
+    callback refresh_browser_status();
+    callback refresh_desktop_status();
     callback refresh_harness();
     callback set_harness_module(string, string);
     callback set_local_backend_enabled(bool);
@@ -2114,12 +2218,175 @@ export component MainWindow inherits Window {
                     close => { root.settings_open = false; }
                 }
 
+                ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    mouse-drag-pan-enabled: true;
+
+                    VerticalLayout {
+                        padding-right: AgTheme.space-1;
+                        spacing: AgTheme.space-3;
+
                 Text {
                     text: "Choose the model provider Argentum uses for this workspace.";
                     color: AgTheme.text-muted;
                     font-size: AgTheme.type-body;
                     wrap: word-wrap;
                 }
+
+                        SectionHeading {
+                            label: "Provider catalog";
+                            detail: root.provider_presets.length;
+                        }
+
+                        Text {
+                            text: "Choose a preset, review its requirements, then add it as a saved profile.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.provider_presets_loading: Text {
+                            text: "Loading provider presets";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        if root.provider_presets_error != "": Text {
+                            text: root.provider_presets_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        VerticalLayout {
+                            spacing: AgTheme.space-1;
+
+                            SectionHeading { label: "Hosted"; detail: "Remote providers"; }
+                            for preset in root.provider_presets_hosted: PresetRow { preset: preset; selected: root.provider_preset_detail.id == preset.id; reduced-motion: root.reduced_motion; clicked => { root.select_provider_preset(preset.id); } }
+
+                            SectionHeading { label: "Aggregators"; detail: "Multi-model routes"; }
+                            for preset in root.provider_presets_aggregator: PresetRow { preset: preset; selected: root.provider_preset_detail.id == preset.id; reduced-motion: root.reduced_motion; clicked => { root.select_provider_preset(preset.id); } }
+
+                            SectionHeading { label: "Local"; detail: "On-device routes"; }
+                            for preset in root.provider_presets_local: PresetRow { preset: preset; selected: root.provider_preset_detail.id == preset.id; reduced-motion: root.reduced_motion; clicked => { root.select_provider_preset(preset.id); } }
+
+                            SectionHeading { label: "Custom"; detail: "Explicit configuration"; }
+                            for preset in root.provider_presets_custom: PresetRow { preset: preset; selected: root.provider_preset_detail.id == preset.id; reduced-motion: root.reduced_motion; clicked => { root.select_provider_preset(preset.id); } }
+
+                            SectionHeading { label: "Unsupported"; detail: "Reference only"; }
+                            for preset in root.provider_presets_unsupported: PresetRow { preset: preset; selected: false; reduced-motion: root.reduced_motion; }
+                        }
+
+
+                        if root.provider_preset_detail.id != "": Rectangle {
+                            border-radius: AgTheme.radius-md;
+                            border-width: AgTheme.hairline;
+                            border-color: AgTheme.border-subtle;
+                            background: AgTheme.chrome;
+
+                            VerticalLayout {
+                                padding: AgTheme.space-3;
+                                spacing: AgTheme.space-2;
+
+                                Text {
+                                    text: root.provider_preset_detail.label + " | " + root.provider_preset_detail.kind_label;
+                                    color: AgTheme.white-100;
+                                    font-size: AgTheme.type-section-title;
+                                    font-weight: AgTheme.weight-semibold;
+                                    wrap: word-wrap;
+                                }
+
+                                Text {
+                                    text: "Endpoint: " + (root.provider_preset_detail.endpoint == "" ? "Set when saving the profile" : root.provider_preset_detail.endpoint);
+                                    color: AgTheme.text-secondary;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                Text {
+                                    text: "Default model: " + root.provider_preset_detail.default_model;
+                                    color: AgTheme.text-secondary;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                Text {
+                                    text: "Credential: " + root.provider_preset_detail.credential;
+                                    color: AgTheme.text-secondary;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                if root.provider_preset_detail.api_key_env != "": Text {
+                                    text: "Environment variable: " + root.provider_preset_detail.api_key_env;
+                                    color: AgTheme.text-muted;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                if root.provider_preset_detail.notes != "": Text {
+                                    text: root.provider_preset_detail.notes;
+                                    color: AgTheme.text-muted;
+                                    font-size: AgTheme.type-compact;
+                                    wrap: word-wrap;
+                                }
+
+                                if root.provider_preset_detail.docs_url != "": Text {
+                                    text: "Docs: " + root.provider_preset_detail.docs_url;
+                                    color: AgTheme.text-tertiary;
+                                    font-size: AgTheme.type-metadata;
+                                    wrap: word-wrap;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: AgTheme.space-2;
+                                    ActionButton {
+                                        label: root.provider_preset_pending == root.provider_preset_detail.id
+                                            ? "Adding provider"
+                                            : "Add provider";
+                                        enabled: root.provider_preset_detail.supported
+                                            && root.provider_preset_pending == ""
+                                            && !root.running;
+                                        primary: true;
+                                        reduced-motion: root.reduced_motion;
+                                        clicked => { root.add_provider_preset(root.provider_preset_detail.id); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    ActionButton {
+                                        label: "Refresh catalog";
+                                        enabled: !root.provider_presets_loading;
+                                        fill: AgTheme.surface-soft;
+                                        outline-color: AgTheme.border-default;
+                                        reduced-motion: root.reduced_motion;
+                                        clicked => { root.refresh_provider_presets(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.provider_preset_notice != "": Text {
+                            text: root.provider_preset_notice;
+                            color: AgTheme.silver-300;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Budget and context limits are not available in this UI build. Use the CLI provider budget and provider context commands.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "ChatGPT account login and account selection remain CLI-only in this build. Use provider login chatgpt and provider accounts chatgpt.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
 
                 SectionHeading { label: "Provider profiles"; detail: root.provider_profiles.length; }
 
@@ -2180,14 +2447,9 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
 
-                ScrollView {
-                    vertical-stretch: 1;
-                    viewport-width: self.width;
-                    mouse-drag-pan-enabled: true;
-
-                    VerticalLayout {
-                        padding-right: AgTheme.space-1;
-                        spacing: AgTheme.space-3;
+                VerticalLayout {
+                    padding-right: AgTheme.space-1;
+                    spacing: AgTheme.space-3;
 
                         SectionHeading {
                             label: root.provider_id == "" ? "Selected profile" : root.provider_label;
@@ -2562,6 +2824,152 @@ export component MainWindow inherits Window {
                         Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
 
                         SectionHeading {
+                            label: "Browser";
+                            detail: root.browser_extensions_built
+                                ? (root.browser_configured
+                                    ? (root.browser_saved_active ? "Configured, active" : "Configured, inactive")
+                                    : "Not configured")
+                                : "Not built";
+                        }
+
+                        Text {
+                            text: "Optional first-party Playwright adapter for reviewed loopback local development. Status only: no Node process, browser or preview is started.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Extensions build: " + (root.browser_extensions_built ? "included" : "not included");
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Configuration: " + (root.browser_configured
+                                ? (root.browser_saved_active ? "saved and marked active" : "saved but inactive")
+                                : "no browser extension record");
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.browser_configured: Text {
+                            text: "Definition readiness: " + (root.browser_definition_ready ? "ready" : "not ready")
+                                + (root.browser_readiness_detail == "" ? "" : " | " + root.browser_readiness_detail);
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.browser_allowed_tools != "": Text {
+                            text: "Allowed tools: " + root.browser_allowed_tools;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Setup: argentum extensions browser setup --source DIR --node FILE --origin http://127.0.0.1:PORT";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Status: argentum extensions browser status";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Loopback origins only. Activation requires the local owner console. Saved activation is not a running process.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.browser_qualification != "": Text {
+                            text: root.browser_qualification;
+                            color: AgTheme.text-tertiary;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        if root.browser_status_error != "": Text {
+                            text: root.browser_status_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        ActionButton {
+                            label: root.browser_status_loading ? "Loading browser status" : "Refresh browser status";
+                            enabled: !root.browser_status_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.refresh_browser_status(); }
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
+                            label: "Desktop control";
+                            detail: root.desktop_summary;
+                        }
+
+                        Text {
+                            text: root.desktop_capability_text;
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: root.desktop_reason;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for tool in root.desktop_tools: Text {
+                            text: tool.id + " | " + tool.risk + " | " + tool.summary;
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Every desktop call requires a current owner grant. Input is approval-gated. No desktop window was enumerated and no input was sent by this status view.";
+                            color: AgTheme.text-tertiary;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        if root.desktop_status_error != "": Text {
+                            text: root.desktop_status_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        ActionButton {
+                            label: root.desktop_status_loading ? "Loading desktop status" : "Refresh desktop status";
+                            enabled: !root.desktop_status_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.refresh_desktop_status(); }
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
                             label: "Execution policy";
                             detail: root.harness_loading ? "Loading" : root.execution_profile_label;
                         }
@@ -2887,8 +3295,6 @@ export component MainWindow inherits Window {
                                 }
                             }
                         }
-                    }
-                }
 
                 if !root.phone_layout: HorizontalLayout {
                     height: AgTheme.control-height;
@@ -3041,7 +3447,10 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+                    }
+                }
             }
+        }
         }
 
         if root.about_open: Rectangle {

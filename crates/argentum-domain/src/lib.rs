@@ -2084,6 +2084,34 @@ pub struct ProviderModel {
     pub context_window_tokens: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderPresetSummary {
+    pub id: String,
+    pub label: String,
+    pub kind: ProviderKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    pub default_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+    pub docs_url: String,
+    pub local: bool,
+    pub supported: bool,
+    pub group: String,
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesktopToolSummary {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub risk: String,
+    pub requires_approval: bool,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderCatalogSource {
@@ -2211,6 +2239,7 @@ pub enum AppCommand {
     ListProviderModels {
         provider_id: String,
     },
+    ListProviderPresets,
     SelectProviderModel {
         provider_id: String,
         model: String,
@@ -2235,6 +2264,8 @@ pub enum AppCommand {
     },
     CompleteOnboarding,
     ListHarnessState,
+    LoadBrowserStatus,
+    LoadDesktopStatus,
     SetLocalBackendEnabled {
         enabled: bool,
     },
@@ -2516,6 +2547,26 @@ pub enum AppEvent {
         #[serde(default)]
         source: ProviderCatalogSource,
     },
+    ProviderPresetsSnapshot {
+        presets: Vec<ProviderPresetSummary>,
+    },
+    BrowserStatusSnapshot {
+        extensions_built: bool,
+        configured: bool,
+        saved_active: bool,
+        definition_ready: bool,
+        readiness_detail: String,
+        allowed_tools: Vec<String>,
+        qualification: String,
+    },
+    DesktopStatusSnapshot {
+        built: bool,
+        available: bool,
+        capability_enabled: bool,
+        capability_availability: String,
+        reason: String,
+        tools: Vec<DesktopToolSummary>,
+    },
     OnboardingSnapshotLoaded(OnboardingSnapshot),
     TrajectoryEntryRecorded {
         session_id: SessionId,
@@ -2596,6 +2647,9 @@ impl AppEvent {
             Self::ProviderCredentialStatus { .. } => "provider_credential_status",
             Self::ProviderProfilesSnapshot { .. } => "provider_profiles_snapshot",
             Self::ProviderModelsSnapshot { .. } => "provider_models_snapshot",
+            Self::ProviderPresetsSnapshot { .. } => "provider_presets_snapshot",
+            Self::BrowserStatusSnapshot { .. } => "browser_status_snapshot",
+            Self::DesktopStatusSnapshot { .. } => "desktop_status_snapshot",
             Self::OnboardingSnapshotLoaded(_) => "onboarding_snapshot_loaded",
             Self::TrajectoryEntryRecorded { .. } => "trajectory_entry_recorded",
             Self::TrajectorySnapshotLoaded(_) => "trajectory_snapshot_loaded",

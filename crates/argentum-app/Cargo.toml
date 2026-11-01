@@ -12,6 +12,7 @@ path = "src/main.rs"
 [features]
 live-preview = ["argentum-ui/live-preview"]
 extensions = ["argentum-cli/extensions"]
+desktop-control = ["argentum-cli/desktop-control"]
 
 [dependencies]
 argentum-cli.workspace = true

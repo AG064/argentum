@@ -1717,6 +1717,27 @@ impl RuntimeService {
                 self.publish_provider_profiles()?;
                 Ok(())
             }
+            AppCommand::ListProviderPresets => {
+                let presets = argentum_providers::PROVIDER_CATALOG
+                    .iter()
+                    .map(|preset| argentum_domain::ProviderPresetSummary {
+                        id: preset.id.to_owned(),
+                        label: preset.label.to_owned(),
+                        kind: preset.kind,
+                        endpoint: preset.default_endpoint.map(str::to_owned),
+                        default_model: preset.default_model.to_owned(),
+                        credential_profile_id: preset.credential_profile_id.map(str::to_owned),
+                        api_key_env: preset.api_key_env.map(str::to_owned),
+                        docs_url: preset.docs_url.to_owned(),
+                        local: preset.local,
+                        supported: preset.supported,
+                        group: preset.group.as_str().to_owned(),
+                        notes: preset.notes.to_owned(),
+                    })
+                    .collect();
+                self.publish_transient(AppEvent::ProviderPresetsSnapshot { presets });
+                Ok(())
+            }
             AppCommand::SaveProviderProfile { profile } => {
                 self.save_provider_profile(profile)?;
                 self.publish_harness_snapshot()?;
@@ -1761,6 +1782,116 @@ impl RuntimeService {
             AppCommand::CompleteOnboarding => self.complete_onboarding(),
             AppCommand::ListHarnessState => {
                 self.publish_harness_snapshot()?;
+                Ok(())
+            }
+            AppCommand::LoadBrowserStatus => {
+                #[cfg(feature = "extensions")]
+                {
+                    let records = self.extension_records()?;
+                    let record = records
+                        .iter()
+                        .find(|record| record.definition.namespace == "browser-control.stdio");
+                    let readiness = self.extension_readiness()?.into_iter().find(|row| {
+                        row.get("namespace").and_then(|value| value.as_str())
+                            == Some("browser-control.stdio")
+                    });
+                    let configured = record.is_some();
+                    let saved_active = record.is_some_and(|record| record.active);
+                    let definition_ready = readiness
+                        .as_ref()
+                        .and_then(|row| row.get("definition_ready"))
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false);
+                    let readiness_detail = readiness
+                        .as_ref()
+                        .and_then(|row| row.get("issue"))
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default()
+                        .to_owned();
+                    let allowed_tools = record
+                        .map(|record| record.definition.allowed_tools.clone())
+                        .unwrap_or_default();
+                    self.publish_transient(AppEvent::BrowserStatusSnapshot {
+                        extensions_built: true,
+                        configured,
+                        saved_active,
+                        definition_ready,
+                        readiness_detail,
+                        allowed_tools,
+                        qualification: "Local definition readiness is not a live browser, connectivity, credential or execution check. Saved activation is not a running process. No Node process, browser or preview was started.".into(),
+                    });
+                }
+                #[cfg(not(feature = "extensions"))]
+                {
+                    self.publish_transient(AppEvent::BrowserStatusSnapshot {
+                        extensions_built: false,
+                        configured: false,
+                        saved_active: false,
+                        definition_ready: false,
+                        readiness_detail:
+                            "This binary was not built with the extensions feature.".into(),
+                        allowed_tools: Vec::new(),
+                        qualification: "The optional browser adapter requires an extensions-enabled build. No Node process, browser or preview was started.".into(),
+                    });
+                }
+                Ok(())
+            }
+            AppCommand::LoadDesktopStatus => {
+                let built = cfg!(all(windows, feature = "desktop-control"));
+                let harness = self.harness_snapshot()?;
+                let capability = harness
+                    .capabilities
+                    .iter()
+                    .find(|capability| capability.id == "desktop.control");
+                let tools = self
+                    .tool_descriptors()
+                    .into_iter()
+                    .filter(|descriptor| descriptor.capability_id == "desktop.control")
+                    .map(|descriptor| argentum_domain::DesktopToolSummary {
+                        id: descriptor.id,
+                        title: descriptor.title,
+                        summary: descriptor.summary,
+                        risk: match descriptor.risk {
+                            argentum_domain::ToolRisk::ReadOnly => "Read only".into(),
+                            argentum_domain::ToolRisk::Mutation => "Mutation".into(),
+                            argentum_domain::ToolRisk::Process => "Process".into(),
+                            argentum_domain::ToolRisk::Shell => "Shell".into(),
+                            argentum_domain::ToolRisk::GitRead => "Git read".into(),
+                            argentum_domain::ToolRisk::GitMutation => "Git mutation".into(),
+                            argentum_domain::ToolRisk::Verification => "Verification".into(),
+                        },
+                        requires_approval: descriptor.requires_approval,
+                    })
+                    .collect::<Vec<_>>();
+                let available = built && !tools.is_empty();
+                let capability_enabled = capability.is_some_and(|capability| capability.enabled);
+                let capability_availability = capability
+                    .map(|capability| format!("{:?}", capability.availability).to_lowercase())
+                    .unwrap_or_else(|| "unavailable".into());
+                let reason = if built {
+                    capability
+                        .map(|capability| capability.unavailable_reason.clone())
+                        .filter(|reason| !reason.is_empty())
+                        .unwrap_or_else(|| {
+                            if capability_enabled {
+                                "Desktop control is enabled by the current execution policy.".into()
+                            } else if capability.is_some() {
+                                "Desktop control is registered but disabled by default.".into()
+                            } else {
+                                "desktop.control is not registered in this harness.".into()
+                            }
+                        })
+                } else {
+                    "This binary was not built with --features desktop-control.".into()
+                };
+                self.publish_transient(AppEvent::DesktopStatusSnapshot {
+                    built,
+                    available,
+                    capability_enabled,
+                    capability_availability,
+                    reason,
+                    tools,
+                });
                 Ok(())
             }
             AppCommand::SetLocalBackendEnabled { enabled } => {
@@ -10642,6 +10773,9 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ProviderCredentialStatus { .. }
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
+        | AppEvent::ProviderPresetsSnapshot { .. }
+        | AppEvent::BrowserStatusSnapshot { .. }
+        | AppEvent::DesktopStatusSnapshot { .. }
         | AppEvent::OnboardingSnapshotLoaded(_)
         | AppEvent::TrajectoryEntryRecorded { .. }
         | AppEvent::TrajectorySnapshotLoaded(_)
@@ -10772,6 +10906,9 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ProviderCredentialStatus { .. }
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
+        | AppEvent::ProviderPresetsSnapshot { .. }
+        | AppEvent::BrowserStatusSnapshot { .. }
+        | AppEvent::DesktopStatusSnapshot { .. }
         | AppEvent::OnboardingSnapshotLoaded(_)
         | AppEvent::TrajectoryEntryRecorded { .. }
         | AppEvent::TrajectorySnapshotLoaded(_)
