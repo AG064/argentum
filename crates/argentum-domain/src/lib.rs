@@ -1113,6 +1113,27 @@ pub struct Goal {
     pub completion: Option<goal_supervision::GoalCompletionReceipt>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillSummaryView {
+    pub name: String,
+    pub description: String,
+    pub relative_path: String,
+    pub digest: String,
+    pub valid: bool,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillInspectionView {
+    pub name: String,
+    pub description: String,
+    pub relative_path: String,
+    pub digest: String,
+    pub body: String,
+    pub valid: bool,
+    pub error: String,
+}
+
 impl From<&Session> for SessionSummary {
     fn from(session: &Session) -> Self {
         Self {
@@ -2223,6 +2244,34 @@ pub enum AppCommand {
     PauseGoal,
     ResumeGoal,
     ClearGoal,
+    ConfigureGoalLimits {
+        goal_id: GoalId,
+        limits: [u64; 9],
+    },
+    ConfigureGoalCriteria {
+        goal_id: GoalId,
+        runners: Vec<VerificationRunnerId>,
+        owner_attestation_required: bool,
+    },
+    AttestGoal {
+        goal_id: GoalId,
+        summary: String,
+    },
+    SuperviseGoal {
+        goal_id: GoalId,
+        iteration_limit: u32,
+        elapsed_seconds: u64,
+    },
+    DeliverGoal {
+        goal_id: GoalId,
+        iteration_limit: u32,
+        elapsed_seconds: u64,
+    },
+    ListToolCatalog,
+    ListSkillCatalog,
+    InspectSkill {
+        name: String,
+    },
     ProbeProvider {
         provider_id: String,
     },
@@ -2439,6 +2488,16 @@ pub enum AppEvent {
         session_id: SessionId,
         invocation: Option<goal_supervision::GoalInvocationStatus>,
     },
+    ToolCatalogSnapshot {
+        tools: Vec<ToolDescriptor>,
+    },
+    SkillCatalogSnapshot {
+        skills: Vec<SkillSummaryView>,
+        complete: bool,
+    },
+    SkillInspectionSnapshot {
+        inspection: SkillInspectionView,
+    },
     ActiveRunsSnapshot {
         runs: Vec<ActiveRunState>,
     },
@@ -2624,6 +2683,9 @@ impl AppEvent {
             Self::ConversationSnapshotLoaded(_) => "conversation_snapshot_loaded",
             Self::GoalSnapshotLoaded { .. } => "goal_snapshot_loaded",
             Self::GoalInvocationSnapshot { .. } => "goal_invocation_snapshot",
+            Self::ToolCatalogSnapshot { .. } => "tool_catalog_snapshot",
+            Self::SkillCatalogSnapshot { .. } => "skill_catalog_snapshot",
+            Self::SkillInspectionSnapshot { .. } => "skill_inspection_snapshot",
             Self::ActiveRunsSnapshot { .. } => "active_runs_snapshot",
             Self::ProjectCreated(_) => "project_created",
             Self::SessionCreated(_) => "session_created",

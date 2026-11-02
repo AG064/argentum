@@ -1755,6 +1755,91 @@ impl RuntimeService {
             AppCommand::PauseGoal => self.pause_goal(),
             AppCommand::ResumeGoal => self.resume_goal(),
             AppCommand::ClearGoal => self.clear_goal(),
+            AppCommand::ConfigureGoalLimits { goal_id, limits } => {
+                self.configure_goal_limits(goal_id, limits)?;
+                Ok(())
+            }
+            AppCommand::ConfigureGoalCriteria {
+                goal_id,
+                runners,
+                owner_attestation_required,
+            } => {
+                self.configure_goal_acceptance(goal_id, &runners, owner_attestation_required)?;
+                Ok(())
+            }
+            AppCommand::AttestGoal { goal_id, summary } => {
+                self.attest_goal_acceptance(goal_id, &summary)?;
+                Ok(())
+            }
+            AppCommand::SuperviseGoal {
+                goal_id,
+                iteration_limit,
+                elapsed_seconds,
+            } => {
+                self.supervise_goal(argentum_domain::goal_supervision::SupervisionRequest {
+                    goal_id,
+                    iteration_limit,
+                    elapsed_seconds,
+                    pause_on_session_switch: true,
+                })
+                .await?;
+                Ok(())
+            }
+            AppCommand::DeliverGoal {
+                goal_id,
+                iteration_limit,
+                elapsed_seconds,
+            } => {
+                self.deliver_goal(argentum_domain::goal_supervision::SupervisionRequest {
+                    goal_id,
+                    iteration_limit,
+                    elapsed_seconds,
+                    pause_on_session_switch: true,
+                })
+                .await?;
+                Ok(())
+            }
+            AppCommand::ListToolCatalog => {
+                self.publish_transient(AppEvent::ToolCatalogSnapshot {
+                    tools: self.tool_descriptors(),
+                });
+                Ok(())
+            }
+            AppCommand::ListSkillCatalog => {
+                let catalog = self.skill_catalog()?;
+                let skills = catalog
+                    .entries
+                    .iter()
+                    .map(|skill| argentum_domain::SkillSummaryView {
+                        name: skill.name.clone().unwrap_or_default(),
+                        description: skill.description.clone().unwrap_or_default(),
+                        relative_path: skill.relative_path.clone(),
+                        digest: skill.digest.clone().unwrap_or_default(),
+                        valid: skill.valid,
+                        error: skill.error.clone().unwrap_or_default(),
+                    })
+                    .collect();
+                self.publish_transient(AppEvent::SkillCatalogSnapshot {
+                    skills,
+                    complete: catalog.complete,
+                });
+                Ok(())
+            }
+            AppCommand::InspectSkill { name } => {
+                let inspection = self.inspect_skill(&name)?;
+                self.publish_transient(AppEvent::SkillInspectionSnapshot {
+                    inspection: argentum_domain::SkillInspectionView {
+                        name: inspection.summary.name.clone().unwrap_or_default(),
+                        description: inspection.summary.description.clone().unwrap_or_default(),
+                        relative_path: inspection.summary.relative_path.clone(),
+                        digest: inspection.summary.digest.clone().unwrap_or_default(),
+                        body: inspection.body,
+                        valid: inspection.summary.valid,
+                        error: inspection.summary.error.clone().unwrap_or_default(),
+                    },
+                });
+                Ok(())
+            }
             AppCommand::ProbeProvider { provider_id } => self.probe_provider(provider_id).await,
             AppCommand::ListProviderProfiles => {
                 self.publish_provider_profiles()?;
@@ -10819,6 +10904,9 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ConversationSnapshotLoaded(_)
         | AppEvent::GoalSnapshotLoaded { .. }
         | AppEvent::GoalInvocationSnapshot { .. }
+        | AppEvent::ToolCatalogSnapshot { .. }
+        | AppEvent::SkillCatalogSnapshot { .. }
+        | AppEvent::SkillInspectionSnapshot { .. }
         | AppEvent::ActiveRunsSnapshot { .. }
         | AppEvent::ProjectCreated(_)
         | AppEvent::SessionCreated(_)
@@ -10949,6 +11037,9 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ConversationSnapshotLoaded(_)
         | AppEvent::GoalSnapshotLoaded { .. }
         | AppEvent::GoalInvocationSnapshot { .. }
+        | AppEvent::ToolCatalogSnapshot { .. }
+        | AppEvent::SkillCatalogSnapshot { .. }
+        | AppEvent::SkillInspectionSnapshot { .. }
         | AppEvent::ActiveRunsSnapshot { .. }
         | AppEvent::ProjectCreated(_)
         | AppEvent::SessionCreated(_)

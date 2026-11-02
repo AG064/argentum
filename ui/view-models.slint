@@ -70,6 +70,25 @@ export struct ApprovalGrantView {
     reason: string,
     created: string,
     binding: string,
+    issuer: string,
+    expiry: string,
+}
+
+export struct ToolCatalogView {
+    id: string,
+    capability: string,
+    title: string,
+    summary: string,
+    risk: string,
+    requires_approval: bool,
+}
+
+export struct SkillCatalogView {
+    name: string,
+    description: string,
+    relative_path: string,
+    valid: bool,
+    error: string,
 }
 
 export struct ApprovalScopeChoiceView {

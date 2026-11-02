@@ -252,13 +252,15 @@ export component MenuRow inherits Rectangle {
     height: root.detail == "" ? AgTheme.control-height : AgTheme.control-height + AgTheme.space-3;
     border-radius: AgTheme.radius-md;
     border-width: AgTheme.hairline;
-    border-color: root.has-focus && root.enabled ? AgTheme.focus-ring : transparent;
+    border-color: root.has-focus && root.enabled
+        ? AgTheme.focus-ring
+        : (root.active && root.enabled ? AgTheme.border-default : transparent);
     background: !root.enabled
         ? transparent
         : (touch.pressed
             ? AgTheme.control-pressed
             : (root.active
-                ? AgTheme.surface-line
+                ? AgTheme.control-selected
                 : (touch.has-hover ? AgTheme.control-hover : transparent)));
     forward-focus: key-focus;
     accessible-role: button;

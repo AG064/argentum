@@ -7,22 +7,27 @@ import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsFiel
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
 import { InspectorSurface } from "surfaces/inspector.slint";
-import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderContextChoiceView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
+import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderContextChoiceView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, SkillCatalogView, ToolCatalogView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 import { DiagnosticRecordView } from "view-models.slint";
 
 component RailSettingsButton inherits Rectangle {
     in property <bool> reduced-motion: false;
+    in property <bool> active: false;
     out property <bool> has-focus: rail-settings-focus.has-focus;
     callback clicked();
 
     height: 44px;
     border-radius: AgTheme.radius-xs;
     border-width: 1px;
-    border-color: root.has-focus ? AgTheme.focus-ring : transparent;
+    border-color: root.has-focus
+        ? AgTheme.focus-ring
+        : (root.active ? AgTheme.border-default : transparent);
     background: rail-settings-touch.pressed
         ? AgTheme.control-pressed
-        : (rail-settings-touch.has-hover ? AgTheme.control-hover : transparent);
+        : (root.active
+            ? AgTheme.control-selected
+            : (rail-settings-touch.has-hover ? AgTheme.control-hover : transparent));
     accessible-role: button;
     accessible-label: "Settings";
     accessible-action-default => { root.clicked(); }
@@ -627,6 +632,7 @@ export component MainWindow inherits Window {
     in-out property <string> goal_draft: "";
     in-out property <string> goal_state: "";
     in-out property <string> goal_next_action: "";
+    in-out property <string> goal_accounting_summary: "No accounting recorded";
     in-out property <int> goal_iteration: 0;
     in-out property <int> goal_tokens_used: 0;
     in-out property <int> goal_token_budget: 0;
@@ -638,6 +644,37 @@ export component MainWindow inherits Window {
     in-out property <bool> goal_time_budget_reported: false;
     in-out property <int> goal_verification_count: 0;
     in-out property <bool> goal_action_pending: false;
+    in-out property <bool> goal_inspector_active: false;
+    in-out property <string> goal_id: "";
+    in-out property <string> goal_limits_summary: "No goal limits reported";
+    in-out property <string> goal_run_limits_summary: "No per-run limits reported";
+    in-out property <string> goal_criteria_summary: "No criteria configured";
+    in-out property <string> goal_attestation_summary: "No owner attestation";
+    in-out property <string> goal_completion_summary: "Not delivered";
+    in-out property <string> goal_invocation_state: "No supervision invocation";
+    in-out property <string> goal_invocation_next_action: "";
+    in-out property <string> goal_limits_draft: "";
+    in-out property <string> goal_limits_error: "";
+    in-out property <string> goal_criteria_draft: "";
+    in-out property <bool> goal_criteria_attestation: false;
+    in-out property <string> goal_criteria_error: "";
+    in-out property <string> goal_attestation_draft: "";
+    in-out property <string> goal_attestation_error: "";
+    in-out property <string> goal_supervise_iterations: "1";
+    in-out property <string> goal_supervise_seconds: "300";
+    in-out property <bool> goal_supervision_pending: false;
+    in-out property <string> goal_supervision_error: "";
+    in-out property <string> goal_supervision_notice: "";
+    in-out property <[ToolCatalogView]> tool_catalog: [];
+    in-out property <bool> tool_catalog_loading: false;
+    in-out property <string> tool_catalog_error: "";
+    in-out property <[SkillCatalogView]> skill_catalog: [];
+    in-out property <bool> skill_catalog_loading: false;
+    in-out property <string> skill_catalog_error: "";
+    in-out property <string> skill_selected: "";
+    in-out property <string> skill_body: "";
+    in-out property <bool> skill_inspect_loading: false;
+    in-out property <string> skill_inspect_error: "";
     in-out property <string> user_prompt: "";
     in-out property <[ConversationMessageView]> conversation_messages: [];
     in-out property <string> plan_summary: "No stages yet";
@@ -781,6 +818,14 @@ export component MainWindow inherits Window {
     callback pause_goal();
     callback resume_goal();
     callback clear_goal();
+    callback configure_goal_limits(string, string);
+    callback configure_goal_criteria(string, string, bool);
+    callback attest_goal(string, string);
+    callback supervise_goal(string, string, string);
+    callback deliver_goal(string, string, string);
+    callback refresh_tool_catalog();
+    callback refresh_skill_catalog();
+    callback inspect_skill(string);
     callback probe_provider(string);
     callback save_provider_credential(string, string);
     callback clear_provider_credential(string);
@@ -1135,6 +1180,7 @@ export component MainWindow inherits Window {
 
                 RailSettingsButton {
                     reduced-motion: root.reduced_motion;
+                    active: root.settings_open;
                     clicked => {
                         root.settings_open = true;
                         root.provider_loading = true;
@@ -1499,6 +1545,7 @@ export component MainWindow inherits Window {
                 height: parent.height - AgTheme.space-7;
                 modes: root.inspector_modes;
                 active-mode: root.active_inspector;
+                goal-tab-active: root.goal_inspector_active;
                 activity-items: root.activity_items;
                 activity-summary: root.activity_summary;
                 trajectory-items: root.trajectory_items;
@@ -1511,6 +1558,7 @@ export component MainWindow inherits Window {
                 goal-draft <=> root.goal_draft;
                 goal-state: root.goal_state;
                 goal-next-action: root.goal_next_action;
+                goal-accounting-summary: root.goal_accounting_summary;
                 goal-iteration: root.goal_iteration;
                 goal-tokens-used: root.goal_tokens_used;
                 goal-token-budget: root.goal_token_budget;
@@ -1521,6 +1569,27 @@ export component MainWindow inherits Window {
                 goal-time-budget-seconds: root.goal_time_budget_seconds;
                 goal-time-budget-reported: root.goal_time_budget_reported;
                 goal-verification-count: root.goal_verification_count;
+                goal-id: root.goal_id;
+                goal-limits-summary: root.goal_limits_summary;
+                goal-run-limits-summary: root.goal_run_limits_summary;
+                goal-criteria-summary: root.goal_criteria_summary;
+                goal-attestation-summary: root.goal_attestation_summary;
+                goal-completion-summary: root.goal_completion_summary;
+                goal-invocation-state: root.goal_invocation_state;
+                goal-invocation-next-action: root.goal_invocation_next_action;
+                goal-limits-draft <=> root.goal_limits_draft;
+                goal-limits-error: root.goal_limits_error;
+                goal-criteria-draft <=> root.goal_criteria_draft;
+                goal-criteria-attestation <=> root.goal_criteria_attestation;
+                goal-criteria-error: root.goal_criteria_error;
+                goal-attestation-draft <=> root.goal_attestation_draft;
+                goal-attestation-error: root.goal_attestation_error;
+                goal-supervise-iterations <=> root.goal_supervise_iterations;
+                goal-supervise-seconds <=> root.goal_supervise_seconds;
+                goal-supervision-pending: root.goal_supervision_pending;
+                goal-action-pending: root.goal_action_pending;
+                goal-supervision-error: root.goal_supervision_error;
+                goal-supervision-notice: root.goal_supervision_notice;
                 goal-busy: root.goal_action_pending || root.running;
                 change-summary: root.change_summary;
                 change-files: root.change_files;
@@ -1556,8 +1625,9 @@ export component MainWindow inherits Window {
                 verification-evidence-error: root.verification_evidence_error;
                 active-session-id: root.active_session_id;
                 reduced-motion: root.reduced_motion;
-                select-mode(mode) => { root.set_inspector_surface(mode); }
-                close => { root.set_inspector_surface(""); }
+                select-mode(mode) => { root.goal_inspector_active = false; root.set_inspector_surface(mode); }
+                select-goal-tab => { root.goal_inspector_active = true; }
+                close => { root.goal_inspector_active = false; root.set_inspector_surface(""); }
                 refresh-trajectory(session-id) => {
                     root.trajectory_loading = true;
                     root.trajectory_error = "";
@@ -1578,6 +1648,11 @@ export component MainWindow inherits Window {
                 pause-goal => { root.pause_goal(); }
                 resume-goal => { root.resume_goal(); }
                 clear-goal => { root.clear_goal(); }
+                configure-goal-limits(goal-id, limits) => { root.configure_goal_limits(goal-id, limits); }
+                configure-goal-criteria(goal-id, runners, attestation) => { root.configure_goal_criteria(goal-id, runners, attestation); }
+                attest-goal(goal-id, summary) => { root.attest_goal(goal-id, summary); }
+                supervise-goal(goal-id, iterations, seconds) => { root.supervise_goal(goal-id, iterations, seconds); }
+                deliver-goal(goal-id, iterations, seconds) => { root.deliver_goal(goal-id, iterations, seconds); }
             }
         }
 
@@ -1749,6 +1824,7 @@ export component MainWindow inherits Window {
                 height: parent.height - AgTheme.space-7;
                 modes: root.inspector_modes;
                 active-mode: root.active_inspector;
+                goal-tab-active: root.goal_inspector_active;
                 activity-items: root.activity_items;
                 activity-summary: root.activity_summary;
                 trajectory-items: root.trajectory_items;
@@ -1761,6 +1837,7 @@ export component MainWindow inherits Window {
                 goal-draft <=> root.goal_draft;
                 goal-state: root.goal_state;
                 goal-next-action: root.goal_next_action;
+                goal-accounting-summary: root.goal_accounting_summary;
                 goal-iteration: root.goal_iteration;
                 goal-tokens-used: root.goal_tokens_used;
                 goal-token-budget: root.goal_token_budget;
@@ -1771,6 +1848,27 @@ export component MainWindow inherits Window {
                 goal-time-budget-seconds: root.goal_time_budget_seconds;
                 goal-time-budget-reported: root.goal_time_budget_reported;
                 goal-verification-count: root.goal_verification_count;
+                goal-id: root.goal_id;
+                goal-limits-summary: root.goal_limits_summary;
+                goal-run-limits-summary: root.goal_run_limits_summary;
+                goal-criteria-summary: root.goal_criteria_summary;
+                goal-attestation-summary: root.goal_attestation_summary;
+                goal-completion-summary: root.goal_completion_summary;
+                goal-invocation-state: root.goal_invocation_state;
+                goal-invocation-next-action: root.goal_invocation_next_action;
+                goal-limits-draft <=> root.goal_limits_draft;
+                goal-limits-error: root.goal_limits_error;
+                goal-criteria-draft <=> root.goal_criteria_draft;
+                goal-criteria-attestation <=> root.goal_criteria_attestation;
+                goal-criteria-error: root.goal_criteria_error;
+                goal-attestation-draft <=> root.goal_attestation_draft;
+                goal-attestation-error: root.goal_attestation_error;
+                goal-supervise-iterations <=> root.goal_supervise_iterations;
+                goal-supervise-seconds <=> root.goal_supervise_seconds;
+                goal-supervision-pending: root.goal_supervision_pending;
+                goal-action-pending: root.goal_action_pending;
+                goal-supervision-error: root.goal_supervision_error;
+                goal-supervision-notice: root.goal_supervision_notice;
                 goal-busy: root.goal_action_pending || root.running;
                 change-summary: root.change_summary;
                 change-files: root.change_files;
@@ -1807,8 +1905,9 @@ export component MainWindow inherits Window {
                 active-session-id: root.active_session_id;
                 touch-mode: root.phone_layout;
                 reduced-motion: root.reduced_motion;
-                select-mode(mode) => { root.set_inspector_surface(mode); }
-                close => { root.set_inspector_surface(""); }
+                select-mode(mode) => { root.goal_inspector_active = false; root.set_inspector_surface(mode); }
+                select-goal-tab => { root.goal_inspector_active = true; }
+                close => { root.goal_inspector_active = false; root.set_inspector_surface(""); }
                 refresh-trajectory(session-id) => {
                     root.trajectory_loading = true;
                     root.trajectory_error = "";
@@ -1829,6 +1928,11 @@ export component MainWindow inherits Window {
                 pause-goal => { root.pause_goal(); }
                 resume-goal => { root.resume_goal(); }
                 clear-goal => { root.clear_goal(); }
+                configure-goal-limits(goal-id, limits) => { root.configure_goal_limits(goal-id, limits); }
+                configure-goal-criteria(goal-id, runners, attestation) => { root.configure_goal_criteria(goal-id, runners, attestation); }
+                attest-goal(goal-id, summary) => { root.attest_goal(goal-id, summary); }
+                supervise-goal(goal-id, iterations, seconds) => { root.supervise_goal(goal-id, iterations, seconds); }
+                deliver-goal(goal-id, iterations, seconds) => { root.deliver_goal(goal-id, iterations, seconds); }
             }
         }
 
@@ -3437,15 +3541,129 @@ export component MainWindow inherits Window {
                             }
                         }
 
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
                         SectionHeading {
-                            label: "Approval grants";
+                            label: "Tools";
+                            detail: root.tool_catalog.length;
+                        }
+
+                        Text {
+                            text: "Read-only catalog metadata. This view does not execute tools.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.tool_catalog_loading: Text {
+                            text: "Loading tool catalog";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        if root.tool_catalog_error != "": Text {
+                            text: root.tool_catalog_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for tool in root.tool_catalog: Rectangle {
+                            min-height: 64px;
+                            border-radius: AgTheme.radius-xs;
+                            border-width: AgTheme.hairline;
+                            border-color: AgTheme.border-subtle;
+                            background: AgTheme.chrome;
+
+                            VerticalLayout {
+                                padding: AgTheme.space-2;
+                                spacing: AgTheme.space-1;
+                                Text { text: tool.title + " | " + tool.risk; color: AgTheme.white-100; font-size: AgTheme.type-body; font-weight: AgTheme.weight-semibold; wrap: word-wrap; }
+                                Text { text: tool.id + " | " + tool.capability + (tool.requires_approval ? " | Approval required" : " | No approval"); color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                                Text { text: tool.summary; color: AgTheme.text-secondary; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                            }
+                        }
+
+                        ActionButton {
+                            label: root.tool_catalog_loading ? "Loading tools" : "Refresh tools";
+                            enabled: !root.tool_catalog_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.refresh_tool_catalog(); }
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
+                            label: "Skills";
+                            detail: root.skill_catalog.length;
+                        }
+
+                        Text {
+                            text: "Workspace skills discovered from reviewed skill documents. Inspection is bounded and read-only.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.skill_catalog_loading: Text {
+                            text: "Loading skill catalog";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        if root.skill_catalog_error != "": Text {
+                            text: root.skill_catalog_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for skill in root.skill_catalog: MenuRow {
+                            icon: "terminal";
+                            label: skill.name == "" ? skill.relative_path : skill.name;
+                            detail: skill.description + (skill.valid ? "" : " | Invalid: " + skill.error);
+                            active: root.skill_selected == skill.name;
+                            enabled: skill.valid && !root.skill_inspect_loading;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.inspect_skill(skill.name); }
+                        }
+
+                        if root.skill_selected != "": Rectangle {
+                            border-radius: AgTheme.radius-md;
+                            border-width: AgTheme.hairline;
+                            border-color: AgTheme.border-subtle;
+                            background: AgTheme.chrome;
+
+                            VerticalLayout {
+                                padding: AgTheme.space-3;
+                                spacing: AgTheme.space-2;
+                                Text { text: "Inspecting " + root.skill_selected; color: AgTheme.white-100; font-size: AgTheme.type-section-title; font-weight: AgTheme.weight-semibold; wrap: word-wrap; }
+                                if root.skill_inspect_loading: Text { text: "Loading bounded inspection"; color: AgTheme.text-muted; font-size: AgTheme.type-compact; }
+                                if root.skill_inspect_error != "": Text { text: root.skill_inspect_error; color: AgTheme.text-danger; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                                if root.skill_body != "": Text { text: root.skill_body; color: AgTheme.text-secondary; font-family: AgTheme.font-code; font-size: AgTheme.type-metadata; wrap: word-wrap; }
+                            }
+                        }
+
+                        ActionButton {
+                            label: root.skill_catalog_loading ? "Loading skills" : "Refresh skills";
+                            enabled: !root.skill_catalog_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.refresh_skill_catalog(); }
+                        }
+
+                        SectionHeading {
+                            label: "Permissions and grants";
                             detail: root.approval_grants_incomplete
                                 ? root.approval_grants.length + " shown"
                                 : root.approval_grants.length;
                         }
 
                         Text {
-                            text: "Persistent grants issued by this owner. Revoking takes effect immediately.";
+                            text: "Persistent grants issued by this owner. Revoking takes effect immediately. Grants are approval records, not capability activation: desktop and browser tools still require their own capability state and owner activation.";
                             color: AgTheme.text-muted;
                             font-size: AgTheme.type-compact;
                             wrap: word-wrap;
@@ -3472,7 +3690,7 @@ export component MainWindow inherits Window {
                         }
 
                         for grant in root.approval_grants: Rectangle {
-                            min-height: 112px;
+                            min-height: 140px;
                             border-radius: AgTheme.radius-md;
                             border-width: AgTheme.hairline;
                             border-color: AgTheme.border-subtle;
@@ -3493,7 +3711,6 @@ export component MainWindow inherits Window {
                                     text: grant.subject;
                                     color: AgTheme.text-secondary;
                                     font-size: AgTheme.type-compact;
-                                    wrap: word-wrap;
                                     overflow: elide;
                                 }
 
@@ -3501,7 +3718,15 @@ export component MainWindow inherits Window {
                                     text: grant.reason;
                                     color: AgTheme.text-muted;
                                     font-size: AgTheme.type-compact;
+                                    height: 32px;
                                     wrap: word-wrap;
+                                }
+
+                                Text {
+                                    text: "Issuer " + grant.issuer + " | Expiry " + grant.expiry;
+                                    color: AgTheme.text-tertiary;
+                                    font-size: AgTheme.type-metadata;
+                                    overflow: elide;
                                 }
 
                                 HorizontalLayout {
