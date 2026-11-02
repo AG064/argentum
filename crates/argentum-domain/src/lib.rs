@@ -2244,6 +2244,14 @@ pub enum AppCommand {
         provider_id: String,
         model: String,
     },
+    SaveProviderBudget {
+        profile_id: String,
+        limits: [u64; 5],
+    },
+    SaveProviderContext {
+        profile_id: String,
+        context_tokens: u32,
+    },
     LoadOnboarding,
     BeginOnboarding,
     SetOnboardingGuidance {
@@ -2550,6 +2558,20 @@ pub enum AppEvent {
     ProviderPresetsSnapshot {
         presets: Vec<ProviderPresetSummary>,
     },
+    ProviderBudgetSnapshot {
+        profile_id: String,
+        budget: Option<context_budget::ModelBudget>,
+        error: String,
+        save_completed: bool,
+    },
+    ProviderContextSnapshot {
+        profile_id: String,
+        available: bool,
+        context_tokens: u32,
+        choices: Vec<u32>,
+        error: String,
+        save_completed: bool,
+    },
     BrowserStatusSnapshot {
         extensions_built: bool,
         configured: bool,
@@ -2648,6 +2670,8 @@ impl AppEvent {
             Self::ProviderProfilesSnapshot { .. } => "provider_profiles_snapshot",
             Self::ProviderModelsSnapshot { .. } => "provider_models_snapshot",
             Self::ProviderPresetsSnapshot { .. } => "provider_presets_snapshot",
+            Self::ProviderBudgetSnapshot { .. } => "provider_budget_snapshot",
+            Self::ProviderContextSnapshot { .. } => "provider_context_snapshot",
             Self::BrowserStatusSnapshot { .. } => "browser_status_snapshot",
             Self::DesktopStatusSnapshot { .. } => "desktop_status_snapshot",
             Self::OnboardingSnapshotLoaded(_) => "onboarding_snapshot_loaded",

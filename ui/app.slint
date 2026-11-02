@@ -7,7 +7,7 @@ import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsFiel
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
 import { InspectorSurface } from "surfaces/inspector.slint";
-import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
+import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderContextChoiceView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 import { DiagnosticRecordView } from "view-models.slint";
 
@@ -489,6 +489,25 @@ export component MainWindow inherits Window {
     in-out property <string> provider_credential_draft: "";
     in-out property <string> provider_credential_error: "";
     in-out property <string> provider_credential_notice: "";
+    in-out property <bool> provider_budget_loading: false;
+    in-out property <bool> provider_budget_saved: false;
+    in-out property <string> provider_budget_error: "";
+    in-out property <string> provider_budget_notice: "";
+    in-out property <bool> provider_budget_pending: false;
+    in-out property <string> provider_budget_profile_id: "";
+    in-out property <string> provider_budget_total: "";
+    in-out property <string> provider_budget_input: "";
+    in-out property <string> provider_budget_max_output: "";
+    in-out property <string> provider_budget_requested_output: "";
+    in-out property <string> provider_budget_uncertainty: "";
+    in-out property <bool> provider_context_loading: false;
+    in-out property <bool> provider_context_available: false;
+    in-out property <string> provider_context_error: "";
+    in-out property <string> provider_context_notice: "";
+    in-out property <bool> provider_context_pending: false;
+    in-out property <string> provider_context_profile_id: "";
+    in-out property <int> provider_context_tokens: 0;
+    in-out property <[ProviderContextChoiceView]> provider_context_choices: [];
     in-out property <bool> provider_loading: false;
     in-out property <bool> provider_saving: false;
     in-out property <bool> provider_selecting: false;
@@ -775,6 +794,8 @@ export component MainWindow inherits Window {
     callback refresh_provider_presets();
     callback add_provider_preset(string);
     callback select_provider_preset(string);
+    callback save_provider_budget();
+    callback set_provider_context(int);
     callback refresh_browser_status();
     callback refresh_desktop_status();
     callback refresh_harness();
@@ -2762,6 +2783,236 @@ export component MainWindow inherits Window {
                             }
                         }
 
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
+                            label: "Budget limits";
+                            detail: root.provider_budget_loading
+                                ? "Loading"
+                                : (root.provider_budget_saved ? "Saved" : "Not set");
+                        }
+
+                        Text {
+                            text: "Owner-declared client limits, not provider-verified capacities. Changes apply to this saved profile and do not start a provider request.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.provider_budget_loading: Text {
+                            text: "Loading saved limits";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        SettingsField {
+                            label: "Total context tokens";
+                            placeholder: "8192";
+                            value: root.provider_budget_total;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_budget_total = value;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Input limit tokens";
+                            placeholder: "8192";
+                            value: root.provider_budget_input;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_budget_input = value;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Maximum output tokens";
+                            placeholder: "4096";
+                            value: root.provider_budget_max_output;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_budget_max_output = value;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Requested output tokens";
+                            placeholder: "512";
+                            value: root.provider_budget_requested_output;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_budget_requested_output = value;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                            }
+                        }
+
+                        SettingsField {
+                            label: "Uncertainty tokens";
+                            placeholder: "512";
+                            value: root.provider_budget_uncertainty;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
+                            field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
+                            edited(value) => {
+                                root.provider_budget_uncertainty = value;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                            }
+                        }
+
+                        ActionButton {
+                            label: "Save limits";
+                            icon: "check";
+                            primary: true;
+                            enabled: root.provider_id != ""
+                                && !root.running
+                                && !root.provider_busy;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                root.provider_budget_pending = true;
+                                root.provider_budget_error = "";
+                                root.provider_budget_notice = "";
+                                root.save_provider_budget();
+                            }
+                        }
+
+                        if root.provider_budget_error != "": Text {
+                            text: root.provider_budget_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.provider_budget_notice != "": Text {
+                            text: root.provider_budget_notice;
+                            color: AgTheme.silver-300;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.provider_context_available: VerticalLayout {
+                            spacing: AgTheme.space-2;
+
+                            Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                            SectionHeading {
+                                label: "Context size";
+                                detail: root.provider_context_loading
+                                    ? "Loading"
+                                    : (root.provider_context_tokens + " tokens");
+                            }
+
+                            Text {
+                                text: "Applies on the next explicitly approved local launch. Close active inference before changing this setting. Memory and speed depend on the model and hardware.";
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                                wrap: word-wrap;
+                            }
+
+                            if root.provider_context_loading: Text {
+                                text: "Loading configured context";
+                                color: AgTheme.text-muted;
+                                font-size: AgTheme.type-compact;
+                            }
+
+                            HorizontalLayout {
+                                spacing: AgTheme.space-2;
+
+                                for choice in root.provider_context_choices: ActionButton {
+                                    label: choice.label;
+                                    fill: choice.selected ? AgTheme.control-selected : AgTheme.surface-soft;
+                                    foreground: choice.selected ? AgTheme.silver-200 : AgTheme.text-secondary;
+                                    outline-color: choice.selected ? AgTheme.border-strong : AgTheme.border-default;
+                                    enabled: !root.running && !root.provider_busy;
+                                    reduced-motion: root.reduced_motion;
+                                    clicked => {
+                                        root.provider_context_pending = true;
+                                        root.provider_context_error = "";
+                                        root.provider_context_notice = "";
+                                        root.set_provider_context(choice.tokens);
+                                    }
+                                }
+                            }
+
+                            if root.provider_context_error != "": Text {
+                                text: root.provider_context_error;
+                                color: AgTheme.text-danger;
+                                font-size: AgTheme.type-compact;
+                                wrap: word-wrap;
+                            }
+
+                            if root.provider_context_notice != "": Text {
+                                text: root.provider_context_notice;
+                                color: AgTheme.silver-300;
+                                font-size: AgTheme.type-compact;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        Rectangle { height: AgTheme.hairline; background: AgTheme.border-faint; }
+
+                        SectionHeading {
+                            label: "ChatGPT accounts";
+                            detail: "CLI-only";
+                        }
+
+                        Text {
+                            text: "This UI does not load, change or sign in ChatGPT accounts. The existing sign-in path requires a direct interactive owner console and the normal operating-system secure store.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Sign in: argentum provider login chatgpt";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Add account: argentum provider login-new chatgpt";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Accounts: argentum provider accounts chatgpt";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Select: argentum provider account chatgpt ACCOUNT_ID";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Sign out: argentum provider logout chatgpt";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
                         if root.local_inference_available: VerticalLayout {
                             spacing: AgTheme.space-2;
 
@@ -2883,6 +3134,21 @@ export component MainWindow inherits Window {
                             color: AgTheme.text-tertiary;
                             font-family: AgTheme.font-code;
                             font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Activate: argentum extensions activate browser-control.stdio --workspace <workspace> --database <database>";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Activation requires the local owner console and a typed ACTIVATE confirmation. This UI does not activate the browser or start Node.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
                             wrap: word-wrap;
                         }
 

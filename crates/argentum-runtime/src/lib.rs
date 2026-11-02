@@ -1110,6 +1110,49 @@ impl RuntimeService {
         Ok(profiles)
     }
 
+    fn publish_provider_limits(&self, save_completed: bool) -> Result<(), RuntimeError> {
+        let Some(profile) = self.store.selected_provider_profile(self.project_id)? else {
+            return Ok(());
+        };
+        let (budget, budget_error) = match self.store.model_budget(self.project_id, &profile) {
+            Ok(budget) => (budget, String::new()),
+            Err(_) => (
+                None,
+                "Saved budget limits are stale for this profile; declare them again.".into(),
+            ),
+        };
+        self.publish_transient(AppEvent::ProviderBudgetSnapshot {
+            profile_id: profile.id.clone(),
+            budget,
+            error: budget_error,
+            save_completed,
+        });
+        let local = profile.id == "llama-cpp"
+            && profile.kind == ProviderKind::LocalLlamaCpp
+            && profile.endpoint == argentum_domain::DEFAULT_LLAMA_CPP_ENDPOINT;
+        let (context_tokens, context_error) = if local {
+            match self.configured_local_context_tokens(&profile.model) {
+                Ok(tokens) => (tokens, String::new()),
+                Err(_) => (
+                    0,
+                    "Configured context is unavailable for this profile; choose a size again."
+                        .into(),
+                ),
+            }
+        } else {
+            (0, String::new())
+        };
+        self.publish_transient(AppEvent::ProviderContextSnapshot {
+            profile_id: profile.id,
+            available: local,
+            context_tokens,
+            choices: argentum_providers::SIDECAR_CONTEXT_VARIANTS.to_vec(),
+            error: context_error,
+            save_completed,
+        });
+        Ok(())
+    }
+
     pub fn onboarding_snapshot(&self) -> Result<OnboardingSnapshot, RuntimeError> {
         let snapshot = self
             .store
@@ -1715,6 +1758,7 @@ impl RuntimeService {
             AppCommand::ProbeProvider { provider_id } => self.probe_provider(provider_id).await,
             AppCommand::ListProviderProfiles => {
                 self.publish_provider_profiles()?;
+                self.publish_provider_limits(false)?;
                 Ok(())
             }
             AppCommand::ListProviderPresets => {
@@ -1758,6 +1802,25 @@ impl RuntimeService {
             }
             AppCommand::SelectProviderModel { provider_id, model } => {
                 self.select_provider_model(provider_id, model)
+            }
+            AppCommand::SaveProviderBudget { profile_id, limits } => {
+                self.declare_model_budget(&profile_id, limits)?;
+                // Publish the saved values in the same command turn. No polling
+                // or delayed host refresh is involved.
+                self.publish_provider_limits(true)?;
+                self.publish_harness_snapshot()?;
+                Ok(())
+            }
+            AppCommand::SaveProviderContext {
+                profile_id,
+                context_tokens,
+            } => {
+                self.configure_local_context(&profile_id, context_tokens)?;
+                // Publish the saved values in the same command turn. No polling
+                // or delayed host refresh is involved.
+                self.publish_provider_limits(true)?;
+                self.publish_harness_snapshot()?;
+                Ok(())
             }
             AppCommand::LoadOnboarding => {
                 self.publish_onboarding_snapshot()?;
@@ -2576,6 +2639,7 @@ impl RuntimeService {
                 .map_err(|_| RuntimeError::InvalidProviderId)?;
             let profiles = self.store.add_provider_preset(self.project_id, &profile)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
+            self.publish_provider_limits(false)?;
             Ok(())
         })();
         self.publish_profile_command_error(&result);
@@ -2591,6 +2655,7 @@ impl RuntimeService {
             self.clear_profile_model_contexts(&profile.id)?;
             self.clear_profile_model_catalog(&profile.id)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
+            self.publish_provider_limits(false)?;
             Ok(())
         })();
         self.publish_profile_command_error(&result);
@@ -2603,12 +2668,11 @@ impl RuntimeService {
         let result = if contains_control || !valid_provider_id(provider_id) {
             Err(RuntimeError::InvalidProviderId)
         } else {
-            self.store
-                .select_provider_profile(self.project_id, provider_id)
-                .map(|profiles| {
-                    self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
-                })
-                .map_err(RuntimeError::from)
+            let profiles = self
+                .store
+                .select_provider_profile(self.project_id, provider_id)?;
+            self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
+            self.publish_provider_limits(false)
         };
         self.publish_profile_command_error(&result);
         result
@@ -10774,6 +10838,8 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
         | AppEvent::ProviderPresetsSnapshot { .. }
+        | AppEvent::ProviderBudgetSnapshot { .. }
+        | AppEvent::ProviderContextSnapshot { .. }
         | AppEvent::BrowserStatusSnapshot { .. }
         | AppEvent::DesktopStatusSnapshot { .. }
         | AppEvent::OnboardingSnapshotLoaded(_)
@@ -10907,6 +10973,8 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ProviderProfilesSnapshot { .. }
         | AppEvent::ProviderModelsSnapshot { .. }
         | AppEvent::ProviderPresetsSnapshot { .. }
+        | AppEvent::ProviderBudgetSnapshot { .. }
+        | AppEvent::ProviderContextSnapshot { .. }
         | AppEvent::BrowserStatusSnapshot { .. }
         | AppEvent::DesktopStatusSnapshot { .. }
         | AppEvent::OnboardingSnapshotLoaded(_)
@@ -11370,6 +11438,74 @@ mod tests {
             runtime.execution_policy().expect("policy").profile_id,
             "guided"
         );
+    }
+
+    #[tokio::test]
+    async fn provider_budget_and_context_commands_persist_and_publish() {
+        let (_workspace_dir, runtime) = composed_runtime().await;
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::SaveProviderBudget {
+                profile_id: "llama-cpp".into(),
+                limits: [8192, 8192, 4096, 512, 512],
+            })
+            .await
+            .expect("save provider budget");
+        let budget = runtime
+            .selected_model_budget()
+            .expect("budget read")
+            .expect("saved budget");
+        assert_eq!(budget.usable_context_tokens, 8192);
+        assert_eq!(budget.maximum_output_tokens, 4096);
+        assert_eq!(budget.requested_output_tokens, 512);
+        let published_budget = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                match events.recv().await {
+                    Ok(AppEvent::ProviderBudgetSnapshot {
+                        budget: Some(budget),
+                        save_completed: true,
+                        ..
+                    }) => break budget,
+                    Ok(_) => continue,
+                    Err(error) => panic!("budget event channel closed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("budget snapshot was published immediately");
+        assert_eq!(published_budget.usable_context_tokens, 8192);
+
+        let mut context_events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::SaveProviderContext {
+                profile_id: "llama-cpp".into(),
+                context_tokens: 16384,
+            })
+            .await
+            .expect("save provider context");
+        assert_eq!(
+            runtime
+                .configured_local_context_tokens("Qwen3.5-0.8B-Q8_0.gguf")
+                .expect("context read"),
+            16384
+        );
+        let published_context = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                match context_events.recv().await {
+                    Ok(AppEvent::ProviderContextSnapshot {
+                        context_tokens,
+                        save_completed: true,
+                        ..
+                    }) => break context_tokens,
+                    Ok(_) => continue,
+                    Err(error) => panic!("context event channel closed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("context snapshot was published immediately");
+        assert_eq!(published_context, 16384);
+        runtime.shutdown().await.expect("runtime shutdown");
     }
 
     #[tokio::test]

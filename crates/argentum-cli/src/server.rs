@@ -803,6 +803,8 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::AddProviderPreset { .. }
         | AppCommand::SelectProviderProfile { .. }
         | AppCommand::SelectProviderModel { .. }
+        | AppCommand::SaveProviderBudget { .. }
+        | AppCommand::SaveProviderContext { .. }
         | AppCommand::SelectHarnessProfile { .. }
         | AppCommand::SelectExecutionProfile { .. }
         | AppCommand::SetHarnessCapabilityEnabled { .. }
@@ -3231,6 +3233,22 @@ mod tests {
         assert!(jsonl_command_is_permitted(&AppCommand::ListProviderPresets));
         assert!(jsonl_command_is_permitted(&AppCommand::LoadBrowserStatus));
         assert!(jsonl_command_is_permitted(&AppCommand::LoadDesktopStatus));
+    }
+
+    #[test]
+    fn provider_setup_mutations_are_not_jsonl_permitted() {
+        assert!(!jsonl_command_is_permitted(
+            &AppCommand::SaveProviderBudget {
+                profile_id: "llama-cpp".into(),
+                limits: [8192, 8192, 4096, 512, 512],
+            }
+        ));
+        assert!(!jsonl_command_is_permitted(
+            &AppCommand::SaveProviderContext {
+                profile_id: "llama-cpp".into(),
+                context_tokens: 16384,
+            }
+        ));
     }
 
     #[test]
