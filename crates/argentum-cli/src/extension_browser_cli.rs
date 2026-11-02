@@ -7,16 +7,21 @@ use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},
     Sha256Digest,
 };
+use argentum_extensions::configuration::{admit, AdmittedDefinition};
+use argentum_extensions::connection::McpSession;
 use argentum_extensions::package::{self, MCP_SCHEMA, PLUGIN_SCHEMA};
 use argentum_platform::AppPaths;
+use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::{Read, Write},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    process::{Command, Stdio},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tokio_util::sync::CancellationToken;
 
 type Error = Box<dyn std::error::Error>;
 
@@ -54,13 +59,16 @@ pub(crate) struct BrowserRequest<'a> {
     pub paths: &'a AppPaths,
     pub database: &'a Path,
     pub local: &'a argentum_cli::LocalCommandHandle,
+    pub json: bool,
+    pub handshake: bool,
 }
 
 pub(crate) async fn run(subcommand: &str, request: &BrowserRequest<'_>) -> Result<(), Error> {
     match subcommand {
         "setup" => setup(request).await,
         "status" => status(request.local),
-        _ => Err("extensions browser requires setup or status; use extensions help".into()),
+        "check" => check(request).await,
+        _ => Err("extensions browser requires setup, status, or check; use extensions help".into()),
     }
 }
 
@@ -450,6 +458,877 @@ fn status(local: &argentum_cli::LocalCommandHandle) -> Result<(), Error> {
     });
     println!("{}", serde_json::to_string_pretty(&document)?);
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct BrowserCheckReport {
+    schema_version: u32,
+    namespace: &'static str,
+    configured: bool,
+    handshake_requested: bool,
+    node: NodeReport,
+    files: FilesReport,
+    configuration: Value,
+    dependencies: DependenciesReport,
+    definition: DefinitionReport,
+    checks: Vec<CheckReport>,
+    ready: bool,
+    handshake: HandshakeReport,
+    qualification: &'static str,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct NodeReport {
+    path: Option<String>,
+    exists: bool,
+    sha256: Option<String>,
+    version: Option<String>,
+    version_status: &'static str,
+    error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct FileReport {
+    path: String,
+    exists: bool,
+    bytes: Option<u64>,
+    sha256: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct FilesReport {
+    adapter: FileReport,
+    adapter_package: FileReport,
+    package_lock: FileReport,
+    config: FileReport,
+    manifest: FileReport,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct ModuleReport {
+    path: String,
+    exists: bool,
+    version: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct BrowserCacheReport {
+    configured: bool,
+    path: Option<String>,
+    exists: bool,
+    chromium: Vec<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct DependenciesReport {
+    playwright: ModuleReport,
+    playwright_core: ModuleReport,
+    browser_cache: BrowserCacheReport,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct DefinitionReport {
+    configured: bool,
+    active: bool,
+    revision: Option<String>,
+    package_sha256: Option<String>,
+    package_root: Option<String>,
+    allowed_tools: Vec<String>,
+    readiness: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct CheckReport {
+    id: &'static str,
+    required: bool,
+    ok: bool,
+    detail: String,
+    next_action: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct HandshakeReport {
+    requested: bool,
+    attempted: bool,
+    ok: Option<bool>,
+    tools: Vec<String>,
+    error: Option<String>,
+    duration_ms: Option<u128>,
+}
+
+const CHECK_QUALIFICATION: &str = "Dependency readiness is a local filesystem observation. The default check starts no Node process, adapter, browser, preview, provider request or network connection. --handshake starts the reviewed adapter only, lists its MCP tools and shuts it down; it does not open a page, navigate or start a preview. A saved activation is not a running process.";
+
+async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
+    let records = request.local.extension_records()?;
+    let readiness_rows = request.local.extension_readiness()?;
+    let record = records
+        .into_iter()
+        .find(|record| record.definition.namespace == NAMESPACE);
+
+    let mut checks = Vec::new();
+    let mut report = BrowserCheckReport {
+        schema_version: 1,
+        namespace: NAMESPACE,
+        configured: record.is_some(),
+        handshake_requested: request.handshake,
+        node: NodeReport::default(),
+        files: FilesReport::default(),
+        configuration: json!({"state": "unavailable"}),
+        dependencies: DependenciesReport::default(),
+        definition: DefinitionReport::default(),
+        checks: Vec::new(),
+        ready: false,
+        handshake: HandshakeReport {
+            requested: request.handshake,
+            ..HandshakeReport::default()
+        },
+        qualification: CHECK_QUALIFICATION,
+    };
+
+    let Some(record) = record else {
+        checks.push(check_row(
+            "definition",
+            true,
+            false,
+            "browser-control.stdio is not installed for this workspace".into(),
+            Some(browser_setup_action(request)),
+        ));
+        if request.handshake {
+            checks.push(check_row(
+                "handshake",
+                true,
+                false,
+                "skipped because the definition is not installed; no Node process started".into(),
+                Some(browser_setup_action(request)),
+            ));
+        } else {
+            checks.push(check_row(
+                "handshake",
+                false,
+                true,
+                "not requested; no Node process started".into(),
+                None,
+            ));
+        }
+        report.node.version_status = "not_configured";
+        report.checks = checks;
+        report.ready = false;
+        print_check(&report, request.json)?;
+        return Err("browser readiness check failed: definition is not installed".into());
+    };
+
+    let definition = &record.definition;
+    report.definition = DefinitionReport {
+        configured: true,
+        active: record.active,
+        revision: Some(record.revision.to_string()),
+        package_sha256: Some(definition.package_sha256.0.clone()),
+        package_root: Some(definition.package_root.clone()),
+        allowed_tools: definition.allowed_tools.clone(),
+        readiness: readiness_rows
+            .iter()
+            .find(|row| row.get("namespace").and_then(Value::as_str) == Some(NAMESPACE))
+            .cloned(),
+    };
+
+    let ExtensionTransport::Stdio {
+        program,
+        args,
+        environment,
+        ..
+    } = &definition.transport
+    else {
+        checks.push(check_row(
+            "definition",
+            true,
+            false,
+            "browser-control.stdio is not a stdio transport".into(),
+            Some(browser_setup_action(request)),
+        ));
+        if request.handshake {
+            checks.push(check_row(
+                "handshake",
+                true,
+                false,
+                "skipped because the definition is not stdio; no Node process started".into(),
+                Some(browser_setup_action(request)),
+            ));
+        } else {
+            checks.push(check_row(
+                "handshake",
+                false,
+                true,
+                "not requested; no Node process started".into(),
+                None,
+            ));
+        }
+        report.node.version_status = "not_configured";
+        report.checks = checks;
+        report.ready = false;
+        print_check(&report, request.json)?;
+        return Err("browser readiness check failed: transport is not stdio".into());
+    };
+
+    let node_path = PathBuf::from(program);
+    let adapter_path = args.first().map(PathBuf::from);
+    let config_path = args.get(1).map(PathBuf::from);
+    let package_root = PathBuf::from(&definition.package_root);
+
+    report.node = NodeReport {
+        path: Some(node_path.display().to_string()),
+        exists: node_path.is_file(),
+        sha256: Some(definition_pinned_program(definition)),
+        version: None,
+        version_status: if request.handshake {
+            "pending_handshake"
+        } else {
+            "not_run_without_handshake"
+        },
+        error: None,
+    };
+
+    let adapter_dir = adapter_path
+        .as_ref()
+        .and_then(|path| path.parent())
+        .map(Path::to_path_buf);
+    report.files.adapter = adapter_path
+        .as_deref()
+        .map(|path| file_report(path, MAX_ADAPTER_BYTES))
+        .unwrap_or_default();
+    report.files.adapter_package = adapter_dir
+        .as_ref()
+        .map(|directory| file_report(&directory.join("package.json"), MAX_ADAPTER_BYTES))
+        .unwrap_or_default();
+    report.files.package_lock = adapter_dir
+        .as_ref()
+        .map(|directory| file_report(&directory.join("package-lock.json"), MAX_ADAPTER_BYTES))
+        .unwrap_or_default();
+    report.files.config = config_path
+        .as_deref()
+        .map(|path| file_report(path, MAX_CONFIG_BYTES))
+        .unwrap_or_default();
+    report.files.manifest = file_report(&package_root.join("plugin.json"), MAX_ADAPTER_BYTES);
+    report.configuration = config_path
+        .as_deref()
+        .map(config_summary)
+        .unwrap_or_else(|| json!({"state": "missing_configuration_argument"}));
+
+    report.dependencies.playwright = module_report(
+        &adapter_dir
+            .as_ref()
+            .map(|directory| directory.join("node_modules").join("playwright"))
+            .unwrap_or_default(),
+    );
+    report.dependencies.playwright_core = module_report(
+        &adapter_dir
+            .as_ref()
+            .map(|directory| directory.join("node_modules").join("playwright-core"))
+            .unwrap_or_default(),
+    );
+    report.dependencies.browser_cache = browser_cache_report(environment);
+
+    checks.push(check_row(
+        "definition",
+        true,
+        true,
+        "browser-control.stdio is installed".into(),
+        None,
+    ));
+    checks.push(check_row(
+        "adapter",
+        true,
+        report.files.adapter.exists && report.files.adapter.error.is_none(),
+        file_detail(&report.files.adapter),
+        Some(format!(
+            "Restore {}, then re-run: {}",
+            report.files.adapter.path,
+            browser_setup_action(request)
+        )),
+    ));
+    checks.push(check_row(
+        "adapter_package",
+        true,
+        report.files.adapter_package.exists && report.files.adapter_package.error.is_none(),
+        file_detail(&report.files.adapter_package),
+        Some(format!(
+            "Restore {}, then re-run: {}",
+            report.files.adapter_package.path,
+            browser_setup_action(request)
+        )),
+    ));
+    checks.push(check_row(
+        "package_lock",
+        false,
+        report.files.package_lock.exists,
+        file_detail(&report.files.package_lock),
+        Some(format!(
+            "Run: cd {} && npm install",
+            adapter_dir
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "<adapter directory>".into())
+        )),
+    ));
+    let config_state = report
+        .configuration
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("unavailable");
+    let config_ok =
+        report.files.config.exists && report.files.config.error.is_none() && config_state == "read";
+    checks.push(check_row(
+        "config",
+        true,
+        config_ok,
+        if config_ok {
+            file_detail(&report.files.config)
+        } else {
+            format!("{} ({config_state})", file_detail(&report.files.config))
+        },
+        Some(browser_setup_action(request)),
+    ));
+    checks.push(check_row(
+        "manifest",
+        true,
+        report.files.manifest.exists && report.files.manifest.error.is_none(),
+        file_detail(&report.files.manifest),
+        Some(
+            "Reinstall the reviewed adapter package, then re-run extensions browser setup.".into(),
+        ),
+    ));
+    checks.push(check_row(
+        "node",
+        true,
+        report.node.exists,
+        report
+            .node
+            .path
+            .clone()
+            .unwrap_or_else(|| "Node path is missing from the definition".into()),
+        Some("Install Node or re-run extensions browser setup --node <absolute-node>.".into()),
+    ));
+    checks.push(check_row(
+        "playwright",
+        true,
+        report.dependencies.playwright.exists,
+        module_detail(&report.dependencies.playwright),
+        Some(adapter_install_action(&adapter_dir)),
+    ));
+    checks.push(check_row(
+        "playwright_core",
+        true,
+        report.dependencies.playwright_core.exists,
+        module_detail(&report.dependencies.playwright_core),
+        Some(adapter_install_action(&adapter_dir)),
+    ));
+
+    let cache = &report.dependencies.browser_cache;
+    checks.push(check_row(
+        "browser_cache",
+        cache.configured,
+        !cache.configured || (cache.exists && !cache.chromium.is_empty()),
+        if cache.configured {
+            format!(
+                "{}; {} Chromium executable(s)",
+                cache.path.as_deref().unwrap_or("cache path missing"),
+                cache.chromium.len()
+            )
+        } else {
+            "not configured; Playwright default cache was not inspected".into()
+        },
+        Some(
+            "Run: npx playwright install chromium with ARGENTUM_PLAYWRIGHT_BROWSERS_PATH set to the configured cache."
+                .into(),
+        ),
+    ));
+
+    let definition_ready = report
+        .definition
+        .readiness
+        .as_ref()
+        .and_then(|row| row.get("definition_ready"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    checks.push(check_row(
+        "definition_ready",
+        false,
+        definition_ready,
+        report
+            .definition
+            .readiness
+            .as_ref()
+            .and_then(|row| row.get("issue"))
+            .and_then(Value::as_str)
+            .unwrap_or("readiness row unavailable")
+            .to_owned(),
+        Some(format!(
+            "Review and activate in the local owner console: argentum extensions activate {NAMESPACE} --workspace <workspace> --database <database>"
+        )),
+    ));
+    checks.push(check_row(
+        "activation",
+        false,
+        record.active,
+        if record.active {
+            "saved activation is present; it is not a running process".into()
+        } else {
+            "saved activation is absent; the adapter can still be tested with --handshake".into()
+        },
+        Some(format!(
+            "Run: argentum extensions activate {NAMESPACE} --workspace <workspace> --database <database>"
+        )),
+    ));
+
+    let required_ready = checks
+        .iter()
+        .filter(|check| check.required)
+        .all(|check| check.ok);
+    if request.handshake {
+        if !required_ready {
+            checks.push(check_row(
+                "handshake",
+                true,
+                false,
+                "skipped because a required dependency check failed; no Node process was started"
+                    .into(),
+                Some(
+                    "Resolve the failed required checks, then re-run extensions browser check --handshake."
+                        .into(),
+                ),
+            ));
+            report.handshake.attempted = false;
+            report.handshake.ok = Some(false);
+            report.handshake.error =
+                Some("required dependency checks failed before handshake".into());
+        } else {
+            report.node.version = None;
+            report.node.version_status = "probed_with_handshake";
+            match probe_node_version(&node_path, Duration::from_secs(5)) {
+                Ok(version) => {
+                    report.node.version = Some(version);
+                    match run_handshake(definition, request.workspace).await {
+                        Ok((tools, duration_ms)) => {
+                            report.handshake.attempted = true;
+                            report.handshake.ok = Some(true);
+                            report.handshake.tools = tools;
+                            report.handshake.duration_ms = Some(duration_ms);
+                            checks.push(check_row(
+                                "handshake",
+                                true,
+                                true,
+                                "adapter initialized, listed tools and retired".into(),
+                                None,
+                            ));
+                        }
+                        Err(error) => {
+                            report.handshake.attempted = true;
+                            report.handshake.ok = Some(false);
+                            report.handshake.error = Some(error.clone());
+                            checks.push(check_row(
+                                "handshake",
+                                true,
+                                false,
+                                error,
+                                Some(
+                                    "Inspect the adapter stderr and the pinned dependencies, then re-run extensions browser check --handshake."
+                                        .into(),
+                                ),
+                            ));
+                        }
+                    }
+                }
+                Err(error) => {
+                    report.node.version_status = "probe_failed";
+                    report.node.error = Some(error.clone());
+                    report.handshake.attempted = false;
+                    report.handshake.ok = Some(false);
+                    report.handshake.error = Some(format!("node --version failed: {error}"));
+                    checks.push(check_row(
+                        "handshake",
+                        true,
+                        false,
+                        format!("node --version failed: {error}"),
+                        Some("Fix the Node executable, then re-run --handshake.".into()),
+                    ));
+                }
+            }
+        }
+    } else {
+        checks.push(check_row(
+            "handshake",
+            false,
+            true,
+            "not requested; no adapter process started".into(),
+            None,
+        ));
+    }
+
+    report.checks = checks;
+    report.ready = report
+        .checks
+        .iter()
+        .filter(|check| check.required)
+        .all(|check| check.ok);
+    print_check(&report, request.json)?;
+    if !report.ready {
+        return Err("browser readiness check failed".into());
+    }
+    Ok(())
+}
+
+fn print_check(report: &BrowserCheckReport, json_output: bool) -> Result<(), Error> {
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(report)?);
+        return Ok(());
+    }
+    println!("Browser control check: {}", report.namespace);
+    println!(
+        "Definition: configured={} active={} readiness={}",
+        report.definition.configured,
+        report.definition.active,
+        report
+            .definition
+            .readiness
+            .as_ref()
+            .and_then(|row| row.get("definition_ready"))
+            .and_then(Value::as_bool)
+            .map_or("unknown".into(), |ready| ready.to_string())
+    );
+    println!(
+        "Node: {} [present={} version={} {}]",
+        report.node.path.as_deref().unwrap_or("missing"),
+        report.node.exists,
+        report.node.version.as_deref().unwrap_or("not probed"),
+        report.node.version_status
+    );
+    for (label, file) in [
+        ("Adapter", &report.files.adapter),
+        ("Package", &report.files.adapter_package),
+        ("Lock", &report.files.package_lock),
+        ("Config", &report.files.config),
+        ("Manifest", &report.files.manifest),
+    ] {
+        println!("{label}: {} [{}]", file.path, file_detail(file));
+    }
+    println!(
+        "Playwright: {} [{}]",
+        report.dependencies.playwright.path,
+        module_detail(&report.dependencies.playwright)
+    );
+    println!(
+        "Playwright core: {} [{}]",
+        report.dependencies.playwright_core.path,
+        module_detail(&report.dependencies.playwright_core)
+    );
+    println!(
+        "Browser cache: configured={} {}",
+        report.dependencies.browser_cache.configured,
+        report
+            .dependencies
+            .browser_cache
+            .path
+            .as_deref()
+            .unwrap_or("not configured")
+    );
+    for chromium in &report.dependencies.browser_cache.chromium {
+        println!("  Chromium: {chromium}");
+    }
+    if report.handshake.requested {
+        println!(
+            "Handshake: attempted={} ok={} tools={} {}",
+            report.handshake.attempted,
+            report
+                .handshake
+                .ok
+                .map_or("not run".into(), |ok| ok.to_string()),
+            report.handshake.tools.len(),
+            report.handshake.error.as_deref().unwrap_or("")
+        );
+        for tool in &report.handshake.tools {
+            println!("  {tool}");
+        }
+    } else {
+        println!("Handshake: not requested; no adapter process started");
+    }
+    println!("Ready: {}", if report.ready { "yes" } else { "no" });
+    for check in &report.checks {
+        println!(
+            "  {} [{}] {}: {}",
+            if check.ok { "ok" } else { "FAIL" },
+            if check.required {
+                "required"
+            } else {
+                "advisory"
+            },
+            check.id,
+            check.detail
+        );
+        if !check.ok {
+            if let Some(next) = &check.next_action {
+                println!("    next: {next}");
+            }
+        }
+    }
+    println!("{}", report.qualification);
+    Ok(())
+}
+
+fn check_row(
+    id: &'static str,
+    required: bool,
+    ok: bool,
+    detail: String,
+    next_action: Option<String>,
+) -> CheckReport {
+    CheckReport {
+        id,
+        required,
+        ok,
+        detail,
+        next_action,
+    }
+}
+
+fn file_detail(file: &FileReport) -> String {
+    if let Some(error) = &file.error {
+        return error.clone();
+    }
+    if !file.exists {
+        return "missing".into();
+    }
+    format!(
+        "{} bytes sha256 {}",
+        file.bytes.unwrap_or_default(),
+        file.sha256.as_deref().unwrap_or("unavailable")
+    )
+}
+
+fn module_detail(module: &ModuleReport) -> String {
+    if !module.exists {
+        return module.error.clone().unwrap_or_else(|| "missing".into());
+    }
+    format!("version {}", module.version.as_deref().unwrap_or("unknown"))
+}
+
+fn file_report(path: &Path, limit: u64) -> FileReport {
+    let mut report = FileReport {
+        path: path.display().to_string(),
+        ..FileReport::default()
+    };
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            report.exists = true;
+            match read_bounded(path, limit, "browser dependency file") {
+                Ok(bytes) => {
+                    report.bytes = Some(bytes.len() as u64);
+                    report.sha256 = Some(format!("{:x}", Sha256::digest(&bytes)));
+                }
+                Err(error) => report.error = Some(error.to_string()),
+            }
+        }
+        Ok(_) => {
+            report.exists = true;
+            report.error = Some("not a regular file".into());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => report.error = Some(error.to_string()),
+    }
+    report
+}
+
+fn module_report(directory: &Path) -> ModuleReport {
+    let package = directory.join("package.json");
+    let file = file_report(&package, 64 * 1024);
+    let mut report = ModuleReport {
+        path: directory.display().to_string(),
+        exists: file.exists,
+        ..ModuleReport::default()
+    };
+    if !file.exists {
+        report.error = Some("missing".into());
+        return report;
+    }
+    match read_bounded(&package, 64 * 1024, "module package.json") {
+        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+            Ok(value) => {
+                report.version = value
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty() && value.len() <= 64)
+                    .map(str::to_owned);
+            }
+            Err(_) => report.error = Some("package.json is invalid".into()),
+        },
+        Err(error) => report.error = Some(error.to_string()),
+    }
+    report
+}
+
+fn browser_cache_report(environment: &BTreeMap<String, String>) -> BrowserCacheReport {
+    let Some(path) = environment
+        .get("ARGENTUM_PLAYWRIGHT_BROWSERS_PATH")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return BrowserCacheReport::default();
+    };
+    let cache = PathBuf::from(path);
+    let mut report = BrowserCacheReport {
+        configured: true,
+        path: Some(cache.display().to_string()),
+        exists: cache.is_dir(),
+        ..BrowserCacheReport::default()
+    };
+    report.chromium = chromium_executables(&cache);
+    report
+}
+
+fn chromium_executables(cache: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(cache) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for entry in entries.flatten().take(256) {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !name.starts_with("chromium") {
+            continue;
+        }
+        for relative in [
+            "chrome-win/chrome.exe",
+            "chrome-win64/chrome.exe",
+            "chrome-linux/chrome",
+            "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+        ] {
+            let candidate = entry.path().join(relative);
+            if candidate.is_file() {
+                found.push(candidate.display().to_string());
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+fn probe_node_version(program: &Path, timeout: Duration) -> Result<String, String> {
+    let mut child = Command::new(program)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut output = String::new();
+                if let Some(stdout) = child.stdout.take() {
+                    let _ = stdout.take(4096).read_to_string(&mut output);
+                }
+                if !status.success() {
+                    return Err("node --version exited nonzero".into());
+                }
+                let version = output.lines().next().unwrap_or_default().trim().to_owned();
+                if version.is_empty() || version.len() > 64 || version.chars().any(char::is_control)
+                {
+                    return Err("node --version returned invalid output".into());
+                }
+                return Ok(version);
+            }
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("node --version exceeded 5 seconds".into());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+}
+
+async fn run_handshake(
+    definition: &ExtensionDefinition,
+    workspace: &Path,
+) -> Result<(Vec<String>, u128), String> {
+    let started = Instant::now();
+    let admitted = admit(definition, workspace).map_err(|error| error.to_string())?;
+    let AdmittedDefinition {
+        program_spec,
+        file_leases,
+        ..
+    } = admitted;
+    let spec = program_spec.ok_or("definition has no stdio program")?;
+    let limits =
+        argentum_extensions::default_process_limits().map_err(|error| error.to_string())?;
+    let allowed = definition
+        .allowed_tools
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let cancel = CancellationToken::new();
+    let mut session = McpSession::connect_stdio(spec, limits, allowed, cancel, move || {
+        file_leases
+            .iter()
+            .all(|lease| lease.verify_identity().is_ok())
+    })
+    .await
+    .map_err(|error| format!("adapter initialization failed: {error}"))?;
+    let discovered = tokio::time::timeout(Duration::from_secs(10), session.discover()).await;
+    let (result, shutdown) = match discovered {
+        Ok(Ok(tools)) => (
+            Ok(tools),
+            session.retire().await.map_err(|error| error.to_string()),
+        ),
+        Ok(Err(error)) => (
+            Err(format!("tool discovery failed: {error}")),
+            session.retire().await.map_err(|error| error.to_string()),
+        ),
+        Err(_) => (
+            Err("tool discovery exceeded 10 seconds".to_owned()),
+            session.retire().await.map_err(|error| error.to_string()),
+        ),
+    };
+    if let Err(error) = shutdown {
+        return Err(match result {
+            Ok(_) => format!("adapter shutdown failed: {error}"),
+            Err(result_error) => format!("{result_error}; adapter shutdown failed: {error}"),
+        });
+    }
+    Ok((
+        result?
+            .into_iter()
+            .map(|tool| tool.handle.name)
+            .collect::<Vec<_>>(),
+        started.elapsed().as_millis(),
+    ))
+}
+
+fn definition_pinned_program(definition: &ExtensionDefinition) -> String {
+    match &definition.transport {
+        ExtensionTransport::Stdio { program_sha256, .. } => program_sha256.0.clone(),
+        _ => String::new(),
+    }
+}
+
+fn browser_setup_action(request: &BrowserRequest<'_>) -> String {
+    format!(
+        "argentum extensions browser setup --source extensions/browser --node <reviewed-node> --origin <loopback-origin> --workspace {} --database {}",
+        request.workspace.display(),
+        request.database.display()
+    )
+}
+
+fn adapter_install_action(adapter_dir: &Option<PathBuf>) -> String {
+    format!(
+        "Run: cd {} && npm install",
+        adapter_dir
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<adapter directory>".into())
+    )
 }
 
 fn required<'a>(flags: &'a BTreeMap<String, String>, name: &str) -> Result<&'a str, Error> {
@@ -862,5 +1741,63 @@ mod tests {
         assert_eq!(unique.len(), BROWSER_TOOLS.len());
         assert!(BROWSER_TOOLS.contains(&"browser_preview_start"));
         assert!(BROWSER_TOOLS.contains(&"browser_close"));
+    }
+
+    #[test]
+    fn dependency_reports_are_bounded_and_do_not_spawn_node() {
+        let directory = tempfile::tempdir().expect("directory");
+        let module = directory.path().join("node_modules").join("playwright");
+        std::fs::create_dir_all(&module).expect("module");
+        std::fs::write(module.join("package.json"), br#"{"version":"1.60.0"}"#)
+            .expect("package.json");
+        let report = module_report(&module);
+        assert!(report.exists);
+        assert_eq!(report.version.as_deref(), Some("1.60.0"));
+
+        let missing = module_report(
+            &directory
+                .path()
+                .join("node_modules")
+                .join("playwright-core"),
+        );
+        assert!(!missing.exists);
+        assert_eq!(missing.error.as_deref(), Some("missing"));
+
+        let file = file_report(&directory.path().join("adapter.mjs"), MAX_ADAPTER_BYTES);
+        assert!(!file.exists);
+        assert!(file.sha256.is_none());
+
+        assert!(probe_node_version(
+            &directory.path().join("missing-node"),
+            Duration::from_millis(50)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn browser_cache_reports_a_chromium_executable() {
+        let directory = tempfile::tempdir().expect("directory");
+        let cache = directory.path().join("ms-playwright");
+        let chrome = cache
+            .join("chromium-1234")
+            .join("chrome-win")
+            .join("chrome.exe");
+        std::fs::create_dir_all(chrome.parent().expect("chrome parent")).expect("cache");
+        std::fs::write(&chrome, b"stub").expect("chrome");
+        let mut environment = BTreeMap::new();
+        environment.insert(
+            "ARGENTUM_PLAYWRIGHT_BROWSERS_PATH".to_owned(),
+            cache.display().to_string(),
+        );
+        let report = browser_cache_report(&environment);
+        assert!(report.configured);
+        assert!(report.exists);
+        assert_eq!(report.chromium.len(), 1);
+        assert_eq!(
+            Path::new(&report.chromium[0]),
+            chrome.as_path(),
+            "{}",
+            report.chromium[0]
+        );
     }
 }
