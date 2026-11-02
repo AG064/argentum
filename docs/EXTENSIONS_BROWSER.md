@@ -40,9 +40,10 @@ Use absolute owner-selected paths and the same workspace/database throughout:
 
 ### Machine-readable inventory and local status
 
-An extensions-enabled CLI with CLIJSON01 supports `--json` only for `list` and
-`status`. This is a new opt-in output contract; earlier mixed-format output did
-not support that flag. Unflagged commands keep their existing human output.
+An extensions-enabled CLI with CLIJSON01 supports `--json` for `list`, `status`
+and `browser check`. This is a new opt-in output contract; earlier mixed-format
+output did not support that flag. Unflagged commands keep their existing human
+output.
 Duplicate flags, a namespace argument in JSON query mode, and `--json` on other
 extension actions are rejected before host startup. This does not enable JSON
 activation, key entry, configuration or other owner operations.
@@ -136,6 +137,49 @@ The optional adapter is `extensions/browser/adapter.mjs`, using Playwright
 and browser downloads are explicit owner/engineer preparation, never CLI
 startup behavior. Review source/license/lock and pin the actual Node program,
 adapter, configuration, dependency inputs and browser files in the definition.
+
+### Runtime readiness check
+
+`argentum extensions browser check [--json] [--handshake] --workspace <ws>
+--database <db>` separates three claims that the older status command could not
+distinguish:
+
+- **Local definition readiness**: the installed `browser-control.stdio`
+  definition, package identity, adapter/configuration paths and saved
+  activation. No process starts.
+- **Dependency readiness**: Node path, adapter/package/lock/config/manifest
+  presence and SHA-256, `node_modules/playwright` and `playwright-core`
+  versions, and the configured Playwright browser cache/Chromium executable.
+- **Live adapter handshake**: only with `--handshake`, the reviewed adapter is
+  started through the existing MCP stdio lifecycle, its tools are listed, and it
+  is shut down within a bounded timeout. It does not open a page, navigate or
+  start a preview.
+
+The default check starts no Node process. Node's `--version` is probed only
+when `--handshake` is requested; without it the report shows
+`version_status: not_run_without_handshake`. If a required dependency is
+missing, `--handshake` reports the gap and starts no Node process.
+
+Required checks are the installed definition, adapter, adapter package,
+configuration, package manifest, Node executable presence, `playwright`,
+`playwright-core`, a configured browser cache and Chromium when that cache is
+declared, and the handshake when requested. The package lockfile, definition
+readiness row and saved activation are advisory. The command exits nonzero only
+when a required check fails. The JSON document lists every check with
+`required`, `ok`, `detail` and a concrete next action.
+
+The command never installs dependencies or browsers. Run the reported commands
+yourself, for example:
+
+```powershell
+cd extensions/browser
+npm install
+npx playwright install chromium
+```
+
+Set `ARGENTUM_PLAYWRIGHT_BROWSERS_PATH` during setup if the browser cache is in a
+non-default location. The check reads only the configured path; it does not
+inspect a Playwright default cache or download a browser.
 
 Adapter configuration accepts only `allowedOrigins`, `artifactDirectory`,
 optional `persistentProfile`, `previewWorkspace`, `previewPort` and

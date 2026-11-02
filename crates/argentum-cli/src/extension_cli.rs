@@ -100,20 +100,26 @@ fn finish_extension_command(
 pub async fn run(values: Vec<String>) -> Result<(), Error> {
     if values.is_empty() || values[0] == "help" || values[0] == "--help" {
         if values.iter().any(|value| value == "--json") {
-            return Err("--json is accepted only by extensions list and status".into());
+            return Err(
+                "--json is accepted only by extensions list, status and browser check".into(),
+            );
         }
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions browser setup --source extensions/browser --node FILE --origin http://127.0.0.1:PORT [--origin ...] [--artifact-directory DIR] [--preview-workspace DIR --preview-port PORT] [--reviewed-stylesheet REL_PATH] [--browser-cache DIR] [--input FILE ...] --workspace DIR [--database FILE]\nextensions browser status --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. Browser setup is inert and loopback-only; the optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions browser setup --source extensions/browser --node FILE --origin http://127.0.0.1:PORT [--origin ...] [--artifact-directory DIR] [--preview-workspace DIR --preview-port PORT] [--reviewed-stylesheet REL_PATH] [--browser-cache DIR] [--input FILE ...] --workspace DIR [--database FILE]\nextensions browser status --workspace DIR [--database FILE]\nextensions browser check [--json] [--handshake] --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. Browser setup is inert and loopback-only; the optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
+    let browser_check_invocation =
+        action == "browser" && values.get(1).map(String::as_str) == Some("check");
     if !matches!(action.as_str(), "list" | "status")
+        && !browser_check_invocation
         && values.iter().skip(1).any(|value| value == "--json")
     {
-        return Err("--json is accepted only by extensions list and status".into());
+        return Err("--json is accepted only by extensions list, status and browser check".into());
     }
     let mut flags = BTreeMap::new();
     let mut subject = None;
     let mut json_mode = false;
+    let mut handshake = false;
     let mut origins = Vec::new();
     let mut inputs = Vec::new();
     let mut index = 1;
@@ -124,6 +130,17 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                 return Err("duplicate extension --json option".into());
             }
             json_mode = true;
+            index += 1;
+            continue;
+        }
+        if value == "--handshake" {
+            if action != "browser" || subject.as_deref() != Some("check") {
+                return Err("--handshake is accepted only by extensions browser check".into());
+            }
+            if handshake {
+                return Err("duplicate extension --handshake option".into());
+            }
+            handshake = true;
             index += 1;
             continue;
         }
@@ -180,10 +197,11 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         }
         index += 1;
     }
-    if json_mode && !matches!(action.as_str(), "list" | "status") {
-        return Err("--json is accepted only by extensions list and status".into());
+    let browser_check = action == "browser" && subject.as_deref() == Some("check");
+    if json_mode && !matches!(action.as_str(), "list" | "status") && !browser_check {
+        return Err("--json is accepted only by extensions list, status and browser check".into());
     }
-    if json_mode && subject.is_some() {
+    if json_mode && subject.is_some() && !browser_check {
         return Err("extension JSON queries do not accept a namespace".into());
     }
     if flags.contains_key("--run-id") && action != "receipts" {
@@ -263,7 +281,7 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
             "browser" => {
                 let subcommand = subject
                     .as_deref()
-                    .ok_or("browser requires setup or status")?;
+                    .ok_or("browser requires setup, status, or check")?;
                 crate::extension_browser_cli::run(
                     subcommand,
                     &crate::extension_browser_cli::BrowserRequest {
@@ -274,6 +292,8 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
                         paths: &paths,
                         database: &database,
                         local: &local,
+                        json: json_mode,
+                        handshake,
                     },
                 )
                 .await?;
@@ -457,5 +477,37 @@ mod tests {
             io::ErrorKind::BrokenPipe
         );
         assert_eq!(pipe.0.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn browser_check_accepts_json_and_handshake_flags() {
+        let error = run(vec![
+            "browser".into(),
+            "check".into(),
+            "--json".into(),
+            "--handshake".into(),
+        ])
+        .await
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("explicit --workspace"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn browser_status_still_rejects_json() {
+        let error = run(vec!["browser".into(), "status".into(), "--json".into()])
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("--json is accepted only"));
+    }
+
+    #[tokio::test]
+    async fn browser_handshake_is_rejected_outside_check() {
+        let error = run(vec!["browser".into(), "setup".into(), "--handshake".into()])
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("--handshake is accepted only"));
     }
 }
