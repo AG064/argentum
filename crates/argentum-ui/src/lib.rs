@@ -475,13 +475,29 @@ impl UiHandle {
                     self.window
                         .set_desktop_status_error(present_error(message).into());
                 }
+                let budget_failed = self.window.get_provider_budget_pending();
+                let context_failed = self.window.get_provider_context_pending();
+                if budget_failed {
+                    self.window.set_provider_budget_pending(false);
+                    self.window
+                        .set_provider_budget_error(present_error(message).into());
+                }
+                if context_failed {
+                    self.window.set_provider_context_pending(false);
+                    self.window
+                        .set_provider_context_error(present_error(message).into());
+                }
                 let consumes_provider_error = self.window.get_provider_error_consumes_next()
                     && message == self.window.get_provider_error().as_str();
                 let provider_pending = self.window.get_provider_pending().to_string();
                 let provider_models_pending = self.window.get_provider_models_pending().to_string();
                 if consumes_provider_error {
                     self.window.set_provider_error_consumes_next(false);
-                } else if !provider_pending.is_empty() || !provider_models_pending.is_empty() {
+                } else if !provider_pending.is_empty()
+                    || !provider_models_pending.is_empty()
+                    || budget_failed
+                    || context_failed
+                {
                     // The command-specific failure callback owns provider presentation. Profile
                     // and model requests can overlap, so a global error cannot safely identify
                     // which operation failed.
@@ -642,6 +658,88 @@ impl UiHandle {
                 self.window.set_provider_presets_loading(false);
                 self.window
                     .set_provider_presets_error(SharedString::default());
+            }
+            AppEvent::ProviderBudgetSnapshot {
+                profile_id,
+                budget,
+                error,
+            } => {
+                if self.window.get_provider_id().as_str() != profile_id {
+                    return;
+                }
+                let was_pending = self.window.get_provider_budget_pending();
+                self.window
+                    .set_provider_budget_profile_id(profile_id.clone().into());
+                self.window.set_provider_budget_loading(false);
+                self.window.set_provider_budget_pending(false);
+                self.window.set_provider_budget_error(error.clone().into());
+                if let Some(budget) = budget {
+                    self.window
+                        .set_provider_budget_total(budget.usable_context_tokens.to_string().into());
+                    self.window.set_provider_budget_input(
+                        budget
+                            .input_limit_tokens
+                            .map(|value| value.to_string())
+                            .unwrap_or_default()
+                            .into(),
+                    );
+                    self.window.set_provider_budget_max_output(
+                        budget.maximum_output_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_requested_output(
+                        budget.requested_output_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_uncertainty(
+                        budget.uncertainty_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_saved(true);
+                } else {
+                    self.window
+                        .set_provider_budget_total(SharedString::default());
+                    self.window
+                        .set_provider_budget_input(SharedString::default());
+                    self.window
+                        .set_provider_budget_max_output(SharedString::default());
+                    self.window
+                        .set_provider_budget_requested_output(SharedString::default());
+                    self.window
+                        .set_provider_budget_uncertainty(SharedString::default());
+                    self.window.set_provider_budget_saved(false);
+                }
+                if was_pending {
+                    self.window
+                        .set_provider_budget_notice("Budget limits saved for this profile.".into());
+                }
+            }
+            AppEvent::ProviderContextSnapshot {
+                profile_id,
+                available,
+                context_tokens,
+                choices,
+                error,
+            } => {
+                if self.window.get_provider_id().as_str() != profile_id {
+                    return;
+                }
+                let was_pending = self.window.get_provider_context_pending();
+                self.window
+                    .set_provider_context_profile_id(profile_id.clone().into());
+                self.window.set_provider_context_loading(false);
+                self.window.set_provider_context_pending(false);
+                self.window.set_provider_context_error(error.clone().into());
+                self.window.set_provider_context_available(*available);
+                self.window
+                    .set_provider_context_tokens(*context_tokens as i32);
+                self.window
+                    .set_provider_context_choices(provider_context_choice_model(
+                        choices,
+                        *context_tokens,
+                    ));
+                if was_pending {
+                    self.window.set_provider_context_notice(
+                        "Context size saved. It applies on the next approved local launch.".into(),
+                    );
+                }
             }
             AppEvent::BrowserStatusSnapshot {
                 extensions_built,
@@ -1208,6 +1306,16 @@ impl UiHandle {
 
     pub fn apply_command_failure(&self, command: &AppCommand, message: &str) {
         match command {
+            AppCommand::SaveProviderBudget { .. } => {
+                self.window.set_provider_budget_pending(false);
+                self.window
+                    .set_provider_budget_error(present_error(message).into());
+            }
+            AppCommand::SaveProviderContext { .. } => {
+                self.window.set_provider_context_pending(false);
+                self.window
+                    .set_provider_context_error(present_error(message).into());
+            }
             AppCommand::ListProviderProfiles
             | AppCommand::SaveProviderProfile { .. }
             | AppCommand::SelectProviderProfile { .. }
@@ -1503,6 +1611,16 @@ impl UiHandle {
                     .set_provider_credential_error(SharedString::default());
                 self.window
                     .set_provider_credential_notice(SharedString::default());
+                self.window.set_provider_budget_loading(true);
+                self.window
+                    .set_provider_budget_error(SharedString::default());
+                self.window
+                    .set_provider_budget_notice(SharedString::default());
+                self.window.set_provider_context_loading(true);
+                self.window
+                    .set_provider_context_error(SharedString::default());
+                self.window
+                    .set_provider_context_notice(SharedString::default());
             }
             if execution_target_changed {
                 self.reset_current_model_context();
@@ -1532,6 +1650,30 @@ impl UiHandle {
                 .set_provider_credential_error(SharedString::default());
             self.window
                 .set_provider_credential_notice(SharedString::default());
+            self.window.set_provider_budget_loading(false);
+            self.window.set_provider_budget_saved(false);
+            self.window
+                .set_provider_budget_error(SharedString::default());
+            self.window
+                .set_provider_budget_notice(SharedString::default());
+            self.window
+                .set_provider_budget_total(SharedString::default());
+            self.window
+                .set_provider_budget_input(SharedString::default());
+            self.window
+                .set_provider_budget_max_output(SharedString::default());
+            self.window
+                .set_provider_budget_requested_output(SharedString::default());
+            self.window
+                .set_provider_budget_uncertainty(SharedString::default());
+            self.window.set_provider_context_loading(false);
+            self.window.set_provider_context_available(false);
+            self.window.set_provider_context_tokens(0);
+            self.window.set_provider_context_choices(ModelRc::default());
+            self.window
+                .set_provider_context_error(SharedString::default());
+            self.window
+                .set_provider_context_notice(SharedString::default());
         }
 
         self.window
@@ -2678,6 +2820,21 @@ fn provider_preset_model_for_group(
     provider_preset_model(&filtered)
 }
 
+fn provider_context_choice_model(
+    choices: &[u32],
+    selected: u32,
+) -> ModelRc<ProviderContextChoiceView> {
+    let rows = choices
+        .iter()
+        .map(|tokens| ProviderContextChoiceView {
+            tokens: *tokens as i32,
+            label: format!("{}K", tokens / 1024).into(),
+            selected: *tokens == selected,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn desktop_tool_model(tools: &[DesktopToolSummary]) -> ModelRc<DesktopToolView> {
     let rows = tools
         .iter()
@@ -3160,6 +3317,56 @@ fn validate_provider_endpoint(value: &str) -> String {
     String::new()
 }
 
+fn parse_provider_budget_limits(
+    total: &str,
+    input: &str,
+    maximum_output: &str,
+    requested_output: &str,
+    uncertainty: &str,
+) -> Result<[u64; 5], String> {
+    let parse = |label: &str, value: &str| {
+        value
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| format!("{label} must be a non-negative integer."))
+    };
+    let total = parse("Total context tokens", total)?;
+    let input = parse("Input limit tokens", input)?;
+    let maximum_output = parse("Maximum output tokens", maximum_output)?;
+    let requested_output = parse("Requested output tokens", requested_output)?;
+    let uncertainty = parse("Uncertainty tokens", uncertainty)?;
+    if total == 0 {
+        return Err("Total context tokens must be greater than zero.".into());
+    }
+    if input == 0 || input > total {
+        return Err(
+            "Input limit tokens must be greater than zero and no larger than total context tokens."
+                .into(),
+        );
+    }
+    if maximum_output == 0 || maximum_output >= total {
+        return Err("Maximum output tokens must be greater than zero and smaller than total context tokens.".into());
+    }
+    if maximum_output > u64::from(u32::MAX) || requested_output > u64::from(u32::MAX) {
+        return Err("Output token values exceed the supported 32-bit limit.".into());
+    }
+    if requested_output > maximum_output {
+        return Err("Requested output tokens cannot exceed maximum output tokens.".into());
+    }
+    if uncertainty < 128 {
+        return Err("Uncertainty tokens must be at least 128.".into());
+    }
+    if requested_output
+        .checked_add(uncertainty)
+        .is_none_or(|reserved| reserved >= total)
+    {
+        return Err(
+            "Requested output plus uncertainty must be smaller than total context tokens.".into(),
+        );
+    }
+    Ok([total, input, maximum_output, requested_output, uncertainty])
+}
+
 pub fn connect_commands<F>(window: &MainWindow, dispatch: F)
 where
     F: Fn(AppCommand) + 'static,
@@ -3612,6 +3819,73 @@ where
         });
     });
 
+    let save_budget_dispatch = dispatch.clone();
+    let save_budget_window = window.as_weak();
+    window.on_save_provider_budget(move || {
+        let Some(window) = save_budget_window.upgrade() else {
+            return;
+        };
+        if window.get_running()
+            || !window.get_provider_pending().is_empty()
+            || window.get_provider_budget_pending()
+        {
+            return;
+        }
+        let profile_id = window.get_provider_id().to_string();
+        if profile_id.is_empty() {
+            window.set_provider_budget_pending(false);
+            window.set_provider_budget_error("Select a saved provider profile first.".into());
+            return;
+        }
+        let limits = match parse_provider_budget_limits(
+            window.get_provider_budget_total().as_str(),
+            window.get_provider_budget_input().as_str(),
+            window.get_provider_budget_max_output().as_str(),
+            window.get_provider_budget_requested_output().as_str(),
+            window.get_provider_budget_uncertainty().as_str(),
+        ) {
+            Ok(limits) => limits,
+            Err(error) => {
+                window.set_provider_budget_pending(false);
+                window.set_provider_budget_error(error.into());
+                return;
+            }
+        };
+        window.set_provider_budget_pending(true);
+        window.set_provider_budget_error(SharedString::default());
+        window.set_provider_budget_notice(SharedString::default());
+        save_budget_dispatch(AppCommand::SaveProviderBudget { profile_id, limits });
+    });
+
+    let context_dispatch = dispatch.clone();
+    let context_window = window.as_weak();
+    window.on_set_provider_context(move |tokens| {
+        let Some(window) = context_window.upgrade() else {
+            return;
+        };
+        if tokens <= 0
+            || window.get_running()
+            || !window.get_provider_pending().is_empty()
+            || window.get_provider_context_pending()
+        {
+            return;
+        }
+        let profile_id = window.get_provider_id().to_string();
+        if profile_id.is_empty() {
+            window.set_provider_context_pending(false);
+            window
+                .set_provider_context_error("Select the built-in llama.cpp profile first.".into());
+            return;
+        }
+        window.set_provider_context_pending(true);
+        window.set_provider_context_error(SharedString::default());
+        window.set_provider_context_notice(SharedString::default());
+        context_dispatch(AppCommand::SaveProviderContext {
+            profile_id,
+            context_tokens: tokens as u32,
+        });
+    });
+
     let refresh_browser_dispatch = dispatch.clone();
     let refresh_browser_window = window.as_weak();
     window.on_refresh_browser_status(move || {
@@ -3939,6 +4213,12 @@ where
             window.set_browser_status_error(SharedString::default());
             window.set_desktop_status_loading(true);
             window.set_desktop_status_error(SharedString::default());
+            window.set_provider_budget_loading(!window.get_provider_id().is_empty());
+            window.set_provider_budget_error(SharedString::default());
+            window.set_provider_budget_notice(SharedString::default());
+            window.set_provider_context_loading(!window.get_provider_id().is_empty());
+            window.set_provider_context_error(SharedString::default());
+            window.set_provider_context_notice(SharedString::default());
         }
         settings_dispatch(AppCommand::ListProviderProfiles);
         settings_dispatch(AppCommand::ListProviderPresets);
@@ -4042,6 +4322,7 @@ pub fn empty_string_model() -> ModelRc<SharedString> {
 
 #[cfg(test)]
 mod tests {
+    use argentum_domain::context_budget::ModelBudget;
     use argentum_domain::{
         now, ChangeRecoveryEntry, ChangeRecoverySnapshot, ChangeRecoveryState, ChangeSetSnapshot,
         ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot,
@@ -4355,6 +4636,17 @@ mod tests {
     }
 
     #[test]
+    fn provider_budget_validation_rejects_invalid_limits() {
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "512", "512").is_ok());
+        assert!(parse_provider_budget_limits("-1", "8192", "4096", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "9000", "4096", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "8192", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "4097", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "512", "127").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "8000", "512").is_err());
+    }
+
+    #[test]
     fn session_model_orders_pinned_first_and_filters_archived() {
         let project_id = ProjectId::new_v4();
         let timestamp = now();
@@ -4623,6 +4915,90 @@ mod tests {
         assert_eq!(ui.window().get_run_state(), "Ready");
         assert_eq!(ui.window().get_error_message(), "");
         assert_ne!(ui.window().get_provider_models_error(), "");
+
+        // Provider budget and context snapshots are projected only for the
+        // currently selected profile and clear their pending states.
+        ui.window().set_provider_id("llama-cpp".into());
+        ui.window().set_provider_budget_pending(true);
+        ui.apply_event(&AppEvent::ProviderBudgetSnapshot {
+            profile_id: "llama-cpp".into(),
+            budget: Some(ModelBudget {
+                revision: RunId::new_v4(),
+                profile_id: "llama-cpp".into(),
+                provider_kind: ProviderKind::LocalLlamaCpp,
+                endpoint: "local://llama-cpp/".into(),
+                model: "Qwen3.5-0.8B-Q8_0.gguf".into(),
+                usable_context_tokens: 8192,
+                input_limit_tokens: Some(8192),
+                maximum_output_tokens: 4096,
+                requested_output_tokens: 512,
+                uncertainty_tokens: 512,
+            }),
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_provider_budget_total().as_str(), "8192");
+        assert_eq!(ui.window().get_provider_budget_input().as_str(), "8192");
+        assert_eq!(
+            ui.window().get_provider_budget_max_output().as_str(),
+            "4096"
+        );
+        assert_eq!(
+            ui.window().get_provider_budget_requested_output().as_str(),
+            "512"
+        );
+        assert_eq!(
+            ui.window().get_provider_budget_uncertainty().as_str(),
+            "512"
+        );
+        assert!(ui.window().get_provider_budget_saved());
+        assert!(!ui.window().get_provider_budget_pending());
+        assert!(ui
+            .window()
+            .get_provider_budget_notice()
+            .as_str()
+            .contains("saved"));
+
+        ui.window().set_provider_context_pending(true);
+        ui.apply_event(&AppEvent::ProviderContextSnapshot {
+            profile_id: "llama-cpp".into(),
+            available: true,
+            context_tokens: 16384,
+            choices: vec![8192, 16384, 32768],
+            error: String::new(),
+        });
+        assert!(ui.window().get_provider_context_available());
+        assert_eq!(ui.window().get_provider_context_tokens(), 16384);
+        let context_choices = ui.window().get_provider_context_choices();
+        assert_eq!(context_choices.row_count(), 3);
+        assert_eq!(
+            context_choices.row_data(0).expect("8K").label.as_str(),
+            "8K"
+        );
+        assert!(!context_choices.row_data(0).expect("8K").selected);
+        assert!(context_choices.row_data(1).expect("16K").selected);
+        assert!(!ui.window().get_provider_context_pending());
+
+        ui.window().set_provider_budget_pending(true);
+        ui.apply_command_failure(
+            &AppCommand::SaveProviderBudget {
+                profile_id: "llama-cpp".into(),
+                limits: [8192, 8192, 4096, 512, 512],
+            },
+            "invalid context/input/output/uncertainty relationship",
+        );
+        assert!(!ui.window().get_provider_budget_pending());
+        assert!(!ui.window().get_provider_budget_error().is_empty());
+
+        ui.window().set_provider_context_pending(true);
+        ui.apply_command_failure(
+            &AppCommand::SaveProviderContext {
+                profile_id: "llama-cpp".into(),
+                context_tokens: 16384,
+            },
+            "context presets configure the built-in llama.cpp profile only",
+        );
+        assert!(!ui.window().get_provider_context_pending());
+        assert!(!ui.window().get_provider_context_error().is_empty());
 
         // Harness state keeps presentation visibility separate from capability
         // availability and dispatches only typed profile or surface changes.
