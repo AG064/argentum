@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(feature = "artifacts")]
 mod artifact_cli;
+mod command_catalog;
 mod doctor_cli;
 #[cfg(feature = "extensions")]
 mod extension_browser_cli;
@@ -737,6 +738,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             if !report.healthy {
                 return Err("doctor found required check failures".into());
             }
+        }
+        Arguments::Commands { json } => {
+            print_commands(json)?;
         }
         Arguments::Status { options, json } => {
             let config = options.host_config()?;
@@ -5167,6 +5171,9 @@ enum Arguments {
         options: CommonOptions,
         json: bool,
     },
+    Commands {
+        json: bool,
+    },
     ProviderProbe {
         options: CommonOptions,
         provider_id: String,
@@ -6409,6 +6416,8 @@ where
         "compact" => Ok(Arguments::Compact { options, deactivate: deactivate_summary, goal_id: associated_goal }),
         "chat" if prompt.is_some() => Err("chat does not accept a prompt; use 'run'".into()),
         "chat" => Ok(Arguments::Interactive { options }),
+        "commands" if prompt.is_some() => Err("commands does not accept a prompt".into()),
+        "commands" => Ok(Arguments::Commands { json }),
         "local-chat" | "local-text" if prompt.is_none() => Ok(Arguments::LocalChat { options, text_only: command == "local-text" }),
         "model" | "profile" | "module" | "plugin" | "mcp" | "migrate" | "prompt"
         | "self" | "update" => Ok(Arguments::Unavailable {
@@ -7952,6 +7961,7 @@ argentum\n  \
 argentum chat [OPTIONS]\n  \
 argentum setup [OPTIONS]\n  \
 argentum doctor [OPTIONS]\n  \
+argentum commands [--json]\n  \
 argentum serve [OPTIONS]\n  \
 argentum run [OPTIONS] [--goal GOAL_ID] --prompt TEXT [--skill NAME]\n  \
 argentum run --final-result [--answer-schema RELATIVE_FILE] --prompt TEXT [OPTIONS]\n  \
@@ -8040,6 +8050,7 @@ no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
   setup       Run deterministic first-run onboarding\n  \
 doctor      Read-only workspace, database, provider, harness and recovery diagnostics\n  \
+commands    List the CLI surface, availability and feature gates\n  \
 serve       Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
   run         Submit one task and stream its output; --final-result emits one settled result\n  \
   result      Read one settled run result without launching work\n  \
@@ -8095,12 +8106,89 @@ fn help_text() -> String {
     #[cfg(feature = "artifacts")]
     text.push_str("Optional local document artifacts: argentum artifacts help. Inspect, serve and verify require an exact owner configuration; serving is not model authority.\n");
     text.push_str(HELP_BODY);
+    text.push_str(
+        "\nReserved (recognized, not available in this phase): model, profile, module, plugin, mcp, migrate, prompt, self, update.\n",
+    );
     text.push('\n');
     text
 }
 
 fn print_help() {
     print!("{}", help_text());
+}
+
+fn print_commands(json: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let entries = command_catalog::COMMANDS;
+    if json {
+        let rows = entries
+            .iter()
+            .map(|entry| {
+                serde_json::json!({
+                    "group": entry.group,
+                    "path": entry.path_string(),
+                    "summary": entry.summary,
+                    "availability": entry.availability().as_str(),
+                    "feature": entry.gate.as_str(),
+                    "mutation": entry.mutation,
+                })
+            })
+            .collect::<Vec<_>>();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "command": "commands",
+                "ok": true,
+                "commands": rows,
+            }))?
+        );
+        return Ok(());
+    }
+    println!(
+        "Argentum commands ({} entries)",
+        command_catalog::command_count()
+    );
+    for group in [
+        "core",
+        "provider",
+        "session",
+        "goal",
+        "harness",
+        "desktop",
+        "permissions",
+        "verification",
+        "changes",
+        "recovery",
+        "extensions",
+        "artifacts",
+        "reserved",
+    ] {
+        let group_entries = entries
+            .iter()
+            .filter(|entry| entry.group == group)
+            .collect::<Vec<_>>();
+        if group_entries.is_empty() {
+            continue;
+        }
+        println!("\n{group}:");
+        for entry in group_entries {
+            let gate = entry
+                .gate
+                .as_str()
+                .map(|gate| format!(" [{gate}]"))
+                .unwrap_or_default();
+            let mutation = if entry.mutation { " [mutation]" } else { "" };
+            println!(
+                "  {:<28} {:<11} {}{}{}",
+                entry.path_string(),
+                entry.availability().as_str(),
+                entry.summary,
+                gate,
+                mutation
+            );
+        }
+    }
+    Ok(())
 }
 
 fn print_version() {
@@ -9695,6 +9783,63 @@ mod tests {
         assert_eq!(failure["dry_run"], true);
         assert_eq!(failure["applied"], false);
         assert_eq!(failure["error"], "target changed");
+    }
+
+    #[test]
+    fn command_catalog_reconciles_with_parser_and_help() {
+        assert!(matches!(
+            parse_args(["commands"]).unwrap(),
+            Arguments::Commands { json: false }
+        ));
+        assert!(matches!(
+            parse_args(["commands", "--json"]).unwrap(),
+            Arguments::Commands { json: true }
+        ));
+        let help = help_text();
+        for entry in command_catalog::COMMANDS {
+            let path = entry.path.to_vec();
+            if entry.reserved {
+                assert!(
+                    matches!(
+                        parse_args(path.clone()).unwrap(),
+                        Arguments::Unavailable { .. }
+                    ),
+                    "reserved path did not reach the stub: {}",
+                    entry.path_string()
+                );
+                assert!(
+                    help.contains(entry.path[0]),
+                    "reserved command missing from help: {}",
+                    entry.path[0]
+                );
+                continue;
+            }
+            if path.len() == 1 {
+                match parse_args(path.clone()) {
+                    Ok(_) => {}
+                    Err(message) => assert!(
+                        !message.contains("unexpected argument")
+                            && !message.contains("not available in this Genesis phase"),
+                        "top-level command rejected: {}: {message}",
+                        entry.path_string()
+                    ),
+                }
+                assert!(
+                    help.contains(entry.path[0]),
+                    "top-level command missing from help: {}",
+                    entry.path_string()
+                );
+            } else if entry.gate == command_catalog::Gate::None {
+                let family = format!("argentum {} ", entry.path[0]);
+                let second = entry.path[1];
+                assert!(
+                    help.lines()
+                        .any(|line| line.contains(&family) && line.contains(second)),
+                    "nested command missing from help: {}",
+                    entry.path_string()
+                );
+            }
+        }
     }
 
     #[test]
