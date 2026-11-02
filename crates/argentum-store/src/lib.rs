@@ -34,6 +34,9 @@ use time::OffsetDateTime;
 use url::Url;
 use uuid::Uuid;
 
+/// Current on-disk schema version written by `Store::migrate`.
+pub const SCHEMA_VERSION: u16 = 22;
+
 mod command_identity;
 mod context_budget;
 mod extensions;
@@ -312,6 +315,15 @@ impl Store {
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// Read the on-disk schema version without migrating or writing.
+    pub fn schema_version(&self) -> Result<u16, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        Ok(connection.query_row("PRAGMA user_version", [], |row| row.get(0))?)
     }
 
     pub fn append_event(&self, event: &AppEvent) -> Result<(), StoreError> {
@@ -3629,7 +3641,7 @@ impl Store {
             "TEXT CHECK(line_count_availability IS NULL OR line_count_availability IN ('computed', 'unavailable', 'unknown'))",
         )?;
         extensions::migrate(&additive)?;
-        additive.execute_batch("PRAGMA user_version = 22;")?;
+        additive.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         ensure_column(&additive, "goal_invocations", "owner_generation", "INTEGER")?;
         // F09 development builds may already have created schema 18 before
         // execution-snapshot binding was added. Keep that interim database

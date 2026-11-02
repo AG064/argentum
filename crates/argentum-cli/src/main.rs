@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(feature = "artifacts")]
 mod artifact_cli;
+mod doctor_cli;
 #[cfg(feature = "extensions")]
 mod extension_browser_cli;
 #[cfg(feature = "extensions")]
@@ -718,6 +719,25 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             })
             .await?;
         }
+        Arguments::Doctor { options, json } => {
+            let database = options.database.clone().or_else(|| {
+                AppPaths::discover()
+                    .ok()
+                    .map(|paths| paths.database.clone())
+            });
+            let Some(database) = database else {
+                return Err("doctor could not resolve the application database path".into());
+            };
+            let report = doctor_cli::build(&options.workspace, Some(database));
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", doctor_cli::format_text(&report));
+            }
+            if !report.healthy {
+                return Err("doctor found required check failures".into());
+            }
+        }
         Arguments::Status { options, json } => {
             let config = options.host_config()?;
             with_one_shot_host(config, move |host| {
@@ -1174,8 +1194,12 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         Arguments::Tools { options, json } => {
             run_tool_list_command(options, json).await?;
         }
-        Arguments::Desktop { options, json } => {
-            run_desktop_status_command(options, json).await?;
+        Arguments::Desktop {
+            options,
+            action,
+            json,
+        } => {
+            run_desktop_command(options, action, json).await?;
         }
         Arguments::Instructions { options, directory } => {
             Box::pin(run_instruction_preview_command(
@@ -3022,6 +3046,461 @@ async fn run_tool_list_command(
     .await
 }
 
+async fn run_desktop_command(
+    options: CommonOptions,
+    action: DesktopAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        DesktopAction::Status => run_desktop_status_command(options, json).await,
+        action => run_desktop_control_command(action, json).await,
+    }
+}
+
+#[cfg(not(all(windows, feature = "desktop-control")))]
+async fn run_desktop_control_command(
+    action: DesktopAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = action;
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "feature": "desktop-control",
+                "built": false,
+                "available": false,
+                "reason": "This binary was not built with --features desktop-control.",
+            })
+        );
+    }
+    Err("desktop control is unavailable: rebuild with --features desktop-control".into())
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+async fn run_desktop_control_command(
+    action: DesktopAction,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+
+    use argentum_extensions::desktop as desktop_api;
+    use tokio_util::sync::CancellationToken;
+
+    let cancel = CancellationToken::new();
+    let signal = cancel.clone();
+    let listener = tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            signal.cancel();
+        }
+    });
+    let result: Result<(), Box<dyn std::error::Error>> = async {
+        match action {
+            DesktopAction::Status => Err("desktop status is handled by the host path".into()),
+            DesktopAction::List => {
+                let list = desktop_api::list_windows(
+                    argentum_domain::desktop::MAX_DESKTOP_WINDOWS,
+                    &cancel,
+                )?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&list)?);
+                } else {
+                    println!(
+                        "Windows: {}{}",
+                        list.windows.len(),
+                        if list.truncated { " (truncated)" } else { "" }
+                    );
+                    for window in &list.windows {
+                        let bounds = window.identity.bounds;
+                        println!(
+                            "  {}  pid={}  {}x{}+{},{}  visible={} minimized={} cloaked={} responding={}  {}",
+                            window.identity.hwnd,
+                            window.identity.process_id,
+                            bounds.width,
+                            bounds.height,
+                            bounds.left,
+                            bounds.top,
+                            window.visible,
+                            window.minimized,
+                            window.cloaked,
+                            window.responding,
+                            window.identity.title
+                        );
+                    }
+                }
+                Ok(())
+            }
+            DesktopAction::Inspect { hwnd, depth } => {
+                let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
+                let inspection = desktop_api::inspect(
+                    &window.identity,
+                    depth,
+                    argentum_domain::desktop::MAX_DESKTOP_ELEMENTS,
+                    &cancel,
+                )?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&inspection)?);
+                } else {
+                    println!(
+                        "Window: {}  pid={}  {}{}",
+                        inspection.window.hwnd,
+                        inspection.window.process_id,
+                        inspection.window.title,
+                        if inspection.truncated {
+                            " (truncated)"
+                        } else {
+                            ""
+                        }
+                    );
+                    println!(
+                        "Generation: {}  elements: {}",
+                        inspection.generation,
+                        inspection.elements.len()
+                    );
+                    for element in &inspection.elements {
+                        let path = element
+                            .identity
+                            .tree_path
+                            .iter()
+                            .map(u32::to_string)
+                            .collect::<Vec<_>>()
+                            .join("/");
+                        let bounds = element.identity.bounds;
+                        println!(
+                            "  path={}  {}  {}x{}+{},{}  enabled={} focused={} offscreen={} password={}  {}",
+                            if path.is_empty() { "root" } else { path.as_str() },
+                            element.control_type_name,
+                            bounds.width,
+                            bounds.height,
+                            bounds.left,
+                            bounds.top,
+                            element.enabled,
+                            element.focused,
+                            element.offscreen,
+                            element.password,
+                            element.identity.name
+                        );
+                    }
+                }
+                Ok(())
+            }
+            DesktopAction::Screenshot { hwnd, output } => {
+                let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
+                let (capture, png) = desktop_api::capture_png(&window.identity, &cancel)?;
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&output)?;
+                file.write_all(&png)?;
+                file.sync_all()?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "action": "screenshot",
+                            "window": capture.window,
+                            "output": output.display().to_string(),
+                            "width": capture.width,
+                            "height": capture.height,
+                            "png_bytes": capture.png_bytes,
+                            "png_sha256": capture.png_sha256,
+                            "print_window_only": capture.print_window_only,
+                            "at_unix_seconds": capture.at_unix_seconds,
+                        })
+                    );
+                } else {
+                    println!(
+                        "Captured {} to {} ({}x{}, {} bytes, sha256 {})",
+                        capture.window.hwnd,
+                        output.display(),
+                        capture.width,
+                        capture.height,
+                        capture.png_bytes,
+                        capture.png_sha256
+                    );
+                }
+                Ok(())
+            }
+            DesktopAction::Invoke {
+                hwnd,
+                element,
+                confirm,
+                depth,
+            } => {
+                let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
+                if !confirm.eq_ignore_ascii_case(&hwnd) {
+                    return Err("--confirm must exactly match --hwnd".into());
+                }
+                let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                let receipt = desktop_api::invoke(&window.identity, &element, &cancel)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                } else {
+                    println!(
+                        "Invoked {} on {} with {}; API return only, reobserve the application.",
+                        receipt.element.automation_id,
+                        receipt.window.hwnd,
+                        receipt.pattern
+                    );
+                }
+                Ok(())
+            }
+            DesktopAction::Type {
+                hwnd,
+                element,
+                text,
+                mode,
+                confirm,
+                depth,
+            } => {
+                let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
+                if !confirm.eq_ignore_ascii_case(&hwnd) {
+                    return Err("--confirm must exactly match --hwnd".into());
+                }
+                let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                let receipt =
+                    desktop_api::type_text(&window.identity, &element, &text, mode, &cancel)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                } else {
+                    println!(
+                        "Typed {} character(s) with mode {} on {}; API return only, reobserve the application.",
+                        receipt.characters, receipt.mode, receipt.window.hwnd
+                    );
+                }
+                Ok(())
+            }
+            DesktopAction::Keys {
+                hwnd,
+                element,
+                chords,
+                confirm,
+                depth,
+            } => {
+                let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
+                if !confirm.eq_ignore_ascii_case(&hwnd) {
+                    return Err("--confirm must exactly match --hwnd".into());
+                }
+                let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                let receipt = desktop_api::press_keys(&window.identity, &element, &chords, &cancel)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                } else {
+                    println!(
+                        "Sent {} chord(s) on {}; API return only, reobserve the application.",
+                        receipt.chords, receipt.window.hwnd
+                    );
+                }
+                Ok(())
+            }
+        }
+    }
+    .await;
+    listener.abort();
+    let _ = listener.await;
+    result
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+#[derive(serde::Deserialize)]
+struct DesktopElementJson {
+    tree_path: Vec<u32>,
+    automation_id: String,
+    control_type: i32,
+    class_name: String,
+    name: String,
+    bounds: argentum_domain::desktop::DesktopRect,
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+#[derive(Debug)]
+struct DesktopElementSelector {
+    tree_path: Vec<u32>,
+    automation_id: Option<String>,
+    control_type: Option<i32>,
+    control_type_name: Option<String>,
+    class_name: Option<String>,
+    name: Option<String>,
+    bounds: Option<argentum_domain::desktop::DesktopRect>,
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+fn resolve_desktop_element(
+    window: &argentum_domain::desktop::DesktopWindowIdentity,
+    value: &str,
+    depth: u8,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<
+    argentum_domain::desktop::DesktopElementIdentity,
+    argentum_extensions::desktop::DesktopError,
+> {
+    use argentum_domain::desktop::DesktopElementIdentity;
+    use argentum_extensions::desktop::{inspect, DesktopError};
+
+    let value = value.trim();
+    if value.starts_with('{') {
+        let parsed: DesktopElementJson = serde_json::from_str(value)
+            .map_err(|_| DesktopError::InvalidInput("element JSON is invalid"))?;
+        let identity = DesktopElementIdentity {
+            tree_path: parsed.tree_path,
+            automation_id: parsed.automation_id,
+            control_type: parsed.control_type,
+            class_name: parsed.class_name,
+            name: parsed.name,
+            bounds: parsed.bounds,
+        };
+        if !identity.path_is_bounded() {
+            return Err(DesktopError::InvalidInput("element path is not bounded"));
+        }
+        return Ok(identity);
+    }
+
+    let selector = parse_desktop_element_selector(value)?;
+    if selector.tree_path.len() > usize::from(depth) {
+        return Err(DesktopError::InvalidInput(
+            "selector path is deeper than --depth",
+        ));
+    }
+    let inspection = inspect(
+        window,
+        depth,
+        argentum_domain::desktop::MAX_DESKTOP_ELEMENTS,
+        cancel,
+    )?;
+    let found = inspection
+        .elements
+        .iter()
+        .find(|element| selector.matches(&element.identity, element.control_type_name))
+        .ok_or(DesktopError::ElementUnavailable)?;
+    Ok(found.identity.clone())
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+fn parse_desktop_element_selector(
+    value: &str,
+) -> Result<DesktopElementSelector, argentum_extensions::desktop::DesktopError> {
+    use argentum_domain::desktop::DesktopRect;
+    use argentum_extensions::desktop::DesktopError;
+
+    let mut selector = DesktopElementSelector {
+        tree_path: Vec::new(),
+        automation_id: None,
+        control_type: None,
+        control_type_name: None,
+        class_name: None,
+        name: None,
+        bounds: None,
+    };
+    let mut has_path = false;
+    for part in value.split(';').filter(|part| !part.trim().is_empty()) {
+        let (key, raw) = part.split_once('=').ok_or(DesktopError::InvalidInput(
+            "selector entries must use key=value",
+        ))?;
+        let key = key.trim();
+        let raw = raw.trim();
+        match key {
+            "path" => {
+                selector.tree_path = parse_desktop_path(raw)?;
+                has_path = true;
+            }
+            "automation-id" => selector.automation_id = Some(raw.to_owned()),
+            "control-type" => {
+                if let Ok(numeric) = raw.parse::<i32>() {
+                    selector.control_type = Some(numeric);
+                } else {
+                    selector.control_type_name = Some(
+                        raw.strip_prefix("ControlType.")
+                            .unwrap_or(raw)
+                            .to_ascii_lowercase(),
+                    );
+                }
+            }
+            "class" => selector.class_name = Some(raw.to_owned()),
+            "name" => selector.name = Some(raw.to_owned()),
+            "bounds" => {
+                let values = raw
+                    .split(',')
+                    .map(|value| value.trim().parse::<i32>())
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| DesktopError::InvalidInput("bounds must be l,t,w,h"))?;
+                if values.len() != 4 {
+                    return Err(DesktopError::InvalidInput("bounds must be l,t,w,h"));
+                }
+                selector.bounds = Some(DesktopRect {
+                    left: values[0],
+                    top: values[1],
+                    width: values[2],
+                    height: values[3],
+                });
+            }
+            _ => return Err(DesktopError::InvalidInput("unknown selector key")),
+        }
+    }
+    if !has_path {
+        return Err(DesktopError::InvalidInput(
+            "selector requires path=0/1/2 or path=root",
+        ));
+    }
+    Ok(selector)
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+fn parse_desktop_path(value: &str) -> Result<Vec<u32>, argentum_extensions::desktop::DesktopError> {
+    use argentum_extensions::desktop::DesktopError;
+
+    if value.is_empty() || value.eq_ignore_ascii_case("root") {
+        return Ok(Vec::new());
+    }
+    let path = value
+        .split('/')
+        .map(|part| {
+            part.parse::<u32>()
+                .map_err(|_| DesktopError::InvalidInput("path segments must be integers"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if path.len() > usize::from(argentum_domain::desktop::MAX_DESKTOP_DEPTH)
+        || path
+            .iter()
+            .any(|index| *index >= u32::from(argentum_domain::desktop::MAX_DESKTOP_ELEMENTS))
+    {
+        return Err(DesktopError::InvalidInput("path is not bounded"));
+    }
+    Ok(path)
+}
+
+#[cfg(all(windows, feature = "desktop-control"))]
+impl DesktopElementSelector {
+    fn matches(
+        &self,
+        identity: &argentum_domain::desktop::DesktopElementIdentity,
+        control_type_name: &'static str,
+    ) -> bool {
+        identity.tree_path == self.tree_path
+            && self
+                .automation_id
+                .as_ref()
+                .is_none_or(|value| value == &identity.automation_id)
+            && self
+                .control_type
+                .is_none_or(|value| value == identity.control_type)
+            && self.control_type_name.as_ref().is_none_or(|value| {
+                control_type_name
+                    .strip_prefix("ControlType.")
+                    .unwrap_or(control_type_name)
+                    .eq_ignore_ascii_case(value)
+            })
+            && self
+                .class_name
+                .as_ref()
+                .is_none_or(|value| value == &identity.class_name)
+            && self
+                .name
+                .as_ref()
+                .is_none_or(|value| value == &identity.name)
+            && self.bounds.is_none_or(|value| value == identity.bounds)
+    }
+}
+
 async fn run_desktop_status_command(
     options: CommonOptions,
     json: bool,
@@ -4552,6 +5031,10 @@ enum Arguments {
         options: CommonOptions,
         json: bool,
     },
+    Doctor {
+        options: CommonOptions,
+        json: bool,
+    },
     ProviderProbe {
         options: CommonOptions,
         provider_id: String,
@@ -4660,6 +5143,7 @@ enum Arguments {
     },
     Desktop {
         options: CommonOptions,
+        action: DesktopAction,
         json: bool,
     },
     Permissions {
@@ -4806,6 +5290,41 @@ enum PermissionAction {
     Select { profile_id: String },
     Grants,
     Revoke { grant_id: argentum_domain::GrantId },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum DesktopAction {
+    Status,
+    List,
+    Inspect {
+        hwnd: String,
+        depth: u8,
+    },
+    Screenshot {
+        hwnd: String,
+        output: PathBuf,
+    },
+    Invoke {
+        hwnd: String,
+        element: String,
+        confirm: String,
+        depth: u8,
+    },
+    Type {
+        hwnd: String,
+        element: String,
+        text: String,
+        mode: argentum_domain::desktop::DesktopTextMode,
+        confirm: String,
+        depth: u8,
+    },
+    Keys {
+        hwnd: String,
+        element: String,
+        chords: Vec<String>,
+        confirm: String,
+        depth: u8,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -5071,6 +5590,14 @@ where
     let mut harness_target = None;
     let mut harness_visibility = None;
     let mut desktop_action = None;
+    let mut desktop_hwnd = None;
+    let mut desktop_depth = None;
+    let mut desktop_output: Option<PathBuf> = None;
+    let mut desktop_element = None;
+    let mut desktop_text = None;
+    let mut desktop_text_mode = None;
+    let mut desktop_chords: Vec<String> = Vec::new();
+    let mut desktop_confirm = None;
     let mut changes_action = None;
     let mut changes_subaction = None;
     let mut changes_target = None;
@@ -5378,7 +5905,7 @@ where
             "--non-interactive" => options.non_interactive = true,
             "--isolated" => {}
             "--jsonl" if command == "serve" => {}
-            unknown if unknown.starts_with('-') => {
+            unknown if unknown.starts_with('-') && command != "desktop" => {
                 return Err(format!("unknown option '{unknown}'"));
             }
             value if command == "run" && prompt.is_none() => prompt = Some(value.to_owned()),
@@ -5467,6 +5994,75 @@ where
             }
             value if command == "tool" && tool_action.is_none() => {
                 tool_action = Some(value.to_owned())
+            }
+            "--hwnd" if command == "desktop" => {
+                if desktop_hwnd.is_some() {
+                    return Err("--hwnd may be supplied once".into());
+                }
+                index += 1;
+                desktop_hwnd = Some(required_value(&values, index, "--hwnd")?.to_owned());
+            }
+            "--depth" if command == "desktop" => {
+                if desktop_depth.is_some() {
+                    return Err("--depth may be supplied once".into());
+                }
+                index += 1;
+                let depth = required_value(&values, index, "--depth")?
+                    .parse::<u8>()
+                    .map_err(|_| "--depth requires an integer from 1 through 8".to_owned())?;
+                if !(1..=argentum_domain::desktop::MAX_DESKTOP_DEPTH).contains(&depth) {
+                    return Err("--depth must be from 1 through 8".into());
+                }
+                desktop_depth = Some(depth);
+            }
+            "--output" if command == "desktop" => {
+                if desktop_output.is_some() {
+                    return Err("--output may be supplied once".into());
+                }
+                index += 1;
+                desktop_output = Some(PathBuf::from(required_value(&values, index, "--output")?));
+            }
+            "--element" if command == "desktop" => {
+                if desktop_element.is_some() {
+                    return Err("--element may be supplied once".into());
+                }
+                index += 1;
+                desktop_element = Some(required_value(&values, index, "--element")?.to_owned());
+            }
+            "--text" if command == "desktop" => {
+                if desktop_text.is_some() {
+                    return Err("--text may be supplied once".into());
+                }
+                index += 1;
+                desktop_text = Some(required_value(&values, index, "--text")?.to_owned());
+            }
+            "--mode" if command == "desktop" => {
+                if desktop_text_mode.is_some() {
+                    return Err("--mode may be supplied once".into());
+                }
+                index += 1;
+                desktop_text_mode = Some(match required_value(&values, index, "--mode")? {
+                    "value" => argentum_domain::desktop::DesktopTextMode::Value,
+                    "keys" => argentum_domain::desktop::DesktopTextMode::Keys,
+                    _ => return Err("--mode must be 'value' or 'keys'".into()),
+                });
+            }
+            "--chord" if command == "desktop" => {
+                if desktop_chords.len() >= usize::from(argentum_domain::desktop::MAX_DESKTOP_KEYS) {
+                    return Err("--chord may be supplied at most 8 times".into());
+                }
+                index += 1;
+                desktop_chords.push(required_value(&values, index, "--chord")?.to_owned());
+            }
+            "--confirm" if command == "desktop" => {
+                if desktop_confirm.is_some() {
+                    return Err("--confirm may be supplied once".into());
+                }
+                index += 1;
+                desktop_confirm = Some(required_value(&values, index, "--confirm")?.to_owned());
+            }
+            unknown if command == "desktop" && unknown.starts_with('-') => {
+                return Err(format!("unknown desktop option '{unknown}'"));
             }
             value if command == "desktop" && desktop_action.is_none() => {
                 desktop_action = Some(value.to_owned())
@@ -5620,6 +6216,7 @@ where
                     | "harness"
                     | "tool"
                     | "desktop"
+                    | "doctor"
                     | "instructions"
                     | "context"
                     | "compact"
@@ -5648,12 +6245,12 @@ where
         "chat" if prompt.is_some() => Err("chat does not accept a prompt; use 'run'".into()),
         "chat" => Ok(Arguments::Interactive { options }),
         "local-chat" | "local-text" if prompt.is_none() => Ok(Arguments::LocalChat { options, text_only: command == "local-text" }),
-        "doctor" | "model" | "profile" | "module" | "plugin" | "mcp" | "migrate"
-        | "prompt" | "self" | "update" => {
-            Ok(Arguments::Unavailable {
-                message: format!("{command} is not available in this Genesis phase"),
-            })
-        }
+        "model" | "profile" | "module" | "plugin" | "mcp" | "migrate" | "prompt"
+        | "self" | "update" => Ok(Arguments::Unavailable {
+            message: format!("{command} is not available in this Genesis phase"),
+        }),
+        "doctor" if prompt.is_some() => Err("doctor does not accept a prompt".into()),
+        "doctor" => Ok(Arguments::Doctor { options, json }),
         "setup" if prompt.is_some() => Err("setup does not accept a prompt".into()),
         "setup" => Ok(Arguments::Setup { options, json }),
         "serve" if json => Err("serve always uses JSONL; remove --json".into()),
@@ -5717,10 +6314,149 @@ where
         }
         "tool" => Err("tool requires 'list'".into()),
         "desktop" if prompt.is_some() => Err("desktop does not accept a prompt".into()),
-        "desktop" if desktop_action.as_deref() == Some("status") => {
-            Ok(Arguments::Desktop { options, json })
+        "desktop" => {
+            let action = match desktop_action.as_deref() {
+                Some("status") => {
+                    reject_desktop_flags(&[
+                        ("--hwnd", desktop_hwnd.is_some()),
+                        ("--depth", desktop_depth.is_some()),
+                        ("--output", desktop_output.is_some()),
+                        ("--element", desktop_element.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                        ("--confirm", desktop_confirm.is_some()),
+                    ])?;
+                    DesktopAction::Status
+                }
+                Some("list") => {
+                    reject_desktop_flags(&[
+                        ("--hwnd", desktop_hwnd.is_some()),
+                        ("--depth", desktop_depth.is_some()),
+                        ("--output", desktop_output.is_some()),
+                        ("--element", desktop_element.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                        ("--confirm", desktop_confirm.is_some()),
+                    ])?;
+                    DesktopAction::List
+                }
+                Some("inspect") => {
+                    let hwnd = desktop_hwnd
+                        .ok_or_else(|| "desktop inspect requires --hwnd <0x...>".to_owned())?;
+                    reject_desktop_flags(&[
+                        ("--output", desktop_output.is_some()),
+                        ("--element", desktop_element.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                        ("--confirm", desktop_confirm.is_some()),
+                    ])?;
+                    DesktopAction::Inspect {
+                        hwnd,
+                        depth: desktop_depth.unwrap_or(4),
+                    }
+                }
+                Some("screenshot") => {
+                    let hwnd = desktop_hwnd.ok_or_else(|| {
+                        "desktop screenshot requires --hwnd <0x...>".to_owned()
+                    })?;
+                    let output = desktop_output
+                        .ok_or_else(|| "desktop screenshot requires --output FILE".to_owned())?;
+                    if !output.is_absolute() {
+                        return Err("--output requires an absolute file path".into());
+                    }
+                    reject_desktop_flags(&[
+                        ("--depth", desktop_depth.is_some()),
+                        ("--element", desktop_element.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                        ("--confirm", desktop_confirm.is_some()),
+                    ])?;
+                    DesktopAction::Screenshot { hwnd, output }
+                }
+                Some("invoke") => {
+                    let (hwnd, element, confirm) =
+                        desktop_mutation_arguments(&desktop_hwnd, &desktop_element, &desktop_confirm)?;
+                    reject_desktop_flags(&[
+                        ("--output", desktop_output.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                    ])?;
+                    if !confirm.eq_ignore_ascii_case(&hwnd) {
+                        return Err("--confirm must exactly match --hwnd".into());
+                    }
+                    DesktopAction::Invoke {
+                        hwnd,
+                        element,
+                        confirm,
+                        depth: desktop_depth.unwrap_or(4),
+                    }
+                }
+                Some("type") => {
+                    let (hwnd, element, confirm) =
+                        desktop_mutation_arguments(&desktop_hwnd, &desktop_element, &desktop_confirm)?;
+                    let text = desktop_text
+                        .ok_or_else(|| "desktop type requires --text".to_owned())?;
+                    if text.is_empty() {
+                        return Err("--text must not be empty".into());
+                    }
+                    reject_desktop_flags(&[
+                        ("--output", desktop_output.is_some()),
+                        ("--chord", !desktop_chords.is_empty()),
+                    ])?;
+                    if !confirm.eq_ignore_ascii_case(&hwnd) {
+                        return Err("--confirm must exactly match --hwnd".into());
+                    }
+                    DesktopAction::Type {
+                        hwnd,
+                        element,
+                        text,
+                        mode: desktop_text_mode
+                            .unwrap_or(argentum_domain::desktop::DesktopTextMode::Value),
+                        confirm,
+                        depth: desktop_depth.unwrap_or(4),
+                    }
+                }
+                Some("keys") => {
+                    let (hwnd, element, confirm) =
+                        desktop_mutation_arguments(&desktop_hwnd, &desktop_element, &desktop_confirm)?;
+                    if desktop_chords.is_empty() {
+                        return Err("desktop keys requires at least one --chord".into());
+                    }
+                    reject_desktop_flags(&[
+                        ("--output", desktop_output.is_some()),
+                        ("--text", desktop_text.is_some()),
+                        ("--mode", desktop_text_mode.is_some()),
+                    ])?;
+                    if !confirm.eq_ignore_ascii_case(&hwnd) {
+                        return Err("--confirm must exactly match --hwnd".into());
+                    }
+                    DesktopAction::Keys {
+                        hwnd,
+                        element,
+                        chords: desktop_chords,
+                        confirm,
+                        depth: desktop_depth.unwrap_or(4),
+                    }
+                }
+                Some(other) => return Err(format!("unknown desktop action '{other}'")),
+                None => {
+                    return Err(
+                        "desktop requires 'status', 'list', 'inspect', 'screenshot', 'invoke', 'type', or 'keys'"
+                            .into(),
+                    )
+                }
+            };
+            Ok(Arguments::Desktop {
+                options,
+                action,
+                json,
+            })
         }
-        "desktop" => Err("desktop requires 'status'".into()),
         "permissions" if prompt.is_some() => {
             Err("permissions does not accept a prompt".into())
         }
@@ -6489,7 +7225,7 @@ mod genesis_polish_parser_tests {
             "instructions [--directory RELATIVE_DIRECTORY]",
             "--remove-aggregate",
             "lm-studio",
-            "doctor      Diagnostics, planned for a later phase",
+            "doctor      Read-only workspace, database, provider, harness and recovery diagnostics",
         ] {
             assert!(text.contains(expected), "help is missing {expected:?}");
         }
@@ -6894,6 +7630,32 @@ fn parse_recovery_args(values: &[String]) -> Result<Arguments, String> {
     })
 }
 
+fn reject_desktop_flags(flags: &[(&str, bool)]) -> Result<(), String> {
+    for (name, supplied) in flags {
+        if *supplied {
+            return Err(format!("{name} is not valid for this desktop action"));
+        }
+    }
+    Ok(())
+}
+
+fn desktop_mutation_arguments(
+    hwnd: &Option<String>,
+    element: &Option<String>,
+    confirm: &Option<String>,
+) -> Result<(String, String, String), String> {
+    Ok((
+        hwnd.clone()
+            .ok_or_else(|| "this desktop action requires --hwnd <0x...>".to_owned())?,
+        element
+            .clone()
+            .ok_or_else(|| "this desktop action requires --element".to_owned())?,
+        confirm
+            .clone()
+            .ok_or_else(|| "this desktop action requires --confirm <HWND>".to_owned())?,
+    ))
+}
+
 fn required_value<'a>(values: &'a [String], index: usize, option: &str) -> Result<&'a str, String> {
     let value = values
         .get(index)
@@ -7078,6 +7840,12 @@ argentum harness module MODULE_ID install|enable|disable|remove [OPTIONS]\n  \
 argentum harness trajectory [SESSION_ID] [OPTIONS]\n  \
 argentum tool list [OPTIONS]\n  \
 argentum desktop status [OPTIONS]\n  \
+argentum desktop list [--json] [OPTIONS]\n  \
+argentum desktop inspect --hwnd <0x...> [--depth N] [--json] [OPTIONS]\n  \
+argentum desktop screenshot --hwnd <0x...> --output ABSOLUTE_FILE [--json] [OPTIONS]\n  \
+argentum desktop invoke --hwnd <0x...> --element <json-or-selector> [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
+argentum desktop type --hwnd <0x...> --element <json-or-selector> --text TEXT [--mode value|keys] [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
+argentum desktop keys --hwnd <0x...> --element <json-or-selector> --chord CHORD [--chord CHORD ...] [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
 argentum permissions list [OPTIONS]\n  \
 argentum permissions select PROFILE_ID [OPTIONS]\n  \
 argentum permissions grants [OPTIONS]\n  \
@@ -7098,7 +7866,7 @@ Commands:\n  \
 no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
   setup       Run deterministic first-run onboarding\n  \
-doctor      Diagnostics, planned for a later phase\n  \
+doctor      Read-only workspace, database, provider, harness and recovery diagnostics\n  \
 serve       Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout\n  \
   run         Submit one task and stream its output; --final-result emits one settled result\n  \
   result      Read one settled run result without launching work\n  \
@@ -7112,7 +7880,7 @@ session     Select the active session for the current workspace\n  \
 goal        Manage the active session goal contract\n  \
 harness     Inspect composition, presentation, execution policy, and surfaces\n  \
 tool        List registered developer tools and current availability\n  \
-desktop     Show optional Windows desktop-control build status (status)\n  \
+desktop     Governed Windows desktop windows: list, inspect, screenshot, invoke, type, keys\n  \
 instructions Preview selected project instruction metadata (--directory RELATIVE_DIRECTORY)\n  \
 context     Preview selected working-context metadata; no tool bodies or token estimates\n  \
 permissions Inspect profiles, select local authority, and manage grants\n  \
@@ -8552,6 +9320,139 @@ mod tests {
         assert!(parse_args(["provider"]).is_err());
         assert!(parse_args(["provider", "status"]).is_err());
         assert!(parse_args(["provider", "probe", "one", "two"]).is_err());
+    }
+
+    #[test]
+    fn parses_doctor_and_desktop_commands() {
+        assert!(matches!(
+            parse_args(["doctor", "--json"]).unwrap(),
+            Arguments::Doctor { json: true, .. }
+        ));
+
+        assert!(matches!(
+            parse_args(["desktop", "list"]).unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::List,
+                json: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse_args(["desktop", "inspect", "--hwnd", "0x1234", "--depth", "3"]).unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Inspect { hwnd, depth },
+                ..
+            } if hwnd == "0x1234" && depth == 3
+        ));
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "invoke",
+                "--hwnd",
+                "0x1234",
+                "--element",
+                "path=0/1",
+                "--confirm",
+                "0x1234",
+                "--json"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Invoke {
+                    hwnd,
+                    element,
+                    confirm,
+                    ..
+                },
+                json: true,
+                ..
+            } if hwnd == "0x1234" && element == "path=0/1" && confirm == "0x1234"
+        ));
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "type",
+                "--hwnd",
+                "0x1234",
+                "--element",
+                "path=root",
+                "--text",
+                "hello",
+                "--confirm",
+                "0x1234"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Type { mode, .. },
+                ..
+            } if mode == argentum_domain::desktop::DesktopTextMode::Value
+        ));
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "keys",
+                "--hwnd",
+                "0x1234",
+                "--element",
+                "path=root",
+                "--chord",
+                "Ctrl+S",
+                "--chord",
+                "Enter",
+                "--confirm",
+                "0x1234"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Keys { chords, .. },
+                ..
+            } if chords.len() == 2
+        ));
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "screenshot",
+                "--hwnd",
+                "0x1234",
+                "--output",
+                r"C:\temp\shot.png"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Screenshot { .. },
+                ..
+            }
+        ));
+        assert!(parse_args([
+            "desktop",
+            "invoke",
+            "--hwnd",
+            "0x1234",
+            "--element",
+            "path=root"
+        ])
+        .is_err());
+        assert!(parse_args([
+            "desktop",
+            "invoke",
+            "--hwnd",
+            "0x1234",
+            "--element",
+            "path=root",
+            "--confirm",
+            "0x9999"
+        ])
+        .is_err());
+        assert!(parse_args([
+            "desktop",
+            "screenshot",
+            "--hwnd",
+            "0x1234",
+            "--output",
+            "relative.png"
+        ])
+        .is_err());
+        assert!(parse_args(["desktop", "unknown"]).is_err());
     }
 
     #[test]
