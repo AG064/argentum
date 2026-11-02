@@ -14,6 +14,8 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 pub struct DoctorReport {
     pub schema_version: u32,
+    pub command: &'static str,
+    pub ok: bool,
     pub healthy: bool,
     pub ready: bool,
     pub workspace: WorkspaceReport,
@@ -287,6 +289,8 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
 
     DoctorReport {
         schema_version: 1,
+        command: "doctor",
+        ok: healthy,
         healthy,
         ready,
         workspace: workspace_report,
@@ -540,6 +544,46 @@ mod tests {
             .checks
             .iter()
             .any(|check| check.id == "database_exists" && check.required && !check.ok));
+    }
+
+    #[test]
+    fn check_ids_and_envelope_fields_are_stable() {
+        let directory = tempfile::tempdir().expect("directory");
+        let database = directory.path().join("argentum.db");
+        let store = Store::open(&database).expect("store");
+        store
+            .resolve_workspace(directory.path())
+            .expect("workspace");
+        drop(store);
+        let report = build(directory.path(), Some(database));
+        assert_eq!(report.command, "doctor");
+        assert_eq!(report.ok, report.healthy);
+        assert_eq!(
+            report
+                .checks
+                .iter()
+                .map(|check| check.id)
+                .collect::<Vec<_>>(),
+            vec![
+                "workspace_exists",
+                "database_exists",
+                "database_openable",
+                "schema_current",
+                "workspace_initialized",
+                "provider_ready",
+                "harness_configured",
+                "recovery_clear",
+            ]
+        );
+        assert_eq!(
+            report
+                .checks
+                .iter()
+                .filter(|check| check.required)
+                .map(|check| check.id)
+                .collect::<Vec<_>>(),
+            vec!["database_exists", "database_openable", "schema_current"]
+        );
     }
 
     #[test]

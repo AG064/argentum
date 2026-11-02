@@ -436,24 +436,7 @@ pub fn type_text(
     mode: DesktopTextMode,
     cancel: &CancellationToken,
 ) -> Result<TextReceipt, DesktopError> {
-    if text.len() > MAX_DESKTOP_TEXT_UTF16 * 4 {
-        return Err(DesktopError::InvalidInput(
-            "text exceeds 1024 UTF-16 code units",
-        ));
-    }
-    if text.encode_utf16().count() > MAX_DESKTOP_TEXT_UTF16 {
-        return Err(DesktopError::InvalidInput(
-            "text exceeds 1024 UTF-16 code units",
-        ));
-    }
-    if text
-        .chars()
-        .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
-    {
-        return Err(DesktopError::InvalidInput(
-            "text contains unsupported control characters",
-        ));
-    }
+    validate_text(text)?;
     with_com(|| {
         let hwnd = validate_window(window, mode == DesktopTextMode::Keys)?;
         let uia = automation()?;
@@ -650,6 +633,187 @@ pub fn capture_png(
             png,
         ))
     })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ActionPreview {
+    pub action: &'static str,
+    pub pattern: &'static str,
+    pub window: DesktopWindowIdentity,
+    pub element: DesktopElementIdentity,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TextPreview {
+    pub action: &'static str,
+    pub mode: &'static str,
+    pub characters: usize,
+    pub window: DesktopWindowIdentity,
+    pub element: DesktopElementIdentity,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct KeyPreview {
+    pub action: &'static str,
+    pub chords: Vec<String>,
+    pub count: usize,
+    pub window: DesktopWindowIdentity,
+    pub element: DesktopElementIdentity,
+}
+
+/// Resolve and validate an invoke target without calling a UIA pattern.
+pub fn preview_invoke(
+    window: &DesktopWindowIdentity,
+    element: &DesktopElementIdentity,
+    cancel: &CancellationToken,
+) -> Result<ActionPreview, DesktopError> {
+    with_com(|| {
+        if cancel.is_cancelled() {
+            return Err(DesktopError::Cancelled);
+        }
+        let hwnd = validate_window(window, false)?;
+        let uia = automation()?;
+        let target = resolve_element(&uia, hwnd, window, element, cancel)?;
+        let snapshot = element_snapshot(&target)?;
+        require_actionable(&snapshot)?;
+        let pattern = if unsafe {
+            target.GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
+        }
+        .is_ok()
+        {
+            "InvokePattern"
+        } else if unsafe {
+            target.GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
+                UIA_SelectionItemPatternId,
+            )
+        }
+        .is_ok()
+        {
+            "SelectionItemPattern.Select"
+        } else {
+            return Err(DesktopError::PatternUnsupported);
+        };
+        Ok(ActionPreview {
+            action: "invoke",
+            pattern,
+            window: window.clone(),
+            element: element.clone(),
+        })
+    })
+}
+
+/// Resolve and validate a text target without calling ValuePattern or SendInput.
+pub fn preview_type_text(
+    window: &DesktopWindowIdentity,
+    element: &DesktopElementIdentity,
+    text: &str,
+    mode: DesktopTextMode,
+    cancel: &CancellationToken,
+) -> Result<TextPreview, DesktopError> {
+    validate_text(text)?;
+    with_com(|| {
+        if cancel.is_cancelled() {
+            return Err(DesktopError::Cancelled);
+        }
+        let hwnd = validate_window(window, mode == DesktopTextMode::Keys)?;
+        let uia = automation()?;
+        let target = resolve_element(&uia, hwnd, window, element, cancel)?;
+        let snapshot = element_snapshot(&target)?;
+        require_actionable(&snapshot)?;
+        let mode_name = match mode {
+            DesktopTextMode::Value => {
+                let pattern = unsafe {
+                    target.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+                }
+                .map_err(|_| DesktopError::PatternUnsupported)?;
+                if unsafe { pattern.CurrentIsReadOnly() }
+                    .map(|value| value.as_bool())
+                    .unwrap_or(true)
+                {
+                    return Err(DesktopError::ElementReadOnly);
+                }
+                "value"
+            }
+            DesktopTextMode::Keys => {
+                if !snapshot.focused {
+                    return Err(DesktopError::ElementNotFocused);
+                }
+                if !is_foreground(hwnd) {
+                    return Err(DesktopError::TargetNotForeground);
+                }
+                "keys"
+            }
+        };
+        Ok(TextPreview {
+            action: "type_text",
+            mode: mode_name,
+            characters: text.chars().count(),
+            window: window.clone(),
+            element: element.clone(),
+        })
+    })
+}
+
+/// Parse and validate key chords without calling SendInput.
+pub fn preview_press_keys(
+    window: &DesktopWindowIdentity,
+    element: &DesktopElementIdentity,
+    chords: &[String],
+    cancel: &CancellationToken,
+) -> Result<KeyPreview, DesktopError> {
+    if chords.is_empty() || chords.len() > usize::from(MAX_DESKTOP_KEYS) {
+        return Err(DesktopError::InvalidInput(
+            "key count must be between 1 and 8",
+        ));
+    }
+    for chord in chords {
+        parse_chord(chord)?;
+    }
+    with_com(|| {
+        if cancel.is_cancelled() {
+            return Err(DesktopError::Cancelled);
+        }
+        let hwnd = validate_window(window, true)?;
+        let uia = automation()?;
+        let target = resolve_element(&uia, hwnd, window, element, cancel)?;
+        let snapshot = element_snapshot(&target)?;
+        require_actionable(&snapshot)?;
+        if !snapshot.focused {
+            return Err(DesktopError::ElementNotFocused);
+        }
+        if !is_foreground(hwnd) {
+            return Err(DesktopError::TargetNotForeground);
+        }
+        Ok(KeyPreview {
+            action: "press_keys",
+            chords: chords.to_vec(),
+            count: chords.len(),
+            window: window.clone(),
+            element: element.clone(),
+        })
+    })
+}
+
+fn validate_text(text: &str) -> Result<(), DesktopError> {
+    if text.len() > MAX_DESKTOP_TEXT_UTF16 * 4 {
+        return Err(DesktopError::InvalidInput(
+            "text exceeds 1024 UTF-16 code units",
+        ));
+    }
+    if text.encode_utf16().count() > MAX_DESKTOP_TEXT_UTF16 {
+        return Err(DesktopError::InvalidInput(
+            "text exceeds 1024 UTF-16 code units",
+        ));
+    }
+    if text
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+    {
+        return Err(DesktopError::InvalidInput(
+            "text contains unsupported control characters",
+        ));
+    }
+    Ok(())
 }
 
 /// Parse a bounded chord such as `Ctrl+Shift+S`. The vocabulary is closed:

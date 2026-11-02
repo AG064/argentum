@@ -1,5 +1,104 @@
 # Optional Windows application control
 
+## CLI direct-window commands
+
+This section covers the owner-invoked CLI surface: `desktop list`, `inspect`,
+`screenshot`, `invoke`, `type` and `keys` in a Windows build with
+`--features desktop-control`. The older owned-application adapter described
+below is a separate optional profile; do not infer its launch/ownership model
+for these direct-window commands.
+
+### Trust boundary
+
+The local owner console is the authority. Window titles, UIA names, automation
+ids, control types, classes, bounds, descriptions and pattern lists are
+untrusted application data. A model, JSONL client, provider response or manifest
+cannot invoke these commands or grant authority. The reviewed adapter is not a
+policy source. The CLI performs no process launch, file download, network
+request, credential read, pointer input or focus change on its own.
+
+### Target identity
+
+A window identity is the observed HWND, process id, title, class and screen
+bounds. An element identity is its child-index tree path, automation id, control
+type, class, name and bounds. The HWND and element are resolved freshly, then
+revalidated immediately before a primitive. A changed title, class, bounds,
+process, path, automation id, control type, name or element bounds fails closed.
+The tree path is bounded to depth 8 and 256 elements per inspection.
+
+### Secure desktop, elevation and session
+
+Targets are rejected when the input desktop is not the default interactive
+desktop, when the target process is elevated and this process is not, when the
+target is in another session, when the window is cloaked, minimized, invisible,
+unresponsive or destroyed, and when the element is disabled, offscreen,
+password-protected or otherwise not actionable. A secure desktop check is
+repeated during long key input.
+
+### Semantic activation versus key input
+
+`invoke` uses only the UIA Invoke or SelectionItem pattern. It does not click a
+coordinate, move the pointer or synthesize a mouse event. `type --mode value`
+uses ValuePattern only and rejects read-only controls. `type --mode keys` and
+`keys` send bounded Unicode or a closed chord vocabulary only to an element that
+is already focused in the already foreground target. A successful call is an API
+return, not proof that the application changed state; reobserve after every
+effect.
+
+### Fresh identity and passwords
+
+References are observations, not durable handles. A new inspection invalidates
+old element identities. Password fields are rejected before action and before
+capture; the element tree may report their existence but never their values.
+`inspect` does not read element values. Window and element names may themselves
+contain sensitive application text; do not export them casually.
+
+### Key denylist
+
+Key input is limited to Ctrl, Shift and Alt combined with letters, digits,
+navigation/editing keys and F1 through F12, plus literal text in `keys` mode.
+The Windows key, Alt+Tab, Alt+F4, Ctrl+Esc, the secure attention sequence,
+arbitrary virtual-key codes and bare modifier chords are rejected. At most eight
+chords are accepted per command.
+
+### Bounds and cancellation
+
+Window lists are at most 64 entries. Inspection is at most 8 levels and 256
+elements. Text is at most 1,024 UTF-16 code units and rejects control characters
+other than newline and tab. Capture is limited to 8 megapixels and a 32 KiB PNG.
+Cancellation is checked before the first primitive and before each key or text
+chunk. Cancellation is not a rollback of an effect already returned by an API.
+
+### Failure taxonomy
+
+Failures are distinct: unavailable build, cancelled, unsupported pattern,
+invalid input, secure desktop, cross-session, elevated target, target
+unavailable/changed/not foreground/minimized/cloaked/not responding, element
+unavailable/changed/disabled/offscreen/password/read-only/not focused, pattern
+unsupported, input rejected, capture too large or failed, and COM failure. The
+CLI reports the error and exits nonzero; it never reports a failure as applied.
+
+### Dry run
+
+`--dry-run` on `invoke`, `type` and `keys` resolves and revalidates the window
+and element and prints the exact planned action, pattern or mode, identities and
+bounds. It does not call a UIA pattern, SendInput or the screenshot API. The
+explicit `--confirm HWND` is still required because dry-run validates the same
+target and confirmation shape; it does not authorise an effect. JSON output sets
+`dry_run: true` and `applied: false`.
+
+### Why pointer injection and focus stealing are omitted
+
+Coordinates are not target identity. A click at a point can hit a moved,
+overlapped or newly created window, and synthetic focus can redirect the owner's
+next keystroke. Neither provides a verifiable element identity. Semantic patterns
+and an already focused foreground target preserve identity, revalidation and the
+owner's focus. Pointer injection, focus stealing, screen-region capture,
+clipboard access, process launch, arbitrary JavaScript and general shell control
+are non-goals.
+
+---
+
 NEXT02's declared native-editor workflow reached assisted post-repair completion
 on 2026-10-16, separate from completed NEXT01 and the core RC. See the exact
 [artifact, native verification and qualification record](NEXT02_ACCEPTANCE.md).
