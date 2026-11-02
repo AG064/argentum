@@ -11,7 +11,7 @@ use argentum_domain::{
     GoalId, GrantScope, GrantSubject, HarnessAvailability, HarnessCapabilityState,
     HarnessExecutionProfileSummary, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
     HarnessSurfaceState, ProviderKind, ProviderModel, ProviderPresetSummary, ProviderProfile,
-    RunId, SessionArchiveFilter, SessionId, SkillSummaryView, SurfaceId, TaskLifecycle,
+    RecordLine, RunId, SessionArchiveFilter, SessionId, SkillSummaryView, SurfaceId, TaskLifecycle,
     ToolDescriptor, ToolResultState, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot,
     TrajectoryState, VerificationEvidence, VerificationRunnerId, VerificationRunnerInspection,
     VerificationState,
@@ -186,6 +186,18 @@ impl UiHandle {
                             "complete"
                         },
                     );
+                    self.window.set_compact_pending(false);
+                    self.window.set_compact_confirm(false);
+                    if result.status == argentum_domain::context_summary::CompactionStatus::Failed {
+                        self.window
+                            .set_compact_error(bounded_summary(&result.reason, 400).into());
+                        self.window.set_compact_notice(SharedString::default());
+                    } else {
+                        self.window.set_compact_error(SharedString::default());
+                        self.window.set_compact_notice(
+                            format!("Compaction {:?}: {}", result.status, result.reason).into(),
+                        );
+                    }
                 }
                 // Projection work is not a task terminal event or observed main-model usage.
             }
@@ -204,6 +216,9 @@ impl UiHandle {
                     .set_project_name(snapshot.project.name.clone().into());
                 self.window.set_workspace_label(
                     display_workspace_label(&snapshot.project.workspace_root).into(),
+                );
+                self.window.set_workspace_path(
+                    snapshot.project.workspace_root.display().to_string().into(),
                 );
                 let active_session_id = snapshot
                     .active_session_id
@@ -331,6 +346,140 @@ impl UiHandle {
             }
             AppEvent::ActiveRunsSnapshot { runs } => {
                 self.apply_active_runs_snapshot(runs);
+            }
+            AppEvent::AccountingSnapshot {
+                session_id,
+                goal_id: _,
+                objective: _,
+                state: _,
+                summary,
+                counters,
+                available,
+                runs,
+                requests,
+                runs_truncated,
+                requests_truncated,
+            } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.window.set_accounting_loading(false);
+                self.window.set_accounting_error(SharedString::default());
+                self.window.set_accounting_summary(summary.clone().into());
+                self.window.set_accounting_counters(counters.clone().into());
+                self.window
+                    .set_accounting_available(available.clone().into());
+                self.window.set_accounting_runs(record_line_model(runs));
+                self.window
+                    .set_accounting_requests(record_line_model(requests));
+                self.window.set_accounting_runs_truncated(*runs_truncated);
+                self.window
+                    .set_accounting_requests_truncated(*requests_truncated);
+            }
+            AppEvent::RunDiagnosticsSnapshot {
+                run_id,
+                state,
+                summary,
+                records,
+                error,
+            } => {
+                self.window.set_run_diagnostics_loading(false);
+                self.window
+                    .set_run_diagnostics_id(run_id.to_string().into());
+                self.window.set_run_diagnostics_state(state.clone().into());
+                self.window
+                    .set_run_diagnostics_summary(summary.clone().into());
+                self.window
+                    .set_run_diagnostics_records(record_line_model(records));
+                self.window.set_run_diagnostics_error(error.clone().into());
+                if error.is_empty() {
+                    self.window.set_run_diagnostics_open(true);
+                }
+            }
+            AppEvent::RunResultSnapshot {
+                run_id,
+                result,
+                error,
+            } => {
+                self.window.set_run_result_loading(false);
+                self.window
+                    .set_run_diagnostics_id(run_id.to_string().into());
+                if let Some(result) = result {
+                    let answer = result.answer.text.clone().unwrap_or_else(|| {
+                        result
+                            .answer
+                            .unavailable_reason
+                            .clone()
+                            .unwrap_or_else(|| "No final answer text is available.".into())
+                    });
+                    let answer = bounded_summary(&answer, 2_000);
+                    self.window
+                        .set_run_result_state(format!("{:?}", result.run_state).into());
+                    self.window.set_run_result_summary(
+                        format!(
+                            "final {} | answer available {} | changes {} | verification {} | usage reported {}",
+                            result.is_final,
+                            result.answer.available,
+                            result.changes.items.len(),
+                            result.verification.items.len(),
+                            result.usage.reported.available,
+                        )
+                        .into(),
+                    );
+                    self.window.set_run_result_answer(answer.into());
+                    self.window.set_run_result_error(
+                        result
+                            .failure
+                            .as_ref()
+                            .and_then(|failure| failure.message.clone())
+                            .unwrap_or_default()
+                            .into(),
+                    );
+                } else {
+                    self.window.set_run_result_state("Unavailable".into());
+                    self.window.set_run_result_summary(SharedString::default());
+                    self.window.set_run_result_answer(SharedString::default());
+                    self.window.set_run_result_error(error.clone().into());
+                }
+            }
+            AppEvent::InstructionsSnapshot {
+                summary,
+                documents,
+                selections,
+                error,
+            } => {
+                self.window.set_instructions_loading(false);
+                self.window.set_instructions_summary(summary.clone().into());
+                self.window
+                    .set_instructions_documents(record_line_model(documents));
+                self.window
+                    .set_instructions_selections(record_line_model(selections));
+                self.window.set_instructions_error(error.clone().into());
+            }
+            AppEvent::ContextSnapshotLoaded {
+                summary,
+                records,
+                error,
+            } => {
+                self.window.set_context_loading(false);
+                self.window.set_context_summary(summary.clone().into());
+                self.window.set_context_records(record_line_model(records));
+                self.window.set_context_error(error.clone().into());
+            }
+            AppEvent::ExtensionStatusSnapshot {
+                entries,
+                receipts,
+                receipts_truncated,
+                error,
+            } => {
+                self.window.set_extension_loading(false);
+                self.window
+                    .set_extension_entries(record_line_model(entries));
+                self.window
+                    .set_extension_receipts(record_line_model(receipts));
+                self.window
+                    .set_extension_receipts_truncated(*receipts_truncated);
+                self.window.set_extension_error(error.clone().into());
             }
             AppEvent::ProjectCreated(project) => {
                 let workspace_label = display_workspace_label(&project.workspace_root);
@@ -566,6 +715,39 @@ impl UiHandle {
                     self.window.set_skill_inspect_loading(false);
                     self.window
                         .set_skill_inspect_error(present_error(message).into());
+                }
+                if self.window.get_accounting_loading() {
+                    self.window.set_accounting_loading(false);
+                    self.window
+                        .set_accounting_error(present_error(message).into());
+                }
+                if self.window.get_run_diagnostics_loading() {
+                    self.window.set_run_diagnostics_loading(false);
+                    self.window
+                        .set_run_diagnostics_error(present_error(message).into());
+                }
+                if self.window.get_run_result_loading() {
+                    self.window.set_run_result_loading(false);
+                    self.window
+                        .set_run_result_error(present_error(message).into());
+                }
+                if self.window.get_instructions_loading() {
+                    self.window.set_instructions_loading(false);
+                    self.window
+                        .set_instructions_error(present_error(message).into());
+                }
+                if self.window.get_context_loading() {
+                    self.window.set_context_loading(false);
+                    self.window.set_context_error(present_error(message).into());
+                }
+                if self.window.get_compact_pending() {
+                    self.window.set_compact_pending(false);
+                    self.window.set_compact_error(present_error(message).into());
+                }
+                if self.window.get_extension_loading() {
+                    self.window.set_extension_loading(false);
+                    self.window
+                        .set_extension_error(present_error(message).into());
                 }
                 let consumes_provider_error = self.window.get_provider_error_consumes_next()
                     && message == self.window.get_provider_error().as_str();
@@ -2831,6 +3013,21 @@ fn approval_grant_model(grants: &[ApprovalGrantRecord]) -> ModelRc<ApprovalGrant
     ModelRc::new(VecModel::from(rows))
 }
 
+fn empty_record_line_model() -> ModelRc<RecordLineView> {
+    ModelRc::new(VecModel::from(Vec::<RecordLineView>::new()))
+}
+
+fn record_line_model(lines: &[RecordLine]) -> ModelRc<RecordLineView> {
+    let rows = lines
+        .iter()
+        .map(|line| RecordLineView {
+            label: line.label.clone().into(),
+            detail: line.detail.clone().into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
     let rows = tools
         .iter()
@@ -4179,6 +4376,105 @@ where
         inspect_skill_dispatch(AppCommand::InspectSkill { name });
     });
 
+    let accounting_dispatch = dispatch.clone();
+    let accounting_window = window.as_weak();
+    window.on_load_accounting(move || {
+        if let Some(window) = accounting_window.upgrade() {
+            window.set_accounting_loading(true);
+            window.set_accounting_error(SharedString::default());
+        }
+        accounting_dispatch(AppCommand::LoadAccounting);
+    });
+
+    let diagnostics_dispatch = dispatch.clone();
+    let diagnostics_window = window.as_weak();
+    window.on_load_run_diagnostics(move |run_id| {
+        let Some(window) = diagnostics_window.upgrade() else {
+            return;
+        };
+        let Ok(run_id) = run_id.trim().parse::<RunId>() else {
+            window.set_run_diagnostics_error("Enter a valid run identifier.".into());
+            return;
+        };
+        window.set_run_diagnostics_loading(true);
+        window.set_run_diagnostics_error(SharedString::default());
+        window.set_run_diagnostics_state("Loading".into());
+        window.set_run_diagnostics_records(empty_record_line_model());
+        diagnostics_dispatch(AppCommand::LoadRunDiagnostics { run_id });
+    });
+
+    let result_dispatch = dispatch.clone();
+    let result_window = window.as_weak();
+    window.on_load_run_result(move |run_id| {
+        let Some(window) = result_window.upgrade() else {
+            return;
+        };
+        let Ok(run_id) = run_id.trim().parse::<RunId>() else {
+            window.set_run_result_error("Enter a valid run identifier.".into());
+            return;
+        };
+        window.set_run_result_loading(true);
+        window.set_run_result_error(SharedString::default());
+        window.set_run_result_state("Loading".into());
+        window.set_run_result_summary(SharedString::default());
+        window.set_run_result_answer(SharedString::default());
+        result_dispatch(AppCommand::LoadRunResult { run_id });
+    });
+
+    let instructions_dispatch = dispatch.clone();
+    let instructions_window = window.as_weak();
+    window.on_load_instructions(move |directory| {
+        let Some(window) = instructions_window.upgrade() else {
+            return;
+        };
+        let directory = directory.trim();
+        let directory = if directory.is_empty() { "." } else { directory };
+        window.set_instructions_loading(true);
+        window.set_instructions_error(SharedString::default());
+        window.set_instructions_summary(SharedString::default());
+        window.set_instructions_documents(empty_record_line_model());
+        window.set_instructions_selections(empty_record_line_model());
+        instructions_dispatch(AppCommand::LoadInstructions {
+            directory: directory.to_owned(),
+        });
+    });
+
+    let context_dispatch = dispatch.clone();
+    let context_window = window.as_weak();
+    window.on_load_context(move || {
+        if let Some(window) = context_window.upgrade() {
+            window.set_context_loading(true);
+            window.set_context_error(SharedString::default());
+        }
+        context_dispatch(AppCommand::LoadContextSnapshot);
+    });
+
+    let compact_dispatch = dispatch.clone();
+    let compact_window = window.as_weak();
+    window.on_compact_context(move |deactivate| {
+        let Some(window) = compact_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_compact_pending() {
+            return;
+        }
+        window.set_compact_pending(true);
+        window.set_compact_confirm(false);
+        window.set_compact_error(SharedString::default());
+        window.set_compact_notice("Compaction requested.".into());
+        compact_dispatch(AppCommand::CompactContext { deactivate });
+    });
+
+    let extensions_dispatch = dispatch.clone();
+    let extensions_window = window.as_weak();
+    window.on_list_extensions(move || {
+        if let Some(window) = extensions_window.upgrade() {
+            window.set_extension_loading(true);
+            window.set_extension_error(SharedString::default());
+        }
+        extensions_dispatch(AppCommand::ListExtensions);
+    });
+
     let probe_dispatch = dispatch.clone();
     let probe_window = window.as_weak();
     window.on_probe_provider(move |provider_id| {
@@ -4718,6 +5014,14 @@ where
             window.set_skill_catalog_error(SharedString::default());
             window.set_skill_inspect_loading(false);
             window.set_skill_inspect_error(SharedString::default());
+            window.set_accounting_loading(true);
+            window.set_accounting_error(SharedString::default());
+            window.set_context_loading(true);
+            window.set_context_error(SharedString::default());
+            window.set_instructions_loading(true);
+            window.set_instructions_error(SharedString::default());
+            window.set_extension_loading(true);
+            window.set_extension_error(SharedString::default());
         }
         settings_dispatch(AppCommand::ListProviderProfiles);
         settings_dispatch(AppCommand::ListProviderPresets);
@@ -4725,6 +5029,12 @@ where
         settings_dispatch(AppCommand::ListApprovalGrants);
         settings_dispatch(AppCommand::ListToolCatalog);
         settings_dispatch(AppCommand::ListSkillCatalog);
+        settings_dispatch(AppCommand::LoadAccounting);
+        settings_dispatch(AppCommand::LoadContextSnapshot);
+        settings_dispatch(AppCommand::LoadInstructions {
+            directory: ".".into(),
+        });
+        settings_dispatch(AppCommand::ListExtensions);
         settings_dispatch(AppCommand::ListVerificationRunners);
         settings_dispatch(AppCommand::InspectVerificationRunners);
         settings_dispatch(AppCommand::LoadBrowserStatus);
@@ -5363,6 +5673,80 @@ mod tests {
         assert_eq!(ui.window().get_skill_body(), "bounded body");
         assert_eq!(ui.window().get_skill_inspect_error(), "missing frontmatter");
         assert!(!ui.window().get_skill_inspect_loading());
+
+        ui.apply_event(&AppEvent::AccountingSnapshot {
+            session_id: goal_session_id,
+            goal_id: Some(
+                "00000000-0000-0000-0000-0000000000c2"
+                    .parse()
+                    .expect("goal id"),
+            ),
+            objective: "Ship the bounded slice".into(),
+            state: "Active".into(),
+            summary: "Session and goal accounting".into(),
+            counters: "observed 10".into(),
+            available: "90 tokens available".into(),
+            runs: vec![RecordLine::new("Run 1", "observed 10")],
+            requests: vec![RecordLine::new("Request 1", "reserved 4")],
+            runs_truncated: false,
+            requests_truncated: true,
+        });
+        assert_eq!(
+            ui.window().get_accounting_summary(),
+            "Session and goal accounting"
+        );
+        assert_eq!(ui.window().get_accounting_runs().row_count(), 1);
+        assert!(ui.window().get_accounting_requests_truncated());
+
+        ui.apply_event(&AppEvent::RunDiagnosticsSnapshot {
+            run_id: "00000000-0000-0000-0000-0000000000c4"
+                .parse()
+                .expect("run id"),
+            state: "Loaded".into(),
+            summary: "Run diagnostics".into(),
+            records: vec![RecordLine::new("", "outcome: complete")],
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_run_diagnostics_state(), "Loaded");
+        assert_eq!(ui.window().get_run_diagnostics_records().row_count(), 1);
+
+        ui.apply_event(&AppEvent::RunResultSnapshot {
+            run_id: "00000000-0000-0000-0000-0000000000c4"
+                .parse()
+                .expect("run id"),
+            result: None,
+            error: "No final result is recorded for this run.".into(),
+        });
+        assert_eq!(ui.window().get_run_result_state(), "Unavailable");
+        assert_eq!(
+            ui.window().get_run_result_error(),
+            "No final result is recorded for this run."
+        );
+
+        ui.apply_event(&AppEvent::InstructionsSnapshot {
+            summary: "1 document".into(),
+            documents: vec![RecordLine::new("AGENTS.md", "workspace")],
+            selections: Vec::new(),
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_instructions_documents().row_count(), 1);
+
+        ui.apply_event(&AppEvent::ContextSnapshotLoaded {
+            summary: "Context loaded".into(),
+            records: vec![RecordLine::new("Session", "active")],
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_context_summary(), "Context loaded");
+        assert_eq!(ui.window().get_context_records().row_count(), 1);
+
+        ui.apply_event(&AppEvent::ExtensionStatusSnapshot {
+            entries: vec![RecordLine::new("extension", "inactive")],
+            receipts: vec![RecordLine::new("#1", "complete")],
+            receipts_truncated: false,
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_extension_entries().row_count(), 1);
+        assert_eq!(ui.window().get_extension_receipts().row_count(), 1);
 
         // A provider probe failure is kept out of the task error surface.
         let detail = "LM Studio could not be reached. Start the service or check the endpoint.";
@@ -6558,6 +6942,18 @@ mod tests {
             "API key must be printable and no larger than 16 KiB."
         );
         assert!(validate_provider_credential(&"x".repeat(16 * 1024)).is_empty());
+    }
+
+    #[test]
+    fn record_line_model_preserves_labels_and_details() {
+        let model = record_line_model(&[
+            RecordLine::new("Run 1", "observed 10"),
+            RecordLine::new("Request 2", "reserved 4"),
+        ]);
+        assert_eq!(model.row_count(), 2);
+        assert_eq!(model.row_data(0).expect("record row").label, "Run 1");
+        assert_eq!(model.row_data(1).expect("record row").detail, "reserved 4");
+        assert_eq!(empty_record_line_model().row_count(), 0);
     }
 
     #[test]

@@ -20,7 +20,7 @@ use argentum_domain::{
     HarnessReadiness, HarnessSnapshot, LayoutProfile, ModelUsage as DomainModelUsage,
     OnboardingAction, OnboardingConnectionState, OnboardingCredentialState, OnboardingError,
     OnboardingSnapshot, PlanStep, ProviderCatalogSource, ProviderKind,
-    ProviderModel as DomainProviderModel, ProviderProfile, ProviderStatus, Run, RunId,
+    ProviderModel as DomainProviderModel, ProviderProfile, ProviderStatus, RecordLine, Run, RunId,
     SandboxScope, SessionId, Sha256Digest, SteeringLifecycle, Task, TaskLifecycle, ToolDescriptor,
     ToolInput, ToolResultState, ToolRisk, ToolTrace, TrajectoryEntry, TrajectoryKind,
     TrajectorySnapshot, TrajectoryState, WorkspaceSnapshot, HOSTED_CREDENTIAL_PROVIDER_IDS,
@@ -1394,6 +1394,510 @@ impl RuntimeService {
         Ok(fork)
     }
 
+    fn publish_accounting_snapshot(&self) -> Result<(), RuntimeError> {
+        let session = self.active_session()?;
+        let goal = self.store.goal(self.project_id, session)?;
+        let inspection = self.inspect_goal_accounting()?;
+        let (goal_id, objective, state, summary, counters, available) = goal.as_ref().map_or_else(
+            || {
+                (
+                    None,
+                    String::new(),
+                    "No goal".into(),
+                    format!("Session {session} | no goal is attached"),
+                    "No goal accounting is available".into(),
+                    "Unavailable until a goal is set".into(),
+                )
+            },
+            |goal| {
+                let counters = goal.accounting.as_ref().map_or_else(
+                    || "No accounting record for this goal".into(),
+                    |accounting| {
+                        format!(
+                            "Observed {} | owner accepted {} | later excess {} | outstanding {} | unresolved {} | overrun {} | requests {} | tools {} | iterations {} | elapsed {} ms",
+                            accounting.counters.observed_tokens,
+                            accounting.counters.owner_accepted_tokens,
+                            accounting.counters.later_usage_excess_tokens,
+                            accounting.counters.outstanding_tokens,
+                            accounting.counters.unresolved_tokens,
+                            accounting.counters.overrun_tokens,
+                            accounting.counters.request_attempts,
+                            accounting.counters.tool_admissions,
+                            accounting.counters.iterations,
+                            accounting.counters.elapsed_milliseconds,
+                        )
+                    },
+                );
+                let available = goal.accounting.as_ref().map_or_else(
+                    || "Unavailable: no accounting record".into(),
+                    |accounting| {
+                        let remaining = accounting.remaining(goal.token_budget);
+                        format!(
+                            "{} estimated tokens available ({})",
+                            remaining
+                                .estimated_tokens
+                                .map_or_else(|| "unknown".into(), |value| value.to_string()),
+                            remaining.reason,
+                        )
+                    },
+                );
+                (
+                    Some(goal.id),
+                    goal.objective.clone(),
+                    goal.lifecycle.label().into(),
+                    format!(
+                        "Session {} | goal {} | iteration {} | next {}",
+                        session, goal.id, goal.iteration, goal.next_action
+                    ),
+                    counters,
+                    available,
+                )
+            },
+        );
+        let runs = inspection
+            .recent_runs
+            .iter()
+            .map(|run| {
+                RecordLine::new(
+                    format!("Run {}", run.run_id),
+                    format!(
+                        "{} | admitted {} | finished {} | observed {} | requests {} | tools {} | outstanding {} | unresolved {} | overrun {} | stop {}",
+                        if run.maintenance { "maintenance" } else { "goal" },
+                        run.admitted_at,
+                        run.finished_at
+                            .map_or_else(|| "open".into(), |value| value.to_string()),
+                        run.counters.observed_tokens,
+                        run.counters.request_attempts,
+                        run.counters.tool_admissions,
+                        run.counters.outstanding_tokens,
+                        run.counters.unresolved_tokens,
+                        run.counters.overrun_tokens,
+                        run.stop_reason.as_deref().unwrap_or("none"),
+                    ),
+                )
+            })
+            .collect();
+        let requests = inspection
+            .requests
+            .iter()
+            .map(|request| {
+                RecordLine::new(
+                    format!("Request {}", request.request_id),
+                    format!(
+                        "run {} | state {:?} | reserved {} | observed {} | overrun {} | profile {} | purpose {} | method {} | disposition {}",
+                        request.run_id,
+                        request.state,
+                        request.reserved_tokens,
+                        request
+                            .observed
+                            .as_ref()
+                            .map_or_else(|| "unavailable".into(), |usage| usage.total_tokens.to_string()),
+                        request.overrun_tokens,
+                        request.profile_id,
+                        request.purpose,
+                        request.method,
+                        if request.disposition.is_some() { "recorded" } else { "none" },
+                    ),
+                )
+            })
+            .collect();
+        self.publish_transient(AppEvent::AccountingSnapshot {
+            session_id: session,
+            goal_id,
+            objective,
+            state,
+            summary,
+            counters,
+            available,
+            runs,
+            requests,
+            runs_truncated: inspection.runs_truncated,
+            requests_truncated: inspection.requests_truncated,
+        });
+        Ok(())
+    }
+
+    fn publish_run_diagnostics(&self, run_id: RunId) {
+        let session = match self.active_session() {
+            Ok(session) => session,
+            Err(error) => {
+                self.publish_transient(AppEvent::RunDiagnosticsSnapshot {
+                    run_id,
+                    state: "Unavailable".into(),
+                    summary: String::new(),
+                    records: Vec::new(),
+                    error: error.to_string(),
+                });
+                return;
+            }
+        };
+        let page = self.review_page(
+            self.project_id,
+            session,
+            crate::review::ReviewRequest::Diagnostics(run_id),
+        );
+        match page {
+            Ok(crate::review::ReviewPage {
+                body: crate::review::ReviewBody::Detail { text, .. },
+                ..
+            }) => {
+                let records = text
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .take(160)
+                    .map(|line| RecordLine::new("", line))
+                    .collect::<Vec<_>>();
+                let summary = text
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                self.publish_transient(AppEvent::RunDiagnosticsSnapshot {
+                    run_id,
+                    state: "Loaded".into(),
+                    summary,
+                    records,
+                    error: String::new(),
+                });
+            }
+            Ok(_) => {
+                self.publish_transient(AppEvent::RunDiagnosticsSnapshot {
+                    run_id,
+                    state: "Unavailable".into(),
+                    summary: String::new(),
+                    records: Vec::new(),
+                    error: "Diagnostics returned an unexpected review body.".into(),
+                });
+            }
+            Err(error) => {
+                self.publish_transient(AppEvent::RunDiagnosticsSnapshot {
+                    run_id,
+                    state: "Unavailable".into(),
+                    summary: String::new(),
+                    records: Vec::new(),
+                    error: format!("Run diagnostics unavailable: {error}"),
+                });
+            }
+        }
+    }
+
+    fn publish_run_result(&self, run_id: RunId) {
+        match self.final_run_result(run_id) {
+            Ok(Some(result)) => {
+                self.publish_transient(AppEvent::RunResultSnapshot {
+                    run_id,
+                    result: Some(Box::new(result)),
+                    error: String::new(),
+                });
+            }
+            Ok(None) => {
+                self.publish_transient(AppEvent::RunResultSnapshot {
+                    run_id,
+                    result: None,
+                    error: "No final result is recorded for this run.".into(),
+                });
+            }
+            Err(error) => {
+                self.publish_transient(AppEvent::RunResultSnapshot {
+                    run_id,
+                    result: None,
+                    error: format!("Final result unavailable: {error}"),
+                });
+            }
+        }
+    }
+
+    fn publish_instructions(&self, directory: &str) {
+        match self.instruction_preview(directory) {
+            Ok(preview) => {
+                let documents = preview
+                    .documents
+                    .iter()
+                    .map(|document| {
+                        RecordLine::new(
+                            format!("#{} {}", document.order, document.source),
+                            format!(
+                                "{} | {} bytes | sha256 {} | override {}",
+                                document.scope,
+                                document.bytes,
+                                document.sha256,
+                                document.override_selected,
+                            ),
+                        )
+                    })
+                    .collect();
+                let selections = preview
+                    .selections
+                    .iter()
+                    .map(|selection| RecordLine::new(selection.scope.clone(), selection.outcome))
+                    .collect();
+                self.publish_transient(AppEvent::InstructionsSnapshot {
+                    summary: format!(
+                        "{} documents | {} selections | {} serialized bytes",
+                        preview.documents.len(),
+                        preview.selections.len(),
+                        preview.serialized_bytes,
+                    ),
+                    documents,
+                    selections,
+                    error: String::new(),
+                });
+            }
+            Err(error) => {
+                self.publish_transient(AppEvent::InstructionsSnapshot {
+                    summary: String::new(),
+                    documents: Vec::new(),
+                    selections: Vec::new(),
+                    error: format!("Instruction preview unavailable: {error}"),
+                });
+            }
+        }
+    }
+
+    fn publish_context_snapshot(&self) {
+        let session = match self.active_session() {
+            Ok(session) => session,
+            Err(error) => {
+                self.publish_transient(AppEvent::ContextSnapshotLoaded {
+                    summary: String::new(),
+                    records: Vec::new(),
+                    error: error.to_string(),
+                });
+                return;
+            }
+        };
+        match self.context_preview(session) {
+            Ok(preview) => {
+                let profile = preview.selected_profile.as_ref().map_or_else(
+                    || "No selected profile".into(),
+                    |profile| format!("{} ({})", profile.label, profile.model),
+                );
+                let accounting = preview.accounting.as_ref().map_or_else(
+                    || {
+                        preview
+                            .accounting_error
+                            .clone()
+                            .unwrap_or_else(|| "Not recorded".into())
+                    },
+                    |accounting| {
+                        format!(
+                            "{} input tokens | usable context {} | fits {}",
+                            accounting.accounted_input, accounting.usable_context, accounting.fits
+                        )
+                    },
+                );
+                let instructions = preview.instructions.as_ref().map_or_else(
+                    || {
+                        preview
+                            .instruction_error
+                            .clone()
+                            .unwrap_or_else(|| "Unavailable".into())
+                    },
+                    |instructions| {
+                        format!(
+                            "{} documents | {} selections | {} bytes",
+                            instructions.documents.len(),
+                            instructions.selections.len(),
+                            instructions.serialized_bytes
+                        )
+                    },
+                );
+                let records = vec![
+                    RecordLine::new("Session", session.to_string()),
+                    RecordLine::new("Profile", profile),
+                    RecordLine::new("Preview basis", preview.preview_basis.to_owned()),
+                    RecordLine::new(
+                        "Token capacity",
+                        preview
+                            .token_capacity
+                            .map_or_else(|| "unknown".into(), |value| value.to_string()),
+                    ),
+                    RecordLine::new(
+                        "Selected context",
+                        format!(
+                            "{} sources | {} groups | {} messages | {} bytes | {} exchanges",
+                            preview.total_sources,
+                            preview.selected_groups,
+                            preview.selected_messages,
+                            preview.selected_bytes,
+                            preview.selected_exchanges,
+                        ),
+                    ),
+                    RecordLine::new(
+                        "Omitted sources",
+                        format!(
+                            "{} ids | {} older | {} inconsistency markers",
+                            preview.omitted_source_ids.len(),
+                            preview.omitted_older_sources,
+                            preview.inconsistent_source_runs,
+                        ),
+                    ),
+                    RecordLine::new(
+                        "Retained observations",
+                        format!(
+                            "{} retained | {} metadata only | {} non-body | {} bytes",
+                            preview.retained_observations,
+                            preview.metadata_only_observations,
+                            preview.non_body_observations,
+                            preview.retained_observation_bytes,
+                        ),
+                    ),
+                    RecordLine::new("Accounting", accounting),
+                    RecordLine::new(
+                        "Compaction",
+                        format!(
+                            "{} | checkpoint {} | {} sources",
+                            preview.compaction,
+                            preview
+                                .summary_checkpoint_id
+                                .map_or_else(|| "none".into(), |value| value.to_string()),
+                            preview.summary_source_count,
+                        ),
+                    ),
+                    RecordLine::new("Instructions", instructions),
+                ];
+                self.publish_transient(AppEvent::ContextSnapshotLoaded {
+                    summary: format!(
+                        "Session {} | {} selected messages | {} selected bytes | compaction {}",
+                        session,
+                        preview.selected_messages,
+                        preview.selected_bytes,
+                        preview.compaction,
+                    ),
+                    records,
+                    error: String::new(),
+                });
+            }
+            Err(error) => {
+                self.publish_transient(AppEvent::ContextSnapshotLoaded {
+                    summary: String::new(),
+                    records: Vec::new(),
+                    error: format!("Context preview unavailable: {error}"),
+                });
+            }
+        }
+    }
+
+    fn publish_extension_status(&self) {
+        #[cfg(not(feature = "extensions"))]
+        {
+            self.publish_transient(AppEvent::ExtensionStatusSnapshot {
+                entries: Vec::new(),
+                receipts: Vec::new(),
+                receipts_truncated: false,
+                error: "Extensions are not compiled in this build.".into(),
+            });
+        }
+        #[cfg(feature = "extensions")]
+        {
+            let readiness = match self.extension_readiness() {
+                Ok(readiness) => readiness,
+                Err(error) => {
+                    self.publish_transient(AppEvent::ExtensionStatusSnapshot {
+                        entries: Vec::new(),
+                        receipts: Vec::new(),
+                        receipts_truncated: false,
+                        error: format!("Extension status unavailable: {error}"),
+                    });
+                    return;
+                }
+            };
+            let entries = readiness
+            .iter()
+            .map(|entry| {
+                let namespace = entry
+                    .get("namespace")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown");
+                let revision = entry
+                    .get("revision")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown");
+                let active = entry
+                    .get("saved_active")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                let ready = entry
+                    .get("definition_ready")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                let issue = entry
+                    .get("issue")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("none");
+                let leases = entry
+                    .get("dependency_leases")
+                    .and_then(serde_json::Value::as_u64)
+                    .map_or_else(|| "unknown".into(), |value| value.to_string());
+                RecordLine::new(
+                    format!("{namespace} | {}", if active { "active" } else { "inactive" }),
+                    format!(
+                        "revision {revision} | definition ready {ready} | issue {issue} | dependency leases {leases}"
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+            let receipts_json = self.extension_receipts(None);
+            let (receipts, receipts_truncated, error) = match receipts_json {
+                Ok(value) => {
+                    let items = value
+                        .get("receipts")
+                        .and_then(serde_json::Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let truncated = value
+                        .get("window_truncated")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    let receipts = items
+                        .iter()
+                        .take(32)
+                        .map(|item| {
+                            let sequence = item
+                                .get("sequence")
+                                .and_then(serde_json::Value::as_u64)
+                                .map_or_else(|| "unknown".into(), |value| value.to_string());
+                            let receipt = item.get("receipt").unwrap_or(item);
+                            let kind = receipt
+                                .get("kind")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("receipt");
+                            let stage = receipt
+                                .get("stage")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("unknown");
+                            let outcome = receipt
+                                .get("outcome")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("unknown");
+                            let call_id = receipt
+                                .get("call_id")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("unknown");
+                            RecordLine::new(
+                                format!("#{sequence} {kind}"),
+                                format!("stage {stage} | outcome {outcome} | call {call_id}"),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    (receipts, truncated, String::new())
+                }
+                Err(error) => (
+                    Vec::new(),
+                    false,
+                    format!("Extension receipts unavailable: {error}"),
+                ),
+            };
+            self.publish_transient(AppEvent::ExtensionStatusSnapshot {
+                entries,
+                receipts,
+                receipts_truncated,
+                error,
+            });
+        }
+    }
+
     fn publish_goal_snapshot(&self, session_id: SessionId) -> Result<(), RuntimeError> {
         let goal = self.store.goal(self.project_id, session_id)?.map(Box::new);
         self.publish_transient(AppEvent::GoalSnapshotLoaded { session_id, goal });
@@ -1838,6 +2342,38 @@ impl RuntimeService {
                         error: inspection.summary.error.clone().unwrap_or_default(),
                     },
                 });
+                Ok(())
+            }
+            AppCommand::LoadAccounting => {
+                self.publish_accounting_snapshot()?;
+                Ok(())
+            }
+            AppCommand::LoadRunDiagnostics { run_id } => {
+                self.publish_run_diagnostics(run_id);
+                Ok(())
+            }
+            AppCommand::LoadRunResult { run_id } => {
+                self.publish_run_result(run_id);
+                Ok(())
+            }
+            AppCommand::LoadInstructions { directory } => {
+                self.publish_instructions(&directory);
+                Ok(())
+            }
+            AppCommand::LoadContextSnapshot => {
+                self.publish_context_snapshot();
+                Ok(())
+            }
+            AppCommand::CompactContext { deactivate } => {
+                let session = self.active_session()?;
+                self.compact_context(session, RunId::new_v4(), deactivate)
+                    .await?;
+                self.publish_goal_snapshot(session)?;
+                self.publish_context_snapshot();
+                Ok(())
+            }
+            AppCommand::ListExtensions => {
+                self.publish_extension_status();
                 Ok(())
             }
             AppCommand::ProbeProvider { provider_id } => self.probe_provider(provider_id).await,
@@ -10907,6 +11443,12 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ToolCatalogSnapshot { .. }
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
+        | AppEvent::AccountingSnapshot { .. }
+        | AppEvent::RunDiagnosticsSnapshot { .. }
+        | AppEvent::RunResultSnapshot { .. }
+        | AppEvent::InstructionsSnapshot { .. }
+        | AppEvent::ContextSnapshotLoaded { .. }
+        | AppEvent::ExtensionStatusSnapshot { .. }
         | AppEvent::ActiveRunsSnapshot { .. }
         | AppEvent::ProjectCreated(_)
         | AppEvent::SessionCreated(_)
@@ -11040,6 +11582,12 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ToolCatalogSnapshot { .. }
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
+        | AppEvent::AccountingSnapshot { .. }
+        | AppEvent::RunDiagnosticsSnapshot { .. }
+        | AppEvent::RunResultSnapshot { .. }
+        | AppEvent::InstructionsSnapshot { .. }
+        | AppEvent::ContextSnapshotLoaded { .. }
+        | AppEvent::ExtensionStatusSnapshot { .. }
         | AppEvent::ActiveRunsSnapshot { .. }
         | AppEvent::ProjectCreated(_)
         | AppEvent::SessionCreated(_)

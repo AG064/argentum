@@ -7,7 +7,7 @@ import { ContextButton, ContextUsagePanel, MenuRow, SectionHeading, SettingsFiel
 import { MobileShell } from "shells/mobile.slint";
 import { ConversationSurface } from "surfaces/conversation.slint";
 import { InspectorSurface } from "surfaces/inspector.slint";
-import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderContextChoiceView, ProviderModelView, ProviderPresetView, ProviderProfileView, SessionItemView, SkillCatalogView, ToolCatalogView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
+import { ActivityItemView, ApprovalGrantView, ApprovalScopeChoiceView, ConversationMessageView, DesktopToolView, FileChangeView, HarnessCapabilityView, HarnessExecutionProfileView, HarnessProfileView, HarnessSurfaceView, HarnessModuleView, InspectorModeView, PlanStepView, ProviderContextChoiceView, ProviderModelView, ProviderPresetView, ProviderProfileView, RecordLineView, SessionItemView, SkillCatalogView, ToolCatalogView, TrajectoryItemView, VerificationEvidenceView, VerificationRunnerView } from "view-models.slint";
 import { AgTheme } from "tokens.slint";
 import { DiagnosticRecordView } from "view-models.slint";
 
@@ -78,6 +78,39 @@ component RailSettingsButton inherits Rectangle {
                 return accept;
             }
             return reject;
+        }
+    }
+}
+
+component OpsLine inherits Rectangle {
+    in property <string> label: "";
+    in property <string> detail: "";
+    in property <bool> mono: false;
+
+    border-radius: AgTheme.radius-xs;
+    border-width: AgTheme.hairline;
+    border-color: AgTheme.border-subtle;
+    background: AgTheme.chrome;
+
+    VerticalLayout {
+        padding: AgTheme.space-2;
+        spacing: AgTheme.space-1;
+
+        if root.label != "": Text {
+            text: root.label;
+            color: AgTheme.text-secondary;
+            font-family: AgTheme.font-ui;
+            font-size: AgTheme.type-compact;
+            font-weight: AgTheme.weight-semibold;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.detail;
+            color: AgTheme.text-muted;
+            font-family: root.mono ? AgTheme.font-code : AgTheme.font-ui;
+            font-size: root.mono ? AgTheme.type-metadata : AgTheme.type-compact;
+            wrap: word-wrap;
         }
     }
 }
@@ -596,6 +629,48 @@ export component MainWindow inherits Window {
     in-out property <bool> diagnostics_open: false;
     in-out property <string> diagnostics_detail: "";
     in-out property <[DiagnosticRecordView]> diagnostic_records: [];
+    in-out property <string> workspace_path: "";
+    in-out property <bool> accounting_loading: false;
+    in-out property <string> accounting_error: "";
+    in-out property <string> accounting_summary: "";
+    in-out property <string> accounting_counters: "";
+    in-out property <string> accounting_available: "";
+    in-out property <[RecordLineView]> accounting_runs: [];
+    in-out property <[RecordLineView]> accounting_requests: [];
+    in-out property <bool> accounting_runs_truncated: false;
+    in-out property <bool> accounting_requests_truncated: false;
+    in-out property <bool> run_diagnostics_loading: false;
+    in-out property <string> run_diagnostics_id: "";
+    in-out property <string> run_diagnostics_state: "Not loaded";
+    in-out property <string> run_diagnostics_summary: "";
+    in-out property <[RecordLineView]> run_diagnostics_records: [];
+    in-out property <string> run_diagnostics_error: "";
+    in-out property <bool> run_diagnostics_open: false;
+    in-out property <bool> run_result_loading: false;
+    in-out property <string> run_result_state: "Not loaded";
+    in-out property <string> run_result_summary: "";
+    in-out property <string> run_result_answer: "";
+    in-out property <string> run_result_error: "";
+    in-out property <bool> instructions_loading: false;
+    in-out property <string> instructions_directory: ".";
+    in-out property <string> instructions_summary: "";
+    in-out property <[RecordLineView]> instructions_documents: [];
+    in-out property <[RecordLineView]> instructions_selections: [];
+    in-out property <string> instructions_error: "";
+    in-out property <bool> context_loading: false;
+    in-out property <string> context_summary: "";
+    in-out property <[RecordLineView]> context_records: [];
+    in-out property <string> context_error: "";
+    in-out property <bool> compact_pending: false;
+    in-out property <bool> compact_confirm: false;
+    in-out property <bool> compact_deactivate: false;
+    in-out property <string> compact_notice: "";
+    in-out property <string> compact_error: "";
+    in-out property <bool> extension_loading: false;
+    in-out property <[RecordLineView]> extension_entries: [];
+    in-out property <[RecordLineView]> extension_receipts: [];
+    in-out property <bool> extension_receipts_truncated: false;
+    in-out property <string> extension_error: "";
     in-out property <bool> local_backend_available: false;
     in-out property <bool> local_backend_enabled: false;
     in-out property <bool> local_backend_ready: false;
@@ -826,6 +901,13 @@ export component MainWindow inherits Window {
     callback refresh_tool_catalog();
     callback refresh_skill_catalog();
     callback inspect_skill(string);
+    callback load_accounting();
+    callback load_run_diagnostics(string);
+    callback load_run_result(string);
+    callback load_instructions(string);
+    callback load_context();
+    callback compact_context(bool);
+    callback list_extensions();
     callback probe_provider(string);
     callback save_provider_credential(string, string);
     callback clear_provider_credential(string);
@@ -3428,6 +3510,539 @@ export component MainWindow inherits Window {
                                     Text { text: record.detail; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
                                 }
                             }
+                        }
+
+                        SectionHeading {
+                            label: "Run operations";
+                            detail: "Read-only inspection";
+                        }
+
+                        Text {
+                            text: "Accounting, diagnostics, instructions and context are bounded views. No transcript body, credential or secret is displayed here.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        SectionHeading {
+                            label: "Accounting";
+                            detail: root.accounting_loading ? "Loading" : "Current session and goal";
+                        }
+
+                        if root.accounting_loading: Text {
+                            text: "Loading accounting";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                        }
+
+                        if root.accounting_error != "": Text {
+                            text: root.accounting_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text { text: root.accounting_summary; color: AgTheme.text-secondary; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                        Text { text: root.accounting_counters; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                        Text { text: root.accounting_available; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+
+                        if root.accounting_runs.length > 0: Text {
+                            text: "Recent runs";
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            font-weight: AgTheme.weight-semibold;
+                        }
+
+                        for run in root.accounting_runs: OpsLine {
+                            label: run.label;
+                            detail: run.detail;
+                        }
+
+                        if root.accounting_runs_truncated: Text {
+                            text: "Run list is truncated by the accounting inspection bound.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        if root.accounting_requests.length > 0: Text {
+                            text: "Requests";
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            font-weight: AgTheme.weight-semibold;
+                        }
+
+                        for request in root.accounting_requests: OpsLine {
+                            label: request.label;
+                            detail: request.detail;
+                        }
+
+                        if root.accounting_requests_truncated: Text {
+                            text: "Request list is truncated by the accounting inspection bound.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        ActionButton {
+                            label: root.accounting_loading ? "Loading accounting" : "Reload accounting";
+                            enabled: !root.accounting_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.load_accounting(); }
+                        }
+
+                        Text {
+                            text: "CLI-only: accounting resolve requires an external owner resolution file. This UI does not read or write that file.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum accounting resolve --workspace <workspace> --database <database> --resolution <absolute-file>";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        SectionHeading {
+                            label: "Run diagnostics and final result";
+                            detail: "Metadata only";
+                        }
+
+                        SettingsField {
+                            label: "Run identifier";
+                            placeholder: "RUN_ID";
+                            value <=> root.run_diagnostics_id;
+                            enabled: !root.run_diagnostics_loading && !root.run_result_loading;
+                        }
+
+                        HorizontalLayout {
+                            spacing: AgTheme.space-2;
+                            ActionButton {
+                                label: root.run_diagnostics_loading ? "Loading diagnostics" : "Load diagnostics";
+                                enabled: !root.run_diagnostics_loading && !root.run_result_loading;
+                                fill: AgTheme.surface-soft;
+                                outline-color: AgTheme.border-default;
+                                reduced-motion: root.reduced_motion;
+                                clicked => { root.load_run_diagnostics(root.run_diagnostics_id); }
+                            }
+                            ActionButton {
+                                label: root.run_result_loading ? "Loading result" : "Load final result";
+                                enabled: !root.run_diagnostics_loading && !root.run_result_loading;
+                                fill: AgTheme.surface-soft;
+                                outline-color: AgTheme.border-default;
+                                reduced-motion: root.reduced_motion;
+                                clicked => { root.load_run_result(root.run_diagnostics_id); }
+                            }
+                        }
+
+                        Text {
+                            text: "Diagnostics state: " + root.run_diagnostics_state;
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_diagnostics_error != "": Text {
+                            text: root.run_diagnostics_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_diagnostics_summary != "": Text {
+                            text: root.run_diagnostics_summary;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_diagnostics_records.length > 0: ActionButton {
+                            label: root.run_diagnostics_open ? "Close diagnostics records" : "Open diagnostics records";
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.run_diagnostics_open = !root.run_diagnostics_open; }
+                        }
+
+                        if root.run_diagnostics_open: Rectangle {
+                            border-radius: AgTheme.radius-xs;
+                            border-width: AgTheme.hairline;
+                            border-color: AgTheme.border-subtle;
+                            background: AgTheme.chrome;
+
+                            VerticalLayout {
+                                padding: AgTheme.space-2;
+                                spacing: AgTheme.space-1;
+
+                                for record in root.run_diagnostics_records: Text {
+                                    text: record.detail;
+                                    color: AgTheme.text-muted;
+                                    font-family: AgTheme.font-code;
+                                    font-size: AgTheme.type-metadata;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "Final result state: " + root.run_result_state;
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_result_error != "": Text {
+                            text: root.run_result_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_result_summary != "": Text {
+                            text: root.run_result_summary;
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.run_result_answer != "": OpsLine {
+                            label: "Final answer preview";
+                            detail: root.run_result_answer;
+                        }
+
+                        SectionHeading {
+                            label: "Instructions preview";
+                            detail: "Metadata only";
+                        }
+
+                        SettingsField {
+                            label: "Directory";
+                            placeholder: ".";
+                            value <=> root.instructions_directory;
+                            enabled: !root.instructions_loading;
+                        }
+
+                        ActionButton {
+                            label: root.instructions_loading ? "Loading instructions" : "Preview instructions";
+                            enabled: !root.instructions_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.load_instructions(root.instructions_directory); }
+                        }
+
+                        if root.instructions_error != "": Text {
+                            text: root.instructions_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text { text: root.instructions_summary; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                        for document in root.instructions_documents: OpsLine {
+                            label: document.label;
+                            detail: document.detail;
+                            mono: true;
+                        }
+                        for selection in root.instructions_selections: OpsLine {
+                            label: selection.label;
+                            detail: selection.detail;
+                        }
+
+                        SectionHeading {
+                            label: "Context preview";
+                            detail: "Metadata only";
+                        }
+
+                        ActionButton {
+                            label: root.context_loading ? "Loading context" : "Load context";
+                            enabled: !root.context_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.load_context(); }
+                        }
+
+                        if root.context_error != "": Text {
+                            text: root.context_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text { text: root.context_summary; color: AgTheme.text-muted; font-size: AgTheme.type-compact; wrap: word-wrap; }
+                        for record in root.context_records: OpsLine {
+                            label: record.label;
+                            detail: record.detail;
+                        }
+
+                        SectionHeading {
+                            label: "Compact context";
+                            detail: root.compact_pending ? "Working" : "Requires confirmation";
+                        }
+
+                        Text {
+                            text: "Compaction uses the selected model and may consume usage; tools remain disabled. Provider-free deactivate consumes no provider usage.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        MenuRow {
+                            icon: "activity";
+                            label: "Provider-free deactivate";
+                            detail: root.compact_deactivate ? "On" : "Off";
+                            active: root.compact_deactivate;
+                            enabled: !root.compact_pending;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.compact_deactivate = !root.compact_deactivate; }
+                        }
+
+                        ActionButton {
+                            label: root.compact_pending
+                                ? "Compacting"
+                                : (root.compact_confirm ? "Confirm compaction" : "Compact context");
+                            enabled: !root.compact_pending && !root.running;
+                            fill: root.compact_confirm ? AgTheme.attention-surface : AgTheme.surface-soft;
+                            outline-color: root.compact_confirm ? AgTheme.red-600 : AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => {
+                                if (root.compact_confirm) {
+                                    root.compact_context(root.compact_deactivate);
+                                } else {
+                                    root.compact_confirm = true;
+                                }
+                            }
+                        }
+
+                        if root.compact_error != "": Text {
+                            text: root.compact_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if root.compact_notice != "": Text {
+                            text: root.compact_notice;
+                            color: AgTheme.silver-300;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Active session " + root.active_session_id + " | goal " + (root.goal_available ? root.goal_state : "none");
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        SectionHeading {
+                            label: "Setup status";
+                            detail: "CLI-owned";
+                        }
+
+                        Text {
+                            text: "Workspace: " + root.workspace_path;
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Provider: " + root.provider_label + " | " + root.provider_detail + " | " + (root.provider_connected ? "connected" : "not tested");
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "The interactive setup wizard is not started from the GUI. Run these commands in the workspace when setup is incomplete:";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "argentum setup --workspace \"" + root.workspace_path + "\"";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum status --workspace \"" + root.workspace_path + "\"";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum workspace status --workspace \"" + root.workspace_path + "\"";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum provider list --workspace \"" + root.workspace_path + "\"";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        SectionHeading {
+                            label: "Extensions and artifacts";
+                            detail: "Read-only status";
+                        }
+
+                        ActionButton {
+                            label: root.extension_loading ? "Loading status" : "Refresh extension status";
+                            enabled: !root.extension_loading;
+                            fill: AgTheme.surface-soft;
+                            outline-color: AgTheme.border-default;
+                            reduced-motion: root.reduced_motion;
+                            clicked => { root.list_extensions(); }
+                        }
+
+                        if root.extension_error != "": Text {
+                            text: root.extension_error;
+                            color: AgTheme.text-danger;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        if !root.extension_loading && root.extension_entries.length == 0 && root.extension_error == "": Text {
+                            text: "No extension definitions are configured for this workspace.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+
+                        for entry in root.extension_entries: OpsLine {
+                            label: entry.label;
+                            detail: entry.detail;
+                        }
+
+                        if root.extension_receipts.length > 0: Text {
+                            text: "Recent receipts";
+                            color: AgTheme.text-secondary;
+                            font-size: AgTheme.type-compact;
+                            font-weight: AgTheme.weight-semibold;
+                        }
+
+                        for receipt in root.extension_receipts: OpsLine {
+                            label: receipt.label;
+                            detail: receipt.detail;
+                            mono: true;
+                        }
+
+                        if root.extension_receipts_truncated: Text {
+                            text: "Receipt window is truncated.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: "Allowed here: read-only status and receipts. Install, configure, activate, disable, remove, key, prepare-media, and artifact verify/serve remain CLI-only.";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions inspect --source DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions configure --file DEFINITION.json --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions activate NAMESPACE --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions key NAMESPACE --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions prepare-media NAMESPACE --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions list --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum extensions receipts --workspace DIR";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "Artifacts have no GUI bridge in this build:";
+                            color: AgTheme.text-muted;
+                            font-size: AgTheme.type-compact;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum artifacts tools";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum artifacts inspect --config ABSOLUTE_FILE";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum artifacts verify --config ABSOLUTE_FILE";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "argentum artifacts serve --config ABSOLUTE_FILE";
+                            color: AgTheme.text-tertiary;
+                            font-family: AgTheme.font-code;
+                            font-size: AgTheme.type-metadata;
+                            wrap: word-wrap;
                         }
 
                         SectionHeading {

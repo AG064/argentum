@@ -1134,6 +1134,21 @@ pub struct SkillInspectionView {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordLine {
+    pub label: String,
+    pub detail: String,
+}
+
+impl RecordLine {
+    pub fn new(label: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            detail: detail.into(),
+        }
+    }
+}
+
 impl From<&Session> for SessionSummary {
     fn from(session: &Session) -> Self {
         Self {
@@ -2272,6 +2287,21 @@ pub enum AppCommand {
     InspectSkill {
         name: String,
     },
+    LoadAccounting,
+    LoadRunDiagnostics {
+        run_id: RunId,
+    },
+    LoadRunResult {
+        run_id: RunId,
+    },
+    LoadInstructions {
+        directory: String,
+    },
+    LoadContextSnapshot,
+    CompactContext {
+        deactivate: bool,
+    },
+    ListExtensions,
     ProbeProvider {
         provider_id: String,
     },
@@ -2498,6 +2528,48 @@ pub enum AppEvent {
     SkillInspectionSnapshot {
         inspection: SkillInspectionView,
     },
+    AccountingSnapshot {
+        session_id: SessionId,
+        goal_id: Option<GoalId>,
+        objective: String,
+        state: String,
+        summary: String,
+        counters: String,
+        available: String,
+        runs: Vec<RecordLine>,
+        requests: Vec<RecordLine>,
+        runs_truncated: bool,
+        requests_truncated: bool,
+    },
+    RunDiagnosticsSnapshot {
+        run_id: RunId,
+        state: String,
+        summary: String,
+        records: Vec<RecordLine>,
+        error: String,
+    },
+    RunResultSnapshot {
+        run_id: RunId,
+        result: Option<Box<final_result::FinalRunResult>>,
+        error: String,
+    },
+    InstructionsSnapshot {
+        summary: String,
+        documents: Vec<RecordLine>,
+        selections: Vec<RecordLine>,
+        error: String,
+    },
+    ContextSnapshotLoaded {
+        summary: String,
+        records: Vec<RecordLine>,
+        error: String,
+    },
+    ExtensionStatusSnapshot {
+        entries: Vec<RecordLine>,
+        receipts: Vec<RecordLine>,
+        receipts_truncated: bool,
+        error: String,
+    },
     ActiveRunsSnapshot {
         runs: Vec<ActiveRunState>,
     },
@@ -2686,6 +2758,12 @@ impl AppEvent {
             Self::ToolCatalogSnapshot { .. } => "tool_catalog_snapshot",
             Self::SkillCatalogSnapshot { .. } => "skill_catalog_snapshot",
             Self::SkillInspectionSnapshot { .. } => "skill_inspection_snapshot",
+            Self::AccountingSnapshot { .. } => "accounting_snapshot",
+            Self::RunDiagnosticsSnapshot { .. } => "run_diagnostics_snapshot",
+            Self::RunResultSnapshot { .. } => "run_result_snapshot",
+            Self::InstructionsSnapshot { .. } => "instructions_snapshot",
+            Self::ContextSnapshotLoaded { .. } => "context_snapshot_loaded",
+            Self::ExtensionStatusSnapshot { .. } => "extension_status_snapshot",
             Self::ActiveRunsSnapshot { .. } => "active_runs_snapshot",
             Self::ProjectCreated(_) => "project_created",
             Self::SessionCreated(_) => "session_created",

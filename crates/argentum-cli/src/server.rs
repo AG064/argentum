@@ -778,6 +778,12 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ListToolCatalog
         | AppCommand::ListSkillCatalog
         | AppCommand::InspectSkill { .. }
+        | AppCommand::LoadAccounting
+        | AppCommand::LoadRunDiagnostics { .. }
+        | AppCommand::LoadRunResult { .. }
+        | AppCommand::LoadInstructions { .. }
+        | AppCommand::LoadContextSnapshot
+        | AppCommand::ListExtensions
         | AppCommand::LoadBrowserStatus
         | AppCommand::LoadDesktopStatus
         | AppCommand::ListApprovalGrants
@@ -808,6 +814,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::SelectProviderModel { .. }
         | AppCommand::SaveProviderBudget { .. }
         | AppCommand::SaveProviderContext { .. }
+        | AppCommand::CompactContext { .. }
         | AppCommand::ConfigureGoalLimits { .. }
         | AppCommand::ConfigureGoalCriteria { .. }
         | AppCommand::AttestGoal { .. }
@@ -3246,6 +3253,16 @@ mod tests {
         assert!(jsonl_command_is_permitted(&AppCommand::InspectSkill {
             name: "release-review".into(),
         }));
+        assert!(jsonl_command_is_permitted(&AppCommand::LoadAccounting));
+        assert!(jsonl_command_is_permitted(&AppCommand::LoadContextSnapshot));
+        assert!(jsonl_command_is_permitted(&AppCommand::ListExtensions));
+        assert!(jsonl_command_is_permitted(
+            &AppCommand::LoadRunDiagnostics {
+                run_id: "00000000-0000-0000-0000-0000000000e2"
+                    .parse()
+                    .expect("run id"),
+            }
+        ));
     }
 
     #[test]
@@ -3279,6 +3296,9 @@ mod tests {
             goal_id,
             iteration_limit: 1,
             elapsed_seconds: 30,
+        }));
+        assert!(!jsonl_command_is_permitted(&AppCommand::CompactContext {
+            deactivate: true
         }));
     }
 
