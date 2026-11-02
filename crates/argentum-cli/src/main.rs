@@ -14,6 +14,7 @@ mod doctor_cli;
 mod extension_browser_cli;
 #[cfg(feature = "extensions")]
 mod extension_cli;
+mod local_readiness;
 mod model_picker;
 
 use argentum_cli::onboarding::{
@@ -720,7 +721,11 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             })
             .await?;
         }
-        Arguments::Doctor { options, json } => {
+        Arguments::Doctor {
+            options,
+            json,
+            probe_local,
+        } => {
             let database = options.database.clone().or_else(|| {
                 AppPaths::discover()
                     .ok()
@@ -729,7 +734,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             let Some(database) = database else {
                 return Err("doctor could not resolve the application database path".into());
             };
-            let report = doctor_cli::build(&options.workspace, Some(database));
+            let report = doctor_cli::build(&options.workspace, Some(database), probe_local);
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -5170,6 +5175,7 @@ enum Arguments {
     Doctor {
         options: CommonOptions,
         json: bool,
+        probe_local: bool,
     },
     Commands {
         json: bool,
@@ -5708,6 +5714,7 @@ where
         CommonOptions::default()
     };
     let mut json = false;
+    let mut probe_local = false;
     let mut final_result = false;
     let mut prompt = None;
     let mut result_run_id = None;
@@ -6065,6 +6072,12 @@ where
                     required_value(&values, index, "--time-budget")?,
                     "--time-budget",
                 )?);
+            }
+            "--probe-local" if command == "doctor" => {
+                if probe_local {
+                    return Err("--probe-local may be supplied once".into());
+                }
+                probe_local = true;
             }
             "--json" => json = true,
             "--no-color" => options.no_color = true,
@@ -6424,7 +6437,11 @@ where
             message: format!("{command} is not available in this Genesis phase"),
         }),
         "doctor" if prompt.is_some() => Err("doctor does not accept a prompt".into()),
-        "doctor" => Ok(Arguments::Doctor { options, json }),
+        "doctor" => Ok(Arguments::Doctor {
+            options,
+            json,
+            probe_local,
+        }),
         "setup" if prompt.is_some() => Err("setup does not accept a prompt".into()),
         "setup" => Ok(Arguments::Setup { options, json }),
         "serve" if json => Err("serve always uses JSONL; remove --json".into()),
@@ -7960,7 +7977,7 @@ Usage:\n  \
 argentum\n  \
 argentum chat [OPTIONS]\n  \
 argentum setup [OPTIONS]\n  \
-argentum doctor [OPTIONS]\n  \
+argentum doctor [--probe-local] [OPTIONS]\n  \
 argentum commands [--json]\n  \
 argentum serve [OPTIONS]\n  \
 argentum run [OPTIONS] [--goal GOAL_ID] --prompt TEXT [--skill NAME]\n  \
@@ -8075,6 +8092,7 @@ Options:\n  \
 --workspace PATH   Workspace boundary, defaults to the current directory\n  \
 --database PATH    SQLite database path, defaults to Argentum application data\n  \
 --isolated         Use explicit workspace/database only; no saved credentials or local runtime\n  \
+--probe-local      Add read-only local browser/desktop readiness checks to doctor\n  \
 --endpoint URL     Legacy HTTP endpoint field; local inference uses llama.cpp\n  \
   --model NAME       Provider model name\n  \
   --skill NAME       Select one project-local skill for this run only\n  \
