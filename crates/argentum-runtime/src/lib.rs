@@ -1805,6 +1805,8 @@ impl RuntimeService {
             }
             AppCommand::SaveProviderBudget { profile_id, limits } => {
                 self.declare_model_budget(&profile_id, limits)?;
+                // Publish the saved values in the same command turn. No polling
+                // or delayed host refresh is involved.
                 self.publish_provider_limits(true)?;
                 self.publish_harness_snapshot()?;
                 Ok(())
@@ -1814,6 +1816,8 @@ impl RuntimeService {
                 context_tokens,
             } => {
                 self.configure_local_context(&profile_id, context_tokens)?;
+                // Publish the saved values in the same command turn. No polling
+                // or delayed host refresh is involved.
                 self.publish_provider_limits(true)?;
                 self.publish_harness_snapshot()?;
                 Ok(())
@@ -11439,6 +11443,7 @@ mod tests {
     #[tokio::test]
     async fn provider_budget_and_context_commands_persist_and_publish() {
         let (_workspace_dir, runtime) = composed_runtime().await;
+        let mut events = runtime.subscribe();
         runtime
             .dispatch(AppCommand::SaveProviderBudget {
                 profile_id: "llama-cpp".into(),
@@ -11453,7 +11458,24 @@ mod tests {
         assert_eq!(budget.usable_context_tokens, 8192);
         assert_eq!(budget.maximum_output_tokens, 4096);
         assert_eq!(budget.requested_output_tokens, 512);
+        let published_budget = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                match events.recv().await {
+                    Ok(AppEvent::ProviderBudgetSnapshot {
+                        budget: Some(budget),
+                        save_completed: true,
+                        ..
+                    }) => break budget,
+                    Ok(_) => continue,
+                    Err(error) => panic!("budget event channel closed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("budget snapshot was published immediately");
+        assert_eq!(published_budget.usable_context_tokens, 8192);
 
+        let mut context_events = runtime.subscribe();
         runtime
             .dispatch(AppCommand::SaveProviderContext {
                 profile_id: "llama-cpp".into(),
@@ -11467,6 +11489,22 @@ mod tests {
                 .expect("context read"),
             16384
         );
+        let published_context = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                match context_events.recv().await {
+                    Ok(AppEvent::ProviderContextSnapshot {
+                        context_tokens,
+                        save_completed: true,
+                        ..
+                    }) => break context_tokens,
+                    Ok(_) => continue,
+                    Err(error) => panic!("context event channel closed: {error}"),
+                }
+            }
+        })
+        .await
+        .expect("context snapshot was published immediately");
+        assert_eq!(published_context, 16384);
         runtime.shutdown().await.expect("runtime shutdown");
     }
 
