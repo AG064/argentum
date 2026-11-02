@@ -284,6 +284,42 @@ fn bound_window_list(list: &mut WindowList) {
     }
 }
 
+/// Read the fresh identity of one explicit top-level window without enumerating
+/// the desktop. The caller still revalidates it before every effect.
+pub fn window_by_hwnd(
+    hwnd: &str,
+    cancel: &CancellationToken,
+) -> Result<WindowSummary, DesktopError> {
+    with_com(|| {
+        if cancel.is_cancelled() {
+            return Err(DesktopError::Cancelled);
+        }
+        if !secure_desktop_ok() {
+            return Err(DesktopError::SecureDesktop);
+        }
+        let value = hwnd
+            .strip_prefix("0x")
+            .or_else(|| hwnd.strip_prefix("0X"))
+            .ok_or(DesktopError::InvalidInput(
+                "hwnd must be 0x-prefixed hexadecimal",
+            ))?;
+        let handle = isize::from_str_radix(value, 16)
+            .map_err(|_| DesktopError::InvalidInput("hwnd is not valid hexadecimal"))?;
+        if handle == 0 {
+            return Err(DesktopError::InvalidInput("hwnd must not be zero"));
+        }
+        let hwnd = HWND(handle as *mut c_void);
+        if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
+            return Err(DesktopError::TargetUnavailable);
+        }
+        let summary = summarize_window(hwnd)?.ok_or(DesktopError::TargetUnavailable)?;
+        if !same_session(summary.identity.process_id) {
+            return Err(DesktopError::CrossSession);
+        }
+        Ok(summary)
+    })
+}
+
 pub fn inspect(
     window: &DesktopWindowIdentity,
     max_depth: u8,
@@ -547,6 +583,15 @@ pub fn capture(
     window: &DesktopWindowIdentity,
     cancel: &CancellationToken,
 ) -> Result<Capture, DesktopError> {
+    capture_png(window, cancel).map(|(capture, _)| capture)
+}
+
+/// Capture the window and also return the exact bounded PNG bytes so a local
+/// caller can write them without decoding the base64 transport field.
+pub fn capture_png(
+    window: &DesktopWindowIdentity,
+    cancel: &CancellationToken,
+) -> Result<(Capture, Vec<u8>), DesktopError> {
     with_com(|| {
         let hwnd = validate_window(window, false)?;
         if cancel.is_cancelled() {
@@ -591,16 +636,19 @@ pub fn capture(
         if png.len() > MAX_DESKTOP_CAPTURE_BYTES {
             return Err(DesktopError::CaptureTooLarge);
         }
-        Ok(Capture {
-            window: window.clone(),
-            width: captured_width,
-            height: captured_height,
-            png_bytes: png.len(),
-            png_sha256: format!("{:x}", Sha256::digest(&png)),
-            png_base64: base64(&png),
-            at_unix_seconds: unix_seconds(),
-            print_window_only: true,
-        })
+        Ok((
+            Capture {
+                window: window.clone(),
+                width: captured_width,
+                height: captured_height,
+                png_bytes: png.len(),
+                png_sha256: format!("{:x}", Sha256::digest(&png)),
+                png_base64: base64(&png),
+                at_unix_seconds: unix_seconds(),
+                print_window_only: true,
+            },
+            png,
+        ))
     })
 }
 
