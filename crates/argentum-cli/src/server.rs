@@ -775,6 +775,9 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ListProviderModels { .. }
         | AppCommand::LoadOnboarding
         | AppCommand::ListHarnessState
+        | AppCommand::ListToolCatalog
+        | AppCommand::ListSkillCatalog
+        | AppCommand::InspectSkill { .. }
         | AppCommand::LoadBrowserStatus
         | AppCommand::LoadDesktopStatus
         | AppCommand::ListApprovalGrants
@@ -805,6 +808,11 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::SelectProviderModel { .. }
         | AppCommand::SaveProviderBudget { .. }
         | AppCommand::SaveProviderContext { .. }
+        | AppCommand::ConfigureGoalLimits { .. }
+        | AppCommand::ConfigureGoalCriteria { .. }
+        | AppCommand::AttestGoal { .. }
+        | AppCommand::SuperviseGoal { .. }
+        | AppCommand::DeliverGoal { .. }
         | AppCommand::SelectHarnessProfile { .. }
         | AppCommand::SelectExecutionProfile { .. }
         | AppCommand::SetHarnessCapabilityEnabled { .. }
@@ -3233,6 +3241,45 @@ mod tests {
         assert!(jsonl_command_is_permitted(&AppCommand::ListProviderPresets));
         assert!(jsonl_command_is_permitted(&AppCommand::LoadBrowserStatus));
         assert!(jsonl_command_is_permitted(&AppCommand::LoadDesktopStatus));
+        assert!(jsonl_command_is_permitted(&AppCommand::ListToolCatalog));
+        assert!(jsonl_command_is_permitted(&AppCommand::ListSkillCatalog));
+        assert!(jsonl_command_is_permitted(&AppCommand::InspectSkill {
+            name: "release-review".into(),
+        }));
+    }
+
+    #[test]
+    fn goal_mutations_are_not_jsonl_permitted() {
+        let goal_id = "00000000-0000-0000-0000-0000000000e1"
+            .parse()
+            .expect("goal id");
+        assert!(!jsonl_command_is_permitted(
+            &AppCommand::ConfigureGoalLimits {
+                goal_id,
+                limits: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            }
+        ));
+        assert!(!jsonl_command_is_permitted(
+            &AppCommand::ConfigureGoalCriteria {
+                goal_id,
+                runners: Vec::new(),
+                owner_attestation_required: false,
+            }
+        ));
+        assert!(!jsonl_command_is_permitted(&AppCommand::AttestGoal {
+            goal_id,
+            summary: "owner reviewed".into(),
+        }));
+        assert!(!jsonl_command_is_permitted(&AppCommand::SuperviseGoal {
+            goal_id,
+            iteration_limit: 1,
+            elapsed_seconds: 30,
+        }));
+        assert!(!jsonl_command_is_permitted(&AppCommand::DeliverGoal {
+            goal_id,
+            iteration_limit: 1,
+            elapsed_seconds: 30,
+        }));
     }
 
     #[test]

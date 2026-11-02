@@ -88,6 +88,7 @@ export component InspectorSurface inherits Rectangle {
     in-out property <string> goal-draft: "";
     in property <string> goal-state: "";
     in property <string> goal-next-action: "";
+    in property <string> goal-accounting-summary: "No accounting recorded";
     in property <int> goal-iteration: 0;
     in property <int> goal-tokens-used: 0;
     in property <int> goal-token-budget: 0;
@@ -99,6 +100,27 @@ export component InspectorSurface inherits Rectangle {
     in property <bool> goal-time-budget-reported: false;
     in property <int> goal-verification-count: 0;
     in property <bool> goal-busy: false;
+    in property <string> goal-id: "";
+    in property <string> goal-limits-summary: "No goal limits reported";
+    in property <string> goal-run-limits-summary: "No per-run limits reported";
+    in property <string> goal-criteria-summary: "No criteria configured";
+    in property <string> goal-attestation-summary: "No owner attestation";
+    in property <string> goal-completion-summary: "Not delivered";
+    in property <string> goal-invocation-state: "No supervision invocation";
+    in property <string> goal-invocation-next-action: "";
+    in-out property <string> goal-limits-draft: "";
+    in property <string> goal-limits-error: "";
+    in-out property <string> goal-criteria-draft: "";
+    in-out property <bool> goal-criteria-attestation: false;
+    in property <string> goal-criteria-error: "";
+    in-out property <string> goal-attestation-draft: "";
+    in property <string> goal-attestation-error: "";
+    in-out property <string> goal-supervise-iterations: "1";
+    in-out property <string> goal-supervise-seconds: "300";
+    in property <bool> goal-supervision-pending: false;
+    in property <bool> goal-action-pending: false;
+    in property <string> goal-supervision-error: "";
+    in property <string> goal-supervision-notice: "";
     in property <string> change-summary: "No files changed";
     in property <[FileChangeView]> change-files: [];
     in property <int> changed-files: 0;
@@ -150,6 +172,11 @@ export component InspectorSurface inherits Rectangle {
     callback pause-goal();
     callback resume-goal();
     callback clear-goal();
+    callback configure-goal-limits(string, string);
+    callback configure-goal-criteria(string, string, bool);
+    callback attest-goal(string, string);
+    callback supervise-goal(string, string, string);
+    callback deliver-goal(string, string, string);
 
     background: transparent;
 
@@ -198,6 +225,7 @@ export component InspectorSurface inherits Rectangle {
             goal-draft <=> root.goal-draft;
             goal-state: root.goal-state;
             goal-next-action: root.goal-next-action;
+            goal-accounting-summary: root.goal-accounting-summary;
             goal-iteration: root.goal-iteration;
             goal-tokens-used: root.goal-tokens-used;
             goal-token-budget: root.goal-token-budget;
@@ -209,6 +237,27 @@ export component InspectorSurface inherits Rectangle {
             goal-time-budget-reported: root.goal-time-budget-reported;
             goal-verification-count: root.goal-verification-count;
             goal-busy: root.goal-busy;
+            goal-id: root.goal-id;
+            goal-limits-summary: root.goal-limits-summary;
+            goal-run-limits-summary: root.goal-run-limits-summary;
+            goal-criteria-summary: root.goal-criteria-summary;
+            goal-attestation-summary: root.goal-attestation-summary;
+            goal-completion-summary: root.goal-completion-summary;
+            goal-invocation-state: root.goal-invocation-state;
+            goal-invocation-next-action: root.goal-invocation-next-action;
+            goal-limits-draft <=> root.goal-limits-draft;
+            goal-limits-error: root.goal-limits-error;
+            goal-criteria-draft <=> root.goal-criteria-draft;
+            goal-criteria-attestation <=> root.goal-criteria-attestation;
+            goal-criteria-error: root.goal-criteria-error;
+            goal-attestation-draft <=> root.goal-attestation-draft;
+            goal-attestation-error: root.goal-attestation-error;
+            goal-supervise-iterations <=> root.goal-supervise-iterations;
+            goal-supervise-seconds <=> root.goal-supervise-seconds;
+            goal-supervision-pending: root.goal-supervision-pending;
+            goal-action-pending: root.goal-action-pending;
+            goal-supervision-error: root.goal-supervision-error;
+            goal-supervision-notice: root.goal-supervision-notice;
             change-summary: root.change-summary;
             change-files: root.change-files;
             changed-files: root.changed-files;
@@ -249,6 +298,11 @@ export component InspectorSurface inherits Rectangle {
             pause-goal => { root.pause-goal(); }
             resume-goal => { root.resume-goal(); }
             clear-goal => { root.clear-goal(); }
+            configure-goal-limits(goal-id, limits) => { root.configure-goal-limits(goal-id, limits); }
+            configure-goal-criteria(goal-id, runners, attestation) => { root.configure-goal-criteria(goal-id, runners, attestation); }
+            attest-goal(goal-id, summary) => { root.attest-goal(goal-id, summary); }
+            supervise-goal(goal-id, iterations, seconds) => { root.supervise-goal(goal-id, iterations, seconds); }
+            deliver-goal(goal-id, iterations, seconds) => { root.deliver-goal(goal-id, iterations, seconds); }
             load-change-diff(file-change-id) => { root.load-change-diff(file-change-id); }
             request-restore(file-change-id) => { root.request-restore(file-change-id); }
             load-change-recovery => { root.load-change-recovery(); }

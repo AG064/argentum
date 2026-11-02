@@ -8,12 +8,13 @@ use argentum_domain::{
     ActiveRunState, AppCommand, AppEvent, ApprovalGrantRecord, ApprovalId, ApprovalScope,
     ChangeOperationId, ChangeRecoveryState, ChangeSetSnapshot, ConversationMessageStatus,
     ConversationRole, DesktopToolSummary, FileChangeId, FileChangeKind, FileChangeRecord, Goal,
-    GrantScope, GrantSubject, HarnessAvailability, HarnessCapabilityState,
+    GoalId, GrantScope, GrantSubject, HarnessAvailability, HarnessCapabilityState,
     HarnessExecutionProfileSummary, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
     HarnessSurfaceState, ProviderKind, ProviderModel, ProviderPresetSummary, ProviderProfile,
-    RunId, SessionArchiveFilter, SessionId, SurfaceId, TaskLifecycle, ToolResultState,
-    TrajectoryEntry, TrajectoryKind, TrajectorySnapshot, TrajectoryState, VerificationEvidence,
-    VerificationRunnerInspection, VerificationState,
+    RunId, SessionArchiveFilter, SessionId, SkillSummaryView, SurfaceId, TaskLifecycle,
+    ToolDescriptor, ToolResultState, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot,
+    TrajectoryState, VerificationEvidence, VerificationRunnerId, VerificationRunnerInspection,
+    VerificationState,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use time::macros::format_description;
@@ -278,6 +279,56 @@ impl UiHandle {
                 }
                 self.apply_goal_snapshot(goal.as_deref());
             }
+            AppEvent::GoalInvocationSnapshot {
+                session_id,
+                invocation,
+            } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.window.set_goal_supervision_pending(false);
+                self.window
+                    .set_goal_supervision_error(SharedString::default());
+                if let Some(invocation) = invocation.as_ref() {
+                    self.window.set_goal_supervision_notice(
+                        format!("Supervision: {:?}", invocation.state).into(),
+                    );
+                }
+                self.apply_goal_invocation(invocation.as_ref());
+            }
+            AppEvent::ToolCatalogSnapshot { tools } => {
+                self.window.set_tool_catalog(tool_catalog_model(tools));
+                self.window.set_tool_catalog_loading(false);
+                self.window.set_tool_catalog_error(SharedString::default());
+            }
+            AppEvent::SkillCatalogSnapshot { skills, complete } => {
+                self.window.set_skill_catalog(skill_catalog_model(skills));
+                self.window.set_skill_catalog_loading(false);
+                self.window.set_skill_catalog_error(
+                    if *complete {
+                        ""
+                    } else {
+                        "Skill catalog is incomplete."
+                    }
+                    .into(),
+                );
+            }
+            AppEvent::SkillInspectionSnapshot { inspection } => {
+                self.window
+                    .set_skill_selected(inspection.name.clone().into());
+                self.window.set_skill_body(inspection.body.clone().into());
+                self.window.set_skill_inspect_loading(false);
+                self.window.set_skill_inspect_error(
+                    if inspection.valid {
+                        String::new()
+                    } else if inspection.error.is_empty() {
+                        "Skill inspection is unavailable.".into()
+                    } else {
+                        inspection.error.clone()
+                    }
+                    .into(),
+                );
+            }
             AppEvent::ActiveRunsSnapshot { runs } => {
                 self.apply_active_runs_snapshot(runs);
             }
@@ -486,6 +537,35 @@ impl UiHandle {
                     self.window.set_provider_context_pending(false);
                     self.window
                         .set_provider_context_error(present_error(message).into());
+                }
+                if self.window.get_goal_action_pending() {
+                    self.window.set_goal_action_pending(false);
+                    self.window
+                        .set_goal_limits_error(present_error(message).into());
+                    self.window
+                        .set_goal_criteria_error(present_error(message).into());
+                    self.window
+                        .set_goal_attestation_error(present_error(message).into());
+                }
+                if self.window.get_goal_supervision_pending() {
+                    self.window.set_goal_supervision_pending(false);
+                    self.window
+                        .set_goal_supervision_error(present_error(message).into());
+                }
+                if self.window.get_tool_catalog_loading() {
+                    self.window.set_tool_catalog_loading(false);
+                    self.window
+                        .set_tool_catalog_error(present_error(message).into());
+                }
+                if self.window.get_skill_catalog_loading() {
+                    self.window.set_skill_catalog_loading(false);
+                    self.window
+                        .set_skill_catalog_error(present_error(message).into());
+                }
+                if self.window.get_skill_inspect_loading() {
+                    self.window.set_skill_inspect_loading(false);
+                    self.window
+                        .set_skill_inspect_error(present_error(message).into());
                 }
                 let consumes_provider_error = self.window.get_provider_error_consumes_next()
                     && message == self.window.get_provider_error().as_str();
@@ -1292,7 +1372,6 @@ impl UiHandle {
             AppEvent::PlatformAuthorityChanged(_)
             | AppEvent::AnswerContractAccepted { .. }
             | AppEvent::AnswerContractEvaluated { .. }
-            | AppEvent::GoalInvocationSnapshot { .. }
             | AppEvent::ExecutionAuditRecorded(_)
             | AppEvent::ExecutionAuditSnapshot { .. }
             | AppEvent::VerificationEvidenceRecorded(_)
@@ -2057,18 +2136,107 @@ impl UiHandle {
             self.window
                 .set_goal_objective(goal.objective.clone().into());
             self.window.set_goal_draft(goal.objective.clone().into());
+            self.window.set_goal_id(goal.id.to_string().into());
             self.window.set_goal_state(goal.lifecycle.label().into());
             self.window
                 .set_goal_next_action(goal.next_action.clone().into());
+            let (limits, run_limits) = goal.accounting.as_ref().map_or_else(
+                || {
+                    (
+                        "Goal: tokens unset | requests unset | iterations unset".to_owned(),
+                        "Run: tokens unset | requests unset | tools unset | seconds unset"
+                            .to_owned(),
+                    )
+                },
+                |account| {
+                    let per_run = &account.per_run;
+                    (
+                        format!(
+                            "Goal: tokens {} | requests {} | iterations {}",
+                            goal.token_budget
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            account
+                                .request_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            account
+                                .iteration_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                        ),
+                        format!(
+                            "Run: tokens {} | requests {} | tools {} | seconds {}",
+                            per_run
+                                .token_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .request_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .tool_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .elapsed_seconds
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                        ),
+                    )
+                },
+            );
+            self.window
+                .set_goal_limits_summary(bounded_summary(&limits, 72).into());
+            self.window
+                .set_goal_run_limits_summary(bounded_summary(&run_limits, 72).into());
+            let criteria = goal.acceptance.as_ref().map_or_else(
+                || "No criteria configured".to_owned(),
+                |acceptance| {
+                    let runners = acceptance
+                        .criteria
+                        .iter()
+                        .map(|criterion| criterion.runner.id())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!(
+                        "Criteria: {}",
+                        if runners.is_empty() { "none" } else { &runners }
+                    )
+                },
+            );
+            self.window
+                .set_goal_criteria_summary(bounded_summary(&criteria, 72).into());
+            self.window.set_goal_attestation_summary(
+                bounded_summary(
+                    &goal
+                        .owner_attestation
+                        .as_ref()
+                        .map(|attestation| format!("Attested: {}", attestation.summary))
+                        .unwrap_or_else(|| "No owner attestation".into()),
+                    60,
+                )
+                .into(),
+            );
+            self.window.set_goal_completion_summary(
+                bounded_summary(
+                    &goal
+                        .completion
+                        .as_ref()
+                        .map(|completion| format!("Delivered: {}", completion.statement))
+                        .unwrap_or_else(|| "Not delivered".into()),
+                    72,
+                )
+                .into(),
+            );
             if let Some(account) = &goal.accounting {
-                let remaining = account.remaining(goal.token_budget);
-                self.window.set_goal_next_action(format!(
-                    "Explicit work only. Goal {}. Requests {}; observed tokens {}; reserved {}; unresolved {}; estimated remaining {:?} ({}). Stop: {}. {}",
-                    goal.id, account.counters.request_attempts, account.counters.observed_tokens,
-                    account.counters.outstanding_tokens, account.counters.unresolved_tokens,
-                    remaining.estimated_tokens, remaining.reason,
-                    account.stop_reason.as_deref().unwrap_or("none"), goal.next_action
-                ).into());
+                self.window.set_goal_accounting_summary(
+                    format!(
+                        "Requests {} | tokens {} | reserved {} | unresolved {}",
+                        account.counters.request_attempts,
+                        account.counters.observed_tokens,
+                        account.counters.outstanding_tokens,
+                        account.counters.unresolved_tokens,
+                    )
+                    .into(),
+                );
+            } else {
+                self.window
+                    .set_goal_accounting_summary("No accounting recorded".into());
             }
             self.window
                 .set_goal_iteration(saturating_i32_u64(u64::from(goal.iteration)));
@@ -2097,8 +2265,25 @@ impl UiHandle {
         } else {
             self.window.set_goal_objective(SharedString::default());
             self.window.set_goal_draft(SharedString::default());
+            self.window.set_goal_id(SharedString::default());
             self.window.set_goal_state(SharedString::default());
             self.window.set_goal_next_action(SharedString::default());
+            self.window
+                .set_goal_accounting_summary("No accounting recorded".into());
+            self.window
+                .set_goal_limits_summary("No goal limits reported".into());
+            self.window
+                .set_goal_run_limits_summary("No per-run limits reported".into());
+            self.window
+                .set_goal_criteria_summary("No criteria configured".into());
+            self.window
+                .set_goal_attestation_summary("No owner attestation".into());
+            self.window
+                .set_goal_completion_summary("Not delivered".into());
+            self.window
+                .set_goal_invocation_state("No supervision invocation".into());
+            self.window
+                .set_goal_invocation_next_action(SharedString::default());
             self.window.set_goal_iteration(0);
             self.window.set_goal_tokens_used(0);
             self.window.set_goal_token_budget(0);
@@ -2109,6 +2294,35 @@ impl UiHandle {
             self.window.set_goal_time_budget_seconds(0);
             self.window.set_goal_time_budget_reported(false);
             self.window.set_goal_verification_count(0);
+        }
+    }
+
+    fn apply_goal_invocation(
+        &self,
+        invocation: Option<&argentum_domain::goal_supervision::GoalInvocationStatus>,
+    ) {
+        if let Some(invocation) = invocation {
+            self.window
+                .set_goal_invocation_state(format!("Supervision: {:?}", invocation.state).into());
+            self.window.set_goal_invocation_next_action(
+                invocation
+                    .stop_reason
+                    .clone()
+                    .unwrap_or_else(|| {
+                        format!(
+                            "attempts {} | criteria {} | elapsed {}s",
+                            invocation.attempts.len(),
+                            invocation.evaluated_criteria.len(),
+                            invocation.elapsed_seconds
+                        )
+                    })
+                    .into(),
+            );
+        } else {
+            self.window
+                .set_goal_invocation_state("No supervision invocation".into());
+            self.window
+                .set_goal_invocation_next_action(SharedString::default());
         }
     }
 
@@ -2606,6 +2820,41 @@ fn approval_grant_model(grants: &[ApprovalGrantRecord]) -> ModelRc<ApprovalGrant
             reason: grant.reason.clone().into(),
             created: format_record_time(grant.created_at).into(),
             binding: grant_subject_binding(&grant.subject).into(),
+            issuer: format!("{:?}", grant.issuer).into(),
+            expiry: grant
+                .expires_at
+                .map(format_record_time)
+                .unwrap_or_else(|| "No expiry".into())
+                .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
+    let rows = tools
+        .iter()
+        .map(|tool| ToolCatalogView {
+            id: tool.id.clone().into(),
+            capability: tool.capability_id.clone().into(),
+            title: tool.title.clone().into(),
+            summary: tool.summary.clone().into(),
+            risk: format!("{:?}", tool.risk).into(),
+            requires_approval: tool.requires_approval,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn skill_catalog_model(skills: &[SkillSummaryView]) -> ModelRc<SkillCatalogView> {
+    let rows = skills
+        .iter()
+        .map(|skill| SkillCatalogView {
+            name: skill.name.clone().into(),
+            description: skill.description.clone().into(),
+            relative_path: skill.relative_path.clone().into(),
+            valid: skill.valid,
+            error: skill.error.clone().into(),
         })
         .collect::<Vec<_>>();
     ModelRc::new(VecModel::from(rows))
@@ -3084,6 +3333,18 @@ fn saturating_i32_u64(value: u64) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
 }
 
+fn bounded_summary(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_owned();
+    }
+    let mut bounded = value
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    bounded.push_str("...");
+    bounded
+}
+
 fn change_summary(files_changed: u32, additions: u32, removals: u32) -> String {
     if files_changed == 0 {
         return "No files changed".into();
@@ -3383,6 +3644,30 @@ fn parse_provider_budget_limits(
         );
     }
     Ok([total, input, maximum_output, requested_output, uncertainty])
+}
+
+fn parse_goal_limits_csv(value: &str) -> Result<[u64; 9], String> {
+    let values = value
+        .split(',')
+        .map(|part| part.trim().parse::<u64>())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Limits require nine unsigned integers.".to_owned())?;
+    values
+        .try_into()
+        .map_err(|_| "Limits require GOAL_TOKENS,REQUESTS,ITERATIONS,TOOLS,SECONDS,RUN_TOKENS,RUN_REQUESTS,RUN_TOOLS,RUN_SECONDS.".to_owned())
+}
+
+fn parse_goal_runner(value: &str) -> Option<VerificationRunnerId> {
+    match value.trim() {
+        "cargo-fmt-check" => Some(VerificationRunnerId::CargoFmtCheck),
+        "cargo-check-locked" => Some(VerificationRunnerId::CargoCheckLocked),
+        "cargo-test-locked" => Some(VerificationRunnerId::CargoTestLocked),
+        "cargo-clippy-strict" => Some(VerificationRunnerId::CargoClippyStrict),
+        other if other.starts_with("project:") && other.len() > "project:".len() => Some(
+            VerificationRunnerId::Project(other["project:".len()..].to_owned()),
+        ),
+        _ => None,
+    }
 }
 
 pub fn connect_commands<F>(window: &MainWindow, dispatch: F)
@@ -3701,6 +3986,197 @@ where
         }
         window.set_goal_action_pending(true);
         clear_goal_dispatch(AppCommand::ClearGoal);
+    });
+
+    let goal_limits_dispatch = dispatch.clone();
+    let goal_limits_window = window.as_weak();
+    window.on_configure_goal_limits(move |goal_id, limits| {
+        let Some(window) = goal_limits_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_limits_error("A current goal is required.".into());
+            return;
+        };
+        let limits = match parse_goal_limits_csv(limits.as_str()) {
+            Ok(limits) => limits,
+            Err(error) => {
+                window.set_goal_limits_error(error.into());
+                return;
+            }
+        };
+        window.set_goal_limits_error(SharedString::default());
+        window.set_goal_action_pending(true);
+        goal_limits_dispatch(AppCommand::ConfigureGoalLimits { goal_id, limits });
+    });
+
+    let goal_criteria_dispatch = dispatch.clone();
+    let goal_criteria_window = window.as_weak();
+    window.on_configure_goal_criteria(move |goal_id, runners, attestation| {
+        let Some(window) = goal_criteria_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_criteria_error("A current goal is required.".into());
+            return;
+        };
+        let runners = runners
+            .split(',')
+            .filter(|value| !value.trim().is_empty())
+            .map(parse_goal_runner)
+            .collect::<Option<Vec<_>>>();
+        let Some(runners) = runners.filter(|runners| !runners.is_empty()) else {
+            window.set_goal_criteria_error(
+                "Use comma-separated cargo-fmt-check, cargo-check-locked, cargo-test-locked, cargo-clippy-strict, or project:ID.".into(),
+            );
+            return;
+        };
+        window.set_goal_criteria_error(SharedString::default());
+        window.set_goal_action_pending(true);
+        goal_criteria_dispatch(AppCommand::ConfigureGoalCriteria {
+            goal_id,
+            runners,
+            owner_attestation_required: attestation,
+        });
+    });
+
+    let goal_attest_dispatch = dispatch.clone();
+    let goal_attest_window = window.as_weak();
+    window.on_attest_goal(move |goal_id, summary| {
+        let Some(window) = goal_attest_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_attestation_error("A current goal is required.".into());
+            return;
+        };
+        let summary = summary.trim().to_owned();
+        if summary.is_empty() {
+            window.set_goal_attestation_error("Enter an owner attestation summary.".into());
+            return;
+        }
+        window.set_goal_attestation_error(SharedString::default());
+        window.set_goal_action_pending(true);
+        goal_attest_dispatch(AppCommand::AttestGoal { goal_id, summary });
+    });
+
+    let goal_supervise_dispatch = dispatch.clone();
+    let goal_supervise_window = window.as_weak();
+    window.on_supervise_goal(move |goal_id, iterations, seconds| {
+        let Some(window) = goal_supervise_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_supervision_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_supervision_error("A current goal is required.".into());
+            return;
+        };
+        let Ok(iterations) = iterations.trim().parse::<u32>() else {
+            window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+            return;
+        };
+        let Ok(seconds) = seconds.trim().parse::<u64>() else {
+            window.set_goal_supervision_error("Elapsed seconds must be a positive integer.".into());
+            return;
+        };
+        if iterations == 0 || seconds == 0 {
+            window.set_goal_supervision_error(
+                "Iterations and elapsed seconds must be positive.".into(),
+            );
+            return;
+        }
+        window.set_goal_supervision_pending(true);
+        window.set_goal_supervision_error(SharedString::default());
+        window.set_goal_supervision_notice("Supervision requested.".into());
+        goal_supervise_dispatch(AppCommand::SuperviseGoal {
+            goal_id,
+            iteration_limit: iterations,
+            elapsed_seconds: seconds,
+        });
+    });
+
+    let goal_deliver_dispatch = dispatch.clone();
+    let goal_deliver_window = window.as_weak();
+    window.on_deliver_goal(move |goal_id, iterations, seconds| {
+        let Some(window) = goal_deliver_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_supervision_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_supervision_error("A current goal is required.".into());
+            return;
+        };
+        let Ok(iterations) = iterations.trim().parse::<u32>() else {
+            window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+            return;
+        };
+        let Ok(seconds) = seconds.trim().parse::<u64>() else {
+            window.set_goal_supervision_error("Elapsed seconds must be a positive integer.".into());
+            return;
+        };
+        if iterations == 0 || seconds == 0 {
+            window.set_goal_supervision_error(
+                "Iterations and elapsed seconds must be positive.".into(),
+            );
+            return;
+        }
+        window.set_goal_supervision_pending(true);
+        window.set_goal_supervision_error(SharedString::default());
+        window.set_goal_supervision_notice("Delivery requested.".into());
+        goal_deliver_dispatch(AppCommand::DeliverGoal {
+            goal_id,
+            iteration_limit: iterations,
+            elapsed_seconds: seconds,
+        });
+    });
+
+    let tool_catalog_dispatch = dispatch.clone();
+    let tool_catalog_window = window.as_weak();
+    window.on_refresh_tool_catalog(move || {
+        if let Some(window) = tool_catalog_window.upgrade() {
+            window.set_tool_catalog_loading(true);
+            window.set_tool_catalog_error(SharedString::default());
+        }
+        tool_catalog_dispatch(AppCommand::ListToolCatalog);
+    });
+
+    let skill_catalog_dispatch = dispatch.clone();
+    let skill_catalog_window = window.as_weak();
+    window.on_refresh_skill_catalog(move || {
+        if let Some(window) = skill_catalog_window.upgrade() {
+            window.set_skill_catalog_loading(true);
+            window.set_skill_catalog_error(SharedString::default());
+        }
+        skill_catalog_dispatch(AppCommand::ListSkillCatalog);
+    });
+
+    let inspect_skill_dispatch = dispatch.clone();
+    let inspect_skill_window = window.as_weak();
+    window.on_inspect_skill(move |name| {
+        let name = name.trim().to_owned();
+        if name.is_empty() {
+            return;
+        }
+        if let Some(window) = inspect_skill_window.upgrade() {
+            window.set_skill_selected(name.clone().into());
+            window.set_skill_inspect_loading(true);
+            window.set_skill_inspect_error(SharedString::default());
+            window.set_skill_body(SharedString::default());
+        }
+        inspect_skill_dispatch(AppCommand::InspectSkill { name });
     });
 
     let probe_dispatch = dispatch.clone();
@@ -4236,11 +4712,19 @@ where
             window.set_provider_context_pending(false);
             window.set_provider_context_error(SharedString::default());
             window.set_provider_context_notice(SharedString::default());
+            window.set_tool_catalog_loading(true);
+            window.set_tool_catalog_error(SharedString::default());
+            window.set_skill_catalog_loading(true);
+            window.set_skill_catalog_error(SharedString::default());
+            window.set_skill_inspect_loading(false);
+            window.set_skill_inspect_error(SharedString::default());
         }
         settings_dispatch(AppCommand::ListProviderProfiles);
         settings_dispatch(AppCommand::ListProviderPresets);
         settings_dispatch(AppCommand::ListHarnessState);
         settings_dispatch(AppCommand::ListApprovalGrants);
+        settings_dispatch(AppCommand::ListToolCatalog);
+        settings_dispatch(AppCommand::ListSkillCatalog);
         settings_dispatch(AppCommand::ListVerificationRunners);
         settings_dispatch(AppCommand::InspectVerificationRunners);
         settings_dispatch(AppCommand::LoadBrowserStatus);
@@ -4820,6 +5304,65 @@ mod tests {
             goal: None,
         });
         assert!(!ui.window().get_goal_available());
+
+        ui.apply_event(&AppEvent::ToolCatalogSnapshot {
+            tools: vec![argentum_domain::ToolDescriptor {
+                id: "read_text".into(),
+                capability_id: "tool.read-text".into(),
+                title: "Read text".into(),
+                summary: "Read a bounded file".into(),
+                capabilities: Vec::new(),
+                risk: argentum_domain::ToolRisk::ReadOnly,
+                requires_approval: false,
+            }],
+        });
+        assert_eq!(ui.window().get_tool_catalog().row_count(), 1);
+        assert!(!ui.window().get_tool_catalog_loading());
+        assert_eq!(ui.window().get_tool_catalog_error(), "");
+
+        ui.apply_event(&AppEvent::SkillCatalogSnapshot {
+            skills: vec![
+                argentum_domain::SkillSummaryView {
+                    name: "release-review".into(),
+                    description: "Review a bounded release slice".into(),
+                    relative_path: ".agents/skills/release-review/SKILL.md".into(),
+                    digest: "abc".into(),
+                    valid: true,
+                    error: String::new(),
+                },
+                argentum_domain::SkillSummaryView {
+                    name: "broken".into(),
+                    description: String::new(),
+                    relative_path: ".agents/skills/broken/SKILL.md".into(),
+                    digest: String::new(),
+                    valid: false,
+                    error: "missing frontmatter".into(),
+                },
+            ],
+            complete: false,
+        });
+        assert_eq!(ui.window().get_skill_catalog().row_count(), 2);
+        assert!(!ui.window().get_skill_catalog_loading());
+        assert_eq!(
+            ui.window().get_skill_catalog_error(),
+            "Skill catalog is incomplete."
+        );
+
+        ui.apply_event(&AppEvent::SkillInspectionSnapshot {
+            inspection: argentum_domain::SkillInspectionView {
+                name: "broken".into(),
+                description: String::new(),
+                relative_path: ".agents/skills/broken/SKILL.md".into(),
+                digest: String::new(),
+                body: "bounded body".into(),
+                valid: false,
+                error: "missing frontmatter".into(),
+            },
+        });
+        assert_eq!(ui.window().get_skill_selected(), "broken");
+        assert_eq!(ui.window().get_skill_body(), "bounded body");
+        assert_eq!(ui.window().get_skill_inspect_error(), "missing frontmatter");
+        assert!(!ui.window().get_skill_inspect_loading());
 
         // A provider probe failure is kept out of the task error surface.
         let detail = "LM Studio could not be reached. Start the service or check the endpoint.";
@@ -6015,5 +6558,77 @@ mod tests {
             "API key must be printable and no larger than 16 KiB."
         );
         assert!(validate_provider_credential(&"x".repeat(16 * 1024)).is_empty());
+    }
+
+    #[test]
+    fn tool_catalog_projection_preserves_capability_risk_and_approval() {
+        let tools = vec![argentum_domain::ToolDescriptor {
+            id: "write_text".into(),
+            capability_id: "tool.write-text".into(),
+            title: "Write text".into(),
+            summary: "Write a prepared bounded UTF-8 file".into(),
+            capabilities: Vec::new(),
+            risk: argentum_domain::ToolRisk::Mutation,
+            requires_approval: true,
+        }];
+        let model = tool_catalog_model(&tools);
+        assert_eq!(model.row_count(), 1);
+        let row = model.row_data(0).expect("tool row");
+        assert_eq!(row.id, "write_text");
+        assert_eq!(row.capability, "tool.write-text");
+        assert_eq!(row.risk, "Mutation");
+        assert!(row.requires_approval);
+    }
+
+    #[test]
+    fn approval_grant_projection_includes_issuer_and_expiry() {
+        let created = now();
+        let grant = ApprovalGrantRecord {
+            id: "00000000-0000-0000-0000-0000000000d1"
+                .parse()
+                .expect("grant id"),
+            audit_id: "00000000-0000-0000-0000-0000000000d2"
+                .parse()
+                .expect("audit id"),
+            capability: argentum_domain::Capability::ExternalProcess,
+            scope: GrantScope::Action,
+            subject: GrantSubject::Action {
+                tool_id: "verify".into(),
+                target: "fixed runners: project:unit-check".into(),
+                binding: argentum_domain::Sha256Digest("00".repeat(32)),
+            },
+            created_at: created,
+            expires_at: Some(created + time::Duration::hours(1)),
+            issuer: argentum_domain::GrantIssuer::User,
+            reason: "Owner approved the exact runner".into(),
+            revoked_at: None,
+        };
+        let model = approval_grant_model(&[grant]);
+        assert_eq!(model.row_count(), 1);
+        let row = model.row_data(0).expect("grant row");
+        assert_eq!(row.capability, "External process");
+        assert_eq!(row.scope, "Action");
+        assert_eq!(row.issuer, "User");
+        assert_ne!(row.expiry, "No expiry");
+        assert_eq!(row.subject, "verify | fixed runners: project:unit-check");
+    }
+
+    #[test]
+    fn goal_limits_and_runner_parsing_is_bounded() {
+        assert_eq!(
+            parse_goal_limits_csv("1,2,3,4,5,6,7,8,9").expect("nine limits"),
+            [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
+        assert!(parse_goal_limits_csv("1,2,3").is_err());
+        assert!(parse_goal_limits_csv("1,2,3,4,5,6,7,8,x").is_err());
+        assert_eq!(
+            parse_goal_runner("cargo-fmt-check"),
+            Some(VerificationRunnerId::CargoFmtCheck)
+        );
+        assert_eq!(
+            parse_goal_runner("project:unit-check"),
+            Some(VerificationRunnerId::Project("unit-check".into()))
+        );
+        assert_eq!(parse_goal_runner("unknown"), None);
     }
 }
