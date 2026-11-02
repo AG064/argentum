@@ -3,6 +3,10 @@
 //! Setup writes owner-reviewed local configuration and an immutable portable
 //! identity package. It never starts Node, a browser, a preview or a provider
 //! request. Exact activation remains a separate interactive owner decision.
+use crate::local_readiness::{
+    browser_cache_report, file_detail, file_hash, file_report, module_detail, module_report,
+    read_bounded, stream_hash, BrowserCacheReport, FileHash, FileReport, ModuleReport,
+};
 use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},
     Sha256Digest,
@@ -495,38 +499,12 @@ struct NodeReport {
 }
 
 #[derive(Debug, Default, Serialize)]
-struct FileReport {
-    path: String,
-    exists: bool,
-    bytes: Option<u64>,
-    sha256: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
 struct FilesReport {
     adapter: FileReport,
     adapter_package: FileReport,
     package_lock: FileReport,
     config: FileReport,
     manifest: FileReport,
-}
-
-#[derive(Debug, Default, Serialize)]
-struct ModuleReport {
-    path: String,
-    exists: bool,
-    version: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
-struct BrowserCacheReport {
-    configured: bool,
-    path: Option<String>,
-    exists: bool,
-    chromium: Vec<String>,
-    error: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -1042,13 +1020,6 @@ struct DependencyHashes {
     chromium: Vec<FileHash>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct FileHash {
-    path: String,
-    bytes: u64,
-    sha256: String,
-}
-
 struct InstallPlan {
     node: PathBuf,
     npm_cli: PathBuf,
@@ -1061,8 +1032,6 @@ struct InstallPlan {
 const INSTALL_TIMEOUT_SECONDS: u64 = 600;
 const INSTALL_OUTPUT_LIMIT: usize = 256 * 1024;
 const INSTALL_OUTPUT_TAIL_CHARS: usize = 8192;
-const CHROMIUM_HASH_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
-
 async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
     let initial = build_check_report(request).await?;
     let plan = install_plan(&initial);
@@ -1469,41 +1438,6 @@ fn dependency_hashes(report: &BrowserCheckReport) -> DependencyHashes {
     }
 }
 
-fn file_hash(path: &Path) -> Option<FileHash> {
-    let report = file_report(path, 64 * 1024);
-    if !report.exists || report.sha256.is_none() {
-        return None;
-    }
-    Some(FileHash {
-        path: report.path,
-        bytes: report.bytes.unwrap_or_default(),
-        sha256: report.sha256.unwrap_or_default(),
-    })
-}
-
-fn stream_hash(path: &Path) -> Option<FileHash> {
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0_u8; 1024 * 1024];
-    let mut total = 0_u64;
-    loop {
-        let read = file.read(&mut buffer).ok()?;
-        if read == 0 {
-            break;
-        }
-        total = total.saturating_add(read as u64);
-        if total > CHROMIUM_HASH_LIMIT_BYTES {
-            return None;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Some(FileHash {
-        path: path.display().to_string(),
-        bytes: total,
-        sha256: format!("{:x}", hasher.finalize()),
-    })
-}
-
 fn print_prepare(report: &PrepareReport, json_output: bool) -> Result<(), Error> {
     if json_output {
         println!("{}", serde_json::to_string_pretty(report)?);
@@ -1690,126 +1624,6 @@ fn check_row(
         detail,
         next_action,
     }
-}
-
-fn file_detail(file: &FileReport) -> String {
-    if let Some(error) = &file.error {
-        return error.clone();
-    }
-    if !file.exists {
-        return "missing".into();
-    }
-    format!(
-        "{} bytes sha256 {}",
-        file.bytes.unwrap_or_default(),
-        file.sha256.as_deref().unwrap_or("unavailable")
-    )
-}
-
-fn module_detail(module: &ModuleReport) -> String {
-    if !module.exists {
-        return module.error.clone().unwrap_or_else(|| "missing".into());
-    }
-    format!("version {}", module.version.as_deref().unwrap_or("unknown"))
-}
-
-fn file_report(path: &Path, limit: u64) -> FileReport {
-    let mut report = FileReport {
-        path: path.display().to_string(),
-        ..FileReport::default()
-    };
-    match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_file() => {
-            report.exists = true;
-            match read_bounded(path, limit, "browser dependency file") {
-                Ok(bytes) => {
-                    report.bytes = Some(bytes.len() as u64);
-                    report.sha256 = Some(format!("{:x}", Sha256::digest(&bytes)));
-                }
-                Err(error) => report.error = Some(error.to_string()),
-            }
-        }
-        Ok(_) => {
-            report.exists = true;
-            report.error = Some("not a regular file".into());
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => report.error = Some(error.to_string()),
-    }
-    report
-}
-
-fn module_report(directory: &Path) -> ModuleReport {
-    let package = directory.join("package.json");
-    let file = file_report(&package, 64 * 1024);
-    let mut report = ModuleReport {
-        path: directory.display().to_string(),
-        exists: file.exists,
-        ..ModuleReport::default()
-    };
-    if !file.exists {
-        report.error = Some("missing".into());
-        return report;
-    }
-    match read_bounded(&package, 64 * 1024, "module package.json") {
-        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-            Ok(value) => {
-                report.version = value
-                    .get("version")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty() && value.len() <= 64)
-                    .map(str::to_owned);
-            }
-            Err(_) => report.error = Some("package.json is invalid".into()),
-        },
-        Err(error) => report.error = Some(error.to_string()),
-    }
-    report
-}
-
-fn browser_cache_report(environment: &BTreeMap<String, String>) -> BrowserCacheReport {
-    let Some(path) = environment
-        .get("ARGENTUM_PLAYWRIGHT_BROWSERS_PATH")
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-    else {
-        return BrowserCacheReport::default();
-    };
-    let cache = PathBuf::from(path);
-    let mut report = BrowserCacheReport {
-        configured: true,
-        path: Some(cache.display().to_string()),
-        exists: cache.is_dir(),
-        ..BrowserCacheReport::default()
-    };
-    report.chromium = chromium_executables(&cache);
-    report
-}
-
-fn chromium_executables(cache: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(cache) else {
-        return Vec::new();
-    };
-    let mut found = Vec::new();
-    for entry in entries.flatten().take(256) {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if !name.starts_with("chromium") {
-            continue;
-        }
-        for relative in [
-            "chrome-win/chrome.exe",
-            "chrome-win64/chrome.exe",
-            "chrome-linux/chrome",
-            "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
-        ] {
-            let candidate = entry.path().join(relative);
-            if candidate.is_file() {
-                found.push(candidate.display().to_string());
-            }
-        }
-    }
-    found.sort();
-    found
 }
 
 fn probe_node_version(program: &Path, timeout: Duration) -> Result<String, String> {
@@ -2129,21 +1943,6 @@ fn private_component(part: &str) -> bool {
 fn verified_digest(path: &Path, limit: u64) -> Result<Sha256Digest, Error> {
     let lease = argentum_execution::VerifiedFileLease::open(path, limit)?;
     Ok(Sha256Digest(lease.sha256().to_owned()))
-}
-
-fn read_bounded(path: &Path, limit: u64, label: &'static str) -> Result<Vec<u8>, Error> {
-    let metadata = std::fs::symlink_metadata(path)?;
-    if !metadata.file_type().is_file() || metadata.len() > limit {
-        return Err(format!("{label} must be a bounded regular file").into());
-    }
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)?
-        .take(limit + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > limit {
-        return Err(format!("{label} exceeds its byte limit").into());
-    }
-    Ok(bytes)
 }
 
 fn default_license(source: &Path) -> Result<PathBuf, Error> {

@@ -108,6 +108,7 @@ must be separate from production history.
 
 ```powershell
 & $exe doctor --workspace $ws --database $db --json
+& $exe doctor --workspace $ws --database $db --json --probe-local
 ```
 
 `doctor` is a read-only aggregate. It opens an existing store read-only, reads
@@ -116,6 +117,12 @@ verification runner registry and compile-time features. It does not start a
 runtime or provider connection, read a credential, run a model, or write to the
 store. A missing database is reported, not created.
 
+The default report is fast. `--probe-local` adds advisory local readiness checks
+for the optional browser and desktop capabilities. The probe only inspects
+bounded local files, module manifests and the configured browser cache. It does
+not execute Node, npm, npx or a browser, does not start a process, and does not
+use the network. Without `--probe-local`, `local_probe` is `null`.
+
 The JSON envelope is stable:
 
 - `schema_version` is `1`.
@@ -123,11 +130,18 @@ The JSON envelope is stable:
 - `ok` and `healthy` are true only when every required check passes.
 - `ready` is true only when required and advisory checks pass.
 - `checks` is ordered and each entry has `id`, `required`, `ok` and `detail`.
+- `local_probe` is the local readiness report, or `null` when not requested.
 
 Required check ids: `database_exists`, `database_openable`, `schema_current`.
 
 Advisory check ids: `workspace_exists`, `workspace_initialized`,
 `provider_ready`, `harness_configured`, `recovery_clear`.
+
+Local probe check ids (all advisory): `node_present`,
+`browser_definition_present`, `browser_adapter_present`, `playwright_present`,
+`chromium_present`, `desktop_feature`, `artifact_feature`. A missing browser
+definition is reported as a failed advisory check with a next action, not as an
+error. The probe never changes `healthy` or the exit code.
 
 Exit code is `0` only when all required checks pass. Any required failure exits
 nonzero. The complete report is printed first, including in `--json` mode, so a

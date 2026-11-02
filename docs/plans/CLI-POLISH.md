@@ -24,6 +24,8 @@ acceptance records, or the design system.
 Implemented:
 
 - `argentum doctor [--json]`.
+- `argentum doctor --probe-local`, a read-only local readiness probe for the
+  optional browser and desktop capabilities.
 - `argentum desktop list [--json]`.
 - `argentum desktop inspect --hwnd <0x...> [--depth N] [--json]`.
 - `argentum desktop screenshot --hwnd <0x...> --output ABSOLUTE_FILE [--json]`.
@@ -49,6 +51,13 @@ current schema. Workspace, provider, harness, and recovery checks are advisory;
 `healthy` follows the required checks and the process exits nonzero when one
 fails. The report never reads credentials, opens a provider connection, or
 writes to the store.
+
+`--probe-local` adds advisory checks for a configured Node executable,
+`browser-control.stdio` definition, browser adapter files, Playwright modules,
+the configured Chromium cache, and the desktop-control and artifacts features.
+The probe inspects bounded local files and manifests only. It never spawns Node,
+npm, npx or a browser and never uses the network, so it cannot change the exit
+contract.
 
 ## Discoverability
 
@@ -88,8 +97,6 @@ advertised as working. Help lists them once as reserved.
 
 ### Doctor
 
-- Add an explicit `--probe-local` mode only if it can stay read-only and free of
-  provider requests.
 - Report recovery detail beyond unfinished change operations once a read-only
   store surface exists.
 

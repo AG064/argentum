@@ -6,10 +6,16 @@
 
 use std::path::{Path, PathBuf};
 
+use argentum_domain::extensions::ExtensionTransport;
+use argentum_domain::ProjectId;
 use argentum_providers::ProviderRegistry;
 use argentum_store::{Store, SCHEMA_VERSION};
 use argentum_tools::ToolRegistry;
 use serde::Serialize;
+
+use crate::local_readiness::{
+    browser_cache_report, file_report, module_report, BrowserCacheReport, FileReport, ModuleReport,
+};
 
 #[derive(Debug, Serialize)]
 pub struct DoctorReport {
@@ -25,6 +31,7 @@ pub struct DoctorReport {
     pub verification: VerificationReport,
     pub features: FeatureReport,
     pub recovery: RecoveryReport,
+    pub local_probe: Option<LocalProbeReport>,
     pub checks: Vec<CheckReport>,
 }
 
@@ -104,6 +111,24 @@ pub struct RecoveryReport {
 }
 
 #[derive(Debug, Serialize)]
+pub struct LocalProbeReport {
+    pub node_path: Option<String>,
+    pub node_present: bool,
+    pub browser_definition_present: bool,
+    pub adapter: FileReport,
+    pub adapter_package: FileReport,
+    pub package_lock: FileReport,
+    pub configuration: FileReport,
+    pub playwright: ModuleReport,
+    pub playwright_core: ModuleReport,
+    pub browser_cache: BrowserCacheReport,
+    pub chromium_present: bool,
+    pub desktop_feature: bool,
+    pub artifact_feature: bool,
+    pub next_actions: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CheckReport {
     pub id: &'static str,
     pub required: bool,
@@ -111,7 +136,7 @@ pub struct CheckReport {
     pub detail: String,
 }
 
-pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
+pub fn build(workspace: &Path, database: Option<PathBuf>, probe_local: bool) -> DoctorReport {
     let workspace_path = workspace.to_path_buf();
     let workspace_exists = workspace_path.exists();
     let mut checks = Vec::new();
@@ -188,6 +213,7 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
         enabled_by_policy: false,
     };
     verification.count = verification.fixed_runners.len();
+    let mut local_probe = None;
 
     if database_exists {
         match Store::open_existing_read_only(&database_path) {
@@ -198,7 +224,7 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
                         database.schema_version = Some(version);
                         if version == SCHEMA_VERSION {
                             database.status = "ok";
-                            populate_initialized(
+                            let project_id = populate_initialized(
                                 &store,
                                 &workspace_path,
                                 &mut workspace_report,
@@ -207,6 +233,10 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
                                 &mut verification,
                                 &mut recovery,
                             );
+                            if probe_local {
+                                local_probe =
+                                    Some(build_local_probe(&store, project_id, &workspace_path));
+                            }
                         } else {
                             database.status = "schema_mismatch";
                         }
@@ -281,6 +311,13 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
         ),
     });
 
+    if probe_local && local_probe.is_none() {
+        local_probe = Some(empty_local_probe(&workspace_path));
+    }
+    if let Some(local) = &local_probe {
+        checks.extend(local_check_reports(local));
+    }
+
     let healthy = checks
         .iter()
         .filter(|check| check.required)
@@ -303,9 +340,10 @@ pub fn build(workspace: &Path, database: Option<PathBuf>) -> DoctorReport {
             browser_adapter: cfg!(feature = "extensions"),
             desktop_control: cfg!(all(windows, feature = "desktop-control")),
             local_artifacts: cfg!(feature = "artifacts"),
-            note: "Feature flags describe this binary. The Node browser adapter and local runtime bundles are not probed.",
+            note: "Feature flags describe this binary. Optional local browser and desktop readiness is only inspected with --probe-local.",
         },
         recovery,
+        local_probe,
         checks,
     }
 }
@@ -318,13 +356,13 @@ fn populate_initialized(
     harness: &mut HarnessReport,
     verification: &mut VerificationReport,
     recovery: &mut RecoveryReport,
-) {
+) -> Option<ProjectId> {
     let resolution = match store.resolve_existing_workspace(workspace) {
         Ok(resolution) => resolution,
         Err(error) => {
             workspace_report.status = "not_initialized";
             workspace_report.error = Some(error.to_string());
-            return;
+            return None;
         }
     };
     workspace_report.status = "initialized";
@@ -405,6 +443,7 @@ fn populate_initialized(
         .map(|operations| operations.len())
         .unwrap_or_default();
     recovery.attention_required = recovery.unfinished_change_operations > 0;
+    Some(project_id)
 }
 
 pub fn format_text(report: &DoctorReport) -> String {
@@ -495,6 +534,21 @@ pub fn format_text(report: &DoctorReport) -> String {
         "Recovery: {} unfinished change operation(s)\n",
         report.recovery.unfinished_change_operations
     ));
+    if let Some(local) = &report.local_probe {
+        output.push_str(&format!(
+            "Local probe: node={} definition={} adapter={} playwright={} chromium={} desktop-feature={} artifact-feature={}\n",
+            local.node_present,
+            local.browser_definition_present,
+            local.adapter.exists && local.adapter_package.exists && local.package_lock.exists,
+            local.playwright.exists && local.playwright_core.exists,
+            local.chromium_present,
+            local.desktop_feature,
+            local.artifact_feature
+        ));
+        for action in &local.next_actions {
+            output.push_str(&format!("  next: {action}\n"));
+        }
+    }
     output.push_str(&format!(
         "Healthy: {}\nReady: {}\n",
         if report.healthy { "yes" } else { "no" },
@@ -509,6 +563,260 @@ pub fn format_text(report: &DoctorReport) -> String {
         ));
     }
     output
+}
+
+fn build_local_probe(
+    store: &Store,
+    project_id: Option<ProjectId>,
+    workspace: &Path,
+) -> LocalProbeReport {
+    let desktop_feature = cfg!(all(windows, feature = "desktop-control"));
+    let artifact_feature = cfg!(feature = "artifacts");
+    let mut next_actions = Vec::new();
+    if !desktop_feature {
+        next_actions
+            .push("Rebuild with --features desktop-control to use desktop commands.".into());
+    }
+    if !artifact_feature {
+        next_actions
+            .push("Rebuild with --features artifacts to use local artifact commands.".into());
+    }
+    let record = project_id
+        .and_then(|project_id| store.extension_records(project_id).ok())
+        .and_then(|records| {
+            records
+                .into_iter()
+                .find(|record| record.definition.namespace == "browser-control.stdio")
+        });
+    let Some(record) = record else {
+        next_actions.insert(
+            0,
+            format!(
+                "Run: argentum extensions browser setup --source extensions/browser --node <absolute-node> --origin <loopback-origin> --workspace {} --database <database>",
+                workspace.display()
+            ),
+        );
+        return LocalProbeReport {
+            node_path: None,
+            node_present: false,
+            browser_definition_present: false,
+            adapter: FileReport::default(),
+            adapter_package: FileReport::default(),
+            package_lock: FileReport::default(),
+            configuration: FileReport::default(),
+            playwright: ModuleReport::default(),
+            playwright_core: ModuleReport::default(),
+            browser_cache: BrowserCacheReport::default(),
+            chromium_present: false,
+            desktop_feature,
+            artifact_feature,
+            next_actions,
+        };
+    };
+    let ExtensionTransport::Stdio {
+        program,
+        args,
+        environment,
+        ..
+    } = &record.definition.transport
+    else {
+        next_actions.insert(
+            0,
+            "Re-run extensions browser setup to install a stdio browser definition.".into(),
+        );
+        return LocalProbeReport {
+            node_path: None,
+            node_present: false,
+            browser_definition_present: true,
+            adapter: FileReport::default(),
+            adapter_package: FileReport::default(),
+            package_lock: FileReport::default(),
+            configuration: FileReport::default(),
+            playwright: ModuleReport::default(),
+            playwright_core: ModuleReport::default(),
+            browser_cache: BrowserCacheReport::default(),
+            chromium_present: false,
+            desktop_feature,
+            artifact_feature,
+            next_actions,
+        };
+    };
+
+    let node_path = Some(program.clone());
+    let node_present = Path::new(program).is_file();
+    let adapter_path = args.first().map(PathBuf::from);
+    let adapter = adapter_path
+        .as_deref()
+        .map(|path| file_report(path, 4 * 1024 * 1024))
+        .unwrap_or_default();
+    let adapter_dir = adapter_path.as_deref().and_then(Path::parent);
+    let adapter_package = adapter_dir
+        .map(|directory| file_report(&directory.join("package.json"), 4 * 1024 * 1024))
+        .unwrap_or_default();
+    let package_lock = adapter_dir
+        .map(|directory| file_report(&directory.join("package-lock.json"), 4 * 1024 * 1024))
+        .unwrap_or_default();
+    let configuration = args
+        .get(1)
+        .map(PathBuf::from)
+        .map(|path| file_report(&path, 128 * 1024))
+        .unwrap_or_default();
+    let playwright = adapter_dir
+        .map(|directory| module_report(&directory.join("node_modules").join("playwright")))
+        .unwrap_or_default();
+    let playwright_core = adapter_dir
+        .map(|directory| module_report(&directory.join("node_modules").join("playwright-core")))
+        .unwrap_or_default();
+    let browser_cache = browser_cache_report(environment);
+    let chromium_present = browser_cache.configured && !browser_cache.chromium.is_empty();
+
+    if !node_present {
+        next_actions
+            .push("Install Node or re-run extensions browser setup --node <absolute-node>.".into());
+    }
+    if !(adapter.exists && adapter_package.exists && package_lock.exists) {
+        next_actions.push(
+            "Run: argentum extensions browser check --workspace <workspace> --database <database> for exact adapter repair actions."
+                .into(),
+        );
+    }
+    if !(playwright.exists && playwright_core.exists) {
+        next_actions.push(
+            "Run: argentum extensions browser prepare --install --confirm-network --workspace <workspace> --database <database>, or cd to the adapter and run npm ci."
+                .into(),
+        );
+    }
+    if !chromium_present {
+        next_actions.push(
+            "Run: argentum extensions browser prepare --install --confirm-network --workspace <workspace> --database <database>, or npx playwright install chromium with the configured cache."
+                .into(),
+        );
+    }
+
+    LocalProbeReport {
+        node_path,
+        node_present,
+        browser_definition_present: true,
+        adapter,
+        adapter_package,
+        package_lock,
+        configuration,
+        playwright,
+        playwright_core,
+        browser_cache,
+        chromium_present,
+        desktop_feature,
+        artifact_feature,
+        next_actions,
+    }
+}
+
+fn empty_local_probe(workspace: &Path) -> LocalProbeReport {
+    LocalProbeReport {
+        node_path: None,
+        node_present: false,
+        browser_definition_present: false,
+        adapter: FileReport::default(),
+        adapter_package: FileReport::default(),
+        package_lock: FileReport::default(),
+        configuration: FileReport::default(),
+        playwright: ModuleReport::default(),
+        playwright_core: ModuleReport::default(),
+        browser_cache: BrowserCacheReport::default(),
+        chromium_present: false,
+        desktop_feature: cfg!(all(windows, feature = "desktop-control")),
+        artifact_feature: cfg!(feature = "artifacts"),
+        next_actions: vec![
+            format!(
+                "Run: argentum extensions browser setup --source extensions/browser --node <absolute-node> --origin <loopback-origin> --workspace {} --database <database>",
+                workspace.display()
+            ),
+            "Use extensions browser check for exact dependency repair actions.".into(),
+        ],
+    }
+}
+
+fn local_check_reports(local: &LocalProbeReport) -> Vec<CheckReport> {
+    vec![
+        CheckReport {
+            id: "node_present",
+            required: false,
+            ok: local.node_present,
+            detail: if local.node_present {
+                "configured Node executable exists".into()
+            } else {
+                "configured Node executable is missing".into()
+            },
+        },
+        CheckReport {
+            id: "browser_definition_present",
+            required: false,
+            ok: local.browser_definition_present,
+            detail: if local.browser_definition_present {
+                "browser-control.stdio is installed".into()
+            } else {
+                "browser-control.stdio is not installed; run extensions browser setup".into()
+            },
+        },
+        CheckReport {
+            id: "browser_adapter_present",
+            required: false,
+            ok: local.adapter.exists && local.adapter_package.exists && local.package_lock.exists,
+            detail: if local.adapter.exists
+                && local.adapter_package.exists
+                && local.package_lock.exists
+            {
+                "adapter, package.json and package-lock.json are present".into()
+            } else {
+                "browser adapter files are incomplete; run extensions browser check".into()
+            },
+        },
+        CheckReport {
+            id: "playwright_present",
+            required: false,
+            ok: local.playwright.exists && local.playwright_core.exists,
+            detail: if local.playwright.exists && local.playwright_core.exists {
+                "playwright and playwright-core are present".into()
+            } else {
+                "Playwright modules are missing; run extensions browser prepare".into()
+            },
+        },
+        CheckReport {
+            id: "chromium_present",
+            required: false,
+            ok: local.chromium_present,
+            detail: if local.chromium_present {
+                format!(
+                    "configured browser cache has {} Chromium executable(s)",
+                    local.browser_cache.chromium.len()
+                )
+            } else if local.browser_cache.configured {
+                "no Chromium executable in the configured browser cache".into()
+            } else {
+                "browser cache is not configured".into()
+            },
+        },
+        CheckReport {
+            id: "desktop_feature",
+            required: false,
+            ok: local.desktop_feature,
+            detail: if local.desktop_feature {
+                "desktop-control is compiled in this build".into()
+            } else {
+                "desktop-control is not compiled in this build".into()
+            },
+        },
+        CheckReport {
+            id: "artifact_feature",
+            required: false,
+            ok: local.artifact_feature,
+            detail: if local.artifact_feature {
+                "artifacts is compiled in this build".into()
+            } else {
+                "artifacts is not compiled in this build".into()
+            },
+        },
+    ]
 }
 
 fn enum_json_name<T: Serialize>(value: &T) -> Option<String> {
@@ -535,7 +843,7 @@ mod tests {
     fn missing_database_is_unhealthy_but_reports_the_path() {
         let directory = tempfile::tempdir().expect("directory");
         let database = directory.path().join("missing.db");
-        let report = build(directory.path(), Some(database.clone()));
+        let report = build(directory.path(), Some(database.clone()), false);
         assert!(!report.healthy);
         assert_eq!(report.database.path, database.display().to_string());
         assert!(!report.database.exists);
@@ -555,7 +863,7 @@ mod tests {
             .resolve_workspace(directory.path())
             .expect("workspace");
         drop(store);
-        let report = build(directory.path(), Some(database));
+        let report = build(directory.path(), Some(database), false);
         assert_eq!(report.command, "doctor");
         assert_eq!(report.ok, report.healthy);
         assert_eq!(
@@ -597,12 +905,58 @@ mod tests {
         drop(workspace);
         drop(store);
 
-        let report = build(directory.path(), Some(database));
+        let report = build(directory.path(), Some(database), false);
         assert!(report.healthy, "{:?}", report.checks);
         assert_eq!(report.database.schema_version, Some(SCHEMA_VERSION));
         assert_eq!(report.workspace.status, "initialized");
         assert_eq!(report.workspace.sessions, Some(1));
         assert_eq!(report.verification.count, 4);
         assert_eq!(report.verification.fixed_runners.len(), 4);
+    }
+
+    #[test]
+    fn probe_local_adds_advisory_checks_and_keeps_required_contract() {
+        let directory = tempfile::tempdir().expect("directory");
+        let database = directory.path().join("argentum.db");
+        let store = Store::open(&database).expect("store");
+        store
+            .resolve_workspace(directory.path())
+            .expect("workspace");
+        drop(store);
+
+        let baseline = build(directory.path(), Some(database.clone()), false);
+        assert!(baseline.local_probe.is_none());
+        let probed = build(directory.path(), Some(database), true);
+
+        let required_ids = |report: &DoctorReport| {
+            report
+                .checks
+                .iter()
+                .filter(|check| check.required)
+                .map(|check| check.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(required_ids(&baseline), required_ids(&probed));
+        assert_eq!(baseline.healthy, probed.healthy);
+
+        let local = probed.local_probe.as_ref().expect("local probe");
+        assert!(!local.browser_definition_present);
+        assert!(!local.next_actions.is_empty());
+        for id in [
+            "node_present",
+            "browser_definition_present",
+            "browser_adapter_present",
+            "playwright_present",
+            "chromium_present",
+            "desktop_feature",
+            "artifact_feature",
+        ] {
+            let check = probed
+                .checks
+                .iter()
+                .find(|check| check.id == id)
+                .unwrap_or_else(|| panic!("missing check {id}"));
+            assert!(!check.required, "{id} must be advisory");
+        }
     }
 }
