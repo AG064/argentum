@@ -40,10 +40,10 @@ Use absolute owner-selected paths and the same workspace/database throughout:
 
 ### Machine-readable inventory and local status
 
-An extensions-enabled CLI with CLIJSON01 supports `--json` for `list`, `status`
-and `browser check`. This is a new opt-in output contract; earlier mixed-format
-output did not support that flag. Unflagged commands keep their existing human
-output.
+An extensions-enabled CLI with CLIJSON01 supports `--json` for `list`, `status`,
+`browser check` and `browser prepare`. This is a new opt-in output contract;
+earlier mixed-format output did not support that flag. Unflagged commands keep
+their existing human output.
 Duplicate flags, a namespace argument in JSON query mode, and `--json` on other
 extension actions are rejected before host startup. This does not enable JSON
 activation, key entry, configuration or other owner operations.
@@ -168,18 +168,51 @@ readiness row and saved activation are advisory. The command exits nonzero only
 when a required check fails. The JSON document lists every check with
 `required`, `ok`, `detail` and a concrete next action.
 
-The command never installs dependencies or browsers. Run the reported commands
-yourself, for example:
+`browser check` never installs dependencies or browsers. `browser prepare`
+without `--install` prints the exact commands; with explicit consent it runs
+them. Set `ARGENTUM_PLAYWRIGHT_BROWSERS_PATH` during setup if the browser cache
+is in a non-default location. The check reads only the configured path; it does
+not inspect a Playwright default cache or download a browser.
+
+### Dependency preparation
 
 ```powershell
-cd extensions/browser
-npm install
-npx playwright install chromium
+# Read-only plan, no Node/npm/npx process
+& $exe extensions browser prepare --workspace $ws --database $db --json
+
+# Explicit network consent
+& $exe extensions browser prepare --install --confirm-network --workspace $ws --database $db --json
 ```
 
-Set `ARGENTUM_PLAYWRIGHT_BROWSERS_PATH` during setup if the browser cache is in a
-non-default location. The check reads only the configured path; it does not
-inspect a Playwright default cache or download a browser.
+Without `--install`, `prepare` runs the same readiness checks as `browser check`
+and prints the exact owner commands. It starts no Node, npm or npx process.
+
+`--install` requires `--confirm-network` exactly. The parser rejects `--install`
+alone before any host or process starts, and rejects `--confirm-network` without
+`--install`. With both flags, `prepare` runs in the browser adapter source
+directory:
+
+```powershell
+npm ci --ignore-scripts --no-audit --no-fund
+npx --no-install playwright install chromium
+```
+
+The command sets `PLAYWRIGHT_BROWSERS_PATH` to the configured browser cache for
+both steps. It executes the pinned Node executable with the npm/npx CLI scripts
+through the managed argv runner, not a shell. Time, output and environment are
+bounded. It fails on a missing Node executable, missing npm/npx CLI scripts,
+missing `package.json` or `package-lock.json`, a missing configured browser
+cache, a nonzero or timed-out command, or a missing resulting
+`node_modules/playwright` or Chromium executable.
+
+Network access is limited to those npm and Playwright download commands. No
+credential, provider request, extension activation, browser launch, page or
+preview is started. `npm ci --ignore-scripts` does not run package lifecycle
+scripts. After a successful install, `prepare` re-runs readiness and records
+SHA-256 hashes for `package-lock.json`, the Playwright and playwright-core
+package manifests, and the Chromium executable. A saved activation remains
+required for normal model execution; preparation does not activate the
+extension.
 
 Adapter configuration accepts only `allowedOrigins`, `artifactDirectory`,
 optional `persistentProfile`, `previewWorkspace`, `previewPort` and

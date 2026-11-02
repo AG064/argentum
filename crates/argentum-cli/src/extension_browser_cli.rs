@@ -7,6 +7,7 @@ use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},
     Sha256Digest,
 };
+use argentum_execution::{ProcessRunner, ProcessSpec};
 use argentum_extensions::configuration::{admit, AdmittedDefinition};
 use argentum_extensions::connection::McpSession;
 use argentum_extensions::package::{self, MCP_SCHEMA, PLUGIN_SCHEMA};
@@ -61,6 +62,8 @@ pub(crate) struct BrowserRequest<'a> {
     pub local: &'a argentum_cli::LocalCommandHandle,
     pub json: bool,
     pub handshake: bool,
+    pub install: bool,
+    pub confirm_network: bool,
 }
 
 pub(crate) async fn run(subcommand: &str, request: &BrowserRequest<'_>) -> Result<(), Error> {
@@ -68,7 +71,11 @@ pub(crate) async fn run(subcommand: &str, request: &BrowserRequest<'_>) -> Resul
         "setup" => setup(request).await,
         "status" => status(request.local),
         "check" => check(request).await,
-        _ => Err("extensions browser requires setup, status, or check; use extensions help".into()),
+        "prepare" => prepare(request).await,
+        _ => Err(
+            "extensions browser requires setup, status, check, or prepare; use extensions help"
+                .into(),
+        ),
     }
 }
 
@@ -561,7 +568,7 @@ struct HandshakeReport {
 
 const CHECK_QUALIFICATION: &str = "Dependency readiness is a local filesystem observation. The default check starts no Node process, adapter, browser, preview, provider request or network connection. --handshake starts the reviewed adapter only, lists its MCP tools and shuts it down; it does not open a page, navigate or start a preview. A saved activation is not a running process.";
 
-async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
+async fn build_check_report(request: &BrowserRequest<'_>) -> Result<BrowserCheckReport, Error> {
     let records = request.local.extension_records()?;
     let readiness_rows = request.local.extension_readiness()?;
     let record = records
@@ -616,8 +623,7 @@ async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
         report.node.version_status = "not_configured";
         report.checks = checks;
         report.ready = false;
-        print_check(&report, request.json)?;
-        return Err("browser readiness check failed: definition is not installed".into());
+        return Ok(report);
     };
 
     let definition = &record.definition;
@@ -668,8 +674,7 @@ async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
         report.node.version_status = "not_configured";
         report.checks = checks;
         report.ready = false;
-        print_check(&report, request.json)?;
-        return Err("browser readiness check failed: transport is not stdio".into());
+        return Ok(report);
     };
 
     let node_path = PathBuf::from(program);
@@ -972,11 +977,606 @@ async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
         .iter()
         .filter(|check| check.required)
         .all(|check| check.ok);
+    Ok(report)
+}
+
+async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
+    let report = build_check_report(request).await?;
     print_check(&report, request.json)?;
     if !report.ready {
         return Err("browser readiness check failed".into());
     }
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct PrepareReport {
+    schema_version: u32,
+    command: &'static str,
+    ok: bool,
+    install: InstallReport,
+    readiness: BrowserCheckReport,
+    dependency_hashes: DependencyHashes,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct InstallReport {
+    requested: bool,
+    confirmed_network: bool,
+    attempted: bool,
+    ok: Option<bool>,
+    commands: Vec<InstallCommand>,
+    steps: Vec<InstallStep>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct InstallCommand {
+    program: String,
+    args: Vec<String>,
+    cwd: String,
+    environment: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+struct InstallStep {
+    name: &'static str,
+    program: String,
+    args: Vec<String>,
+    cwd: String,
+    state: String,
+    exit_code: Option<i32>,
+    duration_ms: u64,
+    stdout: String,
+    stderr: String,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct DependencyHashes {
+    package_lock: Option<FileHash>,
+    playwright_package: Option<FileHash>,
+    playwright_core_package: Option<FileHash>,
+    chromium: Vec<FileHash>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FileHash {
+    path: String,
+    bytes: u64,
+    sha256: String,
+}
+
+struct InstallPlan {
+    node: PathBuf,
+    npm_cli: PathBuf,
+    npx_cli: PathBuf,
+    adapter_dir: PathBuf,
+    cache: PathBuf,
+    commands: Vec<InstallCommand>,
+}
+
+const INSTALL_TIMEOUT_SECONDS: u64 = 600;
+const INSTALL_OUTPUT_LIMIT: usize = 256 * 1024;
+const INSTALL_OUTPUT_TAIL_CHARS: usize = 8192;
+const CHROMIUM_HASH_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
+
+async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
+    let initial = build_check_report(request).await?;
+    let plan = install_plan(&initial);
+    let mut install = InstallReport {
+        requested: request.install,
+        confirmed_network: request.confirm_network,
+        ..InstallReport::default()
+    };
+
+    if !request.install {
+        install.commands = plan
+            .as_ref()
+            .map(|plan| plan.commands.clone())
+            .unwrap_or_else(|_| fallback_commands(&initial, request));
+        let report = PrepareReport {
+            schema_version: 1,
+            command: "browser.prepare",
+            ok: initial.ready,
+            install,
+            readiness: initial,
+            dependency_hashes: DependencyHashes::default(),
+        };
+        print_prepare(&report, request.json)?;
+        if !report.ok {
+            return Err(
+                "browser dependencies are not ready; run the printed install commands".into(),
+            );
+        }
+        return Ok(());
+    }
+
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(error) => {
+            install.error = Some(error.clone());
+            let report = PrepareReport {
+                schema_version: 1,
+                command: "browser.prepare",
+                ok: false,
+                install,
+                readiness: initial,
+                dependency_hashes: DependencyHashes::default(),
+            };
+            print_prepare(&report, request.json)?;
+            return Err(error.into());
+        }
+    };
+    install.commands = plan.commands.clone();
+    install.attempted = true;
+
+    let cancel = CancellationToken::new();
+    let signal = cancel.clone();
+    let listener = tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            signal.cancel();
+        }
+    });
+    let npm_args = vec![
+        "ci".to_owned(),
+        "--ignore-scripts".to_owned(),
+        "--no-audit".to_owned(),
+        "--no-fund".to_owned(),
+    ];
+    let npx_args = vec![
+        "--no-install".to_owned(),
+        "playwright".to_owned(),
+        "install".to_owned(),
+        "chromium".to_owned(),
+    ];
+    install.steps.push(
+        run_install_step(
+            "npm-ci",
+            &plan.node,
+            &plan.npm_cli,
+            &npm_args,
+            &plan.adapter_dir,
+            &plan.cache,
+            &cancel,
+        )
+        .await,
+    );
+    let npm_ok = install
+        .steps
+        .last()
+        .is_some_and(|step| step.exit_code == Some(0) && step.error.is_none());
+    if npm_ok {
+        install.steps.push(
+            run_install_step(
+                "playwright-chromium",
+                &plan.node,
+                &plan.npx_cli,
+                &npx_args,
+                &plan.adapter_dir,
+                &plan.cache,
+                &cancel,
+            )
+            .await,
+        );
+    }
+    listener.abort();
+    let _ = listener.await;
+
+    let install_steps_ok = install.steps.len() == 2
+        && install
+            .steps
+            .iter()
+            .all(|step| step.exit_code == Some(0) && step.error.is_none());
+    install.ok = Some(install_steps_ok);
+    let readiness = build_check_report(request).await?;
+    let dependency_hashes = dependency_hashes(&readiness);
+    let hashes_ok = dependency_hashes.package_lock.is_some()
+        && dependency_hashes.playwright_package.is_some()
+        && !dependency_hashes.chromium.is_empty();
+    let report_ok = install_steps_ok && readiness.ready && hashes_ok;
+    if !report_ok && install.error.is_none() {
+        install.error = Some(if !install_steps_ok {
+            "dependency install command failed".into()
+        } else if !readiness.ready {
+            "readiness still has required failures after install".into()
+        } else {
+            "dependency hashes are incomplete after install".into()
+        });
+    }
+    let report = PrepareReport {
+        schema_version: 1,
+        command: "browser.prepare",
+        ok: report_ok,
+        install,
+        readiness,
+        dependency_hashes,
+    };
+    print_prepare(&report, request.json)?;
+    if !report.ok {
+        return Err("browser dependency preparation failed".into());
+    }
+    Ok(())
+}
+
+fn install_plan(report: &BrowserCheckReport) -> Result<InstallPlan, String> {
+    if !report.definition.configured {
+        return Err(
+            "browser-control.stdio is not installed; run extensions browser setup first".into(),
+        );
+    }
+    let adapter = PathBuf::from(&report.files.adapter.path);
+    if !adapter.is_file() {
+        return Err(format!("adapter is missing: {}", adapter.display()));
+    }
+    let adapter_dir = adapter
+        .parent()
+        .ok_or("adapter has no parent directory")?
+        .to_path_buf();
+    if !report.files.adapter_package.exists || !report.files.package_lock.exists {
+        return Err("adapter package.json and package-lock.json are required".into());
+    }
+    let node = PathBuf::from(
+        report
+            .node
+            .path
+            .as_deref()
+            .ok_or("definition has no Node executable path")?,
+    );
+    if !node.is_file() {
+        return Err(format!("Node executable is missing: {}", node.display()));
+    }
+    let node_dir = node
+        .parent()
+        .ok_or("Node executable has no parent directory")?;
+    let npm_cli = node_dir
+        .join("node_modules")
+        .join("npm")
+        .join("bin")
+        .join("npm-cli.js");
+    let npx_cli = node_dir
+        .join("node_modules")
+        .join("npm")
+        .join("bin")
+        .join("npx-cli.js");
+    if !npm_cli.is_file() || !npx_cli.is_file() {
+        return Err(format!(
+            "npm and npx CLI scripts are missing under {}",
+            node_dir.display()
+        ));
+    }
+    let cache = report
+        .dependencies
+        .browser_cache
+        .path
+        .as_deref()
+        .filter(|_| report.dependencies.browser_cache.configured)
+        .map(PathBuf::from)
+        .ok_or(
+            "configure the browser cache with extensions browser setup --browser-cache <absolute-dir>",
+        )?;
+    if !cache.is_dir() {
+        return Err(format!(
+            "configured browser cache is missing: {}",
+            cache.display()
+        ));
+    }
+    let commands = vec![
+        InstallCommand {
+            program: "npm".into(),
+            args: vec![
+                "ci".into(),
+                "--ignore-scripts".into(),
+                "--no-audit".into(),
+                "--no-fund".into(),
+            ],
+            cwd: adapter_dir.display().to_string(),
+            environment: BTreeMap::new(),
+        },
+        InstallCommand {
+            program: "npx".into(),
+            args: vec![
+                "--no-install".into(),
+                "playwright".into(),
+                "install".into(),
+                "chromium".into(),
+            ],
+            cwd: adapter_dir.display().to_string(),
+            environment: BTreeMap::from([(
+                "PLAYWRIGHT_BROWSERS_PATH".to_owned(),
+                cache.display().to_string(),
+            )]),
+        },
+    ];
+    Ok(InstallPlan {
+        node,
+        npm_cli,
+        npx_cli,
+        adapter_dir,
+        cache,
+        commands,
+    })
+}
+
+fn fallback_commands(
+    report: &BrowserCheckReport,
+    request: &BrowserRequest<'_>,
+) -> Vec<InstallCommand> {
+    let cwd = PathBuf::from(&report.files.adapter.path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| request.workspace.join("extensions").join("browser"))
+        .display()
+        .to_string();
+    let cache = report
+        .dependencies
+        .browser_cache
+        .path
+        .clone()
+        .unwrap_or_else(|| "<configured browser cache>".into());
+    vec![
+        InstallCommand {
+            program: "npm".into(),
+            args: vec![
+                "ci".into(),
+                "--ignore-scripts".into(),
+                "--no-audit".into(),
+                "--no-fund".into(),
+            ],
+            cwd: cwd.clone(),
+            environment: BTreeMap::new(),
+        },
+        InstallCommand {
+            program: "npx".into(),
+            args: vec![
+                "--no-install".into(),
+                "playwright".into(),
+                "install".into(),
+                "chromium".into(),
+            ],
+            cwd,
+            environment: BTreeMap::from([("PLAYWRIGHT_BROWSERS_PATH".to_owned(), cache)]),
+        },
+    ]
+}
+
+async fn run_install_step(
+    name: &'static str,
+    node: &Path,
+    cli: &Path,
+    args: &[String],
+    cwd: &Path,
+    cache: &Path,
+    cancel: &CancellationToken,
+) -> InstallStep {
+    let mut argv = vec![cli.to_string_lossy().into_owned()];
+    argv.extend(args.iter().cloned());
+    let environment = BTreeMap::from([(
+        "PLAYWRIGHT_BROWSERS_PATH".to_owned(),
+        cache.to_string_lossy().into_owned(),
+    )]);
+    let spec = ProcessSpec::argv(node.to_string_lossy().into_owned(), argv.clone(), cwd)
+        .and_then(|spec| spec.with_timeout(Duration::from_secs(INSTALL_TIMEOUT_SECONDS)))
+        .and_then(|spec| spec.with_output_limit(INSTALL_OUTPUT_LIMIT))
+        .and_then(|spec| spec.with_environment(environment));
+    let spec = match spec {
+        Ok(spec) => spec,
+        Err(error) => {
+            return InstallStep {
+                name,
+                program: node.display().to_string(),
+                args: argv,
+                cwd: cwd.display().to_string(),
+                state: "not_started".into(),
+                exit_code: None,
+                duration_ms: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+                stdout_truncated: false,
+                stderr_truncated: false,
+                error: Some(error.to_string()),
+            }
+        }
+    };
+    let result = ProcessRunner.run(spec, cancel.clone()).await;
+    match result {
+        Ok(result) => {
+            let state = match result.state {
+                argentum_execution::ProcessState::Exited => "exited",
+                argentum_execution::ProcessState::TimedOut => "timed_out",
+                argentum_execution::ProcessState::Cancelled => "cancelled",
+            };
+            let error = if result.state != argentum_execution::ProcessState::Exited {
+                Some(format!("install command {}", state.replace('_', " ")))
+            } else if result.exit_code != Some(0) {
+                Some(format!("install command exited {:?}", result.exit_code))
+            } else {
+                None
+            };
+            InstallStep {
+                name,
+                program: node.display().to_string(),
+                args: argv,
+                cwd: cwd.display().to_string(),
+                state: state.into(),
+                exit_code: result.exit_code,
+                duration_ms: result.duration_ms,
+                stdout: output_tail(&result.stdout),
+                stderr: output_tail(&result.stderr),
+                stdout_truncated: result.stdout_truncated
+                    || result.stdout.chars().count() > INSTALL_OUTPUT_TAIL_CHARS,
+                stderr_truncated: result.stderr_truncated
+                    || result.stderr.chars().count() > INSTALL_OUTPUT_TAIL_CHARS,
+                error,
+            }
+        }
+        Err(error) => InstallStep {
+            name,
+            program: node.display().to_string(),
+            args: argv,
+            cwd: cwd.display().to_string(),
+            state: "failed_to_start".into(),
+            exit_code: None,
+            duration_ms: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+            error: Some(error.to_string()),
+        },
+    }
+}
+
+fn output_tail(value: &str) -> String {
+    let count = value.chars().count();
+    if count <= INSTALL_OUTPUT_TAIL_CHARS {
+        return value.to_owned();
+    }
+    value
+        .chars()
+        .skip(count - INSTALL_OUTPUT_TAIL_CHARS)
+        .collect()
+}
+
+fn dependency_hashes(report: &BrowserCheckReport) -> DependencyHashes {
+    let package_lock = report
+        .files
+        .package_lock
+        .exists
+        .then(|| FileHash {
+            path: report.files.package_lock.path.clone(),
+            bytes: report.files.package_lock.bytes.unwrap_or_default(),
+            sha256: report.files.package_lock.sha256.clone().unwrap_or_default(),
+        })
+        .filter(|hash| !hash.sha256.is_empty());
+    DependencyHashes {
+        package_lock,
+        playwright_package: file_hash(
+            &PathBuf::from(&report.dependencies.playwright.path).join("package.json"),
+        ),
+        playwright_core_package: file_hash(
+            &PathBuf::from(&report.dependencies.playwright_core.path).join("package.json"),
+        ),
+        chromium: report
+            .dependencies
+            .browser_cache
+            .chromium
+            .iter()
+            .filter_map(|path| stream_hash(Path::new(path)))
+            .collect(),
+    }
+}
+
+fn file_hash(path: &Path) -> Option<FileHash> {
+    let report = file_report(path, 64 * 1024);
+    if !report.exists || report.sha256.is_none() {
+        return None;
+    }
+    Some(FileHash {
+        path: report.path,
+        bytes: report.bytes.unwrap_or_default(),
+        sha256: report.sha256.unwrap_or_default(),
+    })
+}
+
+fn stream_hash(path: &Path) -> Option<FileHash> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    let mut total = 0_u64;
+    loop {
+        let read = file.read(&mut buffer).ok()?;
+        if read == 0 {
+            break;
+        }
+        total = total.saturating_add(read as u64);
+        if total > CHROMIUM_HASH_LIMIT_BYTES {
+            return None;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Some(FileHash {
+        path: path.display().to_string(),
+        bytes: total,
+        sha256: format!("{:x}", hasher.finalize()),
+    })
+}
+
+fn print_prepare(report: &PrepareReport, json_output: bool) -> Result<(), Error> {
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(report)?);
+        return Ok(());
+    }
+    println!("Browser dependency prepare: {}", report.readiness.namespace);
+    println!(
+        "Install: requested={} confirmed_network={} attempted={} ok={}",
+        report.install.requested,
+        report.install.confirmed_network,
+        report.install.attempted,
+        report
+            .install
+            .ok
+            .map_or("not run".into(), |ok| ok.to_string())
+    );
+    if let Some(error) = &report.install.error {
+        println!("Install error: {error}");
+    }
+    println!("Install commands:");
+    for command in &report.install.commands {
+        println!("  cd {}", command.cwd);
+        for (name, value) in &command.environment {
+            println!("  set {name}={value}");
+        }
+        println!("  {} {}", command.program, command.args.join(" "));
+    }
+    for step in &report.install.steps {
+        println!(
+            "  {}: state={} exit={:?} duration={}ms",
+            step.name, step.state, step.exit_code, step.duration_ms
+        );
+        if let Some(error) = &step.error {
+            println!("    error: {error}");
+        }
+        if !step.stdout.is_empty() {
+            println!("    stdout: {}", step.stdout);
+        }
+        if !step.stderr.is_empty() {
+            println!("    stderr: {}", step.stderr);
+        }
+    }
+    if report.install.requested {
+        println!("Dependency hashes:");
+        print_hash("package-lock", &report.dependency_hashes.package_lock);
+        print_hash(
+            "playwright package",
+            &report.dependency_hashes.playwright_package,
+        );
+        print_hash(
+            "playwright-core package",
+            &report.dependency_hashes.playwright_core_package,
+        );
+        for chromium in &report.dependency_hashes.chromium {
+            println!(
+                "  Chromium {}: {} bytes sha256 {}",
+                chromium.path, chromium.bytes, chromium.sha256
+            );
+        }
+    }
+    print_check(&report.readiness, false)?;
+    println!("Prepare ready: {}", if report.ok { "yes" } else { "no" });
+    Ok(())
+}
+
+fn print_hash(label: &str, hash: &Option<FileHash>) {
+    match hash {
+        Some(hash) => println!(
+            "  {label}: {} ({} bytes, sha256 {})",
+            hash.path, hash.bytes, hash.sha256
+        ),
+        None => println!("  {label}: unavailable"),
+    }
 }
 
 fn print_check(report: &BrowserCheckReport, json_output: bool) -> Result<(), Error> {
@@ -1799,5 +2399,24 @@ mod tests {
             "{}",
             report.chromium[0]
         );
+    }
+
+    #[test]
+    fn prepare_hash_helpers_are_bounded() {
+        let directory = tempfile::tempdir().expect("directory");
+        let file = directory.path().join("file.bin");
+        std::fs::write(&file, b"prepare").expect("file");
+        let small = file_hash(&file).expect("file hash");
+        let streamed = stream_hash(&file).expect("stream hash");
+        assert_eq!(small.bytes, 7);
+        assert_eq!(small.sha256, streamed.sha256);
+        assert_eq!(streamed.bytes, 7);
+
+        let long = "x".repeat(INSTALL_OUTPUT_TAIL_CHARS + 5);
+        assert_eq!(
+            output_tail(&long).chars().count(),
+            INSTALL_OUTPUT_TAIL_CHARS
+        );
+        assert_eq!(output_tail("short"), "short");
     }
 }

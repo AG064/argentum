@@ -222,6 +222,8 @@ impl ProcessSpec {
                         | "GIT_CONFIG_NOSYSTEM"
                         | "LC_ALL"
                         | "LANG"
+                        // Playwright's install command reads this download location.
+                        | "PLAYWRIGHT_BROWSERS_PATH"
                 );
             if !allowed_name || value.len() > MAX_ENVIRONMENT_VALUE_BYTES || value.contains('\0') {
                 return Err(ProcessError::InvalidEnvironment);
