@@ -13,16 +13,21 @@ import { DiagnosticRecordView } from "view-models.slint";
 
 component RailSettingsButton inherits Rectangle {
     in property <bool> reduced-motion: false;
+    in property <bool> active: false;
     out property <bool> has-focus: rail-settings-focus.has-focus;
     callback clicked();
 
     height: 44px;
     border-radius: AgTheme.radius-xs;
     border-width: 1px;
-    border-color: root.has-focus ? AgTheme.focus-ring : transparent;
+    border-color: root.has-focus
+        ? AgTheme.focus-ring
+        : (root.active ? AgTheme.border-default : transparent);
     background: rail-settings-touch.pressed
         ? AgTheme.control-pressed
-        : (rail-settings-touch.has-hover ? AgTheme.control-hover : transparent);
+        : (root.active
+            ? AgTheme.control-selected
+            : (rail-settings-touch.has-hover ? AgTheme.control-hover : transparent));
     accessible-role: button;
     accessible-label: "Settings";
     accessible-action-default => { root.clicked(); }
@@ -639,6 +644,7 @@ export component MainWindow inherits Window {
     in-out property <bool> goal_time_budget_reported: false;
     in-out property <int> goal_verification_count: 0;
     in-out property <bool> goal_action_pending: false;
+    in-out property <bool> goal_inspector_active: false;
     in-out property <string> goal_id: "";
     in-out property <string> goal_limits_summary: "No goal limits reported";
     in-out property <string> goal_run_limits_summary: "No per-run limits reported";
@@ -1174,6 +1180,7 @@ export component MainWindow inherits Window {
 
                 RailSettingsButton {
                     reduced-motion: root.reduced_motion;
+                    active: root.settings_open;
                     clicked => {
                         root.settings_open = true;
                         root.provider_loading = true;
@@ -1538,6 +1545,7 @@ export component MainWindow inherits Window {
                 height: parent.height - AgTheme.space-7;
                 modes: root.inspector_modes;
                 active-mode: root.active_inspector;
+                goal-tab-active: root.goal_inspector_active;
                 activity-items: root.activity_items;
                 activity-summary: root.activity_summary;
                 trajectory-items: root.trajectory_items;
@@ -1617,8 +1625,9 @@ export component MainWindow inherits Window {
                 verification-evidence-error: root.verification_evidence_error;
                 active-session-id: root.active_session_id;
                 reduced-motion: root.reduced_motion;
-                select-mode(mode) => { root.set_inspector_surface(mode); }
-                close => { root.set_inspector_surface(""); }
+                select-mode(mode) => { root.goal_inspector_active = false; root.set_inspector_surface(mode); }
+                select-goal-tab => { root.goal_inspector_active = true; }
+                close => { root.goal_inspector_active = false; root.set_inspector_surface(""); }
                 refresh-trajectory(session-id) => {
                     root.trajectory_loading = true;
                     root.trajectory_error = "";
@@ -1815,6 +1824,7 @@ export component MainWindow inherits Window {
                 height: parent.height - AgTheme.space-7;
                 modes: root.inspector_modes;
                 active-mode: root.active_inspector;
+                goal-tab-active: root.goal_inspector_active;
                 activity-items: root.activity_items;
                 activity-summary: root.activity_summary;
                 trajectory-items: root.trajectory_items;
@@ -1895,8 +1905,9 @@ export component MainWindow inherits Window {
                 active-session-id: root.active_session_id;
                 touch-mode: root.phone_layout;
                 reduced-motion: root.reduced_motion;
-                select-mode(mode) => { root.set_inspector_surface(mode); }
-                close => { root.set_inspector_surface(""); }
+                select-mode(mode) => { root.goal_inspector_active = false; root.set_inspector_surface(mode); }
+                select-goal-tab => { root.goal_inspector_active = true; }
+                close => { root.goal_inspector_active = false; root.set_inspector_surface(""); }
                 refresh-trajectory(session-id) => {
                     root.trajectory_loading = true;
                     root.trajectory_error = "";

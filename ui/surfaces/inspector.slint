@@ -154,9 +154,11 @@ export component InspectorSurface inherits Rectangle {
     in property <bool> verification-evidence-loading: false;
     in property <string> verification-evidence-error: "";
     in property <string> active-session-id: "";
+    in property <bool> goal-tab-active: false;
     in property <bool> touch-mode: false;
     in property <bool> reduced-motion: false;
     callback select-mode(string);
+    callback select-goal-tab();
     callback close();
     callback refresh-trajectory(string);
     callback load-change-diff(string);
@@ -206,9 +208,17 @@ export component InspectorSurface inherits Rectangle {
 
         HorizontalLayout {
             spacing: AgTheme.space-1;
+            InspectorModeButton {
+                mode: { id: "goal", label: "Goal", icon: "plan", detail: "Session goal and supervision" };
+                selected: root.goal-tab-active;
+                touch-mode: root.touch-mode;
+                reduced-motion: root.reduced-motion;
+                horizontal-stretch: 1;
+                clicked => { root.select-goal-tab(); }
+            }
             for mode in root.modes: InspectorModeButton {
                 mode: mode;
-                selected: mode.id == root.active-mode;
+                selected: !root.goal-tab-active && mode.id == root.active-mode;
                 touch-mode: root.touch-mode;
                 reduced-motion: root.reduced-motion;
                 horizontal-stretch: 1;
@@ -218,7 +228,9 @@ export component InspectorSurface inherits Rectangle {
 
         Rectangle { height: AgTheme.hairline; background: AgTheme.border-subtle; }
 
-        if root.active-mode == "changes": ReviewSurface {
+        ReviewSurface {
+            visible: root.goal-tab-active || root.active-mode == "changes";
+            section: root.goal-tab-active ? "goal" : "changes";
             vertical-stretch: 1;
             goal-available: root.goal-available;
             goal-objective: root.goal-objective;

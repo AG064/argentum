@@ -6,6 +6,7 @@ import { SettingsField, SectionHeading } from "../components/surfaces.slint";
 import { FileChangeView, VerificationEvidenceView, VerificationRunnerView } from "../view-models.slint";
 
 export component ReviewSurface inherits Rectangle {
+    in property <string> section: "changes";
     in property <bool> goal-available: false;
     in property <string> goal-objective: "";
     in-out property <string> goal-draft: "";
@@ -110,7 +111,7 @@ export component ReviewSurface inherits Rectangle {
             width: root.width;
             spacing: AgTheme.space-4;
 
-            if root.recovery-required: Rectangle {
+            if root.section == "changes" && root.recovery-required: Rectangle {
                 height: root.touch-mode ? 156px : 132px;
                 vertical-stretch: 0;
                 border-radius: AgTheme.radius-md;
@@ -144,6 +145,9 @@ export component ReviewSurface inherits Rectangle {
                 }
             }
 
+            if root.section == "goal": VerticalLayout {
+                spacing: AgTheme.space-4;
+
             HorizontalLayout {
                 height: root.touch-mode ? AgTheme.mobile-control-height : AgTheme.control-height;
                 SectionHeading { label: "Goal"; horizontal-stretch: 1; }
@@ -159,9 +163,7 @@ export component ReviewSurface inherits Rectangle {
                 Text { text: "Next: " + root.goal-next-action; color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
                 Text { text: root.goal-action-pending ? "Pending: goal action" : (root.goal-supervision-pending ? "Pending: supervision" : "No pending goal action"); color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
                 Text { text: "Iteration " + root.goal-iteration + " | Verifications " + root.goal-verification-count; color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
-                Text { text: "Tokens " + root.goal-tokens-used + " / " + root.goal-token-budget + (root.goal-token-budget-reported ? "" : " (unset)"); color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
-                Text { text: "Tools " + root.goal-tools-used + " / " + root.goal-tool-budget + (root.goal-tool-budget-reported ? "" : " (unset)"); color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
-                Text { text: "Time budget " + root.goal-time-budget-seconds + "s" + (root.goal-time-budget-reported ? "" : " (unset)"); color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
+                Text { text: "Tokens " + (root.goal-token-budget-reported ? root.goal-tokens-used + "/" + root.goal-token-budget : "unset") + " | tools " + (root.goal-tool-budget-reported ? root.goal-tools-used + "/" + root.goal-tool-budget : "unset") + " | time " + (root.goal-time-budget-reported ? root.goal-time-budget-seconds + "s" : "unset"); color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
                 Text { text: root.goal-accounting-summary; color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
                 Text { text: root.goal-limits-summary; color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
                 Text { text: root.goal-run-limits-summary; color: AgTheme.text-muted; font-family: AgTheme.font-ui; font-size: AgTheme.type-compact; overflow: elide; }
@@ -346,6 +348,10 @@ export component ReviewSurface inherits Rectangle {
             }
 
             Rectangle { height: AgTheme.hairline; background: AgTheme.border-subtle; }
+            }
+
+            if root.section == "changes": VerticalLayout {
+                spacing: AgTheme.space-4;
 
             SectionHeading { label: "Changes"; detail: root.changed-files; }
             VerticalLayout {
@@ -662,6 +668,7 @@ export component ReviewSurface inherits Rectangle {
                         font-size: AgTheme.type-metadata;
                     }
                 }
+            }
             }
         }
     }
