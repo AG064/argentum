@@ -1110,7 +1110,7 @@ impl RuntimeService {
         Ok(profiles)
     }
 
-    fn publish_provider_limits(&self) -> Result<(), RuntimeError> {
+    fn publish_provider_limits(&self, save_completed: bool) -> Result<(), RuntimeError> {
         let Some(profile) = self.store.selected_provider_profile(self.project_id)? else {
             return Ok(());
         };
@@ -1125,6 +1125,7 @@ impl RuntimeService {
             profile_id: profile.id.clone(),
             budget,
             error: budget_error,
+            save_completed,
         });
         let local = profile.id == "llama-cpp"
             && profile.kind == ProviderKind::LocalLlamaCpp
@@ -1147,6 +1148,7 @@ impl RuntimeService {
             context_tokens,
             choices: argentum_providers::SIDECAR_CONTEXT_VARIANTS.to_vec(),
             error: context_error,
+            save_completed,
         });
         Ok(())
     }
@@ -1756,7 +1758,7 @@ impl RuntimeService {
             AppCommand::ProbeProvider { provider_id } => self.probe_provider(provider_id).await,
             AppCommand::ListProviderProfiles => {
                 self.publish_provider_profiles()?;
-                self.publish_provider_limits()?;
+                self.publish_provider_limits(false)?;
                 Ok(())
             }
             AppCommand::ListProviderPresets => {
@@ -1803,7 +1805,7 @@ impl RuntimeService {
             }
             AppCommand::SaveProviderBudget { profile_id, limits } => {
                 self.declare_model_budget(&profile_id, limits)?;
-                self.publish_provider_limits()?;
+                self.publish_provider_limits(true)?;
                 self.publish_harness_snapshot()?;
                 Ok(())
             }
@@ -1812,7 +1814,7 @@ impl RuntimeService {
                 context_tokens,
             } => {
                 self.configure_local_context(&profile_id, context_tokens)?;
-                self.publish_provider_limits()?;
+                self.publish_provider_limits(true)?;
                 self.publish_harness_snapshot()?;
                 Ok(())
             }
@@ -2633,7 +2635,7 @@ impl RuntimeService {
                 .map_err(|_| RuntimeError::InvalidProviderId)?;
             let profiles = self.store.add_provider_preset(self.project_id, &profile)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
-            self.publish_provider_limits()?;
+            self.publish_provider_limits(false)?;
             Ok(())
         })();
         self.publish_profile_command_error(&result);
@@ -2649,7 +2651,7 @@ impl RuntimeService {
             self.clear_profile_model_contexts(&profile.id)?;
             self.clear_profile_model_catalog(&profile.id)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
-            self.publish_provider_limits()?;
+            self.publish_provider_limits(false)?;
             Ok(())
         })();
         self.publish_profile_command_error(&result);
@@ -2666,7 +2668,7 @@ impl RuntimeService {
                 .store
                 .select_provider_profile(self.project_id, provider_id)?;
             self.publish_transient(AppEvent::ProviderProfilesSnapshot { profiles });
-            self.publish_provider_limits()
+            self.publish_provider_limits(false)
         };
         self.publish_profile_command_error(&result);
         result

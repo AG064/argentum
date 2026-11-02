@@ -663,6 +663,7 @@ impl UiHandle {
                 profile_id,
                 budget,
                 error,
+                save_completed,
             } => {
                 if self.window.get_provider_id().as_str() != profile_id {
                     return;
@@ -707,8 +708,16 @@ impl UiHandle {
                     self.window.set_provider_budget_saved(false);
                 }
                 if was_pending {
-                    self.window
-                        .set_provider_budget_notice("Budget limits saved for this profile.".into());
+                    if *save_completed {
+                        self.window.set_provider_budget_notice(
+                            "Budget limits saved for this profile.".into(),
+                        );
+                    } else {
+                        self.window.set_provider_budget_error(
+                            "Save did not complete. The displayed limits are the saved values."
+                                .into(),
+                        );
+                    }
                 }
             }
             AppEvent::ProviderContextSnapshot {
@@ -717,6 +726,7 @@ impl UiHandle {
                 context_tokens,
                 choices,
                 error,
+                save_completed,
             } => {
                 if self.window.get_provider_id().as_str() != profile_id {
                     return;
@@ -736,9 +746,17 @@ impl UiHandle {
                         *context_tokens,
                     ));
                 if was_pending {
-                    self.window.set_provider_context_notice(
-                        "Context size saved. It applies on the next approved local launch.".into(),
-                    );
+                    if *save_completed {
+                        self.window.set_provider_context_notice(
+                            "Context size saved. It applies on the next approved local launch."
+                                .into(),
+                        );
+                    } else {
+                        self.window.set_provider_context_error(
+                            "Update did not complete. The displayed context is the saved value."
+                                .into(),
+                        );
+                    }
                 }
             }
             AppEvent::BrowserStatusSnapshot {
@@ -3825,10 +3843,7 @@ where
         let Some(window) = save_budget_window.upgrade() else {
             return;
         };
-        if window.get_running()
-            || !window.get_provider_pending().is_empty()
-            || window.get_provider_budget_pending()
-        {
+        if window.get_running() || !window.get_provider_pending().is_empty() {
             return;
         }
         let profile_id = window.get_provider_id().to_string();
@@ -3853,7 +3868,9 @@ where
         };
         window.set_provider_budget_pending(true);
         window.set_provider_budget_error(SharedString::default());
-        window.set_provider_budget_notice(SharedString::default());
+        window.set_provider_budget_notice(
+            "Save requested. Waiting for the provider runtime to accept it.".into(),
+        );
         save_budget_dispatch(AppCommand::SaveProviderBudget { profile_id, limits });
     });
 
@@ -3863,11 +3880,7 @@ where
         let Some(window) = context_window.upgrade() else {
             return;
         };
-        if tokens <= 0
-            || window.get_running()
-            || !window.get_provider_pending().is_empty()
-            || window.get_provider_context_pending()
-        {
+        if tokens <= 0 || window.get_running() || !window.get_provider_pending().is_empty() {
             return;
         }
         let profile_id = window.get_provider_id().to_string();
@@ -3879,7 +3892,9 @@ where
         }
         window.set_provider_context_pending(true);
         window.set_provider_context_error(SharedString::default());
-        window.set_provider_context_notice(SharedString::default());
+        window.set_provider_context_notice(
+            "Update requested. Waiting for the provider runtime to accept it.".into(),
+        );
         context_dispatch(AppCommand::SaveProviderContext {
             profile_id,
             context_tokens: tokens as u32,
@@ -4214,9 +4229,11 @@ where
             window.set_desktop_status_loading(true);
             window.set_desktop_status_error(SharedString::default());
             window.set_provider_budget_loading(!window.get_provider_id().is_empty());
+            window.set_provider_budget_pending(false);
             window.set_provider_budget_error(SharedString::default());
             window.set_provider_budget_notice(SharedString::default());
             window.set_provider_context_loading(!window.get_provider_id().is_empty());
+            window.set_provider_context_pending(false);
             window.set_provider_context_error(SharedString::default());
             window.set_provider_context_notice(SharedString::default());
         }
@@ -4935,6 +4952,7 @@ mod tests {
                 uncertainty_tokens: 512,
             }),
             error: String::new(),
+            save_completed: true,
         });
         assert_eq!(ui.window().get_provider_budget_total().as_str(), "8192");
         assert_eq!(ui.window().get_provider_budget_input().as_str(), "8192");
@@ -4965,6 +4983,7 @@ mod tests {
             context_tokens: 16384,
             choices: vec![8192, 16384, 32768],
             error: String::new(),
+            save_completed: true,
         });
         assert!(ui.window().get_provider_context_available());
         assert_eq!(ui.window().get_provider_context_tokens(), 16384);
@@ -4977,6 +4996,24 @@ mod tests {
         assert!(!context_choices.row_data(0).expect("8K").selected);
         assert!(context_choices.row_data(1).expect("16K").selected);
         assert!(!ui.window().get_provider_context_pending());
+
+        ui.window().set_provider_id("llama-cpp".into());
+        ui.window().set_provider_pending(SharedString::default());
+        ui.window().set_provider_budget_total("8192".into());
+        ui.window().set_provider_budget_input("8192".into());
+        ui.window().set_provider_budget_max_output("4096".into());
+        ui.window()
+            .set_provider_budget_requested_output("512".into());
+        ui.window().set_provider_budget_uncertainty("512".into());
+        commands.borrow_mut().clear();
+        ui.window().invoke_save_provider_budget();
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SaveProviderBudget { profile_id, limits })
+                if profile_id == "llama-cpp"
+                    && *limits == [8192, 8192, 4096, 512, 512]
+        ));
+        assert!(ui.window().get_provider_budget_pending());
 
         ui.window().set_provider_budget_pending(true);
         ui.apply_command_failure(

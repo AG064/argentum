@@ -2562,6 +2562,7 @@ pub enum AppEvent {
         profile_id: String,
         budget: Option<context_budget::ModelBudget>,
         error: String,
+        save_completed: bool,
     },
     ProviderContextSnapshot {
         profile_id: String,
@@ -2569,6 +2570,7 @@ pub enum AppEvent {
         context_tokens: u32,
         choices: Vec<u32>,
         error: String,
+        save_completed: bool,
     },
     BrowserStatusSnapshot {
         extensions_built: bool,

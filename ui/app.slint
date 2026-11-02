@@ -2809,7 +2809,7 @@ export component MainWindow inherits Window {
                             label: "Total context tokens";
                             placeholder: "8192";
                             value: root.provider_budget_total;
-                            enabled: root.provider_id != "" && !root.running && !root.provider_busy && !root.provider_budget_pending;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
                             field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
                             edited(value) => {
                                 root.provider_budget_total = value;
@@ -2822,7 +2822,7 @@ export component MainWindow inherits Window {
                             label: "Input limit tokens";
                             placeholder: "8192";
                             value: root.provider_budget_input;
-                            enabled: root.provider_id != "" && !root.running && !root.provider_busy && !root.provider_budget_pending;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
                             field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
                             edited(value) => {
                                 root.provider_budget_input = value;
@@ -2835,7 +2835,7 @@ export component MainWindow inherits Window {
                             label: "Maximum output tokens";
                             placeholder: "4096";
                             value: root.provider_budget_max_output;
-                            enabled: root.provider_id != "" && !root.running && !root.provider_busy && !root.provider_budget_pending;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
                             field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
                             edited(value) => {
                                 root.provider_budget_max_output = value;
@@ -2848,7 +2848,7 @@ export component MainWindow inherits Window {
                             label: "Requested output tokens";
                             placeholder: "512";
                             value: root.provider_budget_requested_output;
-                            enabled: root.provider_id != "" && !root.running && !root.provider_busy && !root.provider_budget_pending;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
                             field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
                             edited(value) => {
                                 root.provider_budget_requested_output = value;
@@ -2861,7 +2861,7 @@ export component MainWindow inherits Window {
                             label: "Uncertainty tokens";
                             placeholder: "512";
                             value: root.provider_budget_uncertainty;
-                            enabled: root.provider_id != "" && !root.running && !root.provider_busy && !root.provider_budget_pending;
+                            enabled: root.provider_id != "" && !root.running && !root.provider_busy;
                             field-height: root.phone_layout ? AgTheme.mobile-control-height : AgTheme.control-height;
                             edited(value) => {
                                 root.provider_budget_uncertainty = value;
@@ -2871,13 +2871,12 @@ export component MainWindow inherits Window {
                         }
 
                         ActionButton {
-                            label: root.provider_budget_pending ? "Saving limits" : "Save limits";
+                            label: "Save limits";
                             icon: "check";
                             primary: true;
                             enabled: root.provider_id != ""
                                 && !root.running
-                                && !root.provider_busy
-                                && !root.provider_budget_pending;
+                                && !root.provider_busy;
                             reduced-motion: root.reduced_motion;
                             clicked => {
                                 root.provider_budget_pending = true;
@@ -2931,8 +2930,10 @@ export component MainWindow inherits Window {
 
                                 for choice in root.provider_context_choices: ActionButton {
                                     label: choice.label;
-                                    primary: choice.selected;
-                                    enabled: !root.running && !root.provider_busy && !root.provider_context_pending;
+                                    fill: choice.selected ? AgTheme.control-selected : AgTheme.surface-soft;
+                                    foreground: choice.selected ? AgTheme.silver-200 : AgTheme.text-secondary;
+                                    outline-color: choice.selected ? AgTheme.border-strong : AgTheme.border-default;
+                                    enabled: !root.running && !root.provider_busy;
                                     reduced-motion: root.reduced_motion;
                                     clicked => {
                                         root.provider_context_pending = true;
