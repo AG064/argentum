@@ -103,3 +103,59 @@ paths. Isolation excludes saved/environment provider credentials and the local
 runtime and does not update the saved global workspace. It is not a filesystem
 sandbox independent of the actual workspace policy. Fresh evaluation stores
 must be separate from production history.
+
+## Doctor contract
+
+```powershell
+& $exe doctor --workspace $ws --database $db --json
+```
+
+`doctor` is a read-only aggregate. It opens an existing store read-only, reads
+the persisted workspace/provider/harness/recovery rows, and checks the fixed
+verification runner registry and compile-time features. It does not start a
+runtime or provider connection, read a credential, run a model, or write to the
+store. A missing database is reported, not created.
+
+The JSON envelope is stable:
+
+- `schema_version` is `1`.
+- `command` is `doctor`.
+- `ok` and `healthy` are true only when every required check passes.
+- `ready` is true only when required and advisory checks pass.
+- `checks` is ordered and each entry has `id`, `required`, `ok` and `detail`.
+
+Required check ids: `database_exists`, `database_openable`, `schema_current`.
+
+Advisory check ids: `workspace_exists`, `workspace_initialized`,
+`provider_ready`, `harness_configured`, `recovery_clear`.
+
+Exit code is `0` only when all required checks pass. Any required failure exits
+nonzero. The complete report is printed first, including in `--json` mode, so a
+caller can inspect every check without a panic or a partial document. Advisory
+failures do not change the exit code but set `ready` to false. Check ids are
+stable and are also printed in text mode.
+
+## Desktop commands
+
+```powershell
+& $exe desktop status --json
+& $exe desktop list --json
+& $exe desktop inspect --hwnd 0x1234 --depth 4 --json
+& $exe desktop screenshot --hwnd 0x1234 --output C:\absolute\shot.png --json
+& $exe desktop invoke --hwnd 0x1234 --element 'path=0/1' --confirm 0x1234 --json
+& $exe desktop type --hwnd 0x1234 --element 'path=root' --text 'hello' --confirm 0x1234 --json
+& $exe desktop keys --hwnd 0x1234 --element 'path=root' --chord Ctrl+S --confirm 0x1234 --dry-run --json
+```
+
+Desktop JSON uses a stable envelope with `schema_version`, `ok`, `command`
+(`desktop.<action>`), `action`, `dry_run`, `applied`, `built`, and `result` or
+`error`. `invoke`, `type` and `keys` require `--confirm HWND` matching the target.
+`--dry-run` resolves and revalidates the window and element and prints the
+planned pattern, mode, character count or chords, but calls no UIA pattern,
+SendInput or screenshot API. It still requires the matching confirmation and
+reports `dry_run: true`, `applied: false`. A real action reports `applied: true`
+as an API return only; reobserve the application.
+
+Desktop security, identity, bounds, failure taxonomy and the reasons pointer
+injection and focus stealing are omitted are documented in
+[Windows application control](WINDOWS_APPLICATION_CONTROL.md).

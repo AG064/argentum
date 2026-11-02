@@ -3051,10 +3051,50 @@ async fn run_desktop_command(
     action: DesktopAction,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match action {
+    let name = action.name();
+    let dry_run = action.dry_run();
+    let result = match action {
         DesktopAction::Status => run_desktop_status_command(options, json).await,
         action => run_desktop_control_command(action, json).await,
+    };
+    if let Err(error) = result {
+        if json {
+            println!("{}", desktop_failure(name, dry_run, &error.to_string()));
+        }
+        return Err(error);
     }
+    Ok(())
+}
+
+fn desktop_failure(action: &'static str, dry_run: bool, error: &str) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1,
+        "ok": false,
+        "command": format!("desktop.{action}"),
+        "action": action,
+        "dry_run": dry_run,
+        "applied": false,
+        "built": cfg!(all(windows, feature = "desktop-control")),
+        "error": error,
+    })
+}
+
+fn desktop_success(
+    action: &'static str,
+    dry_run: bool,
+    applied: bool,
+    result: impl serde::Serialize,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1,
+        "ok": true,
+        "command": format!("desktop.{action}"),
+        "action": action,
+        "dry_run": dry_run,
+        "applied": applied,
+        "built": cfg!(all(windows, feature = "desktop-control")),
+        "result": result,
+    })
 }
 
 #[cfg(not(all(windows, feature = "desktop-control")))]
@@ -3062,18 +3102,7 @@ async fn run_desktop_control_command(
     action: DesktopAction,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ = action;
-    if json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "feature": "desktop-control",
-                "built": false,
-                "available": false,
-                "reason": "This binary was not built with --features desktop-control.",
-            })
-        );
-    }
+    let _ = (action, json);
     Err("desktop control is unavailable: rebuild with --features desktop-control".into())
 }
 
@@ -3103,7 +3132,12 @@ async fn run_desktop_control_command(
                     &cancel,
                 )?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&list)?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&desktop_success(
+                            "list", false, false, &list
+                        ))?
+                    );
                 } else {
                     println!(
                         "Windows: {}{}",
@@ -3139,7 +3173,15 @@ async fn run_desktop_control_command(
                     &cancel,
                 )?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&inspection)?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&desktop_success(
+                            "inspect",
+                            false,
+                            false,
+                            &inspection
+                        ))?
+                    );
                 } else {
                     println!(
                         "Window: {}  pid={}  {}{}",
@@ -3194,19 +3236,21 @@ async fn run_desktop_control_command(
                 file.write_all(&png)?;
                 file.sync_all()?;
                 if json {
+                    let result = serde_json::json!({
+                        "window": capture.window,
+                        "output": output.display().to_string(),
+                        "width": capture.width,
+                        "height": capture.height,
+                        "png_bytes": capture.png_bytes,
+                        "png_sha256": capture.png_sha256,
+                        "print_window_only": capture.print_window_only,
+                        "at_unix_seconds": capture.at_unix_seconds,
+                    });
                     println!(
                         "{}",
-                        serde_json::json!({
-                            "action": "screenshot",
-                            "window": capture.window,
-                            "output": output.display().to_string(),
-                            "width": capture.width,
-                            "height": capture.height,
-                            "png_bytes": capture.png_bytes,
-                            "png_sha256": capture.png_sha256,
-                            "print_window_only": capture.print_window_only,
-                            "at_unix_seconds": capture.at_unix_seconds,
-                        })
+                        serde_json::to_string_pretty(&desktop_success(
+                            "screenshot", false, true, result
+                        ))?
                     );
                 } else {
                     println!(
@@ -3226,15 +3270,41 @@ async fn run_desktop_control_command(
                 element,
                 confirm,
                 depth,
+                dry_run,
             } => {
                 let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
                 if !confirm.eq_ignore_ascii_case(&hwnd) {
                     return Err("--confirm must exactly match --hwnd".into());
                 }
                 let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                if dry_run {
+                    let preview =
+                        desktop_api::preview_invoke(&window.identity, &element, &cancel)?;
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&desktop_success(
+                                "invoke", true, false, &preview
+                            ))?
+                        );
+                    } else {
+                        println!(
+                            "Dry run: would invoke {} on {} with {} (no pattern called).",
+                            preview.element.automation_id,
+                            preview.window.hwnd,
+                            preview.pattern
+                        );
+                    }
+                    return Ok(());
+                }
                 let receipt = desktop_api::invoke(&window.identity, &element, &cancel)?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&desktop_success(
+                            "invoke", false, true, &receipt
+                        ))?
+                    );
                 } else {
                     println!(
                         "Invoked {} on {} with {}; API return only, reobserve the application.",
@@ -3252,16 +3322,45 @@ async fn run_desktop_control_command(
                 mode,
                 confirm,
                 depth,
+                dry_run,
             } => {
                 let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
                 if !confirm.eq_ignore_ascii_case(&hwnd) {
                     return Err("--confirm must exactly match --hwnd".into());
                 }
                 let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                if dry_run {
+                    let preview = desktop_api::preview_type_text(
+                        &window.identity,
+                        &element,
+                        &text,
+                        mode,
+                        &cancel,
+                    )?;
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&desktop_success(
+                                "type", true, false, &preview
+                            ))?
+                        );
+                    } else {
+                        println!(
+                            "Dry run: would type {} character(s) with mode {} on {} (no ValuePattern or SendInput).",
+                            preview.characters, preview.mode, preview.window.hwnd
+                        );
+                    }
+                    return Ok(());
+                }
                 let receipt =
                     desktop_api::type_text(&window.identity, &element, &text, mode, &cancel)?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&desktop_success(
+                            "type", false, true, &receipt
+                        ))?
+                    );
                 } else {
                     println!(
                         "Typed {} character(s) with mode {} on {}; API return only, reobserve the application.",
@@ -3276,15 +3375,43 @@ async fn run_desktop_control_command(
                 chords,
                 confirm,
                 depth,
+                dry_run,
             } => {
                 let window = desktop_api::window_by_hwnd(&hwnd, &cancel)?;
                 if !confirm.eq_ignore_ascii_case(&hwnd) {
                     return Err("--confirm must exactly match --hwnd".into());
                 }
                 let element = resolve_desktop_element(&window.identity, &element, depth, &cancel)?;
+                if dry_run {
+                    let preview = desktop_api::preview_press_keys(
+                        &window.identity,
+                        &element,
+                        &chords,
+                        &cancel,
+                    )?;
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&desktop_success(
+                                "keys", true, false, &preview
+                            ))?
+                        );
+                    } else {
+                        println!(
+                            "Dry run: would send {} chord(s) on {} (no SendInput).",
+                            preview.count, preview.window.hwnd
+                        );
+                    }
+                    return Ok(());
+                }
                 let receipt = desktop_api::press_keys(&window.identity, &element, &chords, &cancel)?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&receipt)?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&desktop_success(
+                            "keys", false, true, &receipt
+                        ))?
+                    );
                 } else {
                     println!(
                         "Sent {} chord(s) on {}; API return only, reobserve the application.",
@@ -3548,7 +3675,12 @@ async fn run_desktop_status_command(
                 "note": "Status only. No window was enumerated and no desktop input was sent.",
             });
             if json {
-                println!("{report}");
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&desktop_success(
+                        "status", false, false, &report
+                    ))?
+                );
             } else if built {
                 println!(
                     "Desktop control: built; capability {}; {} tool(s)",
@@ -5309,6 +5441,7 @@ enum DesktopAction {
         element: String,
         confirm: String,
         depth: u8,
+        dry_run: bool,
     },
     Type {
         hwnd: String,
@@ -5317,6 +5450,7 @@ enum DesktopAction {
         mode: argentum_domain::desktop::DesktopTextMode,
         confirm: String,
         depth: u8,
+        dry_run: bool,
     },
     Keys {
         hwnd: String,
@@ -5324,7 +5458,31 @@ enum DesktopAction {
         chords: Vec<String>,
         confirm: String,
         depth: u8,
+        dry_run: bool,
     },
+}
+
+impl DesktopAction {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::List => "list",
+            Self::Inspect { .. } => "inspect",
+            Self::Screenshot { .. } => "screenshot",
+            Self::Invoke { .. } => "invoke",
+            Self::Type { .. } => "type",
+            Self::Keys { .. } => "keys",
+        }
+    }
+
+    fn dry_run(&self) -> bool {
+        match self {
+            Self::Invoke { dry_run, .. }
+            | Self::Type { dry_run, .. }
+            | Self::Keys { dry_run, .. } => *dry_run,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -5598,6 +5756,7 @@ where
     let mut desktop_text_mode = None;
     let mut desktop_chords: Vec<String> = Vec::new();
     let mut desktop_confirm = None;
+    let mut desktop_dry_run = false;
     let mut changes_action = None;
     let mut changes_subaction = None;
     let mut changes_target = None;
@@ -6061,6 +6220,12 @@ where
                 index += 1;
                 desktop_confirm = Some(required_value(&values, index, "--confirm")?.to_owned());
             }
+            "--dry-run" if command == "desktop" => {
+                if desktop_dry_run {
+                    return Err("--dry-run may be supplied once".into());
+                }
+                desktop_dry_run = true;
+            }
             unknown if command == "desktop" && unknown.starts_with('-') => {
                 return Err(format!("unknown desktop option '{unknown}'"));
             }
@@ -6326,6 +6491,7 @@ where
                         ("--mode", desktop_text_mode.is_some()),
                         ("--chord", !desktop_chords.is_empty()),
                         ("--confirm", desktop_confirm.is_some()),
+                        ("--dry-run", desktop_dry_run),
                     ])?;
                     DesktopAction::Status
                 }
@@ -6339,6 +6505,7 @@ where
                         ("--mode", desktop_text_mode.is_some()),
                         ("--chord", !desktop_chords.is_empty()),
                         ("--confirm", desktop_confirm.is_some()),
+                        ("--dry-run", desktop_dry_run),
                     ])?;
                     DesktopAction::List
                 }
@@ -6352,6 +6519,7 @@ where
                         ("--mode", desktop_text_mode.is_some()),
                         ("--chord", !desktop_chords.is_empty()),
                         ("--confirm", desktop_confirm.is_some()),
+                        ("--dry-run", desktop_dry_run),
                     ])?;
                     DesktopAction::Inspect {
                         hwnd,
@@ -6374,6 +6542,7 @@ where
                         ("--mode", desktop_text_mode.is_some()),
                         ("--chord", !desktop_chords.is_empty()),
                         ("--confirm", desktop_confirm.is_some()),
+                        ("--dry-run", desktop_dry_run),
                     ])?;
                     DesktopAction::Screenshot { hwnd, output }
                 }
@@ -6394,6 +6563,7 @@ where
                         element,
                         confirm,
                         depth: desktop_depth.unwrap_or(4),
+                        dry_run: desktop_dry_run,
                     }
                 }
                 Some("type") => {
@@ -6419,6 +6589,7 @@ where
                             .unwrap_or(argentum_domain::desktop::DesktopTextMode::Value),
                         confirm,
                         depth: desktop_depth.unwrap_or(4),
+                        dry_run: desktop_dry_run,
                     }
                 }
                 Some("keys") => {
@@ -6441,6 +6612,7 @@ where
                         chords: desktop_chords,
                         confirm,
                         depth: desktop_depth.unwrap_or(4),
+                        dry_run: desktop_dry_run,
                     }
                 }
                 Some(other) => return Err(format!("unknown desktop action '{other}'")),
@@ -7843,9 +8015,10 @@ argentum desktop status [OPTIONS]\n  \
 argentum desktop list [--json] [OPTIONS]\n  \
 argentum desktop inspect --hwnd <0x...> [--depth N] [--json] [OPTIONS]\n  \
 argentum desktop screenshot --hwnd <0x...> --output ABSOLUTE_FILE [--json] [OPTIONS]\n  \
-argentum desktop invoke --hwnd <0x...> --element <json-or-selector> [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
-argentum desktop type --hwnd <0x...> --element <json-or-selector> --text TEXT [--mode value|keys] [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
-argentum desktop keys --hwnd <0x...> --element <json-or-selector> --chord CHORD [--chord CHORD ...] [--depth N] --confirm <HWND> [--json] [OPTIONS]\n  \
+argentum desktop invoke --hwnd <0x...> --element <json-or-selector> [--depth N] --confirm <HWND> [--dry-run] [--json] [OPTIONS]\n  \
+argentum desktop type --hwnd <0x...> --element <json-or-selector> --text TEXT [--mode value|keys] [--depth N] --confirm <HWND> [--dry-run] [--json] [OPTIONS]\n  \
+argentum desktop keys --hwnd <0x...> --element <json-or-selector> --chord CHORD [--chord CHORD ...] [--depth N] --confirm <HWND> [--dry-run] [--json] [OPTIONS]\n  \
+  desktop invoke|type|keys --dry-run resolves and revalidates without UIA/SendInput; --confirm HWND remains required. See docs/WINDOWS_APPLICATION_CONTROL.md for the threat model.\n  \
 argentum permissions list [OPTIONS]\n  \
 argentum permissions select PROFILE_ID [OPTIONS]\n  \
 argentum permissions grants [OPTIONS]\n  \
@@ -9452,7 +9625,76 @@ mod tests {
             "relative.png"
         ])
         .is_err());
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "invoke",
+                "--hwnd",
+                "0x1234",
+                "--element",
+                "path=root",
+                "--confirm",
+                "0x1234",
+                "--dry-run",
+                "--json"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Invoke { dry_run: true, .. },
+                json: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse_args([
+                "desktop",
+                "keys",
+                "--hwnd",
+                "0x1234",
+                "--element",
+                "path=root",
+                "--chord",
+                "Ctrl+S",
+                "--confirm",
+                "0x1234",
+                "--dry-run"
+            ])
+            .unwrap(),
+            Arguments::Desktop {
+                action: DesktopAction::Keys { dry_run: true, .. },
+                ..
+            }
+        ));
+        assert!(parse_args(["desktop", "list", "--dry-run"]).is_err());
         assert!(parse_args(["desktop", "unknown"]).is_err());
+    }
+
+    #[test]
+    fn desktop_envelope_distinguishes_dry_run_and_failure() {
+        let dry = desktop_success(
+            "invoke",
+            true,
+            false,
+            serde_json::json!({"pattern": "InvokePattern"}),
+        );
+        assert_eq!(dry["schema_version"], 1);
+        assert_eq!(dry["ok"], true);
+        assert_eq!(dry["command"], "desktop.invoke");
+        assert_eq!(dry["action"], "invoke");
+        assert_eq!(dry["dry_run"], true);
+        assert_eq!(dry["applied"], false);
+
+        let applied = desktop_success("type", false, true, serde_json::json!({"characters": 3}));
+        assert_eq!(applied["command"], "desktop.type");
+        assert_eq!(applied["dry_run"], false);
+        assert_eq!(applied["applied"], true);
+
+        let failure = desktop_failure("keys", true, "target changed");
+        assert_eq!(failure["ok"], false);
+        assert_eq!(failure["command"], "desktop.keys");
+        assert_eq!(failure["dry_run"], true);
+        assert_eq!(failure["applied"], false);
+        assert_eq!(failure["error"], "target changed");
     }
 
     #[test]
