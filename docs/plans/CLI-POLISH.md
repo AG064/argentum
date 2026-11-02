@@ -19,7 +19,7 @@ acceptance records, or the design system.
 - Feature-gated desktop build reporting. A binary without `desktop-control`
   reports unavailable and exits nonzero instead of implying support.
 
-## This task
+## Doctor and desktop work
 
 Implemented:
 
@@ -50,6 +50,40 @@ current schema. Workspace, provider, harness, and recovery checks are advisory;
 fails. The report never reads credentials, opens a provider connection, or
 writes to the store.
 
+## Discoverability
+
+- `argentum commands [--json]` reports the catalog without executing anything.
+  Each entry has a group, command path, summary, runtime availability
+  (`available`, `reserved`, `unavailable`), feature gate (`extensions`,
+  `desktop-control`, `artifacts`, or none) and mutation flag.
+- The catalog lives in `crates/argentum-cli/src/command_catalog.rs`. It has 117
+  entries covering top-level commands and the provider, session, goal, harness,
+  desktop, permissions, verification, changes, recovery, extensions and
+  artifacts families.
+- `docs/CLI_GUIDE.md` carries the command index generated from the catalog. A
+  test fails if a catalog path is missing from the index.
+- Shell completion is deferred. The catalog does not carry flag arity,
+  positional types or value suggestions, so a generated PowerShell script would
+  be incomplete and a hand-maintained list would drift from the parser. The
+  limitation is documented instead of shipping a fragile list.
+
+## Reserved-command audit
+
+The parser recognizes these names but returns `Arguments::Unavailable`. None is
+advertised as working. Help lists them once as reserved.
+
+| Command | Classification | Reason and replacement |
+| --- | --- | --- |
+| `model` | reserved | Alias not planned as a separate command; use `provider models` or `provider model`. |
+| `profile` | reserved | Alias not planned as a separate command; use `provider save` and `provider select`. |
+| `module` | reserved | Alias not planned as a separate command; use `harness module`. |
+| `plugin` | reserved | Package lifecycle is owned by the extensions family; use `extensions install` and `extensions configure`. |
+| `mcp` | reserved | Server lifecycle is owned by the extensions family. |
+| `migrate` | reserved | Schema migration runs on store open. An explicit command would need backup and verification design. |
+| `prompt` | reserved | Prompt-template management has no current contract. |
+| `self` | reserved | Self-management has no current contract. |
+| `update` | reserved | Self-update needs signed artifact verification and rollback design; not implemented. |
+
 ## Remaining
 
 ### Doctor
@@ -58,8 +92,6 @@ writes to the store.
   provider requests.
 - Report recovery detail beyond unfinished change operations once a read-only
   store surface exists.
-- Add stable check identifiers and document the exit contract in `docs/CLI_GUIDE.md`.
-- Add integration coverage for unreadable, outdated, and newer schemas.
 
 ### Desktop
 
@@ -67,16 +99,11 @@ writes to the store.
   automation id alone without a path (requires a bounded lookup design).
 - Add a capture comparison command only after a reviewed image-diff policy
   exists.
-- Add an explicit dry-run mode for mutating commands that revalidates and prints
-  the target without calling the pattern.
-- Document the desktop threat model and per-command failure taxonomy in
-  `docs/WINDOWS_APPLICATION_CONTROL.md`.
 
 ### General CLI
 
-- Unify `--json` envelopes and exit codes across inspection commands.
-- Add shell completion and a generated command reference.
-- Audit every `Unavailable` stub and either implement it or remove it from help.
+- Unify `--json` envelopes and exit codes across inspection commands beyond
+  doctor and desktop.
 - Keep provider, credential, and recovery output free of secrets and private
   paths where the operator does not need them.
 - Extend focused parser tests whenever a command grows a new flag family.

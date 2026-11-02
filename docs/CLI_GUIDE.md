@@ -159,3 +159,129 @@ as an API return only; reobserve the application.
 Desktop security, identity, bounds, failure taxonomy and the reasons pointer
 injection and focus stealing are omitted are documented in
 [Windows application control](WINDOWS_APPLICATION_CONTROL.md).
+
+## Command index
+
+The command catalog is the single source for this index. `argentum commands --json` emits the same entries with runtime availability. The stable envelope is `schema_version`, `command: "commands"`, `ok`, and `commands`, where each entry has `group`, `path`, `summary`, `availability`, `feature`, and `mutation`. `availability` is `available`, `reserved`, or `unavailable`; feature-gated entries report `unavailable` in a build without that feature. `feature` is null, `extensions`, `desktop-control`, or `artifacts`. `mutation` marks commands that can change durable state or write output.
+
+Reserved names are recognized by the parser but return an unavailable error; they are not working commands. Shell completion is not shipped. The catalog does not carry flag arity, positional types, or value suggestions, and a hand-maintained completion list would drift from the parser.
+
+| Command | Group | Summary | Feature | Mutation |
+| --- | --- | --- | --- | --- |
+| `commands` | core | List the CLI surface, availability and feature gates | none | no |
+| `chat` | core | Open the interactive terminal shell | none | no |
+| `setup` | core | Run deterministic first-run onboarding | none | yes |
+| `doctor` | core | Read-only workspace, database, provider, harness and recovery diagnostics | none | no |
+| `serve` | core | Keep one runtime alive and exchange protocol v1 JSONL on stdin/stdout | none | no |
+| `run` | core | Submit one task and stream its output | none | yes |
+| `result` | core | Read one settled run result without launching work | none | no |
+| `diagnostics` | core | Read bounded metadata for one run | none | no |
+| `accounting inspect` | core | Inspect accounting reservations read-only | none | no |
+| `accounting resolve` | core | Resolve an accounting reservation with owner confirmation | none | yes |
+| `skills list` | core | List project-local skills | none | no |
+| `skills inspect` | core | Inspect one project-local skill | none | no |
+| `status` | core | Show workspace and provider readiness | none | no |
+| `terminal-diagnostic` | core | Write one synthetic terminal diagnostic | none | yes |
+| `local-chat` | core | Open llama.cpp coding chat with policy-controlled tools | none | yes |
+| `local-text` | core | Open explicit text-only local chat | none | no |
+| `context` | core | Preview selected working-context metadata | none | no |
+| `instructions` | core | Preview selected project instruction metadata | none | no |
+| `compact` | core | Compact or deactivate the active session context | none | yes |
+| `workspace status` | core | Show the persisted workspace selection | none | no |
+| `workspace set` | core | Set the persisted workspace selection | none | yes |
+| `sessions` | core | List durable sessions for the current workspace | none | no |
+| `tool list` | core | List registered developer tools and availability | none | no |
+| `provider probe` | provider | Probe one configured provider | none | no |
+| `provider list` | provider | List provider profiles | none | no |
+| `provider save` | provider | Save a provider profile | none | yes |
+| `provider presets` | provider | List provider catalog presets | none | no |
+| `provider add` | provider | Add a profile from a provider preset | none | yes |
+| `provider login` | provider | Start ChatGPT browser sign-in | none | yes |
+| `provider login-new` | provider | Start a new ChatGPT browser sign-in | none | yes |
+| `provider accounts` | provider | List ChatGPT accounts | none | no |
+| `provider account` | provider | Select a ChatGPT account | none | yes |
+| `provider logout` | provider | Sign out of a ChatGPT account | none | yes |
+| `provider select` | provider | Select a provider profile | none | yes |
+| `provider models` | provider | List models for a provider profile | none | no |
+| `provider model` | provider | Select a model for a provider profile | none | yes |
+| `provider budget` | provider | Declare model budget limits | none | yes |
+| `provider context` | provider | Configure local llama.cpp context | none | yes |
+| `provider credential set` | provider | Save a secure provider credential | none | yes |
+| `provider credential clear` | provider | Clear a secure provider credential | none | yes |
+| `session select` | session | Select the active session | none | yes |
+| `session inspect` | session | Inspect one session | none | no |
+| `session pin` | session | Pin a session | none | yes |
+| `session unpin` | session | Unpin a session | none | yes |
+| `session archive` | session | Archive a session | none | yes |
+| `session unarchive` | session | Unarchive a session | none | yes |
+| `session title` | session | Set a session title | none | yes |
+| `session fork` | session | Fork a session | none | yes |
+| `goal status` | goal | Show the active goal contract | none | no |
+| `goal limits` | goal | Amend aggregate goal limits | none | yes |
+| `goal criteria` | goal | Set goal verification runners | none | yes |
+| `goal attest` | goal | Attest goal completion | none | yes |
+| `goal supervise` | goal | Supervise a finite goal | none | yes |
+| `goal deliver` | goal | Deliver a finite multi-stage goal | none | yes |
+| `goal set` | goal | Set a goal objective and budgets | none | yes |
+| `goal pause` | goal | Pause the active goal | none | yes |
+| `goal resume` | goal | Resume a paused goal | none | yes |
+| `goal clear` | goal | Clear the active goal | none | yes |
+| `harness status` | harness | Show harness composition and readiness | none | no |
+| `harness profile` | harness | Select a harness profile | none | yes |
+| `harness surface` | harness | Show or hide a harness surface | none | yes |
+| `harness execution` | harness | Select an execution policy profile | none | yes |
+| `harness capability` | harness | Enable or disable a capability | none | yes |
+| `harness backend` | harness | Enable or disable a local backend | none | yes |
+| `harness module` | harness | Install, enable, disable or remove a module | none | yes |
+| `harness trajectory` | harness | Inspect a session trajectory | none | no |
+| `desktop status` | desktop | Show desktop-control build and capability status | desktop-control | no |
+| `desktop list` | desktop | List bounded top-level windows | desktop-control | no |
+| `desktop inspect` | desktop | Inspect a bounded UIA element tree | desktop-control | no |
+| `desktop screenshot` | desktop | Capture one bounded window PNG | desktop-control | yes |
+| `desktop invoke` | desktop | Invoke one observed element | desktop-control | yes |
+| `desktop type` | desktop | Type bounded text into one element | desktop-control | yes |
+| `desktop keys` | desktop | Send bounded key chords | desktop-control | yes |
+| `permissions list` | permissions | Inspect permission profiles | none | no |
+| `permissions select` | permissions | Select a permission profile | none | yes |
+| `permissions grants` | permissions | List approval grants | none | no |
+| `permissions revoke` | permissions | Revoke an approval grant | none | yes |
+| `verification list` | verification | List fixed verification runners | none | no |
+| `verification inspect` | verification | Inspect verification runner state | none | no |
+| `verification approve` | verification | Approve one verification runner | none | yes |
+| `verification status` | verification | Show verification status | none | no |
+| `changes page` | changes | Page durable change history | none | no |
+| `changes list` | changes | List changes for one run | none | no |
+| `changes diff` | changes | Show one change diff | none | no |
+| `changes restore` | changes | Request an approved restore | none | yes |
+| `changes recovery` | changes | Retry or restore a change operation | none | yes |
+| `recovery inspect` | recovery | Inspect abandoned local owner state | none | no |
+| `recovery reconcile` | recovery | Reconcile abandoned local owner state | none | yes |
+| `recovery review` | recovery | Review one recovery revision | none | yes |
+| `extensions inspect` | extensions | Inspect a package | extensions | no |
+| `extensions install` | extensions | Install a reviewed package | extensions | yes |
+| `extensions configure` | extensions | Configure an extension definition | extensions | yes |
+| `extensions browser setup` | extensions | Configure the first-party browser adapter | extensions | yes |
+| `extensions browser status` | extensions | Show browser adapter definition status | extensions | no |
+| `extensions browser check` | extensions | Check browser runtime readiness | extensions | no |
+| `extensions browser prepare` | extensions | Prepare browser dependencies with explicit network consent | extensions | yes |
+| `extensions list` | extensions | List installed extension records | extensions | no |
+| `extensions status` | extensions | Show extension records and readiness | extensions | no |
+| `extensions receipts` | extensions | Show extension operation receipts | extensions | no |
+| `extensions activate` | extensions | Activate an extension in the local owner console | extensions | yes |
+| `extensions disable` | extensions | Disable an extension | extensions | yes |
+| `extensions remove` | extensions | Remove an extension registration | extensions | yes |
+| `extensions key` | extensions | Save a secure extension service key | extensions | yes |
+| `extensions prepare-media` | extensions | Prepare a private extension image directory | extensions | yes |
+| `artifacts tools` | artifacts | List local artifact tools | artifacts | no |
+| `artifacts inspect` | artifacts | Inspect a local artifact configuration | artifacts | no |
+| `artifacts serve` | artifacts | Serve a local artifact configuration | artifacts | no |
+| `artifacts verify` | artifacts | Verify a local artifact configuration | artifacts | no |
+| `model` | reserved | Reserved model-management alias; use provider models or provider model | none | no |
+| `profile` | reserved | Reserved profile-management alias; use provider save and provider select | none | no |
+| `module` | reserved | Reserved module-management alias; use harness module | none | no |
+| `plugin` | reserved | Reserved plugin-management alias; use extensions install and configure | none | no |
+| `mcp` | reserved | Reserved MCP server-management alias; use the extensions family | none | no |
+| `migrate` | reserved | Reserved explicit store-migration command; schema migration runs on open | none | no |
+| `prompt` | reserved | Reserved prompt-template management | none | no |
+| `self` | reserved | Reserved self-management command | none | no |
+| `update` | reserved | Reserved self-update command | none | no |
