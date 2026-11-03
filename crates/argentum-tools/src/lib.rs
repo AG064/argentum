@@ -2552,8 +2552,12 @@ mod tests {
         }
         assert!(!ids.contains("network"));
         assert!(!ids.contains("persistent_terminal"));
+        // The interface tools touch no workspace capability, so the runtime gates them
+        // on capability_id alone.
         assert!(descriptors.iter().all(|descriptor| {
-            !descriptor.capability_id.is_empty() && !descriptor.capabilities.is_empty()
+            !descriptor.capability_id.is_empty()
+                && (descriptor.capabilities.is_empty()
+                    == matches!(descriptor.id.as_str(), "ui_inspect" | "ui_update"))
         }));
     }
 

@@ -37,7 +37,7 @@ fn status_initializes_a_fresh_database_once_and_reuses_it() {
     let version: u16 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
-    assert_eq!(version, 22);
+    assert_eq!(version, 23);
     let identity: String = connection
         .query_row(
             "SELECT store_id FROM runtime_store_identity WHERE singleton = 1",
@@ -57,7 +57,7 @@ fn status_initializes_a_fresh_database_once_and_reuses_it() {
     let version: u16 = reopened
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version");
-    assert_eq!(version, 22);
+    assert_eq!(version, 23);
     let reopened_identity: String = reopened
         .query_row(
             "SELECT store_id FROM runtime_store_identity WHERE singleton = 1",

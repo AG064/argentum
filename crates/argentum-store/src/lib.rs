@@ -5626,7 +5626,7 @@ mod tests {
                 .expect("store identity");
             (tables, indexes, identity)
         };
-        assert_eq!((tables, indexes), (31, 29));
+        assert_eq!((tables, indexes), (32, 29));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection

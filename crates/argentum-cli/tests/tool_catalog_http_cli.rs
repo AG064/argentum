@@ -53,6 +53,8 @@ const EXPECTED_TOOLS: &[&str] = &[
     "search_filenames",
     "search_text",
     "start_verification",
+    "ui_inspect",
+    "ui_update",
     "verify",
     "write_text",
 ];

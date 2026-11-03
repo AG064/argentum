@@ -110,14 +110,14 @@ fn newer_schema_is_a_required_failure() {
     let database = directory.path().join("newer.db");
     let connection = rusqlite::Connection::open(&database).expect("database");
     connection
-        .execute_batch("PRAGMA user_version = 23;")
+        .execute_batch("PRAGMA user_version = 24;")
         .expect("schema");
     drop(connection);
 
     let output = run_doctor(&workspace, &database);
     assert!(!output.status.success());
     let report = parse(&output);
-    assert_eq!(report["database"]["schema_version"], 23);
+    assert_eq!(report["database"]["schema_version"], 24);
     assert_eq!(report["database"]["status"], "schema_mismatch");
     assert_eq!(report["ok"], false);
 }
@@ -154,7 +154,7 @@ fn current_schema_is_healthy_and_reports_stable_check_ids() {
     assert_eq!(report["command"], "doctor");
     assert_eq!(report["ok"], true);
     assert_eq!(report["healthy"], true);
-    assert_eq!(report["database"]["schema_version"], 22);
+    assert_eq!(report["database"]["schema_version"], 23);
     assert_eq!(
         check_ids(&report),
         vec![
