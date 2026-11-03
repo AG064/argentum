@@ -1,168 +1,115 @@
-# Argentum platform / Genesis CLI
+<p align="center">
+  <img src="assets/brand/argentum-128.png" alt="Argentum logo" width="96" height="96">
+</p>
 
-Argentum is the local-first native Rust platform in the canonical
-[AG064/argentum repository](https://github.com/AG064/argentum).
-Argentum Genesis is its CLI/TUI product, not a separate repository or runtime
-fork. The executable remains `argentum` and the Cargo package remains
-`argentum-cli`. The `0.1.0-rc.1` transition is a Windows x64 CLI prerelease
-candidate, not a published release or a claim that it replaces Codex.
+<h1 align="center">Argentum</h1>
 
-The native command host owns providers, scoped policy, guarded file changes,
-verification, cancellation, durable history and recovery. The Slint and Android
-hosts remain source modules, not release-qualified products in this CLI package.
-The CLI, future desktop frontend and optional browser/extension capabilities
-share this native core. Genesis may release independently of desktop/browser
-acceptance. The previous TypeScript/Node/Tauri product is explicitly legacy;
-its preserved branch, immutable revisions and existing releases are linked in
-[the migration record](docs/MIGRATION_NATIVE.md). Its feature list is not the
-native CLI's feature list.
+<p align="center">
+  A local-first AI coding agent in native Rust, with a modular desktop app and a terminal product on one shared core.
+</p>
 
-The Windows x64 package requires the Universal CRT and Microsoft Visual C++
-x64 runtime (`VCRUNTIME140.dll`). These system/runtime components are not
-redistributed in the package. The recorded local host is Windows build 26100;
-this is not clean-machine or every-Windows-version qualification.
+![The Argentum desktop app with the Git diff module open](docs/screenshots/desktop-git.png)
 
-## Desktop app
+## Two products, one core
 
-`crates/argentum-app` hosts the Workbench, a native Slint shell. A new project starts
-with the conversation and a provider chooser. Everything else is an optional module:
-sessions, context meter, reasoning, goal supervision, agent changes, Git diff, a
-script-free page reader, per-provider usage, plan, activity, trajectory, status bar,
-and command palette. Settings also holds verification, tools and skills, optional
-browser and desktop capabilities, diagnostics, permissions, and updates. The agent can
-read this interface with `ui_inspect` and change it with `ui_update`, one approved
-change at a time. See [the module contract](docs/UI_MODULES.md).
+<table>
+  <tr>
+    <th width="50%"><a href="crates/argentum-app/README.md">Argentum desktop</a></th>
+    <th width="50%"><a href="crates/argentum-cli/README.md">Argentum Genesis</a></th>
+  </tr>
+  <tr>
+    <td><a href="crates/argentum-app/README.md"><img src="docs/screenshots/desktop-minimal.png" alt="The minimal desktop interface"></a></td>
+    <td><a href="crates/argentum-cli/README.md"><img src="docs/screenshots/cli-doctor.png" alt="The doctor command in a console"></a></td>
+  </tr>
+  <tr>
+    <td>The native Slint app. It starts with a provider and a conversation. Everything else is an optional module: Git diff, a page reader, usage, goals, and more.</td>
+    <td>The CLI and terminal shell, <code>argentum</code>. Chat interactively, run headless tasks with JSON output, or serve JSONL to another program.</td>
+  </tr>
+  <tr>
+    <td><code>cargo run -p argentum-app</code></td>
+    <td><code>cargo run -p argentum-cli --bin argentum</code></td>
+  </tr>
+  <tr>
+    <td><b>Status:</b> built from source, no installer yet</td>
+    <td><b>Status:</b> Windows x64 prerelease candidate, not published yet</td>
+  </tr>
+</table>
 
-```powershell
-cargo run -p argentum-app
-```
+Both run on the same native core, which owns providers, scoped policy, guarded file
+changes, verification, cancellation, durable history, and recovery. Genesis can release
+on its own, and a default CLI build does not include the desktop code.
 
-## Build from a fresh checkout
+## What sets it apart
 
-Install Rust 1.98.0 with rustfmt and Clippy, Git, and the Windows MSVC C++ build
-tools. No Node.js, private compiler cache, model download or old executable is
-required. Cargo.lock pins the dependency resolution.
+- **Local first:** your projects, sessions, and history stay on your machine. There is
+  no hidden telemetry, and updates contact GitHub only when you ask.
+- **You stay in control:** the saved project policy decides what the agent can do.
+  Prompts, model output, and remote content cannot grant it more.
+- **Guarded changes:** edits must match the exact source the agent read, and changes
+  can be reviewed and restored.
+- **Checked work:** verification runners produce receipts tied to the source they
+  checked.
+- **Durable history:** sessions and runs survive restarts, and recovery after a crash
+  is explicit, never automatic.
+- **Your choice of model:** hosted providers, aggregators, your own server, or local
+  llama.cpp.
+- **Modular:** extensions, MCP, a browser adapter, desktop control, and local artifacts
+  are optional at build time.
+
+## Quick start
+
+You need Rust 1.98.0, Git, and on Windows the MSVC C++ build tools. No Node.js is
+needed.
 
 ```powershell
 git clone https://github.com/AG064/argentum.git
 cd argentum
-# Until the native transition is merged, select the accepted native baseline.
-git fetch origin af3e8459536677af2050027b57eb968d30cd2f7a
-git switch --detach af3e8459536677af2050027b57eb968d30cd2f7a
-cargo build -p argentum-cli --bin argentum --release --locked
-& '.\target\release\argentum.exe' --help
+cargo run -p argentum-app
 ```
 
-To prepare a versioned portable package, use
-`scripts/package-windows-cli.ps1 -OutputDirectory C:\temporary\package`.
-The script refuses dirty source and existing output, produces checksums and
-source provenance, and neither signs nor publishes anything.
+For the terminal product, and for setup details, see
+[its page](crates/argentum-cli/README.md).
 
-The workspace defaults to `argentum-cli` with no default optional features.
-Workspace membership does not include every crate in the CLI binary. The
-Windows normal/build dependency selection excludes Slint, the desktop host,
-Android JNI/llama.cpp and external MCP; packaging selects this same CLI target
-without optional features. See [the verified boundaries](docs/architecture.md).
-NEXT01 adds an explicit `extensions` feature in this development branch, not
-in the RELEASE01 core package. Its supported local-browser contribution reached
-post-recovery native completion on 2026-10-13, with current source verification,
-model acknowledgement and independent rendered acceptance. Historical deadline
-failures and estimated-usage dispositions remain recorded; this was assisted
-completion of retained work, not uninterrupted autonomy or general reliability.
-See [the dated NEXT01 evidence](docs/NEXT01_ACCEPTANCE.md).
+## Project status
 
-NEXT02 adds an explicitly selected `desktop-control` feature, not a default core
-dependency. Its declared native-editor workflow reached assisted post-repair
-completion on 2026-10-16, with current verification, model acknowledgement,
-independent saved-artifact review and scoped image evidence. This does not qualify
-general desktop parity or change release status. See
-[the dated NEXT02 evidence](docs/NEXT02_ACCEPTANCE.md) and
-[its application boundary](docs/WINDOWS_APPLICATION_CONTROL.md).
-The [separate dependency maintenance](docs/NEXT02_DEPENDENCY_MAINTENANCE.md)
-preserves that acceptance and requires its own source/package qualification.
+No native release has been published. The latest published release, v0.0.9, is the
+earlier TypeScript product, which is now legacy. Its source and releases are linked in
+[the migration record](docs/MIGRATION_NATIVE.md).
 
-## First run
+Windows x64 is the only tested platform. It has been tested on one Windows build, not
+on a clean machine or across Windows versions. macOS, Linux, Android, and iOS are
+targets, not qualified products. Argentum is not yet a proven replacement for other
+coding agents.
 
-NEXT03's optional `artifacts` development feature completed one bounded local
-Markdown-to-PDF workflow through the same native runtime on 2026-10-17.
-It requires no Google account.
-Its pinned worker, image and verification boundaries are described in
-[local artifacts](docs/LOCAL_ARTIFACTS.md). Qualification is separate from the
-accepted NEXT01/NEXT02 workflows, connected-app acceptance and the core RC.
-See [the scoped acceptance record](docs/NEXT03_LOCAL_ACCEPTANCE.md), including
-independent review, assistance and exact compiled-package provenance.
+| Read this | For |
+| --- | --- |
+| [Support matrix](docs/SUPPORT_MATRIX.md) | What each platform and provider has been tested on |
+| [Roadmap](ROADMAP.md) | What is next, and the release gates |
+| [Release record](docs/releases/0.1.0-rc.1.md) | Exact results for `0.1.0-rc.1` |
+| [Security policy](SECURITY.md) | The trust boundary, and how to report a vulnerability privately |
+| [All documentation](docs/README.md) | Guides, architecture, and evidence |
 
-Run from any directory. Supply the same workspace and database on every command
-when using an explicit store. Choose a new database for initial evaluation,
-rather than copying another application's or another project owner's store.
+## Repository layout
 
-```powershell
-$exe = 'C:\tools\argentum\argentum.exe'
-$ws = 'C:\projects\example'
-$db = 'C:\state\argentum\example.sqlite3'
-& $exe setup --workspace $ws --database $db
-& $exe status --workspace $ws --database $db --json
-& $exe chat --workspace $ws --database $db
-```
+| Path | What |
+| --- | --- |
+| [`crates/argentum-app`](crates/argentum-app/README.md) | Desktop host |
+| [`crates/argentum-cli`](crates/argentum-cli/README.md) | Genesis CLI and terminal shell |
+| [`ui/`](ui/) | Slint interface, tokens, and icons |
+| [`crates/`](crates/) | Shared runtime, store, tools, providers, and security |
+| [`platforms/`](platforms/README.md) | Native platform targets |
+| [`docs/`](docs/README.md) | Documentation |
 
-Setup selects a provider/model, secure credentials, explicit model budget and
-workspace policy. A saved selection is not readiness, entitlement or permission.
-Use masked secure key entry or native ChatGPT browser consent, never a key in a
-command, chat prompt, URL or configuration file. See [the CLI guide](docs/CLI_GUIDE.md)
-and [ChatGPT sign-in](docs/CHATGPT_SIGN_IN.md).
+## Contributing
 
-The default requires confirmation before changes. Bounded search and UTF-8
-reads provide exact source identities. Edits require SHA-bound preimages and
-reject stale or ambiguous selections. Fixed and exactly approved project
-verification produce revision-bound receipts. Supplemental Rust checks are
-optional executable input with their own owner-enabled boundary and limited
-project support; a passing check is not proof of every public requirement.
+Use a focused branch named `feature/`, `fix/`, or `docs/`. There is one repository and
+one shared runtime, so please do not create separate CLI-only branches or copies for one
+frontend. [CONTRIBUTING.md](CONTRIBUTING.md) describes the checks to run.
 
-Headless `run` and JSONL `serve` cannot grant themselves authority. An action
-requiring an unavailable owner responder fails explicitly with
-`approval_required`, rather than waiting forever or silently approving it.
+## License
 
-## Evidence and limits
-
-The [clean-source integration record](docs/GENESIS_INTEGRATION01.md) separates
-accepted runtime repairs, the generic optional-adapter capture correction and
-retained later native changes from task-local configuration and private
-evidence. Its integrated packages require their own source-bound qualification;
-historical live acceptance is not transferred to a new executable.
-
-This transition reuses accepted native workflow evidence and adds clean-source,
-package and credential-free loopback qualification. It makes no new live
-provider requests. MILESTONE01 was an assisted delivery with review and recovery
-interventions, not unassisted autonomous reliability evidence.
-
-Read [release status](docs/releases/0.1.0-rc.1.md),
-[platform/provider support](docs/SUPPORT_MATRIX.md),
-[migration](docs/MIGRATION_NATIVE.md), and [the two-track roadmap](ROADMAP.md).
-Browser automation, external plugins/MCP and general computer use are not
-included in the RELEASE01 core release. NEXT01's optional implementation and
-bounded post-recovery acceptance remain separate. No hidden telemetry upload, self-update,
-model-owned shell approval, push, merge or publication capability is added.
-
-## Development and licensing
-
-Use reviewable feature branches in this repository. Create release-maintenance
-branches only for an actual supported version that needs them. Do not create a
-permanent CLI-only branch, a separate Genesis repository or frontend-specific
-copies of the shared runtime. Existing transition branches are review branches,
-not permanent product lines.
-
-Use descriptive `feature/`, `fix/` or `docs/` names for new work, without
-assistant-branded prefixes. The immutable baseline above preserves the accepted
-native source; to evaluate a later review, select its exact reviewed commit or
-descriptively named branch instead. A branch name alone is not qualification.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) describes focused tests and contribution
-requirements. [SECURITY.md](SECURITY.md) defines the actual trust boundary and
-private vulnerability reporting.
-
-The project license is MIT-derived with an additional mandatory acknowledgement,
-not unmodified SPDX MIT. Cargo inherits the exact [LICENSE](LICENSE) through
-`license-file`. Keep its text and the acknowledgement in distributions.
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) identifies separate third-party
-terms. The CLI package does not bundle Slint UI, a model, llama.cpp or an Android
-runtime. No public release, tag or package publication is automatic.
+The project license is MIT-derived with an additional mandatory acknowledgement, not
+unmodified SPDX MIT. Cargo inherits the exact [LICENSE](LICENSE) through `license-file`.
+Keep its text and the acknowledgement in distributions.
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) identifies separate third-party terms.
+The CLI package does not bundle the Slint UI, a model, llama.cpp, or an Android runtime.
