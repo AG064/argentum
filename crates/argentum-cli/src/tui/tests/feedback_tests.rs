@@ -88,13 +88,13 @@ fn completed_messages_hide_internal_recording_state_and_failed_answers_are_clear
     }
     state.transcript_changed();
     let rows = state.transcript_rows(100, 12).join("\n");
-    assert!(rows.contains("you: normal message"));
-    assert!(rows.contains("argentum: normal message"));
+    assert!(rows.contains("\u{203a} normal message"));
+    assert!(rows.contains("\u{25cf} normal message"));
     assert!(!rows.contains("recorded") && !rows.contains("complete"));
     state.timeline.last_mut().unwrap().state = "failed".into();
     state.transcript_changed();
     let rows = state.transcript_rows(100, 12).join("\n");
-    assert!(rows.contains("response failed"));
+    assert!(rows.contains("Response failed"));
     assert!(!rows.contains("recorded"));
 }
 
@@ -115,7 +115,7 @@ fn tool_rows_replace_planned_paths_with_actual_completed_changes() {
     )));
     assert!(state.display_status().contains("Executing apply_patch"));
     let rows = state.transcript_rows(100, 16).join("\n");
-    assert!(rows.contains("Create \"new.py\"") && rows.contains("result: running"));
+    assert!(rows.contains("Create \"new.py\"") && rows.contains("running"));
     state.apply_event(AppEvent::ToolFinished(trace(
         run,
         id,
@@ -127,7 +127,6 @@ fn tool_rows_replace_planned_paths_with_actual_completed_changes() {
         "Created \"new.py\"",
         "Modified \"requirements.txt\"",
         "Deleted \"old.py\"",
-        "result: succeeded",
     ] {
         assert!(rows.contains(text), "missing {text}");
     }
@@ -155,7 +154,7 @@ fn failed_tool_does_not_claim_completed_changes() {
         ToolResultState::Failed,
     )));
     let rows = state.transcript_rows(100, 10).join("\n");
-    assert!(rows.contains("result: failed"));
+    assert!(rows.contains("failed"));
     assert!(!rows.contains("Created"));
 }
 

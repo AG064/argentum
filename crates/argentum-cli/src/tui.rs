@@ -38,6 +38,7 @@ mod queue;
 mod review;
 mod screen;
 mod settings;
+mod style;
 mod transcript;
 pub use local_text::run_local_text_session;
 mod terminal_diagnostic;
@@ -198,6 +199,8 @@ pub struct TuiState {
     shutdown_notice: Option<String>,
     status: String,
     progress_tick: u8,
+    progress_since: std::cell::Cell<Option<std::time::Instant>>,
+    context_use: Option<(argentum_domain::SessionId, u64, u64)>,
     interrupt_armed: bool,
     terminal_width: u16,
     coding_preflight_issue: Option<String>,
@@ -251,6 +254,8 @@ impl TuiState {
             shutdown_notice: None,
             status: "Ready".into(),
             progress_tick: 0,
+            progress_since: std::cell::Cell::new(None),
+            context_use: None,
             interrupt_armed: false,
             terminal_width: DEFAULT_TERMINAL_WIDTH,
             coding_preflight_issue: None,
@@ -370,6 +375,12 @@ impl TuiState {
                 TuiAction::Redraw
             }
             InputEvent::Access => TuiAction::Ui(menu::Request::Open(menu::View::Permissions)),
+            InputEvent::Escape
+                if self.active_run_id.is_some() || self.manual_compaction.is_some() =>
+            {
+                self.status = "Interrupt requested".into();
+                self.handle_slash_command("/stop")
+            }
             InputEvent::Escape | InputEvent::ConfirmAccess(_) => TuiAction::Redraw,
             InputEvent::Scroll(rows) => self.scroll_rows(rows),
             InputEvent::Latest => self.jump_latest(),
@@ -452,6 +463,18 @@ impl TuiState {
     }
 
     pub fn apply_event(&mut self, event: AppEvent) {
+        if let AppEvent::ContextRequestAccounted {
+            session_id,
+            accounting,
+            ..
+        } = &event
+        {
+            self.context_use = Some((
+                *session_id,
+                accounting.accounted_input,
+                accounting.usable_context,
+            ));
+        }
         match event {
             AppEvent::GoalSnapshotLoaded {
                 session_id,
@@ -1811,6 +1834,7 @@ impl TuiState {
             && self.shutdown_notice.is_none()
     }
 
+    #[cfg(test)]
     fn display_status(&self) -> String {
         if self.progress_active() {
             let marker = ['|', '/', '-', '\\'][usize::from(self.progress_tick % 4)];
@@ -2716,6 +2740,7 @@ impl<W: Write> TtyRenderer<W> {
             return Ok(());
         }
         let frame = screen::frame(state, width, height);
+        let no_color = state.no_color || std::env::var_os("NO_COLOR").is_some();
         let full_redraw =
             self.previous.is_none() || self.width != Some(width) || self.height != Some(height);
         let mut bytes = Vec::new();
@@ -2724,9 +2749,19 @@ impl<W: Write> TtyRenderer<W> {
             self.stats.full_clears += 1;
         }
         for (row, line) in frame.rows.iter().enumerate() {
-            if full_redraw || self.previous.as_ref().and_then(|old| old.rows.get(row)) != Some(line)
-            {
-                write!(bytes, "\x1b[{};1H\x1b[2K{}", row + 1, line)?;
+            let styles = &frame.styles[row];
+            let unchanged = self.previous.as_ref().is_some_and(|old| {
+                old.rows.get(row) == Some(line) && old.styles.get(row) == Some(styles)
+            });
+            if full_redraw || !unchanged {
+                let painted = style::paint(
+                    &style::Row {
+                        text: line.clone(),
+                        spans: styles.clone(),
+                    },
+                    no_color,
+                );
+                write!(bytes, "\x1b[{};1H\x1b[2K{}", row + 1, painted)?;
                 self.stats.changed_rows += 1;
             }
         }
