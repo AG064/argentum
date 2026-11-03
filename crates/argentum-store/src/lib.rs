@@ -19,9 +19,10 @@ use argentum_domain::{
     ConversationSnapshot, ExecutionAuditRecord, FileChangeId, FileChangeKind, FileChangeOrigin,
     FileChangeRecord, FileSnapshotRef, Goal, GrantId, GrantScope, GrantSubject,
     HarnessExecutionPolicy, LayoutProfile, LineCountAvailability, MessageId, ModelUsage,
-    OnboardingSnapshot, Project, ProjectId, ProviderKind, ProviderProfile, RestoreResult, RunId,
-    Session, SessionArchiveFilter, SessionId, SessionListRow, SessionListSnapshot, SessionSummary,
-    Sha256Digest, VerificationEvidence, WorkspaceSnapshot, DEFAULT_EXECUTION_PROFILE_ID,
+    OnboardingSnapshot, Project, ProjectId, ProviderKind, ProviderProfile, ProviderUsageRow,
+    RestoreResult, RunId, Session, SessionArchiveFilter, SessionId, SessionListRow,
+    SessionListSnapshot, SessionSummary, Sha256Digest, UiPreferences, VerificationEvidence,
+    WorkspaceSnapshot, DEFAULT_EXECUTION_PROFILE_ID,
 };
 use directories::ProjectDirs;
 use rusqlite::{
@@ -35,7 +36,7 @@ use url::Url;
 use uuid::Uuid;
 
 /// Current on-disk schema version written by `Store::migrate`.
-pub const SCHEMA_VERSION: u16 = 22;
+pub const SCHEMA_VERSION: u16 = 23;
 
 mod command_identity;
 mod context_budget;
@@ -2213,6 +2214,82 @@ impl Store {
         Ok(())
     }
 
+    /// Appearance is per installation, so it follows the user between workspaces.
+    pub fn save_ui_preferences(&self, preferences: &UiPreferences) -> Result<(), StoreError> {
+        let payload = serde_json::to_string(preferences)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        connection.execute(
+            "INSERT INTO ui_preferences (id, payload) VALUES (1, ?1)
+             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
+            params![payload],
+        )?;
+        Ok(())
+    }
+
+    /// A stored document that no longer validates falls back to the defaults, so
+    /// a bad record cannot leave the interface unusable.
+    pub fn load_ui_preferences(&self) -> Result<UiPreferences, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement =
+            connection.prepare("SELECT payload FROM ui_preferences WHERE id = 1")?;
+        let mut rows = statement.query([])?;
+        let Some(row) = rows.next()? else {
+            return Ok(UiPreferences::default());
+        };
+        let payload: String = row.get(0)?;
+        Ok(serde_json::from_str::<UiPreferences>(&payload)
+            .ok()
+            .filter(|preferences| preferences.validate().is_ok())
+            .unwrap_or_default())
+    }
+
+    /// Tokens the provider reported for completed turns, grouped by profile. Turns
+    /// with no reported usage are not counted, and nothing is estimated.
+    pub fn provider_usage(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Vec<ProviderUsageRow>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT profile_id, usage FROM conversation_messages
+             WHERE project_id = ?1 AND role = 'assistant' AND usage IS NOT NULL",
+        )?;
+        let mut rows = statement.query(params![project_id.to_string()])?;
+        let mut totals: BTreeMap<String, ProviderUsageRow> = BTreeMap::new();
+        while let Some(row) = rows.next()? {
+            let profile_id: String = row.get(0)?;
+            let usage: String = row.get(1)?;
+            let Some(usage) = parse_stored_usage(Some(&usage))? else {
+                continue;
+            };
+            let entry = totals
+                .entry(profile_id.clone())
+                .or_insert_with(|| ProviderUsageRow {
+                    profile_id,
+                    turns: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                });
+            entry.turns = entry.turns.saturating_add(1);
+            entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
+            entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
+            entry.total_tokens = entry.total_tokens.saturating_add(usage.total_tokens);
+        }
+        let mut rows = totals.into_values().collect::<Vec<_>>();
+        rows.sort_by_key(|row| std::cmp::Reverse(row.total_tokens));
+        Ok(rows)
+    }
+
     pub fn load_layout(&self, key: &str) -> Result<Option<LayoutProfile>, StoreError> {
         let connection = self
             .connection
@@ -3233,6 +3310,10 @@ impl Store {
              );
              CREATE TABLE IF NOT EXISTS module_preferences (
                  project_id TEXT PRIMARY KEY,
+                 payload TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS ui_preferences (
+                 id INTEGER PRIMARY KEY CHECK(id = 1),
                  payload TEXT NOT NULL
              );
               CREATE TABLE IF NOT EXISTS projects (
@@ -5506,7 +5587,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u16>(0))
             .expect("schema version");
         assert_eq!(payload_version, EVENT_PAYLOAD_VERSION);
-        assert_eq!(schema_version, 22);
+        assert_eq!(schema_version, SCHEMA_VERSION);
     }
 
     #[test]
@@ -5519,7 +5600,7 @@ mod tests {
             let version: u16 = connection
                 .query_row("PRAGMA user_version", [], |row| row.get(0))
                 .expect("schema version");
-            assert_eq!(version, 22);
+            assert_eq!(version, SCHEMA_VERSION);
             let tables: i64 = connection
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master
@@ -5623,7 +5704,7 @@ mod tests {
             connection
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u16>(0))
                 .expect("schema version"),
-            22
+            SCHEMA_VERSION
         );
         assert!(connection
             .query_row(

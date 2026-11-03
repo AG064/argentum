@@ -251,6 +251,8 @@ impl ToolRegistry {
         for &tool in BuiltinTool::ALL {
             registry.register(tool);
         }
+        registry.register(InspectUiTool);
+        registry.register(UpdateUiTool);
         let _ = workspace;
         registry
     }
@@ -374,7 +376,9 @@ impl ToolRegistry {
             | ToolInput::CheckRust { .. }
             | ToolInput::PollProcessJob { .. }
             | ToolInput::CancelProcessJob { .. }
-            | ToolInput::Extension { .. } => None,
+            | ToolInput::Extension { .. }
+            | ToolInput::InspectUi
+            | ToolInput::UpdateUi { .. } => None,
             ToolInput::DesktopListWindows { .. }
             | ToolInput::DesktopInspect { .. }
             | ToolInput::DesktopInvoke { .. }
@@ -993,6 +997,60 @@ impl BuiltinTool {
     }
 }
 
+/// Reports the shell's modules, layout, and theme. The runtime answers this one,
+/// since the data lives in its store. The descriptor is what makes it a tool.
+pub struct InspectUiTool;
+
+#[async_trait]
+impl AgentTool for InspectUiTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "ui_inspect".into(),
+            capability_id: "tool.ui-inspect".into(),
+            title: "Inspect interface".into(),
+            summary: "Read Argentum's current modules, layout, and theme. Takes no arguments."
+                .into(),
+            capabilities: Vec::new(),
+            risk: ToolRisk::ReadOnly,
+            requires_approval: false,
+        }
+    }
+
+    async fn execute(
+        &self,
+        _request: ToolRequest,
+        _context: ToolContext,
+    ) -> Result<ToolResult, ToolError> {
+        Err(ToolError::Execution("ui_inspect is runtime-owned".into()))
+    }
+}
+
+/// Changes presentation only, after one explicit approval. Applied by the runtime.
+pub struct UpdateUiTool;
+
+#[async_trait]
+impl AgentTool for UpdateUiTool {
+    fn descriptor(&self) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "ui_update".into(),
+            capability_id: "tool.ui-update".into(),
+            title: "Change interface".into(),
+            summary: "Change Argentum's modules, layout, or theme. Each change waits for one approval. Presentation only.".into(),
+            capabilities: Vec::new(),
+            risk: ToolRisk::Mutation,
+            requires_approval: true,
+        }
+    }
+
+    async fn execute(
+        &self,
+        _request: ToolRequest,
+        _context: ToolContext,
+    ) -> Result<ToolResult, ToolError> {
+        Err(ToolError::Execution("ui_update is runtime-owned".into()))
+    }
+}
+
 #[async_trait]
 impl AgentTool for BuiltinTool {
     fn descriptor(&self) -> ToolDescriptor {
@@ -1015,6 +1073,8 @@ impl AgentTool for BuiltinTool {
 
 fn tool_id_for_input(input: &ToolInput) -> &'static str {
     match input {
+        ToolInput::InspectUi => "ui_inspect",
+        ToolInput::UpdateUi { .. } => "ui_update",
         ToolInput::ListDirectory { .. } => "list_directory",
         ToolInput::FileMetadata { .. } => "file_metadata",
         ToolInput::ReadText { .. } => "read_text",
@@ -1819,6 +1879,9 @@ async fn execute_builtin(
         | ToolInput::DesktopPressKeys { .. }
         | ToolInput::DesktopScreenshot { .. } => Err(ToolError::NotRegistered(
             "desktop control is not compiled in this build".into(),
+        )),
+        ToolInput::InspectUi | ToolInput::UpdateUi { .. } => Err(ToolError::Execution(
+            "interface tools are runtime-owned".into(),
         )),
     }
 }
@@ -2742,7 +2805,7 @@ mod tests {
                     "kind": "match",
                     "path": format!("folder/quoted_\"{index}\\name.txt"),
                     "line_number": index + 1,
-                    "line": format!("tab\t nul\u{0} snowman ☃ {index}"),
+                    "line": format!("tab\t nul\u{0} snowman \u{2603} {index}"),
                     "line_truncated": index % 2 == 0,
                     "context": {
                         "before_requested": 8,

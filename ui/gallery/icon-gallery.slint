@@ -1,5 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { AgTheme } from "../tokens.slint";
+import { AgIcon } from "../components/icon.slint";
 
 component CandidateIcon inherits Rectangle {
     in property <string> role;
@@ -10,27 +11,12 @@ component CandidateIcon inherits Rectangle {
     height: root.glyph-size;
     background: transparent;
 
-    Image {
-        width: parent.width;
-        height: parent.height;
-        source: root.role == "new-task" ? @image-url("../assets/icons/lucide/square-pen.svg")
-            : (root.role == "search" ? @image-url("../assets/icons/lucide/search.svg")
-            : (root.role == "sessions" ? @image-url("../assets/icons/lucide/message-square.svg")
-            : (root.role == "activity" ? @image-url("../assets/icons/lucide/activity.svg")
-            : (root.role == "plan" ? @image-url("../assets/icons/lucide/list-checks.svg")
-            : (root.role == "trajectory" ? @image-url("../assets/icons/lucide/git-branch.svg")
-            : (root.role == "changes" ? @image-url("../assets/icons/lucide/file-diff.svg")
-            : (root.role == "inspector" ? @image-url("../assets/icons/lucide/panel-right.svg")
-            : (root.role == "provider" ? @image-url("../assets/icons/lucide/server.svg")
-            : (root.role == "model" ? @image-url("../assets/icons/lucide/cpu.svg")
-            : (root.role == "workspace" ? @image-url("../assets/icons/lucide/folder.svg")
-            : (root.role == "approval" ? @image-url("../assets/icons/lucide/shield-check.svg")
-            : (root.role == "run" ? @image-url("../assets/icons/lucide/play.svg")
-            : (root.role == "stop" ? @image-url("../assets/icons/lucide/square.svg")
-            : (root.role == "settings" ? @image-url("../assets/icons/lucide/sliders-horizontal.svg")
-            : @image-url("../assets/icons/lucide/ellipsis.svg")))))))))))))));
-        colorize: root.tint;
-        image-fit: contain;
+    AgIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.role;
+        tint: root.tint;
+        size: root.glyph-size;
     }
 }
 
@@ -175,6 +161,28 @@ export component IconGallery inherits Window {
                 IconGalleryRow { role: "stop"; svg-name: "square"; }
                 IconGalleryRow { role: "settings"; svg-name: "sliders-horizontal"; }
                 IconGalleryRow { role: "more"; svg-name: "ellipsis"; }
+                IconGalleryRow { role: "plus"; svg-name: "plus"; }
+                IconGalleryRow { role: "menu"; svg-name: "menu"; }
+                IconGalleryRow { role: "close"; svg-name: "x"; }
+                IconGalleryRow { role: "folder"; svg-name: "folder"; }
+                IconGalleryRow { role: "file"; svg-name: "file"; }
+                IconGalleryRow { role: "check"; svg-name: "check"; }
+                IconGalleryRow { role: "play"; svg-name: "play"; }
+                IconGalleryRow { role: "chevron-right"; svg-name: "chevron-right"; }
+                IconGalleryRow { role: "chevron-down"; svg-name: "chevron-down"; }
+                IconGalleryRow { role: "lock"; svg-name: "lock"; }
+                IconGalleryRow { role: "sliders"; svg-name: "sliders-horizontal"; }
+                IconGalleryRow { role: "command"; svg-name: "command"; }
+                IconGalleryRow { role: "paperclip"; svg-name: "paperclip"; }
+                IconGalleryRow { role: "panel"; svg-name: "panel-right"; }
+                IconGalleryRow { role: "terminal"; svg-name: "terminal"; }
+                IconGalleryRow { role: "session"; svg-name: "message-square"; }
+                IconGalleryRow { role: "review"; svg-name: "list-checks"; }
+                IconGalleryRow { role: "diff"; svg-name: "file-diff"; }
+                IconGalleryRow { role: "verify"; svg-name: "shield-check"; }
+                IconGalleryRow { role: "motion"; svg-name: "activity"; }
+                IconGalleryRow { role: "timeline"; svg-name: "git-branch"; }
+                IconGalleryRow { role: "alert"; svg-name: "triangle-alert"; }
             }
         }
 

@@ -213,6 +213,7 @@ fn finish_command_error(error: Box<dyn std::error::Error>, command: &str, json: 
     ExitCode::FAILURE
 }
 
+#[cfg(not(all(feature = "extensions", feature = "artifacts")))]
 fn finish_feature_unavailable(message: &str, command: &str, json: bool) -> ExitCode {
     if json {
         json_contract::emit(&json_contract::JsonErrorEnvelope::new(
@@ -7994,21 +7995,12 @@ fn parse_provider_kind(value: &str) -> Result<argentum_domain::ProviderKind, Str
 }
 
 fn parse_surface_id(value: &str) -> Result<argentum_domain::SurfaceId, String> {
-    match value {
-        "conversation" => Ok(argentum_domain::SurfaceId::Conversation),
-        "plan" => Ok(argentum_domain::SurfaceId::Plan),
-        "changes" => Ok(argentum_domain::SurfaceId::Changes),
-        "files" => Ok(argentum_domain::SurfaceId::Files),
-        "terminal" => Ok(argentum_domain::SurfaceId::Terminal),
-        "preview" => Ok(argentum_domain::SurfaceId::Preview),
-        "activity" => Ok(argentum_domain::SurfaceId::Activity),
-        "trajectory" => Ok(argentum_domain::SurfaceId::Trajectory),
-        "approvals" => Ok(argentum_domain::SurfaceId::Approvals),
-        _ => Err(
-            "SURFACE must be conversation, plan, changes, files, terminal, preview, activity, trajectory, or approvals"
-                .to_owned(),
-        ),
-    }
+    argentum_domain::SurfaceId::from_id(value).ok_or_else(|| {
+        let known = argentum_domain::SurfaceId::ALL
+            .map(argentum_domain::SurfaceId::id)
+            .join(", ");
+        format!("SURFACE must be one of: {known}")
+    })
 }
 
 fn parse_verification_runner(value: &str) -> Result<argentum_domain::VerificationRunnerId, String> {

@@ -4,8 +4,8 @@ use argentum_domain::{
     ApprovalMode, HarnessAvailability, HarnessCapabilityKind, HarnessCapabilityState,
     HarnessExecutionPolicy, HarnessExecutionProfileSummary, HarnessProfileSummary,
     HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, LayoutProfile, SandboxScope, SurfaceId,
-    CUSTOM_EXECUTION_PROFILE_ID, DEFAULT_EXECUTION_PROFILE_ID, LEGACY_GUIDED_EXECUTION_PROFILE_ID,
-    LEGACY_READ_ONLY_EXECUTION_PROFILE_ID,
+    CUSTOM_EXECUTION_PROFILE_ID, DEFAULT_EXECUTION_PROFILE_ID, INSPECTOR_SURFACE_ORDER,
+    LEGACY_GUIDED_EXECUTION_PROFILE_ID, LEGACY_READ_ONLY_EXECUTION_PROFILE_ID,
 };
 use thiserror::Error;
 
@@ -30,7 +30,7 @@ pub use lifecycle::{
     ComposableHarness, ComposableHarnessError, HarnessModuleHandle, HarnessModuleRegistration,
 };
 
-pub const DEFAULT_PROFILE_ID: &str = "standard";
+pub const DEFAULT_PROFILE_ID: &str = "focused";
 pub const CUSTOM_PROFILE_ID: &str = "custom";
 
 const MAX_REGISTRATIONS: usize = 128;
@@ -437,20 +437,13 @@ impl HarnessRegistry {
             }
         }
         resolved.active_inspector = self.first_enabled_inspector(&resolved);
-        resolved.inspector_collapsed =
-            matches!(profile.id.as_str(), "focused" | DEFAULT_PROFILE_ID)
-                || resolved.active_inspector.is_none();
+        resolved.inspector_collapsed = matches!(profile.id.as_str(), "focused" | "standard")
+            || resolved.active_inspector.is_none();
         Ok(resolved)
     }
 
     fn first_enabled_inspector(&self, layout: &LayoutProfile) -> Option<SurfaceId> {
-        [
-            SurfaceId::Changes,
-            SurfaceId::Activity,
-            SurfaceId::Trajectory,
-        ]
-        .into_iter()
-        .find(|surface| {
+        INSPECTOR_SURFACE_ORDER.into_iter().find(|surface| {
             self.surfaces
                 .get(surface)
                 .is_some_and(|registration| registration.available)
@@ -514,10 +507,9 @@ impl HarnessRegistry {
             if !surface.available {
                 resolved.visible.insert(surface.id, false);
             } else if !surface.configurable {
-                resolved.visible.insert(
-                    surface.id,
-                    matches!(surface.id, SurfaceId::Conversation | SurfaceId::Plan),
-                );
+                resolved
+                    .visible
+                    .insert(surface.id, matches!(surface.id, SurfaceId::Conversation));
             }
         }
         if let Some(profile) = self.profiles.get(&resolved.harness_profile_id) {
@@ -677,11 +669,22 @@ impl HarnessRegistry {
                 .get(id)
                 .is_some_and(|capability| capability.available && capability.configurable)
         });
+        // A project saved before the interface tools existed has no entry for them.
+        // Changing the interface follows the write tool, so Read Only stays read only.
+        let write_enabled = resolved
+            .capability_enabled
+            .get("tool.write-text")
+            .copied()
+            .unwrap_or(true);
         for capability in self.capabilities.values().filter(|item| item.configurable) {
             resolved
                 .capability_enabled
                 .entry(capability.id.clone())
-                .or_insert(capability.enabled);
+                .or_insert(if capability.id == "tool.ui-update" {
+                    write_enabled
+                } else {
+                    capability.enabled
+                });
         }
 
         loop {
@@ -981,6 +984,27 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "Fixed read-only Git operations are available.",
             vec![],
         ),
+        disabled_configurable_capability(
+            "browser.reader",
+            "Page reader",
+            HarnessCapabilityKind::Integration,
+            "Lets you open a web page as text in the Browser module. It runs no scripts and keeps no cookies. Only a direct click fetches anything, and the agent cannot use it.",
+            vec![],
+        ),
+        configurable_capability(
+            "tool.ui-inspect",
+            "Interface awareness",
+            HarnessCapabilityKind::Tool,
+            "The agent can read which modules are on and how the interface is laid out and themed.",
+            vec![],
+        ),
+        configurable_capability(
+            "tool.ui-update",
+            "Interface changes",
+            HarnessCapabilityKind::Tool,
+            "The agent can change modules, layout, and theme, one approval at a time. Presentation only.",
+            vec!["approval.write"],
+        ),
         configurable_capability(
             "git.write",
             "Git mutation",
@@ -1128,27 +1152,68 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::Conversation,
             false,
-            "Primary session transcript and composer. It cannot be hidden.",
+            "Conversation, composer, and provider chooser. These are the core and cannot be hidden.",
         ),
         available_surface(
-            SurfaceId::Plan,
+            SurfaceId::Approvals,
             false,
-            "Runtime plan stages appear inside the conversation when present.",
+            "Opens only while an action needs your decision. It cannot be hidden or restyled.",
+        ),
+        available_surface(
+            SurfaceId::Sessions,
+            true,
+            "Sidebar with this workspace's sessions.",
+        ),
+        available_surface(
+            SurfaceId::ContextMeter,
+            true,
+            "Ring in the composer showing context use, when the provider reports it.",
+        ),
+        available_surface(
+            SurfaceId::Reasoning,
+            true,
+            "Collapsed provider reasoning on each response.",
+        ),
+        available_surface(
+            SurfaceId::Goal,
+            true,
+            "A session objective with budgets and next action.",
+        ),
+        available_surface(
+            SurfaceId::CommandPalette,
+            true,
+            "Search commands, sessions, and modules with Ctrl+K.",
+        ),
+        available_surface(
+            SurfaceId::StatusBar,
+            true,
+            "Thin bar with workspace, run state, and changed files.",
         ),
         available_surface(
             SurfaceId::Changes,
             true,
-            "Current run summary only. Per-file diff review is not implemented.",
+            "Per-file review of changes the agent recorded, with restore.",
         ),
-        unavailable_surface(
-            SurfaceId::Files,
-            "The workspace file browser is not implemented.",
+        available_surface(
+            SurfaceId::GitDiff,
+            true,
+            "Working tree status and diff from Git. Runs git only when you ask, and needs the Git inspection permission.",
         ),
-        unavailable_surface(
-            SurfaceId::Terminal,
-            "The persistent terminal backend and surface are not implemented.",
+        available_surface(
+            SurfaceId::Browser,
+            true,
+            "Reader-mode pages with no scripts or cookies. Needs the page reader permission.",
         ),
-        unavailable_surface(SurfaceId::Preview, "No preview renderer is registered."),
+        available_surface(
+            SurfaceId::Usage,
+            true,
+            "Tokens reported by each provider in this workspace.",
+        ),
+        available_surface(
+            SurfaceId::Plan,
+            true,
+            "Runtime plan stages for the current task.",
+        ),
         available_surface(
             SurfaceId::Activity,
             true,
@@ -1159,11 +1224,15 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             true,
             "Bounded durable task, lifecycle, tool, approval, usage, change, and verification records for one session.",
         ),
-        available_surface(
-            SurfaceId::Approvals,
-            false,
-            "Opens only while an action needs a user decision.",
+        unavailable_surface(
+            SurfaceId::Files,
+            "The workspace file browser is not implemented.",
         ),
+        unavailable_surface(
+            SurfaceId::Terminal,
+            "The persistent terminal backend and surface are not implemented.",
+        ),
+        unavailable_surface(SurfaceId::Preview, "No preview renderer is registered."),
     ]
 }
 
@@ -1188,51 +1257,73 @@ fn unavailable_surface(id: SurfaceId, reason: &str) -> SurfaceRegistration {
 }
 
 fn built_in_profiles() -> Vec<ProfileRegistration> {
+    use SurfaceId::{
+        Activity, Browser, Changes, CommandPalette, ContextMeter, GitDiff, Goal, Plan, Reasoning,
+        Sessions, StatusBar, Trajectory, Usage,
+    };
+    const EVERYDAY: [SurfaceId; 4] = [Sessions, ContextMeter, Reasoning, CommandPalette];
     vec![
         profile(
             "focused",
-            "Focused",
-            "Keep secondary work surfaces closed.",
+            "Minimal",
+            "The conversation and provider chooser, nothing else.",
             10,
-            false,
-            false,
-            false,
+            &[],
         ),
         profile(
-            DEFAULT_PROFILE_ID,
+            "standard",
             "Standard",
-            "Default session workspace with optional surfaces closed.",
+            "Adds sessions, context meter, reasoning, and the command palette.",
             20,
-            false,
-            false,
-            false,
+            &EVERYDAY,
         ),
         profile(
             "review",
             "Review",
-            "Open the Changes summary beside the active session.",
+            "Standard plus agent changes and the Git diff.",
             30,
-            true,
-            false,
-            false,
+            &[
+                EVERYDAY[0],
+                EVERYDAY[1],
+                EVERYDAY[2],
+                EVERYDAY[3],
+                Changes,
+                GitDiff,
+            ],
         ),
         profile(
             "trace",
             "Trace",
-            "Open the durable Trajectory while keeping Changes and live Activity closed.",
+            "Standard plus the durable trajectory.",
             40,
-            false,
-            false,
-            true,
+            &[
+                EVERYDAY[0],
+                EVERYDAY[1],
+                EVERYDAY[2],
+                EVERYDAY[3],
+                Trajectory,
+            ],
         ),
         profile(
             "full",
-            "Full",
-            "Open Activity, Trajectory, and the Changes summary.",
+            "Everything",
+            "Every module this build includes.",
             50,
-            true,
-            true,
-            true,
+            &[
+                Sessions,
+                ContextMeter,
+                Reasoning,
+                CommandPalette,
+                Goal,
+                StatusBar,
+                Changes,
+                GitDiff,
+                Browser,
+                Usage,
+                Plan,
+                Activity,
+                Trajectory,
+            ],
         ),
     ]
 }
@@ -1334,9 +1425,11 @@ fn execution_profile(
         "tool.read-binary-metadata",
         "tool.search-text",
         "tool.search-filenames",
+        "tool.ui-inspect",
         "git.read",
     ];
     let execution_capabilities = [
+        "tool.ui-update",
         "tool.create-directory",
         "tool.apply-patch",
         "tool.write-text",
@@ -1373,20 +1466,14 @@ fn profile(
     label: &str,
     detail: &str,
     order: u16,
-    changes_visible: bool,
-    activity_visible: bool,
-    trajectory_visible: bool,
+    visible: &[SurfaceId],
 ) -> ProfileRegistration {
     ProfileRegistration {
         id: id.to_owned(),
         label: label.to_owned(),
         detail: detail.to_owned(),
         order,
-        visibility: BTreeMap::from([
-            (SurfaceId::Changes, changes_visible),
-            (SurfaceId::Activity, activity_visible),
-            (SurfaceId::Trajectory, trajectory_visible),
-        ]),
+        visibility: visible.iter().map(|surface| (*surface, true)).collect(),
     }
 }
 
@@ -1491,9 +1578,9 @@ mod tests {
 
         assert_eq!(
             registry
-                .set_inspector_surface(&layout, Some(SurfaceId::Plan))
-                .expect_err("plan is not an inspector mode"),
-            HarnessError::InvalidInspectorSurface("Plan")
+                .set_inspector_surface(&layout, Some(SurfaceId::Conversation))
+                .expect_err("the conversation is not an inspector mode"),
+            HarnessError::InvalidInspectorSurface("Conversation")
         );
         assert_eq!(
             registry
@@ -1765,6 +1852,47 @@ mod tests {
     }
 
     #[test]
+    fn read_only_stays_read_only_for_policies_saved_before_interface_tools() {
+        let registry = HarnessRegistry::built_in().expect("registry");
+        let saved = HarnessExecutionPolicy {
+            profile_id: CUSTOM_EXECUTION_PROFILE_ID.into(),
+            source_profile_id: None,
+            sandbox_scope: SandboxScope::ReadOnly,
+            approval_mode: ApprovalMode::OnRisk,
+            capability_enabled: BTreeMap::from([
+                ("tool.read-text".into(), true),
+                ("tool.write-text".into(), false),
+            ]),
+        };
+        let policy = registry.reconcile_execution_policy(&saved);
+        assert!(!registry.capability_is_enabled(&policy, "tool.ui-update"));
+        assert!(registry.capability_is_enabled(&policy, "tool.ui-inspect"));
+    }
+
+    #[test]
+    fn core_surfaces_cannot_be_turned_off_and_new_projects_start_minimal() {
+        let registry = HarnessRegistry::built_in().expect("registry");
+        let layout = LayoutProfile::default();
+        for surface in [SurfaceId::Conversation, SurfaceId::Approvals] {
+            assert!(matches!(
+                registry.set_surface_visibility(&layout, surface, false),
+                Err(HarnessError::FixedSurface(_))
+            ));
+        }
+        let snapshot = registry.snapshot(
+            &registry.reconcile_layout(&layout),
+            &HarnessExecutionPolicy::default(),
+            &HarnessFacts::default(),
+        );
+        let on = snapshot
+            .surfaces
+            .iter()
+            .filter(|surface| surface.visible && surface.configurable)
+            .count();
+        assert_eq!(on, 0, "a new project has no optional module on");
+    }
+
+    #[test]
     fn malformed_execution_policy_is_bounded_to_registered_configurable_capabilities() {
         let registry = HarnessRegistry::built_in().expect("registry");
         let mut policy = HarnessExecutionPolicy {
@@ -1781,7 +1909,7 @@ mod tests {
         policy = registry.reconcile_execution_policy(&policy);
 
         assert_eq!(policy.profile_id, CUSTOM_EXECUTION_PROFILE_ID);
-        assert_eq!(policy.capability_enabled.len(), 20);
+        assert_eq!(policy.capability_enabled.len(), 23);
         assert_eq!(
             policy
                 .capability_enabled

@@ -1,3 +1,13 @@
+export struct RichBlockView {
+    kind: string, // p | h1 | h2 | h3 | li | quote | code | table | hr
+    text: string,
+    styled: styled-text,
+    rich: bool, // true when `styled` carries inline formatting
+    lang: string,
+    depth: int,
+    marker: string,
+}
+
 export struct PlanStepView {
     index: int,
     title: string,
@@ -51,6 +61,7 @@ export struct ConversationMessageView {
     context_window_reported: bool,
     context_window_tokens: int,
     state: string,
+    blocks: [RichBlockView],
 }
 
 export struct SessionItemView {
@@ -155,6 +166,11 @@ export struct ProviderPresetView {
     local: bool,
     supported: bool,
     notes: string,
+    detail: string,
+    model: string,
+    needs_key: bool,
+    featured: bool,
+    icon: string,
 }
 
 export struct DesktopToolView {
@@ -194,6 +210,8 @@ export struct HarnessSurfaceView {
     detail: string,
     visible: bool,
     configurable: bool,
+    icon: string,
+    group: string,
 }
 
 export struct HarnessCapabilityView {
@@ -217,4 +235,180 @@ export struct HarnessModuleView {
 export struct DiagnosticRecordView {
     code: string,
     detail: string,
+}
+
+export struct ProjectAuthorityView {
+    key: string,
+    label: string,
+    detail: string,
+    icon: string,
+    enabled: bool,
+}
+
+export struct GraphNodeView {
+    id: string,
+    label: string,
+    detail: string,
+    kind: string,           // "agent" | "workflow" | "module" | "tool" | "provider" | "model" | "memory" | "channel" | "cli" | "input" | "output" | "workspace"
+    state: string,          // "idle" | "running" | "success" | "blocked" | "error" | "disabled"
+    icon: string,
+    x: length,              // logical position in graph canvas (pixels before zoom)
+    y: length,
+    width: length,
+    height: length,
+    ports: int,             // number of connection ports
+    run_progress: float,    // 0.0 .. 1.0
+    run_label: string,
+    detail_role: string,    // secondary subtitle (model, scope, count, etc.)
+}
+
+export struct GraphEdgeView {
+    id: string,
+    source: string,
+    target: string,
+    state: string,          // "idle" | "active" | "success" | "blocked" | "disabled" | "optional"
+    label: string,
+    directed: bool,
+}
+
+export struct ModuleView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    state: string,          // "enabled" | "available" | "blocked" | "attention"
+    badge: string,
+    count: int,
+}
+
+export struct ToolView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    state: string,          // "allowed" | "blocked" | "idle" | "running" | "needs-approval"
+    requires_permission: bool,
+    network: bool,
+    filesystem: bool,
+    last_used: string,
+}
+
+export struct MemorySourceView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    state: string,          // "active" | "indexed" | "syncing" | "blocked" | "empty"
+    entries: int,
+    last_refresh: string,
+}
+
+export struct ChannelView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    connected: bool,
+    state: string,          // "connected" | "configured" | "available" | "blocked"
+    last_activity: string,
+}
+
+export struct AgentView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    state: string,          // "active" | "available" | "draft" | "blocked"
+    tools_count: int,
+    memory_count: int,
+    channels_count: int,
+}
+
+export struct AlertView {
+    id: string,
+    kind: string,           // "success" | "warning" | "error" | "info" | "running"
+    title: string,
+    message: string,
+    timestamp: string,
+    action_label: string,
+    details: string,
+    dismissable: bool,
+    persistent: bool,
+}
+
+export struct OnboardingStepView {
+    id: string,
+    index: int,
+    title: string,
+    detail: string,
+    state: string,          // "complete" | "current" | "pending" | "attention"
+    icon: string,
+}
+
+export struct ContextFieldView {
+    label: string,
+    value: string,
+    state: string,          // "ok" | "warn" | "error" | "muted"
+    detail: string,
+}
+
+export struct RunStageView {
+    id: string,
+    label: string,
+    state: string,          // "complete" | "current" | "pending" | "blocked" | "error"
+    detail: string,
+    duration_ms: int,
+}
+
+export struct MenuItemView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    kind: string,           // "default" | "destructive" | "toggle" | "divider"
+    enabled: bool,
+    selected: bool,
+    shortcut: string,
+}
+
+export struct DiffLineView {
+    kind: string, // add | del | ctx | hunk | meta
+    old_no: string,
+    new_no: string,
+    text: string,
+}
+
+export struct GitFileView {
+    path: string,
+    status: string,
+    selected: bool,
+}
+
+export struct ProviderUsageView {
+    id: string,
+    label: string,
+    model: string,
+    turns: string,
+    input: string,
+    output: string,
+    total: string,
+    share: float,
+    selected: bool,
+}
+
+export struct ThemePresetView {
+    id: string,
+    label: string,
+    selected: bool,
+    canvas: color,
+    surface: color,
+    accent: color,
+    text: color,
+}
+
+export struct PaletteItemView {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
 }

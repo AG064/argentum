@@ -4,6 +4,9 @@ members = [
     "crates/argentum-android",
     "crates/argentum-android-inference",
     "crates/argentum-app",
+    "crates/argentum-browser",
+    "crates/argentum-gitview",
+    "crates/argentum-update",
     "crates/argentum-changes",
     "crates/argentum-cli",
     "crates/argentum-domain",
@@ -47,6 +50,9 @@ argentum-cli = { path = "crates/argentum-cli" }
 argentum-changes = { path = "crates/argentum-changes" }
 argentum-platform = { path = "crates/argentum-platform" }
 argentum-providers = { path = "crates/argentum-providers" }
+argentum-browser = { path = "crates/argentum-browser" }
+argentum-gitview = { path = "crates/argentum-gitview" }
+argentum-update = { path = "crates/argentum-update" }
 argentum-runtime = { path = "crates/argentum-runtime" }
 argentum-scheduler = { path = "crates/argentum-scheduler" }
 argentum-security = { path = "crates/argentum-security" }

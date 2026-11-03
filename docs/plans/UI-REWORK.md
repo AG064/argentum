@@ -1,6 +1,22 @@
 # UI rework plan
 
-Status: deferred. No UI files are changed by the current CLI task.
+Status: active. The Workbench shell in `ui/workbench/` replaces the earlier shell
+and carries every command the earlier shell exposed. Progress is recorded per
+workstream below. "Done" means implemented with tests, not visually qualified on a
+real device unless the line says so.
+
+| Workstream | State |
+| --- | --- |
+| 1. Desktop target and approval workflow | Partial. Status, tools, and revalidation rules are shown. Choosing a window and element remains CLI only. |
+| 2. Browser activation | Done for status. Adapter, definition, configuration, and activation are shown separately. Activation stays an owner console action. |
+| 3. ChatGPT account UI | Partial. The route is labeled as browser sign-in. Sign-in itself remains `provider login chatgpt`. |
+| 4. Provider setup polish | Done. Grouped catalog with endpoint, model, credential need, docs, and honest unsupported rows. |
+| 5. Responsive and mobile | Partial. One shell serves every width, checked headless. Not checked on a device. |
+| 6. Accessibility | Partial. Keyboard actions and names on custom controls, with a source guard test. No screen-reader pass yet. |
+| 7. Default-renderer visual QA | Open. Headless software snapshots exist. Default renderer QA remains. |
+| 8. Live-preview integration | Open. The preview binary still builds. |
+| 9. Screenshot regression tests | Partial. `crates/argentum-ui/examples/ui_snapshot.rs` renders fixed scenes. No stored references yet. |
+| 10. Design-system enforcement | Done. `scripts/validate-design-system.ps1`, `validate-icon-system.ps1`, and `validate-mobile-design.ps1` run in CI. |
 
 The contract remains `docs/ARGENTUM_DESIGN_SYSTEM.md` and the approved
 black/red/silver shell. This plan schedules the deferred work; it does not
@@ -12,7 +28,7 @@ revised.
 
 - No renderer replacement and no second UI framework.
 - No token, palette, or brand-mark changes outside an explicit design-system
-  revision.
+  revision. The Workbench amendment in the design system is that revision.
 - No UI claim for a capability that Rust does not already expose as a durable
   command or read model.
 - No fake readiness, fake connectivity, or placeholder data.

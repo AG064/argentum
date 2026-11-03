@@ -10,9 +10,11 @@ extensions = ["dep:argentum-extensions", "argentum-harness/extensions", "argentu
 desktop-control = ["argentum-harness/desktop-control", "argentum-tools/desktop-control"]
 
 [dependencies]
+argentum-browser.workspace = true
 argentum-changes.workspace = true
 argentum-domain.workspace = true
 argentum-extensions = { workspace = true, optional = true }
+argentum-gitview.workspace = true
 argentum-harness.workspace = true
 argentum-platform.workspace = true
 argentum-providers.workspace = true
