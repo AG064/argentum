@@ -186,12 +186,14 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
         &["permissions", "select", "full-access"],
     );
     assert!(!full_access.status.success());
-    assert!(full_access.stdout.is_empty());
+    assert!(full_access.stderr.is_empty());
+    let failure: serde_json::Value =
+        serde_json::from_slice(&full_access.stdout).expect("JSON error envelope");
+    assert_eq!(failure["ok"], false);
+    assert_eq!(failure["command"], "permissions select");
     assert_eq!(
-        String::from_utf8(full_access.stderr)
-            .expect("UTF-8 error output")
-            .trim(),
-        "argentum: local authority is required for this command"
+        failure["error"]["message"],
+        "local authority is required for this command"
     );
 
     let still_guided = json(run_cli(
