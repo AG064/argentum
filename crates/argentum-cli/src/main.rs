@@ -14,6 +14,7 @@ mod doctor_cli;
 mod extension_browser_cli;
 #[cfg(feature = "extensions")]
 mod extension_cli;
+mod json_contract;
 mod local_readiness;
 mod model_picker;
 
@@ -63,64 +64,75 @@ fn main() -> ExitCode {
 
 #[tokio::main]
 async fn run_main() -> ExitCode {
-    if env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("artifacts")) {
+    let raw_os_args: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
+    let raw_args: Vec<String> = raw_os_args
+        .iter()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect();
+    let json_requested = raw_args.iter().any(|value| value == "--json");
+    let command_path = command_path_from_args(&raw_args);
+
+    if raw_args.first().map(String::as_str) == Some("artifacts") {
         #[cfg(feature = "artifacts")]
         {
-            let arguments = env::args_os()
-                .skip(2)
-                .map(|s| {
-                    s.into_string()
-                        .map_err(|_| "artifact arguments must be UTF-8".into())
+            let arguments = raw_os_args
+                .iter()
+                .skip(1)
+                .cloned()
+                .map(|value| {
+                    value
+                        .into_string()
+                        .map_err(|_| "artifact arguments must be UTF-8".to_owned())
                 })
-                .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>();
-            let result = match arguments {
-                Ok(arguments) => artifact_cli::run(arguments).await,
-                Err(error) => Err(error),
-            };
-            return match result {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("argentum: {error}");
-                    ExitCode::FAILURE
-                }
+                .collect::<Result<Vec<_>, _>>();
+            return match arguments {
+                Ok(arguments) => match artifact_cli::run(arguments).await {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => finish_command_error(error, &command_path, json_requested),
+                },
+                Err(message) => finish_message_error(&message, &command_path, json_requested),
             };
         }
         #[cfg(not(feature = "artifacts"))]
         {
-            eprintln!("argentum: this build omits optional local artifacts");
-            return ExitCode::FAILURE;
+            return finish_feature_unavailable(
+                "this build omits optional local artifacts",
+                &command_path,
+                json_requested,
+            );
         }
     }
-    if env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("extensions")) {
+    if raw_args.first().map(String::as_str) == Some("extensions") {
         #[cfg(feature = "extensions")]
         {
-            let values = env::args_os()
-                .skip(2)
+            let values = raw_os_args
+                .iter()
+                .skip(1)
+                .cloned()
                 .map(|value| {
                     value
                         .into_string()
-                        .map_err(|_| "extension arguments must be UTF-8")
+                        .map_err(|_| "extension arguments must be UTF-8".to_owned())
                 })
                 .collect::<Result<Vec<_>, _>>();
-            let result = match values {
-                Ok(values) => extension_cli::run(values).await,
-                Err(error) => Err(error.into()),
-            };
-            return match result {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("argentum: {error}");
-                    ExitCode::FAILURE
-                }
+            return match values {
+                Ok(values) => match extension_cli::run(values).await {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => finish_command_error(error, &command_path, json_requested),
+                },
+                Err(message) => finish_message_error(&message, &command_path, json_requested),
             };
         }
         #[cfg(not(feature = "extensions"))]
         {
-            eprintln!("argentum: this build omits optional extensions; use an extensions-enabled artifact");
-            return ExitCode::FAILURE;
+            return finish_feature_unavailable(
+                "this build omits optional extensions; use an extensions-enabled artifact",
+                &command_path,
+                json_requested,
+            );
         }
     }
-    match parse_args(env::args_os().skip(1)) {
+    match parse_args(raw_os_args.iter().cloned()) {
         Ok(Arguments::Help) => {
             print_help();
             ExitCode::SUCCESS
@@ -129,22 +141,101 @@ async fn run_main() -> ExitCode {
             print_version();
             ExitCode::SUCCESS
         }
-        Ok(arguments) => {
-            let run_future = Box::pin(run(arguments));
-            match run_future.await {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error_value) => {
-                    eprintln!("argentum: {error_value}");
-                    ExitCode::FAILURE
-                }
+        Ok(arguments) => match run(arguments).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error_value) => finish_command_error(error_value, &command_path, json_requested),
+        },
+        Err(message) => {
+            if json_requested {
+                let envelope =
+                    json_contract::JsonErrorEnvelope::from_message(&command_path, &message);
+                json_contract::emit(&envelope);
+                ExitCode::from(2)
+            } else {
+                eprintln!("argentum: {message}");
+                eprintln!("Run 'argentum help' for usage.");
+                ExitCode::from(2)
             }
         }
-        Err(message) => {
-            eprintln!("argentum: {message}");
-            eprintln!("Run 'argentum help' for usage.");
-            ExitCode::from(2)
+    }
+}
+
+fn command_path_from_args(args: &[String]) -> String {
+    let tokens = args
+        .iter()
+        .take_while(|value| !value.starts_with('-'))
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let mut best: Option<&'static [&'static str]> = None;
+    for entry in command_catalog::COMMANDS {
+        let matches = entry.path.len() <= tokens.len()
+            && entry
+                .path
+                .iter()
+                .zip(tokens.iter())
+                .all(|(segment, token)| segment == token);
+        if matches && best.is_none_or(|current| entry.path.len() > current.len()) {
+            best = Some(entry.path);
         }
     }
+    if let Some(path) = best {
+        return path.join(" ");
+    }
+    let fallback = args
+        .iter()
+        .take(3)
+        .filter(|value| !value.starts_with('-'))
+        .cloned()
+        .collect::<Vec<_>>();
+    if fallback.is_empty() {
+        "cli".into()
+    } else {
+        fallback.join(" ")
+    }
+}
+
+fn finish_command_error(error: Box<dyn std::error::Error>, command: &str, json: bool) -> ExitCode {
+    if error.downcast_ref::<json_contract::JsonEmitted>().is_some()
+        || error
+            .to_string()
+            .contains("structured JSON failure was already emitted")
+    {
+        return ExitCode::FAILURE;
+    }
+    if json {
+        json_contract::emit(&json_contract::JsonErrorEnvelope::from_message(
+            command,
+            &error.to_string(),
+        ));
+    } else {
+        eprintln!("argentum: {error}");
+    }
+    ExitCode::FAILURE
+}
+
+fn finish_feature_unavailable(message: &str, command: &str, json: bool) -> ExitCode {
+    if json {
+        json_contract::emit(&json_contract::JsonErrorEnvelope::new(
+            command,
+            "feature_unavailable",
+            message,
+        ));
+    } else {
+        eprintln!("argentum: {message}");
+    }
+    ExitCode::FAILURE
+}
+
+#[cfg(any(feature = "extensions", feature = "artifacts"))]
+fn finish_message_error(message: &str, command: &str, json: bool) -> ExitCode {
+    if json {
+        json_contract::emit(&json_contract::JsonErrorEnvelope::from_message(
+            command, message,
+        ));
+    } else {
+        eprintln!("argentum: {message}");
+    }
+    ExitCode::FAILURE
 }
 
 async fn start_active_host(config: HostConfig) -> Result<CommandHost, argentum_cli::HostError> {
@@ -412,7 +503,7 @@ async fn run_context_preview_command(config: HostConfig) -> Result<(), Box<dyn s
                 "{}",
                 serde_json::json!({"kind":"current_preview_error", "status":"failed", "reason":error.to_string()})
             );
-            return Err(error);
+            return Err(json_contract::JsonEmitted.into());
         }
     }
     Ok(())
@@ -600,7 +691,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                                     Some(request_id),
                                     payload,
                                 ).await?;
-                                result?;
+                                if result.is_err() {
+                                    return Err(json_contract::JsonEmitted.into());
+                                }
                                 break;
                             }
                             event = events.recv() => {
@@ -741,6 +834,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                 print!("{}", doctor_cli::format_text(&report));
             }
             if !report.healthy {
+                if json {
+                    return Err(json_contract::JsonEmitted.into());
+                }
                 return Err("doctor found required check failures".into());
             }
         }
@@ -873,7 +969,9 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                         };
                         write_machine_response(&mut stdout, &sequence, Some(request_id), payload)
                             .await?;
-                        result?;
+                        if result.is_err() {
+                            return Err(json_contract::JsonEmitted.into());
+                        }
                     } else {
                         let result = client
                             .dispatch(AppCommand::ProbeProvider { provider_id })
@@ -1238,7 +1336,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                             output["accounting_scope"] = serde_json::json!(if deactivate { "provider_free" } else if goal_id.is_some() { "explicit_goal" } else { "owner_maintenance_outside_goal_quota" });
                             println!("{}", serde_json::to_string_pretty(&output)?);
                             if result.status == argentum_domain::context_summary::CompactionStatus::Failed {
-                                return Err(result.reason.into());
+                                return Err(json_contract::JsonEmitted.into());
                             }
                         }
                         Err(error) => {
@@ -1246,7 +1344,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                             println!("{}", serde_json::json!({"status":"failed", "reason":error.to_string(),
                                 "code":failure["code"],
                                 "observed_usage":null, "checkpoint_activation":"not_committed"}));
-                            return Err(error.into());
+                            return Err(json_contract::JsonEmitted.into());
                         }
                     }
                     Ok(())
@@ -3068,7 +3166,11 @@ async fn run_desktop_command(
     };
     if let Err(error) = result {
         if json {
-            println!("{}", desktop_failure(name, dry_run, &error.to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&desktop_failure(name, dry_run, &error.to_string()))?
+            );
+            return Err(json_contract::JsonEmitted.into());
         }
         return Err(error);
     }
@@ -3076,6 +3178,7 @@ async fn run_desktop_command(
 }
 
 fn desktop_failure(action: &'static str, dry_run: bool, error: &str) -> serde_json::Value {
+    let body = json_contract::JsonErrorBody::new(json_contract::classify_error(error), error);
     serde_json::json!({
         "schema_version": 1,
         "ok": false,
@@ -3084,7 +3187,7 @@ fn desktop_failure(action: &'static str, dry_run: bool, error: &str) -> serde_js
         "dry_run": dry_run,
         "applied": false,
         "built": cfg!(all(windows, feature = "desktop-control")),
-        "error": error,
+        "error": body,
     })
 }
 
@@ -4077,6 +4180,7 @@ async fn run_changes_command(
                         ServerPayload::host_command_failed(&error),
                     )
                     .await?;
+                    return Err(json_contract::JsonEmitted.into());
                 }
                 return Err(error.into());
             }
@@ -9800,7 +9904,38 @@ mod tests {
         assert_eq!(failure["command"], "desktop.keys");
         assert_eq!(failure["dry_run"], true);
         assert_eq!(failure["applied"], false);
-        assert_eq!(failure["error"], "target changed");
+        assert_eq!(failure["error"]["code"], "command_failed");
+        assert_eq!(failure["error"]["message"], "target changed");
+
+        let confirmation = desktop_failure("invoke", false, "--confirm must exactly match --hwnd");
+        assert_eq!(confirmation["error"]["code"], "confirmation_mismatch");
+        let unavailable = desktop_failure(
+            "list",
+            false,
+            "desktop control is unavailable: rebuild with --features desktop-control",
+        );
+        assert_eq!(unavailable["error"]["code"], "feature_unavailable");
+    }
+
+    #[test]
+    fn json_command_path_uses_the_longest_catalog_match() {
+        let path = |arguments: &[&str]| {
+            command_path_from_args(
+                &arguments
+                    .iter()
+                    .map(|value| value.to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(path(&["status", "--json"]), "status");
+        assert_eq!(path(&["doctor", "--probe-local", "--json"]), "doctor");
+        assert_eq!(path(&["provider", "presets", "--json"]), "provider presets");
+        assert_eq!(path(&["desktop", "status", "--json"]), "desktop status");
+        assert_eq!(
+            path(&["extensions", "browser", "check", "--json"]),
+            "extensions browser check"
+        );
+        assert_eq!(path(&["unknown-command", "--json"]), "unknown-command");
     }
 
     #[test]

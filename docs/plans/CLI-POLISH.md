@@ -18,6 +18,9 @@ acceptance records, or the design system.
   match the target.
 - Feature-gated desktop build reporting. A binary without `desktop-control`
   reports unavailable and exits nonzero instead of implying support.
+- A stable JSON error envelope for `--json` inspection failures, with stable
+  codes, sanitized messages, and a no-double-print rule for commands that already
+  emit a structured report.
 
 ## Doctor and desktop work
 
@@ -109,8 +112,9 @@ advertised as working. Help lists them once as reserved.
 
 ### General CLI
 
-- Unify `--json` envelopes and exit codes across inspection commands beyond
-  doctor and desktop.
+- Continue applying the documented JSON error contract to new commands as they
+  add `--json`; success envelopes remain command-specific unless a compatible
+  migration is designed.
 - Keep provider, credential, and recovery output free of secrets and private
   paths where the operator does not need them.
 - Extend focused parser tests whenever a command grows a new flag family.
