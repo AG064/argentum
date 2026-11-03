@@ -665,7 +665,13 @@ fn headless_open_pipe_plain_and_structured_process_git_and_edit_settle() {
             };
             let output = fixture.run_with_stdin(&args, true);
             assert_eq!(output.status.code(), Some(1));
-            assert!(String::from_utf8_lossy(&output.stderr).contains("approval_required"));
+            // The machine protocol carries the failure in its own frames.
+            let failure_stream = if json_output {
+                &output.stdout
+            } else {
+                &output.stderr
+            };
+            assert!(String::from_utf8_lossy(failure_stream).contains("approval_required"));
             if json_output {
                 let replies: Vec<Value> = String::from_utf8(output.stdout)
                     .unwrap()

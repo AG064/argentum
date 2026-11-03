@@ -24,12 +24,13 @@ fn harness_snapshot(output: &Output) -> serde_json::Value {
 
 fn assert_local_authority_required(output: Output) {
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    let failure: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("JSON error envelope");
+    assert_eq!(failure["ok"], false);
     assert_eq!(
-        String::from_utf8(output.stderr)
-            .expect("UTF-8 error output")
-            .trim(),
-        "argentum: local authority is required for this command"
+        failure["error"]["message"],
+        "local authority is required for this command"
     );
 }
 
@@ -166,8 +167,13 @@ fn harness_presentation_and_execution_policy_persist_without_enabling_missing_wo
         &["harness", "surface", "terminal", "show"],
     );
     assert!(!unavailable.status.success());
-    let stderr = String::from_utf8_lossy(&unavailable.stderr);
-    assert!(stderr.contains("not available in this build"));
+    let failure: serde_json::Value =
+        serde_json::from_slice(&unavailable.stdout).expect("JSON error envelope");
+    assert_eq!(failure["ok"], false);
+    assert!(failure["error"]["message"]
+        .as_str()
+        .expect("message")
+        .contains("not available in this build"));
 
     let after_failure = harness_snapshot(&run_cli(
         workspace.path(),
