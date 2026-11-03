@@ -45,9 +45,9 @@ approval. Model instructions cannot grant approval or expand policy.
 
 Chat's `/providers`, `/models`, `/setup`, `/context`, `/tools`, `/verification`
 and `/sessions` are selectable panels. `/changes` reviews stored changes and
-verification. Escape returns without submitting the current draft. `/stop`
-requests cancellation and drains owned work; do not kill the process to
-simulate successful cancellation.
+verification. Escape closes a panel without submitting the current draft. In the
+conversation, Escape or `/stop` requests cancellation of the active run and drains
+owned work; do not kill the process to simulate successful cancellation.
 
 Search returns bounded selections. Reads return content, UTF-8 byte ranges,
 coverage and full-source SHA-256. Edits require the observed SHA and an explicit

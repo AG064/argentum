@@ -19,7 +19,7 @@
   </tr>
   <tr>
     <td><a href="crates/argentum-app/README.md"><img src="docs/screenshots/desktop-minimal.png" alt="The minimal desktop interface"></a></td>
-    <td><a href="crates/argentum-cli/README.md"><img src="docs/screenshots/cli-doctor.png" alt="The doctor command in a console"></a></td>
+    <td><a href="crates/argentum-cli/README.md"><img src="docs/screenshots/cli-chat.png" alt="A conversation in the terminal shell"></a></td>
   </tr>
   <tr>
     <td>The native Slint app. It starts with a provider and a conversation. Everything else is an optional module: Git diff, a page reader, usage, goals, and more.</td>

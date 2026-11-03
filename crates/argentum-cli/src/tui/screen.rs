@@ -49,7 +49,15 @@ fn status_row(state: &TuiState) -> Option<Row> {
         return Some(row);
     }
     let _ = elapsed(state);
-    if state.pending_approval.is_some() || state.status.is_empty() || state.status == "Ready" {
+    let repeats_transcript = state
+        .timeline
+        .last()
+        .is_some_and(|entry| entry.text == state.status);
+    if state.pending_approval.is_some()
+        || state.status.is_empty()
+        || state.status == "Ready"
+        || repeats_transcript
+    {
         return None;
     }
     Some(Row::toned(state.status.clone(), Tone::Muted))
@@ -702,7 +710,7 @@ mod tests {
         scenes.push(("typing", typing));
         for (name, state) in scenes {
             let mut renderer = TtyRenderer::new(Vec::new());
-            renderer.render_at(&state, 83, 26).unwrap();
+            renderer.render_at(&state, 100, 30).unwrap();
             std::fs::write(format!("{directory}/{name}.ans"), &renderer.writer).unwrap();
         }
     }

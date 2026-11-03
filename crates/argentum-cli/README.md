@@ -8,10 +8,11 @@ executable is `argentum` and the Cargo package is `argentum-cli`.
 [Argentum desktop](../argentum-app/README.md) |
 [All documentation](../../docs/README.md)
 
-![The doctor command on a configured project](../../docs/screenshots/cli-doctor.png)
+![A conversation in the terminal shell](../../docs/screenshots/cli-chat.png)
 
-Screenshots on this page are real console windows, using a throwaway project and an
-offline demo provider. No model was called.
+Screenshots on this page are real console windows. The conversation and approval images
+show real renderer output with sample content. The others use a throwaway project and an
+offline demo provider. No model was called for any of them.
 
 ## Status
 
@@ -60,6 +61,8 @@ prompt, `provider credential set` reading from stdin, or
 
 ![The first choice in setup](../../docs/screenshots/cli-setup.png)
 
+![The doctor command on a configured project](../../docs/screenshots/cli-doctor.png)
+
 ## Three ways to run
 
 | Mode | Command | Use it for |
@@ -68,9 +71,16 @@ prompt, `provider credential set` reading from stdin, or
 | Headless | `argentum run --prompt TEXT --json` | One task, streamed as JSON |
 | Server | `argentum serve` | Protocol v1 JSONL on stdin and stdout |
 
-In chat, `/providers`, `/models`, `/setup`, `/context`, `/tools`, `/verification`, and
-`/sessions` open panels, and `/changes` reviews stored changes. `/stop` asks the run to
-cancel and drains owned work.
+In chat, type `/` to search every command. `/providers`, `/models`, `/setup`, `/context`,
+`/tools`, `/verification`, and `/sessions` open panels, and `/changes` reviews stored
+changes. Esc or `/stop` asks the run to cancel and drains owned work. The footer always
+shows the model, access level, and context use.
+
+When the agent needs permission, a card appears right above the input. Type `y` to approve
+once or `n` to reject. Only the host draws at the left edge, because model text is always
+indented, so a response cannot draw a matching prompt.
+
+![The permission card above the input](../../docs/screenshots/cli-approval.png)
 
 Add `--final-result` to `run` for one settled result document, and `--answer-schema` to
 validate that answer against a schema file in the workspace. `--json` failures follow

@@ -22,6 +22,27 @@ acceptance records, or the design system.
   codes, sanitized messages, and a no-double-print rule for commands that already
   emit a structured report.
 
+## Terminal shell
+
+Implemented:
+
+- A minimal transcript with marks instead of `you:` and `argentum:` labels, compact
+  tool rows, and word wrap with a hanging indent.
+- Light Markdown in responses: headings, bold, inline code, lists, quotes, and code
+  blocks. A link keeps its address visible.
+- A boxed composer with a placeholder, a pinned permission card, a status row with
+  elapsed time, and a footer with model, access, and context use.
+- Esc interrupts the active run. The command list shows a description for each command.
+- Colors come only from the renderer. Text is sanitized first, so content cannot carry an
+  escape sequence. `--no-color` and `NO_COLOR` keep emphasis and drop color.
+
+Not done yet:
+
+- `setup` is still plain line prompts.
+- File edits show a summary in the transcript. Diffs are in `/changes`.
+- The shell uses the alternate screen with mouse capture, so transcript text does not
+  stay in terminal scrollback, and selecting text needs the terminal's own modifier key.
+
 ## Doctor and desktop work
 
 Implemented:
