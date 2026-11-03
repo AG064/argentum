@@ -24,7 +24,7 @@ struct Cached {
     anchor: Option<Anchor>,
     width: usize,
     height: usize,
-    rows: Vec<String>,
+    rows: Vec<style::Row>,
 }
 
 impl TimelineEntry {
@@ -37,28 +37,6 @@ impl TimelineEntry {
                 self.tool_call_id.unwrap_or(self.view_id)
             },
         )
-    }
-    fn display(&self) -> String {
-        let role = match self.kind {
-            TimelineKind::User => "you",
-            TimelineKind::Assistant => "argentum",
-            TimelineKind::Tool => "tool",
-            TimelineKind::Approval => "approval",
-            TimelineKind::System => "info",
-        };
-        let mut text = format!("{role}: {}", self.text);
-        if !self.detail.is_empty() {
-            text.push_str("\n  ");
-            text.push_str(&self.detail);
-        }
-        if self.kind == TimelineKind::Tool && !self.state.is_empty() {
-            text.push_str(&format!("\n  result: {}", self.state));
-        } else if self.kind == TimelineKind::Assistant
-            && matches!(self.state.as_str(), "failed" | "cancelled" | "interrupted")
-        {
-            text.push_str(&format!("\n  response {}", self.state));
-        }
-        text
     }
 }
 
@@ -99,10 +77,17 @@ impl TuiState {
             self.viewport.updates = self.viewport.updates.saturating_add(1).min(999);
         }
     }
-    fn entry_rows(entry: &TimelineEntry, width: usize) -> Vec<(usize, String)> {
-        screen::wrap_positions(&entry.display(), width)
+    fn entry_rows(entry: &TimelineEntry, width: usize) -> Vec<(usize, style::Row)> {
+        style::entry_rows(entry, width)
     }
+    #[cfg(test)]
     pub(super) fn transcript_rows(&self, width: usize, height: usize) -> Vec<String> {
+        self.transcript_styled(width, height)
+            .into_iter()
+            .map(|row| row.text)
+            .collect()
+    }
+    pub(super) fn transcript_styled(&self, width: usize, height: usize) -> Vec<style::Row> {
         if let Some(cache) = self.viewport.cache.borrow().as_ref() {
             if cache.revision == self.viewport.revision
                 && cache.anchor == self.viewport.anchor
@@ -141,7 +126,9 @@ impl TuiState {
                     }
                 }
             } else {
-                rows.push("Viewed range was evicted; Ctrl+End returns to latest.".into());
+                rows.push(style::Row::plain(
+                    "Viewed range was evicted; Ctrl+End returns to latest.",
+                ));
             }
         } else {
             for entry in self.timeline.iter().rev() {
@@ -158,7 +145,7 @@ impl TuiState {
             }
             rows.reverse();
         }
-        rows.resize(height, String::new());
+        rows.resize(height, style::Row::default());
         *self.viewport.cache.borrow_mut() = Some(Cached {
             revision: self.viewport.revision,
             anchor: self.viewport.anchor.clone(),

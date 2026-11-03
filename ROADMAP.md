@@ -8,7 +8,7 @@ owner has not adopted Argentum as the daily environment.
 
 `AG064/argentum` is the canonical native platform repository. Argentum Genesis
 is its CLI/TUI product, not a separate repository, permanent CLI branch or
-runtime fork. CLI, future desktop and optional browser/extension work share
+runtime fork. CLI, desktop and optional browser/extension work share
 the existing native core and keep useful Cargo boundaries.
 Use feature branches for reviewed development and release-maintenance branches
 only for an actual supported version that needs them.

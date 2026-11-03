@@ -323,10 +323,10 @@ impl TuiState {
                     source.push(
                         screen::wrap(
                             &format!(
-                                "{} {:18} [{}]",
+                                "{} {:16} {}",
                                 if i == o.selected { ">" } else { " " },
                                 c.name,
-                                c.group,
+                                c.description,
                             ),
                             width,
                         )
@@ -335,7 +335,8 @@ impl TuiState {
                 }
                 if let Some(c) = list.get(o.selected) {
                     source.push(format!(
-                        "{}{}",
+                        "[{}] {}{}",
+                        c.group,
                         c.description,
                         self.command_unavailable(c)
                             .map_or(String::new(), |r| format!(" - {r}"))
