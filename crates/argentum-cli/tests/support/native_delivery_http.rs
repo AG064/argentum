@@ -1686,7 +1686,7 @@ fn milestone_native_missing_effective_provider_budget_cannot_dispatch() {
     ]));
     let output = deliver(&fixture, &id, "8");
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("budget"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("budget"));
     assert!(server.requests.try_recv().is_err());
     let status = json_output(fixture.run(&["goal", "status", "--json"]));
     assert!(status["supervision"]["invocation"].is_null());

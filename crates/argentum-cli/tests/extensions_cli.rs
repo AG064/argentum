@@ -295,11 +295,15 @@ fn exact_cli_invalid_json_options_fail_before_host_or_database_startup() {
             .output()
             .unwrap();
         assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("json")
-                || String::from_utf8_lossy(&output.stderr).contains("JSON")
-        );
+        assert!(output.stderr.is_empty());
+        let failure: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("JSON error envelope");
+        assert_eq!(failure["ok"], false);
+        assert!(failure["error"]["message"]
+            .as_str()
+            .expect("message")
+            .to_ascii_lowercase()
+            .contains("json"));
         assert!(workspace.is_dir() && !database.exists());
     }
 }
@@ -315,8 +319,12 @@ async fn exact_cli_native_query_error_has_no_success_document() {
     for action in ["list", "status"] {
         let output = fixture.command(action, true).output().unwrap();
         assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
-        assert!(!output.stderr.is_empty());
+        assert!(output.stderr.is_empty());
+        let failure: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("JSON error envelope");
+        assert_eq!(failure["ok"], false);
+        assert_eq!(failure["schema_version"], 1);
+        assert!(failure.get("connections").is_none());
     }
 }
 
