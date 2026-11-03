@@ -36,7 +36,7 @@ core RC scope or establish full computer use/Codex replacement.
 | Route | Native implementation | Evidence and qualification |
 | --- | --- | --- |
 | Windows x64 MSVC CLI | Setup, chat, headless, JSONL, tools, review, verification, recovery | Primary RC target; local clean-source and package qualification is recorded in the RC document |
-| Windows native Slint UI | Shared command host and existing UI modules | Source retained; not packaged or visually release-qualified by RELEASE01 |
+| Windows native Slint UI | Workbench shell on the shared command host, with [optional modules](UI_MODULES.md) | Runs from source and was walked through on one machine with the software renderer; not packaged or visually release-qualified by RELEASE01 |
 | Android | Host/Keystore/activity and optional in-process inference | Source retained with platform Gradle inputs; no APK/device/release-signing gate claimed here |
 | Linux/macOS CLI | Shared Rust modules and platform-specific branches | Not release-qualified by this Windows RC; Windows authority/job/supplemental behavior must not be inferred |
 | ChatGPT plan | Native dynamic registration, browser consent, OS secure vault, Responses transport | Official optional preview path for eligible open-source/local apps; prior assisted Sol workflow evidence, no new login/inference here |
