@@ -101,11 +101,11 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
     if values.is_empty() || values[0] == "help" || values[0] == "--help" {
         if values.iter().any(|value| value == "--json") {
             return Err(
-                "--json is accepted only by extensions list, status, browser check and browser prepare"
+                "--json is accepted only by extensions list, status, browser status, browser check and browser prepare"
                     .into(),
             );
         }
-        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions browser setup --source extensions/browser --node FILE --origin http://127.0.0.1:PORT [--origin ...] [--artifact-directory DIR] [--preview-workspace DIR --preview-port PORT] [--reviewed-stylesheet REL_PATH] [--browser-cache DIR] [--input FILE ...] --workspace DIR [--database FILE]\nextensions browser status --workspace DIR [--database FILE]\nextensions browser check [--json] [--handshake] --workspace DIR [--database FILE]\nextensions browser prepare [--json] [--install --confirm-network] --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. Browser setup is inert and loopback-only; the optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
+        println!("extensions inspect --source DIR\nextensions install --source DIR --sha256 DIGEST --source-id ID --revision REV --workspace DIR [--database FILE]\nextensions configure --file DEFINITION.json --workspace DIR [--database FILE]\nextensions browser setup --source extensions/browser --node FILE --origin http://127.0.0.1:PORT [--origin ...] [--artifact-directory DIR] [--preview-workspace DIR --preview-port PORT] [--reviewed-stylesheet REL_PATH] [--browser-cache DIR] [--input FILE ...] --workspace DIR [--database FILE]\nextensions browser status [--json] --workspace DIR [--database FILE]\nextensions browser check [--json] [--handshake] --workspace DIR [--database FILE]\nextensions browser prepare [--json] [--install --confirm-network] --workspace DIR [--database FILE]\nextensions list|status --workspace DIR [--database FILE] [--json]\nextensions receipts [--run-id ID] --workspace DIR [--database FILE]\nextensions activate|disable|remove NAMESPACE --workspace DIR [--database FILE]\nextensions key|prepare-media NAMESPACE --workspace DIR [--database FILE]\nConfiguration updates remove activation. Activation requires an interactive owner review; model/JSONL input cannot authorize it. Browser setup is inert and loopback-only; the optional first-party local browser workflow is documented in docs/EXTENSIONS_BROWSER.md.");
         return Ok(());
     }
     let action = &values[0];
@@ -113,13 +113,16 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
         action == "browser" && values.get(1).map(String::as_str) == Some("check");
     let browser_prepare_invocation =
         action == "browser" && values.get(1).map(String::as_str) == Some("prepare");
+    let browser_status_invocation =
+        action == "browser" && values.get(1).map(String::as_str) == Some("status");
     if !matches!(action.as_str(), "list" | "status")
         && !browser_check_invocation
         && !browser_prepare_invocation
+        && !browser_status_invocation
         && values.iter().skip(1).any(|value| value == "--json")
     {
         return Err(
-            "--json is accepted only by extensions list, status, browser check and browser prepare"
+            "--json is accepted only by extensions list, status, browser status, browser check and browser prepare"
                 .into(),
         );
     }
@@ -232,17 +235,19 @@ pub async fn run(values: Vec<String>) -> Result<(), Error> {
     }
     let browser_check = action == "browser" && subject.as_deref() == Some("check");
     let browser_prepare = action == "browser" && subject.as_deref() == Some("prepare");
+    let browser_status = action == "browser" && subject.as_deref() == Some("status");
     if json_mode
         && !matches!(action.as_str(), "list" | "status")
         && !browser_check
         && !browser_prepare
+        && !browser_status
     {
         return Err(
-            "--json is accepted only by extensions list, status, browser check and browser prepare"
+            "--json is accepted only by extensions list, status, browser status, browser check and browser prepare"
                 .into(),
         );
     }
-    if json_mode && subject.is_some() && !browser_check && !browser_prepare {
+    if json_mode && subject.is_some() && !browser_check && !browser_prepare && !browser_status {
         return Err("extension JSON queries do not accept a namespace".into());
     }
     if install && !confirm_network {
@@ -548,11 +553,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn browser_status_still_rejects_json() {
+    async fn browser_status_accepts_json_as_an_explicit_selection() {
         let error = run(vec!["browser".into(), "status".into(), "--json".into()])
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("--json is accepted only"));
+        assert!(
+            !error.to_string().contains("--json is accepted only"),
+            "{error}"
+        );
+        assert!(
+            error.to_string().contains("explicit --workspace"),
+            "{error}"
+        );
     }
 
     #[tokio::test]

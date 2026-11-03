@@ -149,6 +149,79 @@ caller can inspect every check without a panic or a partial document. Advisory
 failures do not change the exit code but set `ready` to false. Check ids are
 stable and are also printed in text mode.
 
+## JSON error contract
+
+Commands that accept `--json` and fail emit exactly one structured JSON object
+on stdout. In `--json` mode the failure record is the JSON object, not a plain
+error sentence mixed with JSON. Text mode keeps the `argentum: ...` message on
+stderr.
+
+The stable failure envelope is:
+
+```json
+{
+  "schema_version": 1,
+  "ok": false,
+  "command": "desktop inspect",
+  "error": {
+    "code": "invalid_argument",
+    "message": "--hwnd requires a hexadecimal window handle"
+  }
+}
+```
+
+- `schema_version` is `1`.
+- `ok` is `false`.
+- `command` is the space-separated command path, for example `doctor`,
+  `provider presets`, `desktop inspect` or `extensions browser check`.
+- `error.code` is a stable identifier listed below.
+- `error.message` is bounded and redacts absolute paths and URLs. It never
+  includes credentials, provider payloads or raw dependency data.
+- `checks` and `action` are optional and appear only where the command already
+  provides them.
+
+Stable codes:
+
+- `invalid_argument`: missing, duplicate, malformed or conflicting arguments.
+- `feature_unavailable`: the binary was built without the required feature.
+- `database_unavailable`: the selected database is missing or cannot be opened.
+- `required_check_failed`: a command's required checks failed, such as `doctor`.
+- `browser_definition_missing`: `browser-control.stdio` is not installed.
+- `browser_dependencies_missing`: the browser adapter dependencies are not ready.
+- `browser_prepare_failed`: a browser dependency install or verification step
+  failed.
+- `confirmation_mismatch`: a desktop confirmation does not match its target.
+- `interactive_required`: the command needs a direct interactive console.
+- `not_found`: the requested run, session or record is not available.
+- `command_failed`: a failure that has no more specific stable code.
+
+Exit codes: argument failures exit `2`. Command failures exit `1`. Success keeps
+the command's existing exit code.
+
+Documented exceptions:
+
+- `doctor --json` keeps its full diagnostic report. On a required failure the
+  report has `ok: false` and adds a top-level `error` object with
+  `code: "required_check_failed"`, plus the existing `checks`. The report
+  includes the requested workspace and database paths by design.
+- `desktop <action> --json` keeps its existing keys `action`, `dry_run`,
+  `applied` and `built`, uses `command: "desktop.<action>"`, and changes `error`
+  to an object with `code` and `message`. Successful desktop payloads are
+  unchanged.
+- `extensions browser check` and `extensions browser prepare` keep their full
+  readiness reports and add an `error` object when they fail. Their
+  `next_action` and `install.commands` fields may include the requested
+  workspace and database paths because they are the repair instructions.
+- `extensions browser status` always emits JSON. `--json` is accepted as an
+  explicit selection and does not change the payload.
+- Streaming machine protocols keep their documented frames. `run --json`,
+  `provider probe --json` and `changes --json` write one terminal machine
+  response and do not append a second envelope. `result` and `--final-result`
+  keep the final-result envelope. `compact` and `context` keep their existing
+  JSON status objects.
+- Success payloads are not rewritten. `schema_version` and `ok` are added to
+  failures, not retrofitted onto every success shape.
+
 ## Desktop commands
 
 ```powershell

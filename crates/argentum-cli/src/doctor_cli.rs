@@ -13,6 +13,7 @@ use argentum_store::{Store, SCHEMA_VERSION};
 use argentum_tools::ToolRegistry;
 use serde::Serialize;
 
+use crate::json_contract::JsonErrorBody;
 use crate::local_readiness::{
     browser_cache_report, file_report, module_report, BrowserCacheReport, FileReport, ModuleReport,
 };
@@ -24,6 +25,8 @@ pub struct DoctorReport {
     pub ok: bool,
     pub healthy: bool,
     pub ready: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonErrorBody>,
     pub workspace: WorkspaceReport,
     pub database: DatabaseReport,
     pub providers: ProviderReport,
@@ -323,6 +326,14 @@ pub fn build(workspace: &Path, database: Option<PathBuf>, probe_local: bool) -> 
         .filter(|check| check.required)
         .all(|check| check.ok);
     let ready = checks.iter().all(|check| check.ok);
+    let error = if healthy {
+        None
+    } else {
+        Some(JsonErrorBody::new(
+            "required_check_failed",
+            "one or more required checks failed",
+        ))
+    };
 
     DoctorReport {
         schema_version: 1,
@@ -330,6 +341,7 @@ pub fn build(workspace: &Path, database: Option<PathBuf>, probe_local: bool) -> 
         ok: healthy,
         healthy,
         ready,
+        error,
         workspace: workspace_report,
         database,
         providers,
@@ -852,6 +864,12 @@ mod tests {
             .checks
             .iter()
             .any(|check| check.id == "database_exists" && check.required && !check.ok));
+        let error = report.error.as_ref().expect("failure envelope");
+        assert_eq!(error.code, "required_check_failed");
+        assert!(!error.message.contains(database.to_string_lossy().as_ref()));
+        let value = serde_json::to_value(&report).expect("report");
+        assert_eq!(value["error"]["code"], "required_check_failed");
+        assert_eq!(value["ok"], false);
     }
 
     #[test]

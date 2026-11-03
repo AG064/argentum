@@ -477,6 +477,8 @@ struct BrowserCheckReport {
     namespace: &'static str,
     configured: bool,
     handshake_requested: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<crate::json_contract::JsonErrorBody>,
     node: NodeReport,
     files: FilesReport,
     configuration: Value,
@@ -559,6 +561,7 @@ async fn build_check_report(request: &BrowserRequest<'_>) -> Result<BrowserCheck
         namespace: NAMESPACE,
         configured: record.is_some(),
         handshake_requested: request.handshake,
+        error: None,
         node: NodeReport::default(),
         files: FilesReport::default(),
         configuration: json!({"state": "unavailable"}),
@@ -959,12 +962,32 @@ async fn build_check_report(request: &BrowserRequest<'_>) -> Result<BrowserCheck
 }
 
 async fn check(request: &BrowserRequest<'_>) -> Result<(), Error> {
-    let report = build_check_report(request).await?;
+    let mut report = build_check_report(request).await?;
+    if !report.ready {
+        report.error = Some(browser_readiness_error(&report));
+    }
     print_check(&report, request.json)?;
     if !report.ready {
+        if request.json {
+            return Err(crate::json_contract::JsonEmitted.into());
+        }
         return Err("browser readiness check failed".into());
     }
     Ok(())
+}
+
+fn browser_readiness_error(report: &BrowserCheckReport) -> crate::json_contract::JsonErrorBody {
+    if !report.configured {
+        crate::json_contract::JsonErrorBody::new(
+            "browser_definition_missing",
+            "browser-control.stdio is not installed for this workspace",
+        )
+    } else {
+        crate::json_contract::JsonErrorBody::new(
+            "browser_dependencies_missing",
+            "browser dependencies are not ready",
+        )
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -972,6 +995,8 @@ struct PrepareReport {
     schema_version: u32,
     command: &'static str,
     ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<crate::json_contract::JsonErrorBody>,
     install: InstallReport,
     readiness: BrowserCheckReport,
     dependency_hashes: DependencyHashes,
@@ -1033,7 +1058,10 @@ const INSTALL_TIMEOUT_SECONDS: u64 = 600;
 const INSTALL_OUTPUT_LIMIT: usize = 256 * 1024;
 const INSTALL_OUTPUT_TAIL_CHARS: usize = 8192;
 async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
-    let initial = build_check_report(request).await?;
+    let mut initial = build_check_report(request).await?;
+    if !initial.ready {
+        initial.error = Some(browser_readiness_error(&initial));
+    }
     let plan = install_plan(&initial);
     let mut install = InstallReport {
         requested: request.install,
@@ -1046,16 +1074,21 @@ async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
             .as_ref()
             .map(|plan| plan.commands.clone())
             .unwrap_or_else(|_| fallback_commands(&initial, request));
+        let error = initial.error.clone();
         let report = PrepareReport {
             schema_version: 1,
             command: "browser.prepare",
             ok: initial.ready,
+            error,
             install,
             readiness: initial,
             dependency_hashes: DependencyHashes::default(),
         };
         print_prepare(&report, request.json)?;
         if !report.ok {
+            if request.json {
+                return Err(crate::json_contract::JsonEmitted.into());
+            }
             return Err(
                 "browser dependencies are not ready; run the printed install commands".into(),
             );
@@ -1071,11 +1104,15 @@ async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
                 schema_version: 1,
                 command: "browser.prepare",
                 ok: false,
+                error: initial.error.clone(),
                 install,
                 readiness: initial,
                 dependency_hashes: DependencyHashes::default(),
             };
             print_prepare(&report, request.json)?;
+            if request.json {
+                return Err(crate::json_contract::JsonEmitted.into());
+            }
             return Err(error.into());
         }
     };
@@ -1140,7 +1177,10 @@ async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
             .iter()
             .all(|step| step.exit_code == Some(0) && step.error.is_none());
     install.ok = Some(install_steps_ok);
-    let readiness = build_check_report(request).await?;
+    let mut readiness = build_check_report(request).await?;
+    if !readiness.ready {
+        readiness.error = Some(browser_readiness_error(&readiness));
+    }
     let dependency_hashes = dependency_hashes(&readiness);
     let hashes_ok = dependency_hashes.package_lock.is_some()
         && dependency_hashes.playwright_package.is_some()
@@ -1155,16 +1195,31 @@ async fn prepare(request: &BrowserRequest<'_>) -> Result<(), Error> {
             "dependency hashes are incomplete after install".into()
         });
     }
+    let error = if report_ok {
+        None
+    } else {
+        Some(crate::json_contract::JsonErrorBody::new(
+            "browser_prepare_failed",
+            install
+                .error
+                .clone()
+                .unwrap_or_else(|| "browser dependency preparation failed".into()),
+        ))
+    };
     let report = PrepareReport {
         schema_version: 1,
         command: "browser.prepare",
         ok: report_ok,
+        error,
         install,
         readiness,
         dependency_hashes,
     };
     print_prepare(&report, request.json)?;
     if !report.ok {
+        if request.json {
+            return Err(crate::json_contract::JsonEmitted.into());
+        }
         return Err("browser dependency preparation failed".into());
     }
     Ok(())
