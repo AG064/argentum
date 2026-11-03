@@ -1,0 +1,122 @@
+{
+  "argentum": {
+    "label": "Argentum Genesis",
+    "version": [
+      "argentum",
+      "--version"
+    ],
+    "setup": [
+      [
+        "argentum",
+        "provider",
+        "save",
+        "bench",
+        "--label",
+        "Benchmark",
+        "--kind",
+        "openai-compatible",
+        "--endpoint",
+        "{env:ARGENTUM_BENCH_ENDPOINT}",
+        "--model",
+        "{model}",
+        "--select",
+        "--workspace",
+        "{workspace}",
+        "--database",
+        "{state}/argentum.sqlite3"
+      ],
+      [
+        "argentum",
+        "provider",
+        "budget",
+        "bench",
+        "--limits",
+        "{env:ARGENTUM_BENCH_LIMITS}",
+        "--workspace",
+        "{workspace}",
+        "--database",
+        "{state}/argentum.sqlite3"
+      ],
+      [
+        "argentum",
+        "permissions",
+        "select",
+        "{env:ARGENTUM_BENCH_PROFILE}",
+        "--workspace",
+        "{workspace}",
+        "--database",
+        "{state}/argentum.sqlite3"
+      ]
+    ],
+    "run": [
+      "argentum",
+      "run",
+      "--prompt",
+      "{prompt}",
+      "--json",
+      "--workspace",
+      "{workspace}",
+      "--database",
+      "{state}/argentum.sqlite3"
+    ]
+  },
+  "claude-code": {
+    "label": "Claude Code",
+    "version": [
+      "claude",
+      "--version"
+    ],
+    "run": [
+      "claude",
+      "-p",
+      "{prompt}",
+      "--model",
+      "{model}",
+      "--dangerously-skip-permissions"
+    ]
+  },
+  "codex": {
+    "label": "Codex",
+    "version": [
+      "codex",
+      "--version"
+    ],
+    "run": [
+      "codex",
+      "exec",
+      "--model",
+      "{model}",
+      "--full-auto",
+      "--skip-git-repo-check",
+      "{prompt}"
+    ]
+  },
+  "opencode": {
+    "label": "OpenCode",
+    "version": [
+      "opencode",
+      "--version"
+    ],
+    "run": [
+      "opencode",
+      "run",
+      "--model",
+      "{model}",
+      "{prompt}"
+    ]
+  },
+  "pi": {
+    "label": "Pi",
+    "version": [
+      "pi",
+      "--version"
+    ],
+    "run": [
+      "pi",
+      "--model",
+      "{model}",
+      "-p",
+      "{prompt}"
+    ]
+  }
+}
