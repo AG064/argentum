@@ -532,7 +532,7 @@ fn f07b_empty_or_unsupported_criteria_fail_without_removing_required_checks() {
         "--json",
     ]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("acceptance_criteria_missing"));
+    assert!(String::from_utf8_lossy(&missing.stdout).contains("acceptance_criteria_missing"));
     for runners in ["", "arbitrary-shell"] {
         let rejected = fixture.run(&[
             "goal",
