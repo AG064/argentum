@@ -8,6 +8,22 @@ Rust owns the application and runtime state. Slint authors the native desktop
 components. The 0.1.0 draft does not claim a mobile implementation or complete
 coverage of every target component contract.
 
+## Workbench amendment
+
+The Workbench shell in `ui/workbench/` replaces the earlier desktop and mobile
+shells, at the maintainer's direction to follow the conventions of current agent
+clients such as Codex, Claude, and OpenCode. Where this document and the Workbench
+differ, these points win. The interface contract is in `docs/UI_MODULES.md`.
+
+- Tokens are runtime values in `ui/workbench/theme.slint`, so the user and the agent
+  can change them. Approval prompts use fixed colors instead.
+- The palette is near-black, neutral gray, and the logotype's red.
+- Radii are softer and scale together. See the table below.
+- The user's own messages may use a filled bubble, which can be turned off. Assistant
+  text has no bubble.
+- One responsive shell serves every width. Below the narrow breakpoint, controls grow
+  to the 48 px touch target, and the sidebar and side panel become overlays.
+
 ## Contract scope
 
 ### Implemented in the 0.1.0 draft

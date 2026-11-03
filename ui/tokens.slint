@@ -84,6 +84,7 @@ export global AgTheme {
     out property <length> control-height: 40px;
     out property <length> mobile-control-height: 48px;
     out property <length> control-min-width: 88px;
+    out property <length> inspector-tab-min-width: 120px;
     out property <length> icon-inline: 16px;
     out property <length> icon-control: 18px;
     out property <length> icon-navigation: 20px;
@@ -92,7 +93,7 @@ export global AgTheme {
     out property <length> step-marker-size: 24px;
     out property <length> brand-mark-sm: 20px;
     out property <length> brand-mark-md: 32px;
-    out property <length> brand-mark-lg: 64px;
+    out property <length> brand-mark-lg: 80px;
     out property <length> brand-lockup-width: 240px;
 
     // Semantic shell geometry and responsive thresholds.
@@ -113,9 +114,10 @@ export global AgTheme {
     out property <length> navigation-width: 264px;
     out property <length> work-pane-width: 372px;
     out property <length> work-content-max-width: 820px;
+    out property <length> empty-state-min-height: 190px;
     out property <length> model-menu-width: 380px;
-    out property <length> settings-dialog-width: 680px;
-    out property <length> settings-dialog-height: 580px;
+    out property <length> settings-dialog-width: 820px;
+    out property <length> settings-dialog-height: 720px;
     out property <length> provider-profile-list-height: 104px;
     out property <length> provider-profile-picker-height: 104px;
     out property <length> provider-model-list-height: 156px;
@@ -142,8 +144,8 @@ export global AgTheme {
     out property <length> compact-menu-width-breakpoint: 440px;
     out property <length> model-menu-height-breakpoint: 400px;
     out property <length> context-menu-height-breakpoint: 410px;
-    out property <length> settings-dialog-width-breakpoint: 704px;
-    out property <length> settings-dialog-height-breakpoint: 604px;
+    out property <length> settings-dialog-width-breakpoint: 844px;
+    out property <length> settings-dialog-height-breakpoint: 744px;
     out property <length> about-dialog-width-breakpoint: 540px;
     out property <length> about-dialog-height-breakpoint: 430px;
     out property <length> approval-dialog-width-breakpoint: 620px;
@@ -177,4 +179,171 @@ export global AgTheme {
     out property <duration> motion-menu: 160ms;
     out property <duration> motion-sheet: 220ms;
     out property <duration> motion-state: 260ms;
+
+    // === Argentum harness redesign palette (additive). ===
+    // Augmented silver-black-red identity: deeper canvas, brighter Argentum
+    // red, restrained gradient stops. Coexists with the legacy dark surface
+    // tokens above so existing surfaces keep working while new components
+    // pull from these named tokens.
+    out property <color> canvas-void: #050608;
+    out property <color> canvas-deep: #080A0E;
+    out property <color> surface-low: #0D1015;
+    out property <color> surface-base: #12161D;
+    out property <color> surface-raised-x: #181D26;
+    out property <color> surface-hover-x: #202631;
+    out property <color> border-xsubtle: #252B35;
+    out property <color> border-xstrong: #3A424F;
+    out property <color> silver-bright: #E4E8ED;
+    out property <color> silver-base: #BCC3CC;
+    out property <color> steel-soft: #7C8795;
+    out property <color> gunmetal-x: #303844;
+    out property <color> red-argent: #E11D3F;
+    out property <color> red-xbright: #FF3455;
+    out property <color> red-xhover: #F02649;
+    out property <color> red-xactive: #BC1532;
+    out property <color> red-xdeep: #720C20;
+    out property <color> red-oxblood: #3B0712;
+    out property <color> text-xprimary: #F2F4F7;
+    out property <color> text-xsecondary: #B6BDC8;
+    out property <color> text-xmuted: #747E8D;
+    out property <color> text-xdisabled: #4D5562;
+
+    // Gradient stops (paired for use with @linear-gradient).
+    out property <color> gradient-void-start: #050608;
+    out property <color> gradient-void-end: #161A22;
+    out property <color> gradient-steel-start: #1F252E;
+    out property <color> gradient-steel-end: #2B3340;
+    out property <color> gradient-argent-start: #C0C7D0;
+    out property <color> gradient-argent-end: #6E7884;
+    out property <color> gradient-crimson-start: #3B0712;
+    out property <color> gradient-crimson-end: #E11D3F;
+    out property <color> gradient-scarlet-start: #E11D3F;
+    out property <color> gradient-scarlet-end: #FF3455;
+    out property <color> gradient-redblack-start: #1A050A;
+    out property <color> gradient-redblack-end: #3B0712;
+
+    // Semantic accents used by the new components.
+    out property <color> state-success: #4FB780;
+    out property <color> state-success-soft: #1E3329;
+    out property <color> state-warning: #E0A53A;
+    out property <color> state-warning-soft: #332512;
+    out property <color> state-info: #5A8CD8;
+    out property <color> state-info-soft: #16243A;
+    out property <color> state-cyan: #46A8B5;
+    out property <color> state-purple: #8B6BB5;
+
+    // Redesign shell geometry (additive).
+    out property <length> shell-topbar-height: 56px;
+    out property <length> shell-bottom-panel-height: 220px;
+    out property <length> shell-side-rail-width: 72px;
+    out property <length> shell-left-nav-width: 240px;
+    out property <length> shell-right-inspector-width: 320px;
+    out property <length> shell-side-nav-width: 220px;
+    out property <length> shell-side-nav-rail-width: 56px;
+    out property <length> shell-graph-toolbar-height: 48px;
+    out property <length> shell-minimap-size: 144px;
+    out property <length> mobile-bottom-nav-height: 72px;
+    out property <length> mobile-run-button-size: 64px;
+    out property <length> mobile-run-button-halo: 88px;
+    out property <length> mobile-sheet-radius: 16px;
+    out property <length> alert-radius: 10px;
+    out property <length> graph-node-min-width: 168px;
+    out property <length> graph-node-radius: 10px;
+    out property <length> graph-port-size: 10px;
+    out property <length> graph-connector-width: 1.5px;
+    out property <length> touch-target: 44px;
+    out property <length> gradient-ring-thickness: 2px;
+    out property <length> onb-step-marker: 28px;
+    out property <length> onb-card-min-width: 280px;
+
+    // === Refined spacing scale (8 px base, with 4 px half-step) ===
+    // Use these everywhere instead of ad-hoc space-3 / space-4. They make
+    // layouts airy and consistent without the blocky look of dense padding.
+    out property <length> s-0: 0px;
+    out property <length> s-1: 4px;
+    out property <length> s-2: 8px;
+    out property <length> s-3: 12px;
+    out property <length> s-4: 16px;
+    out property <length> s-5: 20px;
+    out property <length> s-6: 24px;
+    out property <length> s-7: 32px;
+    out property <length> s-8: 40px;
+    out property <length> s-9: 48px;
+    out property <length> s-10: 64px;
+    out property <length> s-11: 80px;
+    out property <length> s-12: 96px;
+
+    // Width breakpoints in pixels for the redesigned shell.
+    out property <length> bp-phone-narrow: 360px;
+    out property <length> bp-phone-large: 430px;
+    out property <length> bp-tablet: 768px;
+    out property <length> bp-desktop: 1024px;
+    out property <length> bp-desktop-wide: 1440px;
+    out property <length> bp-desktop-xl: 1920px;
+
+    // Animation timing for the redesigned motion system.
+    out property <duration> motion-xfast: 80ms;
+    out property <duration> motion-xmenu: 140ms;
+    out property <duration> motion-xstate: 200ms;
+    out property <duration> motion-xsheet: 240ms;
+    out property <duration> motion-pulse: 1600ms;
+
+    // === Modern chat surface tokens (refined) ===
+    // Single near-black canvas, no surface tinting for non-active
+    // elements. Borders are 1px hairlines at 8-12% white opacity. The
+    // result is airier and reads as one continuous dark surface rather
+    // than a stack of distinct rectangles.
+    out property <color> chat-canvas: #0B0C0F;          // page background
+    out property <color> chat-rail: #0E0F13;            // left conversation history
+    out property <color> chat-surface: #13141A;         // resting elevated surface
+    out property <color> chat-surface-hover: #181A22;   // hover for message rows
+    out property <color> chat-elevated: #1A1C24;        // dropdown / menu
+    out property <color> chat-overlay: #1F222C;          // composer / sheet overlay
+    out property <color> chat-input: #0E0F14;           // input field surface
+    out property <color> chat-input-focus: #181A22;      // input focused
+    out property <color> chat-border-faint: #ffffff14;   // 8% white
+    out property <color> chat-border: #ffffff1f;          // 12% white
+    out property <color> chat-border-strong: #ffffff2e;   // 18% white
+    out property <color> chat-text-primary: #ECEEF1;     // 16:1 against canvas
+    out property <color> chat-text-body: #B7BCC4;        // 9:1
+    out property <color> chat-text-muted: #7A8290;       // 4.5:1
+    out property <color> chat-text-subtle: #565D6A;      // 3:1 captions
+    out property <color> chat-text-disabled: #3A3F4A;
+    out property <color> chat-user-tint: #ffffff08;      // user message subtle bg
+    out property <color> chat-user-border: #ffffff14;    // user message border
+    out property <color> chat-avatar-user: #2A2D36;    // user avatar bg
+    out property <color> chat-avatar-agent: #6E1620;   // agent avatar gradient start
+    out property <color> chat-avatar-agent-end: #B91D2E; // agent avatar gradient end
+    out property <color> chat-code-bg: #08090D;          // code block surface
+    out property <color> chat-code-border: #ffffff14;
+    out property <color> chat-code-text: #D5D9E0;
+    out property <color> chat-code-comment: #6A7080;
+    out property <color> chat-hover-bg: #ffffff0a;        // hover state for actions
+    out property <color> chat-active-bg: #ffffff0f;      // active/selected
+    out property <color> chat-divider: #ffffff0a;        // soft divider between messages
+    out property <color> chat-overlay-bg: #181A22;       // floating panels
+    out property <color> chat-overlay-border: #ffffff1f;  // floating panel border
+    out property <color> chat-run-banner: #ffffff0a;      // active run banner
+    out property <color> chat-run-banner-border: #E11D3F66; // active run banner border
+
+    // Chat geometry.
+    out property <length> chat-max-width: 760px;        // capped reading width
+    out property <length> chat-rail-width: 260px;       // left conversation history
+    out property <length> chat-avatar-size: 28px;       // message avatar circle
+    out property <length> chat-avatar-radius: 14px;     // half of size
+    out property <length> chat-message-radius: 10px;     // user message surface radius
+    out property <length> chat-message-padding: 16px;   // user message internal padding
+    out property <length> chat-message-gap: 24px;        // vertical between messages
+    out property <length> chat-action-button-size: 28px; // per-message action
+    out property <length> chat-composer-radius: 16px;    // composer rounded
+    out property <length> chat-composer-min-height: 56px;
+    out property <length> chat-composer-max-height: 240px;
+    out property <length> chat-composer-toolbar: 44px;   // composer top toolbar
+    out property <length> chat-caret-width: 2px;          // streaming caret
+    out property <length> chat-caret-height: 16px;       // streaming caret height
+    out property <length> chat-line-height: 24px;        // body line height
+    out property <length> chat-message-spacing: 32px;   // between user + assistant pairs
+    out property <duration> chat-caret-blink: 1100ms;    // caret blink rate
+
+    // Shell geometry.
 }

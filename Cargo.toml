@@ -4,6 +4,9 @@ members = [
     "crates/argentum-android",
     "crates/argentum-android-inference",
     "crates/argentum-app",
+    "crates/argentum-browser",
+    "crates/argentum-gitview",
+    "crates/argentum-update",
     "crates/argentum-changes",
     "crates/argentum-cli",
     "crates/argentum-domain",
@@ -47,6 +50,9 @@ argentum-cli = { path = "crates/argentum-cli" }
 argentum-changes = { path = "crates/argentum-changes" }
 argentum-platform = { path = "crates/argentum-platform" }
 argentum-providers = { path = "crates/argentum-providers" }
+argentum-browser = { path = "crates/argentum-browser" }
+argentum-gitview = { path = "crates/argentum-gitview" }
+argentum-update = { path = "crates/argentum-update" }
 argentum-runtime = { path = "crates/argentum-runtime" }
 argentum-scheduler = { path = "crates/argentum-scheduler" }
 argentum-security = { path = "crates/argentum-security" }
@@ -94,4 +100,4 @@ uuid = { version = "1", features = ["serde", "v4"] }
 zeroize = { version = "1", features = ["derive"] }
 windows = "0.62.2"
 windows-sys = "0.61.2"
-zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2", "deflate-zopfli"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2", "deflate-zopfli"] }

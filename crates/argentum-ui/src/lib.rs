@@ -22,6 +22,9 @@ use tracing::warn;
 
 slint::include_modules!();
 
+mod markdown;
+pub mod workbench;
+
 /// Formats a workspace path for presentation without exposing a raw verbatim
 /// Windows path. The full path remains authoritative elsewhere; this label is
 /// only the final directory name, which is enough for the navigation and
@@ -212,8 +215,9 @@ impl UiHandle {
             AppEvent::SupplementalCheckRecorded(_) => {}
             AppEvent::WorkspaceStateLoaded(snapshot) => {
                 let previous_active_session_id = self.window.get_active_session_id().to_string();
-                self.window
-                    .set_project_name(snapshot.project.name.clone().into());
+                self.window.set_project_name(
+                    workbench::display_project_name(&snapshot.project.name).into(),
+                );
                 self.window.set_workspace_label(
                     display_workspace_label(&snapshot.project.workspace_root).into(),
                 );
@@ -483,7 +487,8 @@ impl UiHandle {
             }
             AppEvent::ProjectCreated(project) => {
                 let workspace_label = display_workspace_label(&project.workspace_root);
-                self.window.set_project_name(project.name.clone().into());
+                self.window
+                    .set_project_name(workbench::display_project_name(&project.name).into());
                 self.window
                     .set_workspace_label(workspace_label.clone().into());
                 self.push_activity("Project created", workspace_label, "neutral");
@@ -521,6 +526,7 @@ impl UiHandle {
                 self.window.set_user_prompt(task.prompt.clone().into());
                 self.window.set_draft(SharedString::default());
                 self.window.set_transcript(SharedString::default());
+                self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
                 self.window.set_current_reasoning_available(false);
                 self.window
@@ -558,6 +564,7 @@ impl UiHandle {
                 self.window.set_active_run_id(run_id.to_string().into());
                 let mut transcript = self.window.get_transcript().to_string();
                 transcript.push_str(text);
+                self.window.set_live_blocks(markdown::model(&transcript));
                 self.window.set_transcript(transcript.into());
                 self.window.set_error_message(SharedString::default());
             }
@@ -1275,8 +1282,12 @@ impl UiHandle {
                 self.window
                     .set_selected_change_path(diff.relative_path.clone().into());
                 self.window.set_selected_diff(diff.text.clone().into());
+                let (diff_lines, diff_cut) = workbench::parse_diff(&diff.text);
+                self.window
+                    .set_selected_diff_lines(ModelRc::new(VecModel::from(diff_lines)));
                 self.window.set_selected_diff_available(diff.available);
-                self.window.set_selected_diff_truncated(diff.truncated);
+                self.window
+                    .set_selected_diff_truncated(diff.truncated || diff_cut);
                 self.window.set_selected_diff_reason(if diff.available {
                     SharedString::default()
                 } else {
@@ -1558,6 +1569,33 @@ impl UiHandle {
             | AppEvent::ExecutionAuditSnapshot { .. }
             | AppEvent::VerificationEvidenceRecorded(_)
             | AppEvent::OnboardingSnapshotLoaded(_) => {}
+            AppEvent::UiPreferencesLoaded {
+                preferences,
+                source,
+                summary,
+                undo,
+            } => {
+                workbench::apply_ui_change(
+                    &self.window,
+                    preferences,
+                    *source,
+                    summary,
+                    undo.as_deref(),
+                );
+                self.reconcile_first_run(preferences.first_run_complete);
+            }
+            AppEvent::ProviderUsageLoaded { rows } => {
+                workbench::apply_provider_usage(&self.window, rows);
+            }
+            AppEvent::GitStatusLoaded(snapshot) => {
+                workbench::apply_git_status(&self.window, snapshot);
+            }
+            AppEvent::GitDiffLoaded(snapshot) => {
+                workbench::apply_git_diff(&self.window, snapshot);
+            }
+            AppEvent::BrowserPageLoaded(page) => {
+                workbench::apply_browser_page(&self.window, page);
+            }
             AppEvent::LayoutChanged(profile) => {
                 let active_inspector = profile.active_inspector.map(surface_id).unwrap_or_default();
                 let module_disabled = (active_inspector == "activity"
@@ -1652,6 +1690,22 @@ impl UiHandle {
                 self.window.set_harness_loading(false);
                 self.window.set_harness_pending(SharedString::default());
                 self.window.set_harness_error(present_error(message).into());
+            }
+            AppCommand::UpdateUiPreferences { .. } => {
+                self.window.set_ui_error(present_error(message).into());
+            }
+            AppCommand::LoadProviderUsage => {
+                self.window.set_usage_state("error".into());
+                self.window.set_usage_message(present_error(message).into());
+            }
+            AppCommand::RefreshGitStatus | AppCommand::LoadGitFileDiff { .. } => {
+                self.window.set_git_state("error".into());
+                self.window.set_git_message(present_error(message).into());
+            }
+            AppCommand::BrowserNavigate { .. } => {
+                self.window.set_browser_state("error".into());
+                self.window
+                    .set_browser_message(present_error(message).into());
             }
             AppCommand::SetSurfaceVisibility { surface, visible } => {
                 self.window.set_harness_loading(false);
@@ -1859,6 +1913,7 @@ impl UiHandle {
                 || previous_model != profile.model
                 || matches!(pending.as_str(), "save" | "select");
             self.window.set_provider_id(profile.id.clone().into());
+            self.window.set_provider_custom_draft(false);
             self.window.set_provider_label(profile.label.clone().into());
             self.window
                 .set_provider_kind(provider_kind_id(profile.kind).into());
@@ -2015,6 +2070,14 @@ impl UiHandle {
             self.window
                 .set_provider_models_pending(SharedString::default());
         }
+    }
+
+    /// First run shows the provider chooser and nothing else. A workspace already
+    /// using another provider has made that choice, so it skips straight in.
+    fn reconcile_first_run(&self, complete: bool) {
+        let chose_provider = !self.window.get_provider_id().is_empty()
+            && self.window.get_provider_id().as_str() != argentum_domain::DEFAULT_PROVIDER_ID;
+        self.window.set_first_run_open(!complete && !chose_provider);
     }
 
     fn apply_harness_snapshot(&self, snapshot: &HarnessSnapshot) {
@@ -2182,6 +2245,7 @@ impl UiHandle {
             .set_inspector_modes(inspector_mode_model(&snapshot.surfaces));
         self.window
             .set_harness_capabilities(harness_capability_model(&snapshot.capabilities));
+        workbench::apply_harness_modules(&self.window, snapshot);
         self.window.set_harness_loading(false);
         self.window.set_harness_pending(SharedString::default());
         self.window.set_harness_error(SharedString::default());
@@ -2287,6 +2351,7 @@ impl UiHandle {
             .set_conversation_messages(empty_conversation_model());
         self.window.set_draft(SharedString::default());
         self.window.set_transcript(SharedString::default());
+        self.window.set_live_blocks(ModelRc::default());
         self.window.set_current_reasoning(SharedString::default());
         self.window.set_current_reasoning_available(false);
         self.window
@@ -2786,6 +2851,13 @@ const fn trajectory_state_id(state: TrajectoryState) -> &'static str {
     }
 }
 
+/// Exposed for the visual QA example, which renders real message models.
+pub fn conversation_message_model_for_tools(
+    messages: &[argentum_domain::ConversationMessage],
+) -> ModelRc<ConversationMessageView> {
+    conversation_message_model(messages)
+}
+
 fn conversation_message_model(
     messages: &[argentum_domain::ConversationMessage],
 ) -> ModelRc<ConversationMessageView> {
@@ -2810,6 +2882,7 @@ fn conversation_message_model(
                     ConversationRole::Assistant => "assistant",
                 }
                 .into(),
+                blocks: markdown::model(&text),
                 text: text.into(),
                 reasoning: reasoning.clone().into(),
                 reasoning_available: message.role == ConversationRole::Assistant
@@ -3250,6 +3323,25 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
         _ => "Unsupported",
     };
     ProviderPresetView {
+        featured: matches!(
+            preset.id.as_str(),
+            "minimax" | "deepseek" | "openai" | "chatgpt" | "llama-cpp" | "custom"
+        ),
+        detail: if preset.notes.is_empty() {
+            credential.clone().into()
+        } else {
+            preset.notes.clone().into()
+        },
+        model: preset.default_model.clone().into(),
+        needs_key: preset.credential_profile_id.is_some(),
+        icon: if preset.local {
+            "hard-drive"
+        } else if preset.group == "custom" {
+            "globe"
+        } else {
+            "provider"
+        }
+        .into(),
         id: preset.id.clone().into(),
         label: preset.label.clone().into(),
         kind: provider_kind_id(preset.kind).into(),
@@ -3386,8 +3478,21 @@ fn harness_execution_profile_model(
 }
 
 fn harness_surface_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<HarnessSurfaceView> {
-    let rows = surfaces
-        .iter()
+    let rank = |surface: &&HarnessSurfaceState| {
+        if surface.availability != HarnessAvailability::Available {
+            3
+        } else {
+            match workbench::surface_group(surface.id) {
+                "core" => 0,
+                "shell" => 1,
+                _ => 2,
+            }
+        }
+    };
+    let mut ordered = surfaces.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(rank);
+    let rows = ordered
+        .into_iter()
         .map(|surface| HarnessSurfaceView {
             id: surface_id(surface.id).into(),
             label: surface.label.clone().into(),
@@ -3400,23 +3505,22 @@ fn harness_surface_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<HarnessSur
             .into(),
             visible: surface.visible,
             configurable: surface.configurable,
+            icon: workbench::surface_icon(surface.id).into(),
+            group: workbench::surface_group(surface.id).into(),
         })
         .collect::<Vec<_>>();
     ModelRc::new(VecModel::from(rows))
 }
 
 fn inspector_mode_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<InspectorModeView> {
-    let rows = surfaces
+    let rows = argentum_domain::INSPECTOR_SURFACE_ORDER
         .iter()
-        .filter(|surface| {
-            surface.id.is_inspector()
-                && surface.availability == HarnessAvailability::Available
-                && surface.visible
-        })
+        .filter_map(|id| surfaces.iter().find(|surface| surface.id == *id))
+        .filter(|surface| surface.availability == HarnessAvailability::Available && surface.visible)
         .map(|surface| InspectorModeView {
-            id: surface_id(surface.id).into(),
+            id: surface.id.id().into(),
             label: surface.label.clone().into(),
-            icon: surface_id(surface.id).into(),
+            icon: workbench::surface_icon(surface.id).into(),
             detail: surface.detail.clone().into(),
         })
         .collect::<Vec<_>>();
@@ -3641,7 +3745,7 @@ const fn provider_kind_label(kind: ProviderKind) -> &'static str {
     }
 }
 
-fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
+pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
     match kind {
         "openai-compatible" => Some(ProviderKind::OpenAiCompatible),
         "anthropic" => Some(ProviderKind::Anthropic),
@@ -3674,32 +3778,11 @@ fn provider_status_id(status: &argentum_domain::ProviderStatus) -> String {
 }
 
 const fn surface_id(surface: SurfaceId) -> &'static str {
-    match surface {
-        SurfaceId::Conversation => "conversation",
-        SurfaceId::Plan => "plan",
-        SurfaceId::Changes => "changes",
-        SurfaceId::Files => "files",
-        SurfaceId::Terminal => "terminal",
-        SurfaceId::Preview => "preview",
-        SurfaceId::Activity => "activity",
-        SurfaceId::Trajectory => "trajectory",
-        SurfaceId::Approvals => "approvals",
-    }
+    surface.id()
 }
 
 fn surface_from_id(surface: &str) -> Option<SurfaceId> {
-    match surface {
-        "conversation" => Some(SurfaceId::Conversation),
-        "plan" => Some(SurfaceId::Plan),
-        "changes" => Some(SurfaceId::Changes),
-        "files" => Some(SurfaceId::Files),
-        "terminal" => Some(SurfaceId::Terminal),
-        "preview" => Some(SurfaceId::Preview),
-        "activity" => Some(SurfaceId::Activity),
-        "trajectory" => Some(SurfaceId::Trajectory),
-        "approvals" => Some(SurfaceId::Approvals),
-        _ => None,
-    }
+    SurfaceId::from_id(surface)
 }
 
 fn harness_surface_state(surface: &HarnessSurfaceState) -> &'static str {
@@ -3872,10 +3955,14 @@ where
     F: Fn(AppCommand) + 'static,
 {
     let dispatch = Rc::new(dispatch);
+    {
+        let workbench_dispatch = dispatch.clone();
+        workbench::connect(window, move |command| workbench_dispatch(command));
+    }
 
     let submit_dispatch = dispatch.clone();
     let submit_window = window.as_weak();
-    window.on_submit_task(move |prompt| {
+    window.global::<App>().on_submit_task(move |prompt| {
         let Some(window) = submit_window.upgrade() else {
             return;
         };
@@ -3889,7 +3976,7 @@ where
     });
 
     let cancel_dispatch = dispatch.clone();
-    window.on_cancel_run(move |run_id| {
+    window.global::<App>().on_cancel_run(move |run_id| {
         let Ok(run_id) = run_id.to_string().parse() else {
             warn!("cancel requested without a valid run id");
             return;
@@ -3898,12 +3985,12 @@ where
     });
 
     let new_dispatch = dispatch.clone();
-    window.on_new_session(move || {
+    window.global::<App>().on_new_session(move || {
         new_dispatch(AppCommand::NewSession);
     });
 
     let select_dispatch = dispatch.clone();
-    window.on_select_session(move |session_id| {
+    window.global::<App>().on_select_session(move |session_id| {
         let Ok(session_id) = session_id.to_string().parse() else {
             warn!("session selection requested without a valid session id");
             return;
@@ -3913,7 +4000,7 @@ where
 
     let search_dispatch = dispatch.clone();
     let search_window = window.as_weak();
-    window.on_search_sessions(move |query| {
+    window.global::<App>().on_search_sessions(move |query| {
         let filter = search_window
             .upgrade()
             .map(|window| session_filter_from_id(window.get_session_filter().as_str()))
@@ -3928,7 +4015,7 @@ where
 
     let filter_dispatch = dispatch.clone();
     let filter_window = window.as_weak();
-    window.on_set_session_filter(move |filter| {
+    window.global::<App>().on_set_session_filter(move |filter| {
         let query = filter_window
             .upgrade()
             .map(|window| window.get_session_query().to_string())
@@ -3943,86 +4030,94 @@ where
 
     let title_dispatch = dispatch.clone();
     let title_window = window.as_weak();
-    window.on_rename_session(move |session_id, title| {
-        let Ok(session_id) = session_id.to_string().parse() else {
-            return;
-        };
-        let title = title.trim().to_owned();
-        if title.is_empty() {
-            return;
-        }
-        if let Some(window) = title_window.upgrade() {
-            if window.get_session_action_pending() {
+    window
+        .global::<App>()
+        .on_rename_session(move |session_id, title| {
+            let Ok(session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            let title = title.trim().to_owned();
+            if title.is_empty() {
                 return;
             }
-            window.set_session_action_pending(true);
-            window.set_session_action_error(SharedString::default());
-        }
-        title_dispatch(AppCommand::SetSessionTitle { session_id, title });
-    });
+            if let Some(window) = title_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            title_dispatch(AppCommand::SetSessionTitle { session_id, title });
+        });
 
     let pin_dispatch = dispatch.clone();
     let pin_window = window.as_weak();
-    window.on_set_session_pinned(move |session_id, pinned| {
-        let Ok(session_id) = session_id.to_string().parse() else {
-            return;
-        };
-        if let Some(window) = pin_window.upgrade() {
-            if window.get_session_action_pending() {
+    window
+        .global::<App>()
+        .on_set_session_pinned(move |session_id, pinned| {
+            let Ok(session_id) = session_id.to_string().parse() else {
                 return;
+            };
+            if let Some(window) = pin_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
             }
-            window.set_session_action_pending(true);
-            window.set_session_action_error(SharedString::default());
-        }
-        pin_dispatch(AppCommand::SetSessionPinned { session_id, pinned });
-    });
+            pin_dispatch(AppCommand::SetSessionPinned { session_id, pinned });
+        });
 
     let archive_dispatch = dispatch.clone();
     let archive_window = window.as_weak();
-    window.on_set_session_archived(move |session_id, archived| {
-        let Ok(session_id) = session_id.to_string().parse() else {
-            return;
-        };
-        if let Some(window) = archive_window.upgrade() {
-            if window.get_session_action_pending() {
+    window
+        .global::<App>()
+        .on_set_session_archived(move |session_id, archived| {
+            let Ok(session_id) = session_id.to_string().parse() else {
                 return;
+            };
+            if let Some(window) = archive_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
             }
-            window.set_session_action_pending(true);
-            window.set_session_action_error(SharedString::default());
-        }
-        archive_dispatch(AppCommand::SetSessionArchived {
-            session_id,
-            archived,
+            archive_dispatch(AppCommand::SetSessionArchived {
+                session_id,
+                archived,
+            });
         });
-    });
 
     let fork_dispatch = dispatch.clone();
     let fork_window = window.as_weak();
-    window.on_fork_session(move |session_id, title| {
-        let Ok(source_session_id) = session_id.to_string().parse() else {
-            return;
-        };
-        let title = title.trim().to_owned();
-        if title.is_empty() {
-            return;
-        }
-        if let Some(window) = fork_window.upgrade() {
-            if window.get_session_action_pending() {
+    window
+        .global::<App>()
+        .on_fork_session(move |session_id, title| {
+            let Ok(source_session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            let title = title.trim().to_owned();
+            if title.is_empty() {
                 return;
             }
-            window.set_session_action_pending(true);
-            window.set_session_action_error(SharedString::default());
-        }
-        fork_dispatch(AppCommand::ForkSession {
-            source_session_id,
-            title,
-            expected_last_message_id: None,
+            if let Some(window) = fork_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            fork_dispatch(AppCommand::ForkSession {
+                source_session_id,
+                title,
+                expected_last_message_id: None,
+            });
         });
-    });
 
     let grants_dispatch = dispatch.clone();
     let grants_window = window.as_weak();
-    window.on_refresh_approval_grants(move || {
+    window.global::<App>().on_refresh_approval_grants(move || {
         if let Some(window) = grants_window.upgrade() {
             window.set_approval_grants_loading(true);
             window.set_approval_grants_error(SharedString::default());
@@ -4032,23 +4127,25 @@ where
 
     let revoke_dispatch = dispatch.clone();
     let revoke_window = window.as_weak();
-    window.on_revoke_approval_grant(move |grant_id| {
-        let Ok(grant_id) = grant_id.to_string().parse::<argentum_domain::GrantId>() else {
-            return;
-        };
-        if let Some(window) = revoke_window.upgrade() {
-            if !window.get_approval_grant_pending().is_empty() {
+    window
+        .global::<App>()
+        .on_revoke_approval_grant(move |grant_id| {
+            let Ok(grant_id) = grant_id.to_string().parse::<argentum_domain::GrantId>() else {
                 return;
+            };
+            if let Some(window) = revoke_window.upgrade() {
+                if !window.get_approval_grant_pending().is_empty() {
+                    return;
+                }
+                window.set_approval_grant_pending(grant_id.to_string().into());
+                window.set_approval_grants_error(SharedString::default());
             }
-            window.set_approval_grant_pending(grant_id.to_string().into());
-            window.set_approval_grants_error(SharedString::default());
-        }
-        revoke_dispatch(AppCommand::RevokeApprovalGrant { grant_id });
-    });
+            revoke_dispatch(AppCommand::RevokeApprovalGrant { grant_id });
+        });
 
     let verification_dispatch = dispatch.clone();
     let verification_window = window.as_weak();
-    window.on_refresh_verification(move || {
+    window.global::<App>().on_refresh_verification(move || {
         let active_run_id = verification_window
             .upgrade()
             .map(|window| window.get_active_run_id().to_string())
@@ -4070,58 +4167,64 @@ where
 
     let review_dispatch = dispatch.clone();
     let review_window = window.as_weak();
-    window.on_review_verification_runner(move |runner| {
-        let Ok(runner) = runner
-            .to_string()
-            .parse::<argentum_domain::VerificationRunnerId>()
-        else {
-            return;
-        };
-        if let Some(window) = review_window.upgrade() {
-            window.set_verification_approve_pending(runner.id().into());
-            window.set_verification_runners_error(SharedString::default());
-        }
-        review_dispatch(AppCommand::ReviewProjectVerification { runner });
-    });
+    window
+        .global::<App>()
+        .on_review_verification_runner(move |runner| {
+            let Ok(runner) = runner
+                .to_string()
+                .parse::<argentum_domain::VerificationRunnerId>()
+            else {
+                return;
+            };
+            if let Some(window) = review_window.upgrade() {
+                window.set_verification_approve_pending(runner.id().into());
+                window.set_verification_runners_error(SharedString::default());
+            }
+            review_dispatch(AppCommand::ReviewProjectVerification { runner });
+        });
 
     let approve_verification_dispatch = dispatch.clone();
     let approve_verification_window = window.as_weak();
-    window.on_approve_verification_runner(move |runner| {
-        let Ok(runner) = runner
-            .to_string()
-            .parse::<argentum_domain::VerificationRunnerId>()
-        else {
-            return;
-        };
-        let binding = approve_verification_window
-            .upgrade()
-            .map(|window| window.get_verification_review_binding().to_string())
-            .unwrap_or_default();
-        if binding.is_empty() {
-            return;
-        }
-        if let Some(window) = approve_verification_window.upgrade() {
-            window.set_verification_approve_pending(runner.id().into());
-            window.set_verification_review_open(false);
-            window.set_verification_runners_error(SharedString::default());
-        }
-        approve_verification_dispatch(AppCommand::ApproveProjectVerification {
-            runner,
-            expected_binding: Some(argentum_domain::Sha256Digest(binding)),
+    window
+        .global::<App>()
+        .on_approve_verification_runner(move |runner| {
+            let Ok(runner) = runner
+                .to_string()
+                .parse::<argentum_domain::VerificationRunnerId>()
+            else {
+                return;
+            };
+            let binding = approve_verification_window
+                .upgrade()
+                .map(|window| window.get_verification_review_binding().to_string())
+                .unwrap_or_default();
+            if binding.is_empty() {
+                return;
+            }
+            if let Some(window) = approve_verification_window.upgrade() {
+                window.set_verification_approve_pending(runner.id().into());
+                window.set_verification_review_open(false);
+                window.set_verification_runners_error(SharedString::default());
+            }
+            approve_verification_dispatch(AppCommand::ApproveProjectVerification {
+                runner,
+                expected_binding: Some(argentum_domain::Sha256Digest(binding)),
+            });
         });
-    });
 
     let cancel_review_window = window.as_weak();
-    window.on_cancel_verification_review(move || {
-        if let Some(window) = cancel_review_window.upgrade() {
-            window.set_verification_review_open(false);
-            window.set_verification_approve_pending(SharedString::default());
-        }
-    });
+    window
+        .global::<App>()
+        .on_cancel_verification_review(move || {
+            if let Some(window) = cancel_review_window.upgrade() {
+                window.set_verification_review_open(false);
+                window.set_verification_approve_pending(SharedString::default());
+            }
+        });
 
     let set_goal_dispatch = dispatch.clone();
     let set_goal_window = window.as_weak();
-    window.on_set_goal(
+    window.global::<App>().on_set_goal(
         move |objective, token_budget, tool_budget, time_budget_seconds| {
             let Some(window) = set_goal_window.upgrade() else {
                 return;
@@ -4148,7 +4251,7 @@ where
 
     let pause_goal_dispatch = dispatch.clone();
     let pause_goal_window = window.as_weak();
-    window.on_pause_goal(move || {
+    window.global::<App>().on_pause_goal(move || {
         let Some(window) = pause_goal_window.upgrade() else {
             return;
         };
@@ -4161,7 +4264,7 @@ where
 
     let resume_goal_dispatch = dispatch.clone();
     let resume_goal_window = window.as_weak();
-    window.on_resume_goal(move || {
+    window.global::<App>().on_resume_goal(move || {
         let Some(window) = resume_goal_window.upgrade() else {
             return;
         };
@@ -4174,7 +4277,7 @@ where
 
     let clear_goal_dispatch = dispatch.clone();
     let clear_goal_window = window.as_weak();
-    window.on_clear_goal(move || {
+    window.global::<App>().on_clear_goal(move || {
         let Some(window) = clear_goal_window.upgrade() else {
             return;
         };
@@ -4187,32 +4290,34 @@ where
 
     let goal_limits_dispatch = dispatch.clone();
     let goal_limits_window = window.as_weak();
-    window.on_configure_goal_limits(move |goal_id, limits| {
-        let Some(window) = goal_limits_window.upgrade() else {
-            return;
-        };
-        if window.get_running() || window.get_goal_action_pending() {
-            return;
-        }
-        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
-            window.set_goal_limits_error("A current goal is required.".into());
-            return;
-        };
-        let limits = match parse_goal_limits_csv(limits.as_str()) {
-            Ok(limits) => limits,
-            Err(error) => {
-                window.set_goal_limits_error(error.into());
+    window
+        .global::<App>()
+        .on_configure_goal_limits(move |goal_id, limits| {
+            let Some(window) = goal_limits_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
                 return;
             }
-        };
-        window.set_goal_limits_error(SharedString::default());
-        window.set_goal_action_pending(true);
-        goal_limits_dispatch(AppCommand::ConfigureGoalLimits { goal_id, limits });
-    });
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_limits_error("A current goal is required.".into());
+                return;
+            };
+            let limits = match parse_goal_limits_csv(limits.as_str()) {
+                Ok(limits) => limits,
+                Err(error) => {
+                    window.set_goal_limits_error(error.into());
+                    return;
+                }
+            };
+            window.set_goal_limits_error(SharedString::default());
+            window.set_goal_action_pending(true);
+            goal_limits_dispatch(AppCommand::ConfigureGoalLimits { goal_id, limits });
+        });
 
     let goal_criteria_dispatch = dispatch.clone();
     let goal_criteria_window = window.as_weak();
-    window.on_configure_goal_criteria(move |goal_id, runners, attestation| {
+    window.global::<App>().on_configure_goal_criteria(move |goal_id, runners, attestation| {
         let Some(window) = goal_criteria_window.upgrade() else {
             return;
         };
@@ -4245,104 +4350,114 @@ where
 
     let goal_attest_dispatch = dispatch.clone();
     let goal_attest_window = window.as_weak();
-    window.on_attest_goal(move |goal_id, summary| {
-        let Some(window) = goal_attest_window.upgrade() else {
-            return;
-        };
-        if window.get_running() || window.get_goal_action_pending() {
-            return;
-        }
-        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
-            window.set_goal_attestation_error("A current goal is required.".into());
-            return;
-        };
-        let summary = summary.trim().to_owned();
-        if summary.is_empty() {
-            window.set_goal_attestation_error("Enter an owner attestation summary.".into());
-            return;
-        }
-        window.set_goal_attestation_error(SharedString::default());
-        window.set_goal_action_pending(true);
-        goal_attest_dispatch(AppCommand::AttestGoal { goal_id, summary });
-    });
+    window
+        .global::<App>()
+        .on_attest_goal(move |goal_id, summary| {
+            let Some(window) = goal_attest_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_attestation_error("A current goal is required.".into());
+                return;
+            };
+            let summary = summary.trim().to_owned();
+            if summary.is_empty() {
+                window.set_goal_attestation_error("Enter an owner attestation summary.".into());
+                return;
+            }
+            window.set_goal_attestation_error(SharedString::default());
+            window.set_goal_action_pending(true);
+            goal_attest_dispatch(AppCommand::AttestGoal { goal_id, summary });
+        });
 
     let goal_supervise_dispatch = dispatch.clone();
     let goal_supervise_window = window.as_weak();
-    window.on_supervise_goal(move |goal_id, iterations, seconds| {
-        let Some(window) = goal_supervise_window.upgrade() else {
-            return;
-        };
-        if window.get_running() || window.get_goal_supervision_pending() {
-            return;
-        }
-        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
-            window.set_goal_supervision_error("A current goal is required.".into());
-            return;
-        };
-        let Ok(iterations) = iterations.trim().parse::<u32>() else {
-            window.set_goal_supervision_error("Iterations must be a positive integer.".into());
-            return;
-        };
-        let Ok(seconds) = seconds.trim().parse::<u64>() else {
-            window.set_goal_supervision_error("Elapsed seconds must be a positive integer.".into());
-            return;
-        };
-        if iterations == 0 || seconds == 0 {
-            window.set_goal_supervision_error(
-                "Iterations and elapsed seconds must be positive.".into(),
-            );
-            return;
-        }
-        window.set_goal_supervision_pending(true);
-        window.set_goal_supervision_error(SharedString::default());
-        window.set_goal_supervision_notice("Supervision requested.".into());
-        goal_supervise_dispatch(AppCommand::SuperviseGoal {
-            goal_id,
-            iteration_limit: iterations,
-            elapsed_seconds: seconds,
+    window
+        .global::<App>()
+        .on_supervise_goal(move |goal_id, iterations, seconds| {
+            let Some(window) = goal_supervise_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_supervision_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_supervision_error("A current goal is required.".into());
+                return;
+            };
+            let Ok(iterations) = iterations.trim().parse::<u32>() else {
+                window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+                return;
+            };
+            let Ok(seconds) = seconds.trim().parse::<u64>() else {
+                window.set_goal_supervision_error(
+                    "Elapsed seconds must be a positive integer.".into(),
+                );
+                return;
+            };
+            if iterations == 0 || seconds == 0 {
+                window.set_goal_supervision_error(
+                    "Iterations and elapsed seconds must be positive.".into(),
+                );
+                return;
+            }
+            window.set_goal_supervision_pending(true);
+            window.set_goal_supervision_error(SharedString::default());
+            window.set_goal_supervision_notice("Supervision requested.".into());
+            goal_supervise_dispatch(AppCommand::SuperviseGoal {
+                goal_id,
+                iteration_limit: iterations,
+                elapsed_seconds: seconds,
+            });
         });
-    });
 
     let goal_deliver_dispatch = dispatch.clone();
     let goal_deliver_window = window.as_weak();
-    window.on_deliver_goal(move |goal_id, iterations, seconds| {
-        let Some(window) = goal_deliver_window.upgrade() else {
-            return;
-        };
-        if window.get_running() || window.get_goal_supervision_pending() {
-            return;
-        }
-        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
-            window.set_goal_supervision_error("A current goal is required.".into());
-            return;
-        };
-        let Ok(iterations) = iterations.trim().parse::<u32>() else {
-            window.set_goal_supervision_error("Iterations must be a positive integer.".into());
-            return;
-        };
-        let Ok(seconds) = seconds.trim().parse::<u64>() else {
-            window.set_goal_supervision_error("Elapsed seconds must be a positive integer.".into());
-            return;
-        };
-        if iterations == 0 || seconds == 0 {
-            window.set_goal_supervision_error(
-                "Iterations and elapsed seconds must be positive.".into(),
-            );
-            return;
-        }
-        window.set_goal_supervision_pending(true);
-        window.set_goal_supervision_error(SharedString::default());
-        window.set_goal_supervision_notice("Delivery requested.".into());
-        goal_deliver_dispatch(AppCommand::DeliverGoal {
-            goal_id,
-            iteration_limit: iterations,
-            elapsed_seconds: seconds,
+    window
+        .global::<App>()
+        .on_deliver_goal(move |goal_id, iterations, seconds| {
+            let Some(window) = goal_deliver_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_supervision_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_supervision_error("A current goal is required.".into());
+                return;
+            };
+            let Ok(iterations) = iterations.trim().parse::<u32>() else {
+                window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+                return;
+            };
+            let Ok(seconds) = seconds.trim().parse::<u64>() else {
+                window.set_goal_supervision_error(
+                    "Elapsed seconds must be a positive integer.".into(),
+                );
+                return;
+            };
+            if iterations == 0 || seconds == 0 {
+                window.set_goal_supervision_error(
+                    "Iterations and elapsed seconds must be positive.".into(),
+                );
+                return;
+            }
+            window.set_goal_supervision_pending(true);
+            window.set_goal_supervision_error(SharedString::default());
+            window.set_goal_supervision_notice("Delivery requested.".into());
+            goal_deliver_dispatch(AppCommand::DeliverGoal {
+                goal_id,
+                iteration_limit: iterations,
+                elapsed_seconds: seconds,
+            });
         });
-    });
 
     let tool_catalog_dispatch = dispatch.clone();
     let tool_catalog_window = window.as_weak();
-    window.on_refresh_tool_catalog(move || {
+    window.global::<App>().on_refresh_tool_catalog(move || {
         if let Some(window) = tool_catalog_window.upgrade() {
             window.set_tool_catalog_loading(true);
             window.set_tool_catalog_error(SharedString::default());
@@ -4352,7 +4467,7 @@ where
 
     let skill_catalog_dispatch = dispatch.clone();
     let skill_catalog_window = window.as_weak();
-    window.on_refresh_skill_catalog(move || {
+    window.global::<App>().on_refresh_skill_catalog(move || {
         if let Some(window) = skill_catalog_window.upgrade() {
             window.set_skill_catalog_loading(true);
             window.set_skill_catalog_error(SharedString::default());
@@ -4362,7 +4477,7 @@ where
 
     let inspect_skill_dispatch = dispatch.clone();
     let inspect_skill_window = window.as_weak();
-    window.on_inspect_skill(move |name| {
+    window.global::<App>().on_inspect_skill(move |name| {
         let name = name.trim().to_owned();
         if name.is_empty() {
             return;
@@ -4378,7 +4493,7 @@ where
 
     let accounting_dispatch = dispatch.clone();
     let accounting_window = window.as_weak();
-    window.on_load_accounting(move || {
+    window.global::<App>().on_load_accounting(move || {
         if let Some(window) = accounting_window.upgrade() {
             window.set_accounting_loading(true);
             window.set_accounting_error(SharedString::default());
@@ -4388,24 +4503,26 @@ where
 
     let diagnostics_dispatch = dispatch.clone();
     let diagnostics_window = window.as_weak();
-    window.on_load_run_diagnostics(move |run_id| {
-        let Some(window) = diagnostics_window.upgrade() else {
-            return;
-        };
-        let Ok(run_id) = run_id.trim().parse::<RunId>() else {
-            window.set_run_diagnostics_error("Enter a valid run identifier.".into());
-            return;
-        };
-        window.set_run_diagnostics_loading(true);
-        window.set_run_diagnostics_error(SharedString::default());
-        window.set_run_diagnostics_state("Loading".into());
-        window.set_run_diagnostics_records(empty_record_line_model());
-        diagnostics_dispatch(AppCommand::LoadRunDiagnostics { run_id });
-    });
+    window
+        .global::<App>()
+        .on_load_run_diagnostics(move |run_id| {
+            let Some(window) = diagnostics_window.upgrade() else {
+                return;
+            };
+            let Ok(run_id) = run_id.trim().parse::<RunId>() else {
+                window.set_run_diagnostics_error("Enter a valid run identifier.".into());
+                return;
+            };
+            window.set_run_diagnostics_loading(true);
+            window.set_run_diagnostics_error(SharedString::default());
+            window.set_run_diagnostics_state("Loading".into());
+            window.set_run_diagnostics_records(empty_record_line_model());
+            diagnostics_dispatch(AppCommand::LoadRunDiagnostics { run_id });
+        });
 
     let result_dispatch = dispatch.clone();
     let result_window = window.as_weak();
-    window.on_load_run_result(move |run_id| {
+    window.global::<App>().on_load_run_result(move |run_id| {
         let Some(window) = result_window.upgrade() else {
             return;
         };
@@ -4423,25 +4540,27 @@ where
 
     let instructions_dispatch = dispatch.clone();
     let instructions_window = window.as_weak();
-    window.on_load_instructions(move |directory| {
-        let Some(window) = instructions_window.upgrade() else {
-            return;
-        };
-        let directory = directory.trim();
-        let directory = if directory.is_empty() { "." } else { directory };
-        window.set_instructions_loading(true);
-        window.set_instructions_error(SharedString::default());
-        window.set_instructions_summary(SharedString::default());
-        window.set_instructions_documents(empty_record_line_model());
-        window.set_instructions_selections(empty_record_line_model());
-        instructions_dispatch(AppCommand::LoadInstructions {
-            directory: directory.to_owned(),
+    window
+        .global::<App>()
+        .on_load_instructions(move |directory| {
+            let Some(window) = instructions_window.upgrade() else {
+                return;
+            };
+            let directory = directory.trim();
+            let directory = if directory.is_empty() { "." } else { directory };
+            window.set_instructions_loading(true);
+            window.set_instructions_error(SharedString::default());
+            window.set_instructions_summary(SharedString::default());
+            window.set_instructions_documents(empty_record_line_model());
+            window.set_instructions_selections(empty_record_line_model());
+            instructions_dispatch(AppCommand::LoadInstructions {
+                directory: directory.to_owned(),
+            });
         });
-    });
 
     let context_dispatch = dispatch.clone();
     let context_window = window.as_weak();
-    window.on_load_context(move || {
+    window.global::<App>().on_load_context(move || {
         if let Some(window) = context_window.upgrade() {
             window.set_context_loading(true);
             window.set_context_error(SharedString::default());
@@ -4451,23 +4570,25 @@ where
 
     let compact_dispatch = dispatch.clone();
     let compact_window = window.as_weak();
-    window.on_compact_context(move |deactivate| {
-        let Some(window) = compact_window.upgrade() else {
-            return;
-        };
-        if window.get_running() || window.get_compact_pending() {
-            return;
-        }
-        window.set_compact_pending(true);
-        window.set_compact_confirm(false);
-        window.set_compact_error(SharedString::default());
-        window.set_compact_notice("Compaction requested.".into());
-        compact_dispatch(AppCommand::CompactContext { deactivate });
-    });
+    window
+        .global::<App>()
+        .on_compact_context(move |deactivate| {
+            let Some(window) = compact_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_compact_pending() {
+                return;
+            }
+            window.set_compact_pending(true);
+            window.set_compact_confirm(false);
+            window.set_compact_error(SharedString::default());
+            window.set_compact_notice("Compaction requested.".into());
+            compact_dispatch(AppCommand::CompactContext { deactivate });
+        });
 
     let extensions_dispatch = dispatch.clone();
     let extensions_window = window.as_weak();
-    window.on_list_extensions(move || {
+    window.global::<App>().on_list_extensions(move || {
         if let Some(window) = extensions_window.upgrade() {
             window.set_extension_loading(true);
             window.set_extension_error(SharedString::default());
@@ -4477,100 +4598,110 @@ where
 
     let probe_dispatch = dispatch.clone();
     let probe_window = window.as_weak();
-    window.on_probe_provider(move |provider_id| {
-        let Some(window) = probe_window.upgrade() else {
-            return;
-        };
-        if window.get_running() {
-            warn!("provider probe ignored while a run is active");
-            return;
-        }
-        let provider_id = provider_id.trim().to_string();
-        if provider_id.is_empty() {
-            warn!("provider probe requested without a provider id");
-            return;
-        }
-        probe_dispatch(AppCommand::ProbeProvider { provider_id });
-    });
+    window
+        .global::<App>()
+        .on_probe_provider(move |provider_id| {
+            let Some(window) = probe_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider probe ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            if provider_id.is_empty() {
+                warn!("provider probe requested without a provider id");
+                return;
+            }
+            probe_dispatch(AppCommand::ProbeProvider { provider_id });
+        });
 
     let save_provider_dispatch = dispatch.clone();
     let save_provider_window = window.as_weak();
-    window.on_save_provider_profile(move |provider_id, label, kind, endpoint, model, selected| {
-        let Some(window) = save_provider_window.upgrade() else {
-            return;
-        };
-        if window.get_running() {
-            warn!("provider save ignored while a run is active");
-            return;
-        }
-        let kind = provider_kind_from_id(kind.as_str()).unwrap_or(ProviderKind::Unknown);
-        save_provider_dispatch(AppCommand::SaveProviderProfile {
-            profile: ProviderProfile {
-                id: provider_id.to_string(),
-                label: label.to_string(),
-                kind,
-                endpoint: endpoint.to_string(),
-                model: model.to_string(),
-                selected,
-            },
-        });
-    });
+    window.global::<App>().on_save_provider_profile(
+        move |provider_id, label, kind, endpoint, model, selected| {
+            let Some(window) = save_provider_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider save ignored while a run is active");
+                return;
+            }
+            let kind = provider_kind_from_id(kind.as_str()).unwrap_or(ProviderKind::Unknown);
+            save_provider_dispatch(AppCommand::SaveProviderProfile {
+                profile: ProviderProfile {
+                    id: provider_id.to_string(),
+                    label: label.to_string(),
+                    kind,
+                    endpoint: endpoint.to_string(),
+                    model: model.to_string(),
+                    selected,
+                },
+            });
+        },
+    );
 
     let select_provider_dispatch = dispatch.clone();
     let select_provider_window = window.as_weak();
-    window.on_select_provider_profile(move |provider_id| {
-        let Some(window) = select_provider_window.upgrade() else {
-            return;
-        };
-        if window.get_running() {
-            warn!("provider selection ignored while a run is active");
-            return;
-        }
-        select_provider_dispatch(AppCommand::SelectProviderProfile {
-            provider_id: provider_id.to_string(),
+    window
+        .global::<App>()
+        .on_select_provider_profile(move |provider_id| {
+            let Some(window) = select_provider_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider selection ignored while a run is active");
+                return;
+            }
+            select_provider_dispatch(AppCommand::SelectProviderProfile {
+                provider_id: provider_id.to_string(),
+            });
         });
-    });
 
     let refresh_models_dispatch = dispatch.clone();
     let refresh_models_window = window.as_weak();
-    window.on_refresh_provider_models(move |provider_id| {
-        let Some(window) = refresh_models_window.upgrade() else {
-            return;
-        };
-        if window.get_running() {
-            warn!("model catalog refresh ignored while a run is active");
-            return;
-        }
-        let provider_id = provider_id.trim().to_string();
-        if provider_id.is_empty() {
-            warn!("model refresh requested without a provider id");
-            return;
-        }
-        refresh_models_dispatch(AppCommand::ListProviderModels { provider_id });
-    });
+    window
+        .global::<App>()
+        .on_refresh_provider_models(move |provider_id| {
+            let Some(window) = refresh_models_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("model catalog refresh ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            if provider_id.is_empty() {
+                warn!("model refresh requested without a provider id");
+                return;
+            }
+            refresh_models_dispatch(AppCommand::ListProviderModels { provider_id });
+        });
 
     let select_model_dispatch = dispatch.clone();
     let select_model_window = window.as_weak();
-    window.on_select_provider_model(move |provider_id, model| {
-        let Some(window) = select_model_window.upgrade() else {
-            return;
-        };
-        if window.get_running() {
-            warn!("model selection ignored while a run is active");
-            return;
-        }
-        let provider_id = provider_id.trim().to_string();
-        let model = model.trim().to_string();
-        if provider_id.is_empty() || model.is_empty() {
-            warn!("model selection requested without a provider id or model");
-            return;
-        }
-        select_model_dispatch(AppCommand::SelectProviderModel { provider_id, model });
-    });
+    window
+        .global::<App>()
+        .on_select_provider_model(move |provider_id, model| {
+            let Some(window) = select_model_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("model selection ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            let model = model.trim().to_string();
+            if provider_id.is_empty() || model.is_empty() {
+                warn!("model selection requested without a provider id or model");
+                return;
+            }
+            select_model_dispatch(AppCommand::SelectProviderModel { provider_id, model });
+        });
 
     let refresh_presets_dispatch = dispatch.clone();
     let refresh_presets_window = window.as_weak();
-    window.on_refresh_provider_presets(move || {
+    window.global::<App>().on_refresh_provider_presets(move || {
         if let Some(window) = refresh_presets_window.upgrade() {
             window.set_provider_presets_loading(true);
             window.set_provider_presets_error(SharedString::default());
@@ -4580,38 +4711,42 @@ where
 
     let add_preset_dispatch = dispatch.clone();
     let add_preset_window = window.as_weak();
-    window.on_add_provider_preset(move |preset_id| {
-        let preset_id = preset_id.trim().to_owned();
-        if preset_id.is_empty() {
-            return;
-        }
-        if let Some(window) = add_preset_window.upgrade() {
-            if window.get_running() || !window.get_provider_preset_pending().is_empty() {
+    window
+        .global::<App>()
+        .on_add_provider_preset(move |preset_id| {
+            let preset_id = preset_id.trim().to_owned();
+            if preset_id.is_empty() {
                 return;
             }
-            window.set_provider_preset_pending(preset_id.clone().into());
-            window.set_provider_preset_notice(SharedString::default());
-            window.set_provider_presets_error(SharedString::default());
-        }
-        add_preset_dispatch(AppCommand::AddProviderPreset { preset_id });
-    });
+            if let Some(window) = add_preset_window.upgrade() {
+                if window.get_running() || !window.get_provider_preset_pending().is_empty() {
+                    return;
+                }
+                window.set_provider_preset_pending(preset_id.clone().into());
+                window.set_provider_preset_notice(SharedString::default());
+                window.set_provider_presets_error(SharedString::default());
+            }
+            add_preset_dispatch(AppCommand::AddProviderPreset { preset_id });
+        });
 
     let select_preset_window = window.as_weak();
-    window.on_select_provider_preset(move |preset_id| {
-        let Some(window) = select_preset_window.upgrade() else {
-            return;
-        };
-        let preset_id = preset_id.to_string();
-        PROVIDER_PRESETS.with(|store| {
-            if let Some(preset) = store.borrow().iter().find(|preset| preset.id == preset_id) {
-                window.set_provider_preset_detail(provider_preset_view(preset));
-            }
+    window
+        .global::<App>()
+        .on_select_provider_preset(move |preset_id| {
+            let Some(window) = select_preset_window.upgrade() else {
+                return;
+            };
+            let preset_id = preset_id.to_string();
+            PROVIDER_PRESETS.with(|store| {
+                if let Some(preset) = store.borrow().iter().find(|preset| preset.id == preset_id) {
+                    window.set_provider_preset_detail(provider_preset_view(preset));
+                }
+            });
         });
-    });
 
     let save_budget_dispatch = dispatch.clone();
     let save_budget_window = window.as_weak();
-    window.on_save_provider_budget(move || {
+    window.global::<App>().on_save_provider_budget(move || {
         let Some(window) = save_budget_window.upgrade() else {
             return;
         };
@@ -4648,34 +4783,37 @@ where
 
     let context_dispatch = dispatch.clone();
     let context_window = window.as_weak();
-    window.on_set_provider_context(move |tokens| {
-        let Some(window) = context_window.upgrade() else {
-            return;
-        };
-        if tokens <= 0 || window.get_running() || !window.get_provider_pending().is_empty() {
-            return;
-        }
-        let profile_id = window.get_provider_id().to_string();
-        if profile_id.is_empty() {
-            window.set_provider_context_pending(false);
-            window
-                .set_provider_context_error("Select the built-in llama.cpp profile first.".into());
-            return;
-        }
-        window.set_provider_context_pending(true);
-        window.set_provider_context_error(SharedString::default());
-        window.set_provider_context_notice(
-            "Update requested. Waiting for the provider runtime to accept it.".into(),
-        );
-        context_dispatch(AppCommand::SaveProviderContext {
-            profile_id,
-            context_tokens: tokens as u32,
+    window
+        .global::<App>()
+        .on_set_provider_context(move |tokens| {
+            let Some(window) = context_window.upgrade() else {
+                return;
+            };
+            if tokens <= 0 || window.get_running() || !window.get_provider_pending().is_empty() {
+                return;
+            }
+            let profile_id = window.get_provider_id().to_string();
+            if profile_id.is_empty() {
+                window.set_provider_context_pending(false);
+                window.set_provider_context_error(
+                    "Select the built-in llama.cpp profile first.".into(),
+                );
+                return;
+            }
+            window.set_provider_context_pending(true);
+            window.set_provider_context_error(SharedString::default());
+            window.set_provider_context_notice(
+                "Update requested. Waiting for the provider runtime to accept it.".into(),
+            );
+            context_dispatch(AppCommand::SaveProviderContext {
+                profile_id,
+                context_tokens: tokens as u32,
+            });
         });
-    });
 
     let refresh_browser_dispatch = dispatch.clone();
     let refresh_browser_window = window.as_weak();
-    window.on_refresh_browser_status(move || {
+    window.global::<App>().on_refresh_browser_status(move || {
         if let Some(window) = refresh_browser_window.upgrade() {
             window.set_browser_status_loading(true);
             window.set_browser_status_error(SharedString::default());
@@ -4685,7 +4823,7 @@ where
 
     let refresh_desktop_dispatch = dispatch.clone();
     let refresh_desktop_window = window.as_weak();
-    window.on_refresh_desktop_status(move || {
+    window.global::<App>().on_refresh_desktop_status(move || {
         if let Some(window) = refresh_desktop_window.upgrade() {
             window.set_desktop_status_loading(true);
             window.set_desktop_status_error(SharedString::default());
@@ -4695,7 +4833,7 @@ where
 
     let refresh_harness_dispatch = dispatch.clone();
     let refresh_harness_window = window.as_weak();
-    window.on_refresh_harness(move || {
+    window.global::<App>().on_refresh_harness(move || {
         let Some(window) = refresh_harness_window.upgrade() else {
             return;
         };
@@ -4711,266 +4849,299 @@ where
     let module_dispatch = dispatch.clone();
     let backend_dispatch = dispatch.clone();
     let backend_window = window.as_weak();
-    window.on_set_local_backend_enabled(move |enabled| {
-        let Some(window) = backend_window.upgrade() else {
-            return;
-        };
-        if window.get_running()
-            || window.get_approval_open()
-            || window.get_local_inference_busy()
-            || !window.get_harness_pending().is_empty()
-            || !window.get_local_backend_toggle_supported()
-        {
-            return;
-        }
-        window.set_harness_pending("backend".into());
-        window.set_harness_error(SharedString::default());
-        backend_dispatch(AppCommand::SetLocalBackendEnabled { enabled });
-    });
-    let module_window = window.as_weak();
-    window.on_set_harness_module(move |module_id, action| {
-        let Some(window) = module_window.upgrade() else {
-            return;
-        };
-        if window.get_running()
-            || window.get_approval_open()
-            || !window.get_harness_pending().is_empty()
-        {
-            return;
-        }
-        let action = match action.as_str() {
-            "install" => argentum_domain::ModuleAction::Install,
-            "enable" => argentum_domain::ModuleAction::Enable,
-            "disable" => argentum_domain::ModuleAction::Disable,
-            "remove" => argentum_domain::ModuleAction::Remove,
-            _ => return,
-        };
-        if !window
-            .get_harness_modules()
-            .iter()
-            .any(|module| module.id == module_id)
-        {
-            return;
-        }
-        window.set_harness_pending("module".into());
-        window.set_harness_error(SharedString::default());
-        module_dispatch(AppCommand::SetHarnessModule {
-            module_id: module_id.to_string(),
-            action,
+    window
+        .global::<App>()
+        .on_set_local_backend_enabled(move |enabled| {
+            let Some(window) = backend_window.upgrade() else {
+                return;
+            };
+            if window.get_running()
+                || window.get_approval_open()
+                || window.get_local_inference_busy()
+                || !window.get_harness_pending().is_empty()
+                || !window.get_local_backend_toggle_supported()
+            {
+                return;
+            }
+            window.set_harness_pending("backend".into());
+            window.set_harness_error(SharedString::default());
+            backend_dispatch(AppCommand::SetLocalBackendEnabled { enabled });
         });
-    });
+    let module_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_harness_module(move |module_id, action| {
+            let Some(window) = module_window.upgrade() else {
+                return;
+            };
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+            {
+                return;
+            }
+            let action = match action.as_str() {
+                "install" => argentum_domain::ModuleAction::Install,
+                "enable" => argentum_domain::ModuleAction::Enable,
+                "disable" => argentum_domain::ModuleAction::Disable,
+                "remove" => argentum_domain::ModuleAction::Remove,
+                _ => return,
+            };
+            if !window
+                .get_harness_modules()
+                .iter()
+                .any(|module| module.id == module_id)
+            {
+                return;
+            }
+            window.set_harness_pending("module".into());
+            window.set_harness_error(SharedString::default());
+            module_dispatch(AppCommand::SetHarnessModule {
+                module_id: module_id.to_string(),
+                action,
+            });
+        });
 
     let select_harness_dispatch = dispatch.clone();
     let select_harness_window = window.as_weak();
-    window.on_select_harness_profile(move |profile_id| {
-        let Some(window) = select_harness_window.upgrade() else {
-            return;
-        };
-        let profile_id = profile_id.trim().to_string();
-        if !window.get_harness_pending().is_empty()
-            || profile_id.is_empty()
-            || profile_id == "custom"
-        {
-            return;
-        }
-        window.set_harness_pending("profile".into());
-        window.set_harness_error(SharedString::default());
-        select_harness_dispatch(AppCommand::SelectHarnessProfile { profile_id });
-    });
+    window
+        .global::<App>()
+        .on_select_harness_profile(move |profile_id| {
+            let Some(window) = select_harness_window.upgrade() else {
+                return;
+            };
+            let profile_id = profile_id.trim().to_string();
+            if !window.get_harness_pending().is_empty()
+                || profile_id.is_empty()
+                || profile_id == "custom"
+            {
+                return;
+            }
+            window.set_harness_pending("profile".into());
+            window.set_harness_error(SharedString::default());
+            select_harness_dispatch(AppCommand::SelectHarnessProfile { profile_id });
+        });
 
     let surface_visibility_dispatch = dispatch.clone();
     let surface_visibility_window = window.as_weak();
-    window.on_set_harness_surface_visibility(move |surface, visible| {
-        let Some(window) = surface_visibility_window.upgrade() else {
-            return;
-        };
-        if !window.get_harness_pending().is_empty() {
-            return;
-        }
-        let Some(surface) = surface_from_id(surface.trim()) else {
-            warn!("harness surface visibility requested with an invalid surface id");
-            window.set_harness_pending(SharedString::default());
-            window.set_harness_error("Unknown harness surface.".into());
-            return;
-        };
-        window.set_harness_pending("surface".into());
-        window.set_harness_error(SharedString::default());
-        surface_visibility_dispatch(AppCommand::SetSurfaceVisibility { surface, visible });
-    });
+    window
+        .global::<App>()
+        .on_set_harness_surface_visibility(move |surface, visible| {
+            let Some(window) = surface_visibility_window.upgrade() else {
+                return;
+            };
+            if !window.get_harness_pending().is_empty() {
+                return;
+            }
+            let Some(surface) = surface_from_id(surface.trim()) else {
+                warn!("harness surface visibility requested with an invalid surface id");
+                window.set_harness_pending(SharedString::default());
+                window.set_harness_error("Unknown harness surface.".into());
+                return;
+            };
+            window.set_harness_pending("surface".into());
+            window.set_harness_error(SharedString::default());
+            surface_visibility_dispatch(AppCommand::SetSurfaceVisibility { surface, visible });
+        });
 
     let execution_profile_dispatch = dispatch.clone();
     let execution_profile_window = window.as_weak();
-    window.on_select_execution_profile(move |profile_id| {
-        let Some(window) = execution_profile_window.upgrade() else {
-            return;
-        };
-        let profile_id = profile_id.trim().to_string();
-        if window.get_running()
-            || window.get_approval_open()
-            || !window.get_harness_pending().is_empty()
-            || profile_id.is_empty()
-            || profile_id == "custom"
-        {
-            return;
-        }
-        window.set_harness_pending("execution".into());
-        window.set_harness_error(SharedString::default());
-        execution_profile_dispatch(AppCommand::SelectExecutionProfile { profile_id });
-    });
+    window
+        .global::<App>()
+        .on_select_execution_profile(move |profile_id| {
+            let Some(window) = execution_profile_window.upgrade() else {
+                return;
+            };
+            let profile_id = profile_id.trim().to_string();
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+                || profile_id.is_empty()
+                || profile_id == "custom"
+            {
+                return;
+            }
+            window.set_harness_pending("execution".into());
+            window.set_harness_error(SharedString::default());
+            execution_profile_dispatch(AppCommand::SelectExecutionProfile { profile_id });
+        });
 
     let capability_dispatch = dispatch.clone();
     let capability_window = window.as_weak();
-    window.on_set_harness_capability_enabled(move |capability_id, enabled| {
-        let Some(window) = capability_window.upgrade() else {
-            return;
-        };
-        let capability_id = capability_id.trim().to_string();
-        if window.get_running()
-            || window.get_approval_open()
-            || !window.get_harness_pending().is_empty()
-            || capability_id.is_empty()
-        {
-            return;
-        }
-        window.set_harness_pending("capability".into());
-        window.set_harness_error(SharedString::default());
-        capability_dispatch(AppCommand::SetHarnessCapabilityEnabled {
-            capability_id,
-            enabled,
+    window
+        .global::<App>()
+        .on_set_harness_capability_enabled(move |capability_id, enabled| {
+            let Some(window) = capability_window.upgrade() else {
+                return;
+            };
+            let capability_id = capability_id.trim().to_string();
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+                || capability_id.is_empty()
+            {
+                return;
+            }
+            window.set_harness_pending("capability".into());
+            window.set_harness_error(SharedString::default());
+            capability_dispatch(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id,
+                enabled,
+            });
         });
-    });
 
-    window.on_validate_provider_label(|value| validate_provider_label(value.as_str()).into());
-    window.on_validate_provider_endpoint(|value| validate_provider_endpoint(value.as_str()).into());
-    window.on_validate_provider_model(|value| validate_provider_model(value.as_str()).into());
+    window
+        .global::<App>()
+        .on_validate_provider_label(|value| validate_provider_label(value.as_str()).into());
+    window
+        .global::<App>()
+        .on_validate_provider_endpoint(|value| validate_provider_endpoint(value.as_str()).into());
+    window
+        .global::<App>()
+        .on_validate_provider_model(|value| validate_provider_model(value.as_str()).into());
 
     let drawer_dispatch = dispatch.clone();
-    window.on_toggle_drawer(move || {
+    window.global::<App>().on_toggle_drawer(move || {
         let _ = &drawer_dispatch;
     });
 
     let inspector_dispatch = dispatch.clone();
     let inspector_window = window.as_weak();
-    window.on_set_inspector_surface(move |surface| {
-        let Some(window) = inspector_window.upgrade() else {
-            return;
-        };
-        let surface = surface.trim();
-        let surface = if surface.is_empty() {
-            None
-        } else {
-            let Some(surface) = surface_from_id(surface).filter(|surface| surface.is_inspector())
-            else {
-                warn!("inspector selection requested with an invalid surface id");
-                window.set_harness_error("Unknown inspector surface.".into());
+    window
+        .global::<App>()
+        .on_set_inspector_surface(move |surface| {
+            let Some(window) = inspector_window.upgrade() else {
                 return;
             };
-            Some(surface)
-        };
-        if surface == Some(SurfaceId::Changes) {
-            window.set_verification_runners_loading(true);
-            window.set_verification_runners_error(SharedString::default());
-            window.set_verification_evidence_loading(true);
-            window.set_verification_evidence_error(SharedString::default());
-            inspector_dispatch(AppCommand::ListVerificationRunners);
-            inspector_dispatch(AppCommand::InspectVerificationRunners);
-            inspector_dispatch(AppCommand::ListApprovalGrants);
-            let active_run_id = window.get_active_run_id().to_string();
-            inspector_dispatch(AppCommand::LoadVerificationEvidence {
-                run_id: active_run_id.parse().ok(),
-            });
-        }
-        inspector_dispatch(AppCommand::SetInspectorSurface { surface });
-    });
+            let surface = surface.trim();
+            let surface = if surface.is_empty() {
+                None
+            } else {
+                let Some(surface) =
+                    surface_from_id(surface).filter(|surface| surface.is_inspector())
+                else {
+                    warn!("inspector selection requested with an invalid surface id");
+                    window.set_harness_error("Unknown inspector surface.".into());
+                    return;
+                };
+                Some(surface)
+            };
+            if surface == Some(SurfaceId::Changes) {
+                window.set_verification_runners_loading(true);
+                window.set_verification_runners_error(SharedString::default());
+                window.set_verification_evidence_loading(true);
+                window.set_verification_evidence_error(SharedString::default());
+                inspector_dispatch(AppCommand::ListVerificationRunners);
+                inspector_dispatch(AppCommand::InspectVerificationRunners);
+                inspector_dispatch(AppCommand::ListApprovalGrants);
+                let active_run_id = window.get_active_run_id().to_string();
+                inspector_dispatch(AppCommand::LoadVerificationEvidence {
+                    run_id: active_run_id.parse().ok(),
+                });
+            }
+            inspector_dispatch(AppCommand::SetInspectorSurface { surface });
+        });
 
     let refresh_trajectory_dispatch = dispatch.clone();
     let refresh_trajectory_window = window.as_weak();
-    window.on_refresh_trajectory(move |session_id| {
-        let Some(window) = refresh_trajectory_window.upgrade() else {
-            return;
-        };
-        let Ok(session_id) = session_id.trim().parse::<SessionId>() else {
-            window.set_trajectory_loading(false);
-            window.set_trajectory_error("Invalid session identifier.".into());
-            return;
-        };
-        refresh_trajectory_dispatch(AppCommand::LoadTrajectory {
-            session_id: Some(session_id),
+    window
+        .global::<App>()
+        .on_refresh_trajectory(move |session_id| {
+            let Some(window) = refresh_trajectory_window.upgrade() else {
+                return;
+            };
+            let Ok(session_id) = session_id.trim().parse::<SessionId>() else {
+                window.set_trajectory_loading(false);
+                window.set_trajectory_error("Invalid session identifier.".into());
+                return;
+            };
+            refresh_trajectory_dispatch(AppCommand::LoadTrajectory {
+                session_id: Some(session_id),
+            });
         });
-    });
 
     let diff_dispatch = dispatch.clone();
     let diff_window = window.as_weak();
-    window.on_load_change_diff(move |file_change_id| {
-        let Some(window) = diff_window.upgrade() else {
-            return;
-        };
-        let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
+    window
+        .global::<App>()
+        .on_load_change_diff(move |file_change_id| {
+            let Some(window) = diff_window.upgrade() else {
+                return;
+            };
+            let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
+                window.set_selected_diff_available(false);
+                window.set_selected_diff_reason("Invalid file change identifier.".into());
+                return;
+            };
+            window.set_selected_file_change_id(file_change_id.to_string().into());
+            window.set_selected_diff(SharedString::default());
             window.set_selected_diff_available(false);
-            window.set_selected_diff_reason("Invalid file change identifier.".into());
-            return;
-        };
-        window.set_selected_file_change_id(file_change_id.to_string().into());
-        window.set_selected_diff(SharedString::default());
-        window.set_selected_diff_available(false);
-        window.set_selected_diff_truncated(false);
-        window.set_selected_diff_reason("Loading bounded diff...".into());
-        diff_dispatch(AppCommand::LoadUnifiedDiff { file_change_id });
-    });
+            window.set_selected_diff_truncated(false);
+            window.set_selected_diff_reason("Loading bounded diff...".into());
+            diff_dispatch(AppCommand::LoadUnifiedDiff { file_change_id });
+        });
 
     let restore_dispatch = dispatch.clone();
-    window.on_request_restore(move |file_change_id| {
-        let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
-            warn!("restore requested without a valid file change id");
-            return;
-        };
-        restore_dispatch(AppCommand::RequestRestore { file_change_id });
-    });
+    window
+        .global::<App>()
+        .on_request_restore(move |file_change_id| {
+            let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
+                warn!("restore requested without a valid file change id");
+                return;
+            };
+            restore_dispatch(AppCommand::RequestRestore { file_change_id });
+        });
 
     let load_recovery_dispatch = dispatch.clone();
-    window.on_load_change_recovery(move || {
+    window.global::<App>().on_load_change_recovery(move || {
         load_recovery_dispatch(AppCommand::LoadChangeRecovery);
     });
 
     let retry_recovery_dispatch = dispatch.clone();
-    window.on_retry_change_recovery(move |operation_id| {
-        let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
-            warn!("recovery retry requested without a valid operation id");
-            return;
-        };
-        retry_recovery_dispatch(AppCommand::RetryChangeRecovery { operation_id });
-    });
+    window
+        .global::<App>()
+        .on_retry_change_recovery(move |operation_id| {
+            let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
+                warn!("recovery retry requested without a valid operation id");
+                return;
+            };
+            retry_recovery_dispatch(AppCommand::RetryChangeRecovery { operation_id });
+        });
 
     let recovery_restore_dispatch = dispatch.clone();
-    window.on_request_recovery_restore(move |operation_id| {
-        let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
-            warn!("recovery restore requested without a valid operation id");
-            return;
-        };
-        recovery_restore_dispatch(AppCommand::RequestRecoveryRestore { operation_id });
-    });
+    window
+        .global::<App>()
+        .on_request_recovery_restore(move |operation_id| {
+            let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
+                warn!("recovery restore requested without a valid operation id");
+                return;
+            };
+            recovery_restore_dispatch(AppCommand::RequestRecoveryRestore { operation_id });
+        });
 
     let approve_dispatch = dispatch.clone();
     let approve_window = window.as_weak();
-    window.on_approve_tool(move |approval_id, scope| {
-        let Ok(approval_id) = approval_id.to_string().parse() else {
-            warn!("approval requested without a valid approval id");
-            return;
-        };
-        let scope = ApprovalScope::from_id(scope.as_str()).unwrap_or_default();
-        let Some(window) = approve_window.upgrade() else {
-            return;
-        };
-        if window.get_approval_response_pending() {
-            return;
-        }
-        window.set_approval_response_pending(true);
-        approve_dispatch(AppCommand::ApproveTool { approval_id, scope });
-    });
+    window
+        .global::<App>()
+        .on_approve_tool(move |approval_id, scope| {
+            let Ok(approval_id) = approval_id.to_string().parse() else {
+                warn!("approval requested without a valid approval id");
+                return;
+            };
+            let scope = ApprovalScope::from_id(scope.as_str()).unwrap_or_default();
+            let Some(window) = approve_window.upgrade() else {
+                return;
+            };
+            if window.get_approval_response_pending() {
+                return;
+            }
+            window.set_approval_response_pending(true);
+            approve_dispatch(AppCommand::ApproveTool { approval_id, scope });
+        });
 
     let reject_dispatch = dispatch.clone();
     let reject_window = window.as_weak();
-    window.on_reject_tool(move |approval_id| {
+    window.global::<App>().on_reject_tool(move |approval_id| {
         let Ok(approval_id) = approval_id.to_string().parse() else {
             warn!("rejection requested without a valid approval id");
             return;
@@ -4987,8 +5158,12 @@ where
 
     let settings_dispatch = dispatch.clone();
     let settings_window = window.as_weak();
-    window.on_open_settings(move || {
+    window.global::<App>().on_open_settings(move || {
         if let Some(window) = settings_window.upgrade() {
+            window.set_settings_open(true);
+            window.set_provider_draft_label(window.get_provider_label());
+            window.set_provider_draft_endpoint(window.get_provider_endpoint());
+            window.set_provider_draft_model(window.get_provider_model());
             window.set_harness_loading(true);
             window.set_harness_pending("list".into());
             window.set_harness_error(SharedString::default());
@@ -5049,75 +5224,79 @@ where
 {
     let save = Rc::new(save);
     let save_window = window.as_weak();
-    window.on_save_provider_credential(move |provider_id, credential| {
-        let Some(window) = save_window.upgrade() else {
-            return;
-        };
-        let provider_id = provider_id.as_str();
-        let current_provider_id = window.get_provider_id();
-        let valid_identity =
-            provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
-                && current_provider_id.as_str() == provider_id;
-        let valid_state = !window.get_running()
-            && window.get_provider_credential_supported()
-            && matches!(
-                window.get_provider_credential_pending().as_str(),
-                "" | "save"
-            );
-        if !valid_identity || !valid_state {
-            return;
-        }
-        let validation = validate_provider_credential(credential.as_str());
-        if !validation.is_empty() {
-            window.set_provider_credential_saving(false);
+    window
+        .global::<App>()
+        .on_save_provider_credential(move |provider_id, credential| {
+            let Some(window) = save_window.upgrade() else {
+                return;
+            };
+            let provider_id = provider_id.as_str();
+            let current_provider_id = window.get_provider_id();
+            let valid_identity =
+                provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
+                    && current_provider_id.as_str() == provider_id;
+            let valid_state = !window.get_running()
+                && window.get_provider_credential_supported()
+                && matches!(
+                    window.get_provider_credential_pending().as_str(),
+                    "" | "save"
+                );
+            if !valid_identity || !valid_state {
+                return;
+            }
+            let validation = validate_provider_credential(credential.as_str());
+            if !validation.is_empty() {
+                window.set_provider_credential_saving(false);
+                window.set_provider_credential_deleting(false);
+                window.set_provider_credential_pending(SharedString::default());
+                window.set_provider_credential_error(validation.into());
+                window.set_provider_credential_notice(SharedString::default());
+                return;
+            }
+            window.set_provider_credential_saving(true);
             window.set_provider_credential_deleting(false);
-            window.set_provider_credential_pending(SharedString::default());
-            window.set_provider_credential_error(validation.into());
+            window.set_provider_credential_pending("save".into());
+            let generation =
+                next_provider_credential_generation(window.get_provider_credential_generation());
+            window.set_provider_credential_generation(generation);
+            window.set_provider_credential_error(SharedString::default());
             window.set_provider_credential_notice(SharedString::default());
-            return;
-        }
-        window.set_provider_credential_saving(true);
-        window.set_provider_credential_deleting(false);
-        window.set_provider_credential_pending("save".into());
-        let generation =
-            next_provider_credential_generation(window.get_provider_credential_generation());
-        window.set_provider_credential_generation(generation);
-        window.set_provider_credential_error(SharedString::default());
-        window.set_provider_credential_notice(SharedString::default());
-        save(provider_id.to_owned(), credential.to_string(), generation);
-    });
+            save(provider_id.to_owned(), credential.to_string(), generation);
+        });
 
     let clear = Rc::new(clear);
     let clear_window = window.as_weak();
-    window.on_clear_provider_credential(move |provider_id| {
-        let Some(window) = clear_window.upgrade() else {
-            return;
-        };
-        let provider_id = provider_id.as_str();
-        let current_provider_id = window.get_provider_id();
-        let valid_identity =
-            provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
-                && current_provider_id.as_str() == provider_id;
-        let valid_state = !window.get_running()
-            && window.get_provider_credential_supported()
-            && window.get_provider_credential_configured()
-            && matches!(
-                window.get_provider_credential_pending().as_str(),
-                "" | "delete"
-            );
-        if !valid_identity || !valid_state {
-            return;
-        }
-        window.set_provider_credential_saving(false);
-        window.set_provider_credential_deleting(true);
-        window.set_provider_credential_pending("delete".into());
-        let generation =
-            next_provider_credential_generation(window.get_provider_credential_generation());
-        window.set_provider_credential_generation(generation);
-        window.set_provider_credential_error(SharedString::default());
-        window.set_provider_credential_notice(SharedString::default());
-        clear(provider_id.to_owned(), generation);
-    });
+    window
+        .global::<App>()
+        .on_clear_provider_credential(move |provider_id| {
+            let Some(window) = clear_window.upgrade() else {
+                return;
+            };
+            let provider_id = provider_id.as_str();
+            let current_provider_id = window.get_provider_id();
+            let valid_identity =
+                provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
+                    && current_provider_id.as_str() == provider_id;
+            let valid_state = !window.get_running()
+                && window.get_provider_credential_supported()
+                && window.get_provider_credential_configured()
+                && matches!(
+                    window.get_provider_credential_pending().as_str(),
+                    "" | "delete"
+                );
+            if !valid_identity || !valid_state {
+                return;
+            }
+            window.set_provider_credential_saving(false);
+            window.set_provider_credential_deleting(true);
+            window.set_provider_credential_pending("delete".into());
+            let generation =
+                next_provider_credential_generation(window.get_provider_credential_generation());
+            window.set_provider_credential_generation(generation);
+            window.set_provider_credential_error(SharedString::default());
+            window.set_provider_credential_notice(SharedString::default());
+            clear(provider_id.to_owned(), generation);
+        });
 }
 
 fn next_provider_credential_generation(current: i32) -> i32 {
@@ -5247,11 +5426,14 @@ mod tests {
 
         commands.borrow_mut().clear();
         ui.window()
+            .global::<App>()
             .invoke_load_change_diff(file_change_id.to_string().into());
         ui.window()
+            .global::<App>()
             .invoke_request_restore(file_change_id.to_string().into());
-        ui.window().invoke_load_change_recovery();
+        ui.window().global::<App>().invoke_load_change_recovery();
         ui.window()
+            .global::<App>()
             .invoke_request_recovery_restore(operation_id.to_string().into());
         assert!(matches!(
             commands.borrow().first(),
@@ -5269,6 +5451,117 @@ mod tests {
             commands.borrow().get(3),
             Some(AppCommand::RequestRecoveryRestore { operation_id: id }) if *id == operation_id
         ));
+    }
+
+    #[test]
+    fn approval_prompt_cannot_be_themed_or_turned_off() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+        let prompt = shell
+            .split("component ApprovalPrompt")
+            .nth(1)
+            .expect("approval prompt")
+            .split("component Palette")
+            .next()
+            .expect("approval prompt boundary");
+
+        assert!(
+            !prompt.replace("TrustTheme.", "").contains("Theme."),
+            "uses only TrustTheme colors"
+        );
+        assert!(prompt.contains("TrustTheme.surface"));
+        assert!(shell.contains("if App.approval_open: ApprovalPrompt"));
+        assert!(!shell.contains("Mods.approvals"));
+    }
+
+    #[test]
+    fn approval_prompt_starts_on_the_safe_choice_and_keeps_tab_inside() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(shell.contains("init => { reject-button.take-focus(); }"));
+        assert!(shell.contains("event.text == Key.Tab || event.text == Key.Backtab"));
+    }
+
+    #[test]
+    fn every_custom_button_has_an_assistive_action_and_keyboard_focus() {
+        for (name, source) in [
+            ("chat", include_str!("../../../ui/workbench/chat.slint")),
+            ("panels", include_str!("../../../ui/workbench/panels.slint")),
+            (
+                "provider",
+                include_str!("../../../ui/workbench/provider.slint"),
+            ),
+            (
+                "settings",
+                include_str!("../../../ui/workbench/settings.slint"),
+            ),
+            ("shell", include_str!("../../../ui/workbench/shell.slint")),
+        ] {
+            let source = source.replace("\r\n", "\n");
+            for (index, _) in source.match_indices("accessible-role: button;") {
+                let block = &source[index..source.len().min(index + 420)];
+                assert!(
+                    block.contains("accessible-action-default"),
+                    "{name}: a button has no action: {}",
+                    &block[..block.len().min(120)]
+                );
+            }
+            for (index, _) in source.match_indices("accessible-role: tab;") {
+                let block = &source[index..source.len().min(index + 420)];
+                assert!(block.contains("accessible-action-default"), "{name}: tab");
+            }
+        }
+    }
+
+    #[test]
+    fn focus_follows_overlays_and_returns_afterwards() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(shell.contains("App.approval_open || App.settings_open"));
+        assert!(shell.contains("changed overlay-open => {"));
+        assert!(shell.contains("root.focus-composer();"));
+    }
+
+    #[test]
+    fn no_fabricated_preview_data_remains_in_production_code() {
+        let source = include_str!("lib.rs");
+        let workbench = include_str!("workbench.rs");
+        for forbidden in [
+            "default_conversation_messages",
+            "default_tools",
+            "Telegram bridge",
+        ] {
+            assert!(
+                !source
+                    .split("#[cfg(test)]")
+                    .next()
+                    .unwrap_or_default()
+                    .contains(forbidden),
+                "{forbidden}"
+            );
+            assert!(!workbench
+                .split("#[cfg(test)]")
+                .next()
+                .unwrap_or_default()
+                .contains(forbidden));
+        }
+    }
+
+    #[test]
+    fn overlays_stay_clear_of_safe_areas_and_the_on_screen_keyboard() {
+        let app = include_str!("../../../ui/app.slint");
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(app.contains(
+            "height: root.height - root.safe_area_top - root.safe_area_bottom - root.keyboard_inset;"
+        ));
+        assert!(shell.contains("compact: root.height < Theme.hero-compact-below;"));
+    }
+
+    #[test]
+    fn context_use_copy_identifies_the_latest_turn() {
+        let chat = include_str!("../../../ui/workbench/chat.slint");
+
+        assert!(chat.contains("\"Latest turn: \" + App.usage_total_tokens"));
     }
 
     #[test]
@@ -5562,7 +5855,7 @@ mod tests {
         assert_eq!(modes.row_count(), 1);
         let mode = modes.row_data(0).expect("changes mode");
         assert_eq!(mode.id, "changes");
-        assert_eq!(mode.icon, "changes");
+        assert_eq!(mode.icon, "diff");
     }
 
     #[test]
@@ -5778,8 +6071,10 @@ mod tests {
             dispatched.borrow_mut().push(command);
         });
         ui.window()
+            .global::<App>()
             .invoke_submit_task("Inspect the workspace".into());
         ui.window()
+            .global::<App>()
             .invoke_submit_task("Inspect the workspace".into());
         assert!(ui.window().get_submission_pending());
         assert_eq!(commands.borrow().len(), 1);
@@ -5799,8 +6094,11 @@ mod tests {
         commands.borrow_mut().clear();
         let approval_id = "00000000-0000-0000-0000-000000000091";
         ui.window()
+            .global::<App>()
             .invoke_approve_tool(approval_id.into(), "once".into());
-        ui.window().invoke_reject_tool(approval_id.into());
+        ui.window()
+            .global::<App>()
+            .invoke_reject_tool(approval_id.into());
         assert!(ui.window().get_approval_response_pending());
         assert_eq!(commands.borrow().len(), 1);
         assert!(matches!(
@@ -5831,8 +6129,11 @@ mod tests {
         assert_ne!(ui.window().get_provider_error(), "");
 
         commands.borrow_mut().clear();
-        ui.window().invoke_refresh_provider_models("minimax".into());
         ui.window()
+            .global::<App>()
+            .invoke_refresh_provider_models("minimax".into());
+        ui.window()
+            .global::<App>()
             .invoke_select_provider_model("minimax".into(), "MiniMax-M2.7".into());
         assert!(matches!(
             commands.borrow().first(),
@@ -5933,7 +6234,7 @@ mod tests {
             .set_provider_budget_requested_output("512".into());
         ui.window().set_provider_budget_uncertainty("512".into());
         commands.borrow_mut().clear();
-        ui.window().invoke_save_provider_budget();
+        ui.window().global::<App>().invoke_save_provider_budget();
         assert!(matches!(
             commands.borrow().first(),
             Some(AppCommand::SaveProviderBudget { profile_id, limits })
@@ -6053,6 +6354,7 @@ mod tests {
             "unavailable"
         );
         ui.window()
+            .global::<App>()
             .invoke_select_execution_profile("read-only".into());
         assert!(matches!(
             commands.borrow().first(),
@@ -6100,6 +6402,7 @@ mod tests {
         );
         commands.borrow_mut().clear();
         ui.window()
+            .global::<App>()
             .invoke_set_harness_capability_enabled("tool.write-text".into(), true);
         assert!(matches!(
             commands.borrow().first(),
@@ -6110,7 +6413,9 @@ mod tests {
         ));
         ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
         commands.borrow_mut().clear();
-        ui.window().invoke_select_harness_profile("review".into());
+        ui.window()
+            .global::<App>()
+            .invoke_select_harness_profile("review".into());
         assert!(matches!(
             commands.borrow().first(),
             Some(AppCommand::SelectHarnessProfile { profile_id }) if profile_id == "review"
@@ -6121,6 +6426,7 @@ mod tests {
         ui.apply_event(&AppEvent::HarnessSnapshotLoaded(review_snapshot));
         commands.borrow_mut().clear();
         ui.window()
+            .global::<App>()
             .invoke_set_harness_surface_visibility("activity".into(), true);
         assert!(matches!(
             commands.borrow().first(),
@@ -6130,11 +6436,17 @@ mod tests {
             })
         ));
         commands.borrow_mut().clear();
-        ui.window().invoke_set_inspector_surface("activity".into());
-        ui.window().invoke_set_inspector_surface("changes".into());
         ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface("activity".into());
+        ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface("changes".into());
+        ui.window()
+            .global::<App>()
             .invoke_set_inspector_surface("trajectory".into());
         ui.window()
+            .global::<App>()
             .invoke_set_inspector_surface(SharedString::default());
         let surfaces = commands
             .borrow()
@@ -6166,8 +6478,10 @@ mod tests {
         // boundary while a run is active, even if a caller bypasses Slint enabled state.
         commands.borrow_mut().clear();
         ui.window().set_running(true);
-        ui.window().invoke_probe_provider("minimax".into());
-        ui.window().invoke_save_provider_profile(
+        ui.window()
+            .global::<App>()
+            .invoke_probe_provider("minimax".into());
+        ui.window().global::<App>().invoke_save_provider_profile(
             "minimax".into(),
             "MiniMax".into(),
             "openai-compatible".into(),
@@ -6175,13 +6489,20 @@ mod tests {
             "MiniMax-M2.7".into(),
             true,
         );
-        ui.window().invoke_select_provider_profile("minimax".into());
-        ui.window().invoke_refresh_provider_models("minimax".into());
         ui.window()
+            .global::<App>()
+            .invoke_select_provider_profile("minimax".into());
+        ui.window()
+            .global::<App>()
+            .invoke_refresh_provider_models("minimax".into());
+        ui.window()
+            .global::<App>()
             .invoke_select_provider_model("minimax".into(), "MiniMax-M2.7".into());
         ui.window()
+            .global::<App>()
             .invoke_select_execution_profile("read-only".into());
         ui.window()
+            .global::<App>()
             .invoke_set_harness_capability_enabled("tool.write-text".into(), false);
         assert!(commands.borrow().is_empty());
         ui.window().set_running(false);
@@ -6597,6 +6918,7 @@ mod tests {
         ui.window().set_running(false);
         ui.window().set_approval_open(false);
         ui.window()
+            .global::<App>()
             .invoke_set_harness_module("first-party.activity".into(), "enable".into());
         assert!(
             matches!(commands.borrow().last(), Some(AppCommand::SetHarnessModule { module_id, action: argentum_domain::ModuleAction::Enable }) if module_id == "first-party.activity")
@@ -6615,7 +6937,9 @@ mod tests {
         });
         ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
         assert!(ui.window().get_local_backend_available());
-        ui.window().invoke_set_local_backend_enabled(false);
+        ui.window()
+            .global::<App>()
+            .invoke_set_local_backend_enabled(false);
         assert!(matches!(
             commands.borrow().last(),
             Some(AppCommand::SetLocalBackendEnabled { enabled: false })
@@ -6640,7 +6964,9 @@ mod tests {
             .toggle_supported = false;
         ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot));
         let before = commands.borrow().len();
-        ui.window().invoke_set_local_backend_enabled(true);
+        ui.window()
+            .global::<App>()
+            .invoke_set_local_backend_enabled(true);
         assert_eq!(commands.borrow().len(), before);
 
         // Status events update configured state but never settle a local operation.
@@ -6679,6 +7005,7 @@ mod tests {
             },
         );
         ui.window()
+            .global::<App>()
             .invoke_save_provider_credential("deepseek".into(), "bad\nkey".into());
         assert!(delivered_credentials.borrow().is_empty());
         assert_eq!(
@@ -6686,9 +7013,10 @@ mod tests {
             "API key must be printable and no larger than 16 KiB."
         );
         ui.window()
+            .global::<App>()
             .invoke_save_provider_credential("deepseek".into(), "x".repeat(16 * 1024 + 1).into());
         assert!(delivered_credentials.borrow().is_empty());
-        ui.window().invoke_save_provider_credential(
+        ui.window().global::<App>().invoke_save_provider_credential(
             "custom".into(),
             "credential-that-must-not-be-delivered".into(),
         );
@@ -6700,11 +7028,12 @@ mod tests {
             "deepseek-extra",
             "xdeepseek",
         ] {
-            ui.window().invoke_save_provider_credential(
+            ui.window().global::<App>().invoke_save_provider_credential(
                 invalid_id.into(),
                 "credential-that-must-not-be-delivered".into(),
             );
             ui.window()
+                .global::<App>()
                 .invoke_clear_provider_credential(invalid_id.into());
         }
         assert!(delivered_credentials.borrow().is_empty());
@@ -6715,6 +7044,7 @@ mod tests {
         ui.window()
             .set_provider_credential_draft(replacement.into());
         ui.window()
+            .global::<App>()
             .invoke_save_provider_credential("deepseek".into(), replacement.into());
         let replacement_generation = delivered_credentials.borrow()[0].2;
         assert_eq!(ui.window().get_provider_credential_pending(), "save");
@@ -6742,6 +7072,7 @@ mod tests {
         ui.window()
             .set_provider_credential_draft("clear-draft-fixture".into());
         ui.window()
+            .global::<App>()
             .invoke_clear_provider_credential("deepseek".into());
         let clear_generation = cleared_credentials.borrow()[0].1;
         assert_eq!(ui.window().get_provider_credential_pending(), "delete");
@@ -6770,6 +7101,7 @@ mod tests {
         ui.window()
             .set_provider_credential_draft(failure_fixture.into());
         ui.window()
+            .global::<App>()
             .invoke_save_provider_credential("deepseek".into(), failure_fixture.into());
         let failure_generation = delivered_credentials.borrow()[1].2;
         for (provider_id, action, generation) in [

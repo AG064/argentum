@@ -1,0 +1,808 @@
+// Everything an operator reaches for after the first conversation: supervision,
+// verification, tools, diagnostics, and optional capabilities. Each screen shows
+// what Rust reports and offers only the commands Rust owns.
+import { Theme } from "theme.slint";
+import { App } from "state.slint";
+import { Badge, Btn, Divider, EmptyState, Field, Icon, Label, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
+import { RecordLineView, ProviderPresetView } from "../view-models.slint";
+
+// A heading with its refresh action and loading state.
+export component SectionHead inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> action;
+    in property <bool> busy;
+    callback activated();
+    height: 28px;
+    spacing: Theme.sp8;
+    SectionLabel { text: root.title; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+    if root.busy: Spinner { size: 13px; y: (parent.height - self.height) / 2; }
+    if root.action != "": Btn {
+        y: (parent.height - self.height) / 2;
+        label: root.action;
+        small: true;
+        enabled: !root.busy;
+        clicked => { root.activated(); }
+    }
+}
+
+export component PageHead inherits VerticalLayout {
+    in property <string> title;
+    in property <string> detail;
+    spacing: Theme.sp4;
+    padding-bottom: Theme.sp2;
+    Text { text: root.title; color: Theme.text; font-size: Theme.fs-lg; font-weight: Theme.w-semibold; }
+    if root.detail != "": Text { text: root.detail; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+}
+
+// In a horizontal layout, so a wrapped line is measured at its real width and the
+// rows below it move down.
+export component Notice inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> tone: "primary";
+    Label {
+        text: root.text;
+        tone: root.tone;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+        overflow: clip;
+        size: "sm";
+    }
+}
+
+// Plain name and value lines. The name carries the meaning, so state is never only color.
+export component Fact inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> value;
+    spacing: Theme.sp10;
+    min-height: 22px;
+    Label { text: root.name; tone: "muted"; size: "sm"; width: 34%; wrap: word-wrap; overflow: clip; }
+    Label { text: root.value; size: "sm"; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
+}
+
+export component RecordList inherits VerticalLayout {
+    in property <[RecordLineView]> records;
+    in property <string> empty;
+    spacing: Theme.sp1;
+    if root.records.length == 0 && root.empty != "": Label { text: root.empty; tone: "muted"; size: "sm"; wrap: word-wrap; overflow: clip; }
+    for record in root.records: Fact { name: record.label; value: record.detail; }
+}
+
+// Goal module: limits, criteria, attestation, supervision, and delivery.
+export component GoalPanel inherits Rectangle {
+    private property <string> id: App.goal_id;
+    Scroller {
+        content-height: col.preferred-height + 24px;
+        col := VerticalLayout {
+            y: 0px;
+            height: self.preferred-height;
+            width: root.width;
+            padding: Theme.sp12;
+            spacing: Theme.sp12;
+            if root.id == "": EmptyState {
+                icon: "goal";
+                title: "No goal yet";
+                detail: "Set a goal from the conversation to supervise it here.";
+            }
+            if root.id != "": VerticalLayout {
+                spacing: Theme.sp4;
+                Fact { name: "Goal limits"; value: App.goal_limits_summary; }
+                Fact { name: "Run limits"; value: App.goal_run_limits_summary; }
+                Fact { name: "Accounting"; value: App.goal_accounting_summary; }
+                Fact { name: "Criteria"; value: App.goal_criteria_summary; }
+                Fact { name: "Attestation"; value: App.goal_attestation_summary; }
+                Fact { name: "Supervision"; value: App.goal_invocation_state; }
+                if App.goal_invocation_next_action != "": Fact { name: "Next"; value: App.goal_invocation_next_action; }
+                Fact { name: "Delivery"; value: App.goal_completion_summary; }
+            }
+            if root.id != "": VerticalLayout {
+                spacing: Theme.sp6;
+                Divider { }
+                SectionLabel { text: "LIMITS"; }
+                Field {
+                    placeholder: "Limits, as the CLI accepts them";
+                    mono: true;
+                    value: App.goal_limits_draft;
+                    error: App.goal_limits_error;
+                    edited(text) => { App.goal_limits_draft = text; }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    Btn { label: "Save limits"; small: true; clicked => { App.configure_goal_limits(root.id, App.goal_limits_draft); } }
+                }
+            }
+            if root.id != "": VerticalLayout {
+                spacing: Theme.sp6;
+                Divider { }
+                SectionLabel { text: "ACCEPTANCE CRITERIA"; }
+                Field {
+                    placeholder: "Verification runners, comma separated";
+                    mono: true;
+                    value: App.goal_criteria_draft;
+                    error: App.goal_criteria_error;
+                    edited(text) => { App.goal_criteria_draft = text; }
+                }
+                HorizontalLayout {
+                    spacing: Theme.sp8;
+                    Label { text: "Also needs your attestation"; size: "sm"; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+                    Switch {
+                        label: "Also needs your attestation";
+                        on: App.goal_criteria_attestation;
+                        toggled(v) => { App.goal_criteria_attestation = v; }
+                    }
+                    Btn { label: "Save"; small: true; clicked => { App.configure_goal_criteria(root.id, App.goal_criteria_draft, App.goal_criteria_attestation); } }
+                }
+            }
+            if root.id != "": VerticalLayout {
+                spacing: Theme.sp6;
+                Divider { }
+                SectionLabel { text: "ATTEST"; }
+                Field {
+                    placeholder: "What you checked";
+                    value: App.goal_attestation_draft;
+                    error: App.goal_attestation_error;
+                    edited(text) => { App.goal_attestation_draft = text; }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    Btn { label: "Record attestation"; small: true; clicked => { App.attest_goal(root.id, App.goal_attestation_draft); } }
+                }
+            }
+            if root.id != "": VerticalLayout {
+                spacing: Theme.sp6;
+                Divider { }
+                SectionLabel { text: "SUPERVISE"; }
+                HorizontalLayout {
+                    spacing: Theme.sp8;
+                    Field {
+                        label: "Iterations";
+                        value: App.goal_supervise_iterations;
+                        edited(text) => { App.goal_supervise_iterations = text; }
+                    }
+                    Field {
+                        label: "Seconds";
+                        value: App.goal_supervise_seconds;
+                        edited(text) => { App.goal_supervise_seconds = text; }
+                    }
+                }
+                if App.goal_supervision_error != "": Notice { text: App.goal_supervision_error; tone: "danger"; }
+                if App.goal_supervision_notice != "": Notice { text: App.goal_supervision_notice; tone: "ok"; }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: Theme.sp8;
+                    Btn {
+                        label: "Supervise";
+                        small: true;
+                        busy: App.goal_supervision_pending;
+                        clicked => { App.supervise_goal(root.id, App.goal_supervise_iterations, App.goal_supervise_seconds); }
+                    }
+                    Btn {
+                        label: "Deliver";
+                        small: true;
+                        kind: "primary";
+                        enabled: !App.goal_supervision_pending;
+                        clicked => { App.deliver_goal(root.id, App.goal_supervise_iterations, App.goal_supervise_seconds); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component VerificationPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    init => { App.refresh_verification(); }
+    PageHead {
+        title: "Verification";
+        detail: "Checks you approve once and the agent can then run. Each result records whether it is still current.";
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "RUNNERS";
+            action: "Refresh";
+            busy: App.verification_runners_loading;
+            activated => { App.refresh_verification(); }
+        }
+        if App.verification_runners_error != "": Notice { text: App.verification_runners_error; tone: "danger"; }
+        if App.verification_runners.length == 0 && !App.verification_runners_loading: Label {
+            text: "No verification runners are configured for this workspace.";
+            tone: "muted";
+            size: "sm";
+        }
+        for runner in App.verification_runners: VerticalLayout {
+            padding-top: Theme.sp8;
+            padding-bottom: Theme.sp8;
+            spacing: Theme.sp4;
+            HorizontalLayout {
+                spacing: Theme.sp8;
+                Label { text: runner.id; strong: true; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+                Badge { text: runner.state; }
+                if runner.approval_required && !runner.approved: Btn {
+                    label: "Review";
+                    small: true;
+                    enabled: runner.available && App.verification_approve_pending == "";
+                    clicked => { App.review_verification_runner(runner.id); }
+                }
+            }
+            Notice { text: runner.detail; tone: "secondary"; }
+            Label { text: runner.definition; tone: "muted"; size: "xs"; mono: true; wrap: word-wrap; overflow: clip; }
+            Divider { }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead { title: "EVIDENCE"; busy: App.verification_evidence_loading; }
+        if App.verification_evidence_error != "": Notice { text: App.verification_evidence_error; tone: "danger"; }
+        if App.verification_evidence.length == 0 && !App.verification_evidence_loading: Label {
+            text: "Nothing has been verified yet.";
+            tone: "muted";
+            size: "sm";
+        }
+        for item in App.verification_evidence: VerticalLayout {
+            padding-top: Theme.sp6;
+            padding-bottom: Theme.sp6;
+            spacing: Theme.sp2;
+            HorizontalLayout {
+                spacing: Theme.sp8;
+                Label { text: item.runner; horizontal-stretch: 1; }
+                Badge { text: item.state + (item.fresh ? ", current" : ", stale"); }
+            }
+            Notice { text: item.detail; tone: "secondary"; }
+            Label { text: item.recorded; tone: "muted"; size: "xs"; }
+        }
+    }
+}
+
+export component VerificationReviewSheet inherits Sheet {
+    width: 460px;
+    height: lay.preferred-height;
+    accessible-role: groupbox;
+    accessible-label: "Review verification runner";
+    lay := VerticalLayout {
+        padding: Theme.sp16;
+        spacing: Theme.sp10;
+        Label { text: "Approve this verification runner?"; strong: true; }
+        Fact { name: "Runner"; value: App.verification_review_runner; }
+        Fact { name: "Command"; value: App.verification_review_command; }
+        Fact { name: "Scope"; value: App.verification_review_scope; }
+        Fact { name: "Binding"; value: App.verification_review_binding; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.sp8;
+            Btn { label: "Cancel"; clicked => { App.cancel_verification_review(); } }
+            Btn {
+                label: "Approve";
+                kind: "primary";
+                busy: App.verification_approve_pending != "";
+                clicked => { App.approve_verification_runner(App.verification_review_runner); }
+            }
+        }
+    }
+}
+
+export component ToolsPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    init => {
+        App.refresh_tool_catalog();
+        App.refresh_skill_catalog();
+        App.list_extensions();
+    }
+    PageHead {
+        title: "Tools and skills";
+        detail: "What the agent can use in this workspace, and which actions ask first.";
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        SectionHead {
+            title: "AGENT TOOLS";
+            action: "Refresh";
+            busy: App.tool_catalog_loading;
+            activated => { App.refresh_tool_catalog(); }
+        }
+        if App.tool_catalog_error != "": Notice { text: App.tool_catalog_error; tone: "danger"; }
+        for tool in App.tool_catalog: VerticalLayout {
+            padding-top: Theme.sp6;
+            padding-bottom: Theme.sp6;
+            spacing: Theme.sp2;
+            HorizontalLayout {
+                spacing: Theme.sp8;
+                Label { text: tool.title; horizontal-stretch: 1; }
+                Badge { text: tool.requires_approval ? "Asks first" : "No prompt"; }
+            }
+            Notice { text: tool.summary; tone: "secondary"; }
+            Label { text: tool.id + ", " + tool.risk; tone: "muted"; size: "xs"; }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        SectionHead {
+            title: "SKILLS";
+            action: "Refresh";
+            busy: App.skill_catalog_loading;
+            activated => { App.refresh_skill_catalog(); }
+        }
+        if App.skill_catalog_error != "": Notice { text: App.skill_catalog_error; tone: "danger"; }
+        if App.skill_catalog.length == 0 && !App.skill_catalog_loading: Label { text: "No skills found in this workspace."; tone: "muted"; size: "sm"; }
+        for skill in App.skill_catalog: Row {
+            title: skill.name;
+            detail: skill.valid ? skill.description : skill.error;
+            selected: App.skill_selected == skill.name;
+            clicked => { App.inspect_skill(skill.name); }
+        }
+        if App.skill_inspect_error != "": Notice { text: App.skill_inspect_error; tone: "danger"; }
+        if App.skill_body != "": Rectangle {
+            border-radius: Theme.r-md;
+            background: Theme.code-bg;
+            height: skill-text.preferred-height + 20px;
+            skill-text := Text {
+                x: 10px;
+                y: 10px;
+                width: parent.width - 20px;
+                text: App.skill_body;
+                color: Theme.text-2;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        SectionHead {
+            title: "EXTENSIONS";
+            action: "Refresh";
+            busy: App.extension_loading;
+            activated => { App.list_extensions(); }
+        }
+        if App.extension_error != "": Notice { text: App.extension_error; tone: "danger"; }
+        RecordList { records: App.extension_entries; empty: "No extensions are installed."; }
+        if App.extension_receipts.length > 0: SectionLabel { text: "RECENT RECEIPTS"; }
+        RecordList { records: App.extension_receipts; }
+    }
+}
+
+export component DiagnosticsPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    init => {
+        App.load_accounting();
+        App.load_context();
+    }
+    PageHead {
+        title: "Diagnostics";
+        detail: "What was spent, what the model is seeing, and what happened in a run.";
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "ACCOUNTING";
+            action: "Refresh";
+            busy: App.accounting_loading;
+            activated => { App.load_accounting(); }
+        }
+        if App.accounting_error != "": Notice { text: App.accounting_error; tone: "danger"; }
+        if App.accounting_summary != "": Notice { text: App.accounting_summary; tone: "secondary"; }
+        if App.accounting_counters != "": Notice { text: App.accounting_counters; tone: "muted"; }
+        RecordList { records: App.accounting_runs; }
+        RecordList { records: App.accounting_requests; }
+        if App.accounting_runs_truncated || App.accounting_requests_truncated: Notice { text: "Showing the most recent records."; tone: "muted"; }
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "CONTEXT";
+            action: "Refresh";
+            busy: App.context_loading;
+            activated => { App.load_context(); }
+        }
+        if App.context_error != "": Notice { text: App.context_error; tone: "danger"; }
+        if App.context_summary != "": Notice { text: App.context_summary; tone: "secondary"; }
+        RecordList { records: App.context_records; }
+        if App.compact_error != "": Notice { text: App.compact_error; tone: "danger"; }
+        if App.compact_notice != "": Notice { text: App.compact_notice; tone: "ok"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            Label { text: "Turn compaction off afterwards"; size: "sm"; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+            Switch { label: "Turn compaction off afterwards"; on: App.compact_deactivate; toggled(v) => { App.compact_deactivate = v; } }
+            Btn {
+                label: App.compact_confirm ? "Confirm" : "Compact";
+                small: true;
+                kind: App.compact_confirm ? "primary" : "secondary";
+                busy: App.compact_pending;
+                clicked => {
+                    if App.compact_confirm {
+                        App.compact_confirm = false;
+                        App.compact_context(App.compact_deactivate);
+                    } else {
+                        App.compact_confirm = true;
+                    }
+                }
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "INSTRUCTIONS";
+            action: "Load";
+            busy: App.instructions_loading;
+            activated => { App.load_instructions(App.instructions_directory); }
+        }
+        Field {
+            label: "Directory";
+            mono: true;
+            value: App.instructions_directory;
+            edited(text) => { App.instructions_directory = text; }
+        }
+        if App.instructions_error != "": Notice { text: App.instructions_error; tone: "danger"; }
+        if App.instructions_summary != "": Notice { text: App.instructions_summary; tone: "secondary"; }
+        RecordList { records: App.instructions_documents; }
+        RecordList { records: App.instructions_selections; }
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead { title: "RUN"; busy: App.run_diagnostics_loading || App.run_result_loading; }
+        Field {
+            label: "Run id";
+            mono: true;
+            value: App.run_diagnostics_id;
+            edited(text) => { App.run_diagnostics_id = text; }
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.sp8;
+            Btn { label: "Diagnostics"; small: true; enabled: App.run_diagnostics_id != ""; clicked => { App.load_run_diagnostics(App.run_diagnostics_id); } }
+            Btn { label: "Result"; small: true; enabled: App.run_diagnostics_id != ""; clicked => { App.load_run_result(App.run_diagnostics_id); } }
+        }
+        if App.run_diagnostics_error != "": Notice { text: App.run_diagnostics_error; tone: "danger"; }
+        if App.run_diagnostics_summary != "": Notice { text: App.run_diagnostics_state + ". " + App.run_diagnostics_summary; tone: "secondary"; }
+        RecordList { records: App.run_diagnostics_records; }
+        if App.run_result_error != "": Notice { text: App.run_result_error; tone: "danger"; }
+        if App.run_result_summary != "": Notice { text: App.run_result_state + ". " + App.run_result_summary; tone: "secondary"; }
+        if App.run_result_answer != "": Notice { text: App.run_result_answer; }
+    }
+    if App.diagnostics_enabled: VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead { title: "STARTUP"; }
+        if App.diagnostics_detail != "": Notice { text: App.diagnostics_detail; tone: "secondary"; }
+        for record in App.diagnostic_records: Fact { name: record.code; value: record.detail; }
+    }
+}
+
+export component CapabilitiesPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    init => {
+        App.refresh_browser_status();
+        App.refresh_desktop_status();
+        App.refresh_harness();
+    }
+    PageHead {
+        title: "Capabilities";
+        detail: "Optional parts of Argentum and whether this build and project can use them.";
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "BROWSER CONTROL";
+            action: "Refresh";
+            busy: App.browser_status_loading;
+            activated => { App.refresh_browser_status(); }
+        }
+        Notice { text: "Optional Playwright component the agent can drive. Installing it is not the same as activating it, and neither starts a browser."; tone: "muted"; }
+        Fact { name: "Status"; value: App.browser_summary; }
+        Fact { name: "Built in"; value: App.browser_extensions_built ? "Yes" : "No, this build omits extensions"; }
+        Fact { name: "Definition"; value: App.browser_definition_ready ? "Installed" : "Not installed"; }
+        Fact { name: "Configured"; value: App.browser_configured ? "Yes" : "No"; }
+        Fact { name: "Activated"; value: App.browser_saved_active ? "Yes" : "No, an owner console action"; }
+        if App.browser_allowed_tools != "": Fact { name: "Tools"; value: App.browser_allowed_tools; }
+        if App.browser_readiness_detail != "": Fact { name: "Readiness"; value: App.browser_readiness_detail; }
+        if App.browser_qualification != "": Fact { name: "Qualification"; value: App.browser_qualification; }
+        if App.browser_status_error != "": Notice { text: App.browser_status_error; tone: "danger"; }
+    }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionHead {
+            title: "DESKTOP CONTROL";
+            action: "Refresh";
+            busy: App.desktop_status_loading;
+            activated => { App.refresh_desktop_status(); }
+        }
+        Notice { text: "Windows UI Automation for the agent. Every invoke, type, and key action is confirmed for one exact window."; tone: "muted"; }
+        Fact { name: "Status"; value: App.desktop_summary; }
+        Fact { name: "Built in"; value: App.desktop_built ? "Yes" : "No, this build omits desktop control"; }
+        Fact { name: "Available"; value: App.desktop_available ? "Yes" : (App.desktop_reason != "" ? App.desktop_reason : "No"); }
+        Fact { name: "Capability"; value: App.desktop_capability_text; }
+        for tool in App.desktop_tools: Fact {
+            name: tool.title;
+            value: tool.summary + (tool.requires_approval ? " Asks first." : "");
+        }
+        if App.desktop_status_error != "": Notice { text: App.desktop_status_error; tone: "danger"; }
+    }
+    if App.local_backend_available || App.local_backend_toggle_supported: VerticalLayout {
+        spacing: Theme.sp4;
+        SectionLabel { text: "LOCAL BACKEND"; }
+        if App.local_backend_detail != "": Notice { text: App.local_backend_detail; tone: "secondary"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            Label { text: App.local_backend_ready ? "Ready" : "Not ready"; size: "sm"; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+            Switch {
+                label: "Local backend";
+                on: App.local_backend_enabled;
+                enabled: App.local_backend_toggle_supported;
+                toggled(v) => { App.set_local_backend_enabled(v); }
+            }
+        }
+    }
+    if App.harness_modules.length > 0: VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "HARNESS SERVICES"; height: 22px; }
+        for module in App.harness_modules: VerticalLayout {
+            padding-top: Theme.sp6;
+            padding-bottom: Theme.sp6;
+            spacing: Theme.sp2;
+            HorizontalLayout {
+                spacing: Theme.sp8;
+                Label { text: module.label; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+                Btn {
+                    small: true;
+                    label: module.recovery_pending ? "Recover" : !module.installed ? "Install" : module.enabled ? "Disable" : "Enable";
+                    clicked => { App.set_harness_module(module.id, module.recovery_pending ? "disable" : !module.installed ? "install" : module.enabled ? "disable" : "enable"); }
+                }
+                if module.installed && !module.enabled: Btn {
+                    small: true;
+                    label: "Remove";
+                    clicked => { App.set_harness_module(module.id, "remove"); }
+                }
+            }
+            Notice { text: module.detail; tone: "muted"; }
+        }
+    }
+}
+
+export component GrantsSection inherits VerticalLayout {
+    spacing: Theme.sp4;
+    init => { App.refresh_approval_grants(); }
+    SectionHead {
+        title: "ACTIVE APPROVALS";
+        action: "Refresh";
+        busy: App.approval_grants_loading;
+        activated => { App.refresh_approval_grants(); }
+    }
+    if App.approval_grants_error != "": Notice { text: App.approval_grants_error; tone: "danger"; }
+    if App.approval_grants_incomplete: Notice { text: "This list is incomplete. Refresh before relying on it."; tone: "danger"; }
+    if App.approval_grants.length == 0 && !App.approval_grants_loading: Label { text: "Nothing has standing approval."; tone: "muted"; size: "sm"; }
+    for grant in App.approval_grants: VerticalLayout {
+        padding-top: Theme.sp6;
+        padding-bottom: Theme.sp6;
+        spacing: Theme.sp2;
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            Label { text: grant.capability + ", " + grant.scope; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+            Btn {
+                label: "Revoke";
+                small: true;
+                busy: App.approval_grant_pending == grant.id;
+                clicked => { App.revoke_approval_grant(grant.id); }
+            }
+        }
+        Notice { text: grant.subject; tone: "secondary"; }
+        Label { text: grant.created + (grant.expiry != "" ? ", " + grant.expiry : ""); tone: "muted"; size: "xs"; }
+    }
+}
+
+// The whole catalog, grouped. Choosing one shows what it needs before anything is saved.
+component CatalogGroup inherits VerticalLayout {
+    in property <string> title;
+    in property <[ProviderPresetView]> presets;
+    spacing: Theme.sp1;
+    if root.presets.length > 0: SectionLabel { text: root.title; height: 24px; }
+    for preset in root.presets: Row {
+        title: preset.label;
+        detail: preset.supported ? preset.credential : "Not supported yet. " + preset.notes;
+        icon: preset.icon;
+        selected: App.provider_preset_detail.id == preset.id;
+        clicked => { App.select_provider_preset(preset.id); }
+    }
+}
+
+export component ProviderCatalog inherits VerticalLayout {
+    spacing: Theme.sp8;
+    init => { App.refresh_provider_presets(); }
+    SectionHead {
+        title: "ADD A PROVIDER";
+        action: "Refresh";
+        busy: App.provider_presets_loading;
+        activated => { App.refresh_provider_presets(); }
+    }
+    if App.provider_presets_error != "": Notice { text: App.provider_presets_error; tone: "danger"; }
+    CatalogGroup { title: "HOSTED"; presets: App.provider_presets_hosted; }
+    CatalogGroup { title: "AGGREGATORS"; presets: App.provider_presets_aggregator; }
+    CatalogGroup { title: "ON THIS COMPUTER"; presets: App.provider_presets_local; }
+    CatalogGroup { title: "CUSTOM"; presets: App.provider_presets_custom; }
+    CatalogGroup { title: "NOT SUPPORTED YET"; presets: App.provider_presets_unsupported; }
+    if App.provider_preset_detail.id != "": Rectangle {
+        border-radius: Theme.r-md;
+        background: Theme.surface;
+        border-width: Theme.hair;
+        border-color: Theme.border;
+        height: detail.preferred-height;
+        detail := VerticalLayout {
+            padding: Theme.sp12;
+            spacing: Theme.sp4;
+            Label { text: App.provider_preset_detail.label; strong: true; }
+            Fact { name: "Type"; value: App.provider_preset_detail.kind_label; }
+            if App.provider_preset_detail.endpoint != "": Fact { name: "Endpoint"; value: App.provider_preset_detail.endpoint; }
+            if App.provider_preset_detail.default_model != "": Fact { name: "Default model"; value: App.provider_preset_detail.default_model; }
+            Fact { name: "Sign-in"; value: App.provider_preset_detail.credential; }
+            if App.provider_preset_detail.docs_url != "": Fact { name: "Docs"; value: App.provider_preset_detail.docs_url; }
+            if App.provider_preset_detail.notes != "": Notice { text: App.provider_preset_detail.notes; tone: "muted"; }
+            if App.provider_preset_notice != "": Notice { text: App.provider_preset_notice; tone: "ok"; }
+            HorizontalLayout {
+                alignment: end;
+                Btn {
+                    label: "Add provider";
+                    small: true;
+                    kind: "primary";
+                    enabled: App.provider_preset_detail.supported;
+                    busy: App.provider_preset_pending != "";
+                    clicked => { App.add_provider_preset(App.provider_preset_detail.id); }
+                }
+            }
+        }
+    }
+}
+
+// The key field holds the secret only until it is saved, then Rust clears it.
+export component CredentialSection inherits VerticalLayout {
+    spacing: Theme.sp6;
+    if App.provider_credential_supported: SectionLabel { text: "API KEY"; height: 22px; }
+    if App.provider_credential_supported: Label {
+        text: App.provider_credential_configured ? "A key is saved in the system credential store." : "No key saved yet.";
+        tone: App.provider_credential_configured ? "ok" : "secondary";
+        size: "sm";
+    }
+    if App.provider_credential_supported: Field {
+        placeholder: App.provider_credential_configured ? "Replace the saved key" : "Paste your API key";
+        mono: true;
+        secret: true;
+        value: App.provider_credential_draft;
+        error: App.provider_credential_error;
+        edited(text) => { App.provider_credential_draft = text; }
+    }
+    if App.provider_credential_supported && App.provider_credential_notice != "": Notice { text: App.provider_credential_notice; tone: "ok"; }
+    if App.provider_credential_supported: HorizontalLayout {
+        alignment: end;
+        spacing: Theme.sp8;
+        if App.provider_credential_configured: Btn {
+            label: "Remove key";
+            small: true;
+            busy: App.provider_credential_deleting;
+            clicked => { App.clear_provider_credential(App.provider_id); }
+        }
+        Btn {
+            label: "Save key";
+            small: true;
+            kind: "primary";
+            enabled: App.provider_credential_draft != "";
+            busy: App.provider_credential_saving;
+            clicked => { App.save_provider_credential(App.provider_id, App.provider_credential_draft); }
+        }
+    }
+}
+
+export component BudgetSection inherits VerticalLayout {
+    spacing: Theme.sp6;
+    SectionHead { title: "BUDGET AND CONTEXT"; busy: App.provider_budget_loading || App.provider_context_loading; }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Field { label: "Input tokens"; value: App.provider_budget_input; edited(text) => { App.provider_budget_input = text; } }
+        Field { label: "Output tokens"; value: App.provider_budget_requested_output; edited(text) => { App.provider_budget_requested_output = text; } }
+    }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Field { label: "Max output"; value: App.provider_budget_max_output; edited(text) => { App.provider_budget_max_output = text; } }
+        Field { label: "Total"; value: App.provider_budget_total; edited(text) => { App.provider_budget_total = text; } }
+    }
+    Field { label: "Uncertainty"; value: App.provider_budget_uncertainty; edited(text) => { App.provider_budget_uncertainty = text; } }
+    if App.provider_budget_error != "": Notice { text: App.provider_budget_error; tone: "danger"; }
+    if App.provider_budget_notice != "": Notice { text: App.provider_budget_notice; tone: "ok"; }
+    HorizontalLayout {
+        alignment: end;
+        Btn { label: "Save budget"; small: true; busy: App.provider_budget_pending; clicked => { App.save_provider_budget(); } }
+    }
+    if App.provider_context_available: VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "CONTEXT SIZE"; height: 22px; }
+        for choice in App.provider_context_choices: Row {
+            title: choice.label;
+            selected: choice.selected;
+            enabled: !App.provider_context_pending;
+            clicked => { App.set_provider_context(choice.tokens); }
+        }
+        if App.provider_context_error != "": Notice { text: App.provider_context_error; tone: "danger"; }
+        if App.provider_context_notice != "": Notice { text: App.provider_context_notice; tone: "ok"; }
+    }
+}
+
+export component LocalModelSection inherits VerticalLayout {
+    spacing: Theme.sp6;
+    if App.local_inference_available: SectionLabel { text: "ON-DEVICE MODEL"; height: 22px; }
+    if App.local_inference_available: Notice { text: App.local_inference_detail; tone: "secondary"; }
+    if App.local_inference_available: HorizontalLayout {
+        alignment: end;
+        spacing: Theme.sp8;
+        if !App.local_inference_active: Btn {
+            label: "Install and load";
+            small: true;
+            busy: App.local_inference_busy;
+            clicked => { App.install_and_load_local_model(); }
+        }
+        if App.local_inference_active: Btn {
+            label: "Unload";
+            small: true;
+            busy: App.local_inference_busy;
+            clicked => { App.unload_local_model(); }
+        }
+    }
+}
+
+// Rename, pin, archive, and fork one conversation.
+export component SessionActionsSheet inherits Sheet {
+    width: 380px;
+    height: lay.preferred-height;
+    accessible-role: groupbox;
+    accessible-label: "Conversation actions";
+    lay := VerticalLayout {
+        padding: Theme.sp14;
+        spacing: Theme.sp8;
+        Label { text: App.session_actions_title; strong: true; overflow: elide; }
+        Field {
+            label: "Name";
+            value: App.session_rename_draft;
+            edited(text) => { App.session_rename_draft = text; }
+            accepted(text) => { App.rename_session(App.session_actions_id, text); }
+        }
+        HorizontalLayout {
+            alignment: end;
+            Btn {
+                label: "Rename";
+                small: true;
+                enabled: !App.session_action_pending && App.session_rename_draft != "";
+                clicked => { App.rename_session(App.session_actions_id, App.session_rename_draft); }
+            }
+        }
+        Divider { }
+        Field {
+            label: "Fork into a new conversation";
+            placeholder: "Title for the fork";
+            value: App.session_fork_draft;
+            edited(text) => { App.session_fork_draft = text; }
+        }
+        HorizontalLayout {
+            alignment: end;
+            Btn {
+                label: "Fork";
+                small: true;
+                enabled: !App.session_action_pending && App.session_fork_draft != "";
+                clicked => { App.fork_session(App.session_actions_id, App.session_fork_draft); }
+            }
+        }
+        Divider { }
+        if App.session_action_error != "": Notice { text: App.session_action_error; tone: "danger"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            Btn {
+                label: App.session_actions_pinned ? "Unpin" : "Pin";
+                small: true;
+                enabled: !App.session_action_pending;
+                clicked => { App.set_session_pinned(App.session_actions_id, !App.session_actions_pinned); }
+            }
+            Btn {
+                label: App.session_actions_archived ? "Restore" : "Archive";
+                small: true;
+                enabled: !App.session_action_pending && (App.session_actions_archived || !App.session_actions_active);
+                clicked => { App.set_session_archived(App.session_actions_id, !App.session_actions_archived); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Btn { label: "Close"; small: true; clicked => { App.session_actions_open = false; } }
+        }
+    }
+}

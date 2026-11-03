@@ -25,6 +25,16 @@ Default behavior:
 
 - Rust owns provider, tool, storage, security, and platform behavior.
 - The default core CLI has no embedded JavaScript or dynamic web execution.
+- The desktop Browser module fetches a page as text on a direct click, behind the
+  `browser.reader` capability, which is off by default. It runs no scripts, keeps no
+  cookies, and never passes page content to a model. The agent cannot reach it.
+- Desktop updates start only from a click in Settings, are checked against the
+  release's published SHA-256 sums, and roll back on failure. Releases are unsigned,
+  so this proves integrity, not origin. Signing remains a release gate. The CLI has
+  no self-update.
+- The agent's `ui_update` tool changes presentation only. It is asked about every
+  time, in every approval mode, and no grant can stand in for that. It cannot hide or
+  restyle the approval prompt, change permissions, or set unreadable colors.
   The optional extensions build may invoke separately reviewed current-user
   executable code, including the pinned first-party Playwright adapter. It is
   inert until an admitted operation uses an exactly owner-activated definition.
@@ -235,7 +245,7 @@ configuration and signing material are outside this milestone. Shizuku and
 root remain distinct unavailable authority tiers. Each requires a separate
 future local ceremony, manager grant, observed UID, capability probe, bounded
 lease, revoke behavior, and service-death teardown. Extension loading,
-self-update, and self-modification remain unavailable.
+self-modification, and CLI self-update remain unavailable.
 
 ## Secret storage
 

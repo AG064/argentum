@@ -1,0 +1,743 @@
+// The workbench: sidebar, conversation, side panel, status bar, and overlays.
+// Only the conversation, the provider chooser, and approvals are always present.
+import { Theme, TrustTheme } from "theme.slint";
+import { App, Mods } from "state.slint";
+import { Badge, Btn, Chip, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, ResizeHandle, Row, Scrim, Scroller, SectionLabel, Sheet, Tooltip } from "kit.slint";
+import { BrandMark } from "../components/brand.slint";
+import { Composer, Conversation, EmptyHero } from "chat.slint";
+import { FirstRun, ProviderMenu } from "provider.slint";
+import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel } from "panels.slint";
+import { Settings } from "settings.slint";
+import { GoalPanel, SessionActionsSheet, VerificationReviewSheet } from "ops.slint";
+
+component Sidebar inherits Rectangle {
+    in property <bool> overlay: false;
+    callback close();
+    background: Theme.sidebar;
+    VerticalLayout {
+        padding-top: Theme.sp8;
+        padding-bottom: Theme.sp8;
+        spacing: Theme.sp6;
+        HorizontalLayout {
+            height: 36px;
+            padding-left: Theme.sp12;
+            padding-right: Theme.sp6;
+            spacing: Theme.sp9;
+            BrandMark { size: 22px; y: (parent.height - self.height) / 2; }
+            Label { text: "Argentum"; strong: true; horizontal-stretch: 1; }
+            IconBtn {
+                y: (parent.height - self.height) / 2;
+                size: 28px;
+                icon: "panel";
+                tip: "Hide sidebar";
+                clicked => { root.close(); }
+            }
+        }
+        HorizontalLayout {
+            padding-left: Theme.sp8;
+            padding-right: Theme.sp8;
+            Row {
+                title: "New chat";
+                icon: "new-task";
+                horizontal-stretch: 1;
+                clicked => { App.new_session(); root.close-if-overlay(); }
+            }
+        }
+        HorizontalLayout {
+            padding-left: Theme.sp8;
+            padding-right: Theme.sp8;
+            Rectangle {
+                height: 28px;
+                horizontal-stretch: 1;
+                border-radius: Theme.r-sm;
+                background: project-touch.has-hover ? Theme.hover : transparent;
+                accessible-role: button;
+                accessible-label: "Workspace " + App.project_name;
+                accessible-action-default => { self.open-workspace(); }
+                function open-workspace() {
+                    App.settings_section = "workspace";
+                    App.open_settings();
+                    root.close-if-overlay();
+                }
+                HorizontalLayout {
+                    padding-left: Theme.sp10;
+                    padding-right: Theme.sp10;
+                    spacing: Theme.sp6;
+                    Icon { name: "folder"; size: 13px; tint: Theme.text-3; y: (parent.height - self.height) / 2; }
+                    Label { text: App.project_name; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
+                }
+                Focus { activated => { parent.open-workspace(); } }
+                project-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { parent.open-workspace(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: Theme.sp8;
+            padding-right: Theme.sp8;
+            padding-bottom: Theme.sp4;
+            spacing: Theme.sp4;
+            Field {
+                horizontal-stretch: 1;
+                placeholder: "Search";
+                value: App.session_query;
+                edited(text) => {
+                    App.session_query = text;
+                    App.search_sessions(text);
+                }
+            }
+            IconBtn {
+                y: (parent.height - self.height) / 2;
+                icon: "menu";
+                tip: App.session_filter == "active" ? "Showing active. Show archived." : App.session_filter == "archived" ? "Showing archived. Show all." : "Showing all. Show active.";
+                clicked => {
+                    App.session_filter = App.session_filter == "active" ? "archived" : App.session_filter == "archived" ? "all" : "active";
+                    App.set_session_filter(App.session_filter);
+                }
+            }
+        }
+        Scroller {
+            vertical-stretch: 1;
+            content-height: list.preferred-height;
+            list := VerticalLayout {
+                y: 0px;
+                height: self.preferred-height;
+                x: 8px;
+                width: root.width - 16px;
+                spacing: Theme.sp1;
+                for session in App.session_items: Rectangle {
+                    height: session-row.min-height;
+                    session-row := Row {
+                        width: parent.width;
+                        title: (session.pinned ? "Pinned: " : "") + session.title;
+                        selected: session.active;
+                        clicked => {
+                            if !session.active { App.select_session(session.id); }
+                            root.close-if-overlay();
+                        }
+                    }
+                    IconBtn {
+                        x: parent.width - self.width - 4px;
+                        y: (parent.height - self.height) / 2;
+                        icon: "more";
+                        tip: "Actions for " + session.title;
+                        size: 24px;
+                        glyph: 13px;
+                        clicked => {
+                            App.session_actions_id = session.id;
+                            App.session_actions_title = session.title;
+                            App.session_actions_pinned = session.pinned;
+                            App.session_actions_archived = session.archived;
+                            App.session_actions_active = session.active;
+                            App.session_rename_draft = session.title;
+                            App.session_fork_draft = "";
+                            App.session_action_error = "";
+                            App.session_actions_open = true;
+                        }
+                    }
+                }
+                if App.session_items.length == 0: Label {
+                    text: App.session_query == "" ? "No conversations here" : "No matches";
+                    tone: "muted";
+                    size: "sm";
+                }
+            }
+        }
+    }
+    public function close-if-overlay() { if root.overlay { root.close(); } }
+}
+
+component PanelTabs inherits Rectangle {
+    callback close();
+    height: Theme.header;
+    HorizontalLayout {
+        padding-left: Theme.sp8;
+        padding-right: Theme.sp6;
+        spacing: Theme.sp2;
+        for mode in App.inspector_modes: Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 30px;
+            preferred-width: tab-row.preferred-width;
+            min-width: 30px;
+            horizontal-stretch: 0;
+            border-radius: Theme.r-sm;
+            background: App.active_inspector == mode.id ? Theme.hover : touch.has-hover ? Theme.hover.with-alpha(0.03) : transparent;
+            accessible-role: tab;
+            accessible-label: mode.label;
+            accessible-item-selected: App.active_inspector == mode.id;
+            accessible-action-default => { App.set_inspector_surface(mode.id); }
+            tab-row := HorizontalLayout {
+                padding-left: Theme.sp8;
+                padding-right: Theme.sp9;
+                spacing: Theme.sp6;
+                Icon {
+                    name: mode.icon;
+                    size: Theme.icon-sm;
+                    tint: App.active_inspector == mode.id ? Theme.accent-ink : Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                }
+                if root.width > Theme.tab-label-min * App.inspector_modes.length || App.active_inspector == mode.id: Text {
+                    text: mode.label;
+                    color: App.active_inspector == mode.id ? Theme.text : Theme.text-2;
+                    font-size: Theme.fs-sm;
+                    vertical-alignment: center;
+                }
+            }
+            Focus { activated => { App.set_inspector_surface(mode.id); } }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { App.set_inspector_surface(mode.id); }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        IconBtn {
+            y: (parent.height - self.height) / 2;
+            size: 28px;
+            icon: "close";
+            tip: "Close panel";
+            clicked => { root.close(); }
+        }
+    }
+    Divider { y: parent.height - 1px; }
+}
+
+component SidePanel inherits Rectangle {
+    callback close();
+    background: Theme.canvas;
+    VerticalLayout {
+        PanelTabs { close => { root.close(); } }
+        Rectangle {
+            vertical-stretch: 1;
+            if App.active_inspector == "goal": GoalPanel { }
+            if App.active_inspector == "changes": ChangesPanel { }
+            if App.active_inspector == "git": GitPanel { }
+            if App.active_inspector == "browser": BrowserPanel { }
+            if App.active_inspector == "usage": UsagePanel { }
+            if App.active_inspector == "plan": PlanPanel { }
+            if App.active_inspector == "activity": ActivityPanel { }
+            if App.active_inspector == "trajectory": TrajectoryPanel { }
+        }
+    }
+}
+
+component StatusBar inherits Rectangle {
+    height: 24px;
+    background: Theme.sidebar;
+    Divider { y: 0px; }
+    HorizontalLayout {
+        padding-left: Theme.sp12;
+        padding-right: Theme.sp12;
+        spacing: Theme.sp14;
+        Label { text: App.workspace_label; tone: "muted"; size: "xs"; mono: true; horizontal-stretch: 1; }
+        if App.running: LiveDot { y: (parent.height - self.height) / 2; size: 6px; }
+        Label { text: App.run_state; tone: "muted"; size: "xs"; }
+        if App.changed_files > 0: Label { text: App.changed_files + " changed"; tone: "muted"; size: "xs"; }
+        Label { text: App.provider_label; tone: "muted"; size: "xs"; }
+    }
+}
+
+component TrustButton inherits Rectangle {
+    in property <string> label;
+    in property <color> fill;
+    in property <color> ink;
+    in property <int> weight: 500;
+    out property <bool> focused: key.has-focus;
+    callback clicked();
+    public function take-focus() { key.focus(); }
+    private property <bool> live: !App.approval_response_pending;
+    height: 34px;
+    width: caption.preferred-width + 28px;
+    border-radius: 8px;
+    background: fill;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: live;
+    accessible-action-default => { if live { clicked(); } }
+    caption := Text { text: root.label; color: root.ink; font-size: 13px; font-weight: root.weight; }
+    key := FocusScope {
+        focus-on-click: false;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                if root.live { root.clicked(); }
+                return accept;
+            }
+            reject
+        }
+    }
+    if key.has-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: 10px;
+        border-width: 2px;
+        border-color: TrustTheme.text;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        enabled: root.live;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Permission prompt. Uses TrustTheme, so it stays legible and unmistakable
+// whatever the current theme is, and it cannot be turned off as a module. Focus
+// starts on the safe choice, and Tab stays inside until a decision is made.
+component ApprovalPrompt inherits FocusScope {
+    in property <bool> narrow: false;
+    focus-on-click: false;
+    focus-on-tab-navigation: false;
+    init => { reject-button.take-focus(); }
+    capture-key-pressed(event) => {
+        if event.text == Key.Tab || event.text == Key.Backtab {
+            if reject-button.focused {
+                approve-button.take-focus();
+            } else {
+                reject-button.take-focus();
+            }
+            return accept;
+        }
+        reject
+    }
+    Rectangle { background: TrustTheme.scrim; }
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 32px, 520px);
+        height: lay.preferred-height;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: TrustTheme.border;
+        background: TrustTheme.surface;
+        drop-shadow-color: TrustTheme.shadow;
+        drop-shadow-blur: 30px;
+        accessible-role: groupbox;
+        accessible-label: "Permission request";
+        lay := VerticalLayout {
+            padding: TrustTheme.sp20;
+            spacing: TrustTheme.sp12;
+            HorizontalLayout {
+                spacing: TrustTheme.sp9;
+                Rectangle { width: 8px; height: 8px; border-radius: 4px; background: TrustTheme.mark; y: (parent.height - self.height) / 2; }
+                Text { text: "Permission needed"; color: TrustTheme.text-2; font-size: 12px; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; }
+            }
+            Text { text: App.approval_action; color: TrustTheme.text; font-size: 18px; font-weight: 600; wrap: word-wrap; }
+            if App.approval_target != "": Rectangle {
+                border-radius: 8px;
+                background: TrustTheme.code-bg;
+                height: min(target.preferred-height + 20px, 180px);
+                clip: true;
+                target := Text {
+                    x: 10px;
+                    y: 10px;
+                    width: parent.width - 20px;
+                    text: App.approval_target;
+                    color: TrustTheme.text;
+                    font-family: "Cascadia Mono";
+                    font-size: 12.5px;
+                    wrap: word-wrap;
+                }
+            }
+            if App.approval_capabilities != "": Text { text: "Needs: " + App.approval_capabilities; color: TrustTheme.text-2; font-size: 12px; wrap: word-wrap; }
+            if App.approval_reason != "": Text { text: App.approval_reason; color: TrustTheme.text-2; font-size: 13px; wrap: word-wrap; }
+            if App.approval_scope_choices.length > 1: HorizontalLayout {
+                spacing: TrustTheme.sp8;
+                for choice in App.approval_scope_choices: Rectangle {
+                    height: 26px;
+                    width: choice-label.preferred-width + 16px;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: App.approval_scope == choice.id ? TrustTheme.text : TrustTheme.border;
+                    accessible-role: button;
+                    accessible-label: "Applies to: " + choice.label;
+                    accessible-item-selected: App.approval_scope == choice.id;
+                    accessible-action-default => { App.approval_scope = choice.id; }
+                    choice-label := Text { text: choice.label; color: TrustTheme.text; font-size: 12px; vertical-alignment: center; }
+                    TouchArea { clicked => { App.approval_scope = choice.id; } }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            HorizontalLayout {
+                spacing: TrustTheme.sp8;
+                alignment: end;
+                reject-button := TrustButton {
+                    label: "Reject";
+                    fill: TrustTheme.reject;
+                    ink: TrustTheme.reject-text;
+                    clicked => { App.reject_tool(App.approval_id); }
+                }
+                approve-button := TrustButton {
+                    label: App.approval_scope == "once" ? "Approve once" : "Approve";
+                    fill: TrustTheme.approve;
+                    ink: TrustTheme.approve-text;
+                    weight: 600;
+                    clicked => { App.approve_tool(App.approval_id, App.approval_scope); }
+                }
+            }
+        }
+    }
+}
+
+component Palette inherits Sheet {
+    callback close();
+    public function focus-query() { query.focus(); }
+    clip: true;
+    VerticalLayout {
+        HorizontalLayout {
+            height: 46px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            spacing: Theme.sp10;
+            Icon { name: "search"; size: Theme.icon-md; tint: Theme.text-3; y: (parent.height - self.height) / 2; }
+            query := TextInput {
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                single-line: true;
+                color: Theme.text;
+                font-size: Theme.fs-md;
+                accessible-label: "Search commands";
+                edited => { App.palette_query(self.text); }
+                accepted => {
+                    if App.palette_items.length > 0 {
+                        App.palette_run(App.palette_items[0].id);
+                        root.close();
+                    }
+                }
+            }
+        }
+        Divider { }
+        Scroller {
+            vertical-stretch: 1;
+            content-height: items.preferred-height + 12px;
+            items := VerticalLayout {
+                height: self.preferred-height;
+                x: 6px;
+                y: 6px;
+                width: parent.width - 12px;
+                spacing: Theme.sp1;
+                for item in App.palette_items: Row {
+                    title: item.label;
+                    detail: item.detail;
+                    icon: item.icon;
+                    clicked => {
+                        App.palette_run(item.id);
+                        root.close();
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component Workbench inherits Rectangle {
+    private property <bool> narrow: root.width < Theme.narrow-below;
+    changed narrow => { Theme.coarse = root.narrow; }
+    init => {
+        Theme.coarse = root.narrow;
+        // Somewhere for Escape to land until the composer takes focus.
+        keyboard.focus();
+    }
+    private property <bool> panel-wanted: Mods.any-panel && !App.inspector_collapsed && App.active_inspector != "";
+    private property <bool> wide-enough-for-panel: root.width >= Theme.panel-dock-min;
+    private property <bool> show-sidebar: Mods.sessions && App.sidebar_open && !root.narrow;
+    private property <bool> empty: App.conversation_messages.length == 0 && App.user_prompt == "" && App.live_blocks.length == 0
+        && !App.running && !App.submission_pending && App.error_message == "";
+    private property <length> live-sidebar-width: Theme.sidebar-width;
+    private property <length> live-panel-width: Theme.panel-width;
+    private property <bool> panel-inline: root.panel-wanted && root.wide-enough-for-panel;
+    // Computed from known widths, not measured, so the column cannot feed back
+    // into the layout that positions it.
+    private property <length> main-width: root.width
+        - (root.show-sidebar ? root.live-sidebar-width + 7px : 0px)
+        - (root.panel-inline ? root.live-panel-width + 7px : 0px);
+    private property <length> column: max(240px, min(root.main-width - (root.narrow ? 24px : 56px), Theme.chat-width));
+
+    background: Theme.canvas;
+
+    private property <bool> overlay-open: App.approval_open || App.settings_open || App.provider_menu_open
+        || App.drawer_open;
+    changed overlay-open => {
+        if root.overlay-open {
+            // The approval prompt takes focus itself, on its safe choice.
+            if !App.approval_open {
+                keyboard.focus();
+            }
+        } else {
+            // The control that had focus may be gone, so the shell takes it first.
+            keyboard.focus();
+            root.focus-composer();
+        }
+    }
+
+    // A decision can come and go while Settings stays open, which the handler above
+    // does not see. The prompt's focused button is gone by then, so focus returns here.
+    private property <bool> deciding: App.approval_open;
+    changed deciding => {
+        if !root.deciding {
+            keyboard.focus();
+        }
+    }
+
+    public function focus-composer() {
+        App.composer_focus_tick += 1;
+    }
+
+    function toggle-sidebar() {
+        if root.narrow { App.drawer_open = !App.drawer_open; } else { App.sidebar_open = !App.sidebar_open; }
+    }
+    function toggle-panel() {
+        App.set_panel_visible(App.inspector_collapsed);
+    }
+
+    keyboard := FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape {
+                if App.approval_open { return accept; }
+                if App.settings_open { App.settings_open = false; return accept; }
+                if App.command_palette_open { App.command_palette_open = false; return accept; }
+                if App.provider_menu_open { App.provider_menu_open = false; return accept; }
+                if App.drawer_open { App.drawer_open = false; return accept; }
+                return reject;
+            }
+            if event.modifiers.control && !App.approval_open && !App.first_run_open {
+                if event.text == "k" && Mods.palette {
+                    App.command_palette_open = !App.command_palette_open;
+                    App.palette_query("");
+                    return accept;
+                }
+                if event.text == "b" && Mods.sessions { root.toggle-sidebar(); return accept; }
+                if event.text == "j" && Mods.any-panel { root.toggle-panel(); return accept; }
+                if event.text == "n" { App.new_session(); return accept; }
+                if event.text == "," { App.open_settings(); return accept; }
+            }
+            reject
+        }
+
+        // Nothing behind first run is reachable by keyboard or screen reader.
+        if !App.first_run_open: HorizontalLayout {
+            VerticalLayout {
+                horizontal-stretch: 1;
+                HorizontalLayout {
+                    vertical-stretch: 1;
+                    if root.show-sidebar: Sidebar {
+                        width: root.live-sidebar-width;
+                        close => { root.toggle-sidebar(); }
+                    }
+                    if root.show-sidebar: ResizeHandle {
+                        label: "Resize sidebar";
+                        dragged(d) => {
+                            root.live-sidebar-width = clamp(root.live-sidebar-width + d, 200px, 420px);
+                        }
+                        released => { App.persist_layout(root.live-sidebar-width, root.live-panel-width); }
+                    }
+                    if root.panel-wanted && root.wide-enough-for-panel && Theme.panel-left: SidePanel {
+                        width: root.live-panel-width;
+                        close => { App.set_panel_visible(false); }
+                    }
+                    if root.panel-wanted && root.wide-enough-for-panel && Theme.panel-left: ResizeHandle {
+                        label: "Resize panel";
+                        dragged(d) => { root.live-panel-width = clamp(root.live-panel-width + d, 320px, 860px); }
+                        released => { App.persist_layout(root.live-sidebar-width, root.live-panel-width); }
+                    }
+
+                    // Conversation column.
+                    main := Rectangle {
+                        horizontal-stretch: 1;
+                        VerticalLayout {
+                            header := Rectangle {
+                                height: Theme.header;
+                                HorizontalLayout {
+                                    padding-left: Theme.sp10;
+                                    padding-right: Theme.sp10;
+                                    spacing: Theme.sp2;
+                                    if Mods.sessions && (root.narrow || !App.sidebar_open): IconBtn {
+                                        y: (parent.height - self.height) / 2;
+                                        icon: root.narrow ? "menu" : "panel";
+                                        tip: "Show sidebar";
+                                        clicked => { root.toggle-sidebar(); }
+                                    }
+                                    if !Mods.sessions: BrandMark { size: 22px; y: (parent.height - self.height) / 2; }
+                                    Rectangle { width: 8px; }
+                                    Label {
+                                        text: root.empty ? "" : App.session_title;
+                                        tone: "secondary";
+                                        size: "sm";
+                                        horizontal-stretch: 1;
+                                    }
+                                    if !Mods.sessions: IconBtn {
+                                        y: (parent.height - self.height) / 2;
+                                        icon: "new-task";
+                                        tip: "New chat";
+                                        clicked => { App.new_session(); }
+                                    }
+                                    if Mods.palette: IconBtn {
+                                        y: (parent.height - self.height) / 2;
+                                        icon: "search";
+                                        tip: "Commands (Ctrl+K)";
+                                        clicked => { App.command_palette_open = true; App.palette_query(""); }
+                                    }
+                                    if Mods.any-panel: IconBtn {
+                                        y: (parent.height - self.height) / 2;
+                                        icon: "panel";
+                                        tip: App.inspector_collapsed ? "Show panel (Ctrl+J)" : "Hide panel (Ctrl+J)";
+                                        active: !App.inspector_collapsed;
+                                        clicked => { root.toggle-panel(); }
+                                    }
+                                    IconBtn {
+                                        y: (parent.height - self.height) / 2;
+                                        icon: "settings";
+                                        tip: "Settings (Ctrl+,)";
+                                        clicked => { App.open_settings(); }
+                                    }
+                                }
+                            }
+                            if root.empty: EmptyHero {
+                                vertical-stretch: 1;
+                                column: root.column;
+                                narrow: root.narrow;
+                                compact: root.height < Theme.hero-compact-below;
+                                open-providers => { App.provider_menu_open = !App.provider_menu_open; }
+                            }
+                            if !root.empty: Conversation {
+                                vertical-stretch: 1;
+                                column: root.column;
+                            }
+                            if Mods.goal && !root.empty: HorizontalLayout {
+                                alignment: center;
+                                padding-bottom: Theme.sp8;
+                                GoalCard { width: root.column; }
+                            }
+                            if !root.empty: HorizontalLayout {
+                                alignment: center;
+                                padding-bottom: root.narrow ? Theme.sp10 : Theme.sp16;
+                                docked := Composer {
+                                    width: root.column;
+                                    narrow: root.narrow;
+                                    open-providers => { App.provider_menu_open = !App.provider_menu_open; }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.panel-wanted && root.wide-enough-for-panel && !Theme.panel-left: ResizeHandle {
+                        label: "Resize panel";
+                        dragged(d) => { root.live-panel-width = clamp(root.live-panel-width - d, 320px, 860px); }
+                        released => { App.persist_layout(root.live-sidebar-width, root.live-panel-width); }
+                    }
+                    if root.panel-wanted && root.wide-enough-for-panel && !Theme.panel-left: SidePanel {
+                        width: root.live-panel-width;
+                        close => { App.set_panel_visible(false); }
+                    }
+                }
+                if Mods.status-bar && !root.narrow: StatusBar { }
+            }
+        }
+
+        // Below the panel breakpoint the panel covers the conversation instead.
+        if root.panel-wanted && !root.wide-enough-for-panel: Rectangle {
+            background: Theme.scrim;
+            TouchArea { clicked => { App.set_panel_visible(false); } }
+            SidePanel {
+                x: root.narrow ? 0px : parent.width - self.width;
+                width: root.narrow ? parent.width : min(parent.width - 60px, 520px);
+                height: parent.height;
+                close => { App.set_panel_visible(false); }
+            }
+        }
+
+        if App.drawer_open && root.narrow && Mods.sessions: Rectangle {
+            background: Theme.scrim;
+            TouchArea { clicked => { App.drawer_open = false; } }
+            Sidebar {
+                x: 0;
+                overlay: true;
+                width: min(parent.width - 56px, 320px);
+                height: parent.height;
+                close => { App.drawer_open = false; }
+            }
+        }
+
+        if App.provider_menu_open: Rectangle {
+            TouchArea { clicked => { App.provider_menu_open = false; } }
+            ProviderMenu {
+                max-w: root.width - 24px;
+                x: root.empty
+                    ? (parent.width - min(root.width, Theme.chat-width)) / 2 + 12px
+                    : clamp(root.show-sidebar ? root.live-sidebar-width + 24px : 12px, 12px, parent.width - self.width - 12px);
+                y: root.empty
+                    ? max(12px, parent.height / 2 - self.height + 40px)
+                    : parent.height - self.height - (root.narrow ? 70px : 100px);
+                close => { App.provider_menu_open = false; }
+            }
+        }
+
+        if App.command_palette_open && Mods.palette: Rectangle {
+            background: Theme.scrim;
+            TouchArea { clicked => { App.command_palette_open = false; } }
+            palette := Palette {
+                x: (parent.width - self.width) / 2;
+                y: root.narrow ? 12px : 90px;
+                width: min(parent.width - 24px, 580px);
+                height: min(parent.height - 120px, 400px);
+                close => { App.command_palette_open = false; }
+                init => { self.focus-query(); }
+            }
+        }
+
+        if App.settings_open: Settings {
+            narrow: root.narrow;
+            close => { App.settings_open = false; }
+        }
+
+        if App.session_actions_open: Rectangle {
+            TouchArea { clicked => { App.session_actions_open = false; } }
+            SessionActionsSheet {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(parent.width - 24px, 380px);
+            }
+        }
+
+        if App.verification_review_open: Rectangle {
+            TouchArea { }
+            VerificationReviewSheet {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(parent.width - 24px, 460px);
+            }
+        }
+
+        if App.first_run_open: FirstRun { }
+
+        if App.toast_text != "": Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 24px;
+            width: min(toast.preferred-width, parent.width - 24px);
+            height: 38px;
+            border-radius: Theme.r-lg;
+            background: Theme.overlay;
+            border-width: Theme.hair;
+            border-color: Theme.border-strong;
+            drop-shadow-color: Theme.shadow;
+            drop-shadow-blur: 16px;
+            accessible-role: text;
+            accessible-label: App.toast_text;
+            toast := HorizontalLayout {
+                padding-left: Theme.sp16;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp10;
+                Label { text: App.toast_text; size: "sm"; }
+                if App.toast_undo_token != "": Btn { y: (parent.height - self.height) / 2; label: "Undo"; small: true; kind: "ghost"; clicked => { App.toast_undo(); } }
+                IconBtn { y: (parent.height - self.height) / 2; icon: "close"; tip: "Dismiss"; size: 26px; glyph: 13px; clicked => { App.toast_text = ""; App.toast_undo_token = ""; } }
+            }
+        }
+
+        // Always last: nothing may paint over a permission decision.
+        if App.approval_open: ApprovalPrompt { narrow: root.narrow; }
+    }
+
+}

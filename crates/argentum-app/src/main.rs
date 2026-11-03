@@ -9,6 +9,7 @@ use argentum_ui::display_workspace_label;
 use slint::ComponentHandle;
 
 mod legacy_compat;
+mod workbench_host;
 
 fn main() {
     if let Err(error_value) = run() {
@@ -22,7 +23,9 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(windows)]
     if env::var_os("SLINT_BACKEND").is_none() {
-        env::set_var("SLINT_BACKEND", "femtovg");
+        // The GPU renderer paints a blank window on some drivers. This interface is
+        // light enough to draw in software, and a blank first run would be fatal.
+        env::set_var("SLINT_BACKEND", "winit-software");
     }
 
     let compatibility = legacy_compat::discover();
@@ -58,6 +61,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let preview_size = env::var_os("ARGENTUM_UI_SIZE")
         .and_then(|value| value.into_string().ok())
         .and_then(|value| parse_window_size(&value));
+    let host_runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()?;
+    let runtime_handle = host_runtime.handle().clone();
     let seed_profiles = should_seed_minimax
         .then(legacy_minimax_profile)
         .into_iter()
@@ -73,12 +81,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(size) = preview_size {
                 ui.window().window().set_size(size);
             }
+            workbench_host::connect(ui, &app_paths, &runtime_handle);
         },
     )?;
     Ok(())
 }
 
 fn safe_startup_error(error_value: &(dyn std::error::Error + 'static)) -> String {
+    if matches!(
+        error_value.downcast_ref::<NativeHostError>(),
+        Some(NativeHostError::RecoveryRequired)
+    ) {
+        return "Argentum did not close cleanly last time, or another copy is still running, so it will not take over this data on its own. Close any other copy, then run 'argentum recovery inspect' for this database and follow the command it gives.".into();
+    }
     if error_value.downcast_ref::<NativeHostError>().is_some() {
         return "Argentum could not complete native startup. Check the workspace and provider settings, then try again.".into();
     }

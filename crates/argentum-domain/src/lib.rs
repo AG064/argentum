@@ -1,3 +1,7 @@
+mod ui;
+
+pub use ui::*;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -453,6 +457,10 @@ pub enum ToolInput {
     DesktopScreenshot {
         window: Box<desktop::DesktopWindowIdentity>,
     },
+    InspectUi,
+    UpdateUi {
+        patch: Box<UiPatch>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -552,6 +560,15 @@ pub enum SurfaceId {
     Activity,
     Trajectory,
     Approvals,
+    Sessions,
+    GitDiff,
+    Browser,
+    Usage,
+    ContextMeter,
+    Reasoning,
+    Goal,
+    StatusBar,
+    CommandPalette,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -789,6 +806,55 @@ pub enum ModuleAction {
 }
 
 impl SurfaceId {
+    pub const ALL: [SurfaceId; 18] = [
+        Self::Conversation,
+        Self::Plan,
+        Self::Changes,
+        Self::Files,
+        Self::Terminal,
+        Self::Preview,
+        Self::Activity,
+        Self::Trajectory,
+        Self::Approvals,
+        Self::Sessions,
+        Self::GitDiff,
+        Self::Browser,
+        Self::Usage,
+        Self::ContextMeter,
+        Self::Reasoning,
+        Self::Goal,
+        Self::StatusBar,
+        Self::CommandPalette,
+    ];
+
+    /// Stable identifier used by the shell, the CLI, and the agent's UI tools.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Conversation => "conversation",
+            Self::Plan => "plan",
+            Self::Changes => "changes",
+            Self::Files => "files",
+            Self::Terminal => "terminal",
+            Self::Preview => "preview",
+            Self::Activity => "activity",
+            Self::Trajectory => "trajectory",
+            Self::Approvals => "approvals",
+            Self::Sessions => "sessions",
+            Self::GitDiff => "git",
+            Self::Browser => "browser",
+            Self::Usage => "usage",
+            Self::ContextMeter => "context-meter",
+            Self::Reasoning => "reasoning",
+            Self::Goal => "goal",
+            Self::StatusBar => "status-bar",
+            Self::CommandPalette => "command-palette",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|surface| surface.id() == id)
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Conversation => "Conversation",
@@ -800,11 +866,29 @@ impl SurfaceId {
             Self::Activity => "Activity",
             Self::Trajectory => "Trajectory",
             Self::Approvals => "Approvals",
+            Self::Sessions => "Sessions",
+            Self::GitDiff => "Git diff",
+            Self::Browser => "Browser",
+            Self::Usage => "Usage",
+            Self::ContextMeter => "Context meter",
+            Self::Reasoning => "Reasoning",
+            Self::Goal => "Goal",
+            Self::StatusBar => "Status bar",
+            Self::CommandPalette => "Command palette",
         }
     }
 
     pub const fn is_inspector(self) -> bool {
-        matches!(self, Self::Changes | Self::Activity | Self::Trajectory)
+        matches!(
+            self,
+            Self::Changes
+                | Self::GitDiff
+                | Self::Browser
+                | Self::Usage
+                | Self::Plan
+                | Self::Activity
+                | Self::Trajectory
+        )
     }
 }
 
@@ -816,7 +900,6 @@ pub enum Density {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LayoutProfile {
-    #[serde(default = "default_harness_profile_id")]
     pub harness_profile_id: String,
     pub density: Density,
     pub visible: BTreeMap<SurfaceId, bool>,
@@ -828,7 +911,7 @@ pub struct LayoutProfile {
 
 #[derive(Deserialize)]
 struct LayoutProfileWire {
-    #[serde(default = "default_harness_profile_id")]
+    #[serde(default = "legacy_harness_profile_id")]
     harness_profile_id: String,
     density: Density,
     visible: BTreeMap<SurfaceId, bool>,
@@ -864,10 +947,24 @@ impl<'de> Deserialize<'de> for LayoutProfile {
             .inspector_collapsed
             .unwrap_or_else(|| active_inspector.is_none());
 
+        // These were permanent parts of the shell before they became modules, so a
+        // layout saved back then keeps them.
+        let mut visible = wire.visible;
+        if !visible.contains_key(&SurfaceId::Sessions) {
+            for surface in [
+                SurfaceId::Sessions,
+                SurfaceId::ContextMeter,
+                SurfaceId::Reasoning,
+                SurfaceId::CommandPalette,
+            ] {
+                visible.insert(surface, true);
+            }
+        }
+
         Ok(Self {
             harness_profile_id: wire.harness_profile_id,
             density: wire.density,
-            visible: wire.visible,
+            visible,
             widths: wire.widths,
             inspector_collapsed,
             active_inspector,
@@ -875,6 +972,21 @@ impl<'de> Deserialize<'de> for LayoutProfile {
     }
 }
 
+/// The order inspector surfaces appear in the side panel.
+pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 8] = [
+    SurfaceId::Changes,
+    SurfaceId::GitDiff,
+    SurfaceId::Browser,
+    SurfaceId::Usage,
+    SurfaceId::Plan,
+    SurfaceId::Activity,
+    SurfaceId::Trajectory,
+    SurfaceId::Goal,
+];
+
+/// Migration of layouts saved before the active surface was recorded. Only the
+/// surfaces that were inspectors then take part, so `Plan`, which every old layout
+/// had on, does not open by itself.
 fn first_visible_inspector(visible: &BTreeMap<SurfaceId, bool>) -> Option<SurfaceId> {
     [
         SurfaceId::Changes,
@@ -887,16 +999,13 @@ fn first_visible_inspector(visible: &BTreeMap<SurfaceId, bool>) -> Option<Surfac
 
 impl Default for LayoutProfile {
     fn default() -> Self {
-        let mut visible = BTreeMap::new();
+        // Every surface is written out. A saved layout with no `Sessions` entry is
+        // how the deserializer recognizes one from before modules existed.
+        let mut visible = SurfaceId::ALL
+            .into_iter()
+            .map(|surface| (surface, false))
+            .collect::<BTreeMap<_, _>>();
         visible.insert(SurfaceId::Conversation, true);
-        visible.insert(SurfaceId::Plan, true);
-        visible.insert(SurfaceId::Changes, false);
-        visible.insert(SurfaceId::Files, false);
-        visible.insert(SurfaceId::Terminal, false);
-        visible.insert(SurfaceId::Preview, false);
-        visible.insert(SurfaceId::Activity, false);
-        visible.insert(SurfaceId::Trajectory, false);
-        visible.insert(SurfaceId::Approvals, false);
 
         let mut widths = BTreeMap::new();
         widths.insert(SurfaceId::Plan, 320);
@@ -919,8 +1028,14 @@ impl Default for LayoutProfile {
     }
 }
 
-fn default_harness_profile_id() -> String {
+/// A layout saved before profiles were recorded.
+fn legacy_harness_profile_id() -> String {
     "standard".to_owned()
+}
+
+/// New projects start with the conversation and provider chooser only.
+fn default_harness_profile_id() -> String {
+    "focused".to_owned()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2449,6 +2564,18 @@ pub enum AppCommand {
     ToggleSurface {
         surface: SurfaceId,
     },
+    LoadUiPreferences,
+    UpdateUiPreferences {
+        patch: Box<UiPatch>,
+    },
+    LoadProviderUsage,
+    RefreshGitStatus,
+    LoadGitFileDiff {
+        path: String,
+    },
+    BrowserNavigate {
+        url: String,
+    },
     SetLayout {
         profile: LayoutProfile,
     },
@@ -2728,6 +2855,18 @@ pub enum AppEvent {
     TrajectorySnapshotLoaded(TrajectorySnapshot),
     HarnessSnapshotLoaded(HarnessSnapshot),
     LayoutChanged(LayoutProfile),
+    UiPreferencesLoaded {
+        preferences: Box<UiPreferences>,
+        source: UiChangeSource,
+        summary: String,
+        undo: Option<Box<UiPatch>>,
+    },
+    ProviderUsageLoaded {
+        rows: Vec<ProviderUsageRow>,
+    },
+    GitStatusLoaded(GitStatusSnapshot),
+    GitDiffLoaded(GitDiffSnapshot),
+    BrowserPageLoaded(BrowserPage),
     Error {
         message: String,
         recoverable: bool,
@@ -2778,6 +2917,11 @@ impl AppEvent {
             Self::RunStatusChanged { .. } => "run_status_changed",
             Self::AssistantDelta { .. } => "assistant_delta",
             Self::AssistantReasoningDelta { .. } => "assistant_reasoning_delta",
+            Self::UiPreferencesLoaded { .. } => "ui_preferences_loaded",
+            Self::ProviderUsageLoaded { .. } => "provider_usage_loaded",
+            Self::GitStatusLoaded(_) => "git_status_loaded",
+            Self::GitDiffLoaded(_) => "git_diff_loaded",
+            Self::BrowserPageLoaded(_) => "browser_page_loaded",
             Self::ModelUsageUpdated { .. } => "model_usage_updated",
             Self::ToolStarted(_) => "tool_started",
             Self::ToolFinished(_) => "tool_finished",
@@ -3138,6 +3282,39 @@ mod tests {
     }
 
     #[test]
+    fn legacy_layouts_keep_what_used_to_be_permanent() {
+        let layout: LayoutProfile = serde_json::from_value(serde_json::json!({
+            "density": "Comfortable",
+            "visible": { "Conversation": true },
+            "widths": {}
+        }))
+        .expect("legacy layout");
+        for surface in [
+            SurfaceId::Sessions,
+            SurfaceId::ContextMeter,
+            SurfaceId::Reasoning,
+            SurfaceId::CommandPalette,
+        ] {
+            assert_eq!(layout.visible.get(&surface), Some(&true), "{surface:?}");
+        }
+        // A new project starts with none of them, and saving does not change that.
+        let fresh = LayoutProfile::default();
+        assert_eq!(fresh.harness_profile_id, "focused");
+        assert_ne!(fresh.visible.get(&SurfaceId::Sessions), Some(&true));
+        let saved = serde_json::to_string(&fresh).expect("save");
+        let reloaded: LayoutProfile = serde_json::from_str(&saved).expect("reload");
+        assert_eq!(reloaded, fresh);
+    }
+
+    #[test]
+    fn surface_ids_round_trip() {
+        for surface in SurfaceId::ALL {
+            assert_eq!(SurfaceId::from_id(surface.id()), Some(surface));
+        }
+        assert_eq!(SurfaceId::from_id("approval-bypass"), None);
+    }
+
+    #[test]
     fn legacy_layouts_migrate_the_first_visible_inspector_surface() {
         let layout: LayoutProfile = serde_json::from_value(serde_json::json!({
             "density": "Comfortable",
@@ -3169,7 +3346,7 @@ mod tests {
             },
             "widths": {},
             "inspector_collapsed": false,
-            "active_inspector": "Plan"
+            "active_inspector": "Conversation"
         }));
 
         assert!(layout.is_err());

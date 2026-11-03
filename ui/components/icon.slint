@@ -4,93 +4,314 @@ export component AgIcon inherits Rectangle {
     in property <string> name;
     in property <color> tint: AgTheme.silver-400;
     in property <length> size: 18px;
-    private property <bool> valid-svg-name: root.name == "new-task"
-        || root.name == "sessions"
-        || root.name == "plan"
-        || root.name == "trajectory"
-        || root.name == "changes"
-        || root.name == "inspector"
-        || root.name == "provider"
-        || root.name == "approval"
-        || root.name == "run"
-        || root.name == "settings"
-        || root.name == "plus"
-        || root.name == "search"
-        || root.name == "menu"
-        || root.name == "close"
-        || root.name == "more"
-        || root.name == "activity"
-        || root.name == "workspace"
-        || root.name == "folder"
-        || root.name == "file"
-        || root.name == "check"
-        || root.name == "play"
-        || root.name == "stop"
-        || root.name == "chevron-right"
-        || root.name == "chevron-down"
-        || root.name == "lock"
-        || root.name == "sliders"
-        || root.name == "command"
-        || root.name == "paperclip"
-        || root.name == "panel"
-        || root.name == "terminal"
-        || root.name == "session"
-        || root.name == "model"
-        || root.name == "review"
-        || root.name == "diff"
-        || root.name == "verify"
-        || root.name == "motion"
-        || root.name == "timeline"
-        || root.name == "alert";
 
     width: root.size;
     height: root.size;
     background: transparent;
 
-    if root.valid-svg-name: Image {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        source: root.name == "new-task" ? @image-url("../assets/icons/lucide/square-pen.svg")
-            : (root.name == "sessions" ? @image-url("../assets/icons/lucide/message-square.svg")
-            : (root.name == "plan" ? @image-url("../assets/icons/lucide/list-checks.svg")
-            : (root.name == "trajectory" ? @image-url("../assets/icons/lucide/git-branch.svg")
-            : (root.name == "changes" ? @image-url("../assets/icons/lucide/file-diff.svg")
-            : (root.name == "inspector" ? @image-url("../assets/icons/lucide/panel-right.svg")
-            : (root.name == "provider" ? @image-url("../assets/icons/lucide/server.svg")
-            : (root.name == "approval" ? @image-url("../assets/icons/lucide/shield-check.svg")
-            : (root.name == "run" ? @image-url("../assets/icons/lucide/play.svg")
-            : (root.name == "settings" ? @image-url("../assets/icons/lucide/sliders-horizontal.svg")
-            : (root.name == "plus" ? @image-url("../assets/icons/plus.svg")
-            : (root.name == "search" ? @image-url("../assets/icons/lucide/search.svg")
-            : (root.name == "menu" ? @image-url("../assets/icons/menu.svg")
-            : (root.name == "close" ? @image-url("../assets/icons/close.svg")
-            : (root.name == "more" ? @image-url("../assets/icons/lucide/ellipsis.svg")
-            : (root.name == "activity" ? @image-url("../assets/icons/lucide/activity.svg")
-            : (root.name == "workspace" ? @image-url("../assets/icons/lucide/folder.svg")
-            : (root.name == "folder" ? @image-url("../assets/icons/folder.svg")
-            : (root.name == "file" ? @image-url("../assets/icons/file.svg")
-            : (root.name == "check" ? @image-url("../assets/icons/check.svg")
-            : (root.name == "play" ? @image-url("../assets/icons/play.svg")
-            : (root.name == "stop" ? @image-url("../assets/icons/lucide/square.svg")
-            : (root.name == "chevron-right" ? @image-url("../assets/icons/chevron-right.svg")
-            : (root.name == "chevron-down" ? @image-url("../assets/icons/chevron-down.svg")
-            : (root.name == "lock" ? @image-url("../assets/icons/lock.svg")
-            : (root.name == "sliders" ? @image-url("../assets/icons/sliders.svg")
-            : (root.name == "command" ? @image-url("../assets/icons/command.svg")
-            : (root.name == "paperclip" ? @image-url("../assets/icons/paperclip.svg")
-            : (root.name == "panel" ? @image-url("../assets/icons/panel.svg")
-            : (root.name == "terminal" ? @image-url("../assets/icons/terminal.svg")
-            : (root.name == "session" ? @image-url("../assets/icons/session.svg")
-            : (root.name == "model" ? @image-url("../assets/icons/lucide/cpu.svg")
-            : (root.name == "review" ? @image-url("../assets/icons/review.svg")
-            : (root.name == "diff" ? @image-url("../assets/icons/diff.svg")
-            : (root.name == "verify" ? @image-url("../assets/icons/verify.svg")
-            : (root.name == "motion" ? @image-url("../assets/icons/motion.svg")
-            : (root.name == "timeline" ? @image-url("../assets/icons/timeline.svg")
-            : @image-url("../assets/icons/alert.svg")))))))))))))))))))))))))))))))))))));
-        colorize: root.tint;
-        image-fit: contain;
+    if root.name == "new-task": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/square-pen.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "sessions" || root.name == "session": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/message-square.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "plan" || root.name == "review": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/list-checks.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "trajectory" || root.name == "timeline": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/git-branch.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "changes" || root.name == "diff": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/file-diff.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "inspector" || root.name == "panel": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/panel-right.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "provider": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/server.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "approval" || root.name == "verify": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/shield-check.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "run": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/play.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "settings" || root.name == "sliders": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/sliders-horizontal.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "plus": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/plus.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "search": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/search.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "menu": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/menu.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "close": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/x.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "more": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/ellipsis.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "activity" || root.name == "motion": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/activity.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "workspace" || root.name == "folder-kanban": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/folder-kanban.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "folder": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/folder.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "file": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/file.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "check": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/check.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "circle-check": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/circle-check.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "play": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/play.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "stop" || root.name == "circle-x": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/square.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "chevron-right": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/chevron-right.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "chevron-left": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/chevron-left.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "chevron-down": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/chevron-down.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "lock" || root.name == "key-round": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/lock.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "command": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/command.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "paperclip": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/paperclip.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "terminal": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/terminal.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "model": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/cpu.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "alert" || root.name == "triangle-alert": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/triangle-alert.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "boxes": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/boxes.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "database": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/database.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "workflow": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/workflow.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "wrench": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/wrench.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "user-round": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/user-round.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "hard-drive": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/hard-drive.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "info": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/info.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "scan-text": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/scan-text.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "radio": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/radio.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "plug": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/plug.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "loader": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/loader.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "layout-grid": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/layout-grid.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "map": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/map.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "zoom-in": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/zoom-in.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "zoom-out": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/zoom-out.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "maximize": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/maximize.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "minimize": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/minimize.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "log-out": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/log-out.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "globe": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/globe.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "refresh": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/refresh.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "arrow-up": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/arrow-up.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "code": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/code.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "sparkles": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/sparkles.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "edit-3": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/edit-3.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "copy": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/copy.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "message-circle": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/message-circle.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "thumbs-up": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/thumbs-up.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "thumbs-down": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/thumbs-down.svg");
+        colorize: root.tint; image-fit: contain;
+    }
+    if root.name == "chevron-up": Image {
+        x: 0px; y: 0px; width: parent.width; height: parent.height;
+        source: @image-url("../assets/icons/lucide/chevron-up.svg");
+        colorize: root.tint; image-fit: contain;
     }
 }

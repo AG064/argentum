@@ -10,6 +10,7 @@ third-party/licenses/* -text
 *.ps1 text eol=lf
 *.py text eol=lf
 *.slint text eol=lf
+*.svg text eol=lf
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf

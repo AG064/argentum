@@ -121,7 +121,7 @@ advertised as working. Help lists them once as reserved.
 
 ## Non-goals
 
-- No UI changes in this line. UI work is tracked in `docs/plans/UI-REWORK.md`.
+- UI work is tracked in `docs/plans/UI-REWORK.md`.
 - No hosted test claim from local checks alone.
 - No mutation hidden behind a read-only command.
 - No desktop input in automated tests.

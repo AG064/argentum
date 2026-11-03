@@ -22,6 +22,21 @@ x64 runtime (`VCRUNTIME140.dll`). These system/runtime components are not
 redistributed in the package. The recorded local host is Windows build 26100;
 this is not clean-machine or every-Windows-version qualification.
 
+## Desktop app
+
+`crates/argentum-app` hosts the Workbench, a native Slint shell. A new project starts
+with the conversation and a provider chooser. Everything else is an optional module:
+sessions, context meter, reasoning, goal supervision, agent changes, Git diff, a
+script-free page reader, per-provider usage, plan, activity, trajectory, status bar,
+and command palette. Settings also holds verification, tools and skills, optional
+browser and desktop capabilities, diagnostics, permissions, and updates. The agent can
+read this interface with `ui_inspect` and change it with `ui_update`, one approved
+change at a time. See [the module contract](docs/UI_MODULES.md).
+
+```powershell
+cargo run -p argentum-app
+```
+
 ## Build from a fresh checkout
 
 Install Rust 1.98.0 with rustfmt and Clippy, Git, and the Windows MSVC C++ build

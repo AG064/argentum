@@ -495,10 +495,11 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use argentum_cli::{CommandHost, CommandHostObserver, HostConfig, LocalCommandHandle};
+use argentum_cli::{CommandHost, CommandHostObserver, HostConfig, HostError, LocalCommandHandle};
 use argentum_domain::{AppCommand, AppEvent, ProviderProfile};
 use argentum_security::SecretValue;
-use argentum_ui::{connect_commands, connect_provider_credentials, UiHandle, WeakUiHandle};
+use argentum_ui::{connect_commands, connect_provider_credentials, App, UiHandle, WeakUiHandle};
+use slint::ComponentHandle;
 use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -526,6 +527,8 @@ pub trait NativeInferenceForeground: Send + Sync {
 pub enum NativeHostError {
     Runtime,
     Host,
+    /// The last session did not close cleanly, and takeover is never automatic.
+    RecoveryRequired,
     Ui,
     EventLoop,
     EventRelay,
@@ -549,6 +552,9 @@ impl fmt::Display for NativeHostError {
             Self::Runtime => formatter.write_str("Argentum could not start its native runtime."),
             Self::Host => {
                 formatter.write_str("Argentum could not prepare the native command host.")
+            }
+            Self::RecoveryRequired => {
+                formatter.write_str("Argentum did not close cleanly last time and needs recovery.")
             }
             Self::Ui | Self::EventLoop => {
                 formatter.write_str("Argentum could not run the native interface.")
@@ -579,7 +585,12 @@ where
         .map_err(|_| NativeHostError::Runtime)?;
     let mut host = runtime
         .block_on(CommandHost::start_composed(config))
-        .map_err(|_| NativeHostError::Host)?;
+        .map_err(|error_value| match error_value {
+            HostError::Store(argentum_store::StoreError::HostRecoveryRequired) => {
+                NativeHostError::RecoveryRequired
+            }
+            _ => NativeHostError::Host,
+        })?;
     let mut session = NativeHostSession::new(runtime.handle().clone());
     let inference_foreground = options.inference_foreground.clone();
 
@@ -664,6 +675,12 @@ where
         );
         host.lifecycle_observer()
             .publish_ui_state()
+            .map_err(|_| NativeHostError::Host)?;
+        runtime
+            .block_on(host.client().dispatch(AppCommand::LoadUiPreferences))
+            .map_err(|_| NativeHostError::Host)?;
+        runtime
+            .block_on(host.client().dispatch(AppCommand::ListProviderPresets))
             .map_err(|_| NativeHostError::Host)?;
 
         let show_result = ui.show().map_err(|_| NativeHostError::Ui);
@@ -827,73 +844,75 @@ fn connect_native_commands(
         let install_commands = commands.clone();
         let install_cancellation = commands.cancellation_token();
         let install_foreground = inference_foreground.clone();
-        ui.window().on_install_and_load_local_model(move || {
-            let control = install_control.clone();
-            let task_ui = install_ui.clone();
-            let cancellation = install_cancellation.child_token();
-            let foreground = install_foreground.clone();
-            let admitted = install_commands.spawn(async move {
-                let operation = match control.begin_operation().await {
-                    Ok(operation) => operation,
-                    Err(_) => {
+        ui.window()
+            .global::<App>()
+            .on_install_and_load_local_model(move || {
+                let control = install_control.clone();
+                let task_ui = install_ui.clone();
+                let cancellation = install_cancellation.child_token();
+                let foreground = install_foreground.clone();
+                let admitted = install_commands.spawn(async move {
+                    let operation = match control.begin_operation().await {
+                        Ok(operation) => operation,
+                        Err(_) => {
+                            let _ = deliver_ui_local_inference_state(
+                                task_ui,
+                                false,
+                                "Enable the local backend before loading a model.".into(),
+                            );
+                            return;
+                        }
+                    };
+                    let generation = operation.foreground_generation();
+                    if foreground
+                        .as_ref()
+                        .is_some_and(|service| !service.start_generation(generation))
+                    {
                         let _ = deliver_ui_local_inference_state(
                             task_ui,
                             false,
-                            "Enable the local backend before loading a model.".into(),
+                            "Android could not start the visible local-model service.".into(),
                         );
                         return;
                     }
-                };
-                let generation = operation.foreground_generation();
-                if foreground
-                    .as_ref()
-                    .is_some_and(|service| !service.start_generation(generation))
-                {
-                    let _ = deliver_ui_local_inference_state(
-                        task_ui,
-                        false,
-                        "Android could not start the visible local-model service.".into(),
-                    );
-                    return;
-                }
-                match operation.install_and_activate_default(cancellation).await {
-                    Ok(report) => {
-                        let detail = format!(
-                            "Qwen3.5 0.8B Q4_0 loaded through {} ({:?}).",
-                            report.runtime(),
-                            report.kind()
-                        );
-                        let _ = deliver_ui_local_inference_state(task_ui, true, detail);
-                    }
-                    Err(_) => {
-                        if control.active_model().await.is_none() {
-                            if let Some(service) = foreground {
-                                let _ = service.stop_generation(generation);
-                            }
+                    match operation.install_and_activate_default(cancellation).await {
+                        Ok(report) => {
+                            let detail = format!(
+                                "Qwen3.5 0.8B Q4_0 loaded through {} ({:?}).",
+                                report.runtime(),
+                                report.kind()
+                            );
+                            let _ = deliver_ui_local_inference_state(task_ui, true, detail);
                         }
-                        let _ = deliver_ui_local_inference_state(
-                            task_ui,
-                            false,
-                            "The on-device model could not be downloaded, verified, or loaded."
-                                .into(),
-                        );
+                        Err(_) => {
+                            if control.active_model().await.is_none() {
+                                if let Some(service) = foreground {
+                                    let _ = service.stop_generation(generation);
+                                }
+                            }
+                            let _ = deliver_ui_local_inference_state(
+                                task_ui,
+                                false,
+                                "The on-device model could not be downloaded, verified, or loaded."
+                                    .into(),
+                            );
+                        }
                     }
+                });
+                if !admitted {
+                    let _ = deliver_ui_local_inference_state(
+                        install_ui.clone(),
+                        false,
+                        "The on-device model request was rejected during shutdown.".into(),
+                    );
                 }
             });
-            if !admitted {
-                let _ = deliver_ui_local_inference_state(
-                    install_ui.clone(),
-                    false,
-                    "The on-device model request was rejected during shutdown.".into(),
-                );
-            }
-        });
 
         let unload_control = inference;
         let unload_ui = ui.weak_handle();
         let unload_commands = commands.clone();
         let unload_foreground = inference_foreground;
-        ui.window().on_unload_local_model(move || {
+        ui.window().global::<App>().on_unload_local_model(move || {
             let control = unload_control.clone();
             let task_ui = unload_ui.clone();
             let foreground = unload_foreground.clone();

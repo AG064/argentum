@@ -159,6 +159,14 @@ jobs:
         run: cargo fetch --locked
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Design system, icon, and layout rules
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow==12.2.0
+          if ($LASTEXITCODE -ne 0) { throw 'Pillow install failed' }
+          ./scripts/validate-design-system.ps1
+          ./scripts/validate-icon-system.ps1
+          ./scripts/validate-mobile-design.ps1
       - name: Check native workspace
         run: cargo check --workspace --all-targets --locked --offline -j 1
       - name: Credential-free tests

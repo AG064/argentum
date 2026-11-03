@@ -795,6 +795,12 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::SetSurfaceVisibility { .. }
         | AppCommand::SetInspectorSurface { .. }
         | AppCommand::LoadTrajectory { .. }
+        | AppCommand::LoadUiPreferences
+        | AppCommand::UpdateUiPreferences { .. }
+        | AppCommand::LoadProviderUsage
+        | AppCommand::RefreshGitStatus
+        | AppCommand::LoadGitFileDiff { .. }
+        | AppCommand::BrowserNavigate { .. }
         | AppCommand::LoadChangeSet { .. }
         | AppCommand::LoadUnifiedDiff { .. }
         | AppCommand::RequestRestore { .. }

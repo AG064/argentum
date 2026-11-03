@@ -1,0 +1,413 @@
+// Core: the conversation and the composer. Optional modules appear here only
+// through their Mods flags.
+import { Theme } from "theme.slint";
+import { App, Mods } from "state.slint";
+import { Btn, CopyBtn, Chip, Focus, Icon, IconBtn, Label, LiveDot, Ring, Scroller, Spinner, Tooltip } from "kit.slint";
+import { BrandMark } from "../components/brand.slint";
+import { RichBlocks } from "rich.slint";
+import { ConversationMessageView } from "../view-models.slint";
+
+component UserMessage inherits HorizontalLayout {
+    in property <string> text;
+    alignment: end;
+    Rectangle {
+        max-width: parent.width * 0.86;
+        horizontal-stretch: 0;
+        border-radius: Theme.r-lg;
+        background: Theme.user-bubbles ? Theme.raised : transparent;
+        border-width: Theme.user-bubbles ? 0px : Theme.hair;
+        border-color: Theme.border;
+        HorizontalLayout {
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            padding-top: Theme.sp9;
+            padding-bottom: Theme.sp9;
+            TextInput {
+                text: root.text;
+                read-only: true;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                font-size: Theme.fs-md;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+            }
+        }
+    }
+}
+
+component ReasoningDisclosure inherits VerticalLayout {
+    in property <string> text;
+    in property <bool> live: false;
+    private property <bool> open: false;
+    spacing: Theme.sp6;
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.sp2;
+        Rectangle {
+            height: 24px;
+            preferred-width: head.preferred-width;
+            border-radius: Theme.r-xs;
+            background: touch.has-hover ? Theme.hover : transparent;
+            accessible-role: button;
+            accessible-label: "Reasoning";
+            accessible-expanded: root.open;
+            accessible-action-default => { root.open = !root.open; }
+            head := HorizontalLayout {
+                padding-left: Theme.sp4;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp4;
+                Icon {
+                    name: root.open ? "chevron-down" : "chevron-right";
+                    size: 13px;
+                    tint: Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                }
+                Label {
+                    text: root.live ? "Reasoning" : "Reasoning";
+                    tone: "muted";
+                    size: "sm";
+                }
+            }
+            Focus {
+                radius: Theme.r-xs;
+                activated => { root.open = !root.open; }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.open = !root.open; }
+            }
+        }
+    }
+    if root.open: HorizontalLayout {
+        padding-left: Theme.sp12;
+        spacing: Theme.sp12;
+        Rectangle { width: 2px; background: Theme.border; }
+        TextInput {
+            horizontal-stretch: 1;
+            text: root.text;
+            read-only: true;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.text-2;
+            font-size: Theme.fs-sm;
+            selection-background-color: Theme.accent.with-alpha(0.4);
+            selection-foreground-color: Theme.text;
+        }
+    }
+}
+
+component AssistantMessage inherits Rectangle {
+    in property <ConversationMessageView> message;
+    private property <string> meta: (message.model != "" ? message.model : message.provider-label)
+        + (message.usage-reported ? "  ·  " + message.total-tokens + " tokens" : "");
+    VerticalLayout {
+        spacing: Theme.sp7;
+        if Mods.reasoning && message.reasoning-available: ReasoningDisclosure { text: message.reasoning; }
+        RichBlocks {
+            blocks: message.blocks;
+            link(url) => { App.open_link(url); }
+        }
+        if message.state == "Interrupted" || message.state == "Failed": Label {
+            text: message.state == "Failed" ? "This response failed before it finished." : "This response was interrupted.";
+            tone: "warn";
+            size: "sm";
+        }
+        HorizontalLayout {
+            height: 24px;
+            spacing: Theme.sp6;
+            alignment: start;
+            opacity: hover.has-hover ? 1 : 0;
+            animate opacity { duration: Theme.quick; }
+            CopyBtn { text: message.text; tip: "Copy response"; }
+            Label { text: root.meta; tone: "muted"; size: "xs"; }
+        }
+    }
+    hover := TouchArea { enabled: true; mouse-cursor: default; pointer-event(e) => { } }
+}
+
+component LiveTurn inherits VerticalLayout {
+    spacing: Theme.sp8;
+    if Mods.reasoning && App.current_reasoning_available: ReasoningDisclosure { text: App.current_reasoning; live: true; }
+    RichBlocks {
+        blocks: App.live_blocks;
+        link(url) => { App.open_link(url); }
+    }
+    if App.running: HorizontalLayout {
+        spacing: Theme.sp8;
+        alignment: start;
+        height: 22px;
+        LiveDot { y: (parent.height - self.height) / 2; }
+        Label { text: App.run_state; tone: "muted"; size: "sm"; }
+    }
+}
+
+export component Conversation inherits Rectangle {
+    in property <length> column;
+    private property <length> gutter: (root.width - root.column) / 2;
+    public function to-tail() { scroller.to-tail(); }
+
+    scroller := Scroller {
+        follow-tail: true;
+        content-height: col.preferred-height + 40px;
+        col := VerticalLayout {
+            height: self.preferred-height;
+            x: root.gutter;
+            y: 20px;
+            width: root.column;
+            spacing: Theme.sp22;
+            for message in App.conversation_messages: VerticalLayout {
+                if message.role == "user": UserMessage { text: message.text; }
+                if message.role != "user": AssistantMessage { message: message; }
+            }
+            if App.user_prompt != "": UserMessage { text: App.user_prompt; }
+            if App.running || App.submission_pending || App.live_blocks.length > 0: LiveTurn { }
+            if App.error_message != "": Rectangle {
+                border-radius: Theme.r-md;
+                background: Theme.diff-del-bg;
+                border-width: Theme.hair;
+                border-color: Theme.danger.with-alpha(0.35);
+                HorizontalLayout {
+                    padding: Theme.sp11;
+                    spacing: Theme.sp9;
+                    Icon { name: "triangle-alert"; size: Theme.icon-md; tint: Theme.danger; }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: App.error_message;
+                        color: Theme.text;
+                        font-size: Theme.fs-sm;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+    if !scroller.at-tail: Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 10px;
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        background: Theme.overlay;
+        border-width: Theme.hair;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 10px;
+        drop-shadow-color: Theme.shadow;
+        accessible-role: button;
+        accessible-label: "Scroll to latest";
+        accessible-action-default => { scroller.to-tail(); }
+        Icon { name: "chevron-down"; size: Theme.icon-md; tint: Theme.text-2; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+        Focus {
+            radius: 15px;
+            activated => { scroller.to-tail(); }
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { scroller.to-tail(); } }
+    }
+}
+
+export component Composer inherits Rectangle {
+    callback open-providers();
+    public function focus-input() { input.focus(); }
+    in property <bool> narrow: false;
+    private property <int> focus-tick: App.composer_focus_tick;
+    changed focus-tick => { input.focus(); }
+    init => { input.focus(); }
+
+    private property <bool> can-send: input.text != "" && !App.submission_pending
+        && !App.approval_open && !App.first_run_open;
+    private property <float> context-fraction: App.usage_reported && App.context_window_reported && App.context_window_tokens > 0
+        ? App.usage_total_tokens / App.context_window_tokens : -1;
+    private property <length> text-height: min(max(input.preferred-height, 22px), 220px);
+
+    function send() {
+        if root.can-send && !App.running {
+            App.submit_task(input.text);
+            input.text = "";
+        }
+    }
+
+    function send-or-stop() {
+        if App.running {
+            App.cancel_run(App.active_run_id);
+        } else {
+            root.send();
+        }
+    }
+
+    height: lay.preferred-height;
+    border-radius: Theme.r-xl;
+    background: Theme.surface;
+    border-width: Theme.hair;
+    border-color: input.has-focus ? Theme.border-strong : Theme.border;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-blur: 22px;
+    drop-shadow-offset-y: 6px;
+    animate border-color { duration: Theme.quick; }
+
+    TouchArea { mouse-cursor: text; clicked => { input.focus(); } }
+
+    lay := VerticalLayout {
+        padding-left: Theme.sp16;
+        padding-right: Theme.sp8;
+        padding-top: Theme.sp13;
+        padding-bottom: Theme.sp8;
+        spacing: Theme.sp8;
+        Rectangle {
+            height: root.text-height;
+            clip: true;
+            if input.text == "": Text {
+                x: 0;
+                y: 0;
+                text: App.running ? "Add a follow-up when this run finishes" : "Ask Argentum anything about this workspace";
+                color: Theme.text-3;
+                font-size: Theme.fs-md;
+                overflow: elide;
+                width: parent.width;
+            }
+            input := TextInput {
+                x: 0;
+                y: min(0px, root.text-height - self.preferred-height);
+                width: parent.width - 8px;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                font-size: Theme.fs-md;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+                accessible-label: "Message Argentum";
+                accessible-placeholder-text: "Ask Argentum anything about this workspace";
+                key-pressed(event) => {
+                    if event.text == Key.Return && !event.modifiers.shift && !event.modifiers.control {
+                        root.send();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.sp2;
+            height: Theme.control;
+            Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "provider";
+                label: App.provider_model != "" ? App.provider_model : "Choose a model";
+                trailing-chevron: true;
+                active: App.provider_menu_open;
+                max-label: root.narrow ? 110px : 240px;
+                clicked => { root.open-providers(); }
+            }
+            if !root.narrow: Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "approval";
+                label: App.execution_profile_label;
+                trailing-chevron: false;
+                max-label: 170px;
+                clicked => { App.settings_section = "permissions"; App.open_settings(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if Mods.context-meter: Rectangle {
+                width: root.context-fraction >= 0 && !root.narrow ? Theme.control + 28px : Theme.control;
+                y: 0;
+                accessible-role: text;
+                accessible-label: ctx-tip.text;
+                ctx-touch := TouchArea { }
+                Ring {
+                    x: parent.width - self.width - 7px;
+                    y: (parent.height - self.height) / 2;
+                    fraction: root.context-fraction;
+                }
+                if root.context-fraction >= 0 && !root.narrow: Text {
+                    x: parent.width - self.width - 30px;
+                    y: (parent.height - self.height) / 2;
+                    text: round(root.context-fraction * 100) + "%";
+                    color: Theme.text-3;
+                    font-size: Theme.fs-xs;
+                }
+                if ctx-touch.has-hover: Tooltip {
+                    x: parent.width - self.width;
+                    y: -self.height - 6px;
+                    text: ctx-tip.text;
+                }
+                ctx-tip := Text {
+                    visible: false;
+                    width: 0;
+                    height: 0;
+                    text: !App.usage_reported ? "Latest turn: context use not reported"
+                        : !App.context_window_reported ? "Latest turn: " + App.usage_total_tokens + " tokens, context limit not reported"
+                        : "Latest turn: " + App.usage_total_tokens + " of " + App.context_window_tokens + " context tokens (" + round(root.context-fraction * 100) + "%)";
+                }
+            }
+            Rectangle {
+                width: Theme.control;
+                height: Theme.control;
+                y: 0;
+                border-radius: Theme.control / 2;
+                private property <bool> stop: App.running;
+                private property <bool> live: self.stop || root.can-send;
+                background: !self.live ? Theme.raised
+                    : send-touch.pressed ? Theme.accent
+                    : send-touch.has-hover ? Theme.accent-hover
+                    : Theme.accent;
+                animate background { duration: Theme.quick; }
+                accessible-role: button;
+                accessible-label: self.stop ? "Stop run" : "Send message";
+                accessible-enabled: self.live;
+                accessible-action-default => { root.send-or-stop(); }
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: parent.stop ? "stop" : "arrow-up";
+                    size: Theme.icon-md;
+                    tint: parent.live ? Theme.accent-text : Theme.text-3;
+                }
+                Focus {
+                    enabled: parent.live;
+                    radius: Theme.control / 2;
+                    activated => { root.send-or-stop(); }
+                }
+                send-touch := TouchArea {
+                    mouse-cursor: parent.live ? pointer : default;
+                    clicked => { root.send-or-stop(); }
+                }
+            }
+        }
+    }
+}
+
+// Shown before the first message. Mark, one line, and the composer in the middle
+// of the window, in the manner of Claude and Codex.
+export component EmptyHero inherits VerticalLayout {
+    in property <length> column;
+    in property <bool> narrow: false;
+    callback open-providers();
+    public function focus-input() { composer.focus-input(); }
+    in property <bool> compact: false;
+    alignment: center;
+    spacing: root.compact ? Theme.sp12 : Theme.sp22;
+    if !root.compact: HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 72px;
+            height: 72px;
+            BrandMark { size: 72px; }
+        }
+    }
+    Text {
+        text: App.project_name != "" ? "What should we do in " + App.project_name + "?" : "What should we work on?";
+        color: Theme.text;
+        font-size: Theme.fs-2xl - (narrow ? 6px : 2px);
+        font-weight: Theme.w-medium;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: center;
+        composer := Composer {
+            width: root.column;
+            narrow: root.narrow;
+            open-providers => { root.open-providers(); }
+        }
+    }
+    if !root.compact: Rectangle { height: 40px; }
+}

@@ -359,11 +359,11 @@ mod tests {
 
     #[test]
     fn truncation_preserves_valid_utf8_across_two_three_and_four_byte_chars() {
-        // Path and diff body each mix 2-byte (é, U+00E9), 3-byte (ソ, U+30BD)
-        // and 4-byte (𝄞, U+1D11E) sequences, so a byte cap can land mid-character.
-        let path = "éソ𝄞-note.txt";
+        // Path and diff body each mix 2-byte (U+00E9), 3-byte (U+30BD)
+        // and 4-byte (U+1D11E) sequences, so a byte cap can land mid-character.
+        let path = "éソ\u{1D11E}-note.txt";
         let before = "café ナ ソ line\n";
-        let after = "café ナ ソ 𝄞 line\n";
+        let after = "café ナ ソ \u{1D11E} line\n";
         let change = multibyte_change(path, before, after);
         let full = load_unified_diff(&change, 4096).unwrap();
 
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn caps_at_and_above_full_length_are_not_truncated() {
-        let change = multibyte_change("ソース.txt", "café\n", "café 𝄞\n");
+        let change = multibyte_change("ソース.txt", "café\n", "café \u{1D11E}\n");
         let full = load_unified_diff(&change, 4096).unwrap();
         let full_len = full.byte_count;
         let cap = usize::try_from(full_len).unwrap();

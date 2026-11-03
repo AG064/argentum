@@ -59,6 +59,7 @@ mod approvals;
 mod presentation;
 pub mod review;
 mod tool_feedback;
+mod ui_control;
 pub use presentation::AccessReview;
 use tool_feedback::{FeedbackIssue, PreflightCode};
 mod compaction;
@@ -156,6 +157,8 @@ pub enum RuntimeError {
     Skill(#[from] SkillError),
     #[error(transparent)]
     Harness(#[from] HarnessError),
+    #[error("{0}")]
+    UiPreferences(String),
     #[error(transparent)]
     ComposableHarness(#[from] ComposableHarnessError),
     #[error(transparent)]
@@ -330,6 +333,7 @@ pub struct RuntimeService {
     session_organization_admission: Arc<Mutex<()>>,
     events: broadcast::Sender<AppEvent>,
     cancellation_tokens: Arc<Mutex<BTreeMap<RunId, CancellationToken>>>,
+    git_known_paths: Arc<Mutex<BTreeMap<String, String>>>,
     run_sessions: Arc<Mutex<BTreeMap<RunId, SessionId>>>,
     active_session_runs: Arc<Mutex<BTreeMap<SessionId, RunId>>>,
     retained_session_work: Arc<Mutex<BTreeMap<SessionId, usize>>>,
@@ -644,6 +648,7 @@ impl RuntimeService {
             session_organization_admission: Arc::new(Mutex::new(())),
             events,
             cancellation_tokens: Arc::new(Mutex::new(BTreeMap::new())),
+            git_known_paths: Arc::new(Mutex::new(BTreeMap::new())),
             run_sessions: Arc::new(Mutex::new(BTreeMap::new())),
             active_session_runs: Arc::new(Mutex::new(BTreeMap::new())),
             retained_session_work: Arc::new(Mutex::new(BTreeMap::new())),
@@ -706,6 +711,7 @@ impl RuntimeService {
             session_organization_admission: Arc::new(Mutex::new(())),
             events,
             cancellation_tokens: Arc::new(Mutex::new(BTreeMap::new())),
+            git_known_paths: Arc::new(Mutex::new(BTreeMap::new())),
             run_sessions: Arc::new(Mutex::new(BTreeMap::new())),
             active_session_runs: Arc::new(Mutex::new(BTreeMap::new())),
             retained_session_work: Arc::new(Mutex::new(BTreeMap::new())),
@@ -2754,6 +2760,14 @@ impl RuntimeService {
                 });
                 Ok(())
             }
+            AppCommand::LoadUiPreferences => self.publish_ui_preferences(),
+            AppCommand::UpdateUiPreferences { patch } => {
+                self.apply_ui_patch(&patch, argentum_domain::UiChangeSource::User)
+            }
+            AppCommand::LoadProviderUsage => self.publish_provider_usage(),
+            AppCommand::RefreshGitStatus => self.refresh_git_status().await,
+            AppCommand::LoadGitFileDiff { path } => self.load_git_file_diff(path).await,
+            AppCommand::BrowserNavigate { url } => self.browser_navigate(url).await,
             AppCommand::LoadTrajectory { session_id } => {
                 self.publish_trajectory_snapshot(session_id.unwrap_or_else(|| self.session_id()))?;
                 Ok(())
@@ -5870,8 +5884,24 @@ impl RuntimeService {
             return Ok(instruction_refresh(call.id));
         }
         let instruction_check = instruction_run.check();
-        let authorization =
+        if let ToolInput::UpdateUi { patch } = &request.input {
+            match self.validate_agent_ui_patch(patch) {
+                Ok(()) => {}
+                Err(error_value @ (RuntimeError::UiPreferences(_) | RuntimeError::Harness(_))) => {
+                    return Ok(ModelToolStep::Ready(ModelToolResult {
+                        images: Default::default(),
+                        call_id: call.id,
+                        content: format!("Rejected, nothing changed: {error_value}."),
+                    }));
+                }
+                Err(error_value) => return Err(error_value),
+            }
+        }
+        let mut authorization =
             self.authorize_tool_request_with_policy(&request, &descriptor, &policy, true)?;
+        // It carries no capability, so no grant or approval mode can stand in for
+        // asking. Each interface change is shown to the person once.
+        authorization.prompt |= matches!(&request.input, ToolInput::UpdateUi { .. });
         let prepared_patch = match self.tools.prepare_mutations(
             &request,
             &self.workspace,
@@ -6761,11 +6791,13 @@ impl RuntimeService {
                 profile_id: policy.profile_id.clone(),
             },
         ];
-        let mut grants = self.store.authorization_grants(
-            self.project_id,
-            &descriptor.capabilities,
-            &subjects,
-        )?;
+        // A presentation tool carries no capability, so no grant can apply to it.
+        let mut grants = if descriptor.capabilities.is_empty() {
+            Vec::new()
+        } else {
+            self.store
+                .authorization_grants(self.project_id, &descriptor.capabilities, &subjects)?
+        };
         let mut grant_ids = Vec::new();
         let mut prompt = false;
         let mut try_without_grant = false;
@@ -8274,7 +8306,34 @@ impl RuntimeService {
             &request,
             argentum_domain::extensions::ExtensionReceiptStage::Admitted,
         )?;
-        let mut result = self.tools.execute(request.clone(), context).await;
+        let mut result = match &request.input {
+            ToolInput::InspectUi => Ok(ToolResult {
+                summary: "Read interface".into(),
+                output: self.ui_manifest()?.to_string(),
+                evidence: Default::default(),
+            }),
+            ToolInput::UpdateUi { patch } => {
+                // The approval may have sat for a while, so this validates again
+                // against current state. A rejection is an answer for the model,
+                // not a failed run.
+                match self.apply_ui_patch(patch, argentum_domain::UiChangeSource::Agent) {
+                    Ok(()) => Ok(ToolResult {
+                        summary: "Changed interface".into(),
+                        output: format!("Done: {}.", patch.describe()),
+                        evidence: Default::default(),
+                    }),
+                    Err(
+                        error_value @ (RuntimeError::UiPreferences(_) | RuntimeError::Harness(_)),
+                    ) => Ok(ToolResult {
+                        summary: "Interface change rejected".into(),
+                        output: format!("Rejected, nothing changed: {error_value}."),
+                        evidence: Default::default(),
+                    }),
+                    Err(error_value) => return Err(error_value),
+                }
+            }
+            _ => self.tools.execute(request.clone(), context).await,
+        };
         self.store.ensure_run_generation(request.run_id)?;
         #[cfg(feature = "extensions")]
         if matches!(&request.input, ToolInput::Extension { .. }) {
@@ -9529,6 +9588,12 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
             "required": ["window", "element", "keys"],
             "additionalProperties": false
         }),
+        "ui_inspect" => serde_json::json!({
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }),
+        "ui_update" => ui_control::ui_update_schema(),
         "desktop_screenshot" => serde_json::json!({
             "type": "object",
             "description": "PrintWindow capture of one current visible window into a bounded PNG. No screen-region grab.",
@@ -9748,6 +9813,8 @@ fn tool_action(input: &ToolInput) -> &'static str {
         ToolInput::DesktopTypeText { .. } => "Type bounded desktop text",
         ToolInput::DesktopPressKeys { .. } => "Press bounded desktop keys",
         ToolInput::DesktopScreenshot { .. } => "Capture desktop window",
+        ToolInput::InspectUi => "Read the interface settings",
+        ToolInput::UpdateUi { .. } => "Change the interface",
     }
 }
 
@@ -9812,6 +9879,8 @@ fn mutation_summary(bindings: &[WriteApprovalBinding], completed: bool) -> Optio
 
 fn tool_target(input: &ToolInput) -> String {
     match input {
+        ToolInput::InspectUi => "interface".to_owned(),
+        ToolInput::UpdateUi { patch } => patch.describe(),
         ToolInput::Extension { operation } => format!(
             "reviewed extension operation {:x}",
             Sha256::digest(serde_json::to_vec(operation).unwrap_or_default())
@@ -10034,6 +10103,16 @@ fn model_input_failure(code: PreflightCode, issue: Option<FeedbackIssue>) -> Mod
 }
 
 fn parse_model_tool_input(call: &ModelToolCall) -> Result<ToolInput, ModelInputFailure> {
+    if call.name == "ui_inspect" {
+        return Ok(ToolInput::InspectUi);
+    }
+    if call.name == "ui_update" {
+        return serde_json::from_str::<argentum_domain::UiPatch>(&call.arguments)
+            .map(|patch| ToolInput::UpdateUi {
+                patch: Box::new(patch),
+            })
+            .map_err(|_| model_input_failure(PreflightCode::InvalidArguments, None));
+    }
     let (kind, allowed): (&str, &[&str]) = match call.name.as_str() {
         "list_directory" => ("list_directory", &["path", "max_entries"]),
         "file_metadata" => ("file_metadata", &["path"]),
@@ -10818,7 +10897,9 @@ fn validate_model_tool_input(
         | ToolInput::DesktopInvoke { .. }
         | ToolInput::DesktopTypeText { .. }
         | ToolInput::DesktopPressKeys { .. }
-        | ToolInput::DesktopScreenshot { .. } => Vec::new(),
+        | ToolInput::DesktopScreenshot { .. }
+        | ToolInput::InspectUi
+        | ToolInput::UpdateUi { .. } => Vec::new(),
         ToolInput::Extension { .. } => Vec::new(),
     };
     for path in paths {
@@ -11480,6 +11561,11 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ChangeRecoverySnapshotLoaded(_)
         | AppEvent::HarnessSnapshotLoaded(_)
         | AppEvent::LayoutChanged(_)
+        | AppEvent::UiPreferencesLoaded { .. }
+        | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::GitStatusLoaded(_)
+        | AppEvent::GitDiffLoaded(_)
+        | AppEvent::BrowserPageLoaded(_)
         | AppEvent::SessionMetadataChanged { .. }
         | AppEvent::SessionListLoaded(_)
         | AppEvent::SessionRowUpdated(_)
@@ -11621,6 +11707,11 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::TrajectorySnapshotLoaded(_)
         | AppEvent::HarnessSnapshotLoaded(_)
         | AppEvent::LayoutChanged(_)
+        | AppEvent::UiPreferencesLoaded { .. }
+        | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::GitStatusLoaded(_)
+        | AppEvent::GitDiffLoaded(_)
+        | AppEvent::BrowserPageLoaded(_)
         | AppEvent::Error { .. } => None,
     }
 }
@@ -11809,6 +11900,314 @@ mod tests {
         )
         .expect("runtime with local authority");
         (workspace_dir, runtime, issuer, platform_authority)
+    }
+
+    fn interface_tool_runtime(
+        tool_name: &'static str,
+        arguments: &'static str,
+    ) -> (
+        TestRuntime,
+        Arc<Mutex<Vec<ModelRequest>>>,
+        tempfile::TempDir,
+    ) {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let mut providers = ProviderRegistry::default();
+        providers.register(ModelToolProvider {
+            requests: Arc::clone(&requests),
+            tool_name,
+            arguments,
+            final_text: "Finished",
+        });
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime = test_runtime(
+            Store::open_in_memory().expect("store"),
+            providers,
+            tools,
+            workspace,
+        );
+        (runtime, requests, workspace_dir)
+    }
+
+    fn only_tool_result(requests: &Arc<Mutex<Vec<ModelRequest>>>) -> String {
+        let requests = requests.lock().expect("requests");
+        assert_eq!(requests.len(), 2);
+        requests[1].tool_exchanges[0].results[0].content.clone()
+    }
+
+    #[tokio::test]
+    async fn agent_can_read_the_whole_interface_without_approval_or_private_data() {
+        let (runtime, requests, workspace_dir) = interface_tool_runtime("ui_inspect", "{}");
+        configure_selected_provider(&runtime, "model-tool").await;
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "What modules are on?".into(),
+            })
+            .await
+            .expect("inspect run");
+
+        let manifest: serde_json::Value =
+            serde_json::from_str(&only_tool_result(&requests)).expect("manifest json");
+        let modules = manifest["modules"].as_array().expect("modules");
+        assert_eq!(modules.len(), SurfaceId::ALL.len());
+        let approvals = modules
+            .iter()
+            .find(|module| module["id"] == "approvals")
+            .expect("approvals module");
+        assert_eq!(approvals["changeable"], false);
+        let tokens = manifest["theme"]["tokens"].as_array().expect("tokens");
+        assert_eq!(tokens.len(), argentum_domain::UI_COLOR_TOKENS.len());
+        assert!(tokens.iter().all(|token| token["value"].is_string()));
+
+        let text = manifest.to_string();
+        let root = workspace_dir.path().display().to_string();
+        assert!(
+            !text.contains(&root),
+            "the manifest must not name the workspace"
+        );
+        assert!(!drain_events(&mut events)
+            .iter()
+            .any(|event| matches!(event, AppEvent::ApprovalRequested(_))));
+    }
+
+    #[tokio::test]
+    async fn agent_interface_change_waits_for_approval_and_can_be_undone() {
+        let (runtime, requests, _workspace_dir) = interface_tool_runtime(
+            "ui_update",
+            r#"{"preset":"ember","font_percent":110,"modules":{"browser":true}}"#,
+        );
+        configure_selected_provider(&runtime, "model-tool").await;
+        let before = runtime.store.load_ui_preferences().expect("before");
+        let _responder = runtime.connect_interactive_approval_responder();
+        let mut events = runtime.subscribe();
+        let running = runtime.clone();
+        let run = tokio::spawn(async move {
+            running
+                .dispatch(AppCommand::SubmitTask {
+                    prompt: "Make it warmer".into(),
+                })
+                .await
+        });
+        let approval = loop {
+            if let AppEvent::ApprovalRequested(approval) =
+                tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+                    .await
+                    .expect("approval timeout")
+                    .expect("approval event")
+            {
+                break approval;
+            }
+        };
+        // Nothing changes until the person says so, and the prompt says what changes.
+        assert_eq!(
+            runtime.store.load_ui_preferences().expect("waiting"),
+            before
+        );
+        assert!(approval.target.contains("theme to ember"));
+        assert!(approval.target.contains("turn on browser"));
+        assert!(approval.capabilities.is_empty(), "grants no capability");
+
+        runtime
+            .dispatch(AppCommand::ApproveTool {
+                approval_id: approval.id,
+                scope: ApprovalScope::Once,
+            })
+            .await
+            .expect("approve");
+        run.await.expect("join").expect("run");
+
+        let after = runtime.store.load_ui_preferences().expect("after");
+        assert_eq!(after.preset, "ember");
+        assert_eq!(after.font_percent, 110);
+        let layout = runtime.load_harness_layout().expect("layout");
+        assert_eq!(layout.visible.get(&SurfaceId::Browser), Some(&true));
+        assert!(only_tool_result(&requests).starts_with("Done:"));
+
+        let undo = drain_events(&mut events)
+            .into_iter()
+            .find_map(|event| match event {
+                AppEvent::UiPreferencesLoaded {
+                    source: argentum_domain::UiChangeSource::Agent,
+                    undo,
+                    ..
+                } => undo,
+                _ => None,
+            })
+            .expect("agent change announced with an undo");
+        runtime
+            .dispatch(AppCommand::UpdateUiPreferences { patch: undo })
+            .await
+            .expect("undo");
+        assert_eq!(runtime.store.load_ui_preferences().expect("undone"), before);
+        let layout = runtime.load_harness_layout().expect("layout");
+        assert_eq!(layout.visible.get(&SurfaceId::Browser), Some(&false));
+    }
+
+    #[tokio::test]
+    async fn rejected_interface_approval_changes_nothing() {
+        let (runtime, _requests, _workspace_dir) =
+            interface_tool_runtime("ui_update", r#"{"preset":"silver"}"#);
+        configure_selected_provider(&runtime, "model-tool").await;
+        let before = runtime.store.load_ui_preferences().expect("before");
+        let _responder = runtime.connect_interactive_approval_responder();
+        let mut events = runtime.subscribe();
+        let running = runtime.clone();
+        let run = tokio::spawn(async move {
+            running
+                .dispatch(AppCommand::SubmitTask {
+                    prompt: "Go light".into(),
+                })
+                .await
+        });
+        let approval_id = loop {
+            if let AppEvent::ApprovalRequested(approval) =
+                tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+                    .await
+                    .expect("approval timeout")
+                    .expect("approval event")
+            {
+                break approval.id;
+            }
+        };
+        runtime
+            .dispatch(AppCommand::RejectTool { approval_id })
+            .await
+            .expect("reject");
+        let _ = run.await.expect("join");
+        assert_eq!(runtime.store.load_ui_preferences().expect("after"), before);
+    }
+
+    async fn assert_interface_patch_refused_without_prompt(arguments: &'static str) {
+        let (runtime, requests, _workspace_dir) = interface_tool_runtime("ui_update", arguments);
+        configure_selected_provider(&runtime, "model-tool").await;
+        let before = runtime.store.load_ui_preferences().expect("before");
+        let layout_before = runtime.load_harness_layout().expect("layout");
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "Change it".into(),
+            })
+            .await
+            .expect("run finishes");
+
+        assert!(
+            !drain_events(&mut events)
+                .iter()
+                .any(|event| matches!(event, AppEvent::ApprovalRequested(_))),
+            "{arguments} reached the approval prompt"
+        );
+        let answer = only_tool_result(&requests);
+        assert!(
+            answer.contains("Rejected") || answer.contains("invalid"),
+            "{arguments}: {answer}"
+        );
+        assert_eq!(runtime.store.load_ui_preferences().expect("after"), before);
+        assert_eq!(
+            runtime.load_harness_layout().expect("layout"),
+            layout_before
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_cannot_make_the_interface_unreadable_or_remove_its_safeguards() {
+        for arguments in [
+            // Invisible text.
+            r##"{"colors":{"text":"#0B0B0D"}}"##,
+            // The permission prompt and the conversation are not optional.
+            r#"{"modules":{"approvals":false}}"#,
+            r#"{"modules":{"conversation":false}}"#,
+            // Modules that do not exist or are not in this build.
+            r#"{"modules":{"telemetry":true}}"#,
+            r#"{"modules":{"terminal":true}}"#,
+            // There is no field that reaches authority or first-run state.
+            r#"{"authority":{"network":true}}"#,
+            r#"{"first_run_complete":true}"#,
+            // Bounds.
+            r#"{"font_percent":5}"#,
+            r#"{"preset":"missing"}"#,
+            r#"{}"#,
+        ] {
+            assert_interface_patch_refused_without_prompt(arguments).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn turning_a_module_on_does_not_grant_its_capability() {
+        let (runtime, _requests, _workspace_dir) = interface_tool_runtime("ui_inspect", "{}");
+        let mut policy = runtime.load_execution_policy().expect("policy");
+        policy.capability_enabled.insert("git.read".into(), false);
+        runtime
+            .store
+            .save_execution_policy(runtime.project_id, &policy)
+            .expect("policy saved");
+        for surface in [SurfaceId::GitDiff, SurfaceId::Browser] {
+            runtime
+                .dispatch(AppCommand::SetSurfaceVisibility {
+                    surface,
+                    visible: true,
+                })
+                .await
+                .expect("module on");
+        }
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::RefreshGitStatus)
+            .await
+            .expect("git status");
+        runtime
+            .dispatch(AppCommand::BrowserNavigate {
+                url: "https://example.invalid/".into(),
+            })
+            .await
+            .expect("navigate");
+        let emitted = drain_events(&mut events);
+        assert!(emitted.iter().any(|event| matches!(
+            event,
+            AppEvent::GitStatusLoaded(snapshot)
+                if snapshot.state == argentum_domain::GitViewState::Blocked
+        )));
+        assert!(emitted.iter().any(|event| matches!(
+            event,
+            AppEvent::BrowserPageLoaded(page)
+                if page.state == argentum_domain::BrowserPageState::Blocked
+        )));
+    }
+
+    #[tokio::test]
+    async fn git_diff_only_accepts_paths_from_the_last_status() {
+        let (runtime, _requests, _workspace_dir) = interface_tool_runtime("ui_inspect", "{}");
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::LoadGitFileDiff {
+                path: "../../secrets.txt".into(),
+            })
+            .await
+            .expect("diff");
+        assert!(drain_events(&mut events).iter().any(|event| matches!(
+            event,
+            AppEvent::GitDiffLoaded(snapshot)
+                if snapshot.state == argentum_domain::GitViewState::Failed
+                    && snapshot.diff.is_empty()
+        )));
+    }
+
+    #[tokio::test]
+    async fn a_new_project_stays_minimal_after_its_layout_is_saved() {
+        let (runtime, _requests, _workspace_dir) = interface_tool_runtime("ui_inspect", "{}");
+        runtime
+            .store
+            .save_layout(&runtime.layout_key, &LayoutProfile::default())
+            .expect("saved");
+        let snapshot = runtime.harness_snapshot().expect("snapshot");
+        assert_eq!(snapshot.selected_profile_id, "focused");
+        assert!(!snapshot
+            .surfaces
+            .iter()
+            .any(|surface| surface.configurable && surface.visible));
     }
 
     #[tokio::test]
@@ -12796,7 +13195,7 @@ mod tests {
                 .harness_snapshot()
                 .expect("second snapshot")
                 .selected_profile_id,
-            "standard"
+            "focused"
         );
     }
 
@@ -12825,7 +13224,9 @@ mod tests {
         ));
 
         let definitions = runtime.model_tool_definitions().expect("tool definitions");
-        assert_eq!(definitions.len(), 7);
+        assert_eq!(definitions.len(), 8);
+        assert!(definitions.iter().any(|tool| tool.name == "ui_inspect"));
+        assert!(!definitions.iter().any(|tool| tool.name == "ui_update"));
         assert!(definitions.iter().any(|tool| tool.name == "read_text"));
         assert!(!definitions.iter().any(|tool| tool.name == "write_text"));
 
@@ -14102,7 +14503,7 @@ mod tests {
         );
         assert_eq!(
             runtime.tool_count(),
-            23 + usize::from(cfg!(feature = "extensions"))
+            25 + usize::from(cfg!(feature = "extensions"))
         );
         assert!(runtime
             .tools
