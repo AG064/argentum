@@ -16,7 +16,8 @@ SECRET = "not-a-real-key"
 
 def printed(*extra):
     output = io.StringIO()
-    with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": SECRET}), contextlib.redirect_stdout(output):
+    keys = {"DEEPSEEK_API_KEY": SECRET, "OPENCODE_API_KEY": SECRET}
+    with mock.patch.dict(os.environ, keys), contextlib.redirect_stdout(output):
         with mock.patch.object(run_deepswe.subprocess, "call") as call:
             assert run_deepswe.main(["--tasks", "tasks", *extra]) == 0
     return output.getvalue(), call
@@ -24,10 +25,16 @@ def printed(*extra):
 
 class Commands(unittest.TestCase):
     def test_every_harness_is_listed_and_nothing_runs_by_default(self):
-        output, call = printed()
-        for name in run_deepswe.harnesses("x"):
-            self.assertIn(f"[{name}] pier run", output)
-        call.assert_not_called()
+        for route in run_deepswe.ROUTES:
+            output, call = printed("--route", route)
+            for name in run_deepswe.harnesses(route, "x"):
+                self.assertIn(f"[{name}] pier run", output)
+            call.assert_not_called()
+
+    def test_go_is_the_default_route_and_leaves_out_deepseek_harness(self):
+        output, _ = printed()
+        self.assertIn("opencode-go/deepseek-v4.1-flash", output)
+        self.assertNotIn("DeepSeekHarness", output)
 
     def test_a_key_never_reaches_a_command_or_the_output(self):
         output, call = printed("--go", "--agents", "claude-code", "codex")
@@ -39,7 +46,7 @@ class Commands(unittest.TestCase):
     def test_every_agent_gets_the_same_tasks(self):
         output, _ = printed("--n-tasks", "7", "--seed", "3")
         lines = [line for line in output.splitlines() if " pier run " in line]
-        self.assertEqual(len(lines), len(run_deepswe.harnesses("x")))
+        self.assertEqual(len(lines), len(run_deepswe.harnesses("opencode-go", "x")))
         for line in lines:
             self.assertIn("--n-tasks 7 --sample-seed 3", line)
 

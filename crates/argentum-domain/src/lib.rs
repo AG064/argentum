@@ -2159,7 +2159,7 @@ pub const DEFAULT_LLAMA_CPP_ENDPOINT: &str = "local://llama-cpp/";
 pub const DEFAULT_LLAMA_CPP_MODEL: &str = "Qwen3.5-0.8B-Q8_0.gguf";
 pub const DEFAULT_LM_STUDIO_ENDPOINT: &str = "http://127.0.0.1:1234/v1/";
 pub const DEFAULT_MODEL: &str = DEFAULT_LLAMA_CPP_MODEL;
-pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 18] = [
+pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 19] = [
     "openai",
     "minimax",
     "deepseek",
@@ -2178,6 +2178,7 @@ pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 18] = [
     "qwen",
     "github-models",
     "opencode-zen",
+    "opencode-go",
 ];
 
 pub fn is_supported_hosted_credential_provider_id(profile_id: &str) -> bool {

@@ -9,12 +9,16 @@ import os
 import shlex
 
 from pier.agents.installed.base import BaseInstalledAgent, with_prompt_template
+from pier.agents.installed.opencode import OpenCode
 from pier.environments.base import BaseEnvironment
 from pier.models.agent.context import AgentContext
 from pier.models.agent.install import AgentInstallSpec, InstallStep
 from pier.models.agent.network import NetworkAllowlist
 
-DEEPSEEK_ONLY = NetworkAllowlist(domains=["api.deepseek.com"])
+ROUTES = {
+    "deepseek": ("DEEPSEEK_API_KEY", NetworkAllowlist(domains=["api.deepseek.com"])),
+    "opencode-go": ("OPENCODE_API_KEY", NetworkAllowlist(domains=["opencode.ai"])),
+}
 NODE = (
     "curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
     " && . ~/.nvm/nvm.sh && nvm install 22"
@@ -22,15 +26,24 @@ NODE = (
 APT_CURL = "apt-get update && apt-get install -y curl"
 
 
-def model_id(name):
-    return name.split("/", 1)[-1] if name else "deepseek-flash"
+def route_of(name):
+    """`opencode-go/deepseek-v4.1-flash` gives the route and the model ID."""
+    route, _, model = (name or "").partition("/")
+    if route not in ROUTES or not model:
+        raise ValueError(f"model must be one of {', '.join(ROUTES)}, then /MODEL: {name}")
+    return route, model
 
 
-def deepseek_env(agent):
-    key = agent._get_env("DEEPSEEK_API_KEY")
+def key_env(agent):
+    variable = ROUTES[route_of(agent.model_name)[0]][0]
+    key = agent._get_env(variable)
     if not key:
-        raise ValueError("DEEPSEEK_API_KEY is not set")
-    return {"DEEPSEEK_API_KEY": key}
+        raise ValueError(f"{variable} is not set")
+    return {variable: key}
+
+
+def allowlist(agent):
+    return ROUTES[route_of(agent.model_name)[0]][1]
 
 
 class Argentum(BaseInstalledAgent):
@@ -48,7 +61,7 @@ class Argentum(BaseInstalledAgent):
         return "argentum --version"
 
     def network_allowlist(self):
-        return DEEPSEEK_ONLY
+        return allowlist(self)
 
     def install_spec(self):
         return AgentInstallSpec(
@@ -64,12 +77,13 @@ class Argentum(BaseInstalledAgent):
 
     @with_prompt_template
     async def run(self, instruction, environment, context: AgentContext):
-        env = {**deepseek_env(self), "ARGENTUM_BENCHMARK_DISPOSABLE": "1", "RUST_LOG": "off"}
-        model = shlex.quote(model_id(self.model_name))
+        env = {**key_env(self), "ARGENTUM_BENCHMARK_DISPOSABLE": "1", "RUST_LOG": "off"}
+        route, model = route_of(self.model_name)
         await self.exec_as_agent(
             environment,
             command=(
-                f'argentum benchmark-run --workspace "$PWD" --model {model}'
+                f'argentum benchmark-run --workspace "$PWD" --provider {route}'
+                f" --model {shlex.quote(model)}"
                 f" --prompt {shlex.quote(instruction)} > /logs/agent/argentum.jsonl 2>&1"
             ),
             env=env,
@@ -77,6 +91,16 @@ class Argentum(BaseInstalledAgent):
 
     def populate_context_post_run(self, context: AgentContext):
         return None
+
+
+class OpenCodeGo(OpenCode):
+    """Pier's OpenCode agent, which knows the Zen key but not the Go route."""
+
+    def network_allowlist(self):
+        return allowlist(self)
+
+    def build_process_env(self, *args, **kwargs):
+        return {**super().build_process_env(*args, **kwargs), **key_env(self)}
 
 
 class Pi(BaseInstalledAgent):
@@ -90,7 +114,7 @@ class Pi(BaseInstalledAgent):
         return ". ~/.nvm/nvm.sh; pi --version"
 
     def network_allowlist(self):
-        return DEEPSEEK_ONLY
+        return allowlist(self)
 
     def install_spec(self):
         return AgentInstallSpec(
@@ -105,14 +129,14 @@ class Pi(BaseInstalledAgent):
 
     @with_prompt_template
     async def run(self, instruction, environment, context: AgentContext):
-        model = shlex.quote(model_id(self.model_name))
+        route, model = route_of(self.model_name)
         await self.exec_as_agent(
             environment,
             command=(
-                f". ~/.nvm/nvm.sh; pi --print --provider deepseek --model {model}"
+                f". ~/.nvm/nvm.sh; pi --print --provider {route} --model {shlex.quote(model)}"
                 f" {shlex.quote(instruction)} > /logs/agent/pi.txt 2>&1"
             ),
-            env=deepseek_env(self),
+            env=key_env(self),
         )
 
     def populate_context_post_run(self, context: AgentContext):
@@ -123,6 +147,7 @@ class DeepSeekHarness(BaseInstalledAgent):
     """DeepSeek Harness in its documented one-shot mode.
 
     It uploads session logs to DeepSeek by default, so only run it on these public tasks.
+    OpenCode lists it as having incomplete session support on Go, so it uses DeepSeek directly.
     """
 
     @staticmethod
@@ -133,7 +158,7 @@ class DeepSeekHarness(BaseInstalledAgent):
         return ". ~/.nvm/nvm.sh; dsh --version"
 
     def network_allowlist(self):
-        return DEEPSEEK_ONLY
+        return allowlist(self)
 
     def install_spec(self):
         return AgentInstallSpec(
@@ -146,7 +171,7 @@ class DeepSeekHarness(BaseInstalledAgent):
 
     @with_prompt_template
     async def run(self, instruction, environment, context: AgentContext):
-        env = {**deepseek_env(self), "DSH_PERMISSION_MODE": "danger-full-access"}
+        env = {**key_env(self), "DSH_PERMISSION_MODE": "danger-full-access"}
         await self.exec_as_agent(
             environment,
             command=(

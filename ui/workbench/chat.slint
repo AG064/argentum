@@ -302,7 +302,9 @@ export component Composer inherits Rectangle {
                 max-label: root.narrow ? 110px : 360px;
                 clicked => { root.open-providers(); }
             }
-            if App.provider_id == "deepseek": Chip {
+            if App.provider_id == "deepseek"
+                || (App.provider_id == "opencode-go"
+                    && (App.provider_model == "deepseek-v4.1-flash" || App.provider_model == "deepseek-v4-pro")): Chip {
                 y: (parent.height - self.height) / 2;
                 icon: "sparkles";
                 label: "Thinking: " + App.thinking_mode;

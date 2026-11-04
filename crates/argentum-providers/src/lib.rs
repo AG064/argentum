@@ -598,7 +598,7 @@ const fn preset(
     }
 }
 
-pub const PROVIDER_CATALOG: [ProviderPresetInfo; 28] = [
+pub const PROVIDER_CATALOG: [ProviderPresetInfo; 29] = [
     preset(
         "openai-compatible",
         "OpenAI compatible",
@@ -922,6 +922,20 @@ pub const PROVIDER_CATALOG: [ProviderPresetInfo; 28] = [
         "",
     ),
     preset(
+        "opencode-go",
+        "OpenCode Go",
+        ProviderKind::OpenAiCompatible,
+        Some("https://opencode.ai/inference/go/openai/v1/"),
+        "deepseek-v4.1-flash",
+        Some("opencode-go"),
+        Some("OPENCODE_API_KEY"),
+        "https://opencode.ai/docs/go/",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "Subscription with monthly limits per model. DeepSeek models need the Global region in your OpenCode privacy settings.",
+    ),
+    preset(
         "ollama",
         "Ollama",
         ProviderKind::OpenAiCompatible,
@@ -1144,7 +1158,10 @@ impl ProviderPreset {
                     ProviderKind::OpenAiCompatible,
                     info.label,
                 )?
-                .with_hidden_tagged_reasoning(matches!(info.id, "minimax" | "deepseek")),
+                .with_hidden_tagged_reasoning(matches!(
+                    info.id,
+                    "minimax" | "deepseek" | "opencode-go"
+                )),
             )),
             ProviderKind::Anthropic | ProviderKind::Unknown => {
                 Err(ProviderError::UnsupportedProviderKind {
@@ -1399,6 +1416,12 @@ impl OpenAiCompatibleProvider {
             endpoint.set_path(&format!("{}/", endpoint.path()));
         }
         let mut client = reqwest::Client::builder();
+        let mut probe_client = reqwest::Client::builder();
+        if is_opencode_go_route(&endpoint) {
+            // OpenCode Go asks each client to identify itself.
+            client = client.user_agent(ARGENTUM_USER_AGENT);
+            probe_client = probe_client.user_agent(ARGENTUM_USER_AGENT);
+        }
         if is_minimax_continuation_origin(&endpoint) {
             // Returned private provider state is bound to this origin. A
             // redirect is not permission to disclose it at a different one.
@@ -1406,7 +1429,7 @@ impl OpenAiCompatibleProvider {
         }
         Ok(Self {
             client: client.build()?,
-            probe_client: reqwest::Client::builder()
+            probe_client: probe_client
                 .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(DEFAULT_PROBE_TIMEOUT)
                 .build()?,
@@ -1481,9 +1504,7 @@ impl OpenAiCompatibleProvider {
     }
 
     fn supports_deepseek_protocol(&self) -> bool {
-        self.endpoint.scheme() == "https"
-            && self.endpoint.host_str() == Some("api.deepseek.com")
-            && self.endpoint.port_or_known_default() == Some(443)
+        is_deepseek_route(&self.endpoint, &self.model)
     }
 
     fn prepare_compatible_request(
@@ -1617,7 +1638,12 @@ impl OpenAiCompatibleProvider {
     }
 
     fn models_url(&self) -> Result<Url, ProviderError> {
-        let endpoint = self.endpoint.join("models")?;
+        // Go lists its models apart from any one API format.
+        let endpoint = if is_opencode_go_route(&self.endpoint) {
+            self.endpoint.join("/inference/go/v1/models")?
+        } else {
+            self.endpoint.join("models")?
+        };
         if !matches!(endpoint.scheme(), "http" | "https") {
             return Err(ProviderError::UnsafeProbeEndpoint {
                 reason: "only HTTP and HTTPS endpoints are supported",
@@ -1732,6 +1758,7 @@ impl OpenAiCompatibleProvider {
         };
         let context_window_tokens = profile_id_for_endpoint(&self.endpoint)
             .and_then(|profile_id| canonical_context_window(profile_id, &selected_model));
+        let session_id = request.continuation_scope.map(|scope| scope.session_id);
         let body = build_chat_request_inner(
             ModelRequest {
                 model: selected_model,
@@ -1745,7 +1772,7 @@ impl OpenAiCompatibleProvider {
             serde_json::to_vec(&body)
                 .map_err(|_| ProviderError::InvalidRequest("wire encoding failed"))?,
         );
-        self.stream_openai_body(body, context_window_tokens, sender)
+        self.stream_openai_body(body, context_window_tokens, session_id, sender)
             .await
     }
 
@@ -1753,10 +1780,19 @@ impl OpenAiCompatibleProvider {
         &self,
         body: Bytes,
         context_window_tokens: Option<u64>,
+        session_id: Option<uuid::Uuid>,
         sender: mpsc::Sender<ProviderEvent>,
     ) -> Result<(), ProviderError> {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        if is_opencode_go_route(&self.endpoint) {
+            // Go routes and caches by this. It says nothing about who is asking.
+            let session = session_id.unwrap_or(self.preparation_binding).to_string();
+            headers.insert(
+                OPENCODE_SESSION_HEADER,
+                HeaderValue::from_str(&session).map_err(|_| ProviderError::StreamSetup)?,
+            );
+        }
         let mut request_builder = self
             .client
             .post(self.completion_url()?)
@@ -2026,6 +2062,25 @@ impl OpenAiCompatibleProvider {
     }
 }
 
+const ARGENTUM_USER_AGENT: &str = concat!("argentum/", env!("CARGO_PKG_VERSION"));
+const OPENCODE_SESSION_HEADER: &str = "x-opencode-session";
+
+fn is_opencode_go_route(endpoint: &Url) -> bool {
+    endpoint.scheme() == "https"
+        && endpoint.host_str() == Some("opencode.ai")
+        && endpoint.port_or_known_default() == Some(443)
+        && endpoint.path().trim_end_matches('/') == "/inference/go/openai/v1"
+}
+
+/// DeepSeek itself, or DeepSeek's models through OpenCode Go. Both take the same
+/// thinking settings and need reasoning replayed across tool calls.
+fn is_deepseek_route(endpoint: &Url, model: &str) -> bool {
+    let direct = endpoint.scheme() == "https"
+        && endpoint.host_str() == Some("api.deepseek.com")
+        && endpoint.port_or_known_default() == Some(443);
+    direct || (is_opencode_go_route(endpoint) && model.starts_with("deepseek-"))
+}
+
 fn is_minimax_continuation_origin(endpoint: &Url) -> bool {
     endpoint.scheme() == "https"
         && endpoint.host_str() == Some("api.minimax.io")
@@ -2134,9 +2189,13 @@ impl ModelProvider for OpenAiCompatibleProvider {
         let body = self.prepared_compatible_body(prepared)?;
         let context_window_tokens = profile_id_for_endpoint(&self.endpoint)
             .and_then(|profile_id| canonical_context_window(profile_id, &prepared.request.model));
+        let session_id = prepared
+            .request
+            .continuation_scope
+            .map(|scope| scope.session_id);
         tokio::select! {
             _ = cancellation.cancelled() => Err(ProviderError::RequestCancelled),
-            result = self.stream_openai_body(body, context_window_tokens, sender) => result,
+            result = self.stream_openai_body(body, context_window_tokens, session_id, sender) => result,
         }
     }
 
@@ -2802,7 +2861,7 @@ impl ProviderRegistry {
                         validate_hosted_credential_origin(&profile)?;
                     }
                     let hide_tagged_reasoning =
-                        matches!(profile.id.as_str(), "minimax" | "deepseek");
+                        matches!(profile.id.as_str(), "minimax" | "deepseek" | "opencode-go");
                     Ok(Arc::new(
                         OpenAiCompatibleProvider::new(
                             &profile.endpoint,
@@ -3599,9 +3658,7 @@ fn prepare_compatible_wire(
     }
     let endpoint = Url::parse(&profile.endpoint)?;
     let minimax = is_minimax_continuation_origin(&endpoint);
-    let deepseek = endpoint.scheme() == "https"
-        && endpoint.host_str() == Some("api.deepseek.com")
-        && endpoint.port_or_known_default() == Some(443);
+    let deepseek = is_deepseek_route(&endpoint, &profile.model);
     let deepseek_thinking = deepseek && deepseek_reasoning_effort().is_some();
     for exchange in request.tool_exchanges.iter().chain(
         request
@@ -4627,6 +4684,7 @@ fn canonical_context_window(profile_id: &str, model_id: &str) -> Option<u64> {
             | "deepseek-v4-flash-vision-exp",
         ) => Some(1_000_000),
         ("openai", "gpt-5.6" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna") => Some(1_050_000),
+        ("opencode-go", "deepseek-v4.1-flash" | "deepseek-v4-pro") => Some(1_000_000),
         _ => None,
     }
 }
@@ -4639,6 +4697,9 @@ fn is_supported_openai_chat_model(model_id: &str) -> bool {
 }
 
 fn profile_id_for_endpoint(endpoint: &Url) -> Option<&'static str> {
+    if is_opencode_go_route(endpoint) {
+        return Some("opencode-go");
+    }
     match endpoint.host_str()? {
         "api.openai.com" => Some("openai"),
         "api.minimax.io" => Some("minimax"),
@@ -6517,6 +6578,37 @@ mod tests {
         handle.join().expect("server");
         assert!(requests[0].starts_with("GET /api/v1/models HTTP/1.1\r\n"));
         assert!(requests[1].starts_with("GET /v1/models HTTP/1.1\r\n"));
+    }
+
+    #[test]
+    fn opencode_go_routes_only_its_own_path_and_deepseek_models() {
+        let go = Url::parse("https://opencode.ai/inference/go/openai/v1/").unwrap();
+        assert!(is_opencode_go_route(&go));
+        assert!(is_deepseek_route(&go, "deepseek-v4.1-flash"));
+        assert!(!is_deepseek_route(&go, "glm-5.3"));
+        assert_eq!(
+            canonical_context_window("opencode-go", "deepseek-v4.1-flash"),
+            Some(1_000_000)
+        );
+        for other in [
+            "https://opencode.ai/inference/openai/v1/",
+            "http://opencode.ai/inference/go/openai/v1/",
+            "https://opencode.ai.example/inference/go/openai/v1/",
+        ] {
+            let other = Url::parse(other).unwrap();
+            assert!(!is_opencode_go_route(&other), "{other}");
+            assert!(!is_deepseek_route(&other, "deepseek-v4.1-flash"), "{other}");
+        }
+
+        let profile =
+            provider_profile_from_preset("opencode-go", None, None).expect("OpenCode Go profile");
+        let error = ProviderPreset::parse("opencode-go")
+            .expect("OpenCode Go preset")
+            .build_provider(&profile, None)
+            .err()
+            .expect("Go needs a key");
+        assert!(matches!(error, ProviderError::CredentialsRequired { .. }));
+        assert!(provider_credential_environment().contains(&("opencode-go", "OPENCODE_API_KEY")));
     }
 
     #[test]

@@ -7,15 +7,22 @@ are graded in a separate clean container, so no agent can tune its work to the c
 **No results yet.** Nothing here has been run. The adapters for Argentum, Pi, and DeepSeek
 Harness have not run against a real task, and no number here says any tool is better.
 
-| Harness | How it runs |
-| --- | --- |
-| mini-swe-agent | Built into Pier. The control, because DeepSWE's leaderboard uses it for every model |
-| OpenCode | Built into Pier |
-| Claude Code | Built into Pier, pointed at DeepSeek's Anthropic-compatible route |
-| Codex | Built into Pier, pointed at DeepSeek's Responses API |
-| Argentum | [agents.py](agents.py), using the benchmark build below |
-| Pi | [agents.py](agents.py) |
-| DeepSeek Harness | [agents.py](agents.py). It uploads session logs to DeepSeek by default |
+Runs use [OpenCode Go](https://opencode.ai/docs/go/) by default, because its $100 monthly limit for
+DeepSeek V4.1 Flash goes much further than prepaid credit. It is capped at $50 a week and $20 per
+5 hours. `--route deepseek` uses DeepSeek's own API instead.
+
+| Harness | How it runs | On OpenCode's validated list |
+| --- | --- | --- |
+| mini-swe-agent | Built into Pier. The control, because DeepSWE's leaderboard uses it for every model | No |
+| OpenCode | [agents.py](agents.py), on top of Pier's agent | Its own client |
+| Claude Code | Built into Pier, through Go's Anthropic route | Yes |
+| Codex | Built into Pier, through Go's OpenAI route | Yes |
+| Pi | [agents.py](agents.py) | Yes |
+| Argentum | [agents.py](agents.py), using the benchmark build below | No |
+| DeepSeek Harness | [agents.py](agents.py), `--route deepseek` only. OpenCode lists its Go support as incomplete, and it uploads session logs to DeepSeek by default | No |
+
+Results from different routes are not comparable. I cannot confirm that Go's `deepseek-v4.1-flash`
+is the same build as DeepSeek's own `deepseek-flash`, so record the route with every result.
 
 ## The benchmark build
 
@@ -46,7 +53,9 @@ Windows x64 is still the only tested platform for normal use.
 - Python 3.12 or newer, [Pier](https://pypi.org/project/datacurve-pier/) newer than 0.3.0, and a clone of DeepSWE.
 - Docker on Linux or WSL, or a [Modal](https://modal.com) account. Each task uses up to 2 CPUs,
   8 GB of memory, and 20 GB of disk. Harbor's documentation does not mention native Windows.
-- `DEEPSEEK_API_KEY` in your shell, and `ARGENTUM_BENCHMARK_BINARY` set to the benchmark build.
+- `OPENCODE_API_KEY` in your shell, or `DEEPSEEK_API_KEY` for `--route deepseek`, and
+  `ARGENTUM_BENCHMARK_BINARY` set to the benchmark build.
+- On OpenCode Go, DeepSeek models need **Global** selected under Regions in Settings > Privacy.
 
 ## Run it
 
@@ -56,10 +65,11 @@ Without `--go` this only prints the commands:
 python benchmarks/public/run_deepswe.py --tasks deep-swe/tasks --n-tasks 20
 ```
 
-Add `--go` to run them. That spends real money on DeepSeek, and on Modal if you use it. The
-[leaderboard](https://deepswe.datacurve.ai/) lists about $0.46 per task for the older
-`deepseek-v4-flash` on mini-swe-agent, which is only a rough guide for another build or harness.
-The same `--seed` gives every agent the same tasks.
+Add `--go` to run them. That uses your Go limit, or real money on DeepSeek and on Modal if you use
+them. The [leaderboard](https://deepswe.datacurve.ai/) lists about $0.46 per task for the older
+`deepseek-v4-flash` on mini-swe-agent, which is only a rough guide. On Go, run outside peak hours,
+01:00-04:00 and 06:00-10:00 UTC on weekdays, when prices double. Go watches for abuse and has no
+stated rule on benchmarks, so run slowly. The same `--seed` gives every agent the same tasks.
 
 ## Keeping it fair
 
