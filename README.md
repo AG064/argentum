@@ -51,16 +51,153 @@ on its own, and a default CLI build does not include the desktop code.
   no hidden telemetry, and updates contact GitHub only when you ask.
 - **You stay in control:** the saved project policy decides what the agent can do.
   Prompts, model output, and remote content cannot grant it more.
-- **Guarded changes:** edits must match the exact source the agent read, and changes
-  can be reviewed and restored.
-- **Checked work:** verification runners produce receipts tied to the source they
-  checked.
 - **Durable history:** sessions and runs survive restarts, and recovery after a crash
   is explicit, never automatic.
-- **Your choice of model:** hosted providers, aggregators, your own server, or local
-  llama.cpp.
-- **Modular:** extensions, MCP, a browser adapter, desktop control, and local artifacts
-  are optional at build time.
+
+## See what it did
+
+Each response starts with one line saying what the agent did, with the size of the change. Open
+it for the exact steps, and open a file to read its diff in place.
+
+![A response with its steps and a file diff open](docs/screenshots/desktop-activity.png)
+
+From a real run with DeepSeek:
+
+```text
+> Thought process
+v Changed app.py, read 2 files, listed a folder, ran a command  +6
+    Read app.py
+    Listed the project folder
+    Applied a patch
+    Ran `python app.py`
+    Read app.py
+v app.py  +6
+```
+
+```diff
+@@ -1,4 +1,5 @@
+ def add(a, b):
++    """Return the sum of a and b."""
+     return a + b
+
+@@ -6,5 +7,10 @@
+     return a - b
+
++def multiply(a, b):
++    return a * b
++
++
+ print(add(2, 3))
+ print(subtract(5, 3))
++print(multiply(2, 3))
+```
+
+The terminal shows the same steps as they happen:
+
+![The same kind of task in the terminal shell](docs/screenshots/cli-activity.png)
+
+Details are for your screen only. Command text is not saved, so after a restart you keep the
+answer and the recorded changes, and the step list is gone.
+
+## Features
+
+### How a task runs
+
+| Step | What happens |
+| --- | --- |
+| 1. You ask | Your message and the project's instructions go to the model, inside a checked context budget |
+| 2. The model works in rounds | Each round is one model request, and it can make up to 8 tool calls |
+| 3. Policy decides | The saved project policy allows a tool, asks you first, or refuses it. Nothing the model says can change that |
+| 4. You see each step | Reads, searches, commands, and edits appear as they happen, and thinking streams above them |
+| 5. Changes are recorded | Each edit is checked against the source the agent read, and saved so you can review or restore it |
+| 6. It stops | A run ends with an answer, at Esc or `/stop`, or at the limit of 32 rounds. Long tasks can be continued, or run as a goal |
+
+### Goals
+
+Give a session one objective, and let it work across several runs within limits you set.
+
+![The goal panel, with sample data](docs/screenshots/desktop-goal.png)
+
+```powershell
+argentum goal set "Migrate the parser and keep the tests passing" --token-budget 1000000 --tool-budget 200 --time-budget 3600
+argentum goal status
+argentum goal supervise
+```
+
+You can amend limits, require verification runners, attest completion, pause, resume, and clear a
+goal. `goal deliver` runs a finite goal in stages. See [goal accounting](docs/GOAL_ACCOUNTING.md).
+
+### Providers and models
+
+The catalog covers hosted services, aggregators, your own server, and local models:
+
+| Type | Providers |
+| --- | --- |
+| Hosted | MiniMax, OpenAI, DeepSeek, Google Gemini, Groq, Mistral, xAI, Cerebras, Perplexity, Cohere, Moonshot, Z.AI, Qwen |
+| Plans | ChatGPT plan, with browser sign-in |
+| Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, OpenCode Go |
+| On your computer | llama.cpp, LM Studio, Ollama, vLLM |
+| Your own | Any OpenAI-compatible server |
+
+- **Real model names:** the app shows what is running, such as `DeepSeek-V4.1-Flash-1017`, not only the ID it sends.
+- **Thinking modes:** switch DeepSeek between off, high, and max from the composer, or with `/thinking`.
+- **Secure keys:** API keys go in the operating system's credential store, and each is only sent to its provider's own address.
+- **Tested live:** DeepSeek and OpenCode Go. See the [support matrix](docs/SUPPORT_MATRIX.md) for the rest.
+
+![Provider settings, with sample data](docs/screenshots/desktop-providers.png)
+
+### Context and budget
+
+Change these in Settings > Providers, or with `argentum provider budget`:
+
+- **Budget:** total, input, output, and uncertainty limits for each model. Models with known limits work without setup.
+- **Context size:** pick the size for a local model in the app, under Context size.
+- **Context meter:** an optional module showing how full the context is, and the terminal footer always shows it.
+- **Compaction:** summarize earlier work with `argentum compact` to free up room. The summary loses detail, and Argentum tells you when one is in use.
+
+A request that would not fit is refused before it is sent.
+
+### Control and safety
+
+- **Permission profiles:** Observe, Guided, Automatic, Verification, Developer, and Full Access. Guided is the default.
+- **Clear approvals:** a prompt shows the exact action and target, and you can approve once or reject.
+- **Guarded edits:** an edit must match the exact source the agent read. A stale or ambiguous edit is rejected.
+- **Review and restore:** look through the files a run changed, then restore them, checking first that they have not changed since.
+- **Verification:** fixed runners produce receipts tied to the source they checked.
+- **Recovery:** after a crash, `argentum recovery inspect` shows what happened, and takeover is never automatic.
+
+### Desktop app
+
+- **Modules:** turn on only what you want: Sessions, Context meter, Reasoning, Goal, Command palette, Status bar, Changes, Git diff, Browser, Usage, Plan, Activity, and Trajectory.
+- **Sessions:** search, rename, pin, archive, and fork.
+- **Themes:** Argentum, Obsidian, Graphite, Ember, and Silver, plus density, text size, corners, colors, and fonts.
+- **Interface tools:** the agent can adjust the interface when you approve it, and can never touch permissions or the approval prompt.
+- **Updates:** contacts GitHub only when you click, checks the SHA-256 sum, and rolls back if installing fails.
+
+![The command palette, with sample data](docs/screenshots/desktop-palette.png)
+
+### Terminal and automation
+
+| Mode | Command | For |
+| --- | --- | --- |
+| Chat shell | `argentum chat` | Interactive work with selectable panels |
+| Headless | `argentum run --prompt TEXT --json` | One task, streamed as JSON |
+| Server | `argentum serve` | JSONL on stdin and stdout, for other programs |
+
+`argentum run` cannot approve its own actions, so a task that needs you fails with
+`approval_required`. Use `--final-result` for one settled result, and `--answer-schema` to check the
+answer against a schema.
+
+### Optional at build time
+
+Extensions, MCP, a browser adapter, desktop control, and local artifacts can be built in. A default
+CLI build leaves them out.
+
+### Known limits
+
+- A run stops after 32 rounds. Raising this needs a database migration, and it is planned.
+- The steps and diff list on each response last for the running session only.
+- Windows x64 is the only tested platform, and it has not yet been tested on a clean machine.
 
 ## Quick start
 

@@ -47,9 +47,20 @@ export struct InspectorModeView {
     detail: string,
 }
 
+export struct MessageChangeView {
+    id: string,
+    path: string,
+    additions: int,
+    removals: int,
+}
+
 export struct ConversationMessageView {
     role: string,
     steps: string,
+    steps_title: string,
+    additions: int,
+    removals: int,
+    changes: [MessageChangeView],
     text: string,
     reasoning: string,
     reasoning_available: bool,

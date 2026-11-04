@@ -3004,8 +3004,10 @@ impl RuntimeService {
         let provider_readiness = match selected {
             None => HarnessReadiness::NeedsConfiguration,
             Some(profile)
-                if matches!(profile.id.as_str(), "openai" | "minimax" | "deepseek")
-                    && !self.provider_credential_configured(&profile.id) =>
+                if matches!(
+                    profile.id.as_str(),
+                    "openai" | "minimax" | "deepseek" | "opencode-go"
+                ) && !self.provider_credential_configured(&profile.id) =>
             {
                 HarnessReadiness::NeedsConfiguration
             }
@@ -3611,7 +3613,7 @@ impl RuntimeService {
             ProviderKind::OpenAiCompatible
                 if matches!(
                     profile.id.as_str(),
-                    "openai" | "minimax" | "deepseek" | "chatgpt"
+                    "openai" | "minimax" | "deepseek" | "opencode-go" | "chatgpt"
                 ) =>
             {
                 if self.provider_credential_configured(&profile.id) {
@@ -8266,6 +8268,11 @@ impl RuntimeService {
                 result: ToolResultState::Running,
                 duration_ms: None,
             };
+            self.publish_transient(AppEvent::ToolActivity {
+                run_id: request.run_id,
+                tool_call_id: request.call_id,
+                text: request.input.activity(),
+            });
             self.emit(AppEvent::ToolStarted(trace))?;
             let mut context = ToolContext::new(
                 self.workspace.clone(),
@@ -11589,6 +11596,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::SessionMetadataChanged { .. }
         | AppEvent::SessionListLoaded(_)
         | AppEvent::SessionRowUpdated(_)
+        | AppEvent::ToolActivity { .. }
         | AppEvent::Error { .. } => return None,
     };
     Some(TrajectoryEntry {
@@ -11656,6 +11664,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         AppEvent::ContextCompactionCompleted { operation_id, .. } => Some(*operation_id),
         AppEvent::ContextCompactionProgress { operation_id, .. } => Some(*operation_id),
         AppEvent::ContextRequestAccounted { run_id, .. }
+        | AppEvent::ToolActivity { run_id, .. }
         | AppEvent::ModelRequestAttempt { run_id, .. }
         | AppEvent::SummaryTransportObserved { run_id, .. }
         | AppEvent::ExtensionOperationRecorded { run_id, .. }

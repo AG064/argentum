@@ -58,8 +58,8 @@ system's secure store.
 
 After that you get a conversation. The core is always there and has no switch: the
 conversation, the provider and model chooser, and the approval prompt. The model chooser shows
-the name the provider gives what is running, such as `DeepSeek-V4.1-Flash-1017`. Each response
-can show its thought process and steps, collapsed until you open them. With DeepSeek, the
+the name the provider gives what is running, such as `DeepSeek-V4.1-Flash-1017`. Each response starts with one line saying what the agent did, like "Changed app.py, read a file,
+ran a command +5". Open it for the exact steps, and open a file to read its diff in place. With DeepSeek, the
 Thinking chip next to the model switches between off, high, and max.
 
 ![The minimal interface](../../docs/screenshots/desktop-minimal.png)
@@ -73,7 +73,7 @@ in Settings, or pick a set: Minimal, Standard, Review, Trace, or Everything.
 | --- | --- |
 | Sessions | Sidebar with this workspace's sessions, search, rename, pin, archive, and fork |
 | Context meter | Context use for the latest turn, when the provider reports it |
-| Reasoning | Collapsed provider reasoning and steps on each response |
+| Reasoning | Thought process, step summary, and changed files with diffs on each response |
 | Goal | A session objective with limits and supervision |
 | Command palette | Ctrl+K search over commands, modules, themes, and sessions |
 | Status bar | Workspace, run state, changed files, and provider |

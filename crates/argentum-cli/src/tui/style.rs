@@ -335,8 +335,16 @@ fn lines_for(entry: &TimelineEntry) -> Vec<Line> {
             if !first_summary.is_empty() {
                 segments.push((format!("  {first_summary}"), Tone::Muted));
             }
-            if let Some(duration) = entry.detail.strip_prefix("duration: ") {
-                segments.push((format!("  {duration}"), Tone::Faint));
+            // Only worth showing once it is long enough to notice.
+            if let Some(seconds) = entry
+                .detail
+                .strip_prefix("duration: ")
+                .and_then(|duration| duration.strip_suffix(" ms"))
+                .and_then(|millis| millis.parse::<u64>().ok())
+                .filter(|millis| *millis >= 1000)
+                .map(|millis| millis as f64 / 1000.0)
+            {
+                segments.push((format!("  {seconds:.1}s"), Tone::Faint));
             }
             if running {
                 segments.push(("  running".into(), Tone::Faint));

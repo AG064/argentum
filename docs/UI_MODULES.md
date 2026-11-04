@@ -20,7 +20,7 @@ the rules in [the modular harness contract](HARNESS_MODULARITY.md).
 | --- | --- | --- |
 | `sessions` | Sidebar | Sessions for this workspace, new chat, workspace entry |
 | `context-meter` | Composer | Context use for the latest turn, when reported |
-| `reasoning` | Message | Collapsed provider reasoning and the steps of each response |
+| `reasoning` | Message | Provider reasoning, a one-line step summary, and changed files with diffs on each response |
 | `goal` | Above composer | Session objective, budgets, next action |
 | `command-palette` | Overlay | Ctrl+K search over commands, modules, themes, sessions |
 | `status-bar` | Bottom | Workspace, run state, changed files, provider |
