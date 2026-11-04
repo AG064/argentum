@@ -27,8 +27,13 @@ container has no console. The `benchmark-unattended` Cargo feature exists only f
 - It also needs `ARGENTUM_BENCHMARK_DISPOSABLE=1` at runtime. Without that, it refuses like any other build.
 - `argentum --version` says "benchmark build".
 
-With it, the agent gets the `full-access` profile: no approvals and no workspace limits. **Only run
-it in a disposable container.** The `benchmark-build` workflow builds it and tests all of this.
+It adds one command, `argentum benchmark-run`, which does setup and the task in one process. The
+agent gets the `full-access` profile: no approvals and no workspace limits. **Only run it in a
+disposable container.** The `benchmark-build` workflow builds it and tests all of this.
+
+Argentum's saved database only works on Windows today, so this command keeps its state in memory.
+A benchmark never restarts mid-task, so that should not affect its score, but it does mean recovery
+after a crash is not being tested. Windows x64 is still the only tested platform for normal use.
 
 ## What you need
 

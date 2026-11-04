@@ -1,5 +1,6 @@
 //! The benchmark switch must do nothing in an ordinary build, and in a benchmark build it
-//! must need the container's marker. Run the second half on Linux with:
+//! must need the container's marker. Everything stays in memory, because a saved database
+//! is Windows-only today. Run the second half on Linux with:
 //! `cargo test -p argentum-cli --features benchmark-unattended --test benchmark_unattended`
 
 use std::path::Path;
@@ -7,28 +8,33 @@ use std::process::{Command, Output};
 
 const MARKER: &str = "ARGENTUM_BENCHMARK_DISPOSABLE";
 
-fn invoke(root: &Path, args: &[&str], marker: bool) -> Output {
+fn base_command(marker: bool) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_argentum"));
+    command.env("RUST_LOG", "off").env_remove(MARKER);
+    if marker {
+        command.env(MARKER, "1");
+    }
     command
+}
+
+fn invoke(root: &Path, args: &[&str], marker: bool) -> Output {
+    base_command(marker)
         .args(args)
         .args(["--isolated", "--workspace"])
         .arg(root.join("workspace"))
         .arg("--database")
         .arg(root.join("state.db"))
         .args(["--json", "--no-color"])
-        .env("RUST_LOG", "off")
-        .env_remove(MARKER);
-    if marker {
-        command.env(MARKER, "1");
-    }
-    command.output().unwrap()
+        .output()
+        .unwrap()
 }
 
-fn selected_profile(root: &Path) -> String {
-    let out = invoke(root, &["permissions", "list"], false);
-    assert!(out.status.success());
-    let body: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    body["selected"]["profile_id"].as_str().unwrap().to_owned()
+fn output_of(out: &Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 fn fresh_root() -> tempfile::TempDir {
@@ -42,13 +48,23 @@ fn fresh_root() -> tempfile::TempDir {
 fn an_ordinary_build_ignores_the_marker() {
     let root = fresh_root();
     let out = invoke(root.path(), &["permissions", "select", "full-access"], true);
-    assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stdout)
-        .contains("local authority is required for this command"));
-    assert_eq!(selected_profile(root.path()), "guided");
+    assert!(!out.status.success(), "{}", output_of(&out));
+    // Other platforms refuse earlier, because the saved database is Windows-only.
+    #[cfg(windows)]
+    assert!(
+        output_of(&out).contains("local authority is required for this command"),
+        "{}",
+        output_of(&out)
+    );
 
-    let version = invoke(root.path(), &["--version"], true);
-    assert!(!String::from_utf8_lossy(&version.stdout).contains("benchmark"));
+    let version = base_command(true).arg("--version").output().unwrap();
+    assert!(!output_of(&version).contains("benchmark"));
+
+    let run = base_command(true)
+        .args(["benchmark-run", "--model", "any", "--prompt", "any"])
+        .output()
+        .unwrap();
+    assert!(!run.status.success());
 }
 
 #[cfg(feature = "benchmark-unattended")]
@@ -65,15 +81,20 @@ mod benchmark_build {
             &["permissions", "select", "full-access"],
             false,
         );
-        assert!(!out.status.success());
-        assert_eq!(selected_profile(root.path()), "guided");
+        assert!(!out.status.success(), "{}", output_of(&out));
+
+        let run = base_command(false)
+            .args(["benchmark-run", "--model", "any", "--prompt", "any"])
+            .output()
+            .unwrap();
+        assert!(!run.status.success());
+        assert!(output_of(&run).contains(MARKER), "{}", output_of(&run));
     }
 
     #[test]
     fn it_says_what_it_is() {
-        let root = fresh_root();
-        let out = invoke(root.path(), &["--version"], false);
-        assert!(String::from_utf8_lossy(&out.stdout).contains("benchmark build"));
+        let out = base_command(false).arg("--version").output().unwrap();
+        assert!(output_of(&out).contains("benchmark build"));
     }
 
     fn read_request(stream: &mut std::net::TcpStream) {
@@ -124,53 +145,24 @@ mod benchmark_build {
             }
         });
 
-        for args in [
-            &[
-                "provider",
-                "save",
-                "fixture",
-                "--label",
-                "Fixture",
-                "--kind",
-                "openai-compatible",
-                "--endpoint",
-                endpoint.as_str(),
-                "--model",
-                "fixture-model",
-                "--select",
-            ][..],
-            &[
-                "provider",
-                "budget",
-                "fixture",
-                "--limits",
-                "204800,196608,4096,4096,1024",
-            ][..],
-            &["permissions", "select", "full-access"][..],
-        ] {
-            let out = invoke(root.path(), args, true);
-            assert!(
-                out.status.success(),
-                "{args:?}: {}{}",
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
-        assert_eq!(selected_profile(root.path()), "full-access");
-
-        let run = invoke(root.path(), &["run", "make the proof file"], true);
-        assert!(
-            run.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr)
-        );
+        let run = base_command(true)
+            .arg("benchmark-run")
+            .arg("--workspace")
+            .arg(root.path().join("workspace"))
+            .args(["--provider", "fixture", "--model", "fixture-model"])
+            .args(["--endpoint", endpoint.as_str()])
+            .args(["--limits", "204800,196608,4096,4096,1024"])
+            .args(["--prompt", "make the proof file"])
+            .output()
+            .unwrap();
+        assert!(run.status.success(), "{}", output_of(&run));
         server.join().unwrap();
-        assert_eq!(
-            std::fs::read_to_string(root.path().join("workspace/proof.txt"))
-                .unwrap()
-                .trim(),
-            "ran"
-        );
+        // Windows shells may write UTF-16, so compare only the letters.
+        let proof = std::fs::read(root.path().join("workspace/proof.txt")).unwrap();
+        let letters = proof
+            .into_iter()
+            .filter(u8::is_ascii_alphabetic)
+            .collect::<Vec<_>>();
+        assert_eq!(letters, b"ran");
     }
 }

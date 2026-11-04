@@ -37,7 +37,7 @@ class Argentum(BaseInstalledAgent):
     """The benchmark build of the Argentum CLI, copied in from this machine.
 
     ARGENTUM_BENCHMARK_BINARY points at a build made with the `benchmark-unattended`
-    feature. Ordinary builds refuse the permissions step below.
+    feature. Ordinary builds do not have the `benchmark-run` command.
     """
 
     @staticmethod
@@ -65,16 +65,12 @@ class Argentum(BaseInstalledAgent):
     @with_prompt_template
     async def run(self, instruction, environment, context: AgentContext):
         env = {**deepseek_env(self), "ARGENTUM_BENCHMARK_DISPOSABLE": "1", "RUST_LOG": "off"}
-        scope = '--workspace "$PWD" --database /tmp/argentum-benchmark.sqlite3 --isolated --no-color'
         model = shlex.quote(model_id(self.model_name))
         await self.exec_as_agent(
             environment,
             command=(
-                f"argentum provider add deepseek {scope} --json > /dev/null"
-                f" && argentum provider model deepseek --model {model} {scope} --json > /dev/null"
-                f" && argentum permissions select full-access {scope} --json > /dev/null"
-                f" && argentum run {shlex.quote(instruction)} {scope} --json"
-                " > /logs/agent/argentum.jsonl 2>&1"
+                f'argentum benchmark-run --workspace "$PWD" --model {model}'
+                f" --prompt {shlex.quote(instruction)} > /logs/agent/argentum.jsonl 2>&1"
             ),
             env=env,
         )

@@ -222,6 +222,14 @@ impl HostConfig {
         }
     }
 
+    /// A disposable container has no secure store and keeps nothing, so a benchmark
+    /// run takes its key from the environment and its state lives in memory.
+    #[cfg(feature = "benchmark-unattended")]
+    pub fn for_benchmark(workspace: impl Into<PathBuf>) -> Result<Self, HostError> {
+        Ok(Self::in_memory(workspace)
+            .with_provider_credentials(provider_credentials_from_environment()?))
+    }
+
     pub fn with_provider_credentials(mut self, credentials: ProviderCredentials) -> Self {
         self.provider_credentials = credentials;
         self

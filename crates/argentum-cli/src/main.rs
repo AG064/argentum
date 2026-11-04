@@ -72,6 +72,14 @@ async fn run_main() -> ExitCode {
     let json_requested = raw_args.iter().any(|value| value == "--json");
     let command_path = command_path_from_args(&raw_args);
 
+    #[cfg(feature = "benchmark-unattended")]
+    if raw_args.first().map(String::as_str) == Some("benchmark-run") {
+        return match run_benchmark_task(raw_args[1..].to_vec()).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => finish_command_error(error, "benchmark-run", json_requested),
+        };
+    }
+
     if raw_args.first().map(String::as_str) == Some("artifacts") {
         #[cfg(feature = "artifacts")]
         {
@@ -1461,6 +1469,103 @@ fn benchmark_stands_in_for_owner() -> bool {
 #[cfg(feature = "benchmark-unattended")]
 fn disposable_marker_is_set(value: Option<&std::ffi::OsStr>) -> bool {
     value.is_some_and(|value| value == "1")
+}
+
+/// One task, start to finish, in one process. A saved database is Windows-only today,
+/// and a disposable container has nothing worth saving, so state stays in memory.
+#[cfg(feature = "benchmark-unattended")]
+async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    if !benchmark_stands_in_for_owner() {
+        return Err(format!("benchmark-run needs {BENCHMARK_DISPOSABLE_ENV}=1").into());
+    }
+    let mut workspace = env::current_dir()?;
+    let mut provider_id = "deepseek".to_owned();
+    let (mut model, mut endpoint, mut limits, mut prompt) = (None, None, None, None);
+    let mut values = args.into_iter();
+    while let Some(flag) = values.next() {
+        let mut value = || values.next().ok_or_else(|| format!("{flag} needs a value"));
+        match flag.as_str() {
+            "--workspace" => workspace = value()?.into(),
+            "--provider" => provider_id = value()?,
+            "--model" => model = Some(value()?),
+            "--endpoint" => endpoint = Some(value()?),
+            "--limits" => limits = Some(argentum_cli::parse_model_budget_limits(&value()?)?),
+            "--prompt" => prompt = Some(value()?),
+            "--json" => {}
+            other => return Err(format!("unknown benchmark-run option: {other}").into()),
+        }
+    }
+    let prompt = prompt.ok_or("benchmark-run needs --prompt")?;
+    let model = model.ok_or("benchmark-run needs --model")?;
+    with_one_shot_host(HostConfig::for_benchmark(workspace)?, move |host| {
+        Box::pin(async move {
+            let owner = host.local_handle();
+            if let Some(endpoint) = endpoint {
+                let profile = argentum_providers::normalize_provider_profile(
+                    argentum_domain::ProviderProfile {
+                        id: provider_id.clone(),
+                        label: provider_id.clone(),
+                        kind: argentum_domain::ProviderKind::OpenAiCompatible,
+                        endpoint,
+                        model,
+                        selected: false,
+                    },
+                )?;
+                owner
+                    .dispatch(AppCommand::SaveProviderProfile { profile })
+                    .await?;
+            } else {
+                owner
+                    .dispatch(AppCommand::AddProviderPreset {
+                        preset_id: provider_id.clone(),
+                    })
+                    .await?;
+                owner
+                    .dispatch(AppCommand::SelectProviderModel {
+                        provider_id: provider_id.clone(),
+                        model,
+                    })
+                    .await?;
+            }
+            owner
+                .dispatch(AppCommand::SelectProviderProfile {
+                    provider_id: provider_id.clone(),
+                })
+                .await?;
+            if let Some(limits) = limits {
+                host.declare_model_budget(&provider_id, limits)?;
+            }
+            owner
+                .dispatch(AppCommand::SelectExecutionProfile {
+                    profile_id: "full-access".into(),
+                })
+                .await?;
+
+            let client = host.client();
+            let mut events = client.subscribe();
+            let mut stdout = tokio::io::stdout();
+            let sequence = AtomicU64::new(0);
+            let command = client.dispatch(task_command(prompt, None));
+            tokio::pin!(command);
+            loop {
+                tokio::select! {
+                    result = &mut command => {
+                        while let Ok(event) = events.try_recv() {
+                            write_machine_response(&mut stdout, &sequence, None, ServerPayload::event(event)).await?;
+                        }
+                        result?;
+                        return Ok(());
+                    }
+                    event = events.recv() => {
+                        if let Ok(event) = event {
+                            write_machine_response(&mut stdout, &sequence, None, ServerPayload::event(event)).await?;
+                        }
+                    }
+                }
+            }
+        })
+    })
+    .await
 }
 
 #[cfg(not(feature = "benchmark-unattended"))]
