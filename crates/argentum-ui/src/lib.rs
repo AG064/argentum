@@ -620,6 +620,7 @@ impl UiHandle {
                 self.window
                     .global::<App>()
                     .set_served_model(model.clone().into());
+                self.refresh_model_name();
                 if !profile_id.is_empty() {
                     let profiles = self.window.get_provider_profiles();
                     let provider_label = (0..profiles.row_count())
@@ -1947,6 +1948,7 @@ impl UiHandle {
             self.window
                 .set_provider_endpoint(profile.endpoint.clone().into());
             self.window.set_provider_model(profile.model.clone().into());
+            self.refresh_model_name();
             self.window
                 .set_provider_draft_label(profile.label.clone().into());
             self.window
@@ -1991,6 +1993,7 @@ impl UiHandle {
             self.window.set_provider_kind_label("Unavailable".into());
             self.window.set_provider_endpoint(SharedString::default());
             self.window.set_provider_model(SharedString::default());
+            self.refresh_model_name();
             self.window
                 .set_provider_draft_label(SharedString::default());
             self.window
@@ -2070,8 +2073,11 @@ impl UiHandle {
             return;
         }
         let pending = self.window.get_provider_models_pending().to_string();
-        self.window
-            .set_provider_models(provider_model_view_model(models, selected_model));
+        self.window.set_provider_models(provider_model_view_model(
+            &self.window.get_provider_endpoint(),
+            models,
+            selected_model,
+        ));
         match pending.as_str() {
             "list" => self.window.set_provider_models_loading(false),
             "select" => self.window.set_provider_model_selecting(false),
@@ -2083,6 +2089,7 @@ impl UiHandle {
         if pending == "select" && self.window.get_provider_id().as_str() == provider_id {
             self.reset_current_model_context();
             self.window.set_provider_model(selected_model.into());
+            self.refresh_model_name();
             self.window.set_provider_draft_model(selected_model.into());
             self.window.set_provider_connected(false);
             self.window.set_provider_probe_state("untested".into());
@@ -2095,6 +2102,32 @@ impl UiHandle {
             self.window
                 .set_provider_models_pending(SharedString::default());
         }
+        self.refresh_model_name();
+    }
+
+    /// The name on screen: what the server said it ran, or what is configured.
+    fn refresh_model_name(&self) {
+        let app = self.window.global::<App>();
+        let served = app.get_served_model();
+        let model = if served.is_empty() {
+            self.window.get_provider_model()
+        } else {
+            served
+        };
+        let mut name =
+            argentum_domain::model_display_name(&self.window.get_provider_endpoint(), &model);
+        if name == model.as_str()
+            && self.window.get_provider_models_provider_id() == self.window.get_provider_id()
+        {
+            let rows = self.window.get_provider_models();
+            if let Some(row) = (0..rows.row_count())
+                .filter_map(|index| rows.row_data(index))
+                .find(|row| row.id == model)
+            {
+                name = row.label.to_string();
+            }
+        }
+        app.set_provider_model_name(name.into());
     }
 
     /// First run shows the provider chooser and nothing else. A workspace already
@@ -2613,6 +2646,10 @@ impl UiHandle {
         self.window
             .set_current_run_provider_label(SharedString::default());
         self.window.set_current_run_model(SharedString::default());
+        self.window
+            .global::<App>()
+            .set_served_model(SharedString::default());
+        self.refresh_model_name();
         self.reset_usage_projection();
     }
 
@@ -3472,6 +3509,7 @@ fn provider_profile_view_model_with_credentials(
 }
 
 fn provider_model_view_model(
+    endpoint: &str,
     models: &[ProviderModel],
     selected_model: &str,
 ) -> ModelRc<ProviderModelView> {
@@ -3479,7 +3517,14 @@ fn provider_model_view_model(
         .iter()
         .map(|model| ProviderModelView {
             id: model.id.clone().into(),
-            label: model.label.clone().into(),
+            label: {
+                let published = argentum_domain::model_display_name(endpoint, &model.id);
+                if published == model.id {
+                    model.label.clone().into()
+                } else {
+                    published.into()
+                }
+            },
             context_window_tokens: model.context_window_tokens.map_or(0, saturating_i32_u64),
             context_window_reported: model.context_window_tokens.is_some(),
             selected: model.id == selected_model,

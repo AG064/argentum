@@ -11,6 +11,8 @@ export global App {
     in-out property <string> current_run_provider_label: "";
     in-out property <string> current_run_model: "";
     in-out property <string> served_model: "";
+    // The provider's name for what is running. Requests keep using provider_model.
+    in-out property <string> provider_model_name: "";
     in-out property <string> live_steps: "";
     in-out property <string> thinking_mode: "high";
     callback set_thinking_mode(string);

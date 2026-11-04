@@ -370,10 +370,50 @@ impl Drop for ProcessContainment {
     }
 }
 
-#[cfg(not(windows))]
+/// A process group: everything a command starts dies with it, unless it deliberately
+/// leaves the group. The disposable container around the benchmark covers that case.
+#[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+pub(crate) struct ProcessContainment {
+    group: rustix::process::Pid,
+}
+
+#[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+impl ProcessContainment {
+    /// The child was started as the leader of its own group, so its ID names the group.
+    pub(crate) fn attach(process_id: u32) -> Result<Self, std::io::Error> {
+        let group = i32::try_from(process_id)
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+            .ok_or_else(|| std::io::Error::other("invalid process group"))?;
+        Ok(Self { group })
+    }
+
+    pub(crate) fn attach_managed(
+        _process_id: u32,
+        _limits: ManagedProcessLimits,
+    ) -> Result<(Self, ()), std::io::Error> {
+        Err(std::io::Error::other(
+            "suspended managed processes are currently supported only on Windows",
+        ))
+    }
+
+    pub(crate) fn terminate(&mut self) -> Result<(), std::io::Error> {
+        match rustix::process::kill_process_group(self.group, rustix::process::Signal::KILL) {
+            Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// As with a Windows job, nothing a finished command started outlives it.
+    pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
+        self.terminate()
+    }
+}
+
+#[cfg(not(any(windows, all(target_os = "linux", feature = "benchmark-process-group"))))]
 pub(crate) struct ProcessContainment;
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, all(target_os = "linux", feature = "benchmark-process-group"))))]
 impl ProcessContainment {
     pub(crate) fn attach(_process_id: u32) -> Result<Self, std::io::Error> {
         Err(std::io::Error::other(

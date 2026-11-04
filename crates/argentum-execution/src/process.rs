@@ -1501,6 +1501,8 @@ fn configured_command(spec: &ProcessSpec, managed: bool) -> Command {
     }
     #[cfg(not(windows))]
     let _ = managed;
+    #[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+    command.process_group(0);
     command
 }
 
@@ -1601,7 +1603,13 @@ fn resume_process_threads(process_id: u32) -> Result<(), std::io::Error> {
     }
 }
 
-#[cfg(not(windows))]
+/// Nothing to resume: only Windows starts a command suspended.
+#[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
+    Ok(())
+}
+
+#[cfg(not(any(windows, all(target_os = "linux", feature = "benchmark-process-group"))))]
 fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
     Err(std::io::Error::other(
         "suspended managed processes are currently supported only on Windows",
@@ -2054,6 +2062,49 @@ mod tests {
     use std::time::Duration;
 
     use tokio_util::sync::CancellationToken;
+
+    #[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+    #[tokio::test]
+    async fn a_stopped_command_takes_its_children_with_it() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let spec = ProcessSpec::shell(
+            "sleep 120 & echo $! > child.pid; wait".to_owned(),
+            workspace.path().to_path_buf(),
+        )
+        .expect("spec")
+        .with_timeout(Duration::from_millis(500))
+        .expect("timeout");
+        let _ = ProcessRunner.run(spec, CancellationToken::new()).await;
+
+        let child = fs::read_to_string(workspace.path().join("child.pid")).expect("child pid");
+        let stat = format!("/proc/{}/stat", child.trim());
+        let gone = || {
+            fs::read_to_string(&stat).map_or(true, |text| {
+                text.rsplit(") ")
+                    .next()
+                    .is_some_and(|rest| rest.starts_with('Z'))
+            })
+        };
+        for _ in 0..100 {
+            if gone() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the child of a stopped command is still running");
+    }
+
+    #[cfg(all(not(windows), not(feature = "benchmark-process-group")))]
+    #[tokio::test]
+    async fn an_ordinary_build_refuses_without_verified_containment() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let spec =
+            ProcessSpec::shell("true".to_owned(), workspace.path().to_path_buf()).expect("spec");
+        assert!(matches!(
+            ProcessRunner.run(spec, CancellationToken::new()).await,
+            Err(ProcessError::Containment(_))
+        ));
+    }
 
     #[test]
     fn managed_process_limits_validate_and_derive_local_model_bounds() {

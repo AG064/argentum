@@ -7,6 +7,9 @@ license-file.workspace = true
 
 [features]
 artifact-render = []
+# Disposable Linux benchmark containers only. Other non-Windows builds keep refusing to
+# run processes, because this is weaker than a Windows job object.
+benchmark-process-group = ["dep:rustix"]
 
 [dependencies]
 argentum-domain.workspace = true
@@ -22,6 +25,9 @@ time.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["process"], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 find-msvc-tools = "=0.1.9"

@@ -64,7 +64,9 @@ fn status_row(state: &TuiState) -> Option<Row> {
 }
 
 fn footer_row(state: &TuiState, hint: &str, columns: usize) -> Row {
-    let model = if state.model.is_empty() {
+    let model = if !state.model_name.is_empty() {
+        state.model_name.as_str()
+    } else if state.model.is_empty() {
         state.provider_label.as_str()
     } else {
         state.model.as_str()

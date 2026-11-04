@@ -72,6 +72,14 @@ async fn run_main() -> ExitCode {
     let json_requested = raw_args.iter().any(|value| value == "--json");
     let command_path = command_path_from_args(&raw_args);
 
+    #[cfg(feature = "benchmark-unattended")]
+    if raw_args.first().map(String::as_str) == Some("benchmark-run") {
+        return match run_benchmark_task(raw_args[1..].to_vec()).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => finish_command_error(error, "benchmark-run", json_requested),
+        };
+    }
+
     if raw_args.first().map(String::as_str) == Some("artifacts") {
         #[cfg(feature = "artifacts")]
         {
@@ -1441,6 +1449,128 @@ fn can_download_local_model(options: &CommonOptions) -> bool {
         io::stdin().is_terminal(),
         io::stdout().is_terminal(),
     )
+}
+
+// Windows is what users download, so a Windows binary can never have this switch.
+#[cfg(all(feature = "benchmark-unattended", not(target_os = "linux"), not(test)))]
+compile_error!("benchmark-unattended is for disposable Linux benchmark containers only");
+
+/// Set by the benchmark container image, and read only by a benchmark build.
+#[cfg(feature = "benchmark-unattended")]
+const BENCHMARK_DISPOSABLE_ENV: &str = "ARGENTUM_BENCHMARK_DISPOSABLE";
+
+/// A benchmark build run in a disposable container has no owner to ask. Every other
+/// build returns false, whatever the environment says.
+#[cfg(feature = "benchmark-unattended")]
+fn benchmark_stands_in_for_owner() -> bool {
+    disposable_marker_is_set(std::env::var_os(BENCHMARK_DISPOSABLE_ENV).as_deref())
+}
+
+#[cfg(feature = "benchmark-unattended")]
+fn disposable_marker_is_set(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some_and(|value| value == "1")
+}
+
+/// One task, start to finish, in one process. A saved database is Windows-only today,
+/// and a disposable container has nothing worth saving, so state stays in memory.
+#[cfg(feature = "benchmark-unattended")]
+async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    if !benchmark_stands_in_for_owner() {
+        return Err(format!("benchmark-run needs {BENCHMARK_DISPOSABLE_ENV}=1").into());
+    }
+    let mut workspace = env::current_dir()?;
+    let mut provider_id = "deepseek".to_owned();
+    let (mut model, mut endpoint, mut limits, mut prompt) = (None, None, None, None);
+    let mut values = args.into_iter();
+    while let Some(flag) = values.next() {
+        let mut value = || values.next().ok_or_else(|| format!("{flag} needs a value"));
+        match flag.as_str() {
+            "--workspace" => workspace = value()?.into(),
+            "--provider" => provider_id = value()?,
+            "--model" => model = Some(value()?),
+            "--endpoint" => endpoint = Some(value()?),
+            "--limits" => limits = Some(argentum_cli::parse_model_budget_limits(&value()?)?),
+            "--prompt" => prompt = Some(value()?),
+            "--json" => {}
+            other => return Err(format!("unknown benchmark-run option: {other}").into()),
+        }
+    }
+    let prompt = prompt.ok_or("benchmark-run needs --prompt")?;
+    let model = model.ok_or("benchmark-run needs --model")?;
+    with_one_shot_host(HostConfig::for_benchmark(workspace)?, move |host| {
+        Box::pin(async move {
+            let owner = host.local_handle();
+            if let Some(endpoint) = endpoint {
+                let profile = argentum_providers::normalize_provider_profile(
+                    argentum_domain::ProviderProfile {
+                        id: provider_id.clone(),
+                        label: provider_id.clone(),
+                        kind: argentum_domain::ProviderKind::OpenAiCompatible,
+                        endpoint,
+                        model,
+                        selected: false,
+                    },
+                )?;
+                owner
+                    .dispatch(AppCommand::SaveProviderProfile { profile })
+                    .await?;
+            } else {
+                owner
+                    .dispatch(AppCommand::AddProviderPreset {
+                        preset_id: provider_id.clone(),
+                    })
+                    .await?;
+                owner
+                    .dispatch(AppCommand::SelectProviderModel {
+                        provider_id: provider_id.clone(),
+                        model,
+                    })
+                    .await?;
+            }
+            owner
+                .dispatch(AppCommand::SelectProviderProfile {
+                    provider_id: provider_id.clone(),
+                })
+                .await?;
+            if let Some(limits) = limits {
+                host.declare_model_budget(&provider_id, limits)?;
+            }
+            owner
+                .dispatch(AppCommand::SelectExecutionProfile {
+                    profile_id: "full-access".into(),
+                })
+                .await?;
+
+            let client = host.client();
+            let mut events = client.subscribe();
+            let mut stdout = tokio::io::stdout();
+            let sequence = AtomicU64::new(0);
+            let command = client.dispatch(task_command(prompt, None));
+            tokio::pin!(command);
+            loop {
+                tokio::select! {
+                    result = &mut command => {
+                        while let Ok(event) = events.try_recv() {
+                            write_machine_response(&mut stdout, &sequence, None, ServerPayload::event(event)).await?;
+                        }
+                        result?;
+                        return Ok(());
+                    }
+                    event = events.recv() => {
+                        if let Ok(event) = event {
+                            write_machine_response(&mut stdout, &sequence, None, ServerPayload::event(event)).await?;
+                        }
+                    }
+                }
+            }
+        })
+    })
+    .await
+}
+
+#[cfg(not(feature = "benchmark-unattended"))]
+const fn benchmark_stands_in_for_owner() -> bool {
+    false
 }
 
 fn direct_local_user_interaction(
@@ -3826,12 +3956,13 @@ async fn run_permissions_command(
     action: PermissionAction,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let local_authority_observed = direct_local_user_interaction(
-        options.non_interactive,
-        json,
-        io::stdin().is_terminal(),
-        io::stdout().is_terminal(),
-    );
+    let local_authority_observed = benchmark_stands_in_for_owner()
+        || direct_local_user_interaction(
+            options.non_interactive,
+            json,
+            io::stdin().is_terminal(),
+            io::stdout().is_terminal(),
+        );
     let config = options.host_config()?;
     with_one_shot_host(config, move |host| {
         Box::pin(async move {
@@ -8310,7 +8441,12 @@ fn print_version() {
 }
 
 fn version_line() -> String {
-    format!("argentum {}", env!("CARGO_PKG_VERSION"))
+    let build = if cfg!(feature = "benchmark-unattended") {
+        " (benchmark build, disposable containers only)"
+    } else {
+        ""
+    };
+    format!("argentum {}{build}", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]
@@ -8322,6 +8458,22 @@ mod tests {
     use argentum_cli::protocol::RequestEnvelope;
 
     use super::*;
+
+    #[cfg(not(feature = "benchmark-unattended"))]
+    #[test]
+    fn only_a_benchmark_build_can_stand_in_for_the_owner() {
+        assert!(!benchmark_stands_in_for_owner());
+    }
+
+    #[cfg(feature = "benchmark-unattended")]
+    #[test]
+    fn the_disposable_marker_must_be_exact() {
+        use std::ffi::OsStr;
+        assert!(disposable_marker_is_set(Some(OsStr::new("1"))));
+        for value in [None, Some(""), Some("0"), Some("true"), Some("11")] {
+            assert!(!disposable_marker_is_set(value.map(OsStr::new)));
+        }
+    }
 
     #[tokio::test]
     async fn changes_page_command_preserves_retained_journal_and_workspace() {
@@ -9187,6 +9339,7 @@ mod tests {
         assert!(!matches!(chat, Arguments::Help));
 
         assert!(parse_args(["--non-interactive"]).is_ok());
+        #[cfg(not(feature = "benchmark-unattended"))]
         assert_eq!(
             version_line(),
             concat!("argentum ", env!("CARGO_PKG_VERSION"))
@@ -9295,6 +9448,7 @@ mod tests {
         assert!(parse_args(["session", "fork", session_id]).is_err());
         assert!(parse_args(["version", "extra"]).is_err());
         assert!(parse_args(["session", "select", "invalid"]).is_err());
+        #[cfg(not(feature = "benchmark-unattended"))]
         assert_eq!(
             version_line(),
             concat!("argentum ", env!("CARGO_PKG_VERSION"))

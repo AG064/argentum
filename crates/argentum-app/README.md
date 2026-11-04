@@ -57,8 +57,9 @@ system's secure store.
 ![Choosing a provider on first run](../../docs/screenshots/desktop-first-run.png)
 
 After that you get a conversation. The core is always there and has no switch: the
-conversation, the provider and model chooser, and the approval prompt. Each response can
-show its thought process and steps, collapsed until you open them. With DeepSeek, the
+conversation, the provider and model chooser, and the approval prompt. The model chooser shows
+the name the provider gives what is running, such as `DeepSeek-V4.1-Flash-1017`. Each response
+can show its thought process and steps, collapsed until you open them. With DeepSeek, the
 Thinking chip next to the model switches between off, high, and max.
 
 ![The minimal interface](../../docs/screenshots/desktop-minimal.png)

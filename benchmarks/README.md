@@ -7,6 +7,9 @@ same tasks with the same model.
 this page makes no claim that any tool is better. Results will be added only from real
 runs, with the command, versions, and model recorded.
 
+This is a small smoke test that runs on your own machine. For a public comparison on real
+tasks, see [public/README.md](public/README.md).
+
 ## What it measures
 
 Every attempt gets a fresh copy of the task in a temporary folder. The checks are copied in

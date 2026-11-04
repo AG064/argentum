@@ -2159,7 +2159,7 @@ pub const DEFAULT_LLAMA_CPP_ENDPOINT: &str = "local://llama-cpp/";
 pub const DEFAULT_LLAMA_CPP_MODEL: &str = "Qwen3.5-0.8B-Q8_0.gguf";
 pub const DEFAULT_LM_STUDIO_ENDPOINT: &str = "http://127.0.0.1:1234/v1/";
 pub const DEFAULT_MODEL: &str = DEFAULT_LLAMA_CPP_MODEL;
-pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 18] = [
+pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 19] = [
     "openai",
     "minimax",
     "deepseek",
@@ -2178,6 +2178,7 @@ pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 18] = [
     "qwen",
     "github-models",
     "opencode-zen",
+    "opencode-go",
 ];
 
 pub fn is_supported_hosted_credential_provider_id(profile_id: &str) -> bool {
@@ -2227,6 +2228,35 @@ pub struct ProviderStatus {
     pub endpoint: String,
     pub connected: bool,
     pub detail: String,
+}
+
+/// The name a provider publishes for what actually runs behind a model ID.
+///
+/// Some providers keep one stable ID and upgrade what is behind it, and report only
+/// that ID at runtime. Only those need an entry here, each checked against the
+/// provider's own release notes: DeepSeek at <https://api-docs.deepseek.com/updates>.
+/// An entry goes stale when the provider ships a new build, so update it with them.
+/// Every other model is already known by its ID or by the name its server reports.
+/// The endpoint must match exactly, so a custom route cannot borrow a name.
+fn published_model_name(endpoint: &str, model: &str) -> Option<&'static str> {
+    let host = endpoint
+        .strip_prefix("https://")?
+        .split(['/', '?', '#'])
+        .next()?;
+    match (host, model) {
+        (
+            "api.deepseek.com",
+            "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp",
+        ) => Some("DeepSeek-V4.1-Flash-1017"),
+        ("api.deepseek.com", "deepseek-v4-pro") => Some("DeepSeek-V4-Pro"),
+        _ => None,
+    }
+}
+
+/// What to call a model on screen. Requests always keep using the model ID.
+#[must_use]
+pub fn model_display_name(endpoint: &str, model: &str) -> String {
+    published_model_name(endpoint, model).map_or_else(|| model.to_owned(), str::to_owned)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3575,5 +3605,43 @@ mod tests {
             serde_json::from_value::<AppEvent>(encoded).expect("parsed evidence event"),
             AppEvent::VerificationEvidenceRecorded(evidence)
         );
+    }
+}
+
+#[cfg(test)]
+mod model_name_tests {
+    use super::model_display_name;
+
+    #[test]
+    fn a_stable_id_shows_the_build_behind_it() {
+        for id in [
+            "deepseek-flash",
+            "deepseek-v4-flash",
+            "deepseek-v4-flash-vision-exp",
+        ] {
+            assert_eq!(
+                model_display_name("https://api.deepseek.com/", id),
+                "DeepSeek-V4.1-Flash-1017"
+            );
+        }
+        assert_eq!(
+            model_display_name("https://api.deepseek.com", "deepseek-v4-pro"),
+            "DeepSeek-V4-Pro"
+        );
+    }
+
+    #[test]
+    fn other_models_and_routes_keep_their_own_name() {
+        for (endpoint, model) in [
+            ("https://api.openai.com/v1/", "gpt-5.6-2026-09-01"),
+            ("https://api.minimax.io/v1/", "MiniMax-M2.7"),
+            ("https://api.deepseek.com/", "future-model"),
+            ("http://api.deepseek.com/", "deepseek-flash"),
+            ("https://api.deepseek.com.example/", "deepseek-flash"),
+            ("https://api.deepseek.com@example.com/", "deepseek-flash"),
+            ("https://proxy.example/deepseek/", "deepseek-flash"),
+        ] {
+            assert_eq!(model_display_name(endpoint, model), model);
+        }
     }
 }

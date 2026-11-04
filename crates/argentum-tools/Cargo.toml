@@ -8,6 +8,7 @@ license-file.workspace = true
 [features]
 extensions = []
 desktop-control = ["dep:argentum-extensions", "argentum-extensions/desktop-control"]
+benchmark-process-group = ["argentum-execution/benchmark-process-group"]
 
 [dependencies]
 argentum-domain.workspace = true

@@ -15,6 +15,9 @@ local-llama-cpp = ["argentum-providers/local-llama-cpp"]
 extensions = ["argentum-runtime/extensions", "dep:argentum-extensions", "dep:argentum-execution"]
 desktop-control = ["extensions", "argentum-extensions/desktop-control", "argentum-tools/desktop-control", "argentum-runtime/desktop-control"]
 artifacts = ["extensions", "dep:argentum-artifacts", "tokio/signal"]
+# Public benchmarks only: lets a disposable Linux container choose a permission profile
+# with no owner at a console. Never part of a release. See benchmarks/public/README.md.
+benchmark-unattended = ["argentum-tools/benchmark-process-group"]
 
 [[bin]]
 name = "argentum"

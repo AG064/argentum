@@ -89,6 +89,7 @@ fn normalized_origin(endpoint: &str) -> Result<String, ProviderError> {
     let known_route = match url.host_str() {
         Some("api.minimax.io") => path == "/v1",
         Some("api.deepseek.com") => path.is_empty(),
+        Some("opencode.ai") => path == "/inference/go/openai/v1",
         _ => false,
     };
     if url.scheme() != "https"
