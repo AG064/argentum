@@ -1396,6 +1396,7 @@ impl SummaryStream {
             ));
         }
         match event {
+            ProviderEvent::ServedModel(_) => {}
             ProviderEvent::ImageInputAccepted { .. } => {
                 return Err(RuntimeError::ContextCompaction(
                     "summarizer emitted forbidden image input",

@@ -17,13 +17,13 @@ and model names in them are examples.
 
 ## Status
 
-This app is built from source. It has no installer or published release yet.
+This app has no installer or published release yet.
 
 | State | What |
 | --- | --- |
-| Tested on Windows x64 | First run with the real provider catalog, the API key step, module selection, the main screen, and opening the Settings pages |
+| Tested on Windows x64 | First run, the API key step, modules, Settings, and a live DeepSeek conversation with thinking, approval, and a real file write |
 | Tested with a scripted provider only | The agent's interface tools |
-| Not tested yet | A live model conversation, saving a key in the app, installing an update, Git file selection and opening a page in the real app, screen readers, narrow windows on the real renderer |
+| Not tested yet | Saving a new key in the app, installing an update, Git file selection and opening a page in the real app, screen readers, narrow windows on the real renderer |
 | Not built or tested | macOS, Linux, and Android builds of this interface |
 
 ## Run it
@@ -56,21 +56,23 @@ system's secure store.
 
 ![Choosing a provider on first run](../../docs/screenshots/desktop-first-run.png)
 
-After that you get a conversation and nothing else. The core is always there and has
-no switch: the conversation, the provider and model chooser, and the approval prompt.
+After that you get a conversation. The core is always there and has no switch: the
+conversation, the provider and model chooser, and the approval prompt. Each response can
+show its thought process and steps, collapsed until you open them. With DeepSeek, the
+Thinking chip next to the model switches between off, high, and max.
 
 ![The minimal interface](../../docs/screenshots/desktop-minimal.png)
 
 ## Modules
 
-Everything else is an optional module, off until you want it. Turn them on one by one
+Everything else is an optional module, and only reasoning starts on. Turn them on one by one
 in Settings, or pick a set: Minimal, Standard, Review, Trace, or Everything.
 
 | Module | What it adds |
 | --- | --- |
 | Sessions | Sidebar with this workspace's sessions, search, rename, pin, archive, and fork |
 | Context meter | Context use for the latest turn, when the provider reports it |
-| Reasoning | Collapsed provider reasoning on each response |
+| Reasoning | Collapsed provider reasoning and steps on each response |
 | Goal | A session objective with limits and supervision |
 | Command palette | Ctrl+K search over commands, modules, themes, and sessions |
 | Status bar | Workspace, run state, changed files, and provider |
@@ -116,6 +118,7 @@ colors.
 
 Settings also holds what the agent can do and how you check on it:
 
+- **About:** the version, the project acknowledgement, and the Slint credit
 - **Providers:** the full catalog, API keys, budget, and context size
 - **Workspace:** the current project folder
 - **Verification:** runners and their evidence

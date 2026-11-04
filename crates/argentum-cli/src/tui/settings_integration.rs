@@ -132,7 +132,7 @@ async fn reliability_session_picker_preserves_each_draft_without_model_requests(
             .iter()
             .position(|s| s.id == id)
             .unwrap();
-        open(&mut h, "sessions", "Sessions | settings").await;
+        open(&mut h, "sessions", "Sessions | Esc back").await;
         for _ in 0..index {
             h.input.send(InputEvent::HistoryNext).unwrap();
         }
@@ -168,7 +168,7 @@ async fn reliability_verifier_picker_runs_fixed_command_after_explicit_confirmat
     h.input
         .send(InputEvent::Text("keep verifier draft".into()))
         .unwrap();
-    open(&mut h, "verification", "Verification | settings").await;
+    open(&mut h, "verification", "Verification | Esc back").await;
     h.input.send(InputEvent::Enter).unwrap();
     h.view(|v| v.review.contains("Run cargo-fmt-check in this workspace"))
         .await;
@@ -222,13 +222,13 @@ async fn reliability_provider_model_and_context_selection_use_production_input_w
     h.input
         .send(InputEvent::Text("keep this unsent draft".into()))
         .unwrap();
-    open(&mut h, "providers", "Providers | settings").await;
+    open(&mut h, "providers", "Providers | Esc back").await;
     for _ in 0..index {
         h.input.send(InputEvent::HistoryNext).unwrap();
     }
     h.input.send(InputEvent::Enter).unwrap();
     let provider = h
-        .view(|v| v.provider == "Other" && v.review.contains("Model | settings"))
+        .view(|v| v.provider == "Other" && v.review.contains("Model | Esc back"))
         .await;
     assert_eq!(provider.draft, "keep this unsent draft");
     h.input.send(InputEvent::Escape).unwrap();
@@ -237,7 +237,7 @@ async fn reliability_provider_model_and_context_selection_use_production_input_w
     h.input.send(InputEvent::HistoryNext).unwrap();
     h.input.send(InputEvent::Enter).unwrap();
     let model = h
-        .view(|v| v.model == "second" && v.review.contains("Context | settings"))
+        .view(|v| v.model == "second" && v.review.contains("Context | Esc back"))
         .await;
     assert_eq!(model.draft, "keep this unsent draft");
     h.input.send(InputEvent::Enter).unwrap();
@@ -258,11 +258,11 @@ async fn reliability_provider_model_and_context_selection_use_production_input_w
     );
     h.input.send(InputEvent::Escape).unwrap();
     h.view(|v| v.review.trim().is_empty()).await;
-    open(&mut h, "setup", "Setup | settings").await;
+    open(&mut h, "setup", "Setup | Esc back").await;
     h.input.send(InputEvent::Enter).unwrap();
-    h.view(|v| v.review.contains("Providers | settings")).await;
+    h.view(|v| v.review.contains("Providers | Esc back")).await;
     h.input.send(InputEvent::Escape).unwrap();
-    h.view(|v| v.review.contains("Setup | settings")).await;
+    h.view(|v| v.review.contains("Setup | Esc back")).await;
     h.input.send(InputEvent::Escape).unwrap();
     let final_view = h.view(|v| v.review.trim().is_empty()).await;
     assert_eq!(final_view.draft, "keep this unsent draft");

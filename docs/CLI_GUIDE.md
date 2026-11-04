@@ -21,6 +21,10 @@ commands. The process working directory is not the model workspace.
 & $exe status --workspace $ws --database $db --json
 ```
 
+Models with limits bundled in Argentum, such as DeepSeek's and MiniMax's, get a default budget
+of up to 200,000 tokens automatically. Use `provider budget` to change it, and for any other
+model, which still needs an explicit budget.
+
 `provider models` contacts the selected provider catalogue, not inference.
 Do not run it when offline-only operation is required. A budget is an explicit
 owner declaration bound to profile, model and endpoint, not independently

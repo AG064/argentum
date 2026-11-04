@@ -352,6 +352,7 @@ pub const UI_PRESETS: &[UiPreset] = &[
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiPreferences {
+    pub thinking: ThinkingMode,
     pub version: u16,
     pub preset: String,
     pub colors: BTreeMap<String, String>,
@@ -369,9 +370,39 @@ pub struct UiPreferences {
     pub first_run_complete: bool,
 }
 
+/// How much reasoning to request from a provider that supports it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThinkingMode {
+    Off,
+    #[default]
+    High,
+    Max,
+}
+
+impl ThinkingMode {
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "off" => Some(Self::Off),
+            "high" => Some(Self::High),
+            "max" => Some(Self::Max),
+            _ => None,
+        }
+    }
+}
+
 impl Default for UiPreferences {
     fn default() -> Self {
         Self {
+            thinking: ThinkingMode::default(),
             version: UI_PREFERENCES_VERSION,
             preset: DEFAULT_UI_PRESET.to_owned(),
             colors: BTreeMap::new(),

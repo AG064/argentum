@@ -30,7 +30,7 @@ Implemented:
   tool rows, and word wrap with a hanging indent.
 - Light Markdown in responses: headings, bold, inline code, lists, quotes, and code
   blocks. A link keeps its address visible.
-- A boxed composer with a placeholder, a pinned permission card, a status row with
+- A boxed composer with a placeholder, a permission panel, a status row with
   elapsed time, and a footer with model, access, and context use.
 - Esc interrupts the active run. The command list shows a description for each command.
 - Colors come only from the renderer. Text is sanitized first, so content cannot carry an

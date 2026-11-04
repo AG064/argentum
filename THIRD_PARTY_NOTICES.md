@@ -37,7 +37,7 @@ and retained term identity. An unknown missing notice still fails packaging.
 | Component | Terms and handling |
 | --- | --- |
 | Lucide/selected Feather SVG assets in `ui/assets/icons/lucide` | ISC and retained MIT terms in that directory's LICENSE; retained with Slint source, not in the CLI binary package |
-| Slint 1.17.1 | `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`; preserve upstream options, do not simplify to MIT; UI distribution decision is outside the CLI package |
+| Slint 1.17.1 | `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`; preserve upstream options, do not simplify to MIT. The desktop app is distributed under `LicenseRef-Slint-Royalty-free-2.0`, with the required `AboutSlint` widget in Settings > About. The CLI package does not include Slint |
 | Optional Windows llama.cpp b10621 | MIT upstream runtime; explicit separately pinned download, not bundled in the CLI package |
 | LLVM OpenMP in the optional runtime archive | Apache-2.0 with LLVM Exceptions; installer preserves `LICENSE-LLVM-OpenMP` in extracted runtime |
 | Optional Qwen3.5-0.8B GGUF offers | Apache-2.0 model terms; source/revision/hash/size metadata is embedded in the bounded offers; no model bytes packaged |

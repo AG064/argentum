@@ -39,7 +39,8 @@ component UserMessage inherits HorizontalLayout {
 component ReasoningDisclosure inherits VerticalLayout {
     in property <string> text;
     in property <bool> live: false;
-    private property <bool> open: false;
+    in property <string> title: "Reasoning";
+    private property <bool> open: root.live;
     spacing: Theme.sp6;
     HorizontalLayout {
         alignment: start;
@@ -50,7 +51,7 @@ component ReasoningDisclosure inherits VerticalLayout {
             border-radius: Theme.r-xs;
             background: touch.has-hover ? Theme.hover : transparent;
             accessible-role: button;
-            accessible-label: "Reasoning";
+            accessible-label: root.title;
             accessible-expanded: root.open;
             accessible-action-default => { root.open = !root.open; }
             head := HorizontalLayout {
@@ -64,7 +65,7 @@ component ReasoningDisclosure inherits VerticalLayout {
                     y: (parent.height - self.height) / 2;
                 }
                 Label {
-                    text: root.live ? "Reasoning" : "Reasoning";
+                    text: root.title;
                     tone: "muted";
                     size: "sm";
                 }
@@ -103,7 +104,8 @@ component AssistantMessage inherits Rectangle {
         + (message.usage-reported ? "  ·  " + message.total-tokens + " tokens" : "");
     VerticalLayout {
         spacing: Theme.sp7;
-        if Mods.reasoning && message.reasoning-available: ReasoningDisclosure { text: message.reasoning; }
+        if Mods.reasoning && message.reasoning-available: ReasoningDisclosure { text: message.reasoning; title: "Thought process"; }
+        if Mods.reasoning && message.steps != "": ReasoningDisclosure { text: message.steps; title: "Steps"; }
         RichBlocks {
             blocks: message.blocks;
             link(url) => { App.open_link(url); }
@@ -128,7 +130,8 @@ component AssistantMessage inherits Rectangle {
 
 component LiveTurn inherits VerticalLayout {
     spacing: Theme.sp8;
-    if Mods.reasoning && App.current_reasoning_available: ReasoningDisclosure { text: App.current_reasoning; live: true; }
+    if Mods.reasoning && App.current_reasoning_available: ReasoningDisclosure { text: App.current_reasoning; live: App.running; title: "Thinking"; }
+    if Mods.reasoning && App.live_steps != "": ReasoningDisclosure { text: App.live_steps; live: App.running; title: "Steps"; }
     RichBlocks {
         blocks: App.live_blocks;
         link(url) => { App.open_link(url); }
@@ -291,11 +294,23 @@ export component Composer inherits Rectangle {
             Chip {
                 y: (parent.height - self.height) / 2;
                 icon: "provider";
-                label: App.provider_model != "" ? App.provider_model : "Choose a model";
+                label: App.provider_model == "" ? "Choose a model"
+                    : (root.narrow ? "" : App.provider_label + "  ·  ") + App.provider_model
+                        + (App.served_model != "" && App.served_model != App.provider_model ? " (" + App.served_model + ")" : "");
                 trailing-chevron: true;
                 active: App.provider_menu_open;
-                max-label: root.narrow ? 110px : 240px;
+                max-label: root.narrow ? 110px : 360px;
                 clicked => { root.open-providers(); }
+            }
+            if App.provider_id == "deepseek": Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "sparkles";
+                label: "Thinking: " + App.thinking_mode;
+                trailing-chevron: false;
+                max-label: 120px;
+                clicked => {
+                    App.set_thinking_mode(App.thinking_mode == "off" ? "high" : App.thinking_mode == "high" ? "max" : "off");
+                }
             }
             if !root.narrow: Chip {
                 y: (parent.height - self.height) / 2;

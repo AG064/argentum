@@ -320,6 +320,27 @@ pub enum ModelMessageRole {
     Assistant,
 }
 
+// The owner's thinking mode. One process serves one owner, and the wire builder and
+// its accounting must read the same value.
+static DEEPSEEK_THINKING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn set_deepseek_thinking(mode: argentum_domain::ThinkingMode) {
+    let value = match mode {
+        argentum_domain::ThinkingMode::Off => 0,
+        argentum_domain::ThinkingMode::High => 1,
+        argentum_domain::ThinkingMode::Max => 2,
+    };
+    DEEPSEEK_THINKING.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn deepseek_reasoning_effort() -> Option<&'static str> {
+    match DEEPSEEK_THINKING.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => Some("high"),
+        2 => Some("max"),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModelMessage {
     pub role: ModelMessageRole,
@@ -1145,6 +1166,8 @@ pub enum ProviderEvent {
     ChatGptContinuation(Box<ChatGptAssistantState>),
     UsageObservation(argentum_domain::goal_accounting::ObservedUsage),
     UsageUncertain,
+    /// The model name a response reported. Display only, never a routing input.
+    ServedModel(String),
     Delta(String),
     ReasoningDelta(String),
     ToolCall(ModelToolCall),
@@ -1759,7 +1782,10 @@ impl OpenAiCompatibleProvider {
         let mut explicit_reasoning_tags = ReasoningTagFilter::default();
         let mut usage = usage_accounting::StreamUsage::default();
         let mut tool_calls = ToolCallAccumulator::default();
-        let mut continuation = if self.supports_minimax_reasoning_protocol() {
+        let mut served_model_sent = false;
+        let deepseek_thinking =
+            self.supports_deepseek_protocol() && deepseek_reasoning_effort().is_some();
+        let mut continuation = if self.supports_minimax_reasoning_protocol() || deepseek_thinking {
             Some(minimax_continuation::Accumulator::new(
                 self.endpoint.as_str(),
                 &self.model,
@@ -1783,6 +1809,19 @@ impl OpenAiCompatibleProvider {
                         ));
                     }
                     let chunk = parse_chat_completion_chunk(&message.data)?;
+                    if !served_model_sent {
+                        if let Some(model) = chunk.model.as_deref().filter(|model| {
+                            !model.is_empty()
+                                && model.len() <= 128
+                                && !model.chars().any(char::is_control)
+                        }) {
+                            served_model_sent = true;
+                            sender
+                                .send(ProviderEvent::ServedModel(model.to_owned()))
+                                .await
+                                .map_err(|_| ProviderError::ConsumerClosed)?;
+                        }
+                    }
                     if response_truncated {
                         truncated_usage_frames += 1;
                         if truncated_usage_frames > MAX_TRUNCATED_USAGE_FRAMES {
@@ -3279,6 +3318,8 @@ struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_split: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<DeepSeekThinking>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3299,6 +3340,20 @@ fn build_chat_request_inner(
     deepseek: bool,
     sidecar: bool,
 ) -> Result<ChatCompletionRequest, ProviderError> {
+    let effort = deepseek.then(deepseek_reasoning_effort).flatten();
+    build_chat_request_with_effort(request, minimax, deepseek, sidecar, effort)
+}
+
+fn build_chat_request_with_effort(
+    request: ModelRequest,
+    minimax: bool,
+    deepseek: bool,
+    sidecar: bool,
+    effort: Option<&'static str>,
+) -> Result<ChatCompletionRequest, ProviderError> {
+    // A thinking response with tool calls must be replayed with its reasoning. Earlier
+    // turns have none retained, so they travel as labelled context, as MiniMax's do.
+    let replay_reasoning = minimax || effort.is_some();
     validate_model_tool_payload(&request)?;
     let mut continuation_ids = std::collections::BTreeSet::new();
     for exchange in request.tool_exchanges.iter().chain(
@@ -3311,7 +3366,7 @@ fn build_chat_request_inner(
             return Err(ProviderError::PreparedRequestBindingMismatch);
         }
         if let Some(state) = &exchange.assistant_continuation {
-            if !minimax
+            if !replay_reasoning
                 || !continuation_ids.insert(state.validate_scope(
                     request.continuation_scope,
                     &request.model,
@@ -3345,7 +3400,7 @@ fn build_chat_request_inner(
             request.history,
             request.prompt,
             request.tool_exchanges,
-            minimax,
+            replay_reasoning,
         ),
         tools: request
             .tools
@@ -3356,12 +3411,14 @@ fn build_chat_request_inner(
             include_usage: true,
         },
         reasoning_split: minimax.then_some(true),
-        // Argentum's durable conversation projection does not retain every
-        // prior DeepSeek reasoning_content field. DeepSeek requires all of
-        // those fields to be replayed when thinking and tools are combined,
-        // so use its documented non-thinking tool mode instead of sending an
-        // incomplete history that the provider rejects.
-        thinking: deepseek.then_some(DeepSeekThinking { kind: "disabled" }),
+        thinking: deepseek.then_some(DeepSeekThinking {
+            kind: if effort.is_some() {
+                "enabled"
+            } else {
+                "disabled"
+            },
+        }),
+        reasoning_effort: effort,
         stream: true,
         chat_template_kwargs: sidecar.then(|| serde_json::json!({"enable_thinking":false})),
         parallel_tool_calls: sidecar.then_some(false),
@@ -3542,6 +3599,10 @@ fn prepare_compatible_wire(
     }
     let endpoint = Url::parse(&profile.endpoint)?;
     let minimax = is_minimax_continuation_origin(&endpoint);
+    let deepseek = endpoint.scheme() == "https"
+        && endpoint.host_str() == Some("api.deepseek.com")
+        && endpoint.port_or_known_default() == Some(443);
+    let deepseek_thinking = deepseek && deepseek_reasoning_effort().is_some();
     for exchange in request.tool_exchanges.iter().chain(
         request
             .history
@@ -3549,25 +3610,22 @@ fn prepare_compatible_wire(
             .filter_map(|message| message.tool_exchange.as_ref()),
     ) {
         if let Some(state) = &exchange.assistant_continuation {
-            if !minimax {
+            if !minimax && !deepseek_thinking {
                 return Err(ProviderError::PreparedRequestBindingMismatch);
             }
             state.validate(profile, request.continuation_scope, &exchange.calls)?;
         }
     }
-    if minimax
+    if (minimax || deepseek_thinking)
         && request
             .tool_exchanges
             .iter()
             .any(|exchange| exchange.assistant_continuation.is_none())
     {
         return Err(ProviderError::InvalidRequest(
-            "completed MiniMax assistant continuation is unavailable",
+            "completed assistant continuation is unavailable",
         ));
     }
-    let deepseek = endpoint.scheme() == "https"
-        && endpoint.host_str() == Some("api.deepseek.com")
-        && endpoint.port_or_known_default() == Some(443);
     let body = build_chat_request_inner(request.clone(), minimax, deepseek, false)?;
     let messages = serde_json::to_vec(&body.messages)
         .map_err(|_| ProviderError::InvalidRequest("message accounting failed"))?
@@ -3597,7 +3655,7 @@ fn prepare_compatible_wire(
             .iter()
             .map(|message| {
                 message.tool_exchange.as_ref().map_or(1, |exchange| {
-                    if minimax && exchange.assistant_continuation.is_none() {
+                    if (minimax || deepseek_thinking) && exchange.assistant_continuation.is_none() {
                         1
                     } else {
                         1 + exchange.results.len()
@@ -5787,6 +5845,7 @@ mod tests {
         let mut reasoning = String::new();
         while let Some(event) = receiver.recv().await {
             match event {
+                ProviderEvent::ServedModel(_) => {}
                 ProviderEvent::Delta(delta) => visible.push_str(&delta),
                 ProviderEvent::ReasoningDelta(delta) => reasoning.push_str(&delta),
                 ProviderEvent::ImageInputAccepted { .. } => {
@@ -5853,6 +5912,21 @@ mod tests {
         assert_eq!(body["thinking"]["type"], "disabled");
         assert!(body.get("reasoning_split").is_none());
         assert!(body["tools"].is_array());
+
+        let body = serde_json::to_value(
+            build_chat_request_with_effort(
+                tool_catalog_request(1),
+                false,
+                true,
+                false,
+                Some("max"),
+            )
+            .expect("DeepSeek thinking request"),
+        )
+        .expect("request JSON");
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["reasoning_effort"], "max");
+        assert!(body.get("reasoning_split").is_none());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 // Settings overlay: providers, modules, appearance, permissions, about.
+import { AboutSlint } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { App, Mods } from "state.slint";
 import { Badge, Btn, Divider, VDivider, Field, Focus, Icon, IconBtn, Label, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
@@ -536,8 +537,10 @@ component AboutPage inherits VerticalLayout {
     alignment: start;
     HorizontalLayout { alignment: start; BrandMark { size: 64px; } }
     Text { text: "Argentum " + App.update_current; color: Theme.text; font-size: Theme.fs-xl; font-weight: Theme.w-semibold; }
-    Text { text: "A native Rust agent harness. Engineering draft, not a published release."; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+    Text { text: "Argentum by AG064 (https://github.com/AG064/argentum). A native Rust coding agent."; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
     Text { text: App.workspace_label; color: Theme.text-3; font-size: Theme.fs-sm; font-family: Theme.font-mono; wrap: word-wrap; }
+    Text { text: "Licenses and third-party notices ship in LICENSE and THIRD_PARTY_NOTICES.md."; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+    HorizontalLayout { alignment: start; AboutSlint { } }
 }
 
 export component Settings inherits Rectangle {

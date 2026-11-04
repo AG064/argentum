@@ -1375,6 +1375,21 @@ impl TuiState {
                         .map_or(TuiAction::Redraw, TuiAction::InspectContext)
                 }
             }
+            "/thinking" => {
+                let requested = parts.next().unwrap_or_default().to_ascii_lowercase();
+                match argentum_domain::ThinkingMode::from_id(&requested) {
+                    Some(mode) => {
+                        self.status = format!("Thinking: {}", mode.id());
+                        TuiAction::Dispatch(AppCommand::SetThinkingMode { mode })
+                    }
+                    None => {
+                        self.append_system(
+                            "Usage: /thinking off, /thinking high, or /thinking max.",
+                        );
+                        TuiAction::Redraw
+                    }
+                }
+            }
             "/compact" => {
                 let argument = parts.next();
                 if !matches!(argument, None | Some("deactivate")) || parts.next().is_some() {

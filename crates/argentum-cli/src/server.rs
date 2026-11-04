@@ -797,6 +797,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::LoadTrajectory { .. }
         | AppCommand::LoadUiPreferences
         | AppCommand::UpdateUiPreferences { .. }
+        | AppCommand::SetThinkingMode { .. }
         | AppCommand::LoadProviderUsage
         | AppCommand::RefreshGitStatus
         | AppCommand::LoadGitFileDiff { .. }

@@ -432,10 +432,44 @@ impl RuntimeService {
 
     /// Resolve the current stored declaration without contacting a provider.
     /// Setup, admission, preview and request preparation share this boundary.
+    /// A model with limits bundled in this program works without a manual declaration.
+    /// Limits are never taken from provider responses here, and a saved or stale
+    /// declaration is left alone. Unknown models still fail closed.
+    pub(super) fn ensure_default_model_budget(
+        &self,
+        profile: &argentum_domain::ProviderProfile,
+    ) -> Result<(), RuntimeError> {
+        const DEFAULT_USABLE_CONTEXT: u64 = 200_000;
+        const DEFAULT_OUTPUT: u32 = 8_192;
+        const DEFAULT_UNCERTAINTY: u64 = 2_048;
+        let Some(limit) = argentum_providers::bundled_context_window(profile) else {
+            return Ok(());
+        };
+        if !matches!(self.store.model_budget(self.project_id, profile), Ok(None)) {
+            return Ok(());
+        }
+        let budget = argentum_domain::context_budget::ModelBudget {
+            revision: uuid::Uuid::new_v4(),
+            profile_id: profile.id.clone(),
+            provider_kind: profile.kind,
+            endpoint: profile.endpoint.clone(),
+            model: profile.model.clone(),
+            usable_context_tokens: limit.min(DEFAULT_USABLE_CONTEXT),
+            input_limit_tokens: None,
+            maximum_output_tokens: DEFAULT_OUTPUT,
+            requested_output_tokens: DEFAULT_OUTPUT,
+            uncertainty_tokens: DEFAULT_UNCERTAINTY,
+        };
+        self.validate_model_budget(profile, &budget)?;
+        self.store.save_model_budget(self.project_id, &budget)?;
+        Ok(())
+    }
+
     pub fn resolve_model_budget(
         &self,
         profile: &argentum_domain::ProviderProfile,
     ) -> Result<argentum_domain::context_budget::ModelBudget, RuntimeError> {
+        self.ensure_default_model_budget(profile)?;
         let budget = self
             .store
             .model_budget(self.project_id, profile)
@@ -1011,7 +1045,7 @@ impl RuntimeService {
                                     json!({"historical_placeholder": true,
                                         "retention": observation.retention, "state": observation.state,
                                         "receipt": observation.receipt,
-                                        "notice": "Original output is not retained or available. This is not tool output or a new execution."}).to_string()
+                                        "notice": "This call finished in an earlier turn with the recorded state, but its output is not kept in context. This is not new tool output or a new execution, and it does not mean an earlier statement about the call was wrong. Run the tool again if you need its current content. Do not mention this notice unless the user asks."}).to_string()
                                 };
                                 lineage.push(
                                     json!({"provider_call_id": observation.provider_call_id,
