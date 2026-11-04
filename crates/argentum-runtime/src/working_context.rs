@@ -439,8 +439,10 @@ impl RuntimeService {
         &self,
         profile: &argentum_domain::ProviderProfile,
     ) -> Result<(), RuntimeError> {
-        const DEFAULT_USABLE_CONTEXT: u64 = 200_000;
-        const DEFAULT_OUTPUT: u32 = 8_192;
+        // Accounting counts wire bytes, which is about 3.6 times the tokens a coding
+        // run really uses, and never fewer. The model's full window is therefore safe,
+        // and a lower cap ends long runs far below what the model can hold.
+        const DEFAULT_OUTPUT: u32 = 32_768;
         const DEFAULT_UNCERTAINTY: u64 = 2_048;
         let Some(limit) = argentum_providers::bundled_context_window(profile) else {
             return Ok(());
@@ -454,7 +456,7 @@ impl RuntimeService {
             provider_kind: profile.kind,
             endpoint: profile.endpoint.clone(),
             model: profile.model.clone(),
-            usable_context_tokens: limit.min(DEFAULT_USABLE_CONTEXT),
+            usable_context_tokens: limit,
             input_limit_tokens: None,
             maximum_output_tokens: DEFAULT_OUTPUT,
             requested_output_tokens: DEFAULT_OUTPUT,

@@ -1695,6 +1695,72 @@ pub enum ToolResultState {
     NotExecuted,
 }
 
+/// One line of plain text, short enough for an activity list.
+fn activity_text(text: &str) -> String {
+    const MAX_CHARS: usize = 120;
+    let line = text.trim().lines().next().unwrap_or("").trim();
+    let multiline = text.trim().lines().nth(1).is_some();
+    let mut shown: String = line
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(MAX_CHARS)
+        .collect();
+    if multiline || line.chars().count() > MAX_CHARS {
+        shown.push_str("...");
+    }
+    shown
+}
+
+impl ToolInput {
+    /// What this call does, for the owner's screen.
+    #[must_use]
+    pub fn activity(&self) -> String {
+        let path = activity_text;
+        match self {
+            Self::ListDirectory { path: target, .. } if matches!(target.as_str(), "" | ".") => {
+                "Listed the project folder".to_owned()
+            }
+            Self::ListDirectory { path: target, .. } => format!("Listed {}", path(target)),
+            Self::FileMetadata { path: target, .. }
+            | Self::ReadBinaryMetadata { path: target, .. } => {
+                format!("Inspected {}", path(target))
+            }
+            Self::ReadText { path: target, .. } => format!("Read {}", path(target)),
+            Self::SearchText { query, .. } => format!("Searched for \"{}\"", path(query)),
+            Self::SearchFilenames { pattern, .. } => {
+                format!("Looked for files matching \"{}\"", path(pattern))
+            }
+            Self::CreateDirectory { path: target, .. } => format!("Created {}", path(target)),
+            Self::ApplyPatch { .. } => "Applied a patch".to_owned(),
+            Self::WriteText { path: target, .. } => format!("Wrote {}", path(target)),
+            Self::EditText { path: target, .. } => format!("Edited {}", path(target)),
+            Self::MoveFile { from, to, .. } => format!("Moved {} to {}", path(from), path(to)),
+            Self::CopyFile { from, to, .. } => format!("Copied {} to {}", path(from), path(to)),
+            Self::DeleteFile { path: target, .. } => format!("Deleted {}", path(target)),
+            Self::ExecuteArgv { program, args, .. } => {
+                format!("Ran `{}`", path(&format!("{program} {}", args.join(" "))))
+            }
+            Self::ExecuteShell { command, .. } => format!("Ran `{}`", path(command)),
+            Self::Git { operation } => {
+                let debug = format!("{operation:?}");
+                let name = debug
+                    .split(|character: char| !character.is_alphanumeric())
+                    .next()
+                    .unwrap_or("command")
+                    .to_ascii_lowercase();
+                format!("Git {name}")
+            }
+            Self::Verify { .. } | Self::StartVerification { .. } => "Ran verification".to_owned(),
+            Self::CheckRust { .. } => "Ran Rust checks".to_owned(),
+            Self::PollProcessJob { .. } => "Checked a running job".to_owned(),
+            Self::CancelProcessJob { .. } => "Cancelled a running job".to_owned(),
+            Self::InspectUi => "Read the interface settings".to_owned(),
+            Self::UpdateUi { .. } => "Changed the interface".to_owned(),
+            _ => "Used a tool".to_owned(),
+        }
+    }
+}
+
 pub type SteeringEntryId = Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2801,6 +2867,13 @@ pub enum AppEvent {
         records: Vec<ExecutionAuditRecord>,
     },
     ChangeSetReady(ChangeSet),
+    /// A plain description of a tool call for the owner's screen. Never stored, because
+    /// it can include command text that the audit trail deliberately leaves out.
+    ToolActivity {
+        run_id: RunId,
+        tool_call_id: ToolCallId,
+        text: String,
+    },
     FileChangeRecorded(FileChangeRecord),
     ChangeSetSnapshotLoaded(ChangeSetSnapshot),
     UnifiedDiffLoaded(UnifiedDiffSnapshot),
@@ -2969,6 +3042,7 @@ impl AppEvent {
             Self::ExecutionAuditRecorded(_) => "execution_audit_recorded",
             Self::ExecutionAuditSnapshot { .. } => "execution_audit_snapshot",
             Self::ChangeSetReady(_) => "change_set_ready",
+            Self::ToolActivity { .. } => "tool_activity",
             Self::FileChangeRecorded(_) => "file_change_recorded",
             Self::ChangeSetSnapshotLoaded(_) => "change_set_snapshot_loaded",
             Self::UnifiedDiffLoaded(_) => "unified_diff_loaded",
@@ -3643,5 +3717,22 @@ mod model_name_tests {
         ] {
             assert_eq!(model_display_name(endpoint, model), model);
         }
+    }
+}
+
+#[cfg(test)]
+mod activity_tests {
+    use super::{activity_text, ToolInput};
+
+    #[test]
+    fn activity_is_one_short_line_without_control_characters() {
+        assert_eq!(activity_text("  cargo test\nsecond line"), "cargo test...");
+        assert_eq!(activity_text("a\u{1b}[31mb"), "a[31mb");
+        let long = activity_text(&"x".repeat(500));
+        assert_eq!(long.chars().count(), 123);
+        assert_eq!(
+            ToolInput::InspectUi.activity(),
+            "Read the interface settings"
+        );
     }
 }

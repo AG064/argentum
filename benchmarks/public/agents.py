@@ -64,16 +64,18 @@ class Argentum(BaseInstalledAgent):
         return allowlist(self)
 
     def install_spec(self):
+        # Pier bakes these steps into the image before a trial, when the binary is not
+        # there yet, so the binary is copied in by setup below.
         return AgentInstallSpec(
             agent_name=self.name(),
-            steps=[InstallStep(user="root", run="chmod 755 /usr/local/bin/argentum")],
-            verification_command="argentum --version",
+            steps=[InstallStep(user="root", run="mkdir -p /usr/local/bin")],
         )
 
-    async def install(self, environment: BaseEnvironment):
+    async def setup(self, environment: BaseEnvironment):
+        await super().setup(environment)
         binary = os.environ["ARGENTUM_BENCHMARK_BINARY"]
         await environment.upload_file(binary, "/usr/local/bin/argentum")
-        await super().install(environment)
+        await self.exec_as_root(environment, command="chmod 755 /usr/local/bin/argentum")
 
     @with_prompt_template
     async def run(self, instruction, environment, context: AgentContext):
@@ -83,7 +85,7 @@ class Argentum(BaseInstalledAgent):
             environment,
             command=(
                 f'argentum benchmark-run --workspace "$PWD" --provider {route}'
-                f" --model {shlex.quote(model)}"
+                f" --model {shlex.quote(model)} --thinking max"
                 f" --prompt {shlex.quote(instruction)} > /logs/agent/argentum.jsonl 2>&1"
             ),
             env=env,
@@ -133,7 +135,8 @@ class Pi(BaseInstalledAgent):
         await self.exec_as_agent(
             environment,
             command=(
-                f". ~/.nvm/nvm.sh; pi --print --provider {route} --model {shlex.quote(model)}"
+                f". ~/.nvm/nvm.sh; pi --print --thinking max --provider {route}"
+                f" --model {shlex.quote(model)}"
                 f" {shlex.quote(instruction)} > /logs/agent/pi.txt 2>&1"
             ),
             env=key_env(self),
@@ -146,7 +149,8 @@ class Pi(BaseInstalledAgent):
 class DeepSeekHarness(BaseInstalledAgent):
     """DeepSeek Harness in its documented one-shot mode.
 
-    It uploads session logs to DeepSeek by default, so only run it on these public tasks.
+    It sends session logs to DeepSeek by default. DeepSWE says its data must never reach a
+    training corpus, so the runner leaves this out until that upload is proven off.
     OpenCode lists it as having incomplete session support on Go, so it uses DeepSeek directly.
     """
 

@@ -1,6 +1,6 @@
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
+import { MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -14,6 +14,12 @@ export global App {
     // The provider's name for what is running. Requests keep using provider_model.
     in-out property <string> provider_model_name: "";
     in-out property <string> live_steps: "";
+    in-out property <string> live_steps_title: "";
+    in-out property <int> live_additions: 0;
+    in-out property <int> live_removals: 0;
+    in-out property <[MessageChangeView]> live_changes: [];
+    // The file whose diff is open inside the conversation.
+    in-out property <string> open_message_diff: "";
     in-out property <string> thinking_mode: "high";
     callback set_thinking_mode(string);
     in-out property <bool> usage_reported: false;

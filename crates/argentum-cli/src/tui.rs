@@ -185,6 +185,8 @@ pub struct TuiState {
     goal_accounting_summary: Option<String>,
     platform_authority: Option<PlatformAuthoritySnapshot>,
     timeline: Vec<TimelineEntry>,
+    /// What each tool call is doing, for the screen only. Never stored.
+    tool_activity: std::collections::HashMap<argentum_domain::ToolCallId, String>,
     composer: String,
     composer_cursor: usize,
     history: Vec<String>,
@@ -243,6 +245,7 @@ impl TuiState {
             goal_accounting_summary: None,
             platform_authority: None,
             timeline: Vec::new(),
+            tool_activity: std::collections::HashMap::new(),
             composer: String::new(),
             composer_cursor: 0,
             history: Vec::new(),
@@ -728,6 +731,33 @@ impl TuiState {
                 self.refresh_model_name();
                 if self.active_run_id.is_none() {
                     self.status = format!("Used {} tokens", usage.total_tokens);
+                }
+            }
+            AppEvent::ToolActivity {
+                tool_call_id, text, ..
+            } => {
+                self.tool_activity.insert(tool_call_id, text);
+            }
+            AppEvent::FileChangeRecorded(record) => {
+                if self.run_is_current(record.run_id) {
+                    self.transcript_changed();
+                    self.timeline.push(TimelineEntry {
+                        view_id: RunId::new_v4(),
+                        message_id: None,
+                        kind: TimelineKind::Tool,
+                        run_id: Some(record.run_id),
+                        tool_call_id: None,
+                        text: bounded_text(&match (record.additions, record.removals) {
+                            (added, 0) => format!("+{added}: {}", record.relative_path),
+                            (0, removed) => format!("-{removed}: {}", record.relative_path),
+                            (added, removed) => {
+                                format!("+{added} -{removed}: {}", record.relative_path)
+                            }
+                        }),
+                        detail: String::new(),
+                        state: tool_result_label(ToolResultState::Succeeded).into(),
+                    });
+                    self.truncate_timeline();
                 }
             }
             AppEvent::ToolStarted(trace) => {
@@ -1602,15 +1632,27 @@ impl TuiState {
         }
     }
 
+    /// `Ran: cargo test`, so the verb reads as the tool's name on screen.
+    fn tool_text(&self, trace: &argentum_domain::ToolTrace) -> String {
+        match self.tool_activity.get(&trace.id) {
+            Some(text) => match text.split_once(' ') {
+                Some((verb, rest)) => format!("{verb}: {rest}"),
+                None => text.clone(),
+            },
+            None => format!("{}: {}", trace.tool_id, trace.summary),
+        }
+    }
+
     fn append_tool(&mut self, trace: argentum_domain::ToolTrace, state: &str) {
         self.transcript_changed();
+        let text = self.tool_text(&trace);
         self.timeline.push(TimelineEntry {
             view_id: RunId::new_v4(),
             message_id: None,
             kind: TimelineKind::Tool,
             run_id: Some(trace.run_id),
             tool_call_id: Some(trace.id),
-            text: bounded_text(&format!("{}: {}", trace.tool_id, trace.summary)),
+            text: bounded_text(&text),
             detail: String::new(),
             state: state.into(),
         });
@@ -1619,13 +1661,15 @@ impl TuiState {
 
     fn finish_tool(&mut self, trace: argentum_domain::ToolTrace) {
         self.transcript_changed();
+        let text = self.tool_text(&trace);
+        self.tool_activity.remove(&trace.id);
         if let Some(entry) = self
             .timeline
             .iter_mut()
             .rev()
             .find(|entry| entry.tool_call_id == Some(trace.id))
         {
-            entry.text = bounded_text(&format!("{}: {}", trace.tool_id, trace.summary));
+            entry.text = bounded_text(&text);
             entry.state = tool_result_label(trace.result).into();
             entry.detail = trace
                 .duration_ms

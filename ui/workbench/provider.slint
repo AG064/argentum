@@ -30,7 +30,7 @@ component PresetCard inherits Rectangle {
             HorizontalLayout {
                 spacing: Theme.sp8;
                 Label { text: preset.label; strong: true; horizontal-stretch: 1; }
-                if !preset.needs-key: Badge { text: "Local"; }
+                if preset.local: Badge { text: "Local"; }
             }
             Text {
                 text: preset.detail;

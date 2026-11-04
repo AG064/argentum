@@ -22,6 +22,7 @@ use tracing::warn;
 
 slint::include_modules!();
 
+mod activity;
 mod markdown;
 pub mod workbench;
 
@@ -68,7 +69,7 @@ pub struct WeakUiHandle {
 
 #[derive(Default)]
 struct ProjectionState {
-    run_steps: std::collections::BTreeMap<RunId, String>,
+    run_steps: std::collections::BTreeMap<RunId, activity::RunActivity>,
     run_sessions: HashMap<RunId, SessionId>,
     pending_run_sessions: VecDeque<SessionId>,
     approval_sessions: HashMap<ApprovalId, SessionId>,
@@ -289,9 +290,7 @@ impl UiHandle {
                             &steps,
                         ));
                 }
-                self.window
-                    .global::<App>()
-                    .set_live_steps(SharedString::default());
+                self.apply_live_activity(&activity::RunActivity::default());
                 self.window.set_user_prompt(SharedString::default());
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
@@ -1155,17 +1154,14 @@ impl UiHandle {
                     .set_active_run_id(trace.run_id.to_string().into());
                 let (verb, state) = tool_result_presentation(&trace.result);
                 let title = format!("{} {verb}", tool_label(&trace.tool_id));
-                let step = format!("{title}: {}", trace.summary.replace('\n', ", "));
-                let joined = {
+                let fallback = format!("{title}: {}", trace.summary.replace('\n', ", "));
+                let current = {
                     let mut projection = self.projection();
-                    let steps = projection.run_steps.entry(trace.run_id).or_default();
-                    if !steps.is_empty() {
-                        steps.push('\n');
-                    }
-                    steps.push_str(&step);
-                    steps.clone()
+                    let activity = projection.run_steps.entry(trace.run_id).or_default();
+                    activity.finish(trace, &fallback);
+                    activity.clone()
                 };
-                self.window.global::<App>().set_live_steps(joined.into());
+                self.apply_live_activity(&current);
                 self.push_activity(title, trace.summary.clone(), state);
             }
             AppEvent::ApprovalRequested(request) => {
@@ -1274,10 +1270,28 @@ impl UiHandle {
                 );
                 self.push_activity("Changes recorded", summary, "neutral");
             }
+            AppEvent::ToolActivity {
+                run_id,
+                tool_call_id,
+                text,
+            } => {
+                self.projection()
+                    .run_steps
+                    .entry(*run_id)
+                    .or_default()
+                    .describe(*tool_call_id, text);
+            }
             AppEvent::FileChangeRecorded(record) => {
                 if self.active_session_id() != Some(record.session_id) {
                     return;
                 }
+                let current = {
+                    let mut projection = self.projection();
+                    let activity = projection.run_steps.entry(record.run_id).or_default();
+                    activity.record_change(record);
+                    activity.clone()
+                };
+                self.apply_live_activity(&current);
                 self.append_file_change(record);
             }
             AppEvent::ChangeSetSnapshotLoaded(snapshot) => {
@@ -2698,6 +2712,15 @@ impl UiHandle {
         self.push_activity("Changes loaded", summary, "neutral");
     }
 
+    fn apply_live_activity(&self, activity: &activity::RunActivity) {
+        let app = self.window.global::<App>();
+        app.set_live_steps(activity.details().into());
+        app.set_live_steps_title(activity.title().into());
+        app.set_live_additions(saturating_i32_u32(activity.additions()));
+        app.set_live_removals(saturating_i32_u32(activity.removals()));
+        app.set_live_changes(message_change_model(activity));
+    }
+
     fn append_file_change(&self, record: &FileChangeRecord) {
         let same_run = self.window.get_active_run_id().as_str() == record.run_id.to_string();
         let current = self.window.get_change_files();
@@ -2926,9 +2949,27 @@ fn conversation_message_model(
     conversation_message_model_with_steps(messages, &Default::default())
 }
 
+fn saturating_i32_u32(value: u32) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn message_change_model(activity: &activity::RunActivity) -> ModelRc<MessageChangeView> {
+    let rows = activity
+        .files
+        .iter()
+        .map(|(path, file)| MessageChangeView {
+            id: file.id.clone().into(),
+            path: path.clone().into(),
+            additions: saturating_i32_u32(file.additions),
+            removals: saturating_i32_u32(file.removals),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn conversation_message_model_with_steps(
     messages: &[argentum_domain::ConversationMessage],
-    steps: &std::collections::BTreeMap<RunId, String>,
+    steps: &std::collections::BTreeMap<RunId, activity::RunActivity>,
 ) -> ModelRc<ConversationMessageView> {
     let rows = messages
         .iter()
@@ -2945,16 +2986,18 @@ fn conversation_message_model_with_steps(
                 }
                 reasoning.push_str(&tagged_reasoning);
             }
+            let empty = activity::RunActivity::default();
+            let activity = if message.role == ConversationRole::Assistant {
+                steps.get(&message.run_id).unwrap_or(&empty)
+            } else {
+                &empty
+            };
             ConversationMessageView {
-                steps: if message.role == ConversationRole::Assistant {
-                    steps
-                        .get(&message.run_id)
-                        .cloned()
-                        .unwrap_or_default()
-                        .into()
-                } else {
-                    SharedString::default()
-                },
+                steps: activity.details().into(),
+                steps_title: activity.title().into(),
+                additions: saturating_i32_u32(activity.additions()),
+                removals: saturating_i32_u32(activity.removals()),
+                changes: message_change_model(activity),
                 role: match message.role {
                     ConversationRole::User => "user",
                     ConversationRole::Assistant => "assistant",
@@ -3403,7 +3446,7 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
     ProviderPresetView {
         featured: matches!(
             preset.id.as_str(),
-            "minimax" | "deepseek" | "openai" | "chatgpt" | "llama-cpp" | "custom"
+            "minimax" | "deepseek" | "opencode-go" | "openai" | "chatgpt" | "llama-cpp" | "custom"
         ),
         detail: if preset.notes.is_empty() {
             credential.clone().into()
@@ -3842,7 +3885,10 @@ pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
 }
 
 fn is_supported_provider_credential_id(provider_id: &str) -> bool {
-    matches!(provider_id, "openai" | "minimax" | "deepseek")
+    matches!(
+        provider_id,
+        "openai" | "minimax" | "deepseek" | "opencode-go"
+    )
 }
 
 fn provider_credential_supported(profile: &ProviderProfile) -> bool {

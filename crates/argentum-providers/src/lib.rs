@@ -4198,12 +4198,22 @@ fn partial_marker_suffix_len(text: &str, marker: &str) -> usize {
         .unwrap_or(0)
 }
 
+/// Some OpenAI-compatible servers send `null` for a list with nothing in it.
+fn null_as_empty<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatCompletionChunk {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
     model: Option<String>,
+    #[serde(default, deserialize_with = "null_as_empty")]
     choices: Vec<ChatStreamChoice>,
     #[serde(default)]
     usage: Option<serde_json::Value>,
@@ -4227,9 +4237,9 @@ struct ChatDelta {
     reasoning: Option<String>,
     #[serde(default)]
     reasoning_content: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     reasoning_details: Vec<ChatReasoningDetail>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     tool_calls: Vec<ChatToolCallDelta>,
 }
 
@@ -6609,6 +6619,22 @@ mod tests {
             .expect("Go needs a key");
         assert!(matches!(error, ProviderError::CredentialsRequired { .. }));
         assert!(provider_credential_environment().contains(&("opencode-go", "OPENCODE_API_KEY")));
+    }
+
+    #[test]
+    fn stream_chunks_accept_null_for_an_empty_list() {
+        let chunk: ChatCompletionChunk = serde_json::from_str(
+            r#"{"id":"a","choices":[{"index":0,"finish_reason":null,"delta":{"role":"assistant","content":"hi","reasoning_details":null,"tool_calls":null}}]}"#,
+        )
+        .expect("null lists in a delta");
+        assert_eq!(chunk.choices.len(), 1);
+        assert!(chunk.choices[0].delta.tool_calls.is_empty());
+        assert!(chunk.choices[0].delta.reasoning_details.is_empty());
+
+        let usage: ChatCompletionChunk =
+            serde_json::from_str(r#"{"id":"a","choices":null,"usage":{"total_tokens":1}}"#)
+                .expect("null choices");
+        assert!(usage.choices.is_empty());
     }
 
     #[test]

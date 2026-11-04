@@ -4,8 +4,8 @@ import { Theme } from "theme.slint";
 import { App, Mods } from "state.slint";
 import { Btn, CopyBtn, Chip, Focus, Icon, IconBtn, Label, LiveDot, Ring, Scroller, Spinner, Tooltip } from "kit.slint";
 import { BrandMark } from "../components/brand.slint";
-import { RichBlocks } from "rich.slint";
-import { ConversationMessageView } from "../view-models.slint";
+import { DiffView, RichBlocks } from "rich.slint";
+import { ConversationMessageView, MessageChangeView } from "../view-models.slint";
 
 component UserMessage inherits HorizontalLayout {
     in property <string> text;
@@ -40,6 +40,8 @@ component ReasoningDisclosure inherits VerticalLayout {
     in property <string> text;
     in property <bool> live: false;
     in property <string> title: "Reasoning";
+    in property <int> additions: 0;
+    in property <int> removals: 0;
     private property <bool> open: root.live;
     spacing: Theme.sp6;
     HorizontalLayout {
@@ -68,6 +70,20 @@ component ReasoningDisclosure inherits VerticalLayout {
                     text: root.title;
                     tone: "muted";
                     size: "sm";
+                }
+                if root.additions > 0: Text {
+                    text: "+" + root.additions;
+                    color: Theme.diff-add-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
+                }
+                if root.removals > 0: Text {
+                    text: "-" + root.removals;
+                    color: Theme.diff-del-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
                 }
             }
             Focus {
@@ -98,6 +114,81 @@ component ReasoningDisclosure inherits VerticalLayout {
     }
 }
 
+// The files a response changed. Opening one shows its diff in place.
+component ChangedFiles inherits VerticalLayout {
+    in property <[MessageChangeView]> changes;
+    spacing: Theme.sp2;
+    for change in root.changes: VerticalLayout {
+        private property <bool> opened: App.open_message_diff == change.id;
+        spacing: Theme.sp2;
+        Rectangle {
+            height: 26px;
+            border-radius: Theme.r-xs;
+            background: file-touch.has-hover ? Theme.hover : transparent;
+            accessible-role: button;
+            accessible-label: "Show the diff of " + change.path;
+            accessible-expanded: opened;
+            accessible-action-default => { file-touch.clicked(); }
+            HorizontalLayout {
+                padding-left: Theme.sp4;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp4;
+                Icon {
+                    name: opened ? "chevron-down" : "chevron-right";
+                    size: 13px;
+                    tint: Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: change.path;
+                    color: Theme.text-2;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if change.additions > 0: Text {
+                    text: "+" + change.additions;
+                    color: Theme.diff-add-text;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    vertical-alignment: center;
+                }
+                if change.removals > 0: Text {
+                    text: "-" + change.removals;
+                    color: Theme.diff-del-text;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    vertical-alignment: center;
+                }
+            }
+            file-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    if opened {
+                        App.open_message_diff = "";
+                    } else {
+                        App.open_message_diff = change.id;
+                        App.load_change_diff(change.id);
+                    }
+                }
+            }
+        }
+        if opened && App.selected_file_change_id == change.id && App.selected_diff_available: Rectangle {
+            background: Theme.hover;
+            border-radius: Theme.r-xs;
+            clip: true;
+            DiffView { lines: App.selected_diff_lines; }
+        }
+        if opened && App.selected_file_change_id == change.id && !App.selected_diff_available: Label {
+            text: App.selected_diff_reason;
+            tone: "muted";
+            size: "xs";
+        }
+    }
+}
+
 component AssistantMessage inherits Rectangle {
     in property <ConversationMessageView> message;
     private property <string> meta: (message.model != "" ? message.model : message.provider-label)
@@ -105,7 +196,13 @@ component AssistantMessage inherits Rectangle {
     VerticalLayout {
         spacing: Theme.sp7;
         if Mods.reasoning && message.reasoning-available: ReasoningDisclosure { text: message.reasoning; title: "Thought process"; }
-        if Mods.reasoning && message.steps != "": ReasoningDisclosure { text: message.steps; title: "Steps"; }
+        if Mods.reasoning && message.steps != "": ReasoningDisclosure {
+            text: message.steps;
+            title: message.steps-title != "" ? message.steps-title : "Steps";
+            additions: message.additions;
+            removals: message.removals;
+        }
+        if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
         RichBlocks {
             blocks: message.blocks;
             link(url) => { App.open_link(url); }
@@ -131,7 +228,14 @@ component AssistantMessage inherits Rectangle {
 component LiveTurn inherits VerticalLayout {
     spacing: Theme.sp8;
     if Mods.reasoning && App.current_reasoning_available: ReasoningDisclosure { text: App.current_reasoning; live: App.running; title: "Thinking"; }
-    if Mods.reasoning && App.live_steps != "": ReasoningDisclosure { text: App.live_steps; live: App.running; title: "Steps"; }
+    if Mods.reasoning && App.live_steps != "": ReasoningDisclosure {
+        text: App.live_steps;
+        live: App.running;
+        title: App.live_steps_title != "" ? App.live_steps_title : "Steps";
+        additions: App.live_additions;
+        removals: App.live_removals;
+    }
+    if Mods.reasoning && App.live_changes.length > 0: ChangedFiles { changes: App.live_changes; }
     RichBlocks {
         blocks: App.live_blocks;
         link(url) => { App.open_link(url); }
