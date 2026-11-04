@@ -1603,7 +1603,13 @@ fn resume_process_threads(process_id: u32) -> Result<(), std::io::Error> {
     }
 }
 
-#[cfg(not(windows))]
+/// Nothing to resume: only Windows starts a command suspended.
+#[cfg(all(target_os = "linux", feature = "benchmark-process-group"))]
+fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
+    Ok(())
+}
+
+#[cfg(not(any(windows, all(target_os = "linux", feature = "benchmark-process-group"))))]
 fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
     Err(std::io::Error::other(
         "suspended managed processes are currently supported only on Windows",
