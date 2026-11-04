@@ -1449,7 +1449,11 @@ fn execution_profile(
     for capability_id in execution_capabilities {
         capability_enabled.insert(capability_id.to_owned(), execution_enabled);
     }
-    capability_enabled.insert("verification.supplemental-rust".into(), false);
+    // This capability exists only where Windows LPAC does, and a profile may not name
+    // one that is unavailable.
+    if cfg!(windows) {
+        capability_enabled.insert("verification.supplemental-rust".into(), false);
+    }
     ExecutionProfileRegistration {
         id: id.to_owned(),
         label: label.to_owned(),
