@@ -1006,6 +1006,8 @@ impl Default for LayoutProfile {
             .map(|surface| (surface, false))
             .collect::<BTreeMap<_, _>>();
         visible.insert(SurfaceId::Conversation, true);
+        // Collapsed, and shown only on a response that has reasoning or steps.
+        visible.insert(SurfaceId::Reasoning, true);
 
         let mut widths = BTreeMap::new();
         widths.insert(SurfaceId::Plan, 320);
@@ -2565,6 +2567,9 @@ pub enum AppCommand {
         surface: SurfaceId,
     },
     LoadUiPreferences,
+    SetThinkingMode {
+        mode: ui::ThinkingMode,
+    },
     UpdateUiPreferences {
         patch: Box<UiPatch>,
     },

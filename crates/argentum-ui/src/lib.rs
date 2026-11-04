@@ -68,6 +68,7 @@ pub struct WeakUiHandle {
 
 #[derive(Default)]
 struct ProjectionState {
+    run_steps: std::collections::BTreeMap<RunId, String>,
     run_sessions: HashMap<RunId, SessionId>,
     pending_run_sessions: VecDeque<SessionId>,
     approval_sessions: HashMap<ApprovalId, SessionId>,
@@ -280,10 +281,20 @@ impl UiHandle {
                 if self.active_session_id() != Some(snapshot.session_id) {
                     return;
                 }
+                {
+                    let steps = self.projection().run_steps.clone();
+                    self.window
+                        .set_conversation_messages(conversation_message_model_with_steps(
+                            &snapshot.messages,
+                            &steps,
+                        ));
+                }
                 self.window
-                    .set_conversation_messages(conversation_message_model(&snapshot.messages));
+                    .global::<App>()
+                    .set_live_steps(SharedString::default());
                 self.window.set_user_prompt(SharedString::default());
                 self.window.set_transcript(SharedString::default());
+                self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
                 self.window.set_current_reasoning_available(false);
                 self.window
@@ -606,6 +617,9 @@ impl UiHandle {
                     usage.context_window_tokens.map_or(0, saturating_i32_u64),
                 );
                 self.window.set_current_run_model(model.clone().into());
+                self.window
+                    .global::<App>()
+                    .set_served_model(model.clone().into());
                 if !profile_id.is_empty() {
                     let profiles = self.window.get_provider_profiles();
                     let provider_label = (0..profiles.row_count())
@@ -1140,6 +1154,17 @@ impl UiHandle {
                     .set_active_run_id(trace.run_id.to_string().into());
                 let (verb, state) = tool_result_presentation(&trace.result);
                 let title = format!("{} {verb}", tool_label(&trace.tool_id));
+                let step = format!("{title}: {}", trace.summary.replace('\n', ", "));
+                let joined = {
+                    let mut projection = self.projection();
+                    let steps = projection.run_steps.entry(trace.run_id).or_default();
+                    if !steps.is_empty() {
+                        steps.push('\n');
+                    }
+                    steps.push_str(&step);
+                    steps.clone()
+                };
+                self.window.global::<App>().set_live_steps(joined.into());
                 self.push_activity(title, trace.summary.clone(), state);
             }
             AppEvent::ApprovalRequested(request) => {
@@ -2861,6 +2886,13 @@ pub fn conversation_message_model_for_tools(
 fn conversation_message_model(
     messages: &[argentum_domain::ConversationMessage],
 ) -> ModelRc<ConversationMessageView> {
+    conversation_message_model_with_steps(messages, &Default::default())
+}
+
+fn conversation_message_model_with_steps(
+    messages: &[argentum_domain::ConversationMessage],
+    steps: &std::collections::BTreeMap<RunId, String>,
+) -> ModelRc<ConversationMessageView> {
     let rows = messages
         .iter()
         .map(|message| {
@@ -2877,6 +2909,15 @@ fn conversation_message_model(
                 reasoning.push_str(&tagged_reasoning);
             }
             ConversationMessageView {
+                steps: if message.role == ConversationRole::Assistant {
+                    steps
+                        .get(&message.run_id)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into()
+                } else {
+                    SharedString::default()
+                },
                 role: match message.role {
                     ConversationRole::User => "user",
                     ConversationRole::Assistant => "assistant",
@@ -3985,6 +4026,13 @@ where
     });
 
     let new_dispatch = dispatch.clone();
+    let thinking_dispatch = dispatch.clone();
+    window.global::<App>().on_set_thinking_mode(move |mode| {
+        if let Some(mode) = argentum_domain::ThinkingMode::from_id(&mode) {
+            thinking_dispatch(AppCommand::SetThinkingMode { mode });
+        }
+    });
+
     window.global::<App>().on_new_session(move || {
         new_dispatch(AppCommand::NewSession);
     });
@@ -6580,6 +6628,7 @@ mod tests {
             text: "Must stay hidden".into(),
         });
         assert_eq!(ui.window().get_transcript(), "");
+        assert_eq!(ui.window().get_live_blocks().row_count(), 0);
         ui.apply_event(&AppEvent::TaskAccepted(Task {
             id: "00000000-0000-0000-0000-0000000000a4"
                 .parse()
@@ -6615,6 +6664,8 @@ mod tests {
             .expect("run id");
         ui.window()
             .set_active_session_id(session_id.to_string().into());
+        ui.window()
+            .set_live_blocks(markdown::model("left over from streaming"));
         ui.apply_event(&AppEvent::ConversationSnapshotLoaded(
             ConversationSnapshot {
                 project_id,

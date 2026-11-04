@@ -85,10 +85,15 @@ fn invalid() -> ProviderError {
 
 fn normalized_origin(endpoint: &str) -> Result<String, ProviderError> {
     let mut url = url::Url::parse(endpoint)?;
+    let path = url.path().trim_end_matches('/').to_owned();
+    let known_route = match url.host_str() {
+        Some("api.minimax.io") => path == "/v1",
+        Some("api.deepseek.com") => path.is_empty(),
+        _ => false,
+    };
     if url.scheme() != "https"
-        || url.host_str() != Some("api.minimax.io")
+        || !known_route
         || url.port_or_known_default() != Some(443)
-        || url.path().trim_end_matches('/') != "/v1"
         || !url.username().is_empty()
         || url.password().is_some()
         || url.query().is_some()
@@ -96,7 +101,7 @@ fn normalized_origin(endpoint: &str) -> Result<String, ProviderError> {
     {
         return Err(ProviderError::PreparedRequestBindingMismatch);
     }
-    url.set_path("/v1/");
+    url.set_path(&format!("{path}/"));
     Ok(url.to_string())
 }
 

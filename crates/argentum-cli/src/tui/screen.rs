@@ -55,7 +55,7 @@ fn status_row(state: &TuiState) -> Option<Row> {
         .is_some_and(|entry| entry.text == state.status);
     if state.pending_approval.is_some()
         || state.status.is_empty()
-        || state.status == "Ready"
+        || matches!(state.status.as_str(), "Ready" | "Completed")
         || repeats_transcript
     {
         return None;

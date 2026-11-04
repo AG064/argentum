@@ -1120,9 +1120,7 @@ pub(super) async fn finish(
 pub(super) fn rows(t: &TuiState, width: usize, height: usize) -> Option<Vec<String>> {
     let s = state(t)?;
     let view = t.overlay.as_ref()?.view;
-    let mut source = vec![format!(
-        "{view:?} | settings own navigation | Esc back/close"
-    )];
+    let mut source = vec![format!("{} | Esc back/close", view.title())];
     source.push(
         if s.confirm.is_some() {
             "Hold F8 applies the reviewed action; Esc cancels."
@@ -1163,11 +1161,7 @@ fn editor_position(t: &TuiState, width: usize) -> Option<(usize, usize)> {
     let s = state(t)?;
     let e = s.editor.as_ref()?;
     let view = t.overlay.as_ref()?.view;
-    let header = screen::wrap(
-        &format!("{view:?} | settings own navigation | Esc back/close"),
-        width,
-    )
-    .len()
+    let header = screen::wrap(&format!("{} | Esc back/close", view.title()), width).len()
         + screen::wrap(
             "Input field owns keyboard. Enter saves, Esc cancels, Ctrl+U clears.",
             width,

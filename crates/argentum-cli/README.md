@@ -10,9 +10,9 @@ executable is `argentum` and the Cargo package is `argentum-cli`.
 
 ![A conversation in the terminal shell](../../docs/screenshots/cli-chat.png)
 
-Screenshots on this page are real console windows. The conversation and approval images
-show real renderer output with sample content. The others use a throwaway project and an
-offline demo provider. No model was called for any of them.
+Screenshots on this page are real console windows on a throwaway project. The conversation
+and permission images come from a live DeepSeek session. The others use an offline demo
+provider.
 
 ## Status
 
@@ -71,16 +71,17 @@ prompt, `provider credential set` reading from stdin, or
 | Headless | `argentum run --prompt TEXT --json` | One task, streamed as JSON |
 | Server | `argentum serve` | Protocol v1 JSONL on stdin and stdout |
 
-In chat, type `/` to search every command. `/providers`, `/models`, `/setup`, `/context`,
+In chat, type `/` to search every command. `/thinking off`, `/thinking high`, and
+`/thinking max` set how much DeepSeek reasons, and its thinking appears above each answer. `/providers`, `/models`, `/setup`, `/context`,
 `/tools`, `/verification`, and `/sessions` open panels, and `/changes` reviews stored
 changes. Esc or `/stop` asks the run to cancel and drains owned work. The footer always
 shows the model, access level, and context use.
 
-When the agent needs permission, a card appears right above the input. Type `y` to approve
-once or `n` to reject. Only the host draws at the left edge, because model text is always
-indented, so a response cannot draw a matching prompt.
+When the agent needs permission, a panel shows the exact action and target. Choose with the
+arrows and Enter, or type `y` to approve once or `n` to reject. Reject is selected by default,
+and Esc rejects too.
 
-![The permission card above the input](../../docs/screenshots/cli-approval.png)
+![The permission panel](../../docs/screenshots/cli-approval.png)
 
 Add `--final-result` to `run` for one settled result document, and `--answer-schema` to
 validate that answer against a schema file in the workspace. `--json` failures follow

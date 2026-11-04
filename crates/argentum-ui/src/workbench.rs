@@ -426,6 +426,9 @@ pub fn apply_ui_change(
     undo: Option<&UiPatch>,
 ) {
     apply_preferences(window, preferences);
+    window
+        .global::<crate::App>()
+        .set_thinking_mode(preferences.thinking.id().into());
     if source == UiChangeSource::Agent {
         window.set_ui_last_agent_change(summary.into());
         window.set_toast_text(format!("Agent changed: {summary}").into());

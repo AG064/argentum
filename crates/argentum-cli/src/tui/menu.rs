@@ -19,6 +19,28 @@ pub enum View {
     Changes,
     OwnerConfirm,
 }
+impl View {
+    pub(super) fn title(self) -> &'static str {
+        match self {
+            View::Help => "Help",
+            View::Commands => "Commands",
+            View::Status => "Status",
+            View::Model => "Model",
+            View::Providers => "Providers",
+            View::Permissions => "Permissions",
+            View::Tools => "Tools",
+            View::Verification => "Verification",
+            View::Skills => "Skills",
+            View::Context => "Context",
+            View::Sessions => "Sessions",
+            View::Fork => "Fork",
+            View::Setup => "Setup",
+            View::AccessReview => "Review access change",
+            View::Changes => "Changes",
+            View::OwnerConfirm => "Permission needed",
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
     Open(View),
@@ -177,6 +199,13 @@ pub(super) const COMMANDS: &[Command] = &[
         true
     ),
     cmd!(
+        "/thinking",
+        "Set DeepSeek thinking: off, high, or max",
+        "model/provider",
+        None,
+        false
+    ),
+    cmd!(
         "/compact",
         "Request bounded compaction",
         "diagnostics",
@@ -302,7 +331,7 @@ impl TuiState {
             return super::review::rows(self, width, height);
         }
         let o = self.overlay.as_ref()?;
-        let mut source = vec![format!("{:?} | Esc closes; draft preserved", o.view)];
+        let mut source = vec![format!("{} | Esc closes; draft preserved", o.view.title())];
         match o.view {
             View::Commands | View::Help => {
                 source.push(format!(

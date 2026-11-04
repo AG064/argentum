@@ -10,6 +10,10 @@ export global App {
     in-out property <bool> current_reasoning_available: false;
     in-out property <string> current_run_provider_label: "";
     in-out property <string> current_run_model: "";
+    in-out property <string> served_model: "";
+    in-out property <string> live_steps: "";
+    in-out property <string> thinking_mode: "high";
+    callback set_thinking_mode(string);
     in-out property <bool> usage_reported: false;
     in-out property <int> usage_input_tokens: 0;
     in-out property <int> usage_output_tokens: 0;

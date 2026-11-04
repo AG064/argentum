@@ -1266,9 +1266,9 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
         profile(
             "focused",
             "Minimal",
-            "The conversation and provider chooser, nothing else.",
+            "The conversation, the provider chooser, and collapsed reasoning.",
             10,
-            &[],
+            &[Reasoning],
         ),
         profile(
             "standard",
@@ -1889,7 +1889,7 @@ mod tests {
             .iter()
             .filter(|surface| surface.visible && surface.configurable)
             .count();
-        assert_eq!(on, 0, "a new project has no optional module on");
+        assert_eq!(on, 1, "a new project has only collapsed reasoning on");
     }
 
     #[test]

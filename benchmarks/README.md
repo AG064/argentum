@@ -52,16 +52,20 @@ contain whatever an agent printed, so read them before sharing.
 
 ### Argentum setup
 
-Argentum needs a little more, because each attempt uses a new workspace and a new database:
+Each attempt uses a new workspace and a new database, so Argentum needs two variables. The
+key stays in the operating system's secure store, saved earlier by Argentum:
 
 | Variable | Meaning |
 | --- | --- |
-| `ARGENTUM_BENCH_ENDPOINT` | An OpenAI-compatible endpoint |
-| `ARGENTUM_BENCH_LIMITS` | Model budget, as `TOTAL,INPUT,MAX_OUTPUT,REQUESTED_OUTPUT,UNCERTAINTY` |
+| `ARGENTUM_BENCH_PRESET` | A provider preset whose key is already saved, such as `deepseek` |
 | `ARGENTUM_BENCH_PROFILE` | A permission profile allowed to work unattended |
 
-Headless Argentum never approves its own actions. If the profile requires approval, the
-attempt fails with `approval_required`, and that counts as a failed attempt.
+Choosing a profile other than `guided` needs the owner at a real console, so start the
+benchmark yourself from a terminal. It cannot be run from a script or by an agent. `automatic` is
+the intended choice: it edits inside the workspace without asking, while running outside programs
+still needs approval. Headless Argentum never approves its own actions, so an agent that tries
+to run a program gets `approval_required`. Other tools may be free to run tests, which is a real
+difference to note when reading results.
 
 ## Keeping it fair
 

@@ -187,7 +187,11 @@ fn inline(text: &str, base: Tone) -> Vec<(String, Tone)> {
                 if !plain.is_empty() {
                     out.push((std::mem::take(&mut plain), base));
                 }
-                out.push((body, tone));
+                if tone == Tone::Strong {
+                    out.extend(inline(&body, Tone::Strong));
+                } else {
+                    out.push((body, tone));
+                }
                 rest = &tail[used..];
             }
             None => {
@@ -282,6 +286,23 @@ fn lines_for(entry: &TimelineEntry) -> Vec<Line> {
         }
         TimelineKind::Assistant => {
             lines.push(blank());
+            if !entry.detail.is_empty() {
+                lines.push(Line::new(
+                    "  ",
+                    Tone::Plain,
+                    vec![("Thinking".to_owned(), Tone::Muted)],
+                ));
+                // The tail is enough to follow along. A long trace must not push the
+                // answer off the screen.
+                let tail = entry.detail.trim_end().rsplitn(7, '\n').collect::<Vec<_>>();
+                let shown = tail[..tail.len().min(6)]
+                    .iter()
+                    .rev()
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                lines.append(&mut plain_lines(&shown, "  \u{2502} ", Tone::Faint));
+            }
             let mut body = markdown(&entry.text);
             if let Some(first) = body.first_mut() {
                 if first.first == "  " {
@@ -502,6 +523,15 @@ mod tests {
         assert!(segments
             .iter()
             .any(|(text, tone)| text == "code" && *tone == Tone::Code));
+    }
+
+    #[test]
+    fn code_inside_bold_loses_its_markers() {
+        let joined: String = inline("**`notes.txt` reads:**", Tone::Plain)
+            .iter()
+            .map(|(text, _)| text.as_str())
+            .collect();
+        assert_eq!(joined, "notes.txt reads:");
     }
 
     #[test]

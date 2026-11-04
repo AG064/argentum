@@ -125,7 +125,7 @@ pub enum RuntimeError {
     ContextCompaction(&'static str),
     #[error("{0}; no oversized main request was sent")]
     AutomaticCompactionFailed(String),
-    #[error("context_budget_invalid: {0}; use the trusted local provider budget command")]
+    #[error("context_budget_invalid: {0}; set model limits in Settings > Providers or with 'argentum provider budget'")]
     ContextBudget(&'static str),
     #[error("context_token_capacity_exceeded: estimated input, uncertainty and requested output do not fit the declared model limits")]
     ContextTokenCapacity,
@@ -515,6 +515,7 @@ struct ModelStreamState {
     assistant_reasoning: String,
     reasoning_bytes: usize,
     latest_usage: Option<DomainModelUsage>,
+    served_model: Option<String>,
 }
 
 #[derive(Default)]
@@ -1120,6 +1121,7 @@ impl RuntimeService {
         let Some(profile) = self.store.selected_provider_profile(self.project_id)? else {
             return Ok(());
         };
+        self.ensure_default_model_budget(&profile)?;
         let (budget, budget_error) = match self.store.model_budget(self.project_id, &profile) {
             Ok(budget) => (budget, String::new()),
             Err(_) => (
@@ -2763,6 +2765,12 @@ impl RuntimeService {
             AppCommand::LoadUiPreferences => self.publish_ui_preferences(),
             AppCommand::UpdateUiPreferences { patch } => {
                 self.apply_ui_patch(&patch, argentum_domain::UiChangeSource::User)
+            }
+            AppCommand::SetThinkingMode { mode } => {
+                let mut preferences = self.store.load_ui_preferences()?;
+                preferences.thinking = mode;
+                self.store.save_ui_preferences(&preferences)?;
+                self.publish_ui_preferences()
             }
             AppCommand::LoadProviderUsage => self.publish_provider_usage(),
             AppCommand::RefreshGitStatus => self.refresh_git_status().await,
@@ -4520,6 +4528,9 @@ impl RuntimeService {
                 .ok_or(RuntimeError::ContextBudget(
                     "usable model limits are unknown",
                 ))?;
+                argentum_providers::set_deepseek_thinking(
+                    self.store.load_ui_preferences()?.thinking,
+                );
                 let mut request = ModelRequest {
                     require_tool_call: next_context_ordinal == 1
                         && context.profile.kind == ProviderKind::OpenAiCompatible
@@ -5592,11 +5603,17 @@ impl RuntimeService {
                         session_id: context.session_id,
                         run_id: context.run_id,
                         profile_id: context.profile_id.clone(),
-                        model: context.model.clone(),
+                        model: stream
+                            .served_model
+                            .clone()
+                            .unwrap_or_else(|| context.model.clone()),
                         usage,
                     },
                     context.run_id,
                 )?;
+            }
+            ProviderEvent::ServedModel(model) => {
+                stream.served_model = Some(model);
             }
             ProviderEvent::ToolCall(call) if !round.completed => {
                 if round.tool_calls.len() >= MAX_MODEL_TOOL_CALLS_PER_ROUND {
@@ -9106,6 +9123,9 @@ impl RuntimeService {
         &self,
     ) -> Result<DurableSubmissionExecution, RuntimeError> {
         let profile = self.store.selected_provider_profile(self.project_id)?;
+        if let Some(profile) = &profile {
+            self.ensure_default_model_budget(profile)?;
+        }
         let budget = profile
             .as_ref()
             .map(|profile| self.store.model_budget(self.project_id, profile))
@@ -12204,10 +12224,13 @@ mod tests {
             .expect("saved");
         let snapshot = runtime.harness_snapshot().expect("snapshot");
         assert_eq!(snapshot.selected_profile_id, "focused");
-        assert!(!snapshot
+        let on: Vec<_> = snapshot
             .surfaces
             .iter()
-            .any(|surface| surface.configurable && surface.visible));
+            .filter(|surface| surface.configurable && surface.visible)
+            .map(|surface| surface.id)
+            .collect();
+        assert_eq!(on, [SurfaceId::Reasoning]);
     }
 
     #[tokio::test]

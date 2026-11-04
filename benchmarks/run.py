@@ -59,12 +59,16 @@ def kill_tree(process):
         os.killpg(process.pid, 9)
 
 
-def run_process(command, cwd, timeout, log=None):
+def run_process(command, cwd, timeout, log=None, terminal=False):
+    if terminal:
+        # A step that needs the owner at a real console inherits this one.
+        return subprocess.run(command, cwd=cwd, timeout=timeout, check=False).returncode, False
     options = {} if os.name == "nt" else {"start_new_session": True}
-    output = open(log, "wb") if log else subprocess.DEVNULL
+    output = open(log, "ab") if log else subprocess.DEVNULL
+    stdin = subprocess.DEVNULL
     try:
         process = subprocess.Popen(
-            command, cwd=cwd, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, **options
+            command, cwd=cwd, stdin=stdin, stdout=output, stderr=subprocess.STDOUT, **options
         )
         try:
             return process.wait(timeout=timeout), False
@@ -143,8 +147,10 @@ def attempt(agent, config, task_path, model, attempt_number, raw_dir):
             log = raw_dir / f"{agent}-{task_path.name}-{attempt_number}.log" if raw_dir else None
             try:
                 for step in config.get("setup", []):
+                    terminal = isinstance(step, dict)
+                    command = step["command"] if terminal else step
                     step_code, step_timed_out = run_process(
-                        resolve(substitute(step, values)), workspace, 120
+                        resolve(substitute(command, values)), workspace, 120, log, terminal
                     )
                     if step_code != 0 or step_timed_out:
                         record["status"] = "setup failed"

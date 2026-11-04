@@ -8,6 +8,12 @@
   A local-first AI coding agent in native Rust, with a modular desktop app and a terminal product on one shared core.
 </p>
 
+<p align="center">
+  <a href="https://github.com/AG064/argentum/actions/workflows/native-cli.yml"><img alt="CI" src="https://github.com/AG064/argentum/actions/workflows/native-cli.yml/badge.svg?branch=development"></a>
+  <a href="https://github.com/AG064/argentum/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/AG064/argentum/actions/workflows/codeql.yml/badge.svg?branch=development"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/AG064/argentum"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/AG064/argentum/badge"></a>
+</p>
+
 ![The Argentum desktop app with the Git diff module open](docs/screenshots/desktop-git.png)
 
 ## Two products, one core

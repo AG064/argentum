@@ -9,17 +9,8 @@
       [
         "argentum",
         "provider",
-        "save",
-        "bench",
-        "--label",
-        "Benchmark",
-        "--kind",
-        "openai-compatible",
-        "--endpoint",
-        "{env:ARGENTUM_BENCH_ENDPOINT}",
-        "--model",
-        "{model}",
-        "--select",
+        "add",
+        "{env:ARGENTUM_BENCH_PRESET}",
         "--workspace",
         "{workspace}",
         "--database",
@@ -28,25 +19,27 @@
       [
         "argentum",
         "provider",
-        "budget",
-        "bench",
-        "--limits",
-        "{env:ARGENTUM_BENCH_LIMITS}",
+        "model",
+        "{env:ARGENTUM_BENCH_PRESET}",
+        "--model",
+        "{model}",
         "--workspace",
         "{workspace}",
         "--database",
         "{state}/argentum.sqlite3"
       ],
-      [
-        "argentum",
-        "permissions",
-        "select",
-        "{env:ARGENTUM_BENCH_PROFILE}",
-        "--workspace",
-        "{workspace}",
-        "--database",
-        "{state}/argentum.sqlite3"
-      ]
+      {
+        "command": [
+          "argentum",
+          "permissions",
+          "select",
+          "{env:ARGENTUM_BENCH_PROFILE}",
+          "--workspace",
+          "{workspace}",
+          "--database",
+          "{state}/argentum.sqlite3"
+        ]
+      }
     ],
     "run": [
       "argentum",
