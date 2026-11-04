@@ -1481,6 +1481,7 @@ async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error:
     let mut workspace = env::current_dir()?;
     let mut provider_id = "deepseek".to_owned();
     let (mut model, mut endpoint, mut limits, mut prompt) = (None, None, None, None);
+    let mut thinking = None;
     let mut values = args.into_iter();
     while let Some(flag) = values.next() {
         let mut value = || values.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -1491,6 +1492,14 @@ async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error:
             "--endpoint" => endpoint = Some(value()?),
             "--limits" => limits = Some(argentum_cli::parse_model_budget_limits(&value()?)?),
             "--prompt" => prompt = Some(value()?),
+            "--thinking" => {
+                thinking = Some(match value()?.as_str() {
+                    "off" => argentum_domain::ThinkingMode::Off,
+                    "high" => argentum_domain::ThinkingMode::High,
+                    "max" => argentum_domain::ThinkingMode::Max,
+                    other => return Err(format!("unknown thinking mode: {other}").into()),
+                });
+            }
             "--json" => {}
             other => return Err(format!("unknown benchmark-run option: {other}").into()),
         }
@@ -1534,6 +1543,9 @@ async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error:
                 .await?;
             if let Some(limits) = limits {
                 host.declare_model_budget(&provider_id, limits)?;
+            }
+            if let Some(mode) = thinking {
+                owner.dispatch(AppCommand::SetThinkingMode { mode }).await?;
             }
             owner
                 .dispatch(AppCommand::SelectExecutionProfile {

@@ -27,7 +27,7 @@ class Commands(unittest.TestCase):
     def test_every_harness_is_listed_and_nothing_runs_by_default(self):
         for route in run_deepswe.ROUTES:
             output, call = printed("--route", route)
-            for name in run_deepswe.harnesses(route, "x"):
+            for name in set(run_deepswe.harnesses(route, "x")) - run_deepswe.NEEDS_LOG_UPLOAD_OFF:
                 self.assertIn(f"[{name}] pier run", output)
             call.assert_not_called()
 
@@ -35,6 +35,19 @@ class Commands(unittest.TestCase):
         output, _ = printed()
         self.assertIn("opencode-go/deepseek-v4.1-flash", output)
         self.assertNotIn("DeepSeekHarness", output)
+
+    def test_every_harness_asks_for_the_same_effort(self):
+        for route in run_deepswe.ROUTES:
+            output, _ = printed("--route", route)
+            for line in output.splitlines():
+                if " pier run " in line and "Argentum" not in line and ":Pi " not in line:
+                    self.assertTrue("reasoning_effort=max" in line or "variant=max" in line, line)
+
+    def test_a_harness_that_uploads_session_logs_stays_out(self):
+        output, _ = printed("--route", "deepseek")
+        self.assertNotIn("DeepSeekHarness", output)
+        with self.assertRaises(SystemExit):
+            printed("--route", "deepseek", "--agents", "deepseek-harness")
 
     def test_a_key_never_reaches_a_command_or_the_output(self):
         output, call = printed("--go", "--agents", "claude-code", "codex")
