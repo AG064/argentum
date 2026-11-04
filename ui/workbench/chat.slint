@@ -295,8 +295,8 @@ export component Composer inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 icon: "provider";
                 label: App.provider_model == "" ? "Choose a model"
-                    : (root.narrow ? "" : App.provider_label + "  ·  ") + App.provider_model
-                        + (App.served_model != "" && App.served_model != App.provider_model ? " (" + App.served_model + ")" : "");
+                    : (root.narrow ? "" : App.provider_label + "  ·  ")
+                        + (App.provider_model_name != "" ? App.provider_model_name : App.provider_model);
                 trailing-chevron: true;
                 active: App.provider_menu_open;
                 max-label: root.narrow ? 110px : 360px;

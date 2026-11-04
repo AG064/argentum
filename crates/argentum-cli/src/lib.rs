@@ -1864,6 +1864,19 @@ impl LocalCommandHandle {
         names.truncate(128);
         Ok(names)
     }
+    /// Names a provider's catalog gives its models, where it gives any.
+    pub fn model_labels(
+        &self,
+        profile: &ProviderProfile,
+    ) -> Result<std::collections::BTreeMap<String, String>, HostError> {
+        Ok(self
+            .runtime
+            .cached_profile_model_catalog(&profile.id)?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|model| (model.id, model.label))
+            .collect())
+    }
     pub fn configure_local_context(
         &self,
         id: &str,

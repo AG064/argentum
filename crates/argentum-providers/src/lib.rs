@@ -4443,6 +4443,28 @@ struct ModelsResponse {
 #[derive(Debug, Deserialize)]
 struct ModelDescriptor {
     id: String,
+    // Optional names some servers add to the OpenAI list format.
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+impl ModelDescriptor {
+    /// A name the server offers, or the ID. A malformed name must not lose the catalog.
+    fn label(&self) -> String {
+        [self.display_name.as_deref(), self.name.as_deref()]
+            .into_iter()
+            .flatten()
+            .map(str::trim)
+            .find(|name| {
+                !name.is_empty()
+                    && name.len() <= MAX_PROBE_MODEL_ID_BYTES
+                    && !name.chars().any(char::is_control)
+            })
+            .unwrap_or(&self.id)
+            .to_owned()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -4543,7 +4565,7 @@ fn parse_models_response(body: &[u8]) -> Result<Vec<ProviderModel>, ProviderErro
             .data
             .into_iter()
             .map(|model| ProviderModel {
-                label: model.id.clone(),
+                label: model.label(),
                 id: model.id,
                 context_window_tokens: None,
             })
@@ -6495,6 +6517,34 @@ mod tests {
         handle.join().expect("server");
         assert!(requests[0].starts_with("GET /api/v1/models HTTP/1.1\r\n"));
         assert!(requests[1].starts_with("GET /v1/models HTTP/1.1\r\n"));
+    }
+
+    #[test]
+    fn model_lists_keep_a_name_the_server_offers() {
+        let models = parse_models_response(
+            br#"{"data":[
+                {"id":"plain"},
+                {"id":"vendor/a","name":"Vendor A"},
+                {"id":"vendor/b","display_name":"Vendor B","name":"ignored"},
+                {"id":"vendor/c","name":"bad\u0007name"},
+                {"id":"vendor/d","name":"  "}
+            ]}"#,
+        )
+        .expect("catalog");
+        let labels = models
+            .iter()
+            .map(|model| (model.id.as_str(), model.label.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            [
+                ("plain", "plain"),
+                ("vendor/a", "Vendor A"),
+                ("vendor/b", "Vendor B"),
+                ("vendor/c", "vendor/c"),
+                ("vendor/d", "vendor/d"),
+            ]
+        );
     }
 
     #[test]

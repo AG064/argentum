@@ -1,0 +1,51 @@
+name: Benchmark build
+# Builds and tests the Linux CLI used only inside disposable benchmark containers.
+# It makes no model requests, needs no secrets, and publishes nothing.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [development]
+    paths:
+      - 'benchmarks/public/**'
+      - 'crates/argentum-cli/**'
+      - '.github/workflows/benchmark-build.yml'
+permissions:
+  contents: read
+concurrency:
+  group: benchmark-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+      - name: Keep the switch out of release builds
+        run: |
+          if grep -rl 'benchmark-unattended' scripts .github/workflows/release-build.yml; then
+            echo 'A release path mentions benchmark-unattended' >&2
+            exit 1
+          fi
+      - name: Test an ordinary build
+        run: cargo test --locked -p argentum-cli --test benchmark_unattended
+      - name: Test the benchmark build
+        run: cargo test --locked -p argentum-cli --features benchmark-unattended --test benchmark_unattended
+      - name: Build
+        run: cargo build --locked --release -p argentum-cli --features benchmark-unattended
+      - name: Check the binary
+        run: |
+          ./target/release/argentum --version | grep 'benchmark build'
+          ldd ./target/release/argentum || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: argentum-benchmark-linux-x64
+          path: target/release/argentum
+          if-no-files-found: error
+          retention-days: 14

@@ -177,6 +177,10 @@ pub struct TuiState {
     active_session_title: String,
     provider_label: String,
     model: String,
+    /// What the footer shows. Requests keep using `model`.
+    model_name: String,
+    model_endpoint: String,
+    served_model: Option<String>,
     permission_mode: String,
     goal_accounting_summary: Option<String>,
     platform_authority: Option<PlatformAuthoritySnapshot>,
@@ -232,6 +236,9 @@ impl TuiState {
             active_session_title: String::new(),
             provider_label: "not configured".into(),
             model: "unknown".into(),
+            model_name: String::new(),
+            model_endpoint: String::new(),
+            served_model: None,
             permission_mode: "Guided".into(),
             goal_accounting_summary: None,
             platform_authority: None,
@@ -712,8 +719,13 @@ impl TuiState {
                 }
             }
             AppEvent::ModelUsageUpdated {
-                session_id, usage, ..
+                session_id,
+                usage,
+                model,
+                ..
             } if self.active_session_id == Some(session_id) => {
+                self.served_model = Some(bounded_text(&model));
+                self.refresh_model_name();
                 if self.active_run_id.is_none() {
                     self.status = format!("Used {} tokens", usage.total_tokens);
                 }
@@ -1696,8 +1708,21 @@ impl TuiState {
             } else {
                 bounded_text(&profile.label)
             };
-            self.model = bounded_text(&profile.model);
+            let model = bounded_text(&profile.model);
+            if self.model != model || self.model_endpoint != profile.endpoint {
+                self.served_model = None;
+            }
+            self.model = model;
+            self.model_endpoint.clone_from(&profile.endpoint);
+            self.refresh_model_name();
         }
+    }
+
+    fn refresh_model_name(&mut self) {
+        self.model_name = argentum_domain::model_display_name(
+            &self.model_endpoint,
+            self.served_model.as_deref().unwrap_or(&self.model),
+        );
     }
 
     fn truncate_timeline(&mut self) {
@@ -2980,6 +3005,36 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
+
+    fn deepseek_profile(model: &str) -> argentum_domain::ProviderProfile {
+        argentum_domain::ProviderProfile {
+            id: "deepseek".into(),
+            label: "DeepSeek".into(),
+            kind: argentum_domain::ProviderKind::OpenAiCompatible,
+            endpoint: "https://api.deepseek.com/".into(),
+            model: model.into(),
+            selected: true,
+        }
+    }
+
+    #[test]
+    fn the_footer_name_follows_the_build_and_never_changes_the_requested_model() {
+        let mut state = TuiState::new(PathBuf::from("workspace"), false);
+        state.apply_provider_profiles(&[deepseek_profile("deepseek-flash")]);
+        assert_eq!(state.model, "deepseek-flash");
+        assert_eq!(state.model_name, "DeepSeek-V4.1-Flash-1017");
+
+        state.served_model = Some("deepseek-served-build".into());
+        state.refresh_model_name();
+        assert_eq!(state.model_name, "deepseek-served-build");
+
+        state.apply_provider_profiles(&[deepseek_profile("deepseek-flash")]);
+        assert_eq!(state.model_name, "deepseek-served-build");
+
+        state.apply_provider_profiles(&[deepseek_profile("deepseek-v4-pro")]);
+        assert_eq!(state.served_model, None);
+        assert_eq!(state.model_name, "DeepSeek-V4-Pro");
+    }
     use crate::HostConfig;
 
     fn key(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> KeyEvent {

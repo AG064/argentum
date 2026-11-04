@@ -1443,6 +1443,31 @@ fn can_download_local_model(options: &CommonOptions) -> bool {
     )
 }
 
+// Windows is what users download, so a Windows binary can never have this switch.
+#[cfg(all(feature = "benchmark-unattended", not(target_os = "linux"), not(test)))]
+compile_error!("benchmark-unattended is for disposable Linux benchmark containers only");
+
+/// Set by the benchmark container image, and read only by a benchmark build.
+#[cfg(feature = "benchmark-unattended")]
+const BENCHMARK_DISPOSABLE_ENV: &str = "ARGENTUM_BENCHMARK_DISPOSABLE";
+
+/// A benchmark build run in a disposable container has no owner to ask. Every other
+/// build returns false, whatever the environment says.
+#[cfg(feature = "benchmark-unattended")]
+fn benchmark_stands_in_for_owner() -> bool {
+    disposable_marker_is_set(std::env::var_os(BENCHMARK_DISPOSABLE_ENV).as_deref())
+}
+
+#[cfg(feature = "benchmark-unattended")]
+fn disposable_marker_is_set(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some_and(|value| value == "1")
+}
+
+#[cfg(not(feature = "benchmark-unattended"))]
+const fn benchmark_stands_in_for_owner() -> bool {
+    false
+}
+
 fn direct_local_user_interaction(
     non_interactive: bool,
     machine_output: bool,
@@ -3826,12 +3851,13 @@ async fn run_permissions_command(
     action: PermissionAction,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let local_authority_observed = direct_local_user_interaction(
-        options.non_interactive,
-        json,
-        io::stdin().is_terminal(),
-        io::stdout().is_terminal(),
-    );
+    let local_authority_observed = benchmark_stands_in_for_owner()
+        || direct_local_user_interaction(
+            options.non_interactive,
+            json,
+            io::stdin().is_terminal(),
+            io::stdout().is_terminal(),
+        );
     let config = options.host_config()?;
     with_one_shot_host(config, move |host| {
         Box::pin(async move {
@@ -8310,7 +8336,12 @@ fn print_version() {
 }
 
 fn version_line() -> String {
-    format!("argentum {}", env!("CARGO_PKG_VERSION"))
+    let build = if cfg!(feature = "benchmark-unattended") {
+        " (benchmark build, disposable containers only)"
+    } else {
+        ""
+    };
+    format!("argentum {}{build}", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]
@@ -8322,6 +8353,22 @@ mod tests {
     use argentum_cli::protocol::RequestEnvelope;
 
     use super::*;
+
+    #[cfg(not(feature = "benchmark-unattended"))]
+    #[test]
+    fn only_a_benchmark_build_can_stand_in_for_the_owner() {
+        assert!(!benchmark_stands_in_for_owner());
+    }
+
+    #[cfg(feature = "benchmark-unattended")]
+    #[test]
+    fn the_disposable_marker_must_be_exact() {
+        use std::ffi::OsStr;
+        assert!(disposable_marker_is_set(Some(OsStr::new("1"))));
+        for value in [None, Some(""), Some("0"), Some("true"), Some("11")] {
+            assert!(!disposable_marker_is_set(value.map(OsStr::new)));
+        }
+    }
 
     #[tokio::test]
     async fn changes_page_command_preserves_retained_journal_and_workspace() {
@@ -9187,6 +9234,7 @@ mod tests {
         assert!(!matches!(chat, Arguments::Help));
 
         assert!(parse_args(["--non-interactive"]).is_ok());
+        #[cfg(not(feature = "benchmark-unattended"))]
         assert_eq!(
             version_line(),
             concat!("argentum ", env!("CARGO_PKG_VERSION"))
@@ -9295,6 +9343,7 @@ mod tests {
         assert!(parse_args(["session", "fork", session_id]).is_err());
         assert!(parse_args(["version", "extra"]).is_err());
         assert!(parse_args(["session", "select", "invalid"]).is_err());
+        #[cfg(not(feature = "benchmark-unattended"))]
         assert_eq!(
             version_line(),
             concat!("argentum ", env!("CARGO_PKG_VERSION"))

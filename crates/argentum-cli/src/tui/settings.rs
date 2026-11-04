@@ -191,11 +191,20 @@ pub(super) fn open(
         }
         menu::View::Model => {
             notice=format!("Provider: {}. Choose a model or enter its exact ID. Refresh asks the configured server for its catalog, not an answer.",profile.label);
+            let labels = local.model_labels(&profile)?;
             for model in local.model_choices(&profile)? {
+                let name = argentum_domain::model_display_name(&profile.endpoint, &model);
+                let name = if name != model {
+                    format!("{name} ({model})")
+                } else if let Some(label) = labels.get(&model).filter(|label| **label != model) {
+                    format!("{label} ({model})")
+                } else {
+                    model.clone()
+                };
                 entry(
                     &mut entries,
                     format!(
-                        "{model}{}",
+                        "{name}{}",
                         if model == profile.model {
                             " [selected]"
                         } else {
