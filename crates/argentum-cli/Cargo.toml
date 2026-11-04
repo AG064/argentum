@@ -17,7 +17,7 @@ desktop-control = ["extensions", "argentum-extensions/desktop-control", "argentu
 artifacts = ["extensions", "dep:argentum-artifacts", "tokio/signal"]
 # Public benchmarks only: lets a disposable Linux container choose a permission profile
 # with no owner at a console. Never part of a release. See benchmarks/public/README.md.
-benchmark-unattended = []
+benchmark-unattended = ["argentum-tools/benchmark-process-group"]
 
 [[bin]]
 name = "argentum"

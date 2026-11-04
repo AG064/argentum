@@ -158,7 +158,8 @@ mod benchmark_build {
         assert!(run.status.success(), "{}", output_of(&run));
         server.join().unwrap();
         // Windows shells may write UTF-16, so compare only the letters.
-        let proof = std::fs::read(root.path().join("workspace/proof.txt")).unwrap();
+        let proof = std::fs::read(root.path().join("workspace/proof.txt"))
+            .unwrap_or_else(|error| panic!("{error}: {}", output_of(&run)));
         let letters = proof
             .into_iter()
             .filter(u8::is_ascii_alphabetic)

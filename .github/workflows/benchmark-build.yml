@@ -29,14 +29,18 @@ jobs:
           toolchain: 1.98.0
       - name: Keep the switch out of release builds
         run: |
-          if grep -rl 'benchmark-unattended' scripts .github/workflows/release-build.yml; then
-            echo 'A release path mentions benchmark-unattended' >&2
+          if grep -rlE 'benchmark-(unattended|process-group)' scripts .github/workflows/release-build.yml; then
+            echo 'A release path mentions a benchmark feature' >&2
             exit 1
           fi
       - name: Test an ordinary build
-        run: cargo test --locked -p argentum-cli --test benchmark_unattended
+        run: |
+          cargo test --locked -p argentum-cli --test benchmark_unattended
+          cargo test --locked -p argentum-execution --lib an_ordinary_build_refuses
       - name: Test the benchmark build
-        run: cargo test --locked -p argentum-cli --features benchmark-unattended --test benchmark_unattended
+        run: |
+          cargo test --locked -p argentum-cli --features benchmark-unattended --test benchmark_unattended
+          cargo test --locked -p argentum-execution --features benchmark-process-group --lib a_stopped_command
       - name: Build
         run: cargo build --locked --release -p argentum-cli --features benchmark-unattended
       - name: Check the binary

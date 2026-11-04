@@ -31,9 +31,15 @@ It adds one command, `argentum benchmark-run`, which does setup and the task in 
 agent gets the `full-access` profile: no approvals and no workspace limits. **Only run it in a
 disposable container.** The `benchmark-build` workflow builds it and tests all of this.
 
-Argentum's saved database only works on Windows today, so this command keeps its state in memory.
-A benchmark never restarts mid-task, so that should not affect its score, but it does mean recovery
-after a crash is not being tested. Windows x64 is still the only tested platform for normal use.
+Two parts of Argentum are Windows-only today, so this build works around them:
+
+- **Saved database:** this command keeps its state in memory instead. A benchmark never restarts
+  mid-task, so that should not affect its score, but recovery after a crash is not being tested.
+- **Process containment:** this build uses a Linux process group instead of a Windows job object. A
+  command can deliberately escape a group, which is why it relies on the container. Ordinary
+  builds on other platforms still refuse to run commands.
+
+Windows x64 is still the only tested platform for normal use.
 
 ## What you need
 
