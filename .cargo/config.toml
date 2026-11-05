@@ -1,0 +1,4 @@
+# Windows does not ship the Visual C++ runtime, so without this neither the app nor the CLI
+# starts on a clean PC. scripts/package-windows-release.py fails if the dependency returns.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

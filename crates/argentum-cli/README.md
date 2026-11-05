@@ -33,8 +33,8 @@ cargo build -p argentum-cli --bin argentum --release --locked
 & '.\target\release\argentum.exe' --help
 ```
 
-The result needs the Universal CRT and the Microsoft Visual C++ x64 runtime, which are
-not bundled.
+The result carries the C runtime it needs, so a clean PC does not need the Visual C++ runtime
+installed.
 
 To build a portable package with checksums and source provenance, use
 `scripts/package-windows-cli.ps1 -OutputDirectory C:\temporary\package`. It refuses a

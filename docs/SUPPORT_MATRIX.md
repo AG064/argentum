@@ -4,10 +4,10 @@ Status is scoped to native `0.1.0-rc.1`, not the historical TypeScript release.
 Source presence, compilation, synthetic contracts, live provider evidence and
 release qualification are separate facts.
 
-Observed CLI imports include `VCRUNTIME140.dll` and Universal CRT API sets.
-An installed x64 Microsoft Visual C++ runtime is a prerequisite; it is not
-bundled. Local runtime evidence is Windows 10.0.26100, not a pristine VM or a
-general Windows minimum-version qualification.
+The app and CLI link the C runtime statically, so they do not need the Visual C++ runtime.
+They started in Windows Sandbox on 10.0.26100, with no runtime installed and no network. Before
+this change, the same test failed with `VCRUNTIME140.dll was not found`. That is one clean
+environment on one Windows build, not a general minimum-version qualification.
 
 The qualification runner is `windows-2025`. Retained Server 2022
 and newer-runner failures establish that their LPAC cannot reopen the NUL

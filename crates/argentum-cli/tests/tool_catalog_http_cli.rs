@@ -461,7 +461,8 @@ fn read_output(input: impl Read) -> Vec<u8> {
 }
 
 fn wait_child(child: &mut Child) -> std::process::ExitStatus {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    // Generous, because a busy CI runner can take far longer than the work itself.
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             return status;

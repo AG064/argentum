@@ -45,8 +45,8 @@ $env:ARGENTUM_WORKSPACE = 'C:\projects\example'
 cargo run -p argentum-app
 ```
 
-The app needs the Microsoft Visual C++ runtime and does not bundle it, so a clean PC
-may need it installed.
+The app carries the C runtime it needs, so a clean PC does not need the Visual C++ runtime
+installed.
 
 ## First run
 

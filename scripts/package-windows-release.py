@@ -63,6 +63,24 @@ def copy_notices(stage):
     return records
 
 
+def check_runtime_free(folder):
+    """A clean PC has no Visual C++ runtime, so a binary that needs it will not start."""
+    for path in sorted(folder.iterdir()):
+        binaries = []
+        if path.suffix == ".exe":
+            binaries.append((path.name, path.read_bytes()))
+        elif path.suffix == ".zip":
+            with zipfile.ZipFile(path) as archive:
+                binaries.extend(
+                    (f"{path.name}:{name}", archive.read(name))
+                    for name in archive.namelist()
+                    if name.lower().endswith((".exe", ".dll"))
+                )
+        for name, data in binaries:
+            if b"vcruntime140" in data.lower():
+                raise SystemExit(f"{name} needs the Visual C++ runtime")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, required=True)
@@ -95,6 +113,7 @@ def main():
     for folder, target in ((arguments.cli, f"argentum-genesis-{VERSION_NAME}-windows-x64.zip"),
                            (arguments.cli_desktop, f"argentum-genesis-desktop-control-{VERSION_NAME}-windows-x64.zip")):
         shutil.copy(next(folder.glob("*.zip")), arguments.output / target)
+    check_runtime_free(arguments.output)
     rows = []
     for path in sorted(arguments.output.iterdir()):
         rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n")
