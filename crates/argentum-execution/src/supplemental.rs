@@ -166,7 +166,8 @@ mod tests {
                 replaces: None,
             },
             CancellationToken::new(),
-            Duration::from_secs(60),
+            // Includes queueing behind the other checks in this test binary.
+            Duration::from_secs(600),
         )
         .await
         .unwrap()
