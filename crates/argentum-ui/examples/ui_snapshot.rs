@@ -295,6 +295,7 @@ fn provider_catalog(ui: &UiHandle) {
             group_label: group.into(),
             local,
             supported,
+            tested: id == "deepseek",
             notes: if supported {
                 "".into()
             } else {

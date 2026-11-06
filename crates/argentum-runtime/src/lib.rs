@@ -2406,6 +2406,7 @@ impl RuntimeService {
                         supported: preset.supported,
                         group: preset.group.as_str().to_owned(),
                         notes: preset.notes.to_owned(),
+                        tested: argentum_providers::provider_tested(preset.id),
                     })
                     .collect();
                 self.publish_transient(AppEvent::ProviderPresetsSnapshot { presets });
@@ -3004,10 +3005,8 @@ impl RuntimeService {
         let provider_readiness = match selected {
             None => HarnessReadiness::NeedsConfiguration,
             Some(profile)
-                if matches!(
-                    profile.id.as_str(),
-                    "openai" | "minimax" | "deepseek" | "opencode-go"
-                ) && !self.provider_credential_configured(&profile.id) =>
+                if argentum_domain::is_supported_hosted_credential_provider_id(&profile.id)
+                    && !self.provider_credential_configured(&profile.id) =>
             {
                 HarnessReadiness::NeedsConfiguration
             }
@@ -3611,10 +3610,8 @@ impl RuntimeService {
                 }
             }
             ProviderKind::OpenAiCompatible
-                if matches!(
-                    profile.id.as_str(),
-                    "openai" | "minimax" | "deepseek" | "opencode-go" | "chatgpt"
-                ) =>
+                if profile.id == "chatgpt"
+                    || argentum_domain::is_supported_hosted_credential_provider_id(&profile.id) =>
             {
                 if self.provider_credential_configured(&profile.id) {
                     OnboardingCredentialState::Configured
