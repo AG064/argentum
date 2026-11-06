@@ -14,10 +14,11 @@ pub(super) fn upgrade_run_limit(db: &rusqlite::Connection) -> Result<(), StoreEr
         [],
         |row| row.get(0),
     )?;
-    if !schema
-        .split_whitespace()
-        .collect::<String>()
-        .contains("next_ordinal<=9)")
+    let compact = schema.split_whitespace().collect::<String>();
+    // Earlier releases capped a run at 9 and then 33 groups.
+    if !["next_ordinal<=9)", "next_ordinal<=33)"]
+        .iter()
+        .any(|old| compact.contains(old))
     {
         return Ok(());
     }
@@ -30,7 +31,7 @@ pub(super) fn upgrade_run_limit(db: &rusqlite::Connection) -> Result<(), StoreEr
             session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
             task_id TEXT NOT NULL,
             assistant_complete INTEGER NOT NULL DEFAULT 0,
-            next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 33),
+            next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 121),
             user_message_id TEXT NOT NULL UNIQUE REFERENCES conversation_messages(id) ON DELETE CASCADE);
             INSERT INTO context_runs_v20 SELECT run_id,project_id,session_id,task_id,assistant_complete,next_ordinal,user_message_id FROM context_runs;
             DROP TABLE context_runs;
@@ -190,6 +191,72 @@ mod tests {
                 .get::<_, i64>(0))
                 .unwrap(),
             33
+        );
+        assert_eq!(
+            db.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn reliability_33_group_migration_allows_a_120_round_run() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("migration.db");
+        let store = Store::open(&path).unwrap();
+        let mut group = start(&store, root.path());
+        store.append_context_group(&group).unwrap();
+        {
+            let db = store.connection.lock().unwrap();
+            // Reproduce the precise prior schema in this disposable database.
+            db.execute_batch("PRAGMA foreign_keys=OFF; BEGIN;
+                CREATE TABLE old_context_runs (run_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,task_id TEXT NOT NULL,assistant_complete INTEGER NOT NULL DEFAULT 0,next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 33),user_message_id TEXT NOT NULL UNIQUE REFERENCES conversation_messages(id) ON DELETE CASCADE);
+                INSERT INTO old_context_runs SELECT * FROM context_runs; DROP TABLE context_runs; ALTER TABLE old_context_runs RENAME TO context_runs;
+                CREATE INDEX idx_context_runs_scope ON context_runs(project_id,session_id); PRAGMA user_version=19; COMMIT; PRAGMA foreign_keys=ON;") .unwrap();
+        }
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        assert!(
+            matches!(&store.context_sources(group.project_id,group.session_id).unwrap().sources[0],ContextSource::Group(g) if g==&group)
+        );
+        for ordinal in 1..120 {
+            group.ordinal = ordinal;
+            group.body = GroupBody::Exchange {
+                text: "more".into(),
+                text_retention: Retention::Retained,
+                observations: vec![Observation {
+                    provider_call_id: format!("call-{ordinal}"),
+                    runtime_call_id: Some(Uuid::new_v4()),
+                    tool: "read_text".into(),
+                    arguments: "{}".into(),
+                    retention: Retention::OmittedPolicy,
+                    state: ObservationState::ResultAvailable,
+                    receipt: None,
+                    result: None,
+                    change: None,
+                }],
+            };
+            store.append_context_group(&group).unwrap();
+        }
+        group.ordinal = 120;
+        group.body = GroupBody::Assistant {
+            text: "finished".into(),
+        };
+        store.append_context_group(&group).unwrap();
+        let db = store.connection.lock().unwrap();
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM context_groups", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            121
         );
         assert_eq!(
             db.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))

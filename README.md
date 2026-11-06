@@ -110,7 +110,7 @@ answer and the recorded changes, and the step list is gone.
 | 3. Policy decides | The saved project policy allows a tool, asks you first, or refuses it. Nothing the model says can change that |
 | 4. You see each step | Reads, searches, commands, and edits appear as they happen, and thinking streams above them |
 | 5. Changes are recorded | Each edit is checked against the source the agent read, and saved so you can review or restore it |
-| 6. It stops | A run ends with an answer, at Esc or `/stop`, or at the limit of 32 rounds. Long tasks can be continued, or run as a goal |
+| 6. It stops | A run ends with an answer, at Esc or `/stop`, at the limit of 120 rounds, or when the model asks for the same tool calls four rounds in a row. Long tasks can be continued, or run as a goal |
 
 ### Goals
 
@@ -133,18 +133,19 @@ The catalog covers hosted services, aggregators, your own server, and local mode
 
 | Type | Providers |
 | --- | --- |
-| Hosted | MiniMax, OpenAI, DeepSeek, Google Gemini, Groq, Mistral, xAI, Cerebras, Perplexity, Cohere, Moonshot, Z.AI, Qwen |
+| Tested with Argentum | DeepSeek, OpenCode Go |
+| Hosted | MiniMax, OpenAI, Google Gemini, Groq, Mistral, xAI, Cerebras, Perplexity, Cohere, Moonshot, Z.AI, Qwen, SambaNova, NVIDIA NIM |
 | Plans | ChatGPT plan, with browser sign-in |
-| Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, OpenCode Go |
+| Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, DeepInfra, Novita, Hugging Face, Chutes, Venice, Avian, Requesty, Vercel AI Gateway |
 | On your computer | llama.cpp, LM Studio, Ollama, vLLM |
 | Your own | Any OpenAI-compatible server |
 
 - **Real model names:** the app shows what is running, such as `DeepSeek-V4.1-Flash-1017`, not only the ID it sends.
 - **Thinking modes:** switch DeepSeek between off, high, and max from the composer, or with `/thinking`.
 - **Secure keys:** API keys go in the operating system's credential store, and each is only sent to its provider's own address.
-- **Tested live:** DeepSeek and OpenCode Go. See the [support matrix](docs/SUPPORT_MATRIX.md) for the rest.
+- **Tested and Testing tabs:** Settings > Providers lists tested providers first, and the rest on a Testing tab, so you know which have not been run against Argentum. First run shows only tested providers until you choose Show all.
 
-![Provider settings, with sample data](docs/screenshots/desktop-providers.png)
+![The Testing tab of provider settings](docs/screenshots/desktop-provider-tabs.png)
 
 ### Context and budget
 
@@ -153,7 +154,7 @@ Change these in Settings > Providers, or with `argentum provider budget`:
 - **Budget:** total, input, output, and uncertainty limits for each model. Models with known limits work without setup.
 - **Context size:** pick the size for a local model in the app, under Context size.
 - **Context meter:** an optional module showing how full the context is, and the terminal footer always shows it.
-- **Compaction:** summarize earlier work with `argentum compact` to free up room. The summary loses detail, and Argentum tells you when one is in use.
+- **Compaction:** when the next request would not fit, a run summarizes earlier work and continues. You can also run `argentum compact` yourself. The summary loses detail, and Argentum tells you when one is in use.
 
 A request that would not fit is refused before it is sent.
 
@@ -195,7 +196,7 @@ CLI build leaves them out.
 
 ### Known limits
 
-- A run stops after 32 rounds. Raising this needs a database migration, and it is planned.
+- A run stops after 120 rounds, and earlier if the model repeats the same tool calls four rounds in a row.
 - The steps and diff list on each response last for the running session only.
 - Windows x64 is the only tested platform, and it has not yet been tested on a clean machine.
 

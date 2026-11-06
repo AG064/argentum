@@ -227,6 +227,8 @@ pub enum RuntimeError {
     StateLockPoisoned,
     #[error("the model tool loop exceeded its safety limit")]
     ToolLoopLimit,
+    #[error("the model asked for the same tool calls four rounds in a row, so the run stopped")]
+    RepeatedToolCalls,
     #[error("delegated_readonly_allowance_exhausted: no further child or parent inference was dispatched")]
     DelegationAllowanceExhausted,
     #[error("delegated_readonly_usage_unresolved: dispatched child usage is unavailable or conflicting; no further inference was dispatched")]
@@ -290,6 +292,47 @@ pub enum RuntimeError {
 }
 
 const MAX_MODEL_ROUNDS: usize = argentum_domain::working_context::MAX_RUN_GROUPS as usize - 1;
+const MAX_REPEATED_ROUNDS: usize = 4;
+
+/// Notices a model asking for exactly the same tool calls round after round.
+/// Call identifiers differ per round, so only names and arguments count, and
+/// JSON arguments are compared by value so key order does not matter.
+/// Waiting on a running job repeats by design, so a round of only polls is
+/// never counted.
+#[derive(Default)]
+struct RepeatedRounds {
+    previous: Option<Vec<(String, String)>>,
+    streak: usize,
+}
+
+impl RepeatedRounds {
+    fn observe(&mut self, calls: &[argentum_providers::ModelToolCall]) -> bool {
+        if calls.iter().all(|call| call.name == "poll_process_job") {
+            self.previous = None;
+            self.streak = 0;
+            return false;
+        }
+        let mut signature: Vec<(String, String)> = calls
+            .iter()
+            .map(|call| {
+                let arguments = serde_json::from_str::<serde_json::Value>(&call.arguments)
+                    .map_or_else(
+                        |_| call.arguments.trim().to_owned(),
+                        |value| value.to_string(),
+                    );
+                (call.name.clone(), arguments)
+            })
+            .collect();
+        signature.sort();
+        if self.previous.as_ref() == Some(&signature) {
+            self.streak += 1;
+        } else {
+            self.previous = Some(signature);
+            self.streak = 1;
+        }
+        self.streak >= MAX_REPEATED_ROUNDS
+    }
+}
 const NATIVE_HANDOFF_FEEDBACK: &str = "\n[native_handoff_feedback] Read the completed tool results in this request. No tools are available on this final handoff turn. Return only the normal work-report JSON with truthful status and remaining work. Preserve useful observations in remaining; do not claim unperformed edits or verification. This report is model content, not authority.";
 const MAX_MODEL_TOOL_CALLS_PER_ROUND: usize = 8;
 const MAX_PROMPT_BYTES: usize = 128 * 1024;
@@ -515,6 +558,8 @@ struct ModelStreamState {
     assistant_reasoning: String,
     reasoning_bytes: usize,
     latest_usage: Option<DomainModelUsage>,
+    /// Every request's usage in this run, never reset between rounds.
+    turn_total: argentum_domain::UsageTotal,
     served_model: Option<String>,
 }
 
@@ -2406,6 +2451,7 @@ impl RuntimeService {
                         supported: preset.supported,
                         group: preset.group.as_str().to_owned(),
                         notes: preset.notes.to_owned(),
+                        tested: argentum_providers::provider_tested(preset.id),
                     })
                     .collect();
                 self.publish_transient(AppEvent::ProviderPresetsSnapshot { presets });
@@ -3004,10 +3050,8 @@ impl RuntimeService {
         let provider_readiness = match selected {
             None => HarnessReadiness::NeedsConfiguration,
             Some(profile)
-                if matches!(
-                    profile.id.as_str(),
-                    "openai" | "minimax" | "deepseek" | "opencode-go"
-                ) && !self.provider_credential_configured(&profile.id) =>
+                if argentum_domain::is_supported_hosted_credential_provider_id(&profile.id)
+                    && !self.provider_credential_configured(&profile.id) =>
             {
                 HarnessReadiness::NeedsConfiguration
             }
@@ -3611,10 +3655,8 @@ impl RuntimeService {
                 }
             }
             ProviderKind::OpenAiCompatible
-                if matches!(
-                    profile.id.as_str(),
-                    "openai" | "minimax" | "deepseek" | "opencode-go" | "chatgpt"
-                ) =>
+                if profile.id == "chatgpt"
+                    || argentum_domain::is_supported_hosted_credential_provider_id(&profile.id) =>
             {
                 if self.provider_credential_configured(&profile.id) {
                     OnboardingCredentialState::Configured
@@ -4377,6 +4419,7 @@ impl RuntimeService {
         let mut next_context_ordinal = 1_u32;
         let mut rejected_streak = 0usize;
         let mut last_rejection = None;
+        let mut repeated_rounds = RepeatedRounds::default();
         let result = async {
             // This host's trusted task directory is the canonical workspace root.
             // State belongs to this admitted run, not UI selection or process cwd.
@@ -5149,6 +5192,9 @@ impl RuntimeService {
                 if round_index + 1 >= MAX_MODEL_ROUNDS {
                     return Err(RuntimeError::ToolLoopLimit);
                 }
+                if repeated_rounds.observe(&tool_calls) {
+                    return Err(RuntimeError::RepeatedToolCalls);
+                }
 
                 let mut call_ids = std::collections::BTreeSet::new();
                 for call in &tool_calls {
@@ -5340,7 +5386,10 @@ impl RuntimeService {
             RunOutput {
                 text: terminal_answer.unwrap_or(stream.assistant_text),
                 reasoning: stream.assistant_reasoning,
-                usage: stream.latest_usage,
+                usage: stream.latest_usage.map(|mut usage| {
+                    usage.turn_total = Some(stream.turn_total);
+                    usage
+                }),
             },
         )
     }
@@ -5598,7 +5647,9 @@ impl RuntimeService {
                     context_window_tokens: usage
                         .context_window_tokens
                         .or(self.model_context_window(&context.profile_id, &context.model)?),
+                    turn_total: None,
                 };
+                stream.turn_total.add(&usage);
                 stream.latest_usage = Some(usage.clone());
                 self.emit_for_run(
                     AppEvent::ModelUsageUpdated {
@@ -12943,6 +12994,7 @@ mod tests {
                     reasoning_tokens: None,
                     cached_input_tokens: None,
                     context_window_tokens: Some(65_536),
+                    turn_total: None,
                 },
             },
         })
@@ -14417,6 +14469,54 @@ mod tests {
                 .filter(|event| matches!(event, AppEvent::ModelUsageUpdated { .. }))
                 .count(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn a_turn_records_the_usage_of_every_request() {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        std::fs::write(workspace_dir.path().join("notes.txt"), "workspace evidence")
+            .expect("fixture");
+        let mut providers = ProviderRegistry::default();
+        providers.register(EveryRoundUsageProvider);
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime = RuntimeService::new(
+            Store::open_in_memory().expect("store"),
+            providers,
+            tools,
+            workspace,
+        )
+        .expect("runtime");
+        configure_selected_provider(&runtime, "every-round-usage").await;
+
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "read then answer".into(),
+            })
+            .await
+            .expect("model tool run");
+
+        let snapshot = runtime
+            .conversation_snapshot(runtime.session_id())
+            .expect("conversation");
+        let usage = snapshot
+            .messages
+            .last()
+            .and_then(|message| message.usage.clone())
+            .expect("usage");
+        // The latest request stays as it was, for the context meter.
+        assert_eq!(usage.input_tokens, 20);
+        assert_eq!(
+            usage.turn_total,
+            Some(argentum_domain::UsageTotal {
+                requests: 2,
+                input_tokens: 30,
+                cached_input_tokens: 8,
+                output_tokens: 4,
+            })
         );
     }
 
@@ -16018,10 +16118,12 @@ mod tests {
     async fn model_tool_loop_stops_at_the_round_limit_and_fails_the_run() {
         let workspace_dir = tempfile::tempdir().expect("workspace");
         std::fs::write(workspace_dir.path().join("loop.txt"), "again").expect("fixture");
+        std::fs::write(workspace_dir.path().join("loop-2.txt"), "and again").expect("fixture");
         let requests = Arc::new(Mutex::new(Vec::new()));
         let mut providers = ProviderRegistry::default();
         providers.register(LoopingToolProvider {
             requests: Arc::clone(&requests),
+            alternate: true,
         });
         let broker =
             CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
@@ -16045,6 +16147,89 @@ mod tests {
 
         assert!(matches!(result, Err(RuntimeError::ToolLoopLimit)));
         assert_eq!(requests.lock().expect("requests").len(), MAX_MODEL_ROUNDS);
+        let emitted = drain_events(&mut events);
+        assert!(emitted.iter().any(|event| matches!(
+            event,
+            AppEvent::RunError { session_id, .. }
+                if *session_id == runtime.session_id()
+        )));
+        assert!(!emitted.iter().any(|event| matches!(
+            event,
+            AppEvent::RunStatusChanged {
+                lifecycle: TaskLifecycle::Complete,
+                ..
+            }
+        )));
+        assert!(runtime
+            .run_lifecycles
+            .lock()
+            .expect("lifecycles")
+            .is_empty());
+    }
+
+    #[test]
+    fn repeated_rounds_ignore_call_ids_and_argument_key_order() {
+        let call = |id: &str, arguments: &str| ModelToolCall {
+            id: id.into(),
+            name: "read_text".into(),
+            arguments: arguments.into(),
+        };
+        let mut rounds = RepeatedRounds::default();
+        assert!(!rounds.observe(&[call("a", r#"{"path":"x","limit":1}"#)]));
+        assert!(!rounds.observe(&[call("b", r#"{"limit":1, "path":"x"}"#)]));
+        assert!(!rounds.observe(&[call("c", r#"{"path":"x","limit":1}"#)]));
+        assert!(rounds.observe(&[call("d", r#"{"limit":1,"path":"x"}"#)]));
+        let mut rounds = RepeatedRounds::default();
+        assert!(!rounds.observe(&[call("a", r#"{"path":"x"}"#)]));
+        assert!(!rounds.observe(&[call("b", r#"{"path":"x"}"#)]));
+        assert!(!rounds.observe(&[call("c", r#"{"path":"y"}"#)]));
+        assert!(!rounds.observe(&[call("d", r#"{"path":"y"}"#)]));
+        let poll = |id: &str| ModelToolCall {
+            id: id.into(),
+            name: "poll_process_job".into(),
+            arguments: r#"{"job_id":"j","wait_ms":30000}"#.into(),
+        };
+        let mut rounds = RepeatedRounds::default();
+        for id in ["a", "b", "c", "d", "e"] {
+            assert!(!rounds.observe(&[poll(id)]));
+        }
+    }
+
+    #[tokio::test]
+    async fn model_tool_loop_stops_when_the_model_repeats_the_same_calls() {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        std::fs::write(workspace_dir.path().join("loop.txt"), "again").expect("fixture");
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let mut providers = ProviderRegistry::default();
+        providers.register(LoopingToolProvider {
+            requests: Arc::clone(&requests),
+            alternate: false,
+        });
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime = RuntimeService::new(
+            Store::open_in_memory().expect("store"),
+            providers,
+            tools,
+            workspace,
+        )
+        .expect("runtime");
+        configure_selected_provider(&runtime, "looping-tool").await;
+        let mut events = runtime.subscribe();
+
+        let result = runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "Loop".into(),
+            })
+            .await;
+
+        assert!(matches!(result, Err(RuntimeError::RepeatedToolCalls)));
+        assert_eq!(
+            requests.lock().expect("requests").len(),
+            MAX_REPEATED_ROUNDS
+        );
         let emitted = drain_events(&mut events);
         assert!(emitted.iter().any(|event| matches!(
             event,
@@ -18942,6 +19127,59 @@ mod tests {
     }
 
     #[derive(Debug)]
+    struct EveryRoundUsageProvider;
+
+    #[async_trait]
+    impl ModelProvider for EveryRoundUsageProvider {
+        fn id(&self) -> &'static str {
+            "every-round-usage"
+        }
+
+        fn status(&self) -> ProviderStatus {
+            test_provider_status(self.id())
+        }
+
+        async fn stream(
+            &self,
+            request: ModelRequest,
+            sender: mpsc::Sender<ProviderEvent>,
+        ) -> Result<(), ProviderError> {
+            let first = request.tool_exchanges.is_empty();
+            let (input, cached) = if first { (10, 0) } else { (20, 8) };
+            sender
+                .send(ProviderEvent::Usage(ProviderUsage {
+                    input_tokens: input,
+                    output_tokens: 2,
+                    total_tokens: input + 2,
+                    cached_input_tokens: Some(cached),
+                    reasoning_tokens: None,
+                    context_window_tokens: Some(1_024),
+                }))
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)?;
+            if first {
+                sender
+                    .send(ProviderEvent::ToolCall(ModelToolCall {
+                        id: "usage-read".into(),
+                        name: "read_text".into(),
+                        arguments: r#"{"path":"notes.txt"}"#.into(),
+                    }))
+                    .await
+                    .map_err(|_| ProviderError::ConsumerClosed)?;
+            } else {
+                sender
+                    .send(ProviderEvent::Delta("final answer".into()))
+                    .await
+                    .map_err(|_| ProviderError::ConsumerClosed)?;
+            }
+            sender
+                .send(ProviderEvent::Completed)
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)
+        }
+    }
+
+    #[derive(Debug)]
     struct FirstRoundOnlyUsageProvider;
 
     #[async_trait]
@@ -19828,6 +20066,7 @@ mod tests {
     #[derive(Debug)]
     struct LoopingToolProvider {
         requests: Arc<Mutex<Vec<ModelRequest>>>,
+        alternate: bool,
     }
 
     #[async_trait]
@@ -19851,7 +20090,11 @@ mod tests {
                 .send(ProviderEvent::ToolCall(ModelToolCall {
                     id: format!("loop-call-{call_number}"),
                     name: "read_text".into(),
-                    arguments: r#"{"path":"loop.txt"}"#.into(),
+                    arguments: if self.alternate && call_number % 2 == 1 {
+                        r#"{"path":"loop-2.txt"}"#.into()
+                    } else {
+                        r#"{"path":"loop.txt"}"#.into()
+                    },
                 }))
                 .await
                 .map_err(|_| ProviderError::ConsumerClosed)?;

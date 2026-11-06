@@ -598,7 +598,7 @@ const fn preset(
     }
 }
 
-pub const PROVIDER_CATALOG: [ProviderPresetInfo; 29] = [
+pub const PROVIDER_CATALOG: [ProviderPresetInfo; 39] = [
     preset(
         "openai-compatible",
         "OpenAI compatible",
@@ -936,6 +936,146 @@ pub const PROVIDER_CATALOG: [ProviderPresetInfo; 29] = [
         "Subscription with monthly limits per model. DeepSeek models need the Global region in your OpenCode privacy settings.",
     ),
     preset(
+        "deepinfra",
+        "DeepInfra",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.deepinfra.com/v1/openai/"),
+        "deepseek-ai/DeepSeek-V4-Flash",
+        Some("deepinfra"),
+        Some("DEEPINFRA_API_KEY"),
+        "https://deepinfra.com/docs/openai_api",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "novita",
+        "Novita AI",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.novita.ai/openai/v1/"),
+        "deepseek/deepseek-v4.1-flash-1017",
+        Some("novita"),
+        Some("NOVITA_API_KEY"),
+        "https://novita.ai/docs/guides/llm-api",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "sambanova",
+        "SambaNova",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.sambanova.ai/v1/"),
+        "gpt-oss-120b",
+        Some("sambanova"),
+        Some("SAMBANOVA_API_KEY"),
+        "https://docs.sambanova.ai/",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "nvidia",
+        "NVIDIA NIM",
+        ProviderKind::OpenAiCompatible,
+        Some("https://integrate.api.nvidia.com/v1/"),
+        "deepseek-ai/deepseek-v4.1-flash",
+        Some("nvidia"),
+        Some("NVIDIA_API_KEY"),
+        "https://docs.api.nvidia.com/",
+        false,
+        true,
+        ProviderGroup::Hosted,
+        "",
+    ),
+    preset(
+        "huggingface",
+        "Hugging Face",
+        ProviderKind::OpenAiCompatible,
+        Some("https://router.huggingface.co/v1/"),
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+        Some("huggingface"),
+        Some("HF_TOKEN"),
+        "https://huggingface.co/docs/inference-providers",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "chutes",
+        "Chutes",
+        ProviderKind::OpenAiCompatible,
+        Some("https://llm.chutes.ai/v1/"),
+        "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+        Some("chutes"),
+        Some("CHUTES_API_KEY"),
+        "https://chutes.ai/docs",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "venice",
+        "Venice",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.venice.ai/api/v1/"),
+        "qwen3-coder-480b-a35b-instruct-turbo",
+        Some("venice"),
+        Some("VENICE_API_KEY"),
+        "https://docs.venice.ai/",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "avian",
+        "Avian",
+        ProviderKind::OpenAiCompatible,
+        Some("https://api.avian.io/v1/"),
+        "deepseek/deepseek-v4.1-flash",
+        Some("avian"),
+        Some("AVIAN_API_KEY"),
+        "https://avian.io/docs",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "requesty",
+        "Requesty",
+        ProviderKind::OpenAiCompatible,
+        Some("https://router.requesty.ai/v1/"),
+        "moonshot/kimi-k3.1-pro",
+        Some("requesty"),
+        Some("REQUESTY_API_KEY"),
+        "https://docs.requesty.ai/",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
+        "vercel-ai-gateway",
+        "Vercel AI Gateway",
+        ProviderKind::OpenAiCompatible,
+        Some("https://ai-gateway.vercel.sh/v1/"),
+        "deepseek/deepseek-v4-flash",
+        Some("vercel-ai-gateway"),
+        Some("AI_GATEWAY_API_KEY"),
+        "https://vercel.com/docs/ai-gateway",
+        false,
+        true,
+        ProviderGroup::Aggregator,
+        "",
+    ),
+    preset(
         "ollama",
         "Ollama",
         ProviderKind::OpenAiCompatible,
@@ -1013,6 +1153,15 @@ pub fn provider_presets() -> &'static [ProviderPresetInfo] {
 
 pub fn provider_preset(id: &str) -> Option<ProviderPresetInfo> {
     provider_catalog_entry(id).copied()
+}
+
+/// Providers a real Argentum session has been run against. Everything else is in the
+/// catalog but untested, and the app keeps it on a separate Testing tab.
+pub const TESTED_PROVIDER_IDS: [&str; 2] = ["deepseek", "opencode-go"];
+
+#[must_use]
+pub fn provider_tested(id: &str) -> bool {
+    TESTED_PROVIDER_IDS.contains(&id)
 }
 
 pub fn provider_credential_environment() -> Vec<(&'static str, &'static str)> {
@@ -6588,6 +6737,43 @@ mod tests {
         handle.join().expect("server");
         assert!(requests[0].starts_with("GET /api/v1/models HTTP/1.1\r\n"));
         assert!(requests[1].starts_with("GET /v1/models HTTP/1.1\r\n"));
+    }
+
+    #[test]
+    fn every_new_provider_needs_its_own_key_and_address() {
+        for id in [
+            "deepinfra",
+            "novita",
+            "sambanova",
+            "nvidia",
+            "huggingface",
+            "chutes",
+            "venice",
+            "avian",
+            "requesty",
+            "vercel-ai-gateway",
+        ] {
+            let preset = provider_preset(id).unwrap_or_else(|| panic!("missing {id}"));
+            assert!(preset.supported && !provider_tested(id), "{id}");
+            let endpoint = Url::parse(preset.default_endpoint.expect("endpoint")).expect(id);
+            assert_eq!(endpoint.scheme(), "https", "{id}");
+            assert_eq!(preset.credential_profile_id, Some(id), "{id}");
+            assert!(
+                argentum_domain::is_supported_hosted_credential_provider_id(id),
+                "{id}"
+            );
+            let profile = provider_profile_from_preset(id, None, None).expect(id);
+            let error = ProviderPreset::parse(id)
+                .expect(id)
+                .build_provider(&profile, None)
+                .err()
+                .unwrap_or_else(|| panic!("{id} needs a key"));
+            assert!(
+                matches!(error, ProviderError::CredentialsRequired { .. }),
+                "{id}"
+            );
+        }
+        assert!(provider_tested("deepseek") && provider_tested("opencode-go"));
     }
 
     #[test]

@@ -24,6 +24,7 @@ slint::include_modules!();
 
 mod activity;
 mod markdown;
+mod requests;
 pub mod workbench;
 
 /// Formats a workspace path for presentation without exposing a raw verbatim
@@ -70,6 +71,7 @@ pub struct WeakUiHandle {
 #[derive(Default)]
 struct ProjectionState {
     run_steps: std::collections::BTreeMap<RunId, activity::RunActivity>,
+    requests: requests::RequestLog,
     run_sessions: HashMap<RunId, SessionId>,
     pending_run_sessions: VecDeque<SessionId>,
     approval_sessions: HashMap<ApprovalId, SessionId>,
@@ -206,9 +208,45 @@ impl UiHandle {
                 }
                 // Projection work is not a task terminal event or observed main-model usage.
             }
-            AppEvent::ContextRequestAccounted { .. }
-            | AppEvent::SummaryTransportObserved { .. }
-            | AppEvent::ModelRequestAttempt { .. }
+            AppEvent::ContextRequestAccounted {
+                session_id,
+                run_id,
+                request_id,
+                purpose,
+                accounting,
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection()
+                        .requests
+                        .accounted(*request_id, *run_id, purpose, accounting);
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::ModelRequestAttempt {
+                session_id,
+                request_id,
+                attempt,
+                outcome,
+                error_class,
+                status,
+                planned_delay_ms,
+                stop_reason,
+                ..
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection().requests.attempt(
+                        *request_id,
+                        *attempt,
+                        outcome,
+                        *status,
+                        error_class.as_deref(),
+                        stop_reason.as_deref(),
+                        *planned_delay_ms,
+                    );
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::SummaryTransportObserved { .. }
             | AppEvent::ExtensionOperationRecorded { .. }
             | AppEvent::GoalRequestAccounting { .. } => {}
             // The current Slint client has no supplemental-check surface. The
@@ -602,6 +640,13 @@ impl UiHandle {
                 {
                     return;
                 }
+                self.projection().requests.usage(
+                    *run_id,
+                    usage.input_tokens,
+                    usage.cached_input_tokens,
+                    usage.output_tokens,
+                );
+                self.refresh_requests();
                 self.window.set_active_run_id(run_id.to_string().into());
                 self.window.set_usage_reported(true);
                 self.window
@@ -1147,6 +1192,7 @@ impl UiHandle {
                 );
             }
             AppEvent::ToolFinished(trace) => {
+                self.projection().requests.tool(trace);
                 if !self.run_targets_active_session(trace.run_id) {
                     return;
                 }
@@ -1624,8 +1670,13 @@ impl UiHandle {
                 );
                 self.reconcile_first_run(preferences.first_run_complete);
             }
-            AppEvent::ProviderUsageLoaded { rows } => {
+            AppEvent::ProviderUsageLoaded {
+                rows,
+                daily,
+                projects,
+            } => {
                 workbench::apply_provider_usage(&self.window, rows);
+                workbench::apply_usage_report(&self.window, daily, projects);
             }
             AppEvent::GitStatusLoaded(snapshot) => {
                 workbench::apply_git_status(&self.window, snapshot);
@@ -2712,6 +2763,88 @@ impl UiHandle {
         self.push_activity("Changes loaded", summary, "neutral");
     }
 
+    fn refresh_requests(&self) {
+        let app = self.window.global::<App>();
+        let projection = self.projection();
+        let log = &projection.requests;
+        let parts = log
+            .latest()
+            .map(|record| requests::context_parts(&record.accounting))
+            .unwrap_or_default();
+        app.set_context_parts(ModelRc::new(VecModel::from(
+            parts
+                .iter()
+                .map(|part| ContextPartView {
+                    label: part.label.into(),
+                    amount: format!("{} ({:.0}%)", part.amount, part.share * 100.0).into(),
+                    share: part.share,
+                })
+                .collect::<Vec<_>>(),
+        )));
+        app.set_request_context_summary(
+            log.latest()
+                .map(|record| {
+                    let accounting = &record.accounting;
+                    format!(
+                        "{} of {} usable, estimated in bytes. {}",
+                        accounting.accounted_input,
+                        accounting.usable_context,
+                        if accounting.fits {
+                            "It fits."
+                        } else {
+                            "It does not fit, so it was not sent."
+                        }
+                    )
+                })
+                .unwrap_or_default()
+                .into(),
+        );
+        let rows = log
+            .records()
+            .map(|record| RequestRowView {
+                clock: record.clock.clone().into(),
+                duration: record
+                    .duration_ms
+                    .map_or_else(String::new, |ms| {
+                        if ms >= 1000 {
+                            format!("{:.1}s", ms as f64 / 1000.0)
+                        } else {
+                            format!("{ms} ms")
+                        }
+                    })
+                    .into(),
+                purpose: record.purpose.clone().into(),
+                endpoint: record.endpoint.clone().into(),
+                model: record.model.clone().into(),
+                outcome: match (record.status, record.attempts) {
+                    (Some(status), attempts) if attempts > 1 => {
+                        format!("{} (HTTP {status}, attempt {attempts})", record.outcome)
+                    }
+                    (Some(status), _) => format!("{} (HTTP {status})", record.outcome),
+                    (None, attempts) if attempts > 1 => {
+                        format!("{} (attempt {attempts})", record.outcome)
+                    }
+                    _ => record.outcome.clone(),
+                }
+                .into(),
+                failed: matches!(record.outcome.as_str(), "failed" | "exhausted" | "rejected"),
+                detail: record.detail.clone().into(),
+                tokens: match (record.input_tokens, record.output_tokens) {
+                    (Some(input), Some(output)) => match record.cached_tokens {
+                        Some(cached) if cached > 0 => {
+                            format!("in {input} ({cached} cached), out {output} tokens")
+                        }
+                        _ => format!("in {input}, out {output} tokens"),
+                    },
+                    _ => String::new(),
+                }
+                .into(),
+                tools: record.tools.join(", ").into(),
+            })
+            .collect::<Vec<_>>();
+        app.set_request_rows(ModelRc::new(VecModel::from(rows)));
+    }
+
     fn apply_live_activity(&self, activity: &activity::RunActivity) {
         let app = self.window.global::<App>();
         app.set_live_steps(activity.details().into());
@@ -3427,7 +3560,7 @@ fn provider_profile_model_with_credentials(
 }
 
 fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
-    let credential = if preset.credential_profile_id.as_deref() == Some("chatgpt") {
+    let credential = if preset.id == "chatgpt" {
         "Browser sign-in (CLI-only in this build)".to_owned()
     } else if let Some(variable) = &preset.api_key_env {
         format!("API key from {variable}")
@@ -3444,10 +3577,9 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
         _ => "Unsupported",
     };
     ProviderPresetView {
-        featured: matches!(
-            preset.id.as_str(),
-            "minimax" | "deepseek" | "opencode-go" | "openai" | "chatgpt" | "llama-cpp" | "custom"
-        ),
+        // First run shows what has been tested, plus ways to run a model yourself.
+        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "custom"),
+        tested: preset.tested,
         detail: if preset.notes.is_empty() {
             credential.clone().into()
         } else {
@@ -3885,10 +4017,7 @@ pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
 }
 
 fn is_supported_provider_credential_id(provider_id: &str) -> bool {
-    matches!(
-        provider_id,
-        "openai" | "minimax" | "deepseek" | "opencode-go"
-    )
+    argentum_domain::is_supported_hosted_credential_provider_id(provider_id)
 }
 
 fn provider_credential_supported(profile: &ProviderProfile) -> bool {
@@ -5823,6 +5952,7 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         let view = provider_preset_view(&preset);
         assert_eq!(view.id.as_str(), "deepseek");
@@ -5844,6 +5974,7 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         assert_eq!(
             provider_preset_view(&chatgpt).credential.as_str(),
@@ -6795,6 +6926,7 @@ mod tests {
                             reasoning_tokens: Some(3),
                             cached_input_tokens: None,
                             context_window_tokens: Some(128_000),
+                            turn_total: None,
                         }),
                         profile_id: "minimax".into(),
                         model: "MiniMax-M2.7".into(),
@@ -6861,6 +6993,7 @@ mod tests {
                 reasoning_tokens: Some(6),
                 cached_input_tokens: Some(4),
                 context_window_tokens: Some(204_800),
+                turn_total: None,
             },
         });
         assert!(ui.window().get_usage_reported());

@@ -569,6 +569,7 @@ pub enum SurfaceId {
     Goal,
     StatusBar,
     CommandPalette,
+    Requests,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -806,7 +807,7 @@ pub enum ModuleAction {
 }
 
 impl SurfaceId {
-    pub const ALL: [SurfaceId; 18] = [
+    pub const ALL: [SurfaceId; 19] = [
         Self::Conversation,
         Self::Plan,
         Self::Changes,
@@ -825,6 +826,7 @@ impl SurfaceId {
         Self::Goal,
         Self::StatusBar,
         Self::CommandPalette,
+        Self::Requests,
     ];
 
     /// Stable identifier used by the shell, the CLI, and the agent's UI tools.
@@ -848,6 +850,7 @@ impl SurfaceId {
             Self::Goal => "goal",
             Self::StatusBar => "status-bar",
             Self::CommandPalette => "command-palette",
+            Self::Requests => "requests",
         }
     }
 
@@ -875,6 +878,7 @@ impl SurfaceId {
             Self::Goal => "Goal",
             Self::StatusBar => "Status bar",
             Self::CommandPalette => "Command palette",
+            Self::Requests => "Requests",
         }
     }
 
@@ -888,6 +892,7 @@ impl SurfaceId {
                 | Self::Plan
                 | Self::Activity
                 | Self::Trajectory
+                | Self::Requests
         )
     }
 }
@@ -973,7 +978,7 @@ impl<'de> Deserialize<'de> for LayoutProfile {
 }
 
 /// The order inspector surfaces appear in the side panel.
-pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 8] = [
+pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 9] = [
     SurfaceId::Changes,
     SurfaceId::GitDiff,
     SurfaceId::Browser,
@@ -981,6 +986,7 @@ pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 8] = [
     SurfaceId::Plan,
     SurfaceId::Activity,
     SurfaceId::Trajectory,
+    SurfaceId::Requests,
     SurfaceId::Goal,
 ];
 
@@ -2225,7 +2231,7 @@ pub const DEFAULT_LLAMA_CPP_ENDPOINT: &str = "local://llama-cpp/";
 pub const DEFAULT_LLAMA_CPP_MODEL: &str = "Qwen3.5-0.8B-Q8_0.gguf";
 pub const DEFAULT_LM_STUDIO_ENDPOINT: &str = "http://127.0.0.1:1234/v1/";
 pub const DEFAULT_MODEL: &str = DEFAULT_LLAMA_CPP_MODEL;
-pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 19] = [
+pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 29] = [
     "openai",
     "minimax",
     "deepseek",
@@ -2245,6 +2251,16 @@ pub const HOSTED_CREDENTIAL_PROVIDER_IDS: [&str; 19] = [
     "github-models",
     "opencode-zen",
     "opencode-go",
+    "deepinfra",
+    "novita",
+    "sambanova",
+    "nvidia",
+    "huggingface",
+    "chutes",
+    "venice",
+    "avian",
+    "requesty",
+    "vercel-ai-gateway",
 ];
 
 pub fn is_supported_hosted_credential_provider_id(profile_id: &str) -> bool {
@@ -2350,6 +2366,9 @@ pub struct ProviderPresetSummary {
     pub supported: bool,
     pub group: String,
     pub notes: String,
+    /// Run against a real Argentum session. Others are listed but untested.
+    #[serde(default)]
+    pub tested: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2380,6 +2399,42 @@ pub struct ModelUsage {
     pub cached_input_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window_tokens: Option<u64>,
+    /// Every request in the turn, summed. The fields above describe only the
+    /// latest request, which is what the context meter needs. Older records
+    /// have no total.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_total: Option<UsageTotal>,
+}
+
+/// Reported tokens summed over the requests of one turn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageTotal {
+    pub requests: u32,
+    pub input_tokens: u64,
+    pub cached_input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+impl UsageTotal {
+    pub fn add(&mut self, usage: &ModelUsage) {
+        self.requests = self.requests.saturating_add(1);
+        self.input_tokens = self.input_tokens.saturating_add(usage.input_tokens);
+        self.cached_input_tokens = self
+            .cached_input_tokens
+            .saturating_add(usage.cached_input_tokens.unwrap_or(0));
+        self.output_tokens = self.output_tokens.saturating_add(usage.output_tokens);
+    }
+}
+
+impl ModelUsage {
+    /// What the turn consumed: the turn total when recorded, else this request.
+    pub fn consumed(&self) -> UsageTotal {
+        self.turn_total.unwrap_or_else(|| {
+            let mut total = UsageTotal::default();
+            total.add(self);
+            total
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2971,6 +3026,10 @@ pub enum AppEvent {
     },
     ProviderUsageLoaded {
         rows: Vec<ProviderUsageRow>,
+        #[serde(default)]
+        daily: Vec<UsageDayRow>,
+        #[serde(default)]
+        projects: Vec<ProjectOverview>,
     },
     GitStatusLoaded(GitStatusSnapshot),
     GitDiffLoaded(GitDiffSnapshot),
@@ -3303,6 +3362,7 @@ mod tests {
                     reasoning_tokens: Some(2),
                     cached_input_tokens: Some(3),
                     context_window_tokens: Some(65_536),
+                    turn_total: None,
                 },
             },
         ];

@@ -2505,6 +2505,7 @@ fn runtime_stop_state(error: &RuntimeError) -> GoalInvocationState {
         | RuntimeError::GoalUsageOverrun
         | RuntimeError::ContextTokenCapacity
         | RuntimeError::ToolLoopLimit
+        | RuntimeError::RepeatedToolCalls
         | RuntimeError::Store(StoreError::GoalAccounting("goal_budget_exhausted"))
         | RuntimeError::Store(StoreError::GoalAccounting("goal_deadline_exceeded"))
         | RuntimeError::Store(StoreError::GoalAccounting("goal_iteration_limit"))
@@ -2569,6 +2570,7 @@ fn runtime_stop_reason(error: &RuntimeError) -> &'static str {
         }
         RuntimeError::InstructionRefresh => "instruction_refresh_required",
         RuntimeError::ToolLoopLimit => "tool_loop_limit",
+        RuntimeError::RepeatedToolCalls => "tool_loop_repeated",
         RuntimeError::Store(StoreError::GoalAccounting(code)) => code,
         RuntimeError::Provider(_) => "provider_failure",
         RuntimeError::Tool(ToolError::Workspace(_)) => "verification_input_unavailable",

@@ -65,6 +65,7 @@ fn conversation(ui: &UiHandle) {
             context_window_tokens: Some(200_000),
             reasoning_tokens: None,
             cached_input_tokens: None,
+            turn_total: None,
         }),
         profile_id: "lm-studio".into(),
         model: "qwen3-coder-next".into(),
@@ -246,6 +247,8 @@ fn browser(ui: &UiHandle) {
 
 fn usage(ui: &UiHandle) {
     ui.apply_event(&argentum_domain::AppEvent::ProviderUsageLoaded {
+        daily: Vec::new(),
+        projects: Vec::new(),
         rows: vec![
             ProviderUsageRow {
                 profile_id: "lm-studio".into(),
@@ -295,6 +298,7 @@ fn provider_catalog(ui: &UiHandle) {
             group_label: group.into(),
             local,
             supported,
+            tested: id == "deepseek",
             notes: if supported {
                 "".into()
             } else {

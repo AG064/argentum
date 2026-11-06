@@ -1175,13 +1175,15 @@ async fn reliability_absolute_path_inside_workspace_is_relative_and_readable_in_
 #[tokio::test]
 async fn reliability_valid_work_can_continue_past_eight_model_rounds() {
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(root.path().join("known.txt"), "data").unwrap();
+    for i in 0..10 {
+        std::fs::write(root.path().join(format!("known-{i}.txt")), "data").unwrap();
+    }
     let calls = (0..10)
         .map(|i| {
             call(
                 &format!("read-{i}"),
                 "read_text",
-                json!({"path":"known.txt"}),
+                json!({"path":format!("known-{i}.txt")}),
             )
         })
         .collect();

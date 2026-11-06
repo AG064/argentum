@@ -4982,6 +4982,7 @@ async fn print_provider_presets(json: bool) -> Result<(), Box<dyn std::error::Er
                     "endpoint": preset.default_endpoint,
                     "default_model": preset.default_model,
                     "credential_required": preset.credential_profile_id.is_some(),
+                    "tested": argentum_providers::provider_tested(preset.id),
                     "api_key_env": preset.api_key_env,
                     "local": preset.local,
                     "supported": preset.supported,
@@ -5039,6 +5040,8 @@ fn format_provider_presets_human(presets: &[argentum_providers::ProviderPresetIn
             ));
             if !preset.supported {
                 output.push_str(&format!("    unsupported: {}\n", preset.notes));
+            } else if argentum_providers::provider_tested(preset.id) {
+                output.push_str("    tested with Argentum\n");
             }
         }
     }

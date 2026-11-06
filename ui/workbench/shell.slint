@@ -6,7 +6,7 @@ import { Badge, Btn, Chip, Divider, EmptyState, Field, Focus, Icon, IconBtn, Lab
 import { BrandMark } from "../components/brand.slint";
 import { Composer, Conversation, EmptyHero } from "chat.slint";
 import { FirstRun, ProviderMenu } from "provider.slint";
-import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel } from "panels.slint";
+import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel, RequestsPanel } from "panels.slint";
 import { Settings } from "settings.slint";
 import { GoalPanel, SessionActionsSheet, VerificationReviewSheet } from "ops.slint";
 
@@ -217,6 +217,7 @@ component SidePanel inherits Rectangle {
             if App.active_inspector == "plan": PlanPanel { }
             if App.active_inspector == "activity": ActivityPanel { }
             if App.active_inspector == "trajectory": TrajectoryPanel { }
+            if App.active_inspector == "requests": RequestsPanel { }
         }
     }
 }

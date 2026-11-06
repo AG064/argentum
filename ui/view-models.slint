@@ -177,6 +177,7 @@ export struct ProviderPresetView {
     group_label: string,
     local: bool,
     supported: bool,
+    tested: bool,
     notes: string,
     detail: string,
     model: string,
@@ -394,6 +395,38 @@ export struct GitFileView {
     path: string,
     status: string,
     selected: bool,
+}
+
+export struct ContextPartView {
+    label: string,
+    amount: string,
+    share: float,
+}
+
+export struct RequestRowView {
+    clock: string,
+    duration: string,
+    purpose: string,
+    endpoint: string,
+    model: string,
+    outcome: string,
+    failed: bool,
+    detail: string,
+    tokens: string,
+    tools: string,
+}
+
+export struct UsageDayView {
+    day: string,
+    model: string,
+    detail: string,
+}
+
+export struct ProjectView {
+    name: string,
+    path: string,
+    detail: string,
+    current: bool,
 }
 
 export struct ProviderUsageView {
