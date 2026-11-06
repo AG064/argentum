@@ -1,6 +1,7 @@
 # Support and evidence matrix
 
-Status is scoped to native `0.1.0-rc.1`, not the historical TypeScript release.
+Status is scoped to native `0.1.0-rc.1`, [published as a pre-release](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1) on 2026-11-05 from
+`25c61564`, not the historical TypeScript release.
 Source presence, compilation, synthetic contracts, live provider evidence and
 release qualification are separate facts.
 

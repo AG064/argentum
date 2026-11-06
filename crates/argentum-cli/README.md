@@ -16,8 +16,8 @@ provider.
 
 ## Status
 
-`0.1.0-rc.1` is a Windows x64 prerelease candidate. It is not published yet, and
-packages are not signed. Exact qualification is in
+[0.1.0-rc.1](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1) is a pre-release for Windows x64: download
+`argentum-genesis-0.1.0-rc.1-windows-x64.zip`. Packages are not code signed. Exact qualification is in
 [the release record](../../docs/releases/0.1.0-rc.1.md), and what each platform and
 provider has been tested on is in [the support matrix](../../docs/SUPPORT_MATRIX.md).
 Linux and macOS are not release qualified.

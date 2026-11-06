@@ -17,13 +17,16 @@ and model names in them are examples.
 
 ## Status
 
-This app has no installer or published release yet.
+Download it from [0.1.0-rc.1](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1), a pre-release for Windows x64. It has no installer yet:
+unzip `Argentum-0.1.0-rc.1-windows-x64.zip` and run `Argentum.exe`. It is not code signed, so
+Windows may warn first.
 
 | State | What |
 | --- | --- |
 | Tested on Windows x64 | First run, the API key step, modules, Settings, and a live DeepSeek conversation with thinking, approval, and a real file write |
 | Tested with a scripted provider only | The agent's interface tools |
-| Not tested yet | Saving a new key in the app, installing an update, Git file selection and opening a page in the real app, screen readers, narrow windows on the real renderer |
+| Tested in a clean Windows Sandbox | The release files start, show first run, and close, with no Visual C++ runtime and no network |
+| Not tested yet | Installing an update, Git file selection and opening a page in the real app, OpenCode Go on the first-run screen, screen readers, narrow windows on the real renderer |
 | Not built or tested | macOS, Linux, and Android builds of this interface |
 
 ## Run it

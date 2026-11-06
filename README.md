@@ -36,14 +36,28 @@
     <td><code>cargo run -p argentum-cli --bin argentum</code></td>
   </tr>
   <tr>
-    <td><b>Status:</b> built from source, no installer yet</td>
-    <td><b>Status:</b> Windows x64 prerelease candidate, not published yet</td>
+    <td><b>Status:</b> <a href="https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1">0.1.0-rc.1 pre-release</a> for Windows x64, no installer yet</td>
+    <td><b>Status:</b> <a href="https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1">0.1.0-rc.1 pre-release</a> for Windows x64</td>
   </tr>
 </table>
 
 Both run on the same native core, which owns providers, scoped policy, guarded file
 changes, verification, cancellation, durable history, and recovery. Genesis can release
 on its own, and a default CLI build does not include the desktop code.
+
+## Download
+
+[Argentum 0.1.0-rc.1](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1) is a pre-release for Windows x64. It is not code signed, so Windows
+may warn before it runs. Nothing else needs installing.
+
+| File | What it is |
+| --- | --- |
+| [`Argentum-0.1.0-rc.1-windows-x64.zip`](https://github.com/AG064/argentum/releases/download/v0.1.0-rc.1/Argentum-0.1.0-rc.1-windows-x64.zip) | The desktop app, with its licenses. Start here |
+| [`argentum-genesis-0.1.0-rc.1-windows-x64.zip`](https://github.com/AG064/argentum/releases/download/v0.1.0-rc.1/argentum-genesis-0.1.0-rc.1-windows-x64.zip) | The Genesis CLI |
+| [`SHA256SUMS.txt`](https://github.com/AG064/argentum/releases/download/v0.1.0-rc.1/SHA256SUMS.txt) | Checksums for every file |
+
+Check a download with `Get-FileHash`, and its origin with
+`gh attestation verify FILE --repo AG064/argentum`.
 
 ## What sets it apart
 
@@ -199,7 +213,7 @@ CLI build leaves them out.
 - The steps and diff list on each response last for the running session only.
 - Windows x64 is the only tested platform, and it has not yet been tested on a clean machine.
 
-## Quick start
+## Build from source
 
 You need Rust 1.98.0, Git, and on Windows the MSVC C++ build tools. No Node.js is
 needed.
@@ -215,12 +229,12 @@ For the terminal product, and for setup details, see
 
 ## Project status
 
-No native release has been published. The latest published release, v0.0.9, is the
-earlier TypeScript product, which is now legacy. Its source and releases are linked in
-[the migration record](docs/MIGRATION_NATIVE.md).
+[0.1.0-rc.1](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1) is the first native release, published as a pre-release. GitHub still
+lists v0.0.9 as the latest full release. That is the earlier TypeScript product, which is now
+legacy, and its source and releases are linked in [the migration record](docs/MIGRATION_NATIVE.md).
 
-Windows x64 is the only tested platform. It has been tested on one Windows build, not
-on a clean machine or across Windows versions. macOS, Linux, Android, and iOS are
+Windows x64 is the only tested platform. The release files were tested on one Windows build
+and in a clean Windows Sandbox, not across Windows versions. macOS, Linux, Android, and iOS are
 targets, not qualified products. Argentum is not yet a proven replacement for other
 coding agents.
 
