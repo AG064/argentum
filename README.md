@@ -12,6 +12,7 @@
   <a href="https://github.com/AG064/argentum/actions/workflows/native-cli.yml"><img alt="CI" src="https://github.com/AG064/argentum/actions/workflows/native-cli.yml/badge.svg?branch=development"></a>
   <a href="https://github.com/AG064/argentum/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/AG064/argentum/actions/workflows/codeql.yml/badge.svg?branch=development"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/AG064/argentum"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/AG064/argentum/badge"></a>
+  <a href="https://www.bestpractices.dev/projects/12957"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/12957/badge"></a>
 </p>
 
 ![The Argentum desktop app with the Git diff module open](docs/screenshots/desktop-git.png)
