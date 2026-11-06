@@ -154,7 +154,7 @@ Change these in Settings > Providers, or with `argentum provider budget`:
 - **Budget:** total, input, output, and uncertainty limits for each model. Models with known limits work without setup.
 - **Context size:** pick the size for a local model in the app, under Context size.
 - **Context meter:** an optional module showing how full the context is, and the terminal footer always shows it.
-- **Compaction:** summarize earlier work with `argentum compact` to free up room. The summary loses detail, and Argentum tells you when one is in use.
+- **Compaction:** when the next request would not fit, a run summarizes earlier work and continues. You can also run `argentum compact` yourself. The summary loses detail, and Argentum tells you when one is in use.
 
 A request that would not fit is refused before it is sent.
 
