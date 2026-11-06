@@ -3427,7 +3427,7 @@ fn provider_profile_model_with_credentials(
 }
 
 fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
-    let credential = if preset.credential_profile_id.as_deref() == Some("chatgpt") {
+    let credential = if preset.id == "chatgpt" {
         "Browser sign-in (CLI-only in this build)".to_owned()
     } else if let Some(variable) = &preset.api_key_env {
         format!("API key from {variable}")
@@ -3444,10 +3444,9 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
         _ => "Unsupported",
     };
     ProviderPresetView {
-        featured: matches!(
-            preset.id.as_str(),
-            "minimax" | "deepseek" | "opencode-go" | "openai" | "chatgpt" | "llama-cpp" | "custom"
-        ),
+        // First run shows what has been tested, plus ways to run a model yourself.
+        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "custom"),
+        tested: preset.tested,
         detail: if preset.notes.is_empty() {
             credential.clone().into()
         } else {
@@ -3885,10 +3884,7 @@ pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
 }
 
 fn is_supported_provider_credential_id(provider_id: &str) -> bool {
-    matches!(
-        provider_id,
-        "openai" | "minimax" | "deepseek" | "opencode-go"
-    )
+    argentum_domain::is_supported_hosted_credential_provider_id(provider_id)
 }
 
 fn provider_credential_supported(profile: &ProviderProfile) -> bool {
@@ -5823,6 +5819,7 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         let view = provider_preset_view(&preset);
         assert_eq!(view.id.as_str(), "deepseek");
@@ -5844,6 +5841,7 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         assert_eq!(
             provider_preset_view(&chatgpt).credential.as_str(),

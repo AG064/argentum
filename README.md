@@ -133,18 +133,19 @@ The catalog covers hosted services, aggregators, your own server, and local mode
 
 | Type | Providers |
 | --- | --- |
-| Hosted | MiniMax, OpenAI, DeepSeek, Google Gemini, Groq, Mistral, xAI, Cerebras, Perplexity, Cohere, Moonshot, Z.AI, Qwen |
+| Tested with Argentum | DeepSeek, OpenCode Go |
+| Hosted | MiniMax, OpenAI, Google Gemini, Groq, Mistral, xAI, Cerebras, Perplexity, Cohere, Moonshot, Z.AI, Qwen, SambaNova, NVIDIA NIM |
 | Plans | ChatGPT plan, with browser sign-in |
-| Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, OpenCode Go |
+| Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, DeepInfra, Novita, Hugging Face, Chutes, Venice, Avian, Requesty, Vercel AI Gateway |
 | On your computer | llama.cpp, LM Studio, Ollama, vLLM |
 | Your own | Any OpenAI-compatible server |
 
 - **Real model names:** the app shows what is running, such as `DeepSeek-V4.1-Flash-1017`, not only the ID it sends.
 - **Thinking modes:** switch DeepSeek between off, high, and max from the composer, or with `/thinking`.
 - **Secure keys:** API keys go in the operating system's credential store, and each is only sent to its provider's own address.
-- **Tested live:** DeepSeek and OpenCode Go. See the [support matrix](docs/SUPPORT_MATRIX.md) for the rest.
+- **Tested and Testing tabs:** Settings > Providers lists tested providers first, and the rest on a Testing tab, so you know which have not been run against Argentum. First run shows only tested providers until you choose Show all.
 
-![Provider settings, with sample data](docs/screenshots/desktop-providers.png)
+![The Testing tab of provider settings](docs/screenshots/desktop-provider-tabs.png)
 
 ### Context and budget
 
