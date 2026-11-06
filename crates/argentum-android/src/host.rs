@@ -367,7 +367,12 @@ fn read_window_insets(app: &AndroidApp) -> Option<[i32; 3]> {
         if object.is_null() {
             return Ok(None);
         }
-        let array = JIntArray::cast_local(env, object)?;
+        // The Java method is declared to return int[], so the type check that
+        // cast_local performs, which looks the class up on every call, is not
+        // needed on this path that runs several times a second.
+        // SAFETY: a non-null local reference of type int[] from this frame,
+        // owned only here.
+        let array = unsafe { JIntArray::from_raw(env, object.into_raw()) };
         if array.len(env)? != 3 {
             return Ok(None);
         }

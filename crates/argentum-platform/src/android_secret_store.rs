@@ -255,8 +255,11 @@ impl SecretBridge for JniSecretBridge {
             if object.is_null() {
                 return Ok(None);
             }
-            let array_result = JByteArray::cast_local(env, object);
-            let array = fixed_jni_result(env, array_result)?;
+            // The Java method is declared to return byte[]. cast_local would
+            // look the array class up through FindClass, which is not needed.
+            // SAFETY: a non-null local reference of type byte[] from this
+            // frame, owned only here.
+            let array = unsafe { JByteArray::from_raw(env, object.into_raw()) };
             let length = fixed_jni_result(env, array.len(env))?;
             {
                 let mut cleanup = JniSecretArrayCleanup {
