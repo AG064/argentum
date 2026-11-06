@@ -38,8 +38,13 @@ jobs:
         shell: pwsh
         run: python scripts/package-windows-release.py --output release-assets --cli "$env:RUNNER_TEMP/cli" --cli-desktop "$env:RUNNER_TEMP/cli-desktop"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        id: attest
         with:
           subject-path: release-assets/*
+      # Shipped with the release so anyone can check where each file came from.
+      - name: Add the provenance bundle
+        shell: pwsh
+        run: Copy-Item '${{ steps.attest.outputs.bundle-path }}' release-assets/provenance.intoto.jsonl
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: argentum-release-assets
