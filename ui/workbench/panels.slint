@@ -507,6 +507,20 @@ export component UsagePanel inherits Rectangle {
                         Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
                     }
                 }
+                if App.usage_days.length > 0: SectionLabel { text: "BY DAY, LAST 30 DAYS (UTC)"; height: 22px; }
+                for day in App.usage_days: HorizontalLayout {
+                    spacing: Theme.sp8;
+                    Label { text: day.day; mono: true; size: "xs"; tone: "muted"; }
+                    Label { text: day.model; size: "xs"; horizontal-stretch: 1; }
+                    Label { text: day.detail; mono: true; size: "xs"; tone: "secondary"; }
+                }
+                if App.projects.length > 1: SectionLabel { text: "ALL PROJECTS"; height: 22px; }
+                for project in App.projects: VerticalLayout {
+                    visible: App.projects.length > 1;
+                    height: self.visible ? self.preferred-height : 0px;
+                    Label { text: project.name + (project.current ? "  (this one)" : ""); size: "sm"; strong: project.current; }
+                    Label { text: project.detail; size: "xs"; tone: "muted"; }
+                }
                 Text {
                     text: "Reported by each provider for turns in this workspace. Account limits and costs are not reported to Argentum.";
                     color: Theme.text-3;

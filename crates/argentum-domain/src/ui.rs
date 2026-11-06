@@ -810,6 +810,30 @@ pub struct ProviderUsageRow {
     pub total_tokens: u64,
 }
 
+/// Reported tokens for one UTC day and model in this workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageDayRow {
+    pub day: String,
+    pub model: String,
+    pub turns: u64,
+    pub input_tokens: u64,
+    pub cached_input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+/// One project this database knows, for switching and for usage across projects.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectOverview {
+    pub name: String,
+    pub workspace_root: String,
+    pub sessions: u64,
+    /// Unix seconds of the latest session activity, if any.
+    pub last_activity: Option<i64>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub current: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GitViewState {

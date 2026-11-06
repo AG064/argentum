@@ -415,6 +415,7 @@ component PermissionsPage inherits VerticalLayout {
 
 component WorkspacePage inherits VerticalLayout {
     spacing: Theme.sp16;
+    init => { App.usage_refresh(); }
     Heading { title: "Workspace"; detail: "The folder Argentum works in. File access never leaves it."; }
     VerticalLayout {
         spacing: Theme.sp4;
@@ -435,6 +436,18 @@ component WorkspacePage inherits VerticalLayout {
             kind: "primary";
             enabled: target.value != "" && !App.running;
             clicked => { App.open_workspace(target.value); }
+        }
+    }
+    if App.projects.length > 0: VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "RECENT PROJECTS"; height: 22px; }
+        for project in App.projects: Row {
+            title: project.name + (project.current ? "  (open)" : "");
+            detail: project.path + "  ·  " + project.detail;
+            icon: "folder";
+            selected: project.current;
+            enabled: !project.current && !App.running;
+            clicked => { App.open_workspace(project.path); }
         }
     }
     Text { text: "Argentum restarts to open a different folder. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }

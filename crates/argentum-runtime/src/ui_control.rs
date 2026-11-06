@@ -303,6 +303,8 @@ impl RuntimeService {
     pub(super) fn publish_provider_usage(&self) -> Result<(), RuntimeError> {
         self.publish_transient(AppEvent::ProviderUsageLoaded {
             rows: self.store.provider_usage(self.project_id)?,
+            daily: self.store.usage_by_day(self.project_id, 30)?,
+            projects: self.store.projects_overview(self.project_id)?,
         });
         Ok(())
     }

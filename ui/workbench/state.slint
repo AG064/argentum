@@ -1,6 +1,6 @@
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -236,6 +236,8 @@ export global App {
     // Usage module.
     in-out property <[ProviderUsageView]> usage_rows: [];
     // The Requests module, for this session only.
+    in-out property <[UsageDayView]> usage_days: [];
+    in-out property <[ProjectView]> projects: [];
     in-out property <[ContextPartView]> context_parts: [];
     in-out property <string> request_context_summary: "";
     in-out property <[RequestRowView]> request_rows: [];

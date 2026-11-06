@@ -2990,6 +2990,10 @@ pub enum AppEvent {
     },
     ProviderUsageLoaded {
         rows: Vec<ProviderUsageRow>,
+        #[serde(default)]
+        daily: Vec<UsageDayRow>,
+        #[serde(default)]
+        projects: Vec<ProjectOverview>,
     },
     GitStatusLoaded(GitStatusSnapshot),
     GitDiffLoaded(GitDiffSnapshot),

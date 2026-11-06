@@ -2290,6 +2290,113 @@ impl Store {
         Ok(rows)
     }
 
+    /// Reported tokens per UTC day and model for the last `days` days.
+    pub fn usage_by_day(
+        &self,
+        project_id: ProjectId,
+        days: i64,
+    ) -> Result<Vec<argentum_domain::UsageDayRow>, StoreError> {
+        let since = time::OffsetDateTime::now_utc().unix_timestamp() - days.max(1) * 86_400;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT created_at, model, usage FROM conversation_messages
+             WHERE project_id = ?1 AND role = 'assistant' AND usage IS NOT NULL AND created_at >= ?2",
+        )?;
+        let mut rows = statement.query(params![project_id.to_string(), since])?;
+        let mut totals: BTreeMap<(String, String), argentum_domain::UsageDayRow> = BTreeMap::new();
+        while let Some(row) = rows.next()? {
+            let created_at: i64 = row.get(0)?;
+            let model: String = row.get(1)?;
+            let usage: String = row.get(2)?;
+            let Some(usage) = parse_stored_usage(Some(&usage))? else {
+                continue;
+            };
+            let day = time::OffsetDateTime::from_unix_timestamp(created_at)
+                .map(|moment| moment.date().to_string())
+                .unwrap_or_default();
+            let entry = totals
+                .entry((day.clone(), model.clone()))
+                .or_insert_with(|| argentum_domain::UsageDayRow {
+                    day,
+                    model,
+                    turns: 0,
+                    input_tokens: 0,
+                    cached_input_tokens: 0,
+                    output_tokens: 0,
+                });
+            entry.turns = entry.turns.saturating_add(1);
+            entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
+            entry.cached_input_tokens = entry
+                .cached_input_tokens
+                .saturating_add(usage.cached_input_tokens.unwrap_or(0));
+            entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
+        }
+        let mut rows = totals.into_values().collect::<Vec<_>>();
+        rows.sort_by(|a, b| b.day.cmp(&a.day).then(b.input_tokens.cmp(&a.input_tokens)));
+        Ok(rows)
+    }
+
+    /// Every project in this database, most recently active first.
+    pub fn projects_overview(
+        &self,
+        current: ProjectId,
+    ) -> Result<Vec<argentum_domain::ProjectOverview>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT p.id, p.payload,
+                    (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id),
+                    (SELECT MAX(s.last_activity_at) FROM sessions s WHERE s.project_id = p.id)
+             FROM projects p",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut projects = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let payload: String = row.get(1)?;
+            let sessions: i64 = row.get(2)?;
+            let last_activity: Option<i64> = row.get(3)?;
+            let Ok(project) = serde_json::from_str::<argentum_domain::Project>(&payload) else {
+                continue;
+            };
+            projects.push((id, project, sessions, last_activity));
+        }
+        drop(rows);
+        drop(statement);
+        let mut usage_statement = connection.prepare(
+            "SELECT usage FROM conversation_messages
+             WHERE project_id = ?1 AND role = 'assistant' AND usage IS NOT NULL",
+        )?;
+        let mut overview = Vec::new();
+        for (id, project, sessions, last_activity) in projects {
+            let mut usage_rows = usage_statement.query(params![id])?;
+            let (mut input, mut output) = (0_u64, 0_u64);
+            while let Some(row) = usage_rows.next()? {
+                let usage: String = row.get(0)?;
+                if let Some(usage) = parse_stored_usage(Some(&usage))? {
+                    input = input.saturating_add(usage.input_tokens);
+                    output = output.saturating_add(usage.output_tokens);
+                }
+            }
+            overview.push(argentum_domain::ProjectOverview {
+                name: project.name,
+                workspace_root: project.workspace_root.display().to_string(),
+                sessions: u64::try_from(sessions).unwrap_or(0),
+                last_activity,
+                input_tokens: input,
+                output_tokens: output,
+                current: project.id == current,
+            });
+        }
+        overview.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        Ok(overview)
+    }
+
     pub fn load_layout(&self, key: &str) -> Result<Option<LayoutProfile>, StoreError> {
         let connection = self
             .connection
@@ -6273,6 +6380,30 @@ mod tests {
         );
         assert!(snapshot.messages[0].text.starts_with('b'));
         assert!(snapshot.messages[3].text.starts_with('e'));
+    }
+
+    #[test]
+    fn usage_reports_group_by_day_and_list_projects() {
+        let (store, _directory, project_id, session_id) = conversation_store();
+        let message = assistant_message(project_id, session_id);
+        let usage = message.usage.clone().expect("usage");
+        store.append_conversation_message(&message).expect("first");
+        let mut second = message.clone();
+        second.id = RunId::new_v4();
+        second.run_id = RunId::new_v4();
+        store.append_conversation_message(&second).expect("second");
+
+        let days = store.usage_by_day(project_id, 30).expect("days");
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].turns, 2);
+        assert_eq!(days[0].input_tokens, usage.input_tokens * 2);
+        assert_eq!(days[0].model, message.model);
+
+        let projects = store.projects_overview(project_id).expect("projects");
+        assert_eq!(projects.len(), 1);
+        assert!(projects[0].current);
+        assert_eq!(projects[0].sessions, 1);
+        assert_eq!(projects[0].output_tokens, usage.output_tokens * 2);
     }
 
     #[test]

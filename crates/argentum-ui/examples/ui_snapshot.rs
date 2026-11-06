@@ -246,6 +246,8 @@ fn browser(ui: &UiHandle) {
 
 fn usage(ui: &UiHandle) {
     ui.apply_event(&argentum_domain::AppEvent::ProviderUsageLoaded {
+        daily: Vec::new(),
+        projects: Vec::new(),
         rows: vec![
             ProviderUsageRow {
                 profile_id: "lm-studio".into(),

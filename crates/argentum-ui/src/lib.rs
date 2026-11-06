@@ -1670,8 +1670,13 @@ impl UiHandle {
                 );
                 self.reconcile_first_run(preferences.first_run_complete);
             }
-            AppEvent::ProviderUsageLoaded { rows } => {
+            AppEvent::ProviderUsageLoaded {
+                rows,
+                daily,
+                projects,
+            } => {
                 workbench::apply_provider_usage(&self.window, rows);
+                workbench::apply_usage_report(&self.window, daily, projects);
             }
             AppEvent::GitStatusLoaded(snapshot) => {
                 workbench::apply_git_status(&self.window, snapshot);

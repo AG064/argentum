@@ -15,8 +15,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::markdown::make_block;
 use crate::{
-    App, DiffLineView, GitFileView, MainWindow, Mods, PaletteItemView, ProviderUsageView,
-    RichBlockView, Theme, ThemePresetView,
+    App, DiffLineView, GitFileView, MainWindow, Mods, PaletteItemView, ProjectView,
+    ProviderUsageView, RichBlockView, Theme, ThemePresetView, UsageDayView,
 };
 
 const MAX_DIFF_LINES: usize = 4000;
@@ -368,6 +368,76 @@ fn compact_count(value: u64) -> String {
         1_000..=999_999 => format!("{:.1}k", value as f64 / 1_000.0),
         _ => format!("{:.2}M", value as f64 / 1_000_000.0),
     }
+}
+
+/// Tokens by day and model, and every project this database knows.
+pub fn apply_usage_report(
+    window: &MainWindow,
+    daily: &[argentum_domain::UsageDayRow],
+    projects: &[argentum_domain::ProjectOverview],
+) {
+    let days = daily
+        .iter()
+        .map(|row| UsageDayView {
+            day: row.day.clone().into(),
+            model: row.model.clone().into(),
+            detail: format!(
+                "{} {}, {} in{}, {} out",
+                row.turns,
+                if row.turns == 1 { "turn" } else { "turns" },
+                compact_count(row.input_tokens),
+                if row.cached_input_tokens > 0 {
+                    format!(" ({} cached)", compact_count(row.cached_input_tokens))
+                } else {
+                    String::new()
+                },
+                compact_count(row.output_tokens)
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    window
+        .global::<App>()
+        .set_usage_days(ModelRc::new(VecModel::from(days)));
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let rows = projects
+        .iter()
+        .map(|project| ProjectView {
+            name: project.name.clone().into(),
+            path: project.workspace_root.clone().into(),
+            current: project.current,
+            detail: format!(
+                "{} {}{}{}",
+                project.sessions,
+                if project.sessions == 1 {
+                    "session"
+                } else {
+                    "sessions"
+                },
+                project.last_activity.map_or_else(String::new, |at| {
+                    let days = (now - at).max(0) / 86_400;
+                    match days {
+                        0 => ", active today".to_owned(),
+                        1 => ", active yesterday".to_owned(),
+                        days => format!(", active {days} days ago"),
+                    }
+                }),
+                if project.input_tokens + project.output_tokens > 0 {
+                    format!(
+                        ", {} in, {} out",
+                        compact_count(project.input_tokens),
+                        compact_count(project.output_tokens)
+                    )
+                } else {
+                    String::new()
+                }
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    window
+        .global::<App>()
+        .set_projects(ModelRc::new(VecModel::from(rows)));
 }
 
 pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
