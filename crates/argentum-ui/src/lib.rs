@@ -983,6 +983,22 @@ impl UiHandle {
                         presets,
                         "unsupported",
                     ));
+                let groups = ["hosted", "aggregator", "local", "custom"];
+                let count = |tested: bool| {
+                    let counts = groups
+                        .iter()
+                        .map(|group| {
+                            presets
+                                .iter()
+                                .filter(|preset| preset.group == *group && preset.tested == tested)
+                                .count() as i32
+                        })
+                        .collect::<Vec<_>>();
+                    ModelRc::new(VecModel::from(counts))
+                };
+                let app = self.window.global::<App>();
+                app.set_provider_group_tested(count(true));
+                app.set_provider_group_testing(count(false));
                 self.window.set_provider_presets_loading(false);
                 self.window
                     .set_provider_presets_error(SharedString::default());

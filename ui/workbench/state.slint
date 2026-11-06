@@ -318,6 +318,9 @@ export global App {
     in-out property <[ProviderPresetView]> provider_presets_hosted: [];
     in-out property <[ProviderPresetView]> provider_presets_aggregator: [];
     in-out property <[ProviderPresetView]> provider_presets_local: [];
+    // Rows per catalog group on each tab: hosted, aggregator, local, custom.
+    in-out property <[int]> provider_group_tested: [0, 0, 0, 0];
+    in-out property <[int]> provider_group_testing: [0, 0, 0, 0];
     in-out property <[ProviderPresetView]> provider_presets_custom: [];
     in-out property <[ProviderPresetView]> provider_presets_unsupported: [];
     in-out property <bool> provider_presets_loading: false;

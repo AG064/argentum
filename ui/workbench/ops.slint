@@ -592,11 +592,12 @@ export component GrantsSection inherits VerticalLayout {
 component CatalogGroup inherits VerticalLayout {
     in property <string> title;
     in property <[ProviderPresetView]> presets;
-    // Which tab this group is drawn on.
+    // Which tab this group is drawn on, and how many of its rows are on it.
     in property <bool> tested;
+    in property <int> shown: root.presets.length;
     // Rows of the other tab are hidden and must leave no gap.
     spacing: 0px;
-    if root.presets.length > 0: SectionLabel { text: root.title; height: 24px; }
+    if root.shown > 0: SectionLabel { text: root.title; height: 24px; }
     for preset in root.presets: Row {
         visible: preset.tested == root.tested;
         height: self.visible ? self.preferred-height : 0px;
@@ -629,10 +630,30 @@ export component ProviderCatalog inherits VerticalLayout {
         text: "These are listed but not yet tested with Argentum. After adding one, use Test connection before relying on it.";
         tone: "secondary";
     }
-    CatalogGroup { title: "HOSTED"; presets: App.provider_presets_hosted; tested: !root.show-testing; }
-    CatalogGroup { title: "AGGREGATORS"; presets: App.provider_presets_aggregator; tested: !root.show-testing; }
-    CatalogGroup { title: "ON THIS COMPUTER"; presets: App.provider_presets_local; tested: !root.show-testing; }
-    CatalogGroup { title: "CUSTOM"; presets: App.provider_presets_custom; tested: !root.show-testing; }
+    CatalogGroup {
+        title: "HOSTED";
+        presets: App.provider_presets_hosted;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[0] : App.provider_group_tested[0];
+    }
+    CatalogGroup {
+        title: "AGGREGATORS";
+        presets: App.provider_presets_aggregator;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[1] : App.provider_group_tested[1];
+    }
+    CatalogGroup {
+        title: "LOCAL";
+        presets: App.provider_presets_local;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[2] : App.provider_group_tested[2];
+    }
+    CatalogGroup {
+        title: "CUSTOM";
+        presets: App.provider_presets_custom;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[3] : App.provider_group_tested[3];
+    }
     if root.show-testing: CatalogGroup { title: "NOT SUPPORTED YET"; presets: App.provider_presets_unsupported; tested: false; }
     if App.provider_preset_detail.id != "": Rectangle {
         border-radius: Theme.r-md;

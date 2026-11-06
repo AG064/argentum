@@ -200,10 +200,15 @@ impl HostConfig {
             provider_endpoint: DEFAULT_LLAMA_CPP_ENDPOINT.into(),
             model: android_offer.id.into(),
             local_runtime: None,
-            android_inference: Some(InferenceConfig::new(
-                paths.data_dir.join("models"),
-                Default::default(),
-            )?),
+            // Without the on-device engine there is nothing to configure.
+            android_inference: if argentum_android_inference::ENGINE_INCLUDED {
+                Some(InferenceConfig::new(
+                    paths.data_dir.join("models"),
+                    Default::default(),
+                )?)
+            } else {
+                None
+            },
             provider_credentials,
             secret_store,
         })
