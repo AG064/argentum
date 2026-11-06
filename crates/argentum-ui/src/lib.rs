@@ -3563,7 +3563,13 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
     let credential = if preset.id == "chatgpt" {
         "Browser sign-in (CLI-only in this build)".to_owned()
     } else if let Some(variable) = &preset.api_key_env {
-        format!("API key from {variable}")
+        // Keys are saved in the system credential store. The environment
+        // variable is a desktop alternative and does not exist on Android.
+        if cfg!(target_os = "android") {
+            "API key".to_owned()
+        } else {
+            format!("API key or {variable}")
+        }
     } else if preset.credential_profile_id.is_some() {
         "Saved credential required".to_owned()
     } else {
@@ -5956,7 +5962,7 @@ mod tests {
         };
         let view = provider_preset_view(&preset);
         assert_eq!(view.id.as_str(), "deepseek");
-        assert_eq!(view.credential.as_str(), "API key from DEEPSEEK_API_KEY");
+        assert_eq!(view.credential.as_str(), "API key or DEEPSEEK_API_KEY");
         assert_eq!(view.api_key_env.as_str(), "DEEPSEEK_API_KEY");
         assert_eq!(view.group_label.as_str(), "Hosted");
         assert!(view.supported);

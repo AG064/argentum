@@ -317,8 +317,8 @@ export component Composer inherits Rectangle {
     public function focus-input() { input.focus(); }
     in property <bool> narrow: false;
     private property <int> focus-tick: App.composer_focus_tick;
-    changed focus-tick => { input.focus(); }
-    init => { input.focus(); }
+    changed focus-tick => { if !App.touch_device { input.focus(); } }
+    init => { if !App.touch_device { input.focus(); } }
 
     private property <bool> can-send: input.text != "" && !App.submission_pending
         && !App.approval_open && !App.first_run_open;

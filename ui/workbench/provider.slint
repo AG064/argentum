@@ -86,12 +86,20 @@ export component FirstRun inherits Rectangle {
                 }
             }
             VerticalLayout {
-                spacing: Theme.sp8;
-                for preset[i] in App.provider_presets: PresetCard {
-                    visible: preset.supported && (root.show-all || preset.featured);
-                    height: self.visible ? self.preferred-height : 0px;
-                    preset: preset;
-                    chosen => { App.first_run_choose(preset); }
+                // Hidden presets must take no room, spacing included, so each
+                // card carries its own gap and collapses fully when hidden.
+                spacing: 0px;
+                for preset[i] in App.provider_presets: Rectangle {
+                    property <bool> shown: preset.supported && (root.show-all || preset.featured);
+                    visible: self.shown;
+                    height: self.shown ? card.preferred-height + Theme.sp8 : 0px;
+                    card := PresetCard {
+                        y: 0px;
+                        width: parent.width;
+                        height: self.preferred-height;
+                        preset: preset;
+                        chosen => { App.first_run_choose(preset); }
+                    }
                 }
                 if !root.show-all: HorizontalLayout {
                     alignment: center;

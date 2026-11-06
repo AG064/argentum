@@ -440,6 +440,14 @@ export component Workbench inherits Rectangle {
         // Somewhere for Escape to land until the composer takes focus.
         keyboard.focus();
     }
+    // A touch host says so after the window exists, when the composer may
+    // already have focus. Taking focus here closes the on-screen keyboard.
+    private property <bool> touch: App.touch_device;
+    changed touch => {
+        if root.touch {
+            keyboard.focus();
+        }
+    }
     private property <bool> panel-wanted: Mods.any-panel && !App.inspector_collapsed && App.active_inspector != "";
     private property <bool> wide-enough-for-panel: root.width >= Theme.panel-dock-min;
     private property <bool> show-sidebar: Mods.sessions && App.sidebar_open && !root.narrow;

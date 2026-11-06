@@ -104,6 +104,7 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
             inference_foreground: Some(inference_foreground),
         },
         move |ui| {
+            ui.window().set_touch_device(true);
             *configure_ui_slot.borrow_mut() = Some(ui.weak_handle());
             if let Some(insets) = configure_pending.borrow_mut().take() {
                 apply_android_insets(ui, insets);

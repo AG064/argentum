@@ -146,6 +146,9 @@ export global App {
     in-out property <length> safe_area_top: 0px;
     in-out property <length> safe_area_bottom: 0px;
     in-out property <length> keyboard_inset: 0px;
+    // Set by touch hosts such as Android. The composer then waits for a tap
+    // instead of taking focus, so the on-screen keyboard does not open by itself.
+    in-out property <bool> touch_device: false;
     callback submit_task(string);
     callback cancel_run(string);
     callback new_session();
