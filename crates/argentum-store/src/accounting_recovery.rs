@@ -166,12 +166,12 @@ impl Store {
         goal: Uuid,
         request: Uuid,
     ) -> Result<AccountingRecoveryInspection, StoreError> {
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = (path, workspace, session, goal, request);
             Err(StoreError::RecoveryUnsupported)
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             let (_file, physical) =
                 crate::recovery::pinned_physical_identity(path.as_ref(), false, false)?;
@@ -199,12 +199,12 @@ impl Store {
             .path
             .as_ref()
             .ok_or_else(|| rejected("accounting_recovery_requires_owned_store"))?;
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = (path, generation, resolution);
             Err(StoreError::RecoveryUnsupported)
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             let (_file, physical) = crate::recovery::pinned_physical_identity(path, false, false)?;
             let bytes = serde_json::to_vec(resolution)?;

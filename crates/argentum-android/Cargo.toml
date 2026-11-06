@@ -12,7 +12,13 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
+# Builds the on-device llama.cpp engine into the app.
+on-device-inference = [
+    "dep:argentum-android-inference",
+    "argentum-android-inference/llama-engine",
+]
 android-inference-test-hook = [
+    "on-device-inference",
     "dep:argentum-android-inference",
     "dep:argentum-providers",
     "dep:argentum-security",
@@ -28,6 +34,7 @@ argentum-domain.workspace = true
 argentum-platform.workspace = true
 argentum-providers = { workspace = true, optional = true }
 argentum-security = { workspace = true, optional = true }
+argentum-store.workspace = true
 argentum-ui.workspace = true
 jni.workspace = true
 slint = { workspace = true, features = ["backend-android-activity-06"] }

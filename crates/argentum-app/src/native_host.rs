@@ -523,6 +523,15 @@ pub trait NativeInferenceForeground: Send + Sync {
     fn stop_active(&self) -> bool;
 }
 
+/// Records why the host failed before returning the opaque error. Stderr reaches
+/// logcat on Android and the console on desktop. Error descriptions do not
+/// contain secrets.
+fn host_failure(stage: &str, error: &dyn std::fmt::Debug) -> NativeHostError {
+    eprintln!("argentum host failed at {stage}: {error:?}");
+    tracing::error!(stage, error = ?error, "native host failed");
+    NativeHostError::Host
+}
+
 #[derive(Debug)]
 pub enum NativeHostError {
     Runtime,
@@ -589,7 +598,7 @@ where
             HostError::Store(argentum_store::StoreError::HostRecoveryRequired) => {
                 NativeHostError::RecoveryRequired
             }
-            _ => NativeHostError::Host,
+            other => host_failure("start-host", &other),
         })?;
     let mut session = NativeHostSession::new(runtime.handle().clone());
     let inference_foreground = options.inference_foreground.clone();
@@ -665,7 +674,7 @@ where
             host.set_android_foreground_stop(Arc::new(move |generation| {
                 foreground.stop_generation(generation)
             }))
-            .map_err(|_| NativeHostError::Host)?;
+            .map_err(|error| host_failure("set-android-foreground-stop", &error))?;
         }
         connect_native_commands(
             host,
@@ -675,13 +684,13 @@ where
         );
         host.lifecycle_observer()
             .publish_ui_state()
-            .map_err(|_| NativeHostError::Host)?;
+            .map_err(|error| host_failure("publish-ui-state", &error))?;
         runtime
             .block_on(host.client().dispatch(AppCommand::LoadUiPreferences))
-            .map_err(|_| NativeHostError::Host)?;
+            .map_err(|error| host_failure("load-ui-preferences", &error))?;
         runtime
             .block_on(host.client().dispatch(AppCommand::ListProviderPresets))
-            .map_err(|_| NativeHostError::Host)?;
+            .map_err(|error| host_failure("list-provider-presets", &error))?;
 
         let show_result = ui.show().map_err(|_| NativeHostError::Ui);
         let event_loop_result = if show_result.is_ok() {
@@ -704,7 +713,7 @@ fn seed_missing_profiles(
 ) -> Result<(), NativeHostError> {
     let mut known_ids = host
         .provider_profiles()
-        .map_err(|_| NativeHostError::Host)?
+        .map_err(|error| host_failure("list-provider-profiles", &error))?
         .into_iter()
         .map(|profile| profile.id)
         .collect::<HashSet<_>>();
@@ -717,7 +726,7 @@ fn seed_missing_profiles(
         let profile_id = profile.id.clone();
         runtime
             .block_on(client.dispatch(AppCommand::SaveProviderProfile { profile }))
-            .map_err(|_| NativeHostError::Host)?;
+            .map_err(|error| host_failure("seed-provider-profile", &error))?;
         known_ids.insert(profile_id);
     }
     Ok(())

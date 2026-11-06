@@ -75,6 +75,20 @@ pub trait InferenceEngine: Send + 'static {
     fn unload(&mut self) -> Result<(), EngineFailure>;
 }
 
+#[cfg(all(target_os = "android", feature = "llama-engine"))]
+fn android_engine_factory() -> Box<dyn InferenceEngineFactory> {
+    Box::new(crate::android_engine::AndroidLlamaCppEngine::create)
+}
+
+#[cfg(all(target_os = "android", not(feature = "llama-engine")))]
+fn android_engine_factory() -> Box<dyn InferenceEngineFactory> {
+    Box::new(|| -> Result<Box<dyn InferenceEngine>, EngineFailure> {
+        Err(EngineFailure::new(
+            "on-device inference is not included in this build",
+        ))
+    })
+}
+
 pub trait InferenceEngineFactory: Send + 'static {
     fn create(self: Box<Self>) -> Result<Box<dyn InferenceEngine>, EngineFailure>;
 }
@@ -217,11 +231,7 @@ impl AndroidInferenceModule {
         config: InferenceConfig,
         lifecycle_generation: AuthorityGeneration,
     ) -> Result<Self, InferenceError> {
-        Self::with_engine_factory(
-            config,
-            lifecycle_generation,
-            Box::new(crate::android_engine::AndroidLlamaCppEngine::create),
-        )
+        Self::with_engine_factory(config, lifecycle_generation, android_engine_factory())
     }
 
     pub fn lifecycle_generation(&self) -> &AuthorityGeneration {
@@ -256,9 +266,7 @@ impl AndroidInferenceModule {
 
     #[cfg(target_os = "android")]
     pub fn restart(&mut self) -> Result<(), InferenceError> {
-        self.restart_with_engine_factory(Box::new(
-            crate::android_engine::AndroidLlamaCppEngine::create,
-        ))
+        self.restart_with_engine_factory(android_engine_factory())
     }
 
     pub fn model_directory(&self) -> &std::path::Path {

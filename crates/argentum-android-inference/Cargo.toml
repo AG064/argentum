@@ -6,6 +6,12 @@ rust-version.workspace = true
 license-file.workspace = true
 publish = false
 
+[features]
+# The on-device llama.cpp engine. Off by default: it needs Vulkan C++ headers to
+# build and adds tens of megabytes to the app. Without it, activating an
+# on-device model reports that the engine is not in this build.
+llama-engine = ["dep:llama-cpp-2", "dep:encoding_rs"]
+
 [dependencies]
 argentum-security.workspace = true
 sha2.workspace = true
@@ -14,8 +20,8 @@ tokio.workspace = true
 tokio-util.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
-encoding_rs.workspace = true
-llama-cpp-2 = { workspace = true, features = ["common", "vulkan", "android-static-stdcxx"] }
+encoding_rs = { workspace = true, optional = true }
+llama-cpp-2 = { workspace = true, optional = true, features = ["common", "vulkan", "android-static-stdcxx"] }
 
 [dev-dependencies]
 tempfile.workspace = true

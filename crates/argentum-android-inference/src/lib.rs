@@ -3,7 +3,7 @@
 mod module;
 mod types;
 
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "llama-engine"))]
 mod android_engine;
 
 pub use module::{

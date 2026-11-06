@@ -24,8 +24,14 @@ use uuid::Uuid;
 use super::goal_accounting::{goal_by_id, write_goal};
 use super::{append_event_on, Store, StoreError, DATABASE_BUSY_TIMEOUT};
 
+#[cfg(windows)]
 const OWNERSHIP_MECHANISM: &str = "windows_named_mutex_lifetime_guard_with_pinned_database_file";
+#[cfg(windows)]
 const IDENTITY_METHOD: &str = "windows_volume_serial_and_file_index";
+#[cfg(not(windows))]
+const OWNERSHIP_MECHANISM: &str = "unix_exclusive_flock_lifetime_guard_with_pinned_database_file";
+#[cfg(not(windows))]
+const IDENTITY_METHOD: &str = "unix_device_and_inode";
 
 #[derive(Debug, Clone)]
 pub(super) struct PhysicalStoreIdentity {
@@ -49,9 +55,9 @@ struct HostGenerationRecord {
 pub(crate) struct ManagedHostFence {
     pub(crate) generation: Option<u64>,
     pub(crate) active: AtomicBool,
-    #[cfg(windows)]
-    guard: Option<WindowsMutexGuard>,
-    #[cfg(windows)]
+    #[cfg(any(windows, unix))]
+    guard: Option<OwnerGuard>,
+    #[cfg(any(windows, unix))]
     _database_file: Option<File>,
 }
 
@@ -136,7 +142,7 @@ impl StoreHostOwner {
         }
         transaction.commit()?;
         self.fence.active.store(false, Ordering::Release);
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         if let Some(guard) = self.fence.guard.as_ref() {
             guard.release();
         }
@@ -166,18 +172,18 @@ impl Store {
 
     pub fn open_for_host(path: impl AsRef<Path>) -> Result<(Self, StoreHostOwner), StoreError> {
         let path = path.as_ref().to_path_buf();
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = path;
             return Err(StoreError::RecoveryUnsupported);
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(io_as_database_error)?;
             }
             let (database_file, physical) = pinned_physical_identity(&path, true, true)?;
-            let guard = acquire_named_mutex(&physical.digest)?;
+            let guard = acquire_owner_guard(&physical)?;
             let connection = Connection::open(&physical.canonical_path)?;
             connection.busy_timeout(DATABASE_BUSY_TIMEOUT)?;
             let store = Self {
@@ -212,9 +218,9 @@ impl Store {
         let fence = Arc::new(ManagedHostFence {
             generation: None,
             active: AtomicBool::new(true),
-            #[cfg(windows)]
+            #[cfg(any(windows, unix))]
             guard: None,
-            #[cfg(windows)]
+            #[cfg(any(windows, unix))]
             _database_file: None,
         });
         *store
@@ -1262,12 +1268,12 @@ fn parse_uuid(value: String, field: &str) -> Result<Uuid, StoreError> {
 impl Store {
     pub fn inspect_recovery(path: impl AsRef<Path>) -> Result<RecoveryInspection, StoreError> {
         let path = path.as_ref();
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = path;
             return Err(StoreError::RecoveryUnsupported);
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             let (_file, physical) = pinned_physical_identity(path, false, false)?;
             let connection = Connection::open_with_flags(
@@ -1320,15 +1326,15 @@ impl Store {
 
     pub fn reconcile_recovery(path: impl AsRef<Path>) -> Result<RecoverySettlement, StoreError> {
         let path = path.as_ref();
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = path;
             return Err(StoreError::RecoveryUnsupported);
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             let (_file, physical) = pinned_physical_identity(path, true, false)?;
-            let _guard = acquire_named_mutex(&physical.digest)?;
+            let _guard = acquire_owner_guard(&physical)?;
             let mut connection = Connection::open(&physical.canonical_path)?;
             connection.busy_timeout(DATABASE_BUSY_TIMEOUT)?;
             let schema: u16 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -1475,18 +1481,18 @@ impl Store {
         expected_revision: Uuid,
     ) -> Result<RunRecoveryRecord, StoreError> {
         let path = path.as_ref();
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = (path, run_id, expected_revision);
             return Err(StoreError::RecoveryUnsupported);
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, unix))]
         {
             if run_id.is_nil() || expected_revision.is_nil() {
                 return Err(StoreError::RecoveryDecisionStale);
             }
             let (_file, physical) = pinned_physical_identity(path, true, false)?;
-            let _guard = acquire_named_mutex(&physical.digest)?;
+            let _guard = acquire_owner_guard(&physical)?;
             let mut connection = Connection::open(&physical.canonical_path)?;
             connection.busy_timeout(DATABASE_BUSY_TIMEOUT)?;
             let transaction =
@@ -1589,7 +1595,7 @@ fn owner_evidence_from_record(
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, unix))]
 fn inspect_owner_evidence(
     active: Option<&HostGenerationRecord>,
     store_id: Uuid,
@@ -1605,7 +1611,7 @@ fn inspect_owner_evidence(
             "active_owner_belongs_to_a_different_physical_store_copy",
         );
     }
-    match acquire_named_mutex(&physical.digest) {
+    match acquire_owner_guard(&physical) {
         Ok(_guard) => owner_evidence_from_record(
             active,
             OwnershipOutcome::ProvenAbandoned,
@@ -2251,7 +2257,7 @@ fn legacy_ambiguities_pre17_on(
     Ok((records, truncated))
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, unix))]
 fn io_as_database_error(error: std::io::Error) -> StoreError {
     StoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
@@ -2335,7 +2341,7 @@ fn ensure_supported_local_volume(path: &Path) -> Result<(), StoreError> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, unix)))]
 fn current_process_start_key() -> Result<u64, StoreError> {
     Err(StoreError::RecoveryUnsupported)
 }
@@ -2366,7 +2372,7 @@ fn current_process_start_key() -> Result<u64, StoreError> {
     Ok((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, unix))]
 fn mutex_registry() -> &'static Mutex<BTreeSet<String>> {
     static REGISTRY: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeSet::new()))
@@ -2522,4 +2528,143 @@ fn acquire_named_mutex(
         owner_thread: Mutex::new(Some(owner_thread)),
         released: AtomicBool::new(false),
     })
+}
+
+#[cfg(windows)]
+type OwnerGuard = WindowsMutexGuard;
+
+#[cfg(windows)]
+fn acquire_owner_guard(physical: &PhysicalStoreIdentity) -> Result<OwnerGuard, StoreError> {
+    acquire_named_mutex(&physical.digest)
+}
+
+/// Unix lifetime guard: an exclusive `flock` on a lock file beside the database.
+/// The kernel releases it only when the holding process ends, so acquiring it
+/// proves the previous owner is gone, as the named mutex does on Windows.
+#[cfg(unix)]
+type OwnerGuard = UnixLockGuard;
+
+#[cfg(unix)]
+struct UnixLockGuard {
+    name: String,
+    file: Mutex<Option<File>>,
+    released: AtomicBool,
+}
+
+#[cfg(unix)]
+impl UnixLockGuard {
+    fn release(&self) {
+        if !self.released.swap(true, Ordering::AcqRel) {
+            if let Ok(mut file) = self.file.lock() {
+                if let Some(file) = file.take() {
+                    let _ = file.unlock();
+                }
+            }
+            if let Ok(mut registry) = mutex_registry().lock() {
+                registry.remove(&self.name);
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UnixLockGuard {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+#[cfg(unix)]
+fn acquire_owner_guard(physical: &PhysicalStoreIdentity) -> Result<OwnerGuard, StoreError> {
+    let name = physical.digest.0.clone();
+    {
+        let mut registry = mutex_registry()
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        if !registry.insert(name.clone()) {
+            return Err(StoreError::HostOwnershipLive);
+        }
+    }
+    let forget = |name: &str| {
+        if let Ok(mut registry) = mutex_registry().lock() {
+            registry.remove(name);
+        }
+    };
+    let mut lock_path = physical.canonical_path.clone().into_os_string();
+    lock_path.push(".owner.lock");
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+    {
+        Ok(file) => file,
+        Err(_) => {
+            forget(&name);
+            return Err(StoreError::HostOwnershipUnknown(
+                "lifetime_guard_unavailable",
+            ));
+        }
+    };
+    match file.try_lock() {
+        Ok(()) => Ok(UnixLockGuard {
+            name,
+            file: Mutex::new(Some(file)),
+            released: AtomicBool::new(false),
+        }),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            forget(&name);
+            Err(StoreError::HostOwnershipLive)
+        }
+        Err(std::fs::TryLockError::Error(_)) => {
+            forget(&name);
+            Err(StoreError::HostOwnershipUnknown(
+                "lifetime_guard_could_not_be_acquired",
+            ))
+        }
+    }
+}
+
+/// Unix physical identity: the device and inode of the opened database file.
+#[cfg(unix)]
+pub(super) fn pinned_physical_identity(
+    path: &Path,
+    writable: bool,
+    create: bool,
+) -> Result<(File, PhysicalStoreIdentity), StoreError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(writable)
+        .create(create)
+        .truncate(false)
+        .open(path)
+        .map_err(io_as_database_error)?;
+    let canonical_path = std::fs::canonicalize(path).map_err(io_as_database_error)?;
+    let metadata = file.metadata().map_err(io_as_database_error)?;
+    let value = format!("{:016x}:{:016x}", metadata.dev(), metadata.ino());
+    let digest = argentum_domain::Sha256Digest(format!("{:x}", Sha256::digest(value.as_bytes())));
+    Ok((
+        file,
+        PhysicalStoreIdentity {
+            canonical_path,
+            value,
+            digest,
+        },
+    ))
+}
+
+/// Diagnostic only, as on Windows: the process start time in clock ticks since
+/// boot, field 22 of `/proc/self/stat`.
+#[cfg(unix)]
+fn current_process_start_key() -> Result<u64, StoreError> {
+    let stat = std::fs::read_to_string("/proc/self/stat").map_err(io_as_database_error)?;
+    stat.rsplit_once(')')
+        .and_then(|(_, rest)| rest.split_whitespace().nth(19))
+        .and_then(|value| value.parse().ok())
+        .ok_or(StoreError::HostOwnershipUnknown(
+            "process_start_key_unavailable",
+        ))
 }

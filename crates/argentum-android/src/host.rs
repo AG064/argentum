@@ -16,16 +16,31 @@ use crate::insets::{
 };
 use crate::jni_bridge::{register_close_action, CloseActionRegistration};
 
+/// Why the host could not start. The stage and detail reach logcat through
+/// stderr, so a failed start can be diagnosed without a debugger. Details are
+/// error descriptions and app-private paths, never secrets.
 #[derive(Debug)]
-enum AndroidHostError {
-    Platform,
-    Slint,
-    Host,
+struct AndroidHostError {
+    stage: &'static str,
+    detail: String,
+}
+
+impl AndroidHostError {
+    fn new(stage: &'static str, detail: impl fmt::Debug) -> Self {
+        Self {
+            stage,
+            detail: format!("{detail:?}"),
+        }
+    }
 }
 
 impl fmt::Display for AndroidHostError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Argentum could not start its Android host.")
+        write!(
+            formatter,
+            "Argentum could not start its Android host at {}: {}",
+            self.stage, self.detail
+        )
     }
 }
 
@@ -64,15 +79,16 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
             );
         }
     })
-    .map_err(|_| AndroidHostError::Slint)?;
+    .map_err(|error| AndroidHostError::new("slint", error))?;
 
     let validated = android_app_private_workspace_for_app(&app).map_err(|error| {
         tracing::error!(stage = "private-workspace", error = ?error, "Android host platform initialization failed");
-        AndroidHostError::Platform
+        AndroidHostError::new("private-workspace", error)
     })?;
     let secret_store = Arc::new(AndroidSecretStore::new(app.clone()));
     let config = HostConfig::discover_with_validated_app_paths(validated, secret_store)
-        .map_err(|_| AndroidHostError::Host)?;
+        .map_err(|error| AndroidHostError::new("host-config", error))?;
+    reconcile_abandoned_owner(&config)?;
 
     let configure_app = app.clone();
     let configure_tracker = tracker.clone();
@@ -111,7 +127,7 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
     close_registration.borrow_mut().take();
     result.map_err(|error| {
         tracing::error!(stage = "native-host", error = ?error, "Android native host execution failed");
-        AndroidHostError::Host
+        AndroidHostError::new("native-host", error)
     })
 }
 
@@ -211,6 +227,29 @@ impl NativeInferenceForeground for AndroidInferenceForeground {
     }
 }
 
+/// Android ends app processes as a matter of routine, including when the owner
+/// swipes the app away, and it has no console for the recovery command. The
+/// trusted store reconciliation runs here instead. It acquires the lifetime
+/// lock first, so it only proceeds once the previous owner is proven gone, and
+/// a live second instance fails closed. It records interrupted work, retires
+/// approvals, pauses goals, and replays nothing.
+fn reconcile_abandoned_owner(config: &HostConfig) -> Result<(), AndroidHostError> {
+    let Some(database) = config.database.as_ref().filter(|path| path.exists()) else {
+        return Ok(());
+    };
+    let settlement = argentum_store::Store::reconcile_recovery(database)
+        .map_err(|error| AndroidHostError::new("recovery", error))?;
+    if settlement.mutation_performed {
+        eprintln!(
+            "argentum recovered after an unclean exit: {} runs, {} goal invocations interrupted{}",
+            settlement.recovered_run_ids.len(),
+            settlement.recovered_invocation_ids.len(),
+            if settlement.incomplete { ", more remain" } else { "" }
+        );
+    }
+    Ok(())
+}
+
 fn read_activity_generation(app: &AndroidApp) -> Result<u64, AndroidHostError> {
     use jni::{jni_sig, jni_str};
 
@@ -229,11 +268,11 @@ fn read_activity_generation(app: &AndroidApp) -> Result<u64, AndroidHostError> {
             )?
             .j()
         })
-        .map_err(|_| AndroidHostError::Platform)?;
+        .map_err(|error| AndroidHostError::new("activity-generation", error))?;
     u64::try_from(generation)
         .ok()
         .filter(|generation| *generation != 0)
-        .ok_or(AndroidHostError::Platform)
+        .ok_or_else(|| AndroidHostError::new("activity-generation", "missing"))
 }
 
 fn should_refresh_insets(event: &PollEvent<'_>) -> bool {
