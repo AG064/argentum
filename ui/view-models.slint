@@ -397,6 +397,25 @@ export struct GitFileView {
     selected: bool,
 }
 
+export struct ContextPartView {
+    label: string,
+    amount: string,
+    share: float,
+}
+
+export struct RequestRowView {
+    clock: string,
+    duration: string,
+    purpose: string,
+    endpoint: string,
+    model: string,
+    outcome: string,
+    failed: bool,
+    detail: string,
+    tokens: string,
+    tools: string,
+}
+
 export struct ProviderUsageView {
     id: string,
     label: string,

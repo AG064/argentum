@@ -70,6 +70,7 @@ pub(crate) fn surface_icon(surface: SurfaceId) -> &'static str {
         SurfaceId::Goal => "map",
         SurfaceId::StatusBar => "info",
         SurfaceId::CommandPalette => "command",
+        SurfaceId::Requests => "model",
     }
 }
 

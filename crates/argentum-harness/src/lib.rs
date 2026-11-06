@@ -1220,6 +1220,11 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             "Recent factual run, provider, tool, approval, and verification events.",
         ),
         available_surface(
+            SurfaceId::Requests,
+            true,
+            "Each model request: when, how long, where it went, and what filled its context. This session only.",
+        ),
+        available_surface(
             SurfaceId::Trajectory,
             true,
             "Bounded durable task, lifecycle, tool, approval, usage, change, and verification records for one session.",
@@ -1259,7 +1264,7 @@ fn unavailable_surface(id: SurfaceId, reason: &str) -> SurfaceRegistration {
 fn built_in_profiles() -> Vec<ProfileRegistration> {
     use SurfaceId::{
         Activity, Browser, Changes, CommandPalette, ContextMeter, GitDiff, Goal, Plan, Reasoning,
-        Sessions, StatusBar, Trajectory, Usage,
+        Requests, Sessions, StatusBar, Trajectory, Usage,
     };
     const EVERYDAY: [SurfaceId; 4] = [Sessions, ContextMeter, Reasoning, CommandPalette];
     vec![
@@ -1294,7 +1299,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
         profile(
             "trace",
             "Trace",
-            "Standard plus the durable trajectory.",
+            "Standard plus the durable trajectory and each model request.",
             40,
             &[
                 EVERYDAY[0],
@@ -1302,6 +1307,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
                 EVERYDAY[2],
                 EVERYDAY[3],
                 Trajectory,
+                Requests,
             ],
         ),
         profile(
@@ -1323,6 +1329,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
                 Plan,
                 Activity,
                 Trajectory,
+                Requests,
             ],
         ),
     ]

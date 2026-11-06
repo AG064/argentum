@@ -569,6 +569,7 @@ pub enum SurfaceId {
     Goal,
     StatusBar,
     CommandPalette,
+    Requests,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -806,7 +807,7 @@ pub enum ModuleAction {
 }
 
 impl SurfaceId {
-    pub const ALL: [SurfaceId; 18] = [
+    pub const ALL: [SurfaceId; 19] = [
         Self::Conversation,
         Self::Plan,
         Self::Changes,
@@ -825,6 +826,7 @@ impl SurfaceId {
         Self::Goal,
         Self::StatusBar,
         Self::CommandPalette,
+        Self::Requests,
     ];
 
     /// Stable identifier used by the shell, the CLI, and the agent's UI tools.
@@ -848,6 +850,7 @@ impl SurfaceId {
             Self::Goal => "goal",
             Self::StatusBar => "status-bar",
             Self::CommandPalette => "command-palette",
+            Self::Requests => "requests",
         }
     }
 
@@ -875,6 +878,7 @@ impl SurfaceId {
             Self::Goal => "Goal",
             Self::StatusBar => "Status bar",
             Self::CommandPalette => "Command palette",
+            Self::Requests => "Requests",
         }
     }
 
@@ -888,6 +892,7 @@ impl SurfaceId {
                 | Self::Plan
                 | Self::Activity
                 | Self::Trajectory
+                | Self::Requests
         )
     }
 }
@@ -973,7 +978,7 @@ impl<'de> Deserialize<'de> for LayoutProfile {
 }
 
 /// The order inspector surfaces appear in the side panel.
-pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 8] = [
+pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 9] = [
     SurfaceId::Changes,
     SurfaceId::GitDiff,
     SurfaceId::Browser,
@@ -981,6 +986,7 @@ pub const INSPECTOR_SURFACE_ORDER: [SurfaceId; 8] = [
     SurfaceId::Plan,
     SurfaceId::Activity,
     SurfaceId::Trajectory,
+    SurfaceId::Requests,
     SurfaceId::Goal,
 ];
 
