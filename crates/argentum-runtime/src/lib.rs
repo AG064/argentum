@@ -297,6 +297,8 @@ const MAX_REPEATED_ROUNDS: usize = 4;
 /// Notices a model asking for exactly the same tool calls round after round.
 /// Call identifiers differ per round, so only names and arguments count, and
 /// JSON arguments are compared by value so key order does not matter.
+/// Waiting on a running job repeats by design, so a round of only polls is
+/// never counted.
 #[derive(Default)]
 struct RepeatedRounds {
     previous: Option<Vec<(String, String)>>,
@@ -305,11 +307,19 @@ struct RepeatedRounds {
 
 impl RepeatedRounds {
     fn observe(&mut self, calls: &[argentum_providers::ModelToolCall]) -> bool {
+        if calls.iter().all(|call| call.name == "poll_process_job") {
+            self.previous = None;
+            self.streak = 0;
+            return false;
+        }
         let mut signature: Vec<(String, String)> = calls
             .iter()
             .map(|call| {
                 let arguments = serde_json::from_str::<serde_json::Value>(&call.arguments)
-                    .map_or_else(|_| call.arguments.trim().to_owned(), |value| value.to_string());
+                    .map_or_else(
+                        |_| call.arguments.trim().to_owned(),
+                        |value| value.to_string(),
+                    );
                 (call.name.clone(), arguments)
             })
             .collect();
@@ -16118,6 +16128,15 @@ mod tests {
         assert!(!rounds.observe(&[call("b", r#"{"path":"x"}"#)]));
         assert!(!rounds.observe(&[call("c", r#"{"path":"y"}"#)]));
         assert!(!rounds.observe(&[call("d", r#"{"path":"y"}"#)]));
+        let poll = |id: &str| ModelToolCall {
+            id: id.into(),
+            name: "poll_process_job".into(),
+            arguments: r#"{"job_id":"j","wait_ms":30000}"#.into(),
+        };
+        let mut rounds = RepeatedRounds::default();
+        for id in ["a", "b", "c", "d", "e"] {
+            assert!(!rounds.observe(&[poll(id)]));
+        }
     }
 
     #[tokio::test]
@@ -16151,7 +16170,10 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(RuntimeError::RepeatedToolCalls)));
-        assert_eq!(requests.lock().expect("requests").len(), MAX_REPEATED_ROUNDS);
+        assert_eq!(
+            requests.lock().expect("requests").len(),
+            MAX_REPEATED_ROUNDS
+        );
         let emitted = drain_events(&mut events);
         assert!(emitted.iter().any(|event| matches!(
             event,

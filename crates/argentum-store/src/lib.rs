@@ -2393,7 +2393,7 @@ impl Store {
                 current: project.id == current,
             });
         }
-        overview.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        overview.sort_by_key(|a| std::cmp::Reverse(a.last_activity));
         Ok(overview)
     }
 

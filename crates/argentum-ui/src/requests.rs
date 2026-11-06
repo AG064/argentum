@@ -208,7 +208,7 @@ pub(crate) fn context_parts(accounting: &RequestAccounting) -> Vec<ContextPart> 
         ),
     ];
     parts.retain(|(_, amount)| *amount > 0);
-    parts.sort_by(|a, b| b.1.cmp(&a.1));
+    parts.sort_by_key(|part| std::cmp::Reverse(part.1));
     let usable = accounting.usable_context.max(1) as f32;
     parts
         .into_iter()
