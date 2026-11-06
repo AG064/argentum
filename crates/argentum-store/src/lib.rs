@@ -3705,7 +3705,7 @@ impl Store {
                  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
                  task_id TEXT NOT NULL,
                  assistant_complete INTEGER NOT NULL DEFAULT 0,
-                 next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 33),
+                 next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 121),
                  user_message_id TEXT NOT NULL UNIQUE REFERENCES conversation_messages(id) ON DELETE CASCADE
              );
              CREATE INDEX IF NOT EXISTS idx_context_runs_scope

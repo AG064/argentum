@@ -110,7 +110,7 @@ answer and the recorded changes, and the step list is gone.
 | 3. Policy decides | The saved project policy allows a tool, asks you first, or refuses it. Nothing the model says can change that |
 | 4. You see each step | Reads, searches, commands, and edits appear as they happen, and thinking streams above them |
 | 5. Changes are recorded | Each edit is checked against the source the agent read, and saved so you can review or restore it |
-| 6. It stops | A run ends with an answer, at Esc or `/stop`, or at the limit of 32 rounds. Long tasks can be continued, or run as a goal |
+| 6. It stops | A run ends with an answer, at Esc or `/stop`, at the limit of 120 rounds, or when the model asks for the same tool calls four rounds in a row. Long tasks can be continued, or run as a goal |
 
 ### Goals
 
@@ -196,7 +196,7 @@ CLI build leaves them out.
 
 ### Known limits
 
-- A run stops after 32 rounds. Raising this needs a database migration, and it is planned.
+- A run stops after 120 rounds, and earlier if the model repeats the same tool calls four rounds in a row.
 - The steps and diff list on each response last for the running session only.
 - Windows x64 is the only tested platform, and it has not yet been tested on a clean machine.
 
