@@ -665,6 +665,16 @@ where
                 return;
             };
             window.set_first_run_error(SharedString::default());
+            if preset.endpoint.trim().is_empty() {
+                let app = window.global::<App>();
+                app.set_provider_draft_label(preset.label.clone());
+                app.set_provider_draft_endpoint("http://".into());
+                app.set_provider_draft_model(SharedString::default());
+                app.set_provider_endpoint_error(SharedString::default());
+                app.set_provider_model_error(SharedString::default());
+                window.set_first_run_stage("server".into());
+                return;
+            }
             window.set_first_run_stage(if preset.needs_key { "key" } else { "modules" }.into());
             dispatch(AppCommand::SaveProviderProfile {
                 profile: argentum_domain::ProviderProfile {
@@ -677,6 +687,35 @@ where
                 },
             });
             dispatch(AppCommand::ListHarnessState);
+        });
+    }
+    {
+        let dispatch = dispatch.clone();
+        let weak = window.as_weak();
+        app.on_first_run_save_server(move |endpoint, model, context| {
+            let Some(window) = weak.upgrade() else { return };
+            let limits = match first_run_server_limits(context.as_str()) {
+                Ok(limits) => limits,
+                Err(error) => {
+                    window.set_first_run_error(error.into());
+                    return;
+                }
+            };
+            window.set_first_run_error(SharedString::default());
+            let profile_id = "custom".to_owned();
+            dispatch(AppCommand::SaveProviderProfile {
+                profile: argentum_domain::ProviderProfile {
+                    id: profile_id.clone(),
+                    label: window.global::<App>().get_provider_draft_label().to_string(),
+                    kind: argentum_domain::ProviderKind::OpenAiCompatible,
+                    endpoint: endpoint.trim().to_owned(),
+                    model: model.trim().to_owned(),
+                    selected: true,
+                },
+            });
+            dispatch(AppCommand::SaveProviderBudget { profile_id, limits });
+            dispatch(AppCommand::ListHarnessState);
+            window.set_first_run_stage("modules".into());
         });
     }
     {
@@ -1150,5 +1189,48 @@ mod tests {
                 "no icon named {icon}"
             );
         }
+    }
+}
+
+/// Budget limits for a server the owner described at first run. The owner gives
+/// the context size; the output and safety reserves are derived from it.
+fn first_run_server_limits(context: &str) -> Result<[u64; 5], String> {
+    let total = context
+        .trim()
+        .replace(['_', ','], "")
+        .parse::<u64>()
+        .map_err(|_| "Enter the context size as a whole number of tokens.".to_owned())?;
+    if !(4_096..=10_000_000).contains(&total) {
+        return Err("Enter a context size between 4096 and 10000000 tokens.".into());
+    }
+    // Requests are estimated conservatively, so the answer reserve stays small
+    // to leave room for instructions and tool definitions.
+    let output = (total / 8).min(8_192);
+    let uncertainty = (total / 32).clamp(128, 4_096);
+    crate::parse_provider_budget_limits(
+        &total.to_string(),
+        &total.to_string(),
+        &output.to_string(),
+        &output.to_string(),
+        &uncertainty.to_string(),
+    )
+}
+
+#[cfg(test)]
+mod first_run_server_tests {
+    use super::first_run_server_limits;
+
+    #[test]
+    fn a_context_size_becomes_valid_budget_limits() {
+        assert_eq!(
+            first_run_server_limits("32768"),
+            Ok([32_768, 32_768, 4_096, 4_096, 1_024])
+        );
+        assert_eq!(
+            first_run_server_limits(" 8_192 "),
+            Ok([8_192, 8_192, 1_024, 1_024, 256])
+        );
+        assert!(first_run_server_limits("1000").is_err());
+        assert!(first_run_server_limits("lots").is_err());
     }
 }

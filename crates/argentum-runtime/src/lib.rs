@@ -2448,7 +2448,12 @@ impl RuntimeService {
                         api_key_env: preset.api_key_env.map(str::to_owned),
                         docs_url: preset.docs_url.to_owned(),
                         local: preset.local,
-                        supported: preset.supported,
+                        // llama.cpp on Android is the on-device engine, an
+                        // optional build feature.
+                        supported: preset.supported
+                            && !(cfg!(target_os = "android")
+                                && preset.id == "llama-cpp"
+                                && !argentum_providers::ON_DEVICE_ENGINE_INCLUDED),
                         group: preset.group.as_str().to_owned(),
                         notes: preset.notes.to_owned(),
                         tested: argentum_providers::provider_tested(preset.id),

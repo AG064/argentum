@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 mod module;
+
+/// Whether this build can run a model on an Android device.
+pub const ENGINE_INCLUDED: bool = cfg!(all(target_os = "android", feature = "llama-engine"));
 mod types;
 
 #[cfg(all(target_os = "android", feature = "llama-engine"))]

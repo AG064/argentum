@@ -3584,7 +3584,7 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
     };
     ProviderPresetView {
         // First run shows what has been tested, plus ways to run a model yourself.
-        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "custom"),
+        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "openai-compatible"),
         tested: preset.tested,
         detail: if preset.notes.is_empty() {
             credential.clone().into()
@@ -3974,6 +3974,12 @@ fn present_error(message: &str) -> String {
         || message.contains("connection")
     {
         return "Argentum could not reach the model provider. Check that it is running, then try again.".into();
+    }
+    if message.starts_with("context_token_capacity_exceeded") {
+        return "This request does not fit the model's context size. Start a new chat, compact this one, or raise the context size in Settings > Providers.".into();
+    }
+    if message.starts_with("context_budget_invalid: usable model limits are unknown") {
+        return "Argentum does not know how much this model can hold. Set its context size in Settings > Providers, under Budget and context.".into();
     }
     if message.contains("outside the workspace boundary") {
         return "That path is outside the current workspace.".into();

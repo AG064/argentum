@@ -96,6 +96,8 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
     let configure_ui_slot = ui_slot.clone();
     let configure_registration = close_registration.clone();
     let inference_foreground = Arc::new(AndroidInferenceForeground::new(app.clone()));
+    let insets_timer = slint::Timer::default();
+    let insets_timer_ref = &insets_timer;
     let result = run_native_host(
         config,
         NativeHostOptions {
@@ -116,6 +118,25 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
                     &configure_ui_slot,
                 );
             }
+            let timer_app = configure_app.clone();
+            let timer_tracker = configure_tracker.clone();
+            let timer_pending = configure_pending.clone();
+            let timer_ui_slot = configure_ui_slot.clone();
+            // NativeActivity reports no event when the on-screen keyboard opens
+            // or closes, so the insets are read again on the UI thread. The read
+            // is one JNI call, and the layout changes only when a value does.
+            insets_timer_ref.start(
+                slint::TimerMode::Repeated,
+                std::time::Duration::from_millis(150),
+                move || {
+                    refresh_android_insets(
+                        &timer_app,
+                        &timer_tracker,
+                        &timer_pending,
+                        &timer_ui_slot,
+                    );
+                },
+            );
             *configure_registration.borrow_mut() =
                 Some(register_close_action(activity_generation, || {
                     slint::invoke_from_event_loop(|| {

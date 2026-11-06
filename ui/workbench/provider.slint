@@ -115,6 +115,81 @@ export component FirstRun inherits Rectangle {
             }
         }
     }
+    // A server Argentum has no address for, such as llama-server on a PC.
+    if App.first_run_stage == "server": Scroller {
+        content-height: server-col.preferred-height + 80px;
+        server-col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp14;
+            Text {
+                text: "Where is your server?";
+                color: Theme.text;
+                font-size: Theme.fs-2xl - 2px;
+                font-weight: Theme.w-medium;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Any OpenAI-compatible server, such as llama-server on your PC or network.";
+                color: Theme.text-2;
+                font-size: Theme.fs-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Field {
+                label: "Endpoint";
+                placeholder: "http://192.168.1.20:8080/v1";
+                mono: true;
+                value: App.provider_draft_endpoint;
+                error: App.provider_endpoint_error;
+                edited(text) => {
+                    App.provider_draft_endpoint = text;
+                    App.provider_endpoint_error = App.validate_provider_endpoint(text);
+                }
+            }
+            Field {
+                label: "Model";
+                placeholder: "The model name the server expects";
+                mono: true;
+                value: App.provider_draft_model;
+                error: App.provider_model_error;
+                edited(text) => {
+                    App.provider_draft_model = text;
+                    App.provider_model_error = App.validate_provider_model(text);
+                }
+            }
+            Field {
+                label: "Context size, in tokens";
+                hint: "The server's context setting, such as --ctx-size for llama-server. You can change it later in Settings.";
+                mono: true;
+                value: App.provider_draft_context;
+                edited(text) => { App.provider_draft_context = text; }
+            }
+            if App.first_run_error != "": Label {
+                text: App.first_run_error;
+                tone: "danger";
+                size: "sm";
+                wrap: word-wrap;
+                overflow: clip;
+            }
+            HorizontalLayout {
+                alignment: space-between;
+                Btn { label: "Back"; clicked => { App.first_run_error = ""; App.first_run_stage = "provider"; } }
+                Btn {
+                    label: "Continue";
+                    kind: "primary";
+                    enabled: App.provider_endpoint_error == "" && App.provider_model_error == ""
+                        && App.provider_draft_endpoint != "http://" && App.provider_draft_model != "";
+                    clicked => {
+                        App.first_run_save_server(App.provider_draft_endpoint, App.provider_draft_model,
+                            App.provider_draft_context);
+                    }
+                }
+            }
+        }
+    }
     if App.first_run_stage == "key": Scroller {
         content-height: key-col.preferred-height + 80px;
         key-col := VerticalLayout {

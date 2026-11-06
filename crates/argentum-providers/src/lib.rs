@@ -598,6 +598,9 @@ const fn preset(
     }
 }
 
+/// Whether this build can run a model on an Android device.
+pub const ON_DEVICE_ENGINE_INCLUDED: bool = argentum_android_inference::ENGINE_INCLUDED;
+
 pub const PROVIDER_CATALOG: [ProviderPresetInfo; 39] = [
     preset(
         "openai-compatible",

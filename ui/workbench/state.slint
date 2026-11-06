@@ -192,6 +192,9 @@ export global App {
     in-out property <[ProviderPresetView]> provider_presets: [];
     in-out property <string> first_run_error: "";
     callback first_run_choose(ProviderPresetView);
+    // Saves a server chosen at first run with the context size the owner gave.
+    callback first_run_save_server(string, string, string);
+    in-out property <string> provider_draft_context: "32768";
     callback first_run_finish();
     in-out property <bool> provider_credential_needed: false;
     in-out property <bool> provider_custom_draft: false;

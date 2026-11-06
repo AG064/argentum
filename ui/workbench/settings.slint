@@ -129,7 +129,7 @@ component ProvidersPage inherits VerticalLayout {
         ProviderCatalog { }
         Row {
             title: "Custom endpoint";
-            detail: "An OpenAI-compatible service over HTTPS. Argentum cannot store an API key for these yet.";
+            detail: "Any OpenAI-compatible server, such as llama-server on your PC or network. Argentum cannot store an API key for these yet.";
             icon: "plus";
             clicked => {
                 // A draft only. The provider in use stays as it is until this is saved.
@@ -146,7 +146,7 @@ component ProvidersPage inherits VerticalLayout {
     Divider { }
     Heading {
         title: App.provider_custom_draft ? "Custom endpoint" : App.provider_label;
-        detail: App.provider_custom_draft ? "OpenAI-compatible, over HTTPS" : App.provider_kind_label;
+        detail: App.provider_custom_draft ? "OpenAI-compatible" : App.provider_kind_label;
     }
     label-field := Field {
         label: "Name";
