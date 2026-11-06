@@ -558,6 +558,8 @@ struct ModelStreamState {
     assistant_reasoning: String,
     reasoning_bytes: usize,
     latest_usage: Option<DomainModelUsage>,
+    /// Every request's usage in this run, never reset between rounds.
+    turn_total: argentum_domain::UsageTotal,
     served_model: Option<String>,
 }
 
@@ -5384,7 +5386,10 @@ impl RuntimeService {
             RunOutput {
                 text: terminal_answer.unwrap_or(stream.assistant_text),
                 reasoning: stream.assistant_reasoning,
-                usage: stream.latest_usage,
+                usage: stream.latest_usage.map(|mut usage| {
+                    usage.turn_total = Some(stream.turn_total);
+                    usage
+                }),
             },
         )
     }
@@ -5642,7 +5647,9 @@ impl RuntimeService {
                     context_window_tokens: usage
                         .context_window_tokens
                         .or(self.model_context_window(&context.profile_id, &context.model)?),
+                    turn_total: None,
                 };
+                stream.turn_total.add(&usage);
                 stream.latest_usage = Some(usage.clone());
                 self.emit_for_run(
                     AppEvent::ModelUsageUpdated {
@@ -12987,6 +12994,7 @@ mod tests {
                     reasoning_tokens: None,
                     cached_input_tokens: None,
                     context_window_tokens: Some(65_536),
+                    turn_total: None,
                 },
             },
         })
@@ -14461,6 +14469,54 @@ mod tests {
                 .filter(|event| matches!(event, AppEvent::ModelUsageUpdated { .. }))
                 .count(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn a_turn_records_the_usage_of_every_request() {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        std::fs::write(workspace_dir.path().join("notes.txt"), "workspace evidence")
+            .expect("fixture");
+        let mut providers = ProviderRegistry::default();
+        providers.register(EveryRoundUsageProvider);
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime = RuntimeService::new(
+            Store::open_in_memory().expect("store"),
+            providers,
+            tools,
+            workspace,
+        )
+        .expect("runtime");
+        configure_selected_provider(&runtime, "every-round-usage").await;
+
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "read then answer".into(),
+            })
+            .await
+            .expect("model tool run");
+
+        let snapshot = runtime
+            .conversation_snapshot(runtime.session_id())
+            .expect("conversation");
+        let usage = snapshot
+            .messages
+            .last()
+            .and_then(|message| message.usage.clone())
+            .expect("usage");
+        // The latest request stays as it was, for the context meter.
+        assert_eq!(usage.input_tokens, 20);
+        assert_eq!(
+            usage.turn_total,
+            Some(argentum_domain::UsageTotal {
+                requests: 2,
+                input_tokens: 30,
+                cached_input_tokens: 8,
+                output_tokens: 4,
+            })
         );
     }
 
@@ -19063,6 +19119,59 @@ mod tests {
                 .send(ProviderEvent::Usage(usage))
                 .await
                 .map_err(|_| ProviderError::ConsumerClosed)?;
+            sender
+                .send(ProviderEvent::Completed)
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)
+        }
+    }
+
+    #[derive(Debug)]
+    struct EveryRoundUsageProvider;
+
+    #[async_trait]
+    impl ModelProvider for EveryRoundUsageProvider {
+        fn id(&self) -> &'static str {
+            "every-round-usage"
+        }
+
+        fn status(&self) -> ProviderStatus {
+            test_provider_status(self.id())
+        }
+
+        async fn stream(
+            &self,
+            request: ModelRequest,
+            sender: mpsc::Sender<ProviderEvent>,
+        ) -> Result<(), ProviderError> {
+            let first = request.tool_exchanges.is_empty();
+            let (input, cached) = if first { (10, 0) } else { (20, 8) };
+            sender
+                .send(ProviderEvent::Usage(ProviderUsage {
+                    input_tokens: input,
+                    output_tokens: 2,
+                    total_tokens: input + 2,
+                    cached_input_tokens: Some(cached),
+                    reasoning_tokens: None,
+                    context_window_tokens: Some(1_024),
+                }))
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)?;
+            if first {
+                sender
+                    .send(ProviderEvent::ToolCall(ModelToolCall {
+                        id: "usage-read".into(),
+                        name: "read_text".into(),
+                        arguments: r#"{"path":"notes.txt"}"#.into(),
+                    }))
+                    .await
+                    .map_err(|_| ProviderError::ConsumerClosed)?;
+            } else {
+                sender
+                    .send(ProviderEvent::Delta("final answer".into()))
+                    .await
+                    .map_err(|_| ProviderError::ConsumerClosed)?;
+            }
             sender
                 .send(ProviderEvent::Completed)
                 .await

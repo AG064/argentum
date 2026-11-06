@@ -2399,6 +2399,42 @@ pub struct ModelUsage {
     pub cached_input_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window_tokens: Option<u64>,
+    /// Every request in the turn, summed. The fields above describe only the
+    /// latest request, which is what the context meter needs. Older records
+    /// have no total.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_total: Option<UsageTotal>,
+}
+
+/// Reported tokens summed over the requests of one turn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageTotal {
+    pub requests: u32,
+    pub input_tokens: u64,
+    pub cached_input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+impl UsageTotal {
+    pub fn add(&mut self, usage: &ModelUsage) {
+        self.requests = self.requests.saturating_add(1);
+        self.input_tokens = self.input_tokens.saturating_add(usage.input_tokens);
+        self.cached_input_tokens = self
+            .cached_input_tokens
+            .saturating_add(usage.cached_input_tokens.unwrap_or(0));
+        self.output_tokens = self.output_tokens.saturating_add(usage.output_tokens);
+    }
+}
+
+impl ModelUsage {
+    /// What the turn consumed: the turn total when recorded, else this request.
+    pub fn consumed(&self) -> UsageTotal {
+        self.turn_total.unwrap_or_else(|| {
+            let mut total = UsageTotal::default();
+            total.add(self);
+            total
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -3326,6 +3362,7 @@ mod tests {
                     reasoning_tokens: Some(2),
                     cached_input_tokens: Some(3),
                     context_window_tokens: Some(65_536),
+                    turn_total: None,
                 },
             },
         ];

@@ -65,6 +65,7 @@ fn conversation(ui: &UiHandle) {
             context_window_tokens: Some(200_000),
             reasoning_tokens: None,
             cached_input_tokens: None,
+            turn_total: None,
         }),
         profile_id: "lm-studio".into(),
         model: "qwen3-coder-next".into(),

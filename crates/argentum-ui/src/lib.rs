@@ -6926,6 +6926,7 @@ mod tests {
                             reasoning_tokens: Some(3),
                             cached_input_tokens: None,
                             context_window_tokens: Some(128_000),
+                            turn_total: None,
                         }),
                         profile_id: "minimax".into(),
                         model: "MiniMax-M2.7".into(),
@@ -6992,6 +6993,7 @@ mod tests {
                 reasoning_tokens: Some(6),
                 cached_input_tokens: Some(4),
                 context_window_tokens: Some(204_800),
+                turn_total: None,
             },
         });
         assert!(ui.window().get_usage_reported());

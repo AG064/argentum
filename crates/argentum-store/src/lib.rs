@@ -2280,10 +2280,17 @@ impl Store {
                     output_tokens: 0,
                     total_tokens: 0,
                 });
+            let total_tokens = if usage.turn_total.is_some() {
+                let consumed = usage.consumed();
+                consumed.input_tokens.saturating_add(consumed.output_tokens)
+            } else {
+                usage.total_tokens
+            };
+            let usage = usage.consumed();
             entry.turns = entry.turns.saturating_add(1);
             entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
             entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
-            entry.total_tokens = entry.total_tokens.saturating_add(usage.total_tokens);
+            entry.total_tokens = entry.total_tokens.saturating_add(total_tokens);
         }
         let mut rows = totals.into_values().collect::<Vec<_>>();
         rows.sort_by_key(|row| std::cmp::Reverse(row.total_tokens));
@@ -2327,11 +2334,12 @@ impl Store {
                     cached_input_tokens: 0,
                     output_tokens: 0,
                 });
+            let usage = usage.consumed();
             entry.turns = entry.turns.saturating_add(1);
             entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
             entry.cached_input_tokens = entry
                 .cached_input_tokens
-                .saturating_add(usage.cached_input_tokens.unwrap_or(0));
+                .saturating_add(usage.cached_input_tokens);
             entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
         }
         let mut rows = totals.into_values().collect::<Vec<_>>();
@@ -2379,6 +2387,7 @@ impl Store {
             while let Some(row) = usage_rows.next()? {
                 let usage: String = row.get(0)?;
                 if let Some(usage) = parse_stored_usage(Some(&usage))? {
+                    let usage = usage.consumed();
                     input = input.saturating_add(usage.input_tokens);
                     output = output.saturating_add(usage.output_tokens);
                 }
@@ -4681,7 +4690,14 @@ fn validate_model_usage(usage: &ModelUsage) -> Result<(), StoreError> {
     let valid_context = usage
         .context_window_tokens
         .is_none_or(|tokens| tokens > 0 && usage.total_tokens <= tokens);
-    if valid_total && valid_cached && valid_reasoning && valid_context {
+    // A turn total includes the latest request, so it can never be smaller.
+    let valid_turn = usage.turn_total.is_none_or(|turn| {
+        turn.requests >= 1
+            && turn.input_tokens >= usage.input_tokens
+            && turn.output_tokens >= usage.output_tokens
+            && turn.cached_input_tokens <= turn.input_tokens
+    });
+    if valid_total && valid_cached && valid_reasoning && valid_context && valid_turn {
         Ok(())
     } else {
         Err(StoreError::InvalidRecord(
@@ -5385,6 +5401,7 @@ mod tests {
                 reasoning_tokens: Some(2),
                 cached_input_tokens: Some(3),
                 context_window_tokens: Some(32_768),
+                turn_total: None,
             }),
             profile_id: "hosted".into(),
             model: "hosted-model".into(),
@@ -6224,6 +6241,7 @@ mod tests {
                             reasoning_tokens: Some(2),
                             cached_input_tokens: None,
                             context_window_tokens: Some(32_768),
+                            turn_total: None,
                         },
                     ),
                     profile_id: if role == ConversationRole::Assistant {
@@ -6407,6 +6425,42 @@ mod tests {
     }
 
     #[test]
+    fn usage_reports_count_every_request_of_a_turn() {
+        let (store, _directory, project_id, session_id) = conversation_store();
+        let mut message = assistant_message(project_id, session_id);
+        let mut usage = message.usage.clone().expect("usage");
+        let mut turn = argentum_domain::UsageTotal::default();
+        turn.add(&usage);
+        turn.add(&usage);
+        turn.add(&usage);
+        usage.turn_total = Some(turn);
+        message.usage = Some(usage.clone());
+        store.append_conversation_message(&message).expect("append");
+
+        let days = store.usage_by_day(project_id, 30).expect("days");
+        assert_eq!(days[0].turns, 1);
+        assert_eq!(days[0].input_tokens, usage.input_tokens * 3);
+        let providers = store.provider_usage(project_id).expect("providers");
+        assert_eq!(
+            providers[0].total_tokens,
+            (usage.input_tokens + usage.output_tokens) * 3
+        );
+        let projects = store.projects_overview(project_id).expect("projects");
+        assert_eq!(projects[0].output_tokens, usage.output_tokens * 3);
+
+        let mut smaller = assistant_message(project_id, session_id);
+        let mut bad = smaller.usage.clone().expect("usage");
+        bad.turn_total = Some(argentum_domain::UsageTotal {
+            requests: 1,
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            output_tokens: 0,
+        });
+        smaller.usage = Some(bad);
+        assert!(store.append_conversation_message(&smaller).is_err());
+    }
+
+    #[test]
     fn conversation_message_usage_invariants_are_enforced_before_append() {
         let (store, _directory, project_id, session_id) = conversation_store();
         let base = assistant_message(project_id, session_id);
@@ -6422,6 +6476,7 @@ mod tests {
                 reasoning_tokens: None,
                 cached_input_tokens: None,
                 context_window_tokens: None,
+                turn_total: None,
             },
             ModelUsage {
                 cached_input_tokens: Some(11),
@@ -6484,6 +6539,7 @@ mod tests {
                 reasoning_tokens: None,
                 cached_input_tokens: None,
                 context_window_tokens: None,
+                turn_total: None,
             }),
             ..base.clone()
         });

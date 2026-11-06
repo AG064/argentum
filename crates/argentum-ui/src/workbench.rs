@@ -404,7 +404,13 @@ pub fn apply_usage_report(
         .iter()
         .map(|project| ProjectView {
             name: project.name.clone().into(),
-            path: project.workspace_root.clone().into(),
+            // Windows verbatim paths open the same folder without the prefix.
+            path: project
+                .workspace_root
+                .strip_prefix(r"\\?\")
+                .unwrap_or(&project.workspace_root)
+                .to_owned()
+                .into(),
             current: project.current,
             detail: format!(
                 "{} {}{}{}",
