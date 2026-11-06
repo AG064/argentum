@@ -29,7 +29,8 @@ checksums/provenance, isolated first-run/restart controls and outside-checkout
 launch including spaces/non-ASCII paths. The versioned
 [RC record](docs/releases/0.1.0-rc.1.md) reports actual results and gaps.
 
-Publishing remains a deliberate maintainer decision after draft source review.
+[0.1.0-rc.1](https://github.com/AG064/argentum/releases/tag/v0.1.0-rc.1) was published as a pre-release on 2026-11-05, from `25c61564`, after the
+owner approved it. It is unsigned, and it is not the latest full release.
 It is not performed by CI. Signing, installer, Slint visual acceptance, Android
 device/release qualification and other desktop platforms have their own gates.
 MILESTONE01 remains assisted delivery. No new live benchmark is authorized by
