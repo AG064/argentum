@@ -706,7 +706,10 @@ where
             dispatch(AppCommand::SaveProviderProfile {
                 profile: argentum_domain::ProviderProfile {
                     id: profile_id.clone(),
-                    label: window.global::<App>().get_provider_draft_label().to_string(),
+                    label: window
+                        .global::<App>()
+                        .get_provider_draft_label()
+                        .to_string(),
                     kind: argentum_domain::ProviderKind::OpenAiCompatible,
                     endpoint: endpoint.trim().to_owned(),
                     model: model.trim().to_owned(),

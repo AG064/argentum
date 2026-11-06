@@ -266,7 +266,11 @@ fn reconcile_abandoned_owner(config: &HostConfig) -> Result<(), AndroidHostError
             "argentum recovered after an unclean exit: {} runs, {} goal invocations interrupted{}",
             settlement.recovered_run_ids.len(),
             settlement.recovered_invocation_ids.len(),
-            if settlement.incomplete { ", more remain" } else { "" }
+            if settlement.incomplete {
+                ", more remain"
+            } else {
+                ""
+            }
         );
     }
     Ok(())

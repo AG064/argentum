@@ -1611,7 +1611,7 @@ fn inspect_owner_evidence(
             "active_owner_belongs_to_a_different_physical_store_copy",
         );
     }
-    match acquire_owner_guard(&physical) {
+    match acquire_owner_guard(physical) {
         Ok(_guard) => owner_evidence_from_record(
             active,
             OwnershipOutcome::ProvenAbandoned,
