@@ -207,6 +207,74 @@ component ProvidersPage inherits VerticalLayout {
     LocalModelSection { }
 }
 
+// Pairing a PC and a phone. Both screens show the same six digits, and the
+// owner confirms on each. Nothing is saved without that confirmation.
+component DevicesPage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    init => { App.device_refresh(); }
+    Heading {
+        title: "Devices";
+        detail: "Pair this device with your PC or phone on the same network. Pairing grants nothing by itself; permissions stay with each device.";
+    }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Label { text: "This device"; tone: "muted"; size: "sm"; }
+        Label { text: App.device_fingerprint; size: "sm"; mono: true; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
+    }
+    SectionLabel { text: "PAIRED"; height: 22px; }
+    if App.devices.length == 0: Label { text: "No devices are paired with this one."; tone: "muted"; size: "sm"; }
+    for device in App.devices: HorizontalLayout {
+        spacing: Theme.sp8;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            Label { text: device.name; }
+            Label { text: device.fingerprint; tone: "muted"; size: "xs"; mono: true; }
+        }
+        Btn { label: "Forget"; small: true; clicked => { App.device_forget(device.fingerprint); } }
+    }
+    SectionLabel { text: "PAIR A DEVICE"; height: 22px; }
+    if App.device_pair_state == "idle" || App.device_pair_state == "error": VerticalLayout {
+        spacing: Theme.sp8;
+        Label {
+            text: "On one device, wait for a connection. On the other, enter the address it shows.";
+            tone: "muted";
+            size: "sm";
+            wrap: word-wrap;
+        }
+        Btn { label: "Wait for a device"; clicked => { App.device_listen(); } }
+        address := Field { label: "Address of the other device"; placeholder: "192.168.1.20:47910"; mono: true; }
+        Btn {
+            label: "Connect";
+            enabled: address.value != "";
+            clicked => { App.device_connect(address.value); }
+        }
+    }
+    if App.device_pair_state == "waiting" || App.device_pair_state == "connecting": Label {
+        text: App.device_pair_detail;
+        wrap: word-wrap;
+    }
+    if App.device_pair_state == "code": VerticalLayout {
+        spacing: Theme.sp10;
+        Label { text: "Check that the other device shows the same six digits."; wrap: word-wrap; }
+        Text {
+            text: App.device_pair_code;
+            color: Theme.text;
+            font-size: Theme.fs-2xl + 6px;
+            font-weight: Theme.w-medium;
+            horizontal-alignment: center;
+        }
+        Label { text: App.device_pair_detail; tone: "muted"; size: "xs"; mono: true; wrap: word-wrap; }
+        name := Field { label: "Name for the other device"; value: "Paired device"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            alignment: start;
+            Btn { label: "They match"; kind: "primary"; clicked => { App.device_confirm(true, name.value); } }
+            Btn { label: "Cancel"; clicked => { App.device_confirm(false, ""); } }
+        }
+    }
+    if App.device_pair_state == "error": Label { text: App.device_pair_detail; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+}
+
 component ModulesPage inherits VerticalLayout {
     spacing: Theme.sp14;
     Heading {
@@ -582,6 +650,7 @@ export component Settings inherits Rectangle {
                     { id: "modules", icon: "boxes", label: "Modules" },
                     { id: "appearance", icon: "sparkles", label: "Appearance" },
                     { id: "permissions", icon: "approval", label: "Permissions" },
+                    { id: "devices", icon: "lock", label: "Devices" },
                     { id: "updates", icon: "refresh", label: "Updates" },
                     { id: "about", icon: "info", label: "About" },
                 ]: IconBtn {
@@ -619,6 +688,7 @@ export component Settings inherits Rectangle {
                         Row { title: "Capabilities"; icon: "plug"; selected: App.settings_section == "capabilities"; clicked => { App.settings_section = "capabilities"; } }
                         Row { title: "Diagnostics"; icon: "activity"; selected: App.settings_section == "diagnostics"; clicked => { App.settings_section = "diagnostics"; } }
                         Row { title: "Permissions"; icon: "approval"; selected: App.settings_section == "permissions"; clicked => { App.settings_section = "permissions"; } }
+                        Row { title: "Devices"; icon: "lock"; selected: App.settings_section == "devices"; clicked => { App.settings_section = "devices"; } }
                         Row { title: "Updates"; icon: "refresh"; selected: App.settings_section == "updates"; clicked => { App.settings_section = "updates"; } }
                         Row { title: "About"; icon: "info"; selected: App.settings_section == "about"; clicked => { App.settings_section = "about"; } }
                     }
@@ -643,6 +713,7 @@ export component Settings inherits Rectangle {
                             if App.settings_section == "tools": ToolsPage { }
                             if App.settings_section == "capabilities": CapabilitiesPage { }
                             if App.settings_section == "diagnostics": DiagnosticsPage { }
+                            if App.settings_section == "devices": DevicesPage { }
                             if App.settings_section == "updates": UpdatesPage { }
                             if App.settings_section == "about": AboutPage { }
                         }

@@ -8,7 +8,8 @@ use crate::{PlatformError, SecretStore};
 
 const MAX_SECRET_BYTES: usize = 16 * 1024;
 const SECURE_STORAGE_FAILURE: &str = "Android secure storage operation failed";
-const ACCEPTED_KEYS: [&str; 3] = ["provider/openai", "provider/minimax", "provider/deepseek"];
+// Exact names only: a key for each hosted provider Argentum supports, and this
+// install's device identity.
 
 trait SecretBridge: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, PlatformError>;
@@ -99,7 +100,10 @@ impl AndroidSecretStore {
     }
 
     fn validate_key(key: &str) -> Result<(), PlatformError> {
-        if ACCEPTED_KEYS.contains(&key) {
+        let provider = key
+            .strip_prefix("provider/")
+            .is_some_and(argentum_domain::is_supported_hosted_credential_provider_id);
+        if provider || key == crate::DEVICE_IDENTITY_SECRET_KEY {
             Ok(())
         } else {
             Err(fixed_failure())
@@ -442,7 +446,14 @@ mod tests {
         let bridge = Arc::new(RecordingSecretBridge::default());
         let store = AndroidSecretStore::from_bridge(bridge.clone());
 
-        for key in ["provider/openai", "provider/minimax", "provider/deepseek"] {
+        for key in [
+            "provider/openai",
+            "provider/minimax",
+            "provider/deepseek",
+            "provider/opencode-go",
+            "provider/openrouter",
+            crate::DEVICE_IDENTITY_SECRET_KEY,
+        ] {
             store
                 .set(key, SecretValue::new("bounded-secret"))
                 .expect("canonical key");
@@ -450,7 +461,7 @@ mod tests {
             store.delete(key).expect("canonical key");
         }
 
-        assert_eq!(bridge.call_count(), 9);
+        assert_eq!(bridge.call_count(), 18);
         assert!(bridge
             .calls()
             .iter()

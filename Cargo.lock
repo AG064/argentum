@@ -337,6 +337,7 @@ name = "argentum-app"
 version = "0.1.0-rc.1"
 dependencies = [
  "argentum-cli",
+ "argentum-devices",
  "argentum-domain",
  "argentum-platform",
  "argentum-security",

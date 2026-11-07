@@ -1,6 +1,6 @@
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -149,6 +149,19 @@ export global App {
     // Set by touch hosts such as Android. The composer then waits for a tap
     // instead of taking focus, so the on-screen keyboard does not open by itself.
     in-out property <bool> touch_device: false;
+    // Pairing with another device. The host owns the identity and the store;
+    // the page only shows state and passes the owner's decisions.
+    in-out property <string> device_fingerprint: "";
+    in-out property <[DeviceView]> devices: [];
+    // idle, waiting, connecting, code, or error.
+    in-out property <string> device_pair_state: "idle";
+    in-out property <string> device_pair_code: "";
+    in-out property <string> device_pair_detail: "";
+    callback device_refresh();
+    callback device_listen();
+    callback device_connect(string);
+    callback device_confirm(bool, string);
+    callback device_forget(string);
     callback submit_task(string);
     callback cancel_run(string);
     callback new_session();

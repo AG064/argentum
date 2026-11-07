@@ -18,7 +18,7 @@ use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
 use sha2::{Digest, Sha256};
 
 /// Where the private key is kept in the system credential store.
-pub const IDENTITY_SECRET_KEY: &str = "device/identity-ed25519";
+pub const IDENTITY_SECRET_KEY: &str = argentum_platform::DEVICE_IDENTITY_SECRET_KEY;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DeviceError {

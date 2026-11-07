@@ -33,6 +33,8 @@ pub use authority::{
 const MAX_WORKSPACE_CONFIG_BYTES: u64 = 8 * 1024;
 const DATA_DIR_ENV: &str = "ARGENTUM_DATA_DIR";
 pub const SECRET_SERVICE: &str = "com.argentum.Argentum";
+/// Where this install keeps its device identity in the credential store.
+pub const DEVICE_IDENTITY_SECRET_KEY: &str = "device/identity-ed25519";
 
 #[derive(Debug, Error)]
 pub enum PlatformError {

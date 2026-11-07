@@ -1,3 +1,4 @@
+pub mod devices_ui;
 pub mod native_host;
 pub mod ui_bridge;
 

@@ -68,6 +68,13 @@ pub struct HostConfig {
     secret_store: Arc<dyn SecretStore>,
 }
 
+impl HostConfig {
+    /// The credential store this host was configured with.
+    pub fn secret_store(&self) -> Arc<dyn SecretStore> {
+        Arc::clone(&self.secret_store)
+    }
+}
+
 impl std::fmt::Debug for HostConfig {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

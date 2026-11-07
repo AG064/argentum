@@ -49,8 +49,10 @@ confirm. Paired devices are kept in the store's `paired_devices` table, and
 `argentum_devices::exchange` runs the exchange over any stream as bounded JSON
 lines, tested over a loopback TCP connection. `argentum device pair --listen`
 waits up to two minutes for one device, `--connect HOST:PORT` connects to it,
-and both ask the owner to type y when the codes match. The in-app pairing
-screen and remote sessions are not built yet.
+and both ask the owner to type y when the codes match. Settings > Devices does
+the same in the app on both platforms, and was checked on the Android emulator
+against a stand-in device (`cargo run -p argentum-devices --example pair_peer`).
+Remote sessions are not built yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.

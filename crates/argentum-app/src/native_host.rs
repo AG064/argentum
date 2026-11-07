@@ -592,6 +592,15 @@ where
         .enable_all()
         .build()
         .map_err(|_| NativeHostError::Runtime)?;
+    // Settings > Devices reads the identity and paired devices itself.
+    let devices = crate::devices_ui::DevicesContext {
+        database: config.database.clone(),
+        secrets: config.secret_store(),
+    };
+    let configure_ui = move |ui: &UiHandle| {
+        crate::devices_ui::connect(ui, devices);
+        configure_ui(ui);
+    };
     let mut host = runtime
         .block_on(CommandHost::start_composed(config))
         .map_err(|error_value| match error_value {
