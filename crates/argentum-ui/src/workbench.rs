@@ -1277,7 +1277,7 @@ mod first_run_server_tests {
     }
 }
 
-const PALETTE_COMMAND_HELP: &str = "Commands: new, settings <page>, provider use <id>, provider context <tokens>, module on|off <id>, theme <name>";
+const PALETTE_COMMAND_HELP: &str = "Commands: new, settings <page>, open <panel>, compact, provider use <id>, provider context <tokens>, module on|off <id>, theme <name>";
 
 const SETTINGS_PAGES: [&str; 11] = [
     "providers",
@@ -1300,6 +1300,8 @@ struct PaletteContext {
     current_profile: String,
     /// Modules the owner may turn on or off in this build.
     configurable_modules: Vec<String>,
+    /// Modules that are on now.
+    visible_modules: Vec<String>,
 }
 
 fn palette_context(window: &MainWindow) -> PaletteContext {
@@ -1315,6 +1317,14 @@ fn palette_context(window: &MainWindow) -> PaletteContext {
             (0..surfaces.row_count())
                 .filter_map(|index| surfaces.row_data(index))
                 .filter(|surface| surface.configurable)
+                .map(|surface| surface.id.to_string())
+                .collect()
+        },
+        visible_modules: {
+            let surfaces = window.get_harness_surfaces();
+            (0..surfaces.row_count())
+                .filter_map(|index| surfaces.row_data(index))
+                .filter(|surface| surface.visible)
                 .map(|surface| surface.id.to_string())
                 .collect()
         },
@@ -1341,6 +1351,9 @@ enum PaletteCommand {
         id: &'static str,
         label: &'static str,
     },
+    OpenPanel(SurfaceId),
+    /// Compaction loses detail, so this opens its confirmation.
+    Compact,
 }
 
 impl PaletteCommand {
@@ -1358,6 +1371,8 @@ impl PaletteCommand {
                 surface.label()
             ),
             Self::Theme { label, .. } => format!("Use the {label} theme"),
+            Self::OpenPanel(surface) => format!("Show the {} panel", surface.label()),
+            Self::Compact => "Review compaction in Settings > Diagnostics".into(),
         }
     }
 }
@@ -1372,6 +1387,20 @@ fn parse_palette_command(
     let rest = &words[1..];
     let command = match (verb.as_str(), rest) {
         ("new", []) => Ok(PaletteCommand::NewChat),
+        ("compact", []) => Ok(PaletteCommand::Compact),
+        ("open", [name]) => {
+            let id = name.to_ascii_lowercase();
+            match SurfaceId::from_id(&id).filter(|surface| surface.is_inspector()) {
+                Some(surface) if context.visible_modules.contains(&id) => {
+                    Ok(PaletteCommand::OpenPanel(surface))
+                }
+                Some(surface) => Err(format!(
+                    "The {} module is off. Turn it on with: module on {id}",
+                    surface.label()
+                )),
+                None => Err(format!("There is no panel called {name}.")),
+            }
+        }
         ("settings", []) => Ok(PaletteCommand::Settings("providers")),
         ("settings", [page]) => SETTINGS_PAGES
             .iter()
@@ -1421,7 +1450,9 @@ fn parse_palette_command(
             .ok_or_else(|| format!("There is no theme called {name}.")),
         // A bare word is a search, such as 'theme' to list the themes. With
         // more words it was meant as a command, so it says what is wrong.
-        ("new" | "settings" | "provider" | "module" | "theme", rest) if !rest.is_empty() => {
+        ("new" | "compact" | "open" | "settings" | "provider" | "module" | "theme", rest)
+            if !rest.is_empty() =>
+        {
             Err(format!("That is not a complete {verb} command."))
         }
         _ => return None,
@@ -1461,6 +1492,11 @@ fn run_palette_command<D, P>(
             preset: Some(id.to_owned()),
             ..UiPatch::default()
         }),
+        PaletteCommand::OpenPanel(surface) => app.invoke_set_inspector_surface(surface.id().into()),
+        PaletteCommand::Compact => {
+            window.set_settings_section("diagnostics".into());
+            app.invoke_open_settings();
+        }
     }
 }
 
@@ -1473,6 +1509,7 @@ mod palette_command_tests {
             profiles: vec![("deepseek".into(), "DeepSeek".into())],
             current_profile: "deepseek".into(),
             configurable_modules: vec!["sessions".into()],
+            visible_modules: vec!["usage".into()],
         }
     }
 
@@ -1503,6 +1540,16 @@ mod palette_command_tests {
             parse("module off sessions"),
             Some(Ok(PaletteCommand::Module { visible: false, .. }))
         ));
+        assert_eq!(parse("compact"), Some(Ok(PaletteCommand::Compact)));
+        assert_eq!(
+            parse("open Usage"),
+            Some(Ok(PaletteCommand::OpenPanel(SurfaceId::Usage)))
+        );
+        assert!(matches!(
+            parse("open requests"),
+            Some(Err(problem)) if problem.contains("module on requests")
+        ));
+        assert!(matches!(parse("open nowhere"), Some(Err(_))));
     }
 
     #[test]
