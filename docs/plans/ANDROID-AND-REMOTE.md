@@ -29,6 +29,9 @@ its own, and one install can drive the other.
 
 ## Phase 2: commands everywhere
 
+Started: the palette runs `new`, `settings <page>`, `provider use <id>`,
+`provider context <tokens>`, `module on|off <id>` and `theme <name>`.
+
 - The command palette accepts the CLI command set (`provider`, `module`, `session`,
   `permissions show`, `usage` and so on) and shows the same output.
 - Commands that need an owner console, such as `permissions select`, stay
