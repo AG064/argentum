@@ -8,6 +8,7 @@
 //! An identity grants nothing by itself. What a paired device may ask for is
 //! decided by each device's own persisted workspace policy.
 
+pub mod channel;
 pub mod exchange;
 pub mod pairing;
 

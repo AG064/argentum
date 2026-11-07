@@ -52,7 +52,13 @@ waits up to two minutes for one device, `--connect HOST:PORT` connects to it,
 and both ask the owner to type y when the codes match. Settings > Devices does
 the same in the app on both platforms, and was checked on the Android emulator
 against a stand-in device (`cargo run -p argentum-devices --example pair_peer`).
-Remote sessions are not built yet.
+
+The connection for remote sessions is `argentum_devices::channel`: an X25519
+handshake signed by both identity keys, accepted only from a paired device, then
+ChaCha20-Poly1305 frames with one key per direction and counter nonces. It is
+built from `ring` instead of Noise XX, which would need a new dependency.
+Carrying the command protocol over it, and choosing which device a session runs
+on, are not built yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.
