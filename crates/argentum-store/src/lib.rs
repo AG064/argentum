@@ -40,6 +40,7 @@ pub const SCHEMA_VERSION: u16 = 23;
 
 mod command_identity;
 mod context_budget;
+mod devices;
 mod extensions;
 mod grant_lookup;
 mod history;
@@ -68,6 +69,7 @@ pub use command_identity::{
     MAX_RETAINED_COMMAND_RESULT_BODIES_PER_STORE,
 };
 pub use context_summary::{ContextCommitToken, SummarySnapshot};
+pub use devices::PairedDeviceRecord;
 pub use recovery::StoreHostOwner;
 pub use working_context::{ContextSource, ContextSourceWindow};
 
@@ -3838,6 +3840,7 @@ impl Store {
             "TEXT CHECK(line_count_availability IS NULL OR line_count_availability IN ('computed', 'unavailable', 'unknown'))",
         )?;
         extensions::migrate(&additive)?;
+        devices::migrate(&additive)?;
         additive.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         ensure_column(&additive, "goal_invocations", "owner_generation", "INTEGER")?;
         // F09 development builds may already have created schema 18 before
@@ -5750,7 +5753,7 @@ mod tests {
                 .expect("store identity");
             (tables, indexes, identity)
         };
-        assert_eq!((tables, indexes), (32, 29));
+        assert_eq!((tables, indexes), (33, 29));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection

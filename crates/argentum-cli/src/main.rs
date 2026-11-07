@@ -910,20 +910,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_recovery_command(database, action, json).await?;
         }
-        Arguments::Device { json } => {
-            // The key is created on first use and stays in the credential store.
-            let store = argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
-            let identity = argentum_devices::DeviceIdentity::load_or_create(store.as_ref())?;
-            if json {
-                println!(
-                    "{}",
-                    serde_json::json!({ "fingerprint": identity.fingerprint() })
-                );
-            } else {
-                println!("This device: {}", identity.fingerprint());
-                println!("When pairing, check that the other device shows the same code.");
-            }
-        }
+        Arguments::Device { action, json } => run_device_command(action, json)?,
         Arguments::Accounting {
             options,
             action,
@@ -5138,6 +5125,61 @@ async fn print_session_row(
     Ok(())
 }
 
+fn run_device_command(action: DeviceAction, json: bool) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        DeviceAction::Show => {
+            // The key is created on first use and stays in the credential store.
+            let secrets =
+                argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
+            let identity = argentum_devices::DeviceIdentity::load_or_create(secrets.as_ref())?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "fingerprint": identity.fingerprint() })
+                );
+            } else {
+                println!("This device: {}", identity.fingerprint());
+                println!("When pairing, check that the other device shows the same code.");
+            }
+        }
+        DeviceAction::List => {
+            let store = Store::open(AppPaths::discover()?.database)?;
+            let devices = store.paired_devices()?;
+            if json {
+                let rows = devices
+                    .iter()
+                    .map(|device| {
+                        serde_json::json!({
+                            "fingerprint": device.fingerprint,
+                            "name": device.name,
+                            "paired_at": device.paired_at,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                println!("{}", serde_json::json!({ "devices": rows }));
+            } else if devices.is_empty() {
+                println!("No devices are paired with this one.");
+            } else {
+                for device in devices {
+                    println!("{}  {}", device.fingerprint, device.name);
+                }
+            }
+        }
+        DeviceAction::Forget(fingerprint) => {
+            let store = Store::open(AppPaths::discover()?.database)?;
+            let forgotten = store.forget_paired_device(&fingerprint)?;
+            if json {
+                println!("{}", serde_json::json!({ "forgotten": forgotten }));
+            } else if forgotten {
+                println!("Forgot {fingerprint}. It can no longer reach this device.");
+            } else {
+                return Err(format!("No paired device has the fingerprint {fingerprint}.").into());
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn run_recovery_command(
     database: PathBuf,
     action: RecoveryAction,
@@ -5576,12 +5618,20 @@ enum Arguments {
         action: RecoveryAction,
         json: bool,
     },
-    /// This install's pairing identity.
+    /// This install's pairing identity and the devices paired with it.
     Device {
+        action: DeviceAction,
         json: bool,
     },
     Help,
     Version,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum DeviceAction {
+    Show,
+    List,
+    Forget(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -5960,12 +6010,21 @@ where
         return parse_recovery_args(&values);
     }
     if command == "device" {
-        let rest = values[1..].iter().map(String::as_str).collect::<Vec<_>>();
-        return match rest.as_slice() {
-            ["show"] => Ok(Arguments::Device { json: false }),
-            ["show", "--json"] => Ok(Arguments::Device { json: true }),
-            _ => Err("Usage: argentum device show [--json]".into()),
+        let mut rest = values[1..].iter().map(String::as_str).collect::<Vec<_>>();
+        let json = rest.last() == Some(&"--json");
+        if json {
+            rest.pop();
+        }
+        let action = match rest.as_slice() {
+            ["show"] => DeviceAction::Show,
+            ["list"] => DeviceAction::List,
+            ["forget", fingerprint] => DeviceAction::Forget((*fingerprint).to_owned()),
+            _ => return Err(
+                "Usage: argentum device show|list [--json], or argentum device forget FINGERPRINT"
+                    .into(),
+            ),
         };
+        return Ok(Arguments::Device { action, json });
     }
     if command == "accounting" {
         return parse_accounting_args(&values);
@@ -8330,7 +8389,8 @@ argentum changes recovery [retry|restore OPERATION_ID] [OPTIONS]\n\n\
 argentum recovery inspect [--database PATH] [--json]\n  \
 argentum recovery reconcile [--database PATH] [--json]\n  \
 argentum recovery review --run-id RUN_ID --revision REVISION [--database PATH] [--json]\n\n\
-argentum device show [--json]\n\n\
+argentum device show|list [--json]\n  \
+argentum device forget FINGERPRINT\n\n\
 Commands:\n  \
 no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
@@ -9430,6 +9490,26 @@ mod tests {
     fn rejects_missing_values_and_unknown_options() {
         assert!(parse_args(["run", "--prompt"]).is_err());
         assert!(parse_args(["status", "--unknown"]).is_err());
+    }
+
+    #[test]
+    fn device_commands_parse() {
+        assert!(matches!(
+            parse_args(["device", "show", "--json"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Show,
+                json: true
+            })
+        ));
+        assert!(matches!(
+            parse_args(["device", "forget", "3f2a-91bc-07de-55a1-c004"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Forget(fingerprint),
+                json: false
+            }) if fingerprint == "3f2a-91bc-07de-55a1-c004"
+        ));
+        assert!(parse_args(["device"]).is_err());
+        assert!(parse_args(["device", "forget"]).is_err());
     }
 
     #[test]

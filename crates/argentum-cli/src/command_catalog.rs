@@ -713,6 +713,20 @@ pub const COMMANDS: &[CommandEntry] = &[
         true,
     ),
     cmd(
+        "core",
+        &["device", "list"],
+        "List the devices paired with this one",
+        Gate::None,
+        false,
+    ),
+    cmd(
+        "core",
+        &["device", "forget"],
+        "Forget a paired device",
+        Gate::None,
+        true,
+    ),
+    cmd(
         "recovery",
         &["recovery", "inspect"],
         "Inspect abandoned local owner state",
