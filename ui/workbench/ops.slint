@@ -596,7 +596,7 @@ component CatalogGroup inherits VerticalLayout {
     in property <bool> tested;
     in property <int> shown: root.presets.length;
     // Rows of the other tab are hidden and must leave no gap.
-    spacing: 0px;
+    spacing: Theme.sp0;
     if root.shown > 0: SectionLabel { text: root.title; height: 24px; }
     for preset in root.presets: Row {
         visible: preset.tested == root.tested;

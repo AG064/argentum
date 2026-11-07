@@ -88,7 +88,7 @@ export component FirstRun inherits Rectangle {
             VerticalLayout {
                 // Hidden presets must take no room, spacing included, so each
                 // card carries its own gap and collapses fully when hidden.
-                spacing: 0px;
+                spacing: Theme.sp0;
                 for preset[i] in App.provider_presets: Rectangle {
                     property <bool> shown: preset.supported && (root.show-all || preset.featured);
                     visible: self.shown;
