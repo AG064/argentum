@@ -401,7 +401,8 @@ component Palette inherits Sheet {
                 accessible-label: "Search commands";
                 edited => { App.palette_query(self.text); }
                 accepted => {
-                    if App.palette_items.length > 0 {
+                    // A command with a mistake has no id; it stays open to explain.
+                    if App.palette_items.length > 0 && App.palette_items[0].id != "" {
                         App.palette_run(App.palette_items[0].id);
                         root.close();
                     }
