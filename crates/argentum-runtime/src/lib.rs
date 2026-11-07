@@ -292,6 +292,28 @@ pub enum RuntimeError {
 }
 
 /// Words for the context preview's compaction state. JSON keeps the identifier.
+/// A whole number with thousands separators, such as 1,000,000.
+fn grouped(value: impl std::fmt::Display) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
+/// "1 selection" or "2 selections".
+fn counted(count: usize, singular: &str, plural: &str) -> String {
+    format!(
+        "{} {}",
+        grouped(count),
+        if count == 1 { singular } else { plural }
+    )
+}
+
 fn compaction_label(state: &str) -> &str {
     match state {
         "no_active_summary" => "no summary in use",
@@ -1699,10 +1721,10 @@ impl RuntimeService {
                     .collect();
                 self.publish_transient(AppEvent::InstructionsSnapshot {
                     summary: format!(
-                        "{} documents | {} selections | {} serialized bytes",
-                        preview.documents.len(),
-                        preview.selections.len(),
-                        preview.serialized_bytes,
+                        "{} | {} | {} serialized bytes",
+                        counted(preview.documents.len(), "document", "documents"),
+                        counted(preview.selections.len(), "selection", "selections"),
+                        grouped(preview.serialized_bytes),
                     ),
                     documents,
                     selections,
@@ -1748,8 +1770,8 @@ impl RuntimeService {
                     |accounting| {
                         format!(
                             "{} input tokens of {} usable, {}",
-                            accounting.accounted_input,
-                            accounting.usable_context,
+                            grouped(accounting.accounted_input),
+                            grouped(accounting.usable_context),
                             if accounting.fits {
                                 "fits"
                             } else {
@@ -1767,10 +1789,10 @@ impl RuntimeService {
                     },
                     |instructions| {
                         format!(
-                            "{} documents | {} selections | {} bytes",
-                            instructions.documents.len(),
-                            instructions.selections.len(),
-                            instructions.serialized_bytes
+                            "{} | {} | {} bytes",
+                            counted(instructions.documents.len(), "document", "documents"),
+                            counted(instructions.selections.len(), "selection", "selections"),
+                            grouped(instructions.serialized_bytes)
                         )
                     },
                 );
@@ -1790,7 +1812,7 @@ impl RuntimeService {
                         "Token capacity",
                         preview
                             .token_capacity
-                            .map_or_else(|| "unknown".into(), |value| value.to_string()),
+                            .map_or_else(|| "unknown".into(), grouped),
                     ),
                     RecordLine::new(
                         "Selected context",
@@ -1799,7 +1821,7 @@ impl RuntimeService {
                             preview.total_sources,
                             preview.selected_groups,
                             preview.selected_messages,
-                            preview.selected_bytes,
+                            grouped(preview.selected_bytes),
                             preview.selected_exchanges,
                         ),
                     ),
@@ -1819,7 +1841,7 @@ impl RuntimeService {
                             preview.retained_observations,
                             preview.metadata_only_observations,
                             preview.non_body_observations,
-                            preview.retained_observation_bytes,
+                            grouped(preview.retained_observation_bytes),
                         ),
                     ),
                     RecordLine::new("Accounting", accounting),
@@ -20176,5 +20198,20 @@ mod tests {
             connected: true,
             detail: "test provider".into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod display_number_tests {
+    use super::{counted, grouped};
+
+    #[test]
+    fn numbers_are_grouped_and_counts_agree_with_their_noun() {
+        assert_eq!(grouped(0_u64), "0");
+        assert_eq!(grouped(999_u64), "999");
+        assert_eq!(grouped(24_408_u64), "24,408");
+        assert_eq!(grouped(1_000_000_usize), "1,000,000");
+        assert_eq!(counted(1, "selection", "selections"), "1 selection");
+        assert_eq!(counted(0, "document", "documents"), "0 documents");
     }
 }
