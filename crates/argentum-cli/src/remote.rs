@@ -133,6 +133,105 @@ mod tests {
         DeviceIdentity::load_or_create(&MemoryStore::default()).unwrap()
     }
 
+    /// A real command host answers a request sent from a paired device, and
+    /// the server ends cleanly when that device hangs up.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_paired_device_drives_a_real_command_host() {
+        use crate::protocol::RequestEnvelope;
+        use argentum_domain::AppCommand;
+
+        let (pc, phone) = (identity(), identity());
+        let (pc_key, phone_key) = (pc.public_key(), phone.public_key());
+        let workspace = tempfile::tempdir().unwrap();
+        let host = CommandHost::start_composed(crate::HostConfig::in_memory(workspace.path()))
+            .await
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let serving = tokio::spawn(async move {
+            let (stream, _) = tokio::task::spawn_blocking(move || listener.accept())
+                .await
+                .unwrap()
+                .unwrap();
+            let writer = stream.try_clone().unwrap();
+            let closer = stream.try_clone().unwrap();
+            let channel = tokio::task::spawn_blocking(move || {
+                SecureChannel::accept(stream, &phone, |key| *key == pc_key)
+            })
+            .await
+            .unwrap()
+            .unwrap();
+            let (sender, receiver) = channel.split(writer);
+            let result = serve_jsonl_over_channel(host, receiver, sender).await;
+            closer.shutdown(Shutdown::Both).ok();
+            result
+        });
+
+        let request = format!(
+            "{}\n",
+            serde_json::to_string(&RequestEnvelope::command(
+                "remote-list",
+                AppCommand::ListSessions {
+                    query: String::new(),
+                    filter: Default::default(),
+                    limit: 20,
+                    cursor: None,
+                },
+            ))
+            .unwrap()
+        );
+        let lines = tokio::task::spawn_blocking(move || {
+            let stream = TcpStream::connect(address).unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(20)))
+                .unwrap();
+            let writer = stream.try_clone().unwrap();
+            let channel = SecureChannel::connect(stream, &pc, |key| *key == phone_key).unwrap();
+            let (mut sender, mut receiver) = channel.split(writer.try_clone().unwrap());
+            sender.send(request.as_bytes()).unwrap();
+            let mut received = String::new();
+            while !received
+                .lines()
+                .any(|line| line.contains("SessionListLoaded"))
+            {
+                match receiver.receive() {
+                    Ok(chunk) => received.push_str(&String::from_utf8(chunk).unwrap()),
+                    Err(error) => panic!("{error}; received so far: {received}"),
+                }
+            }
+            writer.shutdown(Shutdown::Write).unwrap();
+            while let Ok(chunk) = receiver.receive() {
+                received.push_str(&String::from_utf8(chunk).unwrap());
+            }
+            received
+        })
+        .await
+        .unwrap();
+
+        let parsed = lines
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(parsed[0]["type"], "ready", "{lines}");
+        assert!(
+            parsed
+                .iter()
+                .any(|line| line["request_id"] == "remote-list"
+                    && line["type"] == "command_completed")
+        );
+        assert!(parsed
+            .iter()
+            .any(|line| line["event"]["SessionListLoaded"]["rows"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 1)));
+        tokio::time::timeout(std::time::Duration::from_secs(10), serving)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn lines_cross_the_bridge_in_both_directions_until_hang_up() {
         let (pc, phone) = (identity(), identity());
