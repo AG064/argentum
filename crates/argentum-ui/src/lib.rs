@@ -3471,6 +3471,16 @@ fn verification_grant_for(grant: &ApprovalGrantRecord, runner_id: &str) -> bool 
     )
 }
 
+fn verification_runner_description(id: &str) -> Option<&'static str> {
+    Some(match id {
+        "cargo-fmt-check" => "Runs cargo fmt --check.",
+        "cargo-check-locked" => "Runs cargo check --locked.",
+        "cargo-test-locked" => "Runs cargo test --locked.",
+        "cargo-clippy-strict" => "Runs cargo clippy with warnings as errors.",
+        _ => return None,
+    })
+}
+
 fn verification_runner_model(
     runners: &[VerificationRunnerInspection],
     grants: &[ApprovalGrantRecord],
@@ -3490,16 +3500,18 @@ fn verification_runner_model(
             } else {
                 "Available"
             };
+            // The definition digest has its own line, so this says what the
+            // runner is and does in words.
             let detail = runner.reason.clone().unwrap_or_else(|| {
-                format!(
-                    "{} | {}",
-                    runner.origin,
-                    runner
-                        .definition_sha256
-                        .as_ref()
-                        .map(|digest| digest.0.clone())
-                        .unwrap_or_else(|| "definition pending".into())
-                )
+                let origin = match runner.origin.as_str() {
+                    "built_in" => "Built in",
+                    "project" => "From this project",
+                    other => other,
+                };
+                match verification_runner_description(&runner.id) {
+                    Some(description) => format!("{origin}. {description}"),
+                    None => format!("{origin}."),
+                }
             });
             VerificationRunnerView {
                 id: runner.id.clone().into(),

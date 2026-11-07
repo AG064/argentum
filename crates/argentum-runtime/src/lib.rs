@@ -291,6 +291,18 @@ pub enum RuntimeError {
     ModuleDisabled,
 }
 
+/// Words for the context preview's compaction state. JSON keeps the identifier.
+fn compaction_label(state: &str) -> &str {
+    match state {
+        "no_active_summary" => "no summary in use",
+        "committed_lossy_summary_reused" => "an earlier summary is in use",
+        "summary_invalidated_source_eligibility_or_window" => {
+            "the earlier summary no longer applies"
+        }
+        other => other,
+    }
+}
+
 const MAX_MODEL_ROUNDS: usize = argentum_domain::working_context::MAX_RUN_GROUPS as usize - 1;
 const MAX_REPEATED_ROUNDS: usize = 4;
 
@@ -1735,8 +1747,14 @@ impl RuntimeService {
                     },
                     |accounting| {
                         format!(
-                            "{} input tokens | usable context {} | fits {}",
-                            accounting.accounted_input, accounting.usable_context, accounting.fits
+                            "{} input tokens of {} usable, {}",
+                            accounting.accounted_input,
+                            accounting.usable_context,
+                            if accounting.fits {
+                                "fits"
+                            } else {
+                                "does not fit"
+                            }
                         )
                     },
                 );
@@ -1759,7 +1777,15 @@ impl RuntimeService {
                 let records = vec![
                     RecordLine::new("Session", session.to_string()),
                     RecordLine::new("Profile", profile),
-                    RecordLine::new("Preview basis", preview.preview_basis.to_owned()),
+                    RecordLine::new(
+                        "Preview basis",
+                        match preview.preview_basis {
+                            "next_task_at_workspace_root_without_prompt" => {
+                                "The next task, before its message".to_owned()
+                            }
+                            other => other.to_owned(),
+                        },
+                    ),
                     RecordLine::new(
                         "Token capacity",
                         preview
@@ -1801,7 +1827,7 @@ impl RuntimeService {
                         "Compaction",
                         format!(
                             "{} | checkpoint {} | {} sources",
-                            preview.compaction,
+                            compaction_label(preview.compaction),
                             preview
                                 .summary_checkpoint_id
                                 .map_or_else(|| "none".into(), |value| value.to_string()),
@@ -1812,11 +1838,11 @@ impl RuntimeService {
                 ];
                 self.publish_transient(AppEvent::ContextSnapshotLoaded {
                     summary: format!(
-                        "Session {} | {} selected messages | {} selected bytes | compaction {}",
+                        "Session {} | {} selected messages | {} selected bytes | {}",
                         session,
                         preview.selected_messages,
                         preview.selected_bytes,
-                        preview.compaction,
+                        compaction_label(preview.compaction),
                     ),
                     records,
                     error: String::new(),
