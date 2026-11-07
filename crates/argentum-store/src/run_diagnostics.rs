@@ -1424,6 +1424,7 @@ mod tests {
                     reasoning_tokens: None,
                     cached_input_tokens: Some(10),
                     context_window_tokens: Some(4096),
+                    turn_total: None,
                 },
             },
         );

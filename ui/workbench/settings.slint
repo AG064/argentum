@@ -129,7 +129,7 @@ component ProvidersPage inherits VerticalLayout {
         ProviderCatalog { }
         Row {
             title: "Custom endpoint";
-            detail: "An OpenAI-compatible service over HTTPS. Argentum cannot store an API key for these yet.";
+            detail: "Any OpenAI-compatible server, such as llama-server. API keys can't be saved for these yet.";
             icon: "plus";
             clicked => {
                 // A draft only. The provider in use stays as it is until this is saved.
@@ -146,7 +146,7 @@ component ProvidersPage inherits VerticalLayout {
     Divider { }
     Heading {
         title: App.provider_custom_draft ? "Custom endpoint" : App.provider_label;
-        detail: App.provider_custom_draft ? "OpenAI-compatible, over HTTPS" : App.provider_kind_label;
+        detail: App.provider_custom_draft ? "OpenAI-compatible" : App.provider_kind_label;
     }
     label-field := Field {
         label: "Name";
@@ -205,6 +205,75 @@ component ProvidersPage inherits VerticalLayout {
     CredentialSection { }
     BudgetSection { }
     LocalModelSection { }
+}
+
+// Pairing a PC and a phone. Both screens show the same six digits, and the
+// owner confirms on each. Nothing is saved without that confirmation.
+component DevicesPage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    init => { App.device_refresh(); }
+    Heading {
+        title: "Devices";
+        detail: "Pair this device with your PC or phone on the same network. Pairing grants nothing by itself; permissions stay with each device.";
+    }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Label { text: "This device"; tone: "muted"; size: "sm"; }
+        // Monospace only for a real fingerprint, which always has four hyphens.
+        Label { text: App.device_fingerprint; size: "sm"; mono: App.device_fingerprint.character-count == 24; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
+    }
+    SectionLabel { text: "PAIRED"; height: 22px; }
+    if App.devices.length == 0: Label { text: "No devices are paired with this one."; tone: "muted"; size: "sm"; }
+    for device in App.devices: HorizontalLayout {
+        spacing: Theme.sp8;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            Label { text: device.name; }
+            Label { text: device.fingerprint; tone: "muted"; size: "xs"; mono: true; }
+        }
+        Btn { label: "Forget"; small: true; clicked => { App.device_forget(device.fingerprint); } }
+    }
+    SectionLabel { text: "PAIR A DEVICE"; height: 22px; }
+    if App.device_pair_state == "idle" || App.device_pair_state == "error": VerticalLayout {
+        spacing: Theme.sp8;
+        Label {
+            text: "On one device, wait for a connection. On the other, enter the address it shows.";
+            tone: "muted";
+            size: "sm";
+            wrap: word-wrap;
+        }
+        Btn { label: "Wait for a device"; clicked => { App.device_listen(); } }
+        address := Field { label: "Address of the other device"; placeholder: "192.168.1.20:47910"; mono: true; }
+        Btn {
+            label: "Connect";
+            enabled: address.value != "";
+            clicked => { App.device_connect(address.value); }
+        }
+    }
+    if App.device_pair_state == "waiting" || App.device_pair_state == "connecting": Label {
+        text: App.device_pair_detail;
+        wrap: word-wrap;
+    }
+    if App.device_pair_state == "code": VerticalLayout {
+        spacing: Theme.sp10;
+        Label { text: "Check that the other device shows the same six digits."; wrap: word-wrap; }
+        Text {
+            text: App.device_pair_code;
+            color: Theme.text;
+            font-size: Theme.fs-2xl + 6px;
+            font-weight: Theme.w-medium;
+            horizontal-alignment: center;
+        }
+        Label { text: App.device_pair_detail; tone: "muted"; size: "xs"; mono: true; wrap: word-wrap; }
+        name := Field { label: "Name for the other device"; value: "Paired device"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            alignment: start;
+            Btn { label: "They match"; kind: "primary"; clicked => { App.device_confirm(true, name.value); } }
+            Btn { label: "Cancel"; clicked => { App.device_confirm(false, ""); } }
+        }
+    }
+    if App.device_pair_state == "error": Label { text: App.device_pair_detail; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
 }
 
 component ModulesPage inherits VerticalLayout {
@@ -415,6 +484,7 @@ component PermissionsPage inherits VerticalLayout {
 
 component WorkspacePage inherits VerticalLayout {
     spacing: Theme.sp16;
+    init => { App.usage_refresh(); }
     Heading { title: "Workspace"; detail: "The folder Argentum works in. File access never leaves it."; }
     VerticalLayout {
         spacing: Theme.sp4;
@@ -435,6 +505,18 @@ component WorkspacePage inherits VerticalLayout {
             kind: "primary";
             enabled: target.value != "" && !App.running;
             clicked => { App.open_workspace(target.value); }
+        }
+    }
+    if App.projects.length > 0: VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "RECENT PROJECTS"; height: 22px; }
+        for project in App.projects: Row {
+            title: project.name + (project.current ? "  (open)" : "");
+            detail: project.path + "  ·  " + project.detail;
+            icon: "folder";
+            selected: project.current;
+            enabled: !project.current && !App.running;
+            clicked => { App.open_workspace(project.path); }
         }
     }
     Text { text: "Argentum restarts to open a different folder. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
@@ -569,6 +651,7 @@ export component Settings inherits Rectangle {
                     { id: "modules", icon: "boxes", label: "Modules" },
                     { id: "appearance", icon: "sparkles", label: "Appearance" },
                     { id: "permissions", icon: "approval", label: "Permissions" },
+                    { id: "devices", icon: "lock", label: "Devices" },
                     { id: "updates", icon: "refresh", label: "Updates" },
                     { id: "about", icon: "info", label: "About" },
                 ]: IconBtn {
@@ -606,6 +689,7 @@ export component Settings inherits Rectangle {
                         Row { title: "Capabilities"; icon: "plug"; selected: App.settings_section == "capabilities"; clicked => { App.settings_section = "capabilities"; } }
                         Row { title: "Diagnostics"; icon: "activity"; selected: App.settings_section == "diagnostics"; clicked => { App.settings_section = "diagnostics"; } }
                         Row { title: "Permissions"; icon: "approval"; selected: App.settings_section == "permissions"; clicked => { App.settings_section = "permissions"; } }
+                        Row { title: "Devices"; icon: "lock"; selected: App.settings_section == "devices"; clicked => { App.settings_section = "devices"; } }
                         Row { title: "Updates"; icon: "refresh"; selected: App.settings_section == "updates"; clicked => { App.settings_section = "updates"; } }
                         Row { title: "About"; icon: "info"; selected: App.settings_section == "about"; clicked => { App.settings_section = "about"; } }
                     }
@@ -630,6 +714,7 @@ export component Settings inherits Rectangle {
                             if App.settings_section == "tools": ToolsPage { }
                             if App.settings_section == "capabilities": CapabilitiesPage { }
                             if App.settings_section == "diagnostics": DiagnosticsPage { }
+                            if App.settings_section == "devices": DevicesPage { }
                             if App.settings_section == "updates": UpdatesPage { }
                             if App.settings_section == "about": AboutPage { }
                         }

@@ -27,6 +27,9 @@ pub struct AccessReview {
     pub busy: bool,
 }
 
+/// How many paired devices the host facts name.
+const MAX_PAIRED_DEVICE_FACTS: usize = 8;
+
 impl RuntimeService {
     pub fn verification_summary(&self) -> Result<String, RuntimeError> {
         let policy = self.execution_policy()?;
@@ -125,8 +128,22 @@ impl RuntimeService {
             self.store
                 .recent_run_outcomes(self.project_id, session, exclude)?
         };
+        // Owner-entered names only; fingerprints and keys stay out of prompts.
+        let paired = self
+            .store
+            .paired_devices()?
+            .iter()
+            .take(MAX_PAIRED_DEVICE_FACTS)
+            .map(|device| data(&device.name, 64))
+            .collect::<Vec<_>>();
+        let devices = json!({
+            "this_device":{"os":std::env::consts::OS,"arch":std::env::consts::ARCH},
+            "paired":paired,
+            "remote_access":if paired.is_empty() {"none paired"} else {"The owner can drive a paired device with argentum device serve and argentum device connect. No model tool reaches another device; say what to run there instead of claiming you did."},
+        });
         Ok(json!({
             "application":"Argentum", "version":env!("CARGO_PKG_VERSION"),
+            "devices":devices,
             "recent_run_outcomes":outcomes,
             "build_identity":null, "os":std::env::consts::OS,
             "provider":profile.map(|p| json!({"id":data(&p.id,64),"label":data(&p.label,80),"kind":p.kind,"configured_model":data(&p.model,256)})),

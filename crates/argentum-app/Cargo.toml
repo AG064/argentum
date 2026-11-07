@@ -16,6 +16,7 @@ desktop-control = ["argentum-cli/desktop-control"]
 
 [dependencies]
 argentum-cli.workspace = true
+argentum-devices.workspace = true
 argentum-domain.workspace = true
 argentum-platform.workspace = true
 argentum-security.workspace = true

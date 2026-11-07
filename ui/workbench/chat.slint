@@ -269,22 +269,29 @@ export component Conversation inherits Rectangle {
             }
             if App.user_prompt != "": UserMessage { text: App.user_prompt; }
             if App.running || App.submission_pending || App.live_blocks.length > 0: LiveTurn { }
+            // Placed by hand: a wrapped Text inside a HorizontalLayout is measured
+            // as one line, which cut long errors off on narrow screens.
             if App.error_message != "": Rectangle {
                 border-radius: Theme.r-md;
                 background: Theme.diff-del-bg;
                 border-width: Theme.hair;
                 border-color: Theme.danger.with-alpha(0.35);
-                HorizontalLayout {
-                    padding: Theme.sp11;
-                    spacing: Theme.sp9;
-                    Icon { name: "triangle-alert"; size: Theme.icon-md; tint: Theme.danger; }
-                    Text {
-                        horizontal-stretch: 1;
-                        text: App.error_message;
-                        color: Theme.text;
-                        font-size: Theme.fs-sm;
-                        wrap: word-wrap;
-                    }
+                height: max(error-text.preferred-height, Theme.icon-md) + 2 * Theme.sp11;
+                Icon {
+                    x: Theme.sp11;
+                    y: Theme.sp11;
+                    name: "triangle-alert";
+                    size: Theme.icon-md;
+                    tint: Theme.danger;
+                }
+                error-text := Text {
+                    x: Theme.sp11 + Theme.icon-md + Theme.sp9;
+                    y: Theme.sp11;
+                    width: parent.width - self.x - Theme.sp11;
+                    text: App.error_message;
+                    color: Theme.text;
+                    font-size: Theme.fs-sm;
+                    wrap: word-wrap;
                 }
             }
         }
@@ -317,8 +324,8 @@ export component Composer inherits Rectangle {
     public function focus-input() { input.focus(); }
     in property <bool> narrow: false;
     private property <int> focus-tick: App.composer_focus_tick;
-    changed focus-tick => { input.focus(); }
-    init => { input.focus(); }
+    changed focus-tick => { if !App.touch_device { input.focus(); } }
+    init => { if !App.touch_device { input.focus(); } }
 
     private property <bool> can-send: input.text != "" && !App.submission_pending
         && !App.approval_open && !App.first_run_open;
@@ -372,6 +379,9 @@ export component Composer inherits Rectangle {
                 width: parent.width;
             }
             input := TextInput {
+                // Shared with the host, which restores a prompt that failed
+                // before it was saved.
+                text <=> App.draft;
                 x: 0;
                 y: min(0px, root.text-height - self.preferred-height);
                 width: parent.width - 8px;

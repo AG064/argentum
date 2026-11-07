@@ -334,6 +334,8 @@ async fn download_model_inner(
     Ok(target)
 }
 
+// Each platform's block returns, so the Android one needs `return`.
+#[allow(clippy::needless_return)]
 async fn publish_model_without_clobber(
     temporary: PathBuf,
     target: PathBuf,
@@ -448,6 +450,8 @@ async fn file_sha256(path: &Path) -> Result<String, ProviderError> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+// Each platform's block returns, so the Android one needs `return`.
+#[allow(clippy::needless_return)]
 fn path_contains_symlink(path: &Path) -> Result<bool, ProviderError> {
     #[cfg(target_os = "android")]
     {

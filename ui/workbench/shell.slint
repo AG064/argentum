@@ -6,7 +6,7 @@ import { Badge, Btn, Chip, Divider, EmptyState, Field, Focus, Icon, IconBtn, Lab
 import { BrandMark } from "../components/brand.slint";
 import { Composer, Conversation, EmptyHero } from "chat.slint";
 import { FirstRun, ProviderMenu } from "provider.slint";
-import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel } from "panels.slint";
+import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel, RequestsPanel } from "panels.slint";
 import { Settings } from "settings.slint";
 import { GoalPanel, SessionActionsSheet, VerificationReviewSheet } from "ops.slint";
 
@@ -217,6 +217,7 @@ component SidePanel inherits Rectangle {
             if App.active_inspector == "plan": PlanPanel { }
             if App.active_inspector == "activity": ActivityPanel { }
             if App.active_inspector == "trajectory": TrajectoryPanel { }
+            if App.active_inspector == "requests": RequestsPanel { }
         }
     }
 }
@@ -400,7 +401,8 @@ component Palette inherits Sheet {
                 accessible-label: "Search commands";
                 edited => { App.palette_query(self.text); }
                 accepted => {
-                    if App.palette_items.length > 0 {
+                    // A command with a mistake has no id; it stays open to explain.
+                    if App.palette_items.length > 0 && App.palette_items[0].id != "" {
                         App.palette_run(App.palette_items[0].id);
                         root.close();
                     }
@@ -438,6 +440,14 @@ export component Workbench inherits Rectangle {
         Theme.coarse = root.narrow;
         // Somewhere for Escape to land until the composer takes focus.
         keyboard.focus();
+    }
+    // A touch host says so after the window exists, when the composer may
+    // already have focus. Taking focus here closes the on-screen keyboard.
+    private property <bool> touch: App.touch_device;
+    changed touch => {
+        if root.touch {
+            keyboard.focus();
+        }
     }
     private property <bool> panel-wanted: Mods.any-panel && !App.inspector_collapsed && App.active_inspector != "";
     private property <bool> wide-enough-for-panel: root.width >= Theme.panel-dock-min;

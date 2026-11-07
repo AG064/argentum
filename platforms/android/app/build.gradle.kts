@@ -22,6 +22,15 @@ val syncAndroidTestBrandIcon by tasks.registering(Sync::class) {
     rename { "ic_argentum.png" }
 }
 
+// On-device inference is optional. Pass -PonDeviceInference=true to build the
+// llama.cpp engine into the app; it needs Vulkan C++ headers (VULKAN_INCLUDE_DIR).
+val onDeviceInferenceArgs: Array<String> =
+    if (providers.gradleProperty("onDeviceInference").orNull == "true") {
+        arrayOf("--features", "on-device-inference")
+    } else {
+        emptyArray()
+    }
+
 val buildRustDebug by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir.resolve("../.."))
     environment("CARGO_BUILD_JOBS", "1")
@@ -34,7 +43,8 @@ val buildRustDebug by tasks.registering(Exec::class) {
         "cargo", "ndk", "-t", "arm64-v8a", "-t", "x86_64",
         "-P", "28",
         "-o", rustDebugJniDir.get().asFile.absolutePath,
-        "build", "-p", "argentum-android", "--lib", "--locked"
+        "build", "-p", "argentum-android", "--lib", "--locked",
+        *onDeviceInferenceArgs
     )
 }
 
@@ -67,11 +77,16 @@ val buildRustRelease by tasks.registering(Exec::class) {
         "cargo", "ndk", "-t", "arm64-v8a", "-t", "x86_64",
         "-P", "28",
         "-o", rustReleaseJniDir.get().asFile.absolutePath,
-        "build", "-p", "argentum-android", "--lib", "--release", "--locked"
+        "build", "-p", "argentum-android", "--lib", "--release", "--locked",
+        *onDeviceInferenceArgs
     )
 }
 
 android {
+    // For diagnosing native crashes: keep symbols so Rust backtraces have names.
+    if (providers.gradleProperty("keepNativeSymbols").orNull == "true") {
+        packaging.jniLibs.keepDebugSymbols.add("**/*.so")
+    }
     namespace = "com.argentum"
     compileSdk = 36
     ndkVersion = "27.0.12077973"

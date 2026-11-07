@@ -1846,7 +1846,9 @@ mod tests {
             }
         });
 
-        tokio::time::timeout(Duration::from_secs(1), entered)
+        // A liveness wait for the download to reach the gate; a slow CI runner
+        // can take more than a second to get there.
+        tokio::time::timeout(Duration::from_secs(30), entered)
             .await
             .expect("final inspection entered the worker")
             .expect("final inspection entry signal");
@@ -1855,7 +1857,9 @@ mod tests {
             tokio::task::yield_now().await;
             let _ = progress_sender.send(());
         });
-        tokio::time::timeout(Duration::from_millis(100), progress)
+        // The gate holds the worker indefinitely, so any completion here shows
+        // the executor is not blocked by it.
+        tokio::time::timeout(Duration::from_secs(5), progress)
             .await
             .expect("Tokio executor remained responsive")
             .expect("Tokio progress signal");

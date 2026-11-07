@@ -1,6 +1,6 @@
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -146,6 +146,22 @@ export global App {
     in-out property <length> safe_area_top: 0px;
     in-out property <length> safe_area_bottom: 0px;
     in-out property <length> keyboard_inset: 0px;
+    // Set by touch hosts such as Android. The composer then waits for a tap
+    // instead of taking focus, so the on-screen keyboard does not open by itself.
+    in-out property <bool> touch_device: false;
+    // Pairing with another device. The host owns the identity and the store;
+    // the page only shows state and passes the owner's decisions.
+    in-out property <string> device_fingerprint: "";
+    in-out property <[DeviceView]> devices: [];
+    // idle, waiting, connecting, code, or error.
+    in-out property <string> device_pair_state: "idle";
+    in-out property <string> device_pair_code: "";
+    in-out property <string> device_pair_detail: "";
+    callback device_refresh();
+    callback device_listen();
+    callback device_connect(string);
+    callback device_confirm(bool, string);
+    callback device_forget(string);
     callback submit_task(string);
     callback cancel_run(string);
     callback new_session();
@@ -189,6 +205,9 @@ export global App {
     in-out property <[ProviderPresetView]> provider_presets: [];
     in-out property <string> first_run_error: "";
     callback first_run_choose(ProviderPresetView);
+    // Saves a server chosen at first run with the context size the owner gave.
+    callback first_run_save_server(string, string, string);
+    in-out property <string> provider_draft_context: "32768";
     callback first_run_finish();
     in-out property <bool> provider_credential_needed: false;
     in-out property <bool> provider_custom_draft: false;
@@ -235,6 +254,12 @@ export global App {
 
     // Usage module.
     in-out property <[ProviderUsageView]> usage_rows: [];
+    // The Requests module, for this session only.
+    in-out property <[UsageDayView]> usage_days: [];
+    in-out property <[ProjectView]> projects: [];
+    in-out property <[ContextPartView]> context_parts: [];
+    in-out property <string> request_context_summary: "";
+    in-out property <[RequestRowView]> request_rows: [];
     in-out property <string> usage_state: "idle"; // idle | loading | ready | error
     in-out property <string> usage_message: "";
     in-out property <string> usage_total: "";
@@ -306,6 +331,9 @@ export global App {
     in-out property <[ProviderPresetView]> provider_presets_hosted: [];
     in-out property <[ProviderPresetView]> provider_presets_aggregator: [];
     in-out property <[ProviderPresetView]> provider_presets_local: [];
+    // Rows per catalog group on each tab: hosted, aggregator, local, custom.
+    in-out property <[int]> provider_group_tested: [0, 0, 0, 0];
+    in-out property <[int]> provider_group_testing: [0, 0, 0, 0];
     in-out property <[ProviderPresetView]> provider_presets_custom: [];
     in-out property <[ProviderPresetView]> provider_presets_unsupported: [];
     in-out property <bool> provider_presets_loading: false;

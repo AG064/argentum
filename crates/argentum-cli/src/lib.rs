@@ -1,5 +1,6 @@
 pub mod onboarding;
 pub mod protocol;
+pub mod remote;
 pub mod server;
 pub mod tui;
 
@@ -66,6 +67,13 @@ pub struct HostConfig {
     pub android_inference: Option<InferenceConfig>,
     provider_credentials: ProviderCredentials,
     secret_store: Arc<dyn SecretStore>,
+}
+
+impl HostConfig {
+    /// The credential store this host was configured with.
+    pub fn secret_store(&self) -> Arc<dyn SecretStore> {
+        Arc::clone(&self.secret_store)
+    }
 }
 
 impl std::fmt::Debug for HostConfig {
@@ -146,10 +154,15 @@ impl HostConfig {
             provider_endpoint: DEFAULT_LLAMA_CPP_ENDPOINT.into(),
             model: android_offer.id.into(),
             local_runtime: None,
-            android_inference: Some(InferenceConfig::new(
-                paths.data_dir.join("models"),
-                Default::default(),
-            )?),
+            // Without the on-device engine there is nothing to configure.
+            android_inference: if argentum_android_inference::ENGINE_INCLUDED {
+                Some(InferenceConfig::new(
+                    paths.data_dir.join("models"),
+                    Default::default(),
+                )?)
+            } else {
+                None
+            },
             provider_credentials,
             secret_store,
         })
@@ -200,10 +213,15 @@ impl HostConfig {
             provider_endpoint: DEFAULT_LLAMA_CPP_ENDPOINT.into(),
             model: android_offer.id.into(),
             local_runtime: None,
-            android_inference: Some(InferenceConfig::new(
-                paths.data_dir.join("models"),
-                Default::default(),
-            )?),
+            // Without the on-device engine there is nothing to configure.
+            android_inference: if argentum_android_inference::ENGINE_INCLUDED {
+                Some(InferenceConfig::new(
+                    paths.data_dir.join("models"),
+                    Default::default(),
+                )?)
+            } else {
+                None
+            },
             provider_credentials,
             secret_store,
         })
@@ -2743,7 +2761,11 @@ mod tests {
         assert_eq!(config.workspace, workspace);
         assert_eq!(config.database, Some(paths.database));
         assert!(config.local_runtime.is_none());
-        assert!(config.android_inference.is_some());
+        // On-device inference is configured only when the engine is built in.
+        assert_eq!(
+            config.android_inference.is_some(),
+            argentum_android_inference::ENGINE_INCLUDED
+        );
         assert_eq!(config.model, "Qwen3.5-0.8B-Q4_0.gguf");
     }
 
@@ -2785,7 +2807,11 @@ mod tests {
             )
         );
         assert!(config.local_runtime.is_none());
-        assert!(config.android_inference.is_some());
+        // On-device inference is configured only when the engine is built in.
+        assert_eq!(
+            config.android_inference.is_some(),
+            argentum_android_inference::ENGINE_INCLUDED
+        );
         assert_eq!(config.model, "Qwen3.5-0.8B-Q4_0.gguf");
         assert!(Arc::ptr_eq(&config.secret_store, &secret_store));
     }

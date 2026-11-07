@@ -13,7 +13,7 @@ pub const MAX_HISTORY_BYTES: usize = 512 * 1024;
 pub const MAX_HISTORY_MESSAGES: usize = 128;
 pub const MAX_GROUP_CALLS: usize = 8;
 pub const MAX_SOURCE_GROUPS: usize = 128;
-pub const MAX_RUN_GROUPS: u32 = 33;
+pub const MAX_RUN_GROUPS: u32 = 121;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -15,8 +15,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::markdown::make_block;
 use crate::{
-    App, DiffLineView, GitFileView, MainWindow, Mods, PaletteItemView, ProviderUsageView,
-    RichBlockView, Theme, ThemePresetView,
+    App, DiffLineView, GitFileView, MainWindow, Mods, PaletteItemView, ProjectView,
+    ProviderUsageView, RichBlockView, Theme, ThemePresetView, UsageDayView,
 };
 
 const MAX_DIFF_LINES: usize = 4000;
@@ -70,6 +70,7 @@ pub(crate) fn surface_icon(surface: SurfaceId) -> &'static str {
         SurfaceId::Goal => "map",
         SurfaceId::StatusBar => "info",
         SurfaceId::CommandPalette => "command",
+        SurfaceId::Requests => "model",
     }
 }
 
@@ -369,6 +370,82 @@ fn compact_count(value: u64) -> String {
     }
 }
 
+/// Tokens by day and model, and every project this database knows.
+pub fn apply_usage_report(
+    window: &MainWindow,
+    daily: &[argentum_domain::UsageDayRow],
+    projects: &[argentum_domain::ProjectOverview],
+) {
+    let days = daily
+        .iter()
+        .map(|row| UsageDayView {
+            day: row.day.clone().into(),
+            model: row.model.clone().into(),
+            detail: format!(
+                "{} {}, {} in{}, {} out",
+                row.turns,
+                if row.turns == 1 { "turn" } else { "turns" },
+                compact_count(row.input_tokens),
+                if row.cached_input_tokens > 0 {
+                    format!(" ({} cached)", compact_count(row.cached_input_tokens))
+                } else {
+                    String::new()
+                },
+                compact_count(row.output_tokens)
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    window
+        .global::<App>()
+        .set_usage_days(ModelRc::new(VecModel::from(days)));
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let rows = projects
+        .iter()
+        .map(|project| ProjectView {
+            name: project.name.clone().into(),
+            // Windows verbatim paths open the same folder without the prefix.
+            path: project
+                .workspace_root
+                .strip_prefix(r"\\?\")
+                .unwrap_or(&project.workspace_root)
+                .to_owned()
+                .into(),
+            current: project.current,
+            detail: format!(
+                "{} {}{}{}",
+                project.sessions,
+                if project.sessions == 1 {
+                    "session"
+                } else {
+                    "sessions"
+                },
+                project.last_activity.map_or_else(String::new, |at| {
+                    let days = (now - at).max(0) / 86_400;
+                    match days {
+                        0 => ", active today".to_owned(),
+                        1 => ", active yesterday".to_owned(),
+                        days => format!(", active {days} days ago"),
+                    }
+                }),
+                if project.input_tokens + project.output_tokens > 0 {
+                    format!(
+                        ", {} in, {} out",
+                        compact_count(project.input_tokens),
+                        compact_count(project.output_tokens)
+                    )
+                } else {
+                    String::new()
+                }
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    window
+        .global::<App>()
+        .set_projects(ModelRc::new(VecModel::from(rows)));
+}
+
 pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
     let profiles = window.get_provider_profiles();
     let label_for = |id: &str| {
@@ -474,6 +551,24 @@ impl BrowserHistory {
 fn palette_items(window: &MainWindow, query: &str) -> Vec<PaletteItemView> {
     let needle = query.trim().to_ascii_lowercase();
     let mut items = Vec::new();
+    // A typed command, in the same words as the CLI, comes first. It only maps
+    // onto actions the interface already offers.
+    if let Some(parsed) = parse_palette_command(query, &palette_context(window)) {
+        items.push(match parsed {
+            Ok(command) => PaletteItemView {
+                id: format!("run:{}", query.trim()).into(),
+                label: command.describe().into(),
+                detail: "Command. Press Enter to run it.".into(),
+                icon: "terminal".into(),
+            },
+            Err(problem) => PaletteItemView {
+                id: SharedString::default(),
+                label: problem.into(),
+                detail: PALETTE_COMMAND_HELP.into(),
+                icon: "triangle-alert".into(),
+            },
+        });
+    }
     let mut add = |id: String, label: String, detail: String, icon: &str| {
         let matches = needle.is_empty()
             || label.to_ascii_lowercase().contains(&needle)
@@ -588,6 +683,16 @@ where
                 return;
             };
             window.set_first_run_error(SharedString::default());
+            if preset.endpoint.trim().is_empty() {
+                let app = window.global::<App>();
+                app.set_provider_draft_label(preset.label.clone());
+                app.set_provider_draft_endpoint("http://".into());
+                app.set_provider_draft_model(SharedString::default());
+                app.set_provider_endpoint_error(SharedString::default());
+                app.set_provider_model_error(SharedString::default());
+                window.set_first_run_stage("server".into());
+                return;
+            }
             window.set_first_run_stage(if preset.needs_key { "key" } else { "modules" }.into());
             dispatch(AppCommand::SaveProviderProfile {
                 profile: argentum_domain::ProviderProfile {
@@ -600,6 +705,51 @@ where
                 },
             });
             dispatch(AppCommand::ListHarnessState);
+        });
+    }
+    {
+        let dispatch = dispatch.clone();
+        let weak = window.as_weak();
+        app.on_first_run_save_server(move |endpoint, model, context| {
+            let Some(window) = weak.upgrade() else { return };
+            let problem = [
+                crate::validate_provider_endpoint(endpoint.as_str()),
+                crate::validate_provider_model(model.as_str()),
+            ]
+            .into_iter()
+            .find(|problem| !problem.is_empty());
+            if let Some(problem) = problem {
+                window.set_first_run_error(problem.into());
+                return;
+            }
+            let limits = match first_run_server_limits(context.as_str()) {
+                Ok(limits) => limits,
+                Err(error) => {
+                    window.set_first_run_error(error.into());
+                    return;
+                }
+            };
+            window.set_first_run_error(SharedString::default());
+            let profile_id = "custom".to_owned();
+            dispatch(AppCommand::SaveProviderProfile {
+                profile: argentum_domain::ProviderProfile {
+                    id: profile_id.clone(),
+                    label: window
+                        .global::<App>()
+                        .get_provider_draft_label()
+                        .to_string(),
+                    kind: argentum_domain::ProviderKind::OpenAiCompatible,
+                    endpoint: endpoint.trim().to_owned(),
+                    model: model.trim().to_owned(),
+                    selected: true,
+                },
+            });
+            crate::defer_until_profile_saved(
+                profile_id.clone(),
+                AppCommand::SaveProviderBudget { profile_id, limits },
+            );
+            dispatch(AppCommand::ListHarnessState);
+            window.set_first_run_stage("modules".into());
         });
     }
     {
@@ -944,6 +1094,14 @@ where
                     ..UiPatch::default()
                 }),
                 Some(("session", session)) => app.invoke_select_session(session.into()),
+                Some(("run", input)) => {
+                    match parse_palette_command(input, &palette_context(&window)) {
+                        Some(Ok(command)) => {
+                            run_palette_command(&window, &dispatch, &send_patch, command)
+                        }
+                        _ => tracing::warn!("palette command was rejected when run"),
+                    }
+                }
                 _ => {}
             }
         });
@@ -1073,5 +1231,340 @@ mod tests {
                 "no icon named {icon}"
             );
         }
+    }
+}
+
+/// Budget limits for a server the owner described at first run. The owner gives
+/// the context size; the output and safety reserves are derived from it.
+fn first_run_server_limits(context: &str) -> Result<[u64; 5], String> {
+    let total = context
+        .trim()
+        .replace(['_', ','], "")
+        .parse::<u64>()
+        .map_err(|_| "Enter the context size as a whole number of tokens.".to_owned())?;
+    if !(4_096..=10_000_000).contains(&total) {
+        return Err("Enter a context size between 4096 and 10000000 tokens.".into());
+    }
+    // Requests are estimated conservatively, so the answer reserve stays small
+    // to leave room for instructions and tool definitions.
+    let output = (total / 8).min(8_192);
+    let uncertainty = (total / 32).clamp(128, 4_096);
+    crate::parse_provider_budget_limits(
+        &total.to_string(),
+        &total.to_string(),
+        &output.to_string(),
+        &output.to_string(),
+        &uncertainty.to_string(),
+    )
+}
+
+#[cfg(test)]
+mod first_run_server_tests {
+    use super::first_run_server_limits;
+
+    #[test]
+    fn a_context_size_becomes_valid_budget_limits() {
+        assert_eq!(
+            first_run_server_limits("32768"),
+            Ok([32_768, 32_768, 4_096, 4_096, 1_024])
+        );
+        assert_eq!(
+            first_run_server_limits(" 8_192 "),
+            Ok([8_192, 8_192, 1_024, 1_024, 256])
+        );
+        assert!(first_run_server_limits("1000").is_err());
+        assert!(first_run_server_limits("lots").is_err());
+    }
+}
+
+const PALETTE_COMMAND_HELP: &str = "Commands: new, settings <page>, open <panel>, compact, provider use <id>, provider context <tokens>, module on|off <id>, theme <name>";
+
+const SETTINGS_PAGES: [&str; 11] = [
+    "providers",
+    "workspace",
+    "modules",
+    "appearance",
+    "verification",
+    "tools",
+    "capabilities",
+    "diagnostics",
+    "permissions",
+    "updates",
+    "about",
+];
+
+/// What a typed command may refer to, read from the window.
+#[derive(Debug, Default)]
+struct PaletteContext {
+    profiles: Vec<(String, String)>,
+    current_profile: String,
+    /// Modules the owner may turn on or off in this build.
+    configurable_modules: Vec<String>,
+    /// Modules that are on now.
+    visible_modules: Vec<String>,
+}
+
+fn palette_context(window: &MainWindow) -> PaletteContext {
+    let profiles = window.get_provider_profiles();
+    PaletteContext {
+        profiles: (0..profiles.row_count())
+            .filter_map(|index| profiles.row_data(index))
+            .map(|profile| (profile.id.to_string(), profile.label.to_string()))
+            .collect(),
+        current_profile: window.get_provider_id().to_string(),
+        configurable_modules: {
+            let surfaces = window.get_harness_surfaces();
+            (0..surfaces.row_count())
+                .filter_map(|index| surfaces.row_data(index))
+                .filter(|surface| surface.configurable)
+                .map(|surface| surface.id.to_string())
+                .collect()
+        },
+        visible_modules: {
+            let surfaces = window.get_harness_surfaces();
+            (0..surfaces.row_count())
+                .filter_map(|index| surfaces.row_data(index))
+                .filter(|surface| surface.visible)
+                .map(|surface| surface.id.to_string())
+                .collect()
+        },
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum PaletteCommand {
+    NewChat,
+    Settings(&'static str),
+    UseProvider {
+        id: String,
+        label: String,
+    },
+    ProviderContext {
+        profile: String,
+        limits: [u64; 5],
+    },
+    Module {
+        surface: SurfaceId,
+        visible: bool,
+    },
+    Theme {
+        id: &'static str,
+        label: &'static str,
+    },
+    OpenPanel(SurfaceId),
+    /// Compaction loses detail, so this opens its confirmation.
+    Compact,
+}
+
+impl PaletteCommand {
+    fn describe(&self) -> String {
+        match self {
+            Self::NewChat => "Start a new chat".into(),
+            Self::Settings(page) => format!("Open Settings > {page}"),
+            Self::UseProvider { label, .. } => format!("Use {label}"),
+            Self::ProviderContext { limits, .. } => {
+                format!("Set the context size to {} tokens", limits[0])
+            }
+            Self::Module { surface, visible } => format!(
+                "Turn {} the {} module",
+                if *visible { "on" } else { "off" },
+                surface.label()
+            ),
+            Self::Theme { label, .. } => format!("Use the {label} theme"),
+            Self::OpenPanel(surface) => format!("Show the {} panel", surface.label()),
+            Self::Compact => "Review compaction in Settings > Diagnostics".into(),
+        }
+    }
+}
+
+/// `None` when the input is not a command, so the palette searches instead.
+fn parse_palette_command(
+    input: &str,
+    context: &PaletteContext,
+) -> Option<Result<PaletteCommand, String>> {
+    let words = input.split_whitespace().collect::<Vec<_>>();
+    let verb = words.first()?.to_ascii_lowercase();
+    let rest = &words[1..];
+    let command = match (verb.as_str(), rest) {
+        ("new", []) => Ok(PaletteCommand::NewChat),
+        ("compact", []) => Ok(PaletteCommand::Compact),
+        ("open", [name]) => {
+            let id = name.to_ascii_lowercase();
+            match SurfaceId::from_id(&id).filter(|surface| surface.is_inspector()) {
+                Some(surface) if context.visible_modules.contains(&id) => {
+                    Ok(PaletteCommand::OpenPanel(surface))
+                }
+                Some(surface) => Err(format!(
+                    "The {} module is off. Turn it on with: module on {id}",
+                    surface.label()
+                )),
+                None => Err(format!("There is no panel called {name}.")),
+            }
+        }
+        ("settings", []) => Ok(PaletteCommand::Settings("providers")),
+        ("settings", [page]) => SETTINGS_PAGES
+            .iter()
+            .find(|known| known.eq_ignore_ascii_case(page))
+            .map(|page| PaletteCommand::Settings(page))
+            .ok_or_else(|| format!("There is no settings page called {page}.")),
+        ("provider", [action, ..]) => match (action.to_ascii_lowercase().as_str(), &rest[1..]) {
+            ("use", [id]) => context
+                .profiles
+                .iter()
+                .find(|(known, _)| known.eq_ignore_ascii_case(id))
+                .map(|(id, label)| PaletteCommand::UseProvider {
+                    id: id.clone(),
+                    label: label.clone(),
+                })
+                .ok_or_else(|| format!("There is no provider profile called {id}.")),
+            ("context", [tokens]) if !context.current_profile.is_empty() => {
+                first_run_server_limits(tokens).map(|limits| PaletteCommand::ProviderContext {
+                    profile: context.current_profile.clone(),
+                    limits,
+                })
+            }
+            ("context", [_]) => Err("Choose a provider first.".into()),
+            _ => Err("Use: provider use <id>, or provider context <tokens>.".into()),
+        },
+        ("module", [state, id]) => {
+            let visible = match state.to_ascii_lowercase().as_str() {
+                "on" => true,
+                "off" => false,
+                _ => return Some(Err("Use: module on <id>, or module off <id>.".into())),
+            };
+            let id = id.to_ascii_lowercase();
+            SurfaceId::from_id(&id)
+                .filter(|_| context.configurable_modules.contains(&id))
+                .map(|surface| PaletteCommand::Module { surface, visible })
+                .ok_or_else(|| format!("There is no module called {id} that can be changed."))
+        }
+        ("theme", [name]) => UI_PRESETS
+            .iter()
+            .find(|preset| {
+                preset.id.eq_ignore_ascii_case(name) || preset.label.eq_ignore_ascii_case(name)
+            })
+            .map(|preset| PaletteCommand::Theme {
+                id: preset.id,
+                label: preset.label,
+            })
+            .ok_or_else(|| format!("There is no theme called {name}.")),
+        // A bare word is a search, such as 'theme' to list the themes. With
+        // more words it was meant as a command, so it says what is wrong.
+        ("new" | "compact" | "open" | "settings" | "provider" | "module" | "theme", rest)
+            if !rest.is_empty() =>
+        {
+            Err(format!("That is not a complete {verb} command."))
+        }
+        _ => return None,
+    };
+    Some(command)
+}
+
+fn run_palette_command<D, P>(
+    window: &MainWindow,
+    dispatch: &D,
+    send_patch: &P,
+    command: PaletteCommand,
+) where
+    D: Fn(AppCommand),
+    P: Fn(UiPatch),
+{
+    let app = window.global::<App>();
+    match command {
+        PaletteCommand::NewChat => dispatch(AppCommand::NewSession),
+        PaletteCommand::Settings(page) => {
+            window.set_settings_section(page.into());
+            app.invoke_open_settings();
+        }
+        PaletteCommand::UseProvider { id, .. } => {
+            dispatch(AppCommand::SelectProviderProfile { provider_id: id })
+        }
+        PaletteCommand::ProviderContext { profile, limits } => {
+            dispatch(AppCommand::SaveProviderBudget {
+                profile_id: profile,
+                limits,
+            })
+        }
+        PaletteCommand::Module { surface, visible } => {
+            dispatch(AppCommand::SetSurfaceVisibility { surface, visible })
+        }
+        PaletteCommand::Theme { id, .. } => send_patch(UiPatch {
+            preset: Some(id.to_owned()),
+            ..UiPatch::default()
+        }),
+        PaletteCommand::OpenPanel(surface) => app.invoke_set_inspector_surface(surface.id().into()),
+        PaletteCommand::Compact => {
+            window.set_settings_section("diagnostics".into());
+            app.invoke_open_settings();
+        }
+    }
+}
+
+#[cfg(test)]
+mod palette_command_tests {
+    use super::*;
+
+    fn context() -> PaletteContext {
+        PaletteContext {
+            profiles: vec![("deepseek".into(), "DeepSeek".into())],
+            current_profile: "deepseek".into(),
+            configurable_modules: vec!["sessions".into()],
+            visible_modules: vec!["usage".into()],
+        }
+    }
+
+    #[test]
+    fn typed_commands_map_onto_existing_actions() {
+        let context = context();
+        let parse = |input: &str| parse_palette_command(input, &context);
+        assert_eq!(parse("new"), Some(Ok(PaletteCommand::NewChat)));
+        assert_eq!(
+            parse("settings Permissions"),
+            Some(Ok(PaletteCommand::Settings("permissions")))
+        );
+        assert_eq!(
+            parse("provider use DEEPSEEK"),
+            Some(Ok(PaletteCommand::UseProvider {
+                id: "deepseek".into(),
+                label: "DeepSeek".into(),
+            }))
+        );
+        assert_eq!(
+            parse("provider context 32768"),
+            Some(Ok(PaletteCommand::ProviderContext {
+                profile: "deepseek".into(),
+                limits: [32_768, 32_768, 4_096, 4_096, 1_024],
+            }))
+        );
+        assert!(matches!(
+            parse("module off sessions"),
+            Some(Ok(PaletteCommand::Module { visible: false, .. }))
+        ));
+        assert_eq!(parse("compact"), Some(Ok(PaletteCommand::Compact)));
+        assert_eq!(
+            parse("open Usage"),
+            Some(Ok(PaletteCommand::OpenPanel(SurfaceId::Usage)))
+        );
+        assert!(matches!(
+            parse("open requests"),
+            Some(Err(problem)) if problem.contains("module on requests")
+        ));
+        assert!(matches!(parse("open nowhere"), Some(Err(_))));
+    }
+
+    #[test]
+    fn searches_pass_through_and_bad_commands_explain_themselves() {
+        let context = context();
+        let parse = |input: &str| parse_palette_command(input, &context);
+        assert_eq!(parse("dark mode"), None);
+        assert_eq!(parse(""), None);
+        assert!(matches!(parse("provider use missing"), Some(Err(_))));
+        assert!(matches!(parse("settings nowhere"), Some(Err(_))));
+        assert!(matches!(parse("module maybe sessions"), Some(Err(_))));
+        assert!(matches!(parse("module on conversation"), Some(Err(_))));
+        assert!(matches!(parse("provider context lots"), Some(Err(_))));
+        assert_eq!(parse("theme"), None);
+        assert_eq!(parse("provider"), None);
+        assert!(matches!(parse("theme a b"), Some(Err(_))));
     }
 }

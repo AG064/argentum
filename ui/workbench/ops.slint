@@ -309,7 +309,7 @@ export component ToolsPage inherits VerticalLayout {
                 Label { text: tool.title; horizontal-stretch: 1; }
                 Badge { text: tool.requires_approval ? "Asks first" : "No prompt"; }
             }
-            Notice { text: tool.summary; tone: "secondary"; }
+            Label { text: tool.summary; tone: "secondary"; size: "sm"; overflow: elide; }
             Label { text: tool.id + ", " + tool.risk; tone: "muted"; size: "xs"; }
         }
     }
@@ -592,9 +592,15 @@ export component GrantsSection inherits VerticalLayout {
 component CatalogGroup inherits VerticalLayout {
     in property <string> title;
     in property <[ProviderPresetView]> presets;
-    spacing: Theme.sp1;
-    if root.presets.length > 0: SectionLabel { text: root.title; height: 24px; }
+    // Which tab this group is drawn on, and how many of its rows are on it.
+    in property <bool> tested;
+    in property <int> shown: root.presets.length;
+    // Rows of the other tab are hidden and must leave no gap.
+    spacing: Theme.sp0;
+    if root.shown > 0: SectionLabel { text: root.title; height: 24px; }
     for preset in root.presets: Row {
+        visible: preset.tested == root.tested;
+        height: self.visible ? self.preferred-height : 0px;
         title: preset.label;
         detail: preset.supported ? preset.credential : "Not supported yet. " + preset.notes;
         icon: preset.icon;
@@ -604,6 +610,7 @@ component CatalogGroup inherits VerticalLayout {
 }
 
 export component ProviderCatalog inherits VerticalLayout {
+    private property <bool> show-testing: false;
     spacing: Theme.sp8;
     init => { App.refresh_provider_presets(); }
     SectionHead {
@@ -613,11 +620,41 @@ export component ProviderCatalog inherits VerticalLayout {
         activated => { App.refresh_provider_presets(); }
     }
     if App.provider_presets_error != "": Notice { text: App.provider_presets_error; tone: "danger"; }
-    CatalogGroup { title: "HOSTED"; presets: App.provider_presets_hosted; }
-    CatalogGroup { title: "AGGREGATORS"; presets: App.provider_presets_aggregator; }
-    CatalogGroup { title: "ON THIS COMPUTER"; presets: App.provider_presets_local; }
-    CatalogGroup { title: "CUSTOM"; presets: App.provider_presets_custom; }
-    CatalogGroup { title: "NOT SUPPORTED YET"; presets: App.provider_presets_unsupported; }
+    HorizontalLayout {
+        spacing: Theme.sp4;
+        alignment: start;
+        Btn { label: "Tested"; small: true; kind: root.show-testing ? "secondary" : "primary"; clicked => { root.show-testing = false; } }
+        Btn { label: "Testing"; small: true; kind: root.show-testing ? "primary" : "secondary"; clicked => { root.show-testing = true; } }
+    }
+    if root.show-testing: Notice {
+        text: "These are listed but not yet tested with Argentum. After adding one, use Test connection before relying on it.";
+        tone: "secondary";
+    }
+    CatalogGroup {
+        title: "HOSTED";
+        presets: App.provider_presets_hosted;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[0] : App.provider_group_tested[0];
+    }
+    CatalogGroup {
+        title: "AGGREGATORS";
+        presets: App.provider_presets_aggregator;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[1] : App.provider_group_tested[1];
+    }
+    CatalogGroup {
+        title: "LOCAL";
+        presets: App.provider_presets_local;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[2] : App.provider_group_tested[2];
+    }
+    CatalogGroup {
+        title: "CUSTOM";
+        presets: App.provider_presets_custom;
+        tested: !root.show-testing;
+        shown: root.show-testing ? App.provider_group_testing[3] : App.provider_group_tested[3];
+    }
+    if root.show-testing: CatalogGroup { title: "NOT SUPPORTED YET"; presets: App.provider_presets_unsupported; tested: false; }
     if App.provider_preset_detail.id != "": Rectangle {
         border-radius: Theme.r-md;
         background: Theme.surface;

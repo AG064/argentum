@@ -507,6 +507,20 @@ export component UsagePanel inherits Rectangle {
                         Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
                     }
                 }
+                if App.usage_days.length > 0: SectionLabel { text: "BY DAY, LAST 30 DAYS (UTC)"; height: 22px; }
+                for day in App.usage_days: HorizontalLayout {
+                    spacing: Theme.sp8;
+                    Label { text: day.day; mono: true; size: "xs"; tone: "muted"; }
+                    Label { text: day.model; size: "xs"; horizontal-stretch: 1; }
+                    Label { text: day.detail; mono: true; size: "xs"; tone: "secondary"; }
+                }
+                if App.projects.length > 1: SectionLabel { text: "ALL PROJECTS"; height: 22px; }
+                for project in App.projects: VerticalLayout {
+                    visible: App.projects.length > 1;
+                    height: self.visible ? self.preferred-height : 0px;
+                    Label { text: project.name + (project.current ? "  (this one)" : ""); size: "sm"; strong: project.current; }
+                    Label { text: project.detail; size: "xs"; tone: "muted"; }
+                }
                 Text {
                     text: "Reported by each provider for turns in this workspace. Account limits and costs are not reported to Argentum.";
                     color: Theme.text-3;
@@ -551,6 +565,68 @@ export component GoalCard inherits Rectangle {
                     App.set_goal(text, 0, 0, 0);
                     self.value = "";
                 }
+            }
+        }
+    }
+}
+
+// What filled the latest request's context, and every model request this session.
+export component RequestsPanel inherits Rectangle {
+    Scroller {
+        content-height: body.preferred-height + 24px;
+        body := VerticalLayout {
+            x: 14px;
+            y: 12px;
+            width: root.width - 28px;
+            height: self.preferred-height;
+            spacing: Theme.sp10;
+            SectionLabel { text: "CONTEXT OF THE LATEST REQUEST"; height: 22px; }
+            if App.context_parts.length == 0: Label {
+                text: "Appears after the next request. Sizes are estimated in bytes, which is never fewer than tokens.";
+                tone: "muted";
+                size: "sm";
+                wrap: word-wrap;
+            }
+            if App.request_context_summary != "": Label { text: App.request_context_summary; tone: "secondary"; size: "sm"; wrap: word-wrap; }
+            for part in App.context_parts: VerticalLayout {
+                spacing: Theme.sp2;
+                HorizontalLayout {
+                    spacing: Theme.sp6;
+                    Label { text: part.label; size: "sm"; horizontal-stretch: 1; }
+                    Label { text: part.amount; mono: true; size: "xs"; tone: "muted"; }
+                }
+                Rectangle {
+                    height: 5px;
+                    border-radius: 2.5px;
+                    background: Theme.hover;
+                    Rectangle {
+                        x: 0;
+                        width: max(2px, parent.width * part.share);
+                        border-radius: 2.5px;
+                        background: Theme.accent;
+                    }
+                }
+            }
+            SectionLabel { text: "REQUESTS"; height: 22px; }
+            if App.request_rows.length == 0: Label {
+                text: "No model requests yet in this session.";
+                tone: "muted";
+                size: "sm";
+            }
+            for row in App.request_rows: VerticalLayout {
+                spacing: Theme.sp2;
+                HorizontalLayout {
+                    spacing: Theme.sp6;
+                    Label { text: row.clock; mono: true; size: "xs"; tone: "muted"; }
+                    Label { text: row.duration; mono: true; size: "xs"; }
+                    Label { text: row.outcome; size: "xs"; tone: row.failed ? "danger" : "muted"; horizontal-stretch: 1; }
+                    Label { text: row.purpose; size: "xs"; tone: "muted"; }
+                }
+                Label { text: row.endpoint; mono: true; size: "xs"; wrap: word-wrap; }
+                Label { text: row.model + (row.tokens != "" ? "  ·  " + row.tokens : ""); size: "xs"; tone: "secondary"; wrap: word-wrap; }
+                if row.detail != "": Label { text: row.detail; size: "xs"; tone: "muted"; wrap: word-wrap; }
+                if row.tools != "": Label { text: row.tools; mono: true; size: "xs"; tone: "muted"; wrap: word-wrap; }
+                Divider { }
             }
         }
     }

@@ -31,6 +31,7 @@ component PresetCard inherits Rectangle {
                 spacing: Theme.sp8;
                 Label { text: preset.label; strong: true; horizontal-stretch: 1; }
                 if preset.local: Badge { text: "Local"; }
+                if preset.tested: Badge { text: "Tested"; }
             }
             Text {
                 text: preset.detail;
@@ -85,12 +86,20 @@ export component FirstRun inherits Rectangle {
                 }
             }
             VerticalLayout {
-                spacing: Theme.sp8;
-                for preset[i] in App.provider_presets: PresetCard {
-                    visible: preset.supported && (root.show-all || preset.featured);
-                    height: self.visible ? self.preferred-height : 0px;
-                    preset: preset;
-                    chosen => { App.first_run_choose(preset); }
+                // Hidden presets must take no room, spacing included, so each
+                // card carries its own gap and collapses fully when hidden.
+                spacing: Theme.sp0;
+                for preset[i] in App.provider_presets: Rectangle {
+                    property <bool> shown: preset.supported && (root.show-all || preset.featured);
+                    visible: self.shown;
+                    height: self.shown ? card.preferred-height + Theme.sp8 : 0px;
+                    card := PresetCard {
+                        y: 0px;
+                        width: parent.width;
+                        height: self.preferred-height;
+                        preset: preset;
+                        chosen => { App.first_run_choose(preset); }
+                    }
                 }
                 if !root.show-all: HorizontalLayout {
                     alignment: center;
@@ -102,6 +111,83 @@ export component FirstRun inherits Rectangle {
                     size: "sm";
                     wrap: word-wrap;
                     overflow: clip;
+                }
+            }
+        }
+    }
+    // A server Argentum has no address for, such as llama-server on a PC.
+    if App.first_run_stage == "server": Scroller {
+        content-height: server-col.preferred-height + 80px;
+        server-col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp14;
+            Text {
+                text: "Where is your server?";
+                color: Theme.text;
+                font-size: Theme.fs-2xl - 2px;
+                font-weight: Theme.w-medium;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Any OpenAI-compatible server, such as llama-server on your PC or network.";
+                color: Theme.text-2;
+                font-size: Theme.fs-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            server-endpoint := Field {
+                label: "Endpoint";
+                placeholder: "http://192.168.1.20:8080/v1";
+                mono: true;
+                value: App.provider_draft_endpoint;
+                error: App.provider_endpoint_error;
+                edited(text) => {
+                    App.provider_draft_endpoint = text;
+                    App.provider_endpoint_error = App.validate_provider_endpoint(text);
+                }
+            }
+            server-model := Field {
+                label: "Model";
+                placeholder: "The model name the server expects";
+                mono: true;
+                value: App.provider_draft_model;
+                error: App.provider_model_error;
+                edited(text) => {
+                    App.provider_draft_model = text;
+                    App.provider_model_error = App.validate_provider_model(text);
+                }
+            }
+            server-context := Field {
+                label: "Context size, in tokens";
+                hint: "The server's context setting, such as --ctx-size for llama-server. You can change it later in Settings.";
+                mono: true;
+                value: App.provider_draft_context;
+                edited(text) => { App.provider_draft_context = text; }
+            }
+            if App.first_run_error != "": Label {
+                text: App.first_run_error;
+                tone: "danger";
+                size: "sm";
+                wrap: word-wrap;
+                overflow: clip;
+            }
+            HorizontalLayout {
+                alignment: space-between;
+                Btn { label: "Back"; clicked => { App.first_run_error = ""; App.first_run_stage = "provider"; } }
+                Btn {
+                    label: "Continue";
+                    kind: "primary";
+                    // The fields' own text is read, not the drafts, so a value set by
+                    // assistive technology without an edit event still counts.
+                    // The host validates it before anything is saved.
+                    enabled: server-endpoint.value != "" && server-model.value != "";
+                    clicked => {
+                        App.first_run_save_server(server-endpoint.value, server-model.value,
+                            server-context.value);
+                    }
                 }
             }
         }

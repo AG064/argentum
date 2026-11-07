@@ -1,3 +1,9 @@
+// Managed processes and checks are not offered on Android, so much of this
+// module is unused there.
+#![cfg_attr(
+    target_os = "android",
+    allow(dead_code, unused_imports, clippy::needless_return)
+)]
 use crate::process::ManagedProcessLimits;
 
 #[cfg(windows)]

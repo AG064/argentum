@@ -36,3 +36,5 @@
 - [Migration from the TypeScript product](MIGRATION_NATIVE.md)
 - [Security policy](../SECURITY.md)
 - [Plans in progress](plans/)
+- [Computer use design](COMPUTER_USE_DESIGN.md): not built yet
+- [Voice mode design](VOICE_MODE_DESIGN.md): not built yet

@@ -310,6 +310,7 @@ dependencies = [
  "argentum-platform",
  "argentum-providers",
  "argentum-security",
+ "argentum-store",
  "argentum-ui",
  "jni 0.22.4",
  "slint",
@@ -336,6 +337,7 @@ name = "argentum-app"
 version = "0.1.0-rc.1"
 dependencies = [
  "argentum-cli",
+ "argentum-devices",
  "argentum-domain",
  "argentum-platform",
  "argentum-security",
@@ -405,6 +407,7 @@ version = "0.1.0-rc.1"
 dependencies = [
  "argentum-android-inference",
  "argentum-artifacts",
+ "argentum-devices",
  "argentum-domain",
  "argentum-execution",
  "argentum-extensions",
@@ -430,6 +433,19 @@ dependencies = [
  "unicode-width",
  "windows-sys 0.61.2",
  "zeroize",
+]
+
+[[package]]
+name = "argentum-devices"
+version = "0.1.0-rc.1"
+dependencies = [
+ "argentum-platform",
+ "argentum-security",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

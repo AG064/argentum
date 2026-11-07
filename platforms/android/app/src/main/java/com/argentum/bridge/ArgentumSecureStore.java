@@ -95,10 +95,18 @@ final class ArgentumSecureStore {
         }
     }
 
+    // The native side holds the exact list of names. This keeps a second check
+    // on their shape: a provider key, or this install's device identity.
     private static void validateKey(String key) {
-        if (!("provider/openai".equals(key)
-                || "provider/minimax".equals(key)
-                || "provider/deepseek".equals(key))) {
+        if (key == null) {
+            throw failure();
+        }
+        boolean device = "device/identity-ed25519".equals(key);
+        boolean provider = key.startsWith("provider/")
+                && key.length() > "provider/".length()
+                && key.length() <= "provider/".length() + 64
+                && key.substring("provider/".length()).matches("[a-z0-9-]+");
+        if (!device && !provider) {
             throw failure();
         }
     }

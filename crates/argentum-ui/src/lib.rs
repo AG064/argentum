@@ -1,3 +1,6 @@
+// Clippy reports thread-locals that are already `const` when this crate is
+// built for Android.
+#![cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local))]
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -24,6 +27,7 @@ slint::include_modules!();
 
 mod activity;
 mod markdown;
+mod requests;
 pub mod workbench;
 
 /// Formats a workspace path for presentation without exposing a raw verbatim
@@ -53,6 +57,47 @@ const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 thread_local! {
     static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
+    static DEFERRED: RefCell<DeferredCommands> = const {
+        RefCell::new(DeferredCommands {
+            dispatch: None,
+            after_profile: Vec::new(),
+        })
+    };
+}
+
+/// Commands that must wait for a provider profile to exist. The host runs
+/// commands concurrently, so a budget sent right after its profile could
+/// arrive first and be rejected. Both live on the UI thread.
+#[derive(Default)]
+struct DeferredCommands {
+    dispatch: Option<Rc<dyn Fn(AppCommand)>>,
+    after_profile: Vec<(String, AppCommand)>,
+}
+
+pub(crate) fn defer_until_profile_saved(profile_id: String, command: AppCommand) {
+    DEFERRED.with(|deferred| {
+        deferred
+            .borrow_mut()
+            .after_profile
+            .push((profile_id, command));
+    });
+}
+
+fn run_commands_waiting_for(profiles: &[ProviderProfile]) {
+    let ready = DEFERRED.with(|deferred| {
+        let mut deferred = deferred.borrow_mut();
+        let (ready, waiting): (Vec<_>, Vec<_>) = deferred
+            .after_profile
+            .drain(..)
+            .partition(|(id, _)| profiles.iter().any(|profile| &profile.id == id));
+        deferred.after_profile = waiting;
+        deferred.dispatch.clone().map(|dispatch| (dispatch, ready))
+    });
+    if let Some((dispatch, ready)) = ready {
+        for (_, command) in ready {
+            dispatch(command);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -70,6 +115,7 @@ pub struct WeakUiHandle {
 #[derive(Default)]
 struct ProjectionState {
     run_steps: std::collections::BTreeMap<RunId, activity::RunActivity>,
+    requests: requests::RequestLog,
     run_sessions: HashMap<RunId, SessionId>,
     pending_run_sessions: VecDeque<SessionId>,
     approval_sessions: HashMap<ApprovalId, SessionId>,
@@ -206,9 +252,45 @@ impl UiHandle {
                 }
                 // Projection work is not a task terminal event or observed main-model usage.
             }
-            AppEvent::ContextRequestAccounted { .. }
-            | AppEvent::SummaryTransportObserved { .. }
-            | AppEvent::ModelRequestAttempt { .. }
+            AppEvent::ContextRequestAccounted {
+                session_id,
+                run_id,
+                request_id,
+                purpose,
+                accounting,
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection()
+                        .requests
+                        .accounted(*request_id, *run_id, purpose, accounting);
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::ModelRequestAttempt {
+                session_id,
+                request_id,
+                attempt,
+                outcome,
+                error_class,
+                status,
+                planned_delay_ms,
+                stop_reason,
+                ..
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection().requests.attempt(
+                        *request_id,
+                        *attempt,
+                        outcome,
+                        *status,
+                        error_class.as_deref(),
+                        stop_reason.as_deref(),
+                        *planned_delay_ms,
+                    );
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::SummaryTransportObserved { .. }
             | AppEvent::ExtensionOperationRecorded { .. }
             | AppEvent::GoalRequestAccounting { .. } => {}
             // The current Slint client has no supplemental-check surface. The
@@ -291,6 +373,21 @@ impl UiHandle {
                         ));
                 }
                 self.apply_live_activity(&activity::RunActivity::default());
+                // A run that failed before its message was stored would lose
+                // what the owner typed. Put it back in the empty composer.
+                let prompt = self.window.get_user_prompt();
+                if !prompt.is_empty()
+                    && !self.window.get_error_message().is_empty()
+                    && self.window.get_draft().is_empty()
+                    && !snapshot
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == ConversationRole::User)
+                        .is_some_and(|message| message.text == prompt.as_str())
+                {
+                    self.window.set_draft(prompt);
+                }
                 self.window.set_user_prompt(SharedString::default());
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
@@ -602,6 +699,13 @@ impl UiHandle {
                 {
                     return;
                 }
+                self.projection().requests.usage(
+                    *run_id,
+                    usage.input_tokens,
+                    usage.cached_input_tokens,
+                    usage.output_tokens,
+                );
+                self.refresh_requests();
                 self.window.set_active_run_id(run_id.to_string().into());
                 self.window.set_usage_reported(true);
                 self.window
@@ -903,6 +1007,7 @@ impl UiHandle {
             }
             AppEvent::ProviderProfilesSnapshot { profiles } => {
                 self.apply_provider_profiles(profiles);
+                run_commands_waiting_for(profiles);
                 if !self.window.get_provider_preset_pending().is_empty() {
                     self.window
                         .set_provider_preset_pending(SharedString::default());
@@ -938,6 +1043,22 @@ impl UiHandle {
                         presets,
                         "unsupported",
                     ));
+                let groups = ["hosted", "aggregator", "local", "custom"];
+                let count = |tested: bool| {
+                    let counts = groups
+                        .iter()
+                        .map(|group| {
+                            presets
+                                .iter()
+                                .filter(|preset| preset.group == *group && preset.tested == tested)
+                                .count() as i32
+                        })
+                        .collect::<Vec<_>>();
+                    ModelRc::new(VecModel::from(counts))
+                };
+                let app = self.window.global::<App>();
+                app.set_provider_group_tested(count(true));
+                app.set_provider_group_testing(count(false));
                 self.window.set_provider_presets_loading(false);
                 self.window
                     .set_provider_presets_error(SharedString::default());
@@ -1147,6 +1268,7 @@ impl UiHandle {
                 );
             }
             AppEvent::ToolFinished(trace) => {
+                self.projection().requests.tool(trace);
                 if !self.run_targets_active_session(trace.run_id) {
                     return;
                 }
@@ -1624,8 +1746,13 @@ impl UiHandle {
                 );
                 self.reconcile_first_run(preferences.first_run_complete);
             }
-            AppEvent::ProviderUsageLoaded { rows } => {
+            AppEvent::ProviderUsageLoaded {
+                rows,
+                daily,
+                projects,
+            } => {
                 workbench::apply_provider_usage(&self.window, rows);
+                workbench::apply_usage_report(&self.window, daily, projects);
             }
             AppEvent::GitStatusLoaded(snapshot) => {
                 workbench::apply_git_status(&self.window, snapshot);
@@ -2712,6 +2839,88 @@ impl UiHandle {
         self.push_activity("Changes loaded", summary, "neutral");
     }
 
+    fn refresh_requests(&self) {
+        let app = self.window.global::<App>();
+        let projection = self.projection();
+        let log = &projection.requests;
+        let parts = log
+            .latest()
+            .map(|record| requests::context_parts(&record.accounting))
+            .unwrap_or_default();
+        app.set_context_parts(ModelRc::new(VecModel::from(
+            parts
+                .iter()
+                .map(|part| ContextPartView {
+                    label: part.label.into(),
+                    amount: format!("{} ({:.0}%)", part.amount, part.share * 100.0).into(),
+                    share: part.share,
+                })
+                .collect::<Vec<_>>(),
+        )));
+        app.set_request_context_summary(
+            log.latest()
+                .map(|record| {
+                    let accounting = &record.accounting;
+                    format!(
+                        "{} of {} usable, estimated in bytes. {}",
+                        accounting.accounted_input,
+                        accounting.usable_context,
+                        if accounting.fits {
+                            "It fits."
+                        } else {
+                            "It does not fit, so it was not sent."
+                        }
+                    )
+                })
+                .unwrap_or_default()
+                .into(),
+        );
+        let rows = log
+            .records()
+            .map(|record| RequestRowView {
+                clock: record.clock.clone().into(),
+                duration: record
+                    .duration_ms
+                    .map_or_else(String::new, |ms| {
+                        if ms >= 1000 {
+                            format!("{:.1}s", ms as f64 / 1000.0)
+                        } else {
+                            format!("{ms} ms")
+                        }
+                    })
+                    .into(),
+                purpose: record.purpose.clone().into(),
+                endpoint: record.endpoint.clone().into(),
+                model: record.model.clone().into(),
+                outcome: match (record.status, record.attempts) {
+                    (Some(status), attempts) if attempts > 1 => {
+                        format!("{} (HTTP {status}, attempt {attempts})", record.outcome)
+                    }
+                    (Some(status), _) => format!("{} (HTTP {status})", record.outcome),
+                    (None, attempts) if attempts > 1 => {
+                        format!("{} (attempt {attempts})", record.outcome)
+                    }
+                    _ => record.outcome.clone(),
+                }
+                .into(),
+                failed: matches!(record.outcome.as_str(), "failed" | "exhausted" | "rejected"),
+                detail: record.detail.clone().into(),
+                tokens: match (record.input_tokens, record.output_tokens) {
+                    (Some(input), Some(output)) => match record.cached_tokens {
+                        Some(cached) if cached > 0 => {
+                            format!("in {input} ({cached} cached), out {output} tokens")
+                        }
+                        _ => format!("in {input}, out {output} tokens"),
+                    },
+                    _ => String::new(),
+                }
+                .into(),
+                tools: record.tools.join(", ").into(),
+            })
+            .collect::<Vec<_>>();
+        app.set_request_rows(ModelRc::new(VecModel::from(rows)));
+    }
+
     fn apply_live_activity(&self, activity: &activity::RunActivity) {
         let app = self.window.global::<App>();
         app.set_live_steps(activity.details().into());
@@ -3222,6 +3431,27 @@ fn record_line_model(lines: &[RecordLine]) -> ModelRc<RecordLineView> {
     ModelRc::new(VecModel::from(rows))
 }
 
+/// Tool summaries are written for the model and can run to a paragraph. The
+/// settings list shows the first sentence, cut at a word near 140 characters.
+fn short_summary(summary: &str) -> String {
+    const LIMIT: usize = 140;
+    let first = summary
+        .find(". ")
+        .or_else(|| summary.find("; "))
+        .map_or(summary, |end| &summary[..end]);
+    let first = first.trim().trim_end_matches('.');
+    if first.chars().count() <= LIMIT {
+        return first.to_owned();
+    }
+    let cut = first
+        .char_indices()
+        .nth(LIMIT)
+        .map_or(first.len(), |(index, _)| index);
+    let head = &first[..cut];
+    let head = head.rfind(' ').map_or(head, |space| &head[..space]);
+    format!("{}...", head.trim_end_matches([',', ';', ':']))
+}
+
 fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
     let rows = tools
         .iter()
@@ -3229,7 +3459,7 @@ fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
             id: tool.id.clone().into(),
             capability: tool.capability_id.clone().into(),
             title: tool.title.clone().into(),
-            summary: tool.summary.clone().into(),
+            summary: short_summary(&tool.summary).into(),
             risk: format!("{:?}", tool.risk).into(),
             requires_approval: tool.requires_approval,
         })
@@ -3262,6 +3492,16 @@ fn verification_grant_for(grant: &ApprovalGrantRecord, runner_id: &str) -> bool 
     )
 }
 
+fn verification_runner_description(id: &str) -> Option<&'static str> {
+    Some(match id {
+        "cargo-fmt-check" => "Runs cargo fmt --check.",
+        "cargo-check-locked" => "Runs cargo check --locked.",
+        "cargo-test-locked" => "Runs cargo test --locked.",
+        "cargo-clippy-strict" => "Runs cargo clippy with warnings as errors.",
+        _ => return None,
+    })
+}
+
 fn verification_runner_model(
     runners: &[VerificationRunnerInspection],
     grants: &[ApprovalGrantRecord],
@@ -3281,16 +3521,18 @@ fn verification_runner_model(
             } else {
                 "Available"
             };
+            // The definition digest has its own line, so this says what the
+            // runner is and does in words.
             let detail = runner.reason.clone().unwrap_or_else(|| {
-                format!(
-                    "{} | {}",
-                    runner.origin,
-                    runner
-                        .definition_sha256
-                        .as_ref()
-                        .map(|digest| digest.0.clone())
-                        .unwrap_or_else(|| "definition pending".into())
-                )
+                let origin = match runner.origin.as_str() {
+                    "built_in" => "Built in",
+                    "project" => "From this project",
+                    other => other,
+                };
+                match verification_runner_description(&runner.id) {
+                    Some(description) => format!("{origin}. {description}"),
+                    None => format!("{origin}."),
+                }
             });
             VerificationRunnerView {
                 id: runner.id.clone().into(),
@@ -3427,10 +3669,16 @@ fn provider_profile_model_with_credentials(
 }
 
 fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
-    let credential = if preset.credential_profile_id.as_deref() == Some("chatgpt") {
+    let credential = if preset.id == "chatgpt" {
         "Browser sign-in (CLI-only in this build)".to_owned()
     } else if let Some(variable) = &preset.api_key_env {
-        format!("API key from {variable}")
+        // Keys are saved in the system credential store. The environment
+        // variable is a desktop alternative and does not exist on Android.
+        if cfg!(target_os = "android") {
+            "API key".to_owned()
+        } else {
+            format!("API key or {variable}")
+        }
     } else if preset.credential_profile_id.is_some() {
         "Saved credential required".to_owned()
     } else {
@@ -3444,10 +3692,9 @@ fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
         _ => "Unsupported",
     };
     ProviderPresetView {
-        featured: matches!(
-            preset.id.as_str(),
-            "minimax" | "deepseek" | "opencode-go" | "openai" | "chatgpt" | "llama-cpp" | "custom"
-        ),
+        // First run shows what has been tested, plus ways to run a model yourself.
+        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "openai-compatible"),
+        tested: preset.tested,
         detail: if preset.notes.is_empty() {
             credential.clone().into()
         } else {
@@ -3837,6 +4084,12 @@ fn present_error(message: &str) -> String {
     {
         return "Argentum could not reach the model provider. Check that it is running, then try again.".into();
     }
+    if message.starts_with("context_token_capacity_exceeded") {
+        return "This request does not fit the model's context size. Start a new chat, compact this one, or raise the context size in Settings > Providers.".into();
+    }
+    if message.starts_with("context_budget_invalid: usable model limits are unknown") {
+        return "Argentum does not know how much this model can hold. Set its context size in Settings > Providers, under Budget and context.".into();
+    }
     if message.contains("outside the workspace boundary") {
         return "That path is outside the current workspace.".into();
     }
@@ -3885,10 +4138,7 @@ pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
 }
 
 fn is_supported_provider_credential_id(provider_id: &str) -> bool {
-    matches!(
-        provider_id,
-        "openai" | "minimax" | "deepseek" | "opencode-go"
-    )
+    argentum_domain::is_supported_hosted_credential_provider_id(provider_id)
 }
 
 fn provider_credential_supported(profile: &ProviderProfile) -> bool {
@@ -4087,6 +4337,10 @@ where
     F: Fn(AppCommand) + 'static,
 {
     let dispatch = Rc::new(dispatch);
+    {
+        let deferred_dispatch: Rc<dyn Fn(AppCommand)> = dispatch.clone();
+        DEFERRED.with(|deferred| deferred.borrow_mut().dispatch = Some(deferred_dispatch));
+    }
     {
         let workbench_dispatch = dispatch.clone();
         workbench::connect(window, move |command| workbench_dispatch(command));
@@ -5451,6 +5705,27 @@ pub fn empty_string_model() -> ModelRc<SharedString> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tool_summaries_show_their_first_sentence_within_the_limit() {
+        use super::short_summary;
+        assert_eq!(
+            short_summary("Copy one prepared bounded file"),
+            "Copy one prepared bounded file"
+        );
+        assert_eq!(
+            short_summary("Make a localized edit. Prefer old_text for one match."),
+            "Make a localized edit"
+        );
+        assert_eq!(
+            short_summary("Cancel a job; cancellation does not undo effects"),
+            "Cancel a job"
+        );
+        let long = "word ".repeat(60);
+        let short = short_summary(&long);
+        assert!(short.ends_with("..."));
+        assert!(short.chars().count() <= 143);
+    }
+
     use argentum_domain::context_budget::ModelBudget;
     use argentum_domain::{
         now, ChangeRecoveryEntry, ChangeRecoverySnapshot, ChangeRecoveryState, ChangeSetSnapshot,
@@ -5823,10 +6098,11 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         let view = provider_preset_view(&preset);
         assert_eq!(view.id.as_str(), "deepseek");
-        assert_eq!(view.credential.as_str(), "API key from DEEPSEEK_API_KEY");
+        assert_eq!(view.credential.as_str(), "API key or DEEPSEEK_API_KEY");
         assert_eq!(view.api_key_env.as_str(), "DEEPSEEK_API_KEY");
         assert_eq!(view.group_label.as_str(), "Hosted");
         assert!(view.supported);
@@ -5844,6 +6120,7 @@ mod tests {
             supported: true,
             group: "hosted".into(),
             notes: String::new(),
+            tested: false,
         };
         assert_eq!(
             provider_preset_view(&chatgpt).credential.as_str(),
@@ -5997,9 +6274,73 @@ mod tests {
         assert_eq!(mode.icon, "diff");
     }
 
+    /// Run from the shared UI test: the window backend allows one instance.
+    fn a_prompt_lost_by_a_failed_run_returns_to_the_composer(ui: &UiHandle) {
+        let project_id: argentum_domain::ProjectId = "00000000-0000-0000-0000-0000000000d1"
+            .parse()
+            .expect("project id");
+        let session_id: SessionId = "00000000-0000-0000-0000-0000000000d2"
+            .parse()
+            .expect("session id");
+        let snapshot = |messages: Vec<ConversationMessage>| {
+            AppEvent::ConversationSnapshotLoaded(ConversationSnapshot {
+                project_id,
+                session_id,
+                messages,
+            })
+        };
+        ui.window()
+            .set_active_session_id(session_id.to_string().into());
+
+        // The run failed before the prompt was stored.
+        ui.window().set_user_prompt("Unsaved question".into());
+        ui.window().set_error_message("Could not continue.".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Unsaved question");
+        assert_eq!(ui.window().get_user_prompt(), "");
+
+        // A stored prompt is not repeated.
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_user_prompt("Saved question".into());
+        ui.apply_event(&snapshot(vec![ConversationMessage {
+            id: "00000000-0000-0000-0000-0000000000d3"
+                .parse()
+                .expect("message id"),
+            project_id,
+            session_id,
+            run_id: "00000000-0000-0000-0000-0000000000d4"
+                .parse()
+                .expect("run id"),
+            role: ConversationRole::User,
+            text: "Saved question".into(),
+            reasoning: String::new(),
+            usage: None,
+            profile_id: String::new(),
+            model: String::new(),
+            status: ConversationMessageStatus::Complete,
+            created_at: now(),
+        }]));
+        assert_eq!(ui.window().get_draft(), "");
+
+        // Without an error nothing is restored, and a typed draft is kept.
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_user_prompt("Fine".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "");
+        ui.window().set_error_message("Could not continue.".into());
+        ui.window().set_draft("Typed already".into());
+        ui.window().set_user_prompt("Lost".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Typed already");
+    }
+
     #[test]
     fn event_callback_and_credential_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
+        a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_active_session_id(SharedString::default());
 
         let goal_session_id: SessionId = "00000000-0000-0000-0000-0000000000c1"
             .parse()
@@ -6795,6 +7136,7 @@ mod tests {
                             reasoning_tokens: Some(3),
                             cached_input_tokens: None,
                             context_window_tokens: Some(128_000),
+                            turn_total: None,
                         }),
                         profile_id: "minimax".into(),
                         model: "MiniMax-M2.7".into(),
@@ -6861,6 +7203,7 @@ mod tests {
                 reasoning_tokens: Some(6),
                 cached_input_tokens: Some(4),
                 context_window_tokens: Some(204_800),
+                turn_total: None,
             },
         });
         assert!(ui.window().get_usage_reported());

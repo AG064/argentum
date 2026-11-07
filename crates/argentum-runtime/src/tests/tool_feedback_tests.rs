@@ -1103,6 +1103,41 @@ async fn model_host_facts_include_the_scoped_session_and_run_identity() {
 }
 
 #[tokio::test]
+async fn model_host_facts_name_paired_devices_without_their_keys() {
+    let root = tempfile::tempdir().unwrap();
+    let (runtime, _) = fixture(root.path(), Vec::new(), true).await;
+    let policy = runtime.execution_policy().unwrap();
+    let facts = runtime
+        .runtime_facts_for(None, &policy, false, None, None)
+        .unwrap();
+    assert_eq!(facts["devices"]["this_device"]["os"], std::env::consts::OS);
+    assert_eq!(facts["devices"]["paired"], serde_json::json!([]));
+    assert_eq!(facts["devices"]["remote_access"], "none paired");
+
+    let key = "ab".repeat(32);
+    runtime
+        .store
+        .save_paired_device(&argentum_store::PairedDeviceRecord {
+            public_key: key.clone(),
+            fingerprint: "abab-abab-abab-abab-abab".into(),
+            name: "Phone".into(),
+            paired_at: 0,
+        })
+        .unwrap();
+    let facts = runtime
+        .runtime_facts_for(None, &policy, false, None, None)
+        .unwrap();
+    assert_eq!(facts["devices"]["paired"], serde_json::json!(["Phone"]));
+    assert!(facts["devices"]["remote_access"]
+        .as_str()
+        .unwrap()
+        .contains("No model tool reaches another device"));
+    let text = facts.to_string();
+    assert!(!text.contains(&key));
+    assert!(!text.contains("abab-abab"));
+}
+
+#[tokio::test]
 async fn reliability_failed_read_returns_specific_result_and_allows_correction() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("exists.txt"), "actual data").unwrap();
@@ -1175,13 +1210,15 @@ async fn reliability_absolute_path_inside_workspace_is_relative_and_readable_in_
 #[tokio::test]
 async fn reliability_valid_work_can_continue_past_eight_model_rounds() {
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(root.path().join("known.txt"), "data").unwrap();
+    for i in 0..10 {
+        std::fs::write(root.path().join(format!("known-{i}.txt")), "data").unwrap();
+    }
     let calls = (0..10)
         .map(|i| {
             call(
                 &format!("read-{i}"),
                 "read_text",
-                json!({"path":"known.txt"}),
+                json!({"path":format!("known-{i}.txt")}),
             )
         })
         .collect();

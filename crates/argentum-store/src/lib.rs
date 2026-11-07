@@ -40,6 +40,7 @@ pub const SCHEMA_VERSION: u16 = 23;
 
 mod command_identity;
 mod context_budget;
+mod devices;
 mod extensions;
 mod grant_lookup;
 mod history;
@@ -68,6 +69,7 @@ pub use command_identity::{
     MAX_RETAINED_COMMAND_RESULT_BODIES_PER_STORE,
 };
 pub use context_summary::{ContextCommitToken, SummarySnapshot};
+pub use devices::PairedDeviceRecord;
 pub use recovery::StoreHostOwner;
 pub use working_context::{ContextSource, ContextSourceWindow};
 
@@ -2280,14 +2282,130 @@ impl Store {
                     output_tokens: 0,
                     total_tokens: 0,
                 });
+            let total_tokens = if usage.turn_total.is_some() {
+                let consumed = usage.consumed();
+                consumed.input_tokens.saturating_add(consumed.output_tokens)
+            } else {
+                usage.total_tokens
+            };
+            let usage = usage.consumed();
             entry.turns = entry.turns.saturating_add(1);
             entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
             entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
-            entry.total_tokens = entry.total_tokens.saturating_add(usage.total_tokens);
+            entry.total_tokens = entry.total_tokens.saturating_add(total_tokens);
         }
         let mut rows = totals.into_values().collect::<Vec<_>>();
         rows.sort_by_key(|row| std::cmp::Reverse(row.total_tokens));
         Ok(rows)
+    }
+
+    /// Reported tokens per UTC day and model for the last `days` days.
+    pub fn usage_by_day(
+        &self,
+        project_id: ProjectId,
+        days: i64,
+    ) -> Result<Vec<argentum_domain::UsageDayRow>, StoreError> {
+        let since = time::OffsetDateTime::now_utc().unix_timestamp() - days.max(1) * 86_400;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT created_at, model, usage FROM conversation_messages
+             WHERE project_id = ?1 AND role = 'assistant' AND usage IS NOT NULL AND created_at >= ?2",
+        )?;
+        let mut rows = statement.query(params![project_id.to_string(), since])?;
+        let mut totals: BTreeMap<(String, String), argentum_domain::UsageDayRow> = BTreeMap::new();
+        while let Some(row) = rows.next()? {
+            let created_at: i64 = row.get(0)?;
+            let model: String = row.get(1)?;
+            let usage: String = row.get(2)?;
+            let Some(usage) = parse_stored_usage(Some(&usage))? else {
+                continue;
+            };
+            let day = time::OffsetDateTime::from_unix_timestamp(created_at)
+                .map(|moment| moment.date().to_string())
+                .unwrap_or_default();
+            let entry = totals
+                .entry((day.clone(), model.clone()))
+                .or_insert_with(|| argentum_domain::UsageDayRow {
+                    day,
+                    model,
+                    turns: 0,
+                    input_tokens: 0,
+                    cached_input_tokens: 0,
+                    output_tokens: 0,
+                });
+            let usage = usage.consumed();
+            entry.turns = entry.turns.saturating_add(1);
+            entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
+            entry.cached_input_tokens = entry
+                .cached_input_tokens
+                .saturating_add(usage.cached_input_tokens);
+            entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
+        }
+        let mut rows = totals.into_values().collect::<Vec<_>>();
+        rows.sort_by(|a, b| b.day.cmp(&a.day).then(b.input_tokens.cmp(&a.input_tokens)));
+        Ok(rows)
+    }
+
+    /// Every project in this database, most recently active first.
+    pub fn projects_overview(
+        &self,
+        current: ProjectId,
+    ) -> Result<Vec<argentum_domain::ProjectOverview>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT p.id, p.payload,
+                    (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id),
+                    (SELECT MAX(s.last_activity_at) FROM sessions s WHERE s.project_id = p.id)
+             FROM projects p",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut projects = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let payload: String = row.get(1)?;
+            let sessions: i64 = row.get(2)?;
+            let last_activity: Option<i64> = row.get(3)?;
+            let Ok(project) = serde_json::from_str::<argentum_domain::Project>(&payload) else {
+                continue;
+            };
+            projects.push((id, project, sessions, last_activity));
+        }
+        drop(rows);
+        drop(statement);
+        let mut usage_statement = connection.prepare(
+            "SELECT usage FROM conversation_messages
+             WHERE project_id = ?1 AND role = 'assistant' AND usage IS NOT NULL",
+        )?;
+        let mut overview = Vec::new();
+        for (id, project, sessions, last_activity) in projects {
+            let mut usage_rows = usage_statement.query(params![id])?;
+            let (mut input, mut output) = (0_u64, 0_u64);
+            while let Some(row) = usage_rows.next()? {
+                let usage: String = row.get(0)?;
+                if let Some(usage) = parse_stored_usage(Some(&usage))? {
+                    let usage = usage.consumed();
+                    input = input.saturating_add(usage.input_tokens);
+                    output = output.saturating_add(usage.output_tokens);
+                }
+            }
+            overview.push(argentum_domain::ProjectOverview {
+                name: project.name,
+                workspace_root: project.workspace_root.display().to_string(),
+                sessions: u64::try_from(sessions).unwrap_or(0),
+                last_activity,
+                input_tokens: input,
+                output_tokens: output,
+                current: project.id == current,
+            });
+        }
+        overview.sort_by_key(|a| std::cmp::Reverse(a.last_activity));
+        Ok(overview)
     }
 
     pub fn load_layout(&self, key: &str) -> Result<Option<LayoutProfile>, StoreError> {
@@ -3598,7 +3716,7 @@ impl Store {
                  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
                  task_id TEXT NOT NULL,
                  assistant_complete INTEGER NOT NULL DEFAULT 0,
-                 next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 33),
+                 next_ordinal INTEGER NOT NULL DEFAULT 0 CHECK(next_ordinal >= 0 AND next_ordinal <= 121),
                  user_message_id TEXT NOT NULL UNIQUE REFERENCES conversation_messages(id) ON DELETE CASCADE
              );
              CREATE INDEX IF NOT EXISTS idx_context_runs_scope
@@ -3722,6 +3840,7 @@ impl Store {
             "TEXT CHECK(line_count_availability IS NULL OR line_count_availability IN ('computed', 'unavailable', 'unknown'))",
         )?;
         extensions::migrate(&additive)?;
+        devices::migrate(&additive)?;
         additive.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         ensure_column(&additive, "goal_invocations", "owner_generation", "INTEGER")?;
         // F09 development builds may already have created schema 18 before
@@ -4574,7 +4693,14 @@ fn validate_model_usage(usage: &ModelUsage) -> Result<(), StoreError> {
     let valid_context = usage
         .context_window_tokens
         .is_none_or(|tokens| tokens > 0 && usage.total_tokens <= tokens);
-    if valid_total && valid_cached && valid_reasoning && valid_context {
+    // A turn total includes the latest request, so it can never be smaller.
+    let valid_turn = usage.turn_total.is_none_or(|turn| {
+        turn.requests >= 1
+            && turn.input_tokens >= usage.input_tokens
+            && turn.output_tokens >= usage.output_tokens
+            && turn.cached_input_tokens <= turn.input_tokens
+    });
+    if valid_total && valid_cached && valid_reasoning && valid_context && valid_turn {
         Ok(())
     } else {
         Err(StoreError::InvalidRecord(
@@ -5278,6 +5404,7 @@ mod tests {
                 reasoning_tokens: Some(2),
                 cached_input_tokens: Some(3),
                 context_window_tokens: Some(32_768),
+                turn_total: None,
             }),
             profile_id: "hosted".into(),
             model: "hosted-model".into(),
@@ -5626,7 +5753,7 @@ mod tests {
                 .expect("store identity");
             (tables, indexes, identity)
         };
-        assert_eq!((tables, indexes), (32, 29));
+        assert_eq!((tables, indexes), (33, 29));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection
@@ -6117,6 +6244,7 @@ mod tests {
                             reasoning_tokens: Some(2),
                             cached_input_tokens: None,
                             context_window_tokens: Some(32_768),
+                            turn_total: None,
                         },
                     ),
                     profile_id: if role == ConversationRole::Assistant {
@@ -6276,6 +6404,66 @@ mod tests {
     }
 
     #[test]
+    fn usage_reports_group_by_day_and_list_projects() {
+        let (store, _directory, project_id, session_id) = conversation_store();
+        let message = assistant_message(project_id, session_id);
+        let usage = message.usage.clone().expect("usage");
+        store.append_conversation_message(&message).expect("first");
+        let mut second = message.clone();
+        second.id = RunId::new_v4();
+        second.run_id = RunId::new_v4();
+        store.append_conversation_message(&second).expect("second");
+
+        let days = store.usage_by_day(project_id, 30).expect("days");
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].turns, 2);
+        assert_eq!(days[0].input_tokens, usage.input_tokens * 2);
+        assert_eq!(days[0].model, message.model);
+
+        let projects = store.projects_overview(project_id).expect("projects");
+        assert_eq!(projects.len(), 1);
+        assert!(projects[0].current);
+        assert_eq!(projects[0].sessions, 1);
+        assert_eq!(projects[0].output_tokens, usage.output_tokens * 2);
+    }
+
+    #[test]
+    fn usage_reports_count_every_request_of_a_turn() {
+        let (store, _directory, project_id, session_id) = conversation_store();
+        let mut message = assistant_message(project_id, session_id);
+        let mut usage = message.usage.clone().expect("usage");
+        let mut turn = argentum_domain::UsageTotal::default();
+        turn.add(&usage);
+        turn.add(&usage);
+        turn.add(&usage);
+        usage.turn_total = Some(turn);
+        message.usage = Some(usage.clone());
+        store.append_conversation_message(&message).expect("append");
+
+        let days = store.usage_by_day(project_id, 30).expect("days");
+        assert_eq!(days[0].turns, 1);
+        assert_eq!(days[0].input_tokens, usage.input_tokens * 3);
+        let providers = store.provider_usage(project_id).expect("providers");
+        assert_eq!(
+            providers[0].total_tokens,
+            (usage.input_tokens + usage.output_tokens) * 3
+        );
+        let projects = store.projects_overview(project_id).expect("projects");
+        assert_eq!(projects[0].output_tokens, usage.output_tokens * 3);
+
+        let mut smaller = assistant_message(project_id, session_id);
+        let mut bad = smaller.usage.clone().expect("usage");
+        bad.turn_total = Some(argentum_domain::UsageTotal {
+            requests: 1,
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            output_tokens: 0,
+        });
+        smaller.usage = Some(bad);
+        assert!(store.append_conversation_message(&smaller).is_err());
+    }
+
+    #[test]
     fn conversation_message_usage_invariants_are_enforced_before_append() {
         let (store, _directory, project_id, session_id) = conversation_store();
         let base = assistant_message(project_id, session_id);
@@ -6291,6 +6479,7 @@ mod tests {
                 reasoning_tokens: None,
                 cached_input_tokens: None,
                 context_window_tokens: None,
+                turn_total: None,
             },
             ModelUsage {
                 cached_input_tokens: Some(11),
@@ -6353,6 +6542,7 @@ mod tests {
                 reasoning_tokens: None,
                 cached_input_tokens: None,
                 context_window_tokens: None,
+                turn_total: None,
             }),
             ..base.clone()
         });
