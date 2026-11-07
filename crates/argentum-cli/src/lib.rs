@@ -1,5 +1,6 @@
 pub mod onboarding;
 pub mod protocol;
+pub mod remote;
 pub mod server;
 pub mod tui;
 

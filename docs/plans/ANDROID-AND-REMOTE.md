@@ -57,8 +57,15 @@ The connection for remote sessions is `argentum_devices::channel`: an X25519
 handshake signed by both identity keys, accepted only from a paired device, then
 ChaCha20-Poly1305 frames with one key per direction and counter nonces. It is
 built from `ring` instead of Noise XX, which would need a new dependency.
-Carrying the command protocol over it, and choosing which device a session runs
-on, are not built yet.
+`argentum device serve [--port PORT]` (default 47911) waits for one paired
+device and serves it the same JSONL command protocol as `argentum serve`, over
+that channel (`argentum_cli::remote`). `argentum device connect HOST[:PORT]`
+relays a console to it. The serving device has no approval responder for a
+remote device, so anything that needs approval is refused there and its
+workspace policy stays authoritative. A test carries split JSONL lines both
+ways between two in-memory identities. A live run between two installs, the
+app UI for remote sessions, and choosing which device a session runs on are not
+built or checked yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.

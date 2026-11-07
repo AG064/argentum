@@ -47,6 +47,8 @@ pub enum ChannelError {
     TooLarge,
     #[error("a secure connection could not be set up")]
     Crypto,
+    #[error("the other device closed the connection")]
+    Closed,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -177,40 +179,110 @@ impl<S: Read + Write> SecureChannel<S> {
     }
 
     pub fn send(&mut self, message: &[u8]) -> Result<(), ChannelError> {
-        if message.len() > MAX_MESSAGE_BYTES {
-            return Err(ChannelError::TooLarge);
-        }
-        let nonce = counter_nonce(self.sent)?;
-        self.sent += 1;
-        let mut sealed = message.to_vec();
-        self.sealing
-            .seal_in_place_append_tag(nonce, Aad::empty(), &mut sealed)
-            .map_err(|_| ChannelError::Crypto)?;
-        let length = u32::try_from(sealed.len()).map_err(|_| ChannelError::TooLarge)?;
-        let writer = self.stream.get_mut();
-        writer.write_all(&length.to_be_bytes())?;
-        writer.write_all(&sealed)?;
-        writer.flush()?;
-        Ok(())
+        seal_frame(
+            self.stream.get_mut(),
+            &self.sealing,
+            &mut self.sent,
+            message,
+        )
     }
 
     pub fn receive(&mut self) -> Result<Vec<u8>, ChannelError> {
-        let mut length = [0_u8; 4];
-        self.stream.read_exact(&mut length)?;
-        let length = u32::from_be_bytes(length) as usize;
-        if length > MAX_MESSAGE_BYTES + CHACHA20_POLY1305.tag_len() {
-            return Err(ChannelError::TooLarge);
-        }
-        let mut sealed = vec![0_u8; length];
-        self.stream.read_exact(&mut sealed)?;
-        let nonce = counter_nonce(self.received)?;
-        self.received += 1;
-        let opened = self
-            .opening
-            .open_in_place(nonce, Aad::empty(), &mut sealed)
-            .map_err(|_| ChannelError::Integrity)?;
-        Ok(opened.to_vec())
+        open_frame(&mut self.stream, &self.opening, &mut self.received)
     }
+
+    /// Splits the channel so one thread can send while another receives.
+    /// `writer` must write to the same connection, such as a cloned socket.
+    pub fn split<W: Write>(self, writer: W) -> (ChannelSender<W>, ChannelReceiver<S>) {
+        (
+            ChannelSender {
+                writer,
+                sealing: self.sealing,
+                sent: self.sent,
+            },
+            ChannelReceiver {
+                reader: self.stream,
+                opening: self.opening,
+                received: self.received,
+            },
+        )
+    }
+}
+
+/// The sending half of a split channel.
+pub struct ChannelSender<W: Write> {
+    writer: W,
+    sealing: LessSafeKey,
+    sent: u64,
+}
+
+impl<W: Write> ChannelSender<W> {
+    pub fn send(&mut self, message: &[u8]) -> Result<(), ChannelError> {
+        seal_frame(&mut self.writer, &self.sealing, &mut self.sent, message)
+    }
+}
+
+/// The receiving half of a split channel.
+pub struct ChannelReceiver<R: Read> {
+    reader: BufReader<R>,
+    opening: LessSafeKey,
+    received: u64,
+}
+
+impl<R: Read> ChannelReceiver<R> {
+    /// Returns [`ChannelError::Closed`] once the other device has hung up.
+    pub fn receive(&mut self) -> Result<Vec<u8>, ChannelError> {
+        open_frame(&mut self.reader, &self.opening, &mut self.received)
+    }
+}
+
+fn seal_frame<W: Write>(
+    writer: &mut W,
+    sealing: &LessSafeKey,
+    sent: &mut u64,
+    message: &[u8],
+) -> Result<(), ChannelError> {
+    if message.len() > MAX_MESSAGE_BYTES {
+        return Err(ChannelError::TooLarge);
+    }
+    let nonce = counter_nonce(*sent)?;
+    *sent += 1;
+    let mut sealed = message.to_vec();
+    sealing
+        .seal_in_place_append_tag(nonce, Aad::empty(), &mut sealed)
+        .map_err(|_| ChannelError::Crypto)?;
+    let length = u32::try_from(sealed.len()).map_err(|_| ChannelError::TooLarge)?;
+    writer.write_all(&length.to_be_bytes())?;
+    writer.write_all(&sealed)?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn open_frame<R: Read>(
+    reader: &mut R,
+    opening: &LessSafeKey,
+    received: &mut u64,
+) -> Result<Vec<u8>, ChannelError> {
+    let mut length = [0_u8; 4];
+    match reader.read_exact(&mut length) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+            return Err(ChannelError::Closed)
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let length = u32::from_be_bytes(length) as usize;
+    if length > MAX_MESSAGE_BYTES + CHACHA20_POLY1305.tag_len() {
+        return Err(ChannelError::TooLarge);
+    }
+    let mut sealed = vec![0_u8; length];
+    reader.read_exact(&mut sealed)?;
+    let nonce = counter_nonce(*received)?;
+    *received += 1;
+    let opened = opening
+        .open_in_place(nonce, Aad::empty(), &mut sealed)
+        .map_err(|_| ChannelError::Integrity)?;
+    Ok(opened.to_vec())
 }
 
 fn ephemeral() -> Result<(EphemeralPrivateKey, [u8; 32]), ChannelError> {
@@ -445,5 +517,28 @@ mod tests {
             channel.send(&vec![0_u8; MAX_MESSAGE_BYTES + 1]),
             Err(ChannelError::TooLarge)
         ));
+    }
+
+    #[test]
+    fn split_halves_carry_messages_and_report_a_hang_up() {
+        let (pc, phone) = (identity(), identity());
+        let (pc_key, phone_key) = (pc.public_key(), phone.public_key());
+        let (client, server) = pair();
+        let phone_side = std::thread::spawn(move || {
+            let writer = server.try_clone().unwrap();
+            let channel = SecureChannel::accept(server, &phone, |key| *key == pc_key).unwrap();
+            let (mut sender, mut receiver) = channel.split(writer);
+            sender.send(b"first").unwrap();
+            assert_eq!(receiver.receive().unwrap(), b"reply");
+            sender.send(b"second").unwrap();
+        });
+        let writer = client.try_clone().unwrap();
+        let channel = SecureChannel::connect(client, &pc, |key| *key == phone_key).unwrap();
+        let (mut sender, mut receiver) = channel.split(writer);
+        assert_eq!(receiver.receive().unwrap(), b"first");
+        sender.send(b"reply").unwrap();
+        assert_eq!(receiver.receive().unwrap(), b"second");
+        phone_side.join().unwrap();
+        assert!(matches!(receiver.receive(), Err(ChannelError::Closed)));
     }
 }

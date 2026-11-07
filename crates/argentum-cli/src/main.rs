@@ -910,6 +910,16 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_recovery_command(database, action, json).await?;
         }
+        Arguments::Device {
+            action: DeviceAction::Serve(port),
+            ..
+        } => run_device_serve(port).await?,
+        Arguments::Device {
+            action: DeviceAction::Connect(address),
+            ..
+        } => tokio::task::spawn_blocking(move || run_device_connect(&address))
+            .await?
+            .map_err(|error| error.to_string())?,
         Arguments::Device { action, json } => run_device_command(action, json)?,
         Arguments::Accounting {
             options,
@@ -5241,6 +5251,128 @@ fn run_device_pairing(peer: PairPeer, name: String) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+/// The paired devices' identity keys, read from this device's store.
+fn paired_device_keys() -> Result<Vec<[u8; 32]>, Box<dyn std::error::Error + Send + Sync>> {
+    let store = Store::open(AppPaths::discover()?.database)?;
+    let keys = store
+        .paired_devices()?
+        .iter()
+        .filter_map(|device| decode_device_key(&device.public_key))
+        .collect::<Vec<_>>();
+    if keys.is_empty() {
+        return Err("No devices are paired with this one. Run argentum device pair first.".into());
+    }
+    Ok(keys)
+}
+
+fn decode_device_key(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 || !hex.is_ascii() {
+        return None;
+    }
+    (0..64)
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).ok())
+        .collect::<Option<Vec<u8>>>()?
+        .try_into()
+        .ok()
+}
+
+/// Waits for one paired device and serves it the command protocol. Commands
+/// that need approval are refused here, as with argentum serve.
+async fn run_device_serve(port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    use std::time::Duration;
+
+    let keys = paired_device_keys().map_err(|error| error.to_string())?;
+    let secrets = argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
+    let identity = argentum_devices::DeviceIdentity::load_or_create(secrets.as_ref())?;
+    eprintln!("This device: {}", identity.fingerprint());
+    eprintln!("Waiting for a paired device on port {port}...");
+    let listener = std::net::TcpListener::bind(("0.0.0.0", port))?;
+    let (stream, writer, channel) = tokio::task::spawn_blocking(
+        move || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+            loop {
+                let (stream, address) = listener.accept()?;
+                stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+                let writer = stream.try_clone()?;
+                match argentum_devices::channel::SecureChannel::accept(
+                    stream.try_clone()?,
+                    &identity,
+                    |key| keys.contains(key),
+                ) {
+                    Ok(channel) => {
+                        stream.set_read_timeout(None)?;
+                        return Ok((stream, writer, channel));
+                    }
+                    Err(error) => eprintln!("Refused a connection from {address}: {error}"),
+                }
+            }
+        },
+    )
+    .await?
+    .map_err(|error| error.to_string())?;
+    eprintln!(
+        "Serving {}. Commands that need approval are refused on this device.",
+        argentum_devices::fingerprint(&channel.peer())
+    );
+    let (sender, receiver) = channel.split(writer);
+    let host = start_active_host(CommonOptions::default().host_config()?).await?;
+    let result = argentum_cli::remote::serve_jsonl_over_channel(host, receiver, sender).await;
+    let _ = stream.shutdown(std::net::Shutdown::Both);
+    result?;
+    eprintln!("The other device disconnected.");
+    Ok(())
+}
+
+/// Relays this console to a paired device's command protocol: lines typed
+/// here are requests, and its responses are printed as they arrive.
+fn run_device_connect(address: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::io::{Read, Write};
+    use std::time::Duration;
+
+    let keys = paired_device_keys()?;
+    let secrets = argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
+    let identity = argentum_devices::DeviceIdentity::load_or_create(secrets.as_ref())?;
+    let address = std::net::ToSocketAddrs::to_socket_addrs(address)?
+        .next()
+        .ok_or("That address could not be resolved.")?;
+    let stream = std::net::TcpStream::connect_timeout(&address, Duration::from_secs(15))?;
+    stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+    let writer = stream.try_clone()?;
+    let channel =
+        argentum_devices::channel::SecureChannel::connect(stream.try_clone()?, &identity, |key| {
+            keys.contains(key)
+        })?;
+    stream.set_read_timeout(None)?;
+    eprintln!(
+        "Connected to {}. Type JSONL requests; end input to disconnect.",
+        argentum_devices::fingerprint(&channel.peer())
+    );
+    let (mut sender, mut receiver) = channel.split(writer);
+    let shutdown = stream.try_clone()?;
+    std::thread::spawn(move || {
+        let mut stdin = std::io::stdin().lock();
+        let mut buffer = vec![0_u8; 64 * 1024];
+        while let Ok(read) = stdin.read(&mut buffer) {
+            if read == 0 || sender.send(&buffer[..read]).is_err() {
+                break;
+            }
+        }
+        // The other device finishes what it was asked, then hangs up.
+        let _ = shutdown.shutdown(std::net::Shutdown::Write);
+    });
+    let mut stdout = std::io::stdout().lock();
+    loop {
+        match receiver.receive() {
+            Ok(chunk) => {
+                stdout.write_all(&chunk)?;
+                stdout.flush()?;
+            }
+            Err(argentum_devices::channel::ChannelError::Closed) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
 fn run_device_command(action: DeviceAction, json: bool) -> Result<(), Box<dyn std::error::Error>> {
     match action {
         DeviceAction::Show => {
@@ -5282,6 +5414,9 @@ fn run_device_command(action: DeviceAction, json: bool) -> Result<(), Box<dyn st
             }
         }
         DeviceAction::Pair { peer, name } => run_device_pairing(peer, name)?,
+        DeviceAction::Serve(_) | DeviceAction::Connect(_) => {
+            unreachable!("remote sessions run on the async runtime")
+        }
         DeviceAction::Forget(fingerprint) => {
             let store = Store::open(AppPaths::discover()?.database)?;
             let forgotten = store.forget_paired_device(&fingerprint)?;
@@ -5749,7 +5884,14 @@ enum DeviceAction {
     Show,
     List,
     Forget(String),
-    Pair { peer: PairPeer, name: String },
+    Pair {
+        peer: PairPeer,
+        name: String,
+    },
+    /// Serve the command protocol to one paired device.
+    Serve(u16),
+    /// Drive a paired device's command protocol from this console.
+    Connect(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -5761,6 +5903,8 @@ enum PairPeer {
 
 /// The default port for pairing on the local network.
 const PAIRING_PORT: u16 = 47_910;
+/// The default port for remote sessions between paired devices.
+const SESSION_PORT: u16 = 47_911;
 
 #[derive(Debug, PartialEq, Eq)]
 enum RecoveryAction {
@@ -6148,8 +6292,18 @@ where
             ["list"] => DeviceAction::List,
             ["forget", fingerprint] => DeviceAction::Forget((*fingerprint).to_owned()),
             ["pair", options @ ..] if !json => parse_pair_options(options)?,
+            ["serve"] if !json => DeviceAction::Serve(SESSION_PORT),
+            ["serve", "--port", port] if !json => DeviceAction::Serve(
+                port.parse()
+                    .map_err(|_| "--port takes a port number".to_owned())?,
+            ),
+            ["connect", address] if !json => DeviceAction::Connect(if address.contains(':') {
+                (*address).to_owned()
+            } else {
+                format!("{address}:{SESSION_PORT}")
+            }),
             _ => return Err(
-                "Usage: argentum device show|list [--json], argentum device forget FINGERPRINT, or argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME]"
+                "Usage: argentum device show|list [--json], argentum device forget FINGERPRINT, argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME], argentum device serve [--port PORT], or argentum device connect HOST[:PORT]"
                     .into(),
             ),
         };
@@ -8520,7 +8674,9 @@ argentum recovery reconcile [--database PATH] [--json]\n  \
 argentum recovery review --run-id RUN_ID --revision REVISION [--database PATH] [--json]\n\n\
 argentum device show|list [--json]\n  \
 argentum device forget FINGERPRINT\n  \
-argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME]\n\n\
+argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME]\n  \
+argentum device serve [--port PORT]\n  \
+argentum device connect HOST[:PORT]\n\n\
 Commands:\n  \
 no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
@@ -9658,6 +9814,23 @@ mod tests {
                 ..
             }) if address == "192.168.1.20:47910" && name == "Phone"
         ));
+        assert!(matches!(
+            parse_args(["device", "serve"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Serve(SESSION_PORT),
+                json: false,
+            })
+        ));
+        assert!(matches!(
+            parse_args(["device", "connect", "192.168.1.20"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Connect(address),
+                json: false,
+            }) if address == "192.168.1.20:47911"
+        ));
+        assert!(parse_args(["device", "serve", "--json"]).is_err());
+        assert_eq!(decode_device_key(&"ab".repeat(32)), Some([0xab; 32]));
+        assert_eq!(decode_device_key("ab"), None);
         assert!(parse_args(["device", "pair"]).is_err());
         assert!(parse_args(["device", "pair", "--listen", "--json"]).is_err());
         assert!(parse_args(["device"]).is_err());

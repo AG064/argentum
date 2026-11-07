@@ -734,6 +734,20 @@ pub const COMMANDS: &[CommandEntry] = &[
         true,
     ),
     cmd(
+        "core",
+        &["device", "serve"],
+        "Serve this device's command protocol to one paired device",
+        Gate::None,
+        true,
+    ),
+    cmd(
+        "core",
+        &["device", "connect"],
+        "Send command protocol requests to a paired device",
+        Gate::None,
+        true,
+    ),
+    cmd(
         "recovery",
         &["recovery", "inspect"],
         "Inspect abandoned local owner state",
