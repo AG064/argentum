@@ -41,8 +41,11 @@ Started: the palette runs `new`, `settings <page>`, `provider use <id>`,
 
 Started: `crates/argentum-devices` gives each install an Ed25519 identity in the
 credential store, with a fingerprint to compare and signing for the pairing
-challenge. `argentum device show` prints the fingerprint. Pairing, transport and
-remote sessions are not built yet.
+challenge. `argentum device show` prints the fingerprint. The pairing exchange is
+in `argentum_devices::pairing`: both devices sign a transcript of both keys and
+nonces, verify each other, and show the same six-digit code for the owner to
+confirm. The transport, storing paired devices in the policy, and remote
+sessions are not built yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.

@@ -8,6 +8,8 @@
 //! An identity grants nothing by itself. What a paired device may ask for is
 //! decided by each device's own persisted workspace policy.
 
+pub mod pairing;
+
 use argentum_platform::{PlatformError, SecretStore};
 use argentum_security::SecretValue;
 use ring::rand::SystemRandom;
@@ -113,13 +115,13 @@ fn decode_hex(text: &str) -> Option<Vec<u8>> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::sync::Mutex;
 
     #[derive(Default)]
-    struct MemoryStore(Mutex<HashMap<String, String>>);
+    pub(crate) struct MemoryStore(Mutex<HashMap<String, String>>);
 
     impl SecretStore for MemoryStore {
         fn get(&self, key: &str) -> Result<Option<SecretValue>, PlatformError> {
