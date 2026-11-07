@@ -63,9 +63,12 @@ that channel (`argentum_cli::remote`). `argentum device connect HOST[:PORT]`
 relays a console to it. The serving device has no approval responder for a
 remote device, so anything that needs approval is refused there and its
 workspace policy stays authoritative. A test carries split JSONL lines both
-ways between two in-memory identities. A live run between two installs, the
-app UI for remote sessions, and choosing which device a session runs on are not
-built or checked yet.
+ways between two in-memory identities. The agent's host facts now include a `devices` entry:
+this device's OS and architecture, the owner-entered names of up to eight
+paired devices, and a note that no model tool reaches another device. Keys and
+fingerprints stay out of prompts. A live run between two installs, the app UI
+for remote sessions, model tools that act on a paired device, and choosing
+which device a session runs on are not built or checked yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.
