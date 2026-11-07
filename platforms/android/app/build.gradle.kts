@@ -83,6 +83,10 @@ val buildRustRelease by tasks.registering(Exec::class) {
 }
 
 android {
+    // For diagnosing native crashes: keep symbols so Rust backtraces have names.
+    if (providers.gradleProperty("keepNativeSymbols").orNull == "true") {
+        packaging.jniLibs.keepDebugSymbols.add("**/*.so")
+    }
     namespace = "com.argentum"
     compileSdk = 36
     ndkVersion = "27.0.12077973"

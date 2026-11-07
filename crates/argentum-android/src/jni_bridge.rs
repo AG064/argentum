@@ -182,6 +182,12 @@ fn request_registered_close(activity_generation: u64) -> bool {
     action.is_some_and(|action| action())
 }
 
+/// Called by the Java activity through JNI.
+///
+/// # Safety
+///
+/// Only the JVM may call this, on a thread attached to it, with the activity's
+/// own environment and instance. The pointers are not read here.
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn Java_com_argentum_ArgentumActivity_nativeOnLifecycle(
@@ -201,6 +207,12 @@ pub unsafe extern "system" fn Java_com_argentum_ArgentumActivity_nativeOnLifecyc
     let _ = process_lifecycle().accept_code(protocol, activity_generation, sequence, state);
 }
 
+/// Called by the Java activity through JNI.
+///
+/// # Safety
+///
+/// Only the JVM may call this, on a thread attached to it, with the activity's
+/// own environment and instance. The pointers are not read here.
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn Java_com_argentum_ArgentumActivity_nativeOnBackRequested(

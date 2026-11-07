@@ -1,3 +1,6 @@
+// Clippy reports thread-locals that are already `const` when this crate is
+// built for Android.
+#![cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local))]
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -54,7 +57,12 @@ const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 thread_local! {
     static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
-    static DEFERRED: RefCell<DeferredCommands> = RefCell::new(DeferredCommands::default());
+    static DEFERRED: RefCell<DeferredCommands> = const {
+        RefCell::new(DeferredCommands {
+            dispatch: None,
+            after_profile: Vec::new(),
+        })
+    };
 }
 
 /// Commands that must wait for a provider profile to exist. The host runs

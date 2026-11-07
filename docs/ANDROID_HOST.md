@@ -22,9 +22,11 @@ Checked on an Android 16 x86_64 emulator sized like a Xiaomi Mi 13T Pro
 
 Not checked yet:
 
-- A physical arm64 phone. The arm64 build crashes at startup on the emulator's
-  ARM translation layer, inside that layer, while the x86_64 build of the same
-  code runs. This needs a real device to settle.
+- A physical arm64 phone. On the x86_64 emulator, the arm64 build runs through
+  Android's ARM translation and aborts before Argentum's code starts: inside
+  `android-activity`'s startup, where it looks up Android SDK classes with
+  `FindClass`. The x86_64 build of the same code runs, and real arm64 phones have
+  no translation layer, but this needs a real device to settle.
 - On-device models. The llama.cpp engine is an optional build feature (below).
 
 ## Build
@@ -46,6 +48,9 @@ $env:ANDROID_JAR = "$env:ANDROID_HOME\platforms\android-36\android.jar"
 cargo ndk -t arm64-v8a -P 28 -o platforms/android/app/build/generated/rustJniLibs/debug build -p argentum-android --lib --release --locked
 platforms\android\gradlew.bat -p platforms\android --no-daemon assembleDebug -x buildRustDebug
 ```
+
+Add `-PkeepNativeSymbols=true` to keep native symbols, so a Rust panic in logcat
+has a readable backtrace.
 
 Delete `platforms/android/app/build/outputs/apk/debug/app-debug.apk` first.
 Incremental packaging otherwise keeps the old file's dead space, and the APK grows

@@ -48,6 +48,13 @@ impl std::error::Error for AndroidHostError {}
 
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
+    // A panic on a phone otherwise leaves only its message in logcat. The
+    // backtrace has names when the library keeps its symbols
+    // (-PkeepNativeSymbols=true).
+    std::panic::set_hook(Box::new(|info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        eprintln!("argentum panicked: {info}\n{backtrace}");
+    }));
     if let Err(error) = run_android(app) {
         eprintln!("{error}");
     }

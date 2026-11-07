@@ -1,4 +1,10 @@
 //! Optional bounded Rust-library checks, always isolated on Windows.
+// Managed processes and checks are not offered on Android, so much of this
+// module is unused there.
+#![cfg_attr(
+    target_os = "android",
+    allow(dead_code, unused_imports, clippy::needless_return)
+)]
 use crate::ProcessJobOwner;
 use argentum_domain::{supplemental::*, Sha256Digest};
 use argentum_workspaces::WorkspaceManager;
