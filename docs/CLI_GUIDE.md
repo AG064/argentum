@@ -347,6 +347,7 @@ Reserved names are recognized by the parser but return an unavailable error; the
 | `changes recovery` | changes | Retry or restore a change operation | none | yes |
 | `device show` | core | Show this device's pairing fingerprint, creating its key on first use | none | yes |
 | `device list` | core | List the devices paired with this one | none | no |
+| `device pair` | core | Pair with another device on the local network after comparing a code | none | yes |
 | `device forget` | core | Forget a paired device | none | yes |
 | `recovery inspect` | recovery | Inspect abandoned local owner state | none | no |
 | `recovery reconcile` | recovery | Reconcile abandoned local owner state | none | yes |

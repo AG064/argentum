@@ -5125,6 +5125,122 @@ async fn print_session_row(
     Ok(())
 }
 
+fn parse_pair_options(options: &[&str]) -> Result<DeviceAction, String> {
+    let mut peer = None;
+    let mut name = "Paired device".to_owned();
+    let mut index = 0;
+    while index < options.len() {
+        match options[index] {
+            "--listen" => {
+                let port = match options.get(index + 1) {
+                    Some(value) if !value.starts_with("--") => {
+                        index += 1;
+                        value
+                            .parse()
+                            .map_err(|_| "--listen takes a port number".to_owned())?
+                    }
+                    _ => PAIRING_PORT,
+                };
+                peer = Some(PairPeer::Listen(port));
+            }
+            "--connect" => {
+                let address = options
+                    .get(index + 1)
+                    .ok_or_else(|| "--connect takes HOST:PORT".to_owned())?;
+                index += 1;
+                peer = Some(PairPeer::Connect((*address).to_owned()));
+            }
+            "--name" => {
+                name = options
+                    .get(index + 1)
+                    .ok_or_else(|| "--name takes a name".to_owned())?
+                    .to_string();
+                index += 1;
+            }
+            other => return Err(format!("unexpected pairing argument '{other}'")),
+        }
+        index += 1;
+    }
+    Ok(DeviceAction::Pair {
+        peer: peer.ok_or_else(|| "device pair needs --listen or --connect".to_owned())?,
+        name,
+    })
+}
+
+/// Pairing is an owner action at a console: both devices show a code and the
+/// owner confirms it matches. Nothing is saved without that confirmation.
+fn run_device_pairing(peer: PairPeer, name: String) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, Write};
+    use std::time::Duration;
+
+    const PAIRING_WAIT: Duration = Duration::from_secs(120);
+    let secrets = argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
+    let identity = argentum_devices::DeviceIdentity::load_or_create(secrets.as_ref())?;
+    println!("This device: {}", identity.fingerprint());
+    let (stream, initiator) = match peer {
+        PairPeer::Listen(port) => {
+            let listener = std::net::TcpListener::bind(("0.0.0.0", port))?;
+            listener.set_nonblocking(true)?;
+            println!("Waiting up to two minutes for the other device to connect on port {port}...");
+            let deadline = std::time::Instant::now() + PAIRING_WAIT;
+            loop {
+                match listener.accept() {
+                    Ok((stream, address)) => {
+                        println!("Connected from {address}.");
+                        stream.set_nonblocking(false)?;
+                        break (stream, false);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err("No device connected within two minutes.".into());
+                        }
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+        PairPeer::Connect(address) => {
+            let address = std::net::ToSocketAddrs::to_socket_addrs(&address.as_str())?
+                .next()
+                .ok_or("That address could not be resolved.")?;
+            (
+                std::net::TcpStream::connect_timeout(&address, Duration::from_secs(15))?,
+                true,
+            )
+        }
+    };
+    stream.set_read_timeout(Some(PAIRING_WAIT))?;
+    stream.set_write_timeout(Some(Duration::from_secs(15)))?;
+    let outcome = argentum_devices::exchange::exchange(&stream, &identity, initiator)?;
+    println!("Other device: {}", outcome.peer.fingerprint);
+    println!();
+    println!("    {}", outcome.comparison_code);
+    println!();
+    print!("Does the other device show the same six digits? Type y to pair: ");
+    std::io::stdout().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().lock().read_line(&mut answer)?;
+    if !answer.trim().eq_ignore_ascii_case("y") {
+        println!("Not paired.");
+        return Ok(());
+    }
+    let store = Store::open(AppPaths::discover()?.database)?;
+    store.save_paired_device(&argentum_store::PairedDeviceRecord {
+        public_key: outcome
+            .peer
+            .public_key
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+        fingerprint: outcome.peer.fingerprint.clone(),
+        name,
+        paired_at: argentum_domain::now().unix_timestamp(),
+    })?;
+    println!("Paired with {}.", outcome.peer.fingerprint);
+    Ok(())
+}
+
 fn run_device_command(action: DeviceAction, json: bool) -> Result<(), Box<dyn std::error::Error>> {
     match action {
         DeviceAction::Show => {
@@ -5165,6 +5281,7 @@ fn run_device_command(action: DeviceAction, json: bool) -> Result<(), Box<dyn st
                 }
             }
         }
+        DeviceAction::Pair { peer, name } => run_device_pairing(peer, name)?,
         DeviceAction::Forget(fingerprint) => {
             let store = Store::open(AppPaths::discover()?.database)?;
             let forgotten = store.forget_paired_device(&fingerprint)?;
@@ -5632,7 +5749,18 @@ enum DeviceAction {
     Show,
     List,
     Forget(String),
+    Pair { peer: PairPeer, name: String },
 }
+
+#[derive(Debug, PartialEq, Eq)]
+enum PairPeer {
+    /// Wait for one device to connect on this port.
+    Listen(u16),
+    Connect(String),
+}
+
+/// The default port for pairing on the local network.
+const PAIRING_PORT: u16 = 47_910;
 
 #[derive(Debug, PartialEq, Eq)]
 enum RecoveryAction {
@@ -6019,8 +6147,9 @@ where
             ["show"] => DeviceAction::Show,
             ["list"] => DeviceAction::List,
             ["forget", fingerprint] => DeviceAction::Forget((*fingerprint).to_owned()),
+            ["pair", options @ ..] if !json => parse_pair_options(options)?,
             _ => return Err(
-                "Usage: argentum device show|list [--json], or argentum device forget FINGERPRINT"
+                "Usage: argentum device show|list [--json], argentum device forget FINGERPRINT, or argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME]"
                     .into(),
             ),
         };
@@ -8390,7 +8519,8 @@ argentum recovery inspect [--database PATH] [--json]\n  \
 argentum recovery reconcile [--database PATH] [--json]\n  \
 argentum recovery review --run-id RUN_ID --revision REVISION [--database PATH] [--json]\n\n\
 argentum device show|list [--json]\n  \
-argentum device forget FINGERPRINT\n\n\
+argentum device forget FINGERPRINT\n  \
+argentum device pair --listen [PORT]|--connect HOST:PORT [--name NAME]\n\n\
 Commands:\n  \
 no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
@@ -9508,6 +9638,28 @@ mod tests {
                 json: false
             }) if fingerprint == "3f2a-91bc-07de-55a1-c004"
         ));
+        assert!(matches!(
+            parse_args(["device", "pair", "--listen"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Pair {
+                    peer: PairPeer::Listen(PAIRING_PORT),
+                    ..
+                },
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_args(["device", "pair", "--connect", "192.168.1.20:47910", "--name", "Phone"]),
+            Ok(Arguments::Device {
+                action: DeviceAction::Pair {
+                    peer: PairPeer::Connect(address),
+                    name,
+                },
+                ..
+            }) if address == "192.168.1.20:47910" && name == "Phone"
+        ));
+        assert!(parse_args(["device", "pair"]).is_err());
+        assert!(parse_args(["device", "pair", "--listen", "--json"]).is_err());
         assert!(parse_args(["device"]).is_err());
         assert!(parse_args(["device", "forget"]).is_err());
     }

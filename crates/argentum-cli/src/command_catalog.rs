@@ -721,6 +721,13 @@ pub const COMMANDS: &[CommandEntry] = &[
     ),
     cmd(
         "core",
+        &["device", "pair"],
+        "Pair with another device on the local network after comparing a code",
+        Gate::None,
+        true,
+    ),
+    cmd(
+        "core",
         &["device", "forget"],
         "Forget a paired device",
         Gate::None,

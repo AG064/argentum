@@ -47,9 +47,10 @@ nonces, verify each other, and show the same six-digit code for the owner to
 confirm. Paired devices are kept in the store's `paired_devices` table, and
 `argentum device list` and `argentum device forget` show and remove them.
 `argentum_devices::exchange` runs the exchange over any stream as bounded JSON
-lines, tested over a loopback TCP connection. Listening for and connecting to a
-device from the app or CLI, the pairing screen, and remote sessions are not
-built yet.
+lines, tested over a loopback TCP connection. `argentum device pair --listen`
+waits up to two minutes for one device, `--connect HOST:PORT` connects to it,
+and both ask the owner to type y when the codes match. The in-app pairing
+screen and remote sessions are not built yet.
 
 - Each install has a device identity: an Ed25519 key in the Windows credential
   store or Android Keystore.
