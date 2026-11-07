@@ -54,6 +54,42 @@ const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 thread_local! {
     static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
+    static DEFERRED: RefCell<DeferredCommands> = RefCell::new(DeferredCommands::default());
+}
+
+/// Commands that must wait for a provider profile to exist. The host runs
+/// commands concurrently, so a budget sent right after its profile could
+/// arrive first and be rejected. Both live on the UI thread.
+#[derive(Default)]
+struct DeferredCommands {
+    dispatch: Option<Rc<dyn Fn(AppCommand)>>,
+    after_profile: Vec<(String, AppCommand)>,
+}
+
+pub(crate) fn defer_until_profile_saved(profile_id: String, command: AppCommand) {
+    DEFERRED.with(|deferred| {
+        deferred
+            .borrow_mut()
+            .after_profile
+            .push((profile_id, command));
+    });
+}
+
+fn run_commands_waiting_for(profiles: &[ProviderProfile]) {
+    let ready = DEFERRED.with(|deferred| {
+        let mut deferred = deferred.borrow_mut();
+        let (ready, waiting): (Vec<_>, Vec<_>) = deferred
+            .after_profile
+            .drain(..)
+            .partition(|(id, _)| profiles.iter().any(|profile| &profile.id == id));
+        deferred.after_profile = waiting;
+        deferred.dispatch.clone().map(|dispatch| (dispatch, ready))
+    });
+    if let Some((dispatch, ready)) = ready {
+        for (_, command) in ready {
+            dispatch(command);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -948,6 +984,7 @@ impl UiHandle {
             }
             AppEvent::ProviderProfilesSnapshot { profiles } => {
                 self.apply_provider_profiles(profiles);
+                run_commands_waiting_for(profiles);
                 if !self.window.get_provider_preset_pending().is_empty() {
                     self.window
                         .set_provider_preset_pending(SharedString::default());
@@ -4244,6 +4281,10 @@ where
     F: Fn(AppCommand) + 'static,
 {
     let dispatch = Rc::new(dispatch);
+    {
+        let deferred_dispatch: Rc<dyn Fn(AppCommand)> = dispatch.clone();
+        DEFERRED.with(|deferred| deferred.borrow_mut().dispatch = Some(deferred_dispatch));
+    }
     {
         let workbench_dispatch = dispatch.clone();
         workbench::connect(window, move |command| workbench_dispatch(command));

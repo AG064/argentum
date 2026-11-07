@@ -694,6 +694,16 @@ where
         let weak = window.as_weak();
         app.on_first_run_save_server(move |endpoint, model, context| {
             let Some(window) = weak.upgrade() else { return };
+            let problem = [
+                crate::validate_provider_endpoint(endpoint.as_str()),
+                crate::validate_provider_model(model.as_str()),
+            ]
+            .into_iter()
+            .find(|problem| !problem.is_empty());
+            if let Some(problem) = problem {
+                window.set_first_run_error(problem.into());
+                return;
+            }
             let limits = match first_run_server_limits(context.as_str()) {
                 Ok(limits) => limits,
                 Err(error) => {
@@ -716,7 +726,10 @@ where
                     selected: true,
                 },
             });
-            dispatch(AppCommand::SaveProviderBudget { profile_id, limits });
+            crate::defer_until_profile_saved(
+                profile_id.clone(),
+                AppCommand::SaveProviderBudget { profile_id, limits },
+            );
             dispatch(AppCommand::ListHarnessState);
             window.set_first_run_stage("modules".into());
         });

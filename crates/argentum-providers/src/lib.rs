@@ -614,7 +614,7 @@ pub const PROVIDER_CATALOG: [ProviderPresetInfo; 39] = [
         false,
         true,
         ProviderGroup::Custom,
-        "Requires an explicit endpoint. Use provider save for a custom route.",
+        "Your own server, such as llama-server. You give its address, model, and context size.",
     ),
     preset(
         "minimax",

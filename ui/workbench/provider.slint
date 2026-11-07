@@ -138,7 +138,7 @@ export component FirstRun inherits Rectangle {
                 horizontal-alignment: center;
                 wrap: word-wrap;
             }
-            Field {
+            server-endpoint := Field {
                 label: "Endpoint";
                 placeholder: "http://192.168.1.20:8080/v1";
                 mono: true;
@@ -149,7 +149,7 @@ export component FirstRun inherits Rectangle {
                     App.provider_endpoint_error = App.validate_provider_endpoint(text);
                 }
             }
-            Field {
+            server-model := Field {
                 label: "Model";
                 placeholder: "The model name the server expects";
                 mono: true;
@@ -160,7 +160,7 @@ export component FirstRun inherits Rectangle {
                     App.provider_model_error = App.validate_provider_model(text);
                 }
             }
-            Field {
+            server-context := Field {
                 label: "Context size, in tokens";
                 hint: "The server's context setting, such as --ctx-size for llama-server. You can change it later in Settings.";
                 mono: true;
@@ -180,11 +180,13 @@ export component FirstRun inherits Rectangle {
                 Btn {
                     label: "Continue";
                     kind: "primary";
-                    enabled: App.provider_endpoint_error == "" && App.provider_model_error == ""
-                        && App.provider_draft_endpoint != "http://" && App.provider_draft_model != "";
+                    // The fields' own text is read, not the drafts, so a value set by
+                    // assistive technology without an edit event still counts.
+                    // The host validates it before anything is saved.
+                    enabled: server-endpoint.value != "" && server-model.value != "";
                     clicked => {
-                        App.first_run_save_server(App.provider_draft_endpoint, App.provider_draft_model,
-                            App.provider_draft_context);
+                        App.first_run_save_server(server-endpoint.value, server-model.value,
+                            server-context.value);
                     }
                 }
             }

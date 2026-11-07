@@ -198,7 +198,7 @@ CLI build leaves them out.
 
 - A run stops after 120 rounds, and earlier if the model repeats the same tool calls four rounds in a row.
 - The steps and diff list on each response last for the running session only.
-- Windows x64 is the only tested platform, and it has not yet been tested on a clean machine.
+- Windows x64 is the only qualified platform. Android runs on an emulator and has not yet been tested on a phone. See [Argentum on Android](docs/ANDROID_HOST.md).
 
 ## Quick start
 
@@ -220,8 +220,10 @@ No native release has been published. The latest published release, v0.0.9, is t
 earlier TypeScript product, which is now legacy. Its source and releases are linked in
 [the migration record](docs/MIGRATION_NATIVE.md).
 
-Windows x64 is the only tested platform. It has been tested on one Windows build, not
-on a clean machine or across Windows versions. macOS, Linux, Android, and iOS are
+Windows x64 is the only qualified platform. It has been tested on one Windows build, not
+on a clean machine or across Windows versions. Android chats, sets up providers, and
+survives rotation and restarts on an Android 16 emulator, but has not yet been tested on
+a phone; see [Argentum on Android](docs/ANDROID_HOST.md). macOS, Linux, and iOS are
 targets, not qualified products. Argentum is not yet a proven replacement for other
 coding agents.
 
