@@ -379,6 +379,9 @@ export component Composer inherits Rectangle {
                 width: parent.width;
             }
             input := TextInput {
+                // Shared with the host, which restores a prompt that failed
+                // before it was saved.
+                text <=> App.draft;
                 x: 0;
                 y: min(0px, root.text-height - self.preferred-height);
                 width: parent.width - 8px;

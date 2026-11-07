@@ -365,6 +365,21 @@ impl UiHandle {
                         ));
                 }
                 self.apply_live_activity(&activity::RunActivity::default());
+                // A run that failed before its message was stored would lose
+                // what the owner typed. Put it back in the empty composer.
+                let prompt = self.window.get_user_prompt();
+                if !prompt.is_empty()
+                    && !self.window.get_error_message().is_empty()
+                    && self.window.get_draft().is_empty()
+                    && !snapshot
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == ConversationRole::User)
+                        .is_some_and(|message| message.text == prompt.as_str())
+                {
+                    self.window.set_draft(prompt);
+                }
                 self.window.set_user_prompt(SharedString::default());
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
@@ -6197,9 +6212,73 @@ mod tests {
         assert_eq!(mode.icon, "diff");
     }
 
+    /// Run from the shared UI test: the window backend allows one instance.
+    fn a_prompt_lost_by_a_failed_run_returns_to_the_composer(ui: &UiHandle) {
+        let project_id: argentum_domain::ProjectId = "00000000-0000-0000-0000-0000000000d1"
+            .parse()
+            .expect("project id");
+        let session_id: SessionId = "00000000-0000-0000-0000-0000000000d2"
+            .parse()
+            .expect("session id");
+        let snapshot = |messages: Vec<ConversationMessage>| {
+            AppEvent::ConversationSnapshotLoaded(ConversationSnapshot {
+                project_id,
+                session_id,
+                messages,
+            })
+        };
+        ui.window()
+            .set_active_session_id(session_id.to_string().into());
+
+        // The run failed before the prompt was stored.
+        ui.window().set_user_prompt("Unsaved question".into());
+        ui.window().set_error_message("Could not continue.".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Unsaved question");
+        assert_eq!(ui.window().get_user_prompt(), "");
+
+        // A stored prompt is not repeated.
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_user_prompt("Saved question".into());
+        ui.apply_event(&snapshot(vec![ConversationMessage {
+            id: "00000000-0000-0000-0000-0000000000d3"
+                .parse()
+                .expect("message id"),
+            project_id,
+            session_id,
+            run_id: "00000000-0000-0000-0000-0000000000d4"
+                .parse()
+                .expect("run id"),
+            role: ConversationRole::User,
+            text: "Saved question".into(),
+            reasoning: String::new(),
+            usage: None,
+            profile_id: String::new(),
+            model: String::new(),
+            status: ConversationMessageStatus::Complete,
+            created_at: now(),
+        }]));
+        assert_eq!(ui.window().get_draft(), "");
+
+        // Without an error nothing is restored, and a typed draft is kept.
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_user_prompt("Fine".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "");
+        ui.window().set_error_message("Could not continue.".into());
+        ui.window().set_draft("Typed already".into());
+        ui.window().set_user_prompt("Lost".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Typed already");
+    }
+
     #[test]
     fn event_callback_and_credential_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
+        a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_active_session_id(SharedString::default());
 
         let goal_session_id: SessionId = "00000000-0000-0000-0000-0000000000c1"
             .parse()
