@@ -309,7 +309,7 @@ export component ToolsPage inherits VerticalLayout {
                 Label { text: tool.title; horizontal-stretch: 1; }
                 Badge { text: tool.requires_approval ? "Asks first" : "No prompt"; }
             }
-            Notice { text: tool.summary; tone: "secondary"; }
+            Label { text: tool.summary; tone: "secondary"; size: "sm"; overflow: elide; }
             Label { text: tool.id + ", " + tool.risk; tone: "muted"; size: "xs"; }
         }
     }

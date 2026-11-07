@@ -219,7 +219,8 @@ component DevicesPage inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.sp8;
         Label { text: "This device"; tone: "muted"; size: "sm"; }
-        Label { text: App.device_fingerprint; size: "sm"; mono: true; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
+        // Monospace only for a real fingerprint, which always has four hyphens.
+        Label { text: App.device_fingerprint; size: "sm"; mono: App.device_fingerprint.character-count == 24; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
     }
     SectionLabel { text: "PAIRED"; height: 22px; }
     if App.devices.length == 0: Label { text: "No devices are paired with this one."; tone: "muted"; size: "sm"; }

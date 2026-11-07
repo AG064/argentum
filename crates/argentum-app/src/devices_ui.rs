@@ -129,8 +129,10 @@ pub fn connect(ui: &UiHandle, context: DevicesContext) {
 
 fn refresh(window: &MainWindow, context: &DevicesContext) {
     let app = window.global::<App>();
-    match DeviceIdentity::load_or_create(context.secrets.as_ref()) {
-        Ok(identity) => app.set_device_fingerprint(identity.fingerprint().into()),
+    // Opening the page writes nothing; the key is made when pairing starts.
+    match DeviceIdentity::load(context.secrets.as_ref()) {
+        Ok(Some(identity)) => app.set_device_fingerprint(identity.fingerprint().into()),
+        Ok(None) => app.set_device_fingerprint("Created when you first pair".into()),
         Err(error) => app.set_device_fingerprint(format!("Unavailable: {error}").into()),
     }
     let devices = open_store(context)

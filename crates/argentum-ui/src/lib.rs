@@ -3431,6 +3431,27 @@ fn record_line_model(lines: &[RecordLine]) -> ModelRc<RecordLineView> {
     ModelRc::new(VecModel::from(rows))
 }
 
+/// Tool summaries are written for the model and can run to a paragraph. The
+/// settings list shows the first sentence, cut at a word near 140 characters.
+fn short_summary(summary: &str) -> String {
+    const LIMIT: usize = 140;
+    let first = summary
+        .find(". ")
+        .or_else(|| summary.find("; "))
+        .map_or(summary, |end| &summary[..end]);
+    let first = first.trim().trim_end_matches('.');
+    if first.chars().count() <= LIMIT {
+        return first.to_owned();
+    }
+    let cut = first
+        .char_indices()
+        .nth(LIMIT)
+        .map_or(first.len(), |(index, _)| index);
+    let head = &first[..cut];
+    let head = head.rfind(' ').map_or(head, |space| &head[..space]);
+    format!("{}...", head.trim_end_matches([',', ';', ':']))
+}
+
 fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
     let rows = tools
         .iter()
@@ -3438,7 +3459,7 @@ fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
             id: tool.id.clone().into(),
             capability: tool.capability_id.clone().into(),
             title: tool.title.clone().into(),
-            summary: tool.summary.clone().into(),
+            summary: short_summary(&tool.summary).into(),
             risk: format!("{:?}", tool.risk).into(),
             requires_approval: tool.requires_approval,
         })
@@ -5684,6 +5705,27 @@ pub fn empty_string_model() -> ModelRc<SharedString> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tool_summaries_show_their_first_sentence_within_the_limit() {
+        use super::short_summary;
+        assert_eq!(
+            short_summary("Copy one prepared bounded file"),
+            "Copy one prepared bounded file"
+        );
+        assert_eq!(
+            short_summary("Make a localized edit. Prefer old_text for one match."),
+            "Make a localized edit"
+        );
+        assert_eq!(
+            short_summary("Cancel a job; cancellation does not undo effects"),
+            "Cancel a job"
+        );
+        let long = "word ".repeat(60);
+        let short = short_summary(&long);
+        assert!(short.ends_with("..."));
+        assert!(short.chars().count() <= 143);
+    }
+
     use argentum_domain::context_budget::ModelBudget;
     use argentum_domain::{
         now, ChangeRecoveryEntry, ChangeRecoverySnapshot, ChangeRecoveryState, ChangeSetSnapshot,

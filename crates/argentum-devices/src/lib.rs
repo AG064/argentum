@@ -47,12 +47,20 @@ impl std::fmt::Debug for DeviceIdentity {
 
 impl DeviceIdentity {
     /// The saved identity, or a new one saved now.
+    /// Reads this install's identity without creating one.
+    pub fn load(store: &dyn SecretStore) -> Result<Option<Self>, DeviceError> {
+        let Some(saved) = store.get(IDENTITY_SECRET_KEY)? else {
+            return Ok(None);
+        };
+        let pkcs8 = decode_hex(saved.expose()).ok_or(DeviceError::InvalidIdentity)?;
+        let key_pair =
+            Ed25519KeyPair::from_pkcs8(&pkcs8).map_err(|_| DeviceError::InvalidIdentity)?;
+        Ok(Some(Self { key_pair }))
+    }
+
     pub fn load_or_create(store: &dyn SecretStore) -> Result<Self, DeviceError> {
-        if let Some(saved) = store.get(IDENTITY_SECRET_KEY)? {
-            let pkcs8 = decode_hex(saved.expose()).ok_or(DeviceError::InvalidIdentity)?;
-            let key_pair =
-                Ed25519KeyPair::from_pkcs8(&pkcs8).map_err(|_| DeviceError::InvalidIdentity)?;
-            return Ok(Self { key_pair });
+        if let Some(identity) = Self::load(store)? {
+            return Ok(identity);
         }
         let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
             .map_err(|_| DeviceError::Generation)?;
@@ -151,7 +159,13 @@ pub(crate) mod tests {
     #[test]
     fn an_identity_is_created_once_and_then_reused() {
         let store = MemoryStore::default();
+        assert!(DeviceIdentity::load(&store).unwrap().is_none());
+        assert!(store.get(IDENTITY_SECRET_KEY).unwrap().is_none());
         let first = DeviceIdentity::load_or_create(&store).unwrap();
+        assert_eq!(
+            DeviceIdentity::load(&store).unwrap().unwrap().public_key(),
+            first.public_key()
+        );
         let second = DeviceIdentity::load_or_create(&store).unwrap();
         assert_eq!(first.public_key(), second.public_key());
         assert_eq!(first.fingerprint().len(), 24);
