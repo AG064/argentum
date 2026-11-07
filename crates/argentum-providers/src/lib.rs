@@ -1494,6 +1494,7 @@ pub struct OpenAiCompatibleProvider {
 }
 
 const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+const MODEL_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const LOCAL_SIDECAR_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_PROBE_BODY_BYTES: usize = 256 * 1024;
 const MAX_PROBE_MODELS: usize = 4_096;
@@ -1567,7 +1568,10 @@ impl OpenAiCompatibleProvider {
         if !endpoint.path().ends_with('/') {
             endpoint.set_path(&format!("{}/", endpoint.path()));
         }
-        let mut client = reqwest::Client::builder();
+        // Only establishing the connection is bounded. Without it an unreachable
+        // server, common on a phone that changes networks, held a run for the
+        // system TCP timeout. Streamed replies can still take as long as needed.
+        let mut client = reqwest::Client::builder().connect_timeout(MODEL_CONNECT_TIMEOUT);
         let mut probe_client = reqwest::Client::builder();
         if is_opencode_go_route(&endpoint) {
             // OpenCode Go asks each client to identify itself.

@@ -273,6 +273,43 @@ fn reconcile_abandoned_owner(config: &HostConfig) -> Result<(), AndroidHostError
             }
         );
     }
+    acknowledge_effect_free_interruptions(database)
+}
+
+/// A reconciled run blocks its session until the owner reviews it, which on
+/// desktop is `argentum recovery review`. A phone has no console, and the app
+/// is ended routinely, so a chat cut off mid-reply would block its session for
+/// good. Runs that admitted no external effect are acknowledged here, such as
+/// a reply in progress, whose only unknown is the model request's outcome and
+/// usage. Any run that may have changed something keeps its hold.
+fn acknowledge_effect_free_interruptions(
+    database: &std::path::Path,
+) -> Result<(), AndroidHostError> {
+    use argentum_domain::recovery::{RecoveryEffectState, RecoveryExecutionState};
+
+    let inspection = argentum_store::Store::inspect_recovery(database)
+        .map_err(|error| AndroidHostError::new("recovery-inspect", error))?;
+    let mut acknowledged = 0_usize;
+    for run in inspection.runs.iter().filter(|run| {
+        run.execution_state == RecoveryExecutionState::Interrupted
+            && run.admission_blocked
+            && run.owner_reviewed_at.is_none()
+            && run.effect_state != RecoveryEffectState::Admitted
+            && run
+                .unresolved_effects
+                .iter()
+                .all(|reason| reason == "provider_request_outcome_unknown")
+    }) {
+        let Some(revision) = run.recovery_revision else {
+            continue;
+        };
+        argentum_store::Store::review_recovery(database, run.run_id, revision)
+            .map_err(|error| AndroidHostError::new("recovery-review", error))?;
+        acknowledged += 1;
+    }
+    if acknowledged > 0 {
+        eprintln!("argentum acknowledged {acknowledged} interrupted runs with no external effects");
+    }
     Ok(())
 }
 
