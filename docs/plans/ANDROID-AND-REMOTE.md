@@ -62,8 +62,10 @@ device and serves it the same JSONL command protocol as `argentum serve`, over
 that channel (`argentum_cli::remote`). `argentum device connect HOST[:PORT]`
 relays a console to it. The serving device has no approval responder for a
 remote device, so anything that needs approval is refused there and its
-workspace policy stays authoritative. A test carries split JSONL lines both
-ways between two in-memory identities. The agent's host facts now include a `devices` entry:
+workspace policy stays authoritative. Tests carry split JSONL lines both
+ways between two in-memory identities, and drive a real command host from a
+paired device: it answers a session list request and stops cleanly when that
+device hangs up. The agent's host facts now include a `devices` entry:
 this device's OS and architecture, the owner-entered names of up to eight
 paired devices, and a note that no model tool reaches another device. Keys and
 fingerprints stay out of prompts. A live run between two installs, the app UI
