@@ -706,6 +706,13 @@ pub const COMMANDS: &[CommandEntry] = &[
         true,
     ),
     cmd(
+        "core",
+        &["device", "show"],
+        "Show this device's pairing fingerprint, creating its key on first use",
+        Gate::None,
+        true,
+    ),
+    cmd(
         "recovery",
         &["recovery", "inspect"],
         "Inspect abandoned local owner state",

@@ -8,6 +8,7 @@ members = [
     "crates/argentum-gitview",
     "crates/argentum-update",
     "crates/argentum-changes",
+    "crates/argentum-devices",
     "crates/argentum-cli",
     "crates/argentum-domain",
     "crates/argentum-execution",
@@ -48,6 +49,7 @@ argentum-harness = { path = "crates/argentum-harness" }
 argentum-lifecycle = { path = "crates/argentum-lifecycle" }
 argentum-cli = { path = "crates/argentum-cli" }
 argentum-changes = { path = "crates/argentum-changes" }
+argentum-devices = { path = "crates/argentum-devices" }
 argentum-platform = { path = "crates/argentum-platform" }
 argentum-providers = { path = "crates/argentum-providers" }
 argentum-browser = { path = "crates/argentum-browser" }
@@ -88,6 +90,8 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 similar = "2"
 slint = "1.17"
+# Already in the lock through rustls; used directly for device identity keys.
+ring = "0.17"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
 tokio = { version = "1", features = ["fs", "io-std", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }

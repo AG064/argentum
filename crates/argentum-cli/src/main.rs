@@ -910,6 +910,20 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_recovery_command(database, action, json).await?;
         }
+        Arguments::Device { json } => {
+            // The key is created on first use and stays in the credential store.
+            let store = argentum_platform::default_secret_store(argentum_platform::SECRET_SERVICE);
+            let identity = argentum_devices::DeviceIdentity::load_or_create(store.as_ref())?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "fingerprint": identity.fingerprint() })
+                );
+            } else {
+                println!("This device: {}", identity.fingerprint());
+                println!("When pairing, check that the other device shows the same code.");
+            }
+        }
         Arguments::Accounting {
             options,
             action,
@@ -5562,6 +5576,10 @@ enum Arguments {
         action: RecoveryAction,
         json: bool,
     },
+    /// This install's pairing identity.
+    Device {
+        json: bool,
+    },
     Help,
     Version,
 }
@@ -5940,6 +5958,14 @@ where
     }
     if command == "recovery" {
         return parse_recovery_args(&values);
+    }
+    if command == "device" {
+        let rest = values[1..].iter().map(String::as_str).collect::<Vec<_>>();
+        return match rest.as_slice() {
+            ["show"] => Ok(Arguments::Device { json: false }),
+            ["show", "--json"] => Ok(Arguments::Device { json: true }),
+            _ => Err("Usage: argentum device show [--json]".into()),
+        };
     }
     if command == "accounting" {
         return parse_accounting_args(&values);
@@ -8304,6 +8330,7 @@ argentum changes recovery [retry|restore OPERATION_ID] [OPTIONS]\n\n\
 argentum recovery inspect [--database PATH] [--json]\n  \
 argentum recovery reconcile [--database PATH] [--json]\n  \
 argentum recovery review --run-id RUN_ID --revision REVISION [--database PATH] [--json]\n\n\
+argentum device show [--json]\n\n\
 Commands:\n  \
 no command  Open the interactive terminal shell\n  \
 chat        Open the interactive terminal shell\n  \
