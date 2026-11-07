@@ -129,7 +129,7 @@ component ProvidersPage inherits VerticalLayout {
         ProviderCatalog { }
         Row {
             title: "Custom endpoint";
-            detail: "Any OpenAI-compatible server, such as llama-server on your PC or network. Argentum cannot store an API key for these yet.";
+            detail: "Any OpenAI-compatible server, such as llama-server. API keys can't be saved for these yet.";
             icon: "plus";
             clicked => {
                 // A draft only. The provider in use stays as it is until this is saved.
