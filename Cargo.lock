@@ -441,6 +441,8 @@ dependencies = [
  "argentum-platform",
  "argentum-security",
  "ring",
+ "serde",
+ "serde_json",
  "sha2",
  "thiserror 2.0.19",
 ]

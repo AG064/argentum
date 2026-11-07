@@ -8,6 +8,7 @@
 //! An identity grants nothing by itself. What a paired device may ask for is
 //! decided by each device's own persisted workspace policy.
 
+pub mod exchange;
 pub mod pairing;
 
 use argentum_platform::{PlatformError, SecretStore};
@@ -100,11 +101,11 @@ pub fn verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bo
         .is_ok()
 }
 
-fn encode_hex(bytes: &[u8]) -> String {
+pub(crate) fn encode_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_hex(text: &str) -> Option<Vec<u8>> {
     if !text.len().is_multiple_of(2) {
         return None;
     }
