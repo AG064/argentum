@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The pairing exchange between two installs, without the transport.
 //!
 //! 1. Each device sends its public key and a fresh random nonce.

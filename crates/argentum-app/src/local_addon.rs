@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Settings > Providers > Local model add-on. The Windows release does not
 //! include llama.cpp or any model. The owner reviews exactly what would be
 //! downloaded and confirms it here, and can remove it again.

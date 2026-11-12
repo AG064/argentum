@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Offline check of a GitHub artifact attestation, which is a Sigstore bundle.
 //!
 //! A publisher's release workflow signs an in-toto statement that lists each file

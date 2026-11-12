@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Stable machine-readable error envelope for `--json` inspection commands.
 //!
 //! Success payloads are owned by each command and are not rewritten here. This

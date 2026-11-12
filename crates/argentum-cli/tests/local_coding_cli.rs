@@ -1,4 +1,6 @@
 #![cfg(windows)]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Opt-in installed-model integration. No downloads, saved hosted credentials,
 //! user workspace writes, or interference with another model process.
 use argentum_cli::{CommandHost, HostConfig};

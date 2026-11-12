@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Process-group tests. On Android they run on a device or emulator: see
 //! docs/ANDROID_HOST.md.
 use std::collections::BTreeMap;

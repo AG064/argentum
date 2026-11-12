@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Canonical structural contract shared by persistence and execution.
 use crate::goal_supervision::{
     VerificationInputLimits, VerificationInputScope, VerificationInputSnapshot,

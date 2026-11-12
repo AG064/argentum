@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // Offline counter controls. No application launch, input, capture or provider.
 using System;
 using System.Collections.Generic;

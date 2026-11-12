@@ -1,4 +1,6 @@
 #![cfg(all(windows, feature = "extensions"))]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Controlled model responses exercise the actual CLI, not an SDK-only route.
 //! No real provider, account, session state or inference is used.
 use argentum_cli::{CommandHost, HostConfig};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! What happens to a folder the owner picked in Settings > Workspace. The
 //! picker only fills in the path. It goes through the same check as a typed
 //! path, and nothing opens until the owner presses Open and restart, which

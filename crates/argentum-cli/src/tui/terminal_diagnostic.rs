@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Explicit provider-free fixture. There is no environment switch or normal
 //! chat hook that can enable raw text capture.
 use std::fs::{File, OpenOptions};

@@ -35,4 +35,4 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Fuzz ${{ matrix.target }}
-        run: cargo fuzz run ${{ matrix.target }} --locked -- -max_total_time=300
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=300

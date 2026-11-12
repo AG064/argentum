@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Synthetic usage through the exact executable and production text adapter.
 use super::instructions_http::Server;
 use super::*;

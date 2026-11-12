@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! One contained, bounded identity path for reviewed project input roles.
 use std::fs;
 use std::io::Read;

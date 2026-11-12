@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Bounded metadata projection of the existing journals. No writes or new index.
 use super::*;
 use serde::{Deserialize, Serialize};

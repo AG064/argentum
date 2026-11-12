@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The benchmark switch must do nothing in an ordinary build, and in a benchmark build it
 //! must need the container's marker. Everything stays in memory, because a saved database
 //! is Windows-only today. Run the second half on Linux with:

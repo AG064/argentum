@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use crate::{connection::ConnectionError, package};
 use argentum_domain::{
     extensions::{ExtensionDefinition, ExtensionTransport, ExtensionTrust},

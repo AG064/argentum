@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Fixed native verifier: raw-byte consistency, source preservation and producer
 //! preparation coverage. Semantic and visual acceptance remain independent.
 use crate::{

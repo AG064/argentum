@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Read-only diagnostic aggregate for `argentum doctor`.
 //!
 //! The report is built from the persisted store, static feature flags and the

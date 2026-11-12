@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Settings > Workspace on Android: the optional All files access permission,
 //! the folder picker, and switching between a chosen folder in Internal
 //! storage and the app's own folder.

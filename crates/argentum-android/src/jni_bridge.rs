@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 #[cfg(any(test, target_os = "android"))]
 use std::collections::HashMap;
 #[cfg(any(test, target_os = "android"))]

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Every model request in the running session: when, how long, where, and what filled
 //! its context. Kept for this session only.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 pub mod devices_ui;
 mod local_addon;
 pub mod native_host;

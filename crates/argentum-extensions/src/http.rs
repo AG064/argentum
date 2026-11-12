@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Streamable HTTP on an exact reviewed endpoint and pinned address set.
 //! Credential-bearing redirects and automatic authentication helpers are absent.
 use crate::MAX_MESSAGE_BYTES;

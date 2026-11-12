@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Exact executable controls. Trusted local owner commands, no physical-input claims.
 use super::instructions_http::Server;
 use super::*;

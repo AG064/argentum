@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- Copyright (C) 2026 AG064 -->
 <!--
   Per-user Windows installer for the Argentum desktop app and the Argentum
   Genesis CLI. Built by scripts/build-windows-installer.ps1 with WiX 5.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Serves this app to paired devices while the owner allows it.
 //!
 //! Each connection must open a secure channel from a paired device. It then

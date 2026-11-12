@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The messages shown when Argentum cannot start. They name what to check
 //! and never include paths, keys, or raw error text.
 

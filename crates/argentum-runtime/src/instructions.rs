@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Bounded, request-local repository guidance. This module grants no authority.
 use std::collections::BTreeSet;
 use std::io::Write;

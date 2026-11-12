@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! A stand-in device for testing pairing. It keeps its identity in memory, so
 //! it writes nothing to the credential store, and it saves nothing.
 //!

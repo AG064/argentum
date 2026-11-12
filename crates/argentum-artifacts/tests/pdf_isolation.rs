@@ -1,4 +1,6 @@
 #![cfg(windows)]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Real offline renderer controls, never Google or provider calls.
 use argentum_artifacts::sha256;
 use std::path::PathBuf;

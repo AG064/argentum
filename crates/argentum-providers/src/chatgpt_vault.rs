@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Versioned OS-secret-store records. No bearer state is stored in SQLite or files.
 use argentum_platform::SecretStore;
 use argentum_security::SecretValue;

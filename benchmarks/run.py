@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 """Run coding agents on the same tasks and record what happened.
 
 Each attempt gets a fresh copy of a task's fixture. The checks stay out of the

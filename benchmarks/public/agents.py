@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 """Pier agents for tools Pier does not ship: Argentum, Pi, and DeepSeek Harness.
 
 Each one runs inside the task's container. The task's own instruction tells every agent to

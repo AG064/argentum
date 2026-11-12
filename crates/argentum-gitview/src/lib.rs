@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Read-only working tree status and diff through the `git` executable.
 //!
 //! Running Git is an external process, so the runtime only calls this crate after

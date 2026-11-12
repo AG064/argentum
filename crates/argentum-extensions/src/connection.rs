@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! MCP sessions have reviewed connection identity, fresh catalog handles and
 //! bounded results. Server instructions and annotations are never host policy.
 use std::collections::{BTreeMap, BTreeSet};

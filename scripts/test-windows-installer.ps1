@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 <#
 .SYNOPSIS
 Installs the Argentum MSI for the current user, checks what it created, then

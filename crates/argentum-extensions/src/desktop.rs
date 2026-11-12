@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional first-party Windows desktop control.
 //!
 //! This module is compiled only for Windows builds that explicitly enable the

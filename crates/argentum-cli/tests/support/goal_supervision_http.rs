@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! F07B through the rebuilt CLI, loopback HTTP adapter, and real Cargo formatter.
 use super::instructions_http::Server;
 use super::*;

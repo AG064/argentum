@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Data-only identities for the optional first-party desktop-control tools.
 //!
 //! These types carry no platform authority. A caller-supplied identity is an

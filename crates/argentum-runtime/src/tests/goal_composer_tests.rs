@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The desktop composer path for goals: set a goal, run tasks toward it, and
 //! pause, resume and clear it, through `AppCommand` only.
 

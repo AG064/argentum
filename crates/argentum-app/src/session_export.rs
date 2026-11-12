@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Session export from inside the app. It reads the store, removes anything
 //! that looks like a credential, and hands the JSON to the platform, which asks
 //! the owner where it goes: a Save dialog on Windows, the share sheet on

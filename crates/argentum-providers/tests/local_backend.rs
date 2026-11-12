@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use argentum_domain::{ProviderProfile, ProviderStatus};
 use argentum_providers::{
     LocalInferenceBackend, ModelProvider, ModelRequest, ProviderError, ProviderEvent,

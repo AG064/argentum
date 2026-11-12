@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Shared durable-to-request projection. Historical records grant no authority.
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};

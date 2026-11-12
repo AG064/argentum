@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! A deliberately small Markdown-to-layout compiler, not another edit format.
 //! Unsupported content is rejected explicitly. Nothing fetches links or executes
 //! raw HTML, templates, code blocks or document instructions.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional bounded Rust-library checks, always isolated on Windows.
 // Managed processes and checks are not offered on Android, so much of this
 // module is unused there.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 

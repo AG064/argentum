@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Runs the pairing exchange over a byte stream, such as a TCP connection on
 //! the local network. Each message is one JSON line of bounded length.
 //!

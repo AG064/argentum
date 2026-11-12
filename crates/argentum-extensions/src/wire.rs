@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Length-bounded stdio framing around the maintained MCP service machinery.
 use std::io;
 use std::sync::{

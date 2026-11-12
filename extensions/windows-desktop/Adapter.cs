@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // Optional current-user Windows adapter. UIA operations stay on one bounded MTA
 // worker; a timed-out effect is uncertain and retires the whole connection.
 // No network, shell, desktop-wide text/capture, clipboard or arbitrary keys.

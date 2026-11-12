@@ -40,6 +40,20 @@ marked `#[ignore]` need extra setup, such as a provider key, a local model,
 pinned document assets, a Node browser, or a Windows desktop session. Run them
 only when you have that setup.
 
+## Tests are required
+
+- New functionality must come with automated tests that cover it, in the same
+  pull request.
+- A bug fix must come with a test that fails without the fix, where that is
+  possible.
+- A pull request that changes behavior without tests is not merged.
+
+Tests live next to the code they check, in `#[cfg(test)]` modules, or in each
+crate's `tests/` folder. Parsers that read untrusted input also get a fuzz target
+in `fuzz/`.
+
+## Running the apps
+
 The desktop app is `cargo run -p argentum-app`. The Android app is described in
 [docs/ANDROID_HOST.md](docs/ANDROID_HOST.md).
 

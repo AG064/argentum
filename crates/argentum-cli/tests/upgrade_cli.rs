@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Saved data from another release must not stop the app from starting.
 //!
 //! These start the real composed host against a database file, rewrite the

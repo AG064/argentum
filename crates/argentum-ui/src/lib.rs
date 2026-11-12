@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // Clippy reports thread-locals that are already `const` when this crate is
 // built for Android.
 #![cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local))]

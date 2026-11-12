@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Client-side estimated admission and observed usage. Not a billing ceiling.
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

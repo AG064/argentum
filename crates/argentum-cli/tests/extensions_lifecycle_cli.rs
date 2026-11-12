@@ -1,4 +1,6 @@
 #![cfg(all(windows, feature = "extensions"))]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Actual CLI cancellation/restart controls with synthetic local services.
 use argentum_cli::{
     protocol::{RequestEnvelope, ResponseEnvelope, ServerPayload},

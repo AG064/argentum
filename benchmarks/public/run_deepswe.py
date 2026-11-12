@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 """Run DeepSWE on one model across agent harnesses, through Datacurve's Pier.
 
 Prints the commands by default and spends nothing. Add --go to run them. Run it where

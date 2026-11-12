@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Fixed local Markdown creation, using the same pinned non-V8 PDFium DLL.
 use super::{read, write, Ptr, Result};
 use argentum_artifacts::{layout, markdown, sha256};

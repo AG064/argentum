@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! First-party optional browser adapter registration and local status.
 //!
 //! Setup writes owner-reviewed local configuration and an immutable portable

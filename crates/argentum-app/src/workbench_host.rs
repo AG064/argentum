@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The workbench actions that belong to the desktop program rather than a command:
 //! installing an update and reopening in another workspace. They act on the
 //! installed program, so no tool, model, or protocol client can reach them.

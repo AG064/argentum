@@ -1,0 +1,38 @@
+# Advisories reviewed for Argentum. OSV-Scanner reads this file for the lockfile
+# in the same folder. Each entry says why it does not affect the shipped apps.
+# Review again before the date in ignoreUntil, or when the dependency changes.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+ignoreUntil = 2027-05-12
+reason = "unsafe-libyaml: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0141"
+ignoreUntil = 2027-05-12
+reason = "bincode: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0192"
+ignoreUntil = 2027-05-12
+reason = "ttf-parser: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-05-12
+reason = "zvariant: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-05-12
+reason = "zbus_names: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-05-12
+reason = "zvariant_derive: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0441"
+ignoreUntil = 2027-05-12
+reason = "pin-utils: RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."

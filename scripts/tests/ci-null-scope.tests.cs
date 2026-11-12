@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // Synthetic state tests. No native NUL handle is opened or device ACL changed.
 using System;
 using System.Collections.Generic;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // CI host preparation only. Never linked into Argentum or invoked at startup.
 using System;
 using System.Collections.Generic;

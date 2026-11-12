@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Devices the owner paired with this install. Only the owner's confirmation on
 //! both devices adds one, and the owner can forget one at any time. Being paired
 //! grants nothing by itself: what a paired device may ask for is decided by the

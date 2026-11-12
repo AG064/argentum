@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 #[cfg(test)]
 mod tests {
     use argentum_cli::{CommandHost, HostConfig, LocalCommandHandle};

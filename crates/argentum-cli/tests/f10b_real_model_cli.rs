@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Opt-in Windows acceptance for the configured MiniMax coding route.
 //!
 //! This test is intentionally ignored. It requires a process-scoped

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The model's bounded way to say a goal is achieved.
 //!
 //! A goal-bound run is offered one extra tool, `report_goal_complete`. Calling

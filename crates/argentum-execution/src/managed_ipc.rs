@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Bidirectional IPC on the same suspended/contained process launch boundary.
 //! Job limits do not sandbox trusted code's filesystem or network access.
 use std::time::Duration;

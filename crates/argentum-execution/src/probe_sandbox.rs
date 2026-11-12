@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The Windows execution boundary for the optional Rust check, not a generic executor.
 //! Only explicitly owned copies receive package-SID access. No network capabilities.
 //! Cargo needs the fixed read-only system-registry capability to initialize Winsock.

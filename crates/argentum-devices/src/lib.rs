@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! This install's device identity, the base for pairing a PC and a phone.
 //!
 //! Each install has one Ed25519 key pair. The private key never leaves the

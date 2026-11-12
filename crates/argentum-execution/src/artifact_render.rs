@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Fixed PDF worker in a private LPAC byte-copy. Not a generic process tool.
 use std::{
     io,

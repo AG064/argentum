@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 """Real owned Win32 menus and UIA controls. No model, credentials or real task."""
 import argparse
 import ctypes

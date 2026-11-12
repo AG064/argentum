@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Fixed A4 document profile with measured font advances and bounded pagination.
 use crate::{
     markdown::{Block, Document},

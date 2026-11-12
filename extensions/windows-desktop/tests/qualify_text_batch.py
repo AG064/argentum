@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 """Actual owned UIA batch controls; no provider, real task or authority store."""
 import argparse
 import ctypes

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Commands behind the shell's optional modules, and the agent's view of the UI.
 //!
 //! The agent reads the interface with `ui_inspect` and changes it with `ui_update`.

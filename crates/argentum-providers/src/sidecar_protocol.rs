@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Pinned llama.cpp chat/tool protocol. Metadata and exact token counts use the
 //! already-approved, authenticated child. Nothing here loads a model or grants tools.
 use super::*;

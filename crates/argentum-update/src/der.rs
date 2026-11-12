@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Just enough DER reading to pull named fields out of an X.509 certificate.
 //!
 //! Signature and chain checks are done by `ring` and `rustls-webpki`. This reader

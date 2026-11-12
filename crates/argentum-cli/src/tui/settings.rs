@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Owner-driven settings. Labels are display data; actions are typed values.
 use super::*;
 use argentum_domain::{HarnessCapabilityKind, ProviderKind, VerificationRunnerId};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The standard Windows folder picker and Save dialog, shown over the Argentum
 //! window. Both return only what the owner chose; they read and write nothing.
 

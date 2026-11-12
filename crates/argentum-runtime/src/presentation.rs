@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Read-only host projections shared by terminal inspection and model guidance.
 use super::*;
 use serde_json::{json, Value};

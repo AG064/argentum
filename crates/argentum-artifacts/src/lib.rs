@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional local document artifacts. No account connection, automatic process,
 //! generic shell, network fetch, or model-authored verification authority.
 

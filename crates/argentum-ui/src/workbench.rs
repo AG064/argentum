@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Projects module, theme, and panel state into the shell, and connects the
 //! callbacks that only the workbench uses. This renders domain state and dispatches
 //! commands. Provider, Git, and network work all happens behind the command host.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Minimal preview host for the generated Argentum shell.
 //!
 //! The binary renders the compiled `MainWindow` with its default values. It

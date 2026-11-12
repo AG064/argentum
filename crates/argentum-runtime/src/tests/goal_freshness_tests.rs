@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use super::*;
 use argentum_domain::{VerificationRunnerId, VerificationState};
 use argentum_tools::{AgentTool, ToolContext, ToolError, ToolResult};

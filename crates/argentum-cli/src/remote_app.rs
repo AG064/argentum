@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Lets a paired device drive a running app: the desktop or Android window
 //! keeps its own runtime, and the device becomes a second frontend for it.
 //!

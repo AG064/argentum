@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 pub const DEFAULT_DENSITY_DPI: u32 = 160;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

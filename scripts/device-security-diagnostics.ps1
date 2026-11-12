@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 # Read-only device-security metadata for the inherited-stdio comparison.
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 // Optional first-party MCP adapter. No browser starts until an admitted tool call.
 // This is reviewed trusted Node/Playwright code, not an OS filesystem sandbox.
 import { randomUUID, createHash } from 'node:crypto';

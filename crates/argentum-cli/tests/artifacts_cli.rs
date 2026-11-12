@@ -1,4 +1,6 @@
 #![cfg(all(windows, feature = "artifacts"))]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Actual CLI stdio and verifier controls. Synthetic sources; no real provider.
 use argentum_artifacts::{
     artifact::{Configuration, Input},

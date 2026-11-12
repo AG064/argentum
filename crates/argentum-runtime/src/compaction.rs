@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Bounded, tools-disabled compaction attempts. No effect or run recovery.
 use std::path::Path;
 use std::sync::Arc;

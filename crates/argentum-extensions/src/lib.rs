@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional, explicitly reviewed extension components. Construction is inert.
 //! Installation is not execution approval. External code is never host policy.
 pub mod configuration;

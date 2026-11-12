@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Remote sessions: the JSONL command protocol carried over a secure channel
 //! between two paired devices.
 //!

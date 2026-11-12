@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Lossy derived context only. Source receipts remain the outcome authority.
 use std::collections::BTreeSet;
 

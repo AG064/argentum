@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Trusted-owner declarations, never permissions or provider-verified capacity.
 use serde::{Deserialize, Serialize};
 

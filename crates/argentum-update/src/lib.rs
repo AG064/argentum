@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Checks for, downloads, and installs Argentum releases.
 //!
 //! Every step runs from an explicit click in Settings. Nothing here runs in the

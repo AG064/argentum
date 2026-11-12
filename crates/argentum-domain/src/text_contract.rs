@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Model-facing text protocol v1. Offsets are zero-based UTF-8 bytes, end-exclusive.
 use serde::{Deserialize, Serialize};
 

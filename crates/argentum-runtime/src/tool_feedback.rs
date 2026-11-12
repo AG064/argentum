@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Fixed, non-authorizing feedback for failures proven to precede execution.
 use argentum_tools::ToolError;
 use argentum_workspaces::WorkspaceError;

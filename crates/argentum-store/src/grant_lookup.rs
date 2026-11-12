@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Bounded authority candidates are separate from paginated grant history.
 use super::*;
 use argentum_domain::{ApprovalGrantHistoryCoverage, Capability};

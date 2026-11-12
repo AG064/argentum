@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Exact local inputs and derived artifact identities. These records are not
 //! execution grants, semantic grades, or native verification receipts.
 use crate::{markdown, sha256, ArtifactError as Error, Result};

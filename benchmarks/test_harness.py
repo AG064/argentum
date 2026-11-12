@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 """Proves the harness and tasks work without an agent, a model, or a key."""
 
 import json

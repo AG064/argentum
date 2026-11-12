@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! What a run did, in words: "Read 3 files, ran 2 commands" and the files it changed.
 //!
 //! Kept for the running session only. Command text is never stored, so a restart

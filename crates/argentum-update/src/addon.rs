@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! The optional local model add-on: the llama.cpp runtime and one model, which
 //! the owner installs from Settings instead of receiving them with the app.
 //!

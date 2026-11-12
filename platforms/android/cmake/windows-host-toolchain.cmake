@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 if(NOT DEFINED ENV{VCToolsInstallDir})
     message(FATAL_ERROR "VCToolsInstallDir is missing; run the Android build from a Visual Studio developer environment")
 endif()

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional maintained MCP server over the existing bounded stdio transport.
 //! Construction and discovery are local-only; no credential or provider path.
 use crate::{artifact::Artifacts, ArtifactError as Error, Result};

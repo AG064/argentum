@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Resolve enabled service providers before publishing lifecycle registrations.
 //! This is a composition description, not authority or executable package loading.
 

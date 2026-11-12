@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Native adapter for the Anthropic Messages API.
 //!
 //! The adapter maps the shared request and tool contract onto Messages API

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use super::*;
 use argentum_domain::text_contract::{TextReadResult, MAX_TEXT_RESULT_BYTES};
 use argentum_domain::SandboxScope;

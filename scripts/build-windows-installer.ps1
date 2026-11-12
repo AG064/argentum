@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+
 <#
 .SYNOPSIS
 Builds the per-user Windows installer (MSI) from the portable desktop zip and

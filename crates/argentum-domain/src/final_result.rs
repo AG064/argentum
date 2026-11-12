@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 use crate::{
     FileChangeId, FileChangeKind, FileChangeOrigin, ModelUsage, ProjectId, RunId, SessionId,
     Sha256Digest, TaskId, TaskLifecycle, VerificationId, VerificationRunnerId, VerificationState,

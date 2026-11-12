@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Presentation preferences for the native shell.
 //!
 //! This is presentation state only. Nothing here can grant authority, and the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 # Fresh credential-free portability diagnostics, separate from the full gates.
 param([Parameter(Mandatory)][string]$OutputDirectory, [switch]$CiNullAccess)
 $ErrorActionPreference = 'Stop'

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! No owner-token execution. The broker supplies only a fixed private byte-copy.
 fn main() -> std::process::ExitCode {
     if !argentum_execution::current_process_is_lpac() {

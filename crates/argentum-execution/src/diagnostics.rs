@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Deterministic excerpts of already-permitted bounded process text.
 //! Selection is not execution evidence and never changes a verifier outcome.
 use serde::Serialize;

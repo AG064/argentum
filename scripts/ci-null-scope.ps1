@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 # Explicit disposable CI setup. Dot-sourcing is inert and opens no device.
 function Invoke-CiNullScope {
     param([Parameter(Mandatory)][scriptblock]$Body, [Parameter(Mandatory)][string]$ReceiptPath)

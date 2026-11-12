@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Optional local CLI commands. No install/configuration starts an extension.
 use argentum_cli::{CommandHost, HostConfig};
 use argentum_domain::extensions::{ExtensionDefinition, ExtensionRecord};

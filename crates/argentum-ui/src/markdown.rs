@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Turns Markdown into the block model the shell renders. Text comes from models
 //! and web pages, so it is treated as untrusted: raw HTML stays literal and links
 //! keep only http and https targets.

@@ -1,4 +1,6 @@
 #![cfg(all(windows, feature = "desktop-control"))]
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
 //! Credential-free synthetic responses drive the actual CLI and real owned UIA.
 use argentum_cli::{CommandHost, HostConfig};
 use argentum_domain::{

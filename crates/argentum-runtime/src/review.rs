@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Owner-side review and restore preparation. Never a model tool.
 use super::*;
 use argentum_store::{ReviewCursor, ReviewRecord, ReviewRuns};

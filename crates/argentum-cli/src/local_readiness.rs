@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Shared local-only readiness helpers for doctor and the browser commands.
 //!
 //! These helpers inspect bounded regular files and module manifests. They do

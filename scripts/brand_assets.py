@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 """Regenerate or verify the checked-in Argentum PNG identity assets."""
 
 from __future__ import annotations

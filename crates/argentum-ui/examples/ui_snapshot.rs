@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Renders every shell state to a PNG with the software renderer, with no window
 //! and no host. This is a visual QA tool. The fixture data below exists only here
 //! and never reaches the product.

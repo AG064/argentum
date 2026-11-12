@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! An optional Android workspace on primary shared storage, such as
 //! `/storage/emulated/0/Documents/project`.
 //!

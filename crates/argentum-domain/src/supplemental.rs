@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 AG064
+
 //! Model-authored checks are executable inputs and separate from project-suite evidence.
 use crate::{ProjectId, RunId, SessionId, Sha256Digest};
 use serde::{Deserialize, Serialize};
