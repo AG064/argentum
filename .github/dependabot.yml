@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: gradle
+    directory: /platforms/android
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+  - package-ecosystem: npm
+    directory: /extensions/browser
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2

@@ -1,0 +1,108 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/argentum-android",
+    "crates/argentum-android-inference",
+    "crates/argentum-app",
+    "crates/argentum-browser",
+    "crates/argentum-gitview",
+    "crates/argentum-update",
+    "crates/argentum-changes",
+    "crates/argentum-devices",
+    "crates/argentum-cli",
+    "crates/argentum-domain",
+    "crates/argentum-execution",
+    "crates/argentum-extensions",
+    "crates/argentum-artifacts",
+    "crates/argentum-harness",
+    "crates/argentum-lifecycle",
+    "crates/argentum-runtime",
+    "crates/argentum-providers",
+    "crates/argentum-tools",
+    "crates/argentum-ui",
+    "crates/argentum-security",
+    "crates/argentum-store",
+    "crates/argentum-workspaces",
+    "crates/argentum-platform",
+]
+exclude = [
+    "crates/argentum-icon-gallery",
+]
+default-members = ["crates/argentum-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "AGPL-3.0-only"
+authors = ["AG064 <contact@ag064.eu>"]
+
+[workspace.dependencies]
+base64 = "0.22"
+argentum-app = { path = "crates/argentum-app" }
+argentum-android-inference = { path = "crates/argentum-android-inference" }
+argentum-domain = { path = "crates/argentum-domain" }
+argentum-execution = { path = "crates/argentum-execution" }
+argentum-extensions = { path = "crates/argentum-extensions" }
+argentum-artifacts = { path = "crates/argentum-artifacts" }
+argentum-harness = { path = "crates/argentum-harness" }
+argentum-lifecycle = { path = "crates/argentum-lifecycle" }
+argentum-cli = { path = "crates/argentum-cli" }
+argentum-changes = { path = "crates/argentum-changes" }
+argentum-devices = { path = "crates/argentum-devices" }
+argentum-platform = { path = "crates/argentum-platform" }
+argentum-providers = { path = "crates/argentum-providers" }
+argentum-browser = { path = "crates/argentum-browser" }
+argentum-gitview = { path = "crates/argentum-gitview" }
+argentum-update = { path = "crates/argentum-update" }
+argentum-runtime = { path = "crates/argentum-runtime" }
+argentum-security = { path = "crates/argentum-security" }
+argentum-store = { path = "crates/argentum-store" }
+argentum-tools = { path = "crates/argentum-tools" }
+argentum-ui = { path = "crates/argentum-ui" }
+argentum-workspaces = { path = "crates/argentum-workspaces" }
+
+async-trait = "0.1"
+bytes = "1"
+android-activity = { version = "0.6", default-features = false, features = ["native-activity"] }
+cap-std = "4.0.3"
+crossterm = "0.28"
+directories = "6"
+futures-util = "0.3"
+argon2 = "0.5.3"
+chacha20poly1305 = "0.10.1"
+getrandom = "0.3.3"
+encoding_rs = "0.8"
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "linux-native", "windows-native"] }
+jni = "0.22"
+llama-cpp-2 = { version = "=0.1.156", default-features = false }
+pulldown-cmark = "0.13"
+png = "=0.18.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest-eventsource = "0.6"
+regex = "1"
+rusqlite = { version = "0.41", features = ["bundled", "fallible_uint"] }
+rustix = { version = "1.1.4", features = ["fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+similar = "2"
+slint = "1.18.1"
+# Already in the lock through rustls; used directly for device identity keys.
+ring = "0.17"
+rustls-pki-types = "1"
+rustls-webpki = { version = "0.103", default-features = false, features = ["ring", "std"] }
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
+tokio = { version = "1", features = ["fs", "io-std", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tempfile = "3"
+url = "2"
+uuid = { version = "1", features = ["serde", "v4"] }
+zeroize = { version = "1", features = ["derive"] }
+windows = "0.62.2"
+windows-sys = "0.61.2"
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2", "deflate-zopfli"] }

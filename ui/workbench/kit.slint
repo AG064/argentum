@@ -1,0 +1,798 @@
+// Workbench controls. Everything visual in the shell is built from these.
+import { Theme } from "theme.slint";
+import { AgIcon } from "../components/icon.slint";
+import { App } from "state.slint";
+
+export { AgIcon as Icon }
+
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool> below: true;
+    private property <float> shown: 0;
+    init => { self.shown = 1; }
+    animate shown { duration: Theme.quick; easing: ease-out; }
+    opacity: self.shown;
+    width: tip.preferred-width + 16px;
+    height: tip.preferred-height + 10px;
+    background: Theme.overlay;
+    border-color: Theme.border-strong;
+    border-width: Theme.hair;
+    border-radius: Theme.r-sm;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-blur: 10px;
+    drop-shadow-offset-y: 2px;
+    tip := Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: Theme.fs-xs;
+    }
+}
+
+// Keyboard focus for a control. Tab reaches it and Return or Space activates it. The
+// ring shows only for keyboard focus, since clicks do not move focus here.
+export component Focus inherits FocusScope {
+    in property <length> radius: Theme.r-sm;
+    callback activated();
+    focus-on-click: false;
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == " " {
+            root.activated();
+            return accept;
+        }
+        reject
+    }
+    if root.has-focus: Rectangle {
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        border-radius: root.radius + 2px;
+        border-width: 2px;
+        border-color: Theme.accent;
+    }
+}
+
+export component Divider inherits Rectangle {
+    height: Theme.hair;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    background: Theme.border;
+}
+
+export component VDivider inherits Rectangle {
+    width: Theme.hair;
+    horizontal-stretch: 0;
+    vertical-stretch: 1;
+    background: Theme.border;
+}
+
+export component Label inherits Text {
+    in property <string> tone: "primary"; // primary | secondary | muted | accent | danger | ok | warn
+    in property <string> size: "md"; // xs | sm | md | lg | xl | 2xl
+    in property <bool> strong: false;
+    in property <bool> mono: false;
+    color: tone == "secondary" ? Theme.text-2
+        : tone == "muted" ? Theme.text-3
+        : tone == "accent" ? Theme.accent-ink
+        : tone == "danger" ? Theme.danger
+        : tone == "ok" ? Theme.ok
+        : tone == "warn" ? Theme.warn
+        : Theme.text;
+    font-size: size == "xs" ? Theme.fs-xs
+        : size == "sm" ? Theme.fs-sm
+        : size == "lg" ? Theme.fs-lg
+        : size == "xl" ? Theme.fs-xl
+        : size == "2xl" ? Theme.fs-2xl
+        : Theme.fs-md;
+    font-weight: strong ? Theme.w-semibold : Theme.w-normal;
+    font-family: mono ? Theme.font-mono : Theme.font-ui;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+export component SectionLabel inherits Text {
+    color: Theme.text-3;
+    font-size: Theme.fs-xs;
+    font-weight: Theme.w-semibold;
+    letter-spacing: 0.4px;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+export component Spinner inherits Rectangle {
+    in property <length> size: 16px;
+    in property <color> tint: Theme.accent-ink;
+    width: size;
+    height: size;
+    accessible-role: progress-indicator;
+    Image {
+        x: 0;
+        y: 0;
+        width: root.size;
+        height: root.size;
+        source: @image-url("../assets/icons/lucide/loader.svg");
+        colorize: root.tint;
+        image-fit: contain;
+        transform-rotation: Theme.reduced-motion ? 0deg : 360deg * mod(animation-tick() / 1ms, 1100) / 1100;
+    }
+}
+
+// Ink that spreads from where a finger lands and fades once it lifts. Touch
+// devices only: with a mouse, hover already shows what is under the pointer.
+// Put it first so it is drawn under the owner's content; outside a layout it
+// fills the owner. The owner's TouchArea calls `react` from its pointer-event
+// handler, which sees a tap's press and release even when both arrive before
+// the next frame.
+export component Ripple inherits Rectangle {
+    in property <color> ink: Theme.text;
+    // Spread from the middle, as for a round or square icon button.
+    in property <bool> centered: false;
+    clip: true;
+
+    private property <bool> shown: false;
+    private property <bool> held: false;
+    private property <duration> began: 0ms;
+    private property <duration> lifted: 0ms;
+    private property <length> cx: 0px;
+    private property <length> cy: 0px;
+
+    public function react(event: PointerEvent, at-x: length, at-y: length) {
+        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left
+            && App.touch_device && !Theme.reduced-motion {
+            root.cx = root.centered ? root.width / 2 : at-x;
+            root.cy = root.centered ? root.height / 2 : at-y;
+            root.began = animation-tick();
+            root.held = true;
+            root.shown = true;
+            settle.running = false;
+        } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) && root.held {
+            root.held = false;
+            root.lifted = animation-tick();
+            settle.running = true;
+        }
+    }
+
+    settle := Timer {
+        interval: Theme.ripple + Theme.calm;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.shown = false;
+        }
+    }
+
+    // Only exists while it is visible, so nothing redraws once it has faded.
+    if root.shown: Rectangle {
+        private property <float> spread: clamp((animation-tick() - root.began) / Theme.ripple, 0, 1);
+        // A quick tap still lets the ink spread most of the way before it fades.
+        private property <duration> fade-from: max(root.lifted, root.began + Theme.ripple * 0.6);
+        private property <float> fade: root.held ? 0 : clamp((animation-tick() - self.fade-from) / Theme.calm, 0, 1);
+        private property <length> reach: (root.width + root.height) * (1 - (1 - self.spread) * (1 - self.spread));
+        x: root.cx - self.reach / 2;
+        y: root.cy - self.reach / 2;
+        width: self.reach;
+        height: self.reach;
+        border-radius: self.reach / 2;
+        background: root.ink;
+        opacity: 0.14 * (1 - self.fade);
+    }
+}
+
+// Rounded button. `kind` is primary (red), secondary (outlined), ghost, or danger.
+export component Btn inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <string> kind: "secondary";
+    in property <bool> enabled: true;
+    in property <bool> busy: false;
+    in property <bool> full: false;
+    in property <bool> small: false;
+    callback clicked();
+    public function take-focus() { key.focus(); }
+
+    private property <bool> live: enabled && !busy;
+    private property <color> fg: !live ? Theme.text-3
+        : kind == "primary" ? Theme.accent-text
+        : kind == "danger" ? Theme.danger
+        : kind == "ghost" ? Theme.text-2
+        : Theme.text;
+
+    height: small && !Theme.coarse ? Theme.control - 6px : Theme.control;
+    min-width: lay.preferred-width;
+    horizontal-stretch: full ? 1 : 0;
+    border-radius: Theme.r-md;
+    border-width: kind == "secondary" || kind == "danger" ? Theme.hair : 0px;
+    border-color: kind == "danger" ? Theme.danger.with-alpha(0.4)
+        : touch.has-hover && live ? Theme.border-strong : Theme.border;
+    background: !live ? (kind == "primary" ? Theme.raised : transparent)
+        : kind == "primary" ? (touch.pressed ? Theme.accent : touch.has-hover ? Theme.accent-hover : Theme.accent)
+        : touch.pressed ? Theme.pressed
+        : touch.has-hover ? Theme.hover
+        : transparent;
+    animate background, border-color { duration: Theme.quick; }
+    transform-scale: App.touch_device && touch.pressed && live ? Theme.press-scale : 1;
+    animate transform-scale { duration: Theme.quick; easing: ease-out; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: live;
+    accessible-action-default => { if live { clicked(); } }
+
+    ink := Ripple {
+        border-radius: root.border-radius;
+        ink: kind == "primary" ? Theme.accent-text : Theme.text;
+    }
+    lay := HorizontalLayout {
+        padding-left: small ? Theme.sp9 : Theme.sp12;
+        padding-right: small ? Theme.sp9 : Theme.sp12;
+        spacing: Theme.sp6;
+        alignment: center;
+        if busy: Spinner { size: Theme.icon-sm; tint: fg; y: (parent.height - self.height) / 2; }
+        if icon != "" && !busy: AgIcon { name: icon; size: Theme.icon-sm; tint: fg; y: (parent.height - self.height) / 2; }
+        if label != "": Text {
+            text: label;
+            color: fg;
+            font-size: small ? Theme.fs-sm : Theme.fs-sm;
+            font-weight: Theme.w-medium;
+            vertical-alignment: center;
+        }
+    }
+    key := Focus {
+        enabled: live;
+        radius: Theme.r-md;
+        activated => { root.clicked(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: live ? pointer : default;
+        clicked => { if live { root.clicked(); } }
+        pointer-event(event) => { if live { ink.react(event, self.mouse-x, self.mouse-y); } }
+    }
+}
+
+export component IconBtn inherits Rectangle {
+    in property <string> icon;
+    in property <string> tip;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <length> size: Theme.control;
+    in property <length> glyph: Theme.icon-md;
+    in property <color> tint: active ? Theme.text : Theme.text-2;
+    callback clicked();
+    width: size;
+    height: size;
+    border-radius: Theme.r-sm;
+    background: !enabled ? transparent
+        : touch.pressed ? Theme.pressed
+        : active || touch.has-hover ? Theme.hover
+        : transparent;
+    animate background { duration: Theme.quick; }
+    accessible-role: button;
+    accessible-label: tip;
+    accessible-enabled: enabled;
+    accessible-action-default => { if enabled { clicked(); } }
+    ink := Ripple {
+        border-radius: root.border-radius;
+        centered: true;
+    }
+    AgIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: icon;
+        size: glyph;
+        tint: enabled ? root.tint : Theme.text-3;
+        // The glyph dips under a finger; the button itself keeps its place.
+        transform-scale: App.touch_device && touch.pressed && root.enabled ? Theme.press-scale - 0.06 : 1;
+        animate transform-scale { duration: Theme.quick; easing: ease-out; }
+    }
+    Focus {
+        enabled: root.enabled;
+        activated => { root.clicked(); }
+    }
+    private property <length> reach: Theme.coarse ? max(0px, (Theme.touch - root.size) / 2) : 0px;
+    touch := TouchArea {
+        x: -root.reach;
+        y: -root.reach;
+        width: root.width + 2 * root.reach;
+        height: root.height + 2 * root.reach;
+        mouse-cursor: enabled ? pointer : default;
+        clicked => { if enabled { root.clicked(); } }
+        pointer-event(event) => { if enabled { ink.react(event, self.mouse-x, self.mouse-y); } }
+    }
+    if touch.has-hover && root.tip != "" && !Theme.coarse: Tooltip {
+        x: min(0px, (parent.width - self.width) / 2);
+        y: parent.height + 4px;
+        text: root.tip;
+    }
+}
+
+// Pulsing live dot for "the agent is doing something".
+export component LiveDot inherits Rectangle {
+    in property <color> tint: Theme.accent;
+    in property <bool> pulsing: true;
+    in property <length> size: 7px;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: tint;
+    private property <float> phase: !pulsing || Theme.reduced-motion ? 0 : (1 + sin(360deg * mod(animation-tick() / 1ms, 1400) / 1400)) / 2;
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.size + 8px * phase;
+        height: self.width;
+        border-radius: (root.size + 8px * phase) / 2;
+        background: root.tint.with-alpha(0.22 * (1 - phase));
+    }
+}
+
+export component Switch inherits Rectangle {
+    in property <bool> on: false;
+    in property <bool> enabled: true;
+    in property <string> label;
+    callback toggled(bool);
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background: !enabled ? Theme.raised : on ? Theme.accent : Theme.pressed;
+    animate background { duration: Theme.quick; }
+    accessible-role: switch;
+    accessible-label: label;
+    accessible-checked: on;
+    accessible-enabled: enabled;
+    accessible-action-default => { if enabled { toggled(!on); } }
+    Rectangle {
+        y: 2px;
+        x: on ? parent.width - self.width - 2px : 2px;
+        // The thumb stretches toward where it will go while a finger holds it.
+        width: App.touch_device && switch-touch.pressed && root.enabled && !Theme.reduced-motion ? 18px : 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: enabled ? Theme.thumb : Theme.text-3;
+        animate x, width { duration: Theme.calm; easing: ease-out; }
+    }
+    Focus {
+        enabled: root.enabled;
+        radius: 9px;
+        activated => { root.toggled(!root.on); }
+    }
+    private property <length> reach: Theme.coarse ? (Theme.touch - self.height) / 2 : 0px;
+    switch-touch := TouchArea {
+        x: -root.reach;
+        y: -root.reach;
+        width: root.width + 2 * root.reach;
+        height: root.height + 2 * root.reach;
+        mouse-cursor: enabled ? pointer : default;
+        clicked => { if enabled { toggled(!on); } }
+    }
+}
+
+export component Chip inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> trailing-chevron: false;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <length> max-label: 220px;
+    in property <color> tint: Theme.text-2;
+    callback clicked();
+    height: Theme.chip;
+    min-width: lay.min-width;
+    preferred-width: lay.preferred-width;
+    max-width: lay.preferred-width;
+    border-radius: Theme.r-sm;
+    background: touch.pressed ? Theme.pressed : active || touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.quick; }
+    transform-scale: App.touch_device && touch.pressed && enabled ? Theme.press-scale : 1;
+    animate transform-scale { duration: Theme.quick; easing: ease-out; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { clicked(); }
+    ink := Ripple { border-radius: root.border-radius; }
+    lay := HorizontalLayout {
+        padding-left: Theme.sp8;
+        padding-right: Theme.sp8;
+        spacing: Theme.sp6;
+        if icon != "": AgIcon { name: icon; size: Theme.icon-sm; tint: root.tint; y: (parent.height - self.height) / 2; }
+        Text {
+            text: label;
+            color: root.tint;
+            font-size: Theme.fs-sm;
+            vertical-alignment: center;
+            overflow: elide;
+            max-width: max-label;
+            min-width: 24px;
+        }
+        if trailing-chevron: AgIcon { name: "chevron-down"; size: 12px; tint: Theme.text-3; y: (parent.height - self.height) / 2; }
+    }
+    Focus {
+        enabled: root.enabled;
+        activated => { root.clicked(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: enabled ? pointer : default;
+        clicked => { if enabled { root.clicked(); } }
+        pointer-event(event) => { if enabled { ink.react(event, self.mouse-x, self.mouse-y); } }
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tint: Theme.text-2;
+    in property <color> fill: Theme.hover;
+    height: 18px;
+    width: t.preferred-width + 12px;
+    border-radius: Theme.r-xs;
+    background: fill;
+    t := Text {
+        text: root.text;
+        color: root.tint;
+        font-size: Theme.fs-xs;
+        font-weight: Theme.w-medium;
+    }
+}
+
+// List row with hover, an optional leading icon, and a selected marker.
+export component Row inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> icon;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    in property <bool> mark-accent: false;
+    callback clicked();
+    min-height: detail == "" ? Theme.row : Theme.row + 14px;
+    border-radius: Theme.r-sm;
+    background: touch.pressed && enabled ? Theme.pressed : selected || (touch.has-hover && enabled) ? Theme.hover : transparent;
+    animate background { duration: Theme.quick; }
+    accessible-role: button;
+    accessible-label: title;
+    accessible-item-selected: selected;
+    accessible-action-default => { if enabled { clicked(); } }
+    ink := Ripple { border-radius: root.border-radius; }
+    @children
+    HorizontalLayout {
+        padding-left: Theme.sp10;
+        padding-right: Theme.sp10;
+        spacing: Theme.sp9;
+        if icon != "": AgIcon {
+            name: icon;
+            size: Theme.icon-md;
+            tint: selected ? Theme.text : Theme.text-3;
+            y: (parent.height - self.height) / 2;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.sp1;
+            horizontal-stretch: 1;
+            Text {
+                text: title;
+                color: !enabled ? Theme.text-3 : selected ? Theme.text : Theme.text-2;
+                font-size: Theme.fs-sm + 0.5px;
+                font-weight: selected ? Theme.w-medium : Theme.w-normal;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if detail != "": Text {
+                text: detail;
+                color: Theme.text-3;
+                font-size: Theme.fs-xs;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+    }
+    Focus {
+        enabled: root.enabled;
+        activated => { root.clicked(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: enabled ? pointer : default;
+        clicked => { if enabled { root.clicked(); } }
+        pointer-event(event) => { if enabled { ink.react(event, self.mouse-x, self.mouse-y); } }
+    }
+}
+
+// Single-line labelled text input.
+export component Field inherits VerticalLayout {
+    in property <bool> secret: false;
+    in property <string> label;
+    in property <string> placeholder;
+    in property <string> hint;
+    in property <string> error;
+    in property <bool> enabled: true;
+    in property <bool> mono: false;
+    in-out property <string> value <=> input.text;
+    callback edited(string);
+    callback accepted(string);
+    public function focus-input() { input.focus(); }
+    spacing: Theme.sp5;
+    if label != "": Text {
+        text: label;
+        color: Theme.text-2;
+        font-size: Theme.fs-xs + 0.5px;
+        font-weight: Theme.w-medium;
+    }
+    Rectangle {
+        height: Theme.control + 2px;
+        border-radius: Theme.r-sm;
+        background: Theme.code-bg;
+        border-width: Theme.hair;
+        border-color: error != "" ? Theme.danger.with-alpha(0.7)
+            : input.has-focus ? Theme.accent.with-alpha(0.75)
+            : Theme.border;
+        animate border-color { duration: Theme.quick; }
+        TouchArea {
+            mouse-cursor: text;
+            clicked => { input.focus(); }
+        }
+        if input.text == "": Text {
+            x: 10px;
+            text: placeholder;
+            color: Theme.text-3;
+            font-size: Theme.fs-sm;
+            vertical-alignment: center;
+            height: parent.height;
+            width: parent.width - 20px;
+            overflow: elide;
+        }
+        input := TextInput {
+            input-type: root.secret ? InputType.password : InputType.text;
+            x: 10px;
+            width: parent.width - 20px;
+            height: parent.height;
+            vertical-alignment: center;
+            color: Theme.text;
+            font-size: Theme.fs-sm;
+            font-family: mono ? Theme.font-mono : Theme.font-ui;
+            selection-background-color: Theme.accent.with-alpha(0.4);
+            selection-foreground-color: Theme.text;
+            single-line: true;
+            enabled: root.enabled;
+            accessible-label: root.label != "" ? root.label : root.placeholder;
+            edited => { root.edited(self.text); }
+            accepted => { root.accepted(self.text); }
+        }
+    }
+    if error != "" || hint != "": Text {
+        text: error != "" ? error : hint;
+        color: error != "" ? Theme.danger : Theme.text-3;
+        font-size: Theme.fs-xs;
+        wrap: word-wrap;
+    }
+}
+
+// Vertical scroller with a thin overlay thumb. Content goes in as children and
+// must set its own height. `follow-tail` keeps new content in view until the
+// reader scrolls away from the bottom.
+export component Scroller inherits Rectangle {
+    in property <length> content-height;
+    in-out property <length> offset: 0px;
+    in property <bool> follow-tail: false;
+    out property <bool> at-tail: fl.content-y <= fl.height - fl.content-height + 24px;
+    out property <bool> at-top: fl.content-y >= 0px;
+    public function to-tail() { fl.content-y = min(0px, fl.height - fl.content-height); }
+    public function to-top() { fl.content-y = 0px; }
+
+    private property <bool> tailing: true;
+    private property <length> measured: root.content-height;
+    changed measured => {
+        if follow-tail && tailing {
+            fl.content-y = min(0px, fl.height - fl.content-height);
+        }
+    }
+
+    fl := Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-height: max(root.content-height, self.height);
+        content-width: root.width;
+        interactive: true;
+        flicked => { root.tailing = root.at-tail; }
+        @children
+    }
+    if root.content-height > root.height + 1px: Rectangle {
+        private property <length> track: root.height - 8px;
+        private property <length> thumb: max(28px, track * root.height / root.content-height);
+        private property <float> pos: -fl.content-y / max(1px, root.content-height - root.height);
+        x: root.width - self.width - 2px;
+        y: 4px + (track - thumb) * pos;
+        width: thumb-touch.has-hover || thumb-touch.pressed ? 6px : 4px;
+        height: thumb;
+        border-radius: 3px;
+        background: thumb-touch.pressed ? Theme.text-3 : thumb-touch.has-hover ? Theme.text-3.with-alpha(0.8) : Theme.border-strong;
+        animate width { duration: Theme.quick; }
+        thumb-touch := TouchArea {
+            private property <length> start: 0px;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down { self.start = fl.content-y; }
+            }
+            moved => {
+                if self.pressed {
+                    fl.content-y = clamp(
+                        self.start - (self.mouse-y - self.pressed-y) * root.content-height / root.height,
+                        min(0px, root.height - root.content-height),
+                        0px);
+                    root.tailing = root.at-tail;
+                }
+            }
+        }
+    }
+}
+
+// Draggable column edge.
+export component ResizeHandle inherits Rectangle {
+    in property <string> label;
+    callback dragged(length);
+    callback released();
+    width: 7px;
+    horizontal-stretch: 0;
+    background: transparent;
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        width: touch.pressed || touch.has-hover ? 2px : Theme.hair;
+        background: touch.pressed ? Theme.accent : touch.has-hover ? Theme.border-strong : Theme.border;
+        animate background { duration: Theme.quick; }
+    }
+    touch := TouchArea {
+        mouse-cursor: col-resize;
+        moved => { if self.pressed { root.dragged(self.mouse-x - self.pressed-x); } }
+        pointer-event(e) => { if e.kind == PointerEventKind.up { root.released(); } }
+    }
+}
+
+// Card surface with a soft shadow, used for popovers and sheets. It grows into
+// place from `rise-x` and `rise-y`, fractions of its own size: a popover over
+// the composer rises from its bottom edge, a dialog from its middle.
+export component Sheet inherits Rectangle {
+    in property <float> rise-x: 0.5;
+    in property <float> rise-y: 0.5;
+    private property <float> shown: 0;
+    init => { self.shown = 1; }
+    animate shown { duration: Theme.calm; easing: ease-out; }
+    opacity: self.shown;
+    transform-scale: Theme.enter-scale + (1 - Theme.enter-scale) * self.shown;
+    transform-origin: { x: self.width * self.rise-x, y: self.height * self.rise-y };
+    background: Theme.overlay;
+    border-color: Theme.border-strong;
+    border-width: Theme.hair;
+    border-radius: Theme.r-lg;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-blur: 28px;
+    drop-shadow-offset-y: 8px;
+    // Swallow clicks so a scrim behind the sheet does not close it.
+    TouchArea { }
+    @children
+}
+
+export component Scrim inherits Rectangle {
+    in property <color> shade: Theme.scrim;
+    callback dismissed();
+    background: shade;
+    TouchArea { clicked => { dismissed(); } }
+}
+
+// Circular fill gauge. `fraction` below zero means unknown and draws no arc.
+export component Ring inherits Rectangle {
+    in property <float> fraction: -1;
+    in property <length> size: 18px;
+    in property <length> stroke: 2.5px;
+    width: size;
+    height: size;
+    // The arc sweeps to a new reading instead of jumping to it.
+    private property <float> f: clamp(fraction, 0, 1);
+    animate f { duration: Theme.glide; easing: ease-out; }
+    private property <color> tone: fraction >= 0.9 ? Theme.danger : fraction >= 0.7 ? Theme.warn : Theme.silver;
+    animate tone { duration: Theme.glide; }
+    Rectangle {
+        border-radius: root.size / 2;
+        border-width: root.stroke;
+        border-color: Theme.pressed;
+    }
+    if fraction >= 0: Path {
+        x: 0;
+        y: 0;
+        width: root.size;
+        height: root.size;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: root.tone;
+        stroke-width: root.stroke;
+        fill: transparent;
+        // Arc drawn clockwise from 12 o'clock. Slint arcs need distinct endpoints,
+        // so a full ring stops just short of closing.
+        MoveTo { x: 50; y: 8; }
+        ArcTo {
+            radius-x: 42;
+            radius-y: 42;
+            large-arc: root.f > 0.5;
+            sweep: true;
+            x: 50 + 42 * sin(360deg * min(root.f, 0.999));
+            y: 50 - 42 * cos(360deg * min(root.f, 0.999));
+        }
+    }
+}
+
+// Thin horizontal meter.
+export component Meter inherits Rectangle {
+    in property <float> fraction: 0;
+    in property <color> fill: Theme.silver;
+    height: 4px;
+    border-radius: 2px;
+    background: Theme.hover;
+    Rectangle {
+        x: 0;
+        height: parent.height;
+        width: parent.width * clamp(root.fraction, 0, 1);
+        border-radius: 2px;
+        background: root.fill;
+        animate width { duration: Theme.calm; }
+    }
+}
+
+// Centered message for a panel with nothing to show.
+export component EmptyState inherits VerticalLayout {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> detail;
+    alignment: center;
+    spacing: Theme.sp6;
+    padding: Theme.s5;
+    HorizontalLayout {
+        alignment: center;
+        if icon != "": AgIcon { name: icon; size: 22px; tint: Theme.text-3; }
+    }
+    Text {
+        text: title;
+        color: Theme.text-2;
+        font-size: Theme.fs-md;
+        font-weight: Theme.w-medium;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    if detail != "": Text {
+        text: detail;
+        color: Theme.text-3;
+        font-size: Theme.fs-sm;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
+// Copies through the host's clipboard where it has one, as on Android, and
+// otherwise through a hidden input, the toolkit's own clipboard path.
+export component CopyBtn inherits Rectangle {
+    in property <string> text;
+    in property <string> tip: "Copy";
+    private property <bool> copied: false;
+    width: Theme.control - 6px;
+    height: Theme.control - 6px;
+    IconBtn {
+        size: parent.width;
+        glyph: Theme.icon-sm;
+        icon: copied ? "check" : "copy";
+        tip: root.tip;
+        tint: copied ? Theme.ok : Theme.text-3;
+        clicked => {
+            if !App.copy_text(root.text) {
+                buffer.select-all();
+                buffer.copy();
+                buffer.clear-selection();
+            }
+            root.copied = true;
+            reset.running = true;
+        }
+    }
+    buffer := TextInput {
+        visible: false;
+        width: 0;
+        height: 0;
+        text: root.text;
+        read-only: true;
+    }
+    reset := Timer {
+        interval: 1400ms;
+        running: false;
+        triggered => { self.running = false; root.copied = false; }
+    }
+}

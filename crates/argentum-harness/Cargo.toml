@@ -1,0 +1,20 @@
+[package]
+name = "argentum-harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+extensions = []
+desktop-control = []
+
+[dependencies]
+argentum-lifecycle.workspace = true
+argentum-domain.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

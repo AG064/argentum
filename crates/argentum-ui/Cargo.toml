@@ -1,0 +1,29 @@
+[package]
+name = "argentum-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+argentum-domain.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+pulldown-cmark.workspace = true
+serde_json.workspace = true
+slint.workspace = true
+time.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+argentum-harness.workspace = true
+png = "0.18"
+uuid.workspace = true
+
+[features]
+live-preview = ["slint/live-preview"]
+
+[build-dependencies]
+slint-build = "1.18.1"

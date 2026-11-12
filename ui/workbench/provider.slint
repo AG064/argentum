@@ -1,0 +1,404 @@
+// Core: choosing a provider and model. The first-run screen is this and nothing
+// else, then an optional step for adding modules.
+import { Theme } from "theme.slint";
+import { App, Mods } from "state.slint";
+import { Badge, Btn, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
+import { BrandMark } from "../components/brand.slint";
+import { ProviderPresetView } from "../view-models.slint";
+import { CredentialSection } from "ops.slint";
+
+component PresetCard inherits Rectangle {
+    in property <ProviderPresetView> preset;
+    callback chosen();
+    min-height: 72px;
+    border-radius: Theme.r-lg;
+    background: touch.pressed ? Theme.raised : touch.has-hover ? Theme.surface : Theme.surface.with-alpha(0.55);
+    border-width: Theme.hair;
+    border-color: touch.has-hover ? Theme.border-strong : Theme.border;
+    animate background, border-color { duration: Theme.quick; }
+    accessible-role: button;
+    accessible-label: preset.label + ". " + preset.detail;
+    accessible-action-default => { chosen(); }
+    HorizontalLayout {
+        padding: Theme.sp14;
+        spacing: Theme.sp12;
+        Icon { name: preset.icon; size: 20px; tint: touch.has-hover ? Theme.accent-ink : Theme.silver; y: (parent.height - self.height) / 2; }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.sp2;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: Theme.sp8;
+                Label { text: preset.label; strong: true; horizontal-stretch: 1; }
+                if preset.local: Badge { text: "Local"; }
+                if preset.tested: Badge { text: "Tested"; }
+            }
+            Text {
+                text: preset.detail;
+                color: Theme.text-3;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+        }
+    }
+    Focus {
+        radius: Theme.r-lg;
+        activated => { root.chosen(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(); }
+    }
+}
+
+export component FirstRun inherits Rectangle {
+    background: Theme.canvas;
+    private property <length> column: min(root.width - 40px, 560px);
+    private property <bool> two-up: root.column >= 480px;
+    private property <bool> show-all: false;
+
+    // Provider choice is short and centers itself. The module list is long, so it
+    // scrolls between a fixed heading and a Start button that is always in view.
+    if App.first_run_stage == "provider": Scroller {
+        content-height: col.preferred-height + 80px;
+        col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp22;
+            VerticalLayout {
+                spacing: Theme.sp14;
+                HorizontalLayout { alignment: center; BrandMark { size: 56px; } }
+                Text {
+                    text: "Choose a provider";
+                    color: Theme.text;
+                    font-size: Theme.fs-2xl - 2px;
+                    font-weight: Theme.w-medium;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "That is all Argentum needs to start. Everything else is an optional module you can add now or later.";
+                    color: Theme.text-2;
+                    font-size: Theme.fs-md;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            VerticalLayout {
+                // Hidden presets must take no room, spacing included, so each
+                // card carries its own gap and collapses fully when hidden.
+                spacing: Theme.sp0;
+                for preset[i] in App.provider_presets: Rectangle {
+                    property <bool> shown: preset.supported && (root.show-all || preset.featured);
+                    visible: self.shown;
+                    height: self.shown ? card.preferred-height + Theme.sp8 : 0px;
+                    card := PresetCard {
+                        y: 0px;
+                        width: parent.width;
+                        height: self.preferred-height;
+                        preset: preset;
+                        chosen => { App.first_run_choose(preset); }
+                    }
+                }
+                if !root.show-all: HorizontalLayout {
+                    alignment: center;
+                    Btn { label: "Show all providers"; small: true; clicked => { root.show-all = true; } }
+                }
+                if App.first_run_error != "": Label {
+                    text: App.first_run_error;
+                    tone: "danger";
+                    size: "sm";
+                    wrap: word-wrap;
+                    overflow: clip;
+                }
+            }
+        }
+    }
+    // A server Argentum has no address for, such as llama-server on a PC.
+    if App.first_run_stage == "server": Scroller {
+        content-height: server-col.preferred-height + 80px;
+        server-col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp14;
+            Text {
+                text: "Where is your server?";
+                color: Theme.text;
+                font-size: Theme.fs-2xl - 2px;
+                font-weight: Theme.w-medium;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Any OpenAI-compatible server, such as llama-server on your PC or network.";
+                color: Theme.text-2;
+                font-size: Theme.fs-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            server-endpoint := Field {
+                label: "Endpoint";
+                placeholder: "http://192.168.1.20:8080/v1";
+                mono: true;
+                value: App.provider_draft_endpoint;
+                error: App.provider_endpoint_error;
+                edited(text) => {
+                    App.provider_draft_endpoint = text;
+                    App.provider_endpoint_error = App.validate_provider_endpoint(text);
+                }
+            }
+            server-model := Field {
+                label: "Model";
+                placeholder: "The model name the server expects";
+                mono: true;
+                value: App.provider_draft_model;
+                error: App.provider_model_error;
+                edited(text) => {
+                    App.provider_draft_model = text;
+                    App.provider_model_error = App.validate_provider_model(text);
+                }
+            }
+            server-context := Field {
+                label: "Context size, in tokens";
+                hint: "The server's context setting, such as --ctx-size for llama-server. You can change it later in Settings.";
+                mono: true;
+                value: App.provider_draft_context;
+                edited(text) => { App.provider_draft_context = text; }
+            }
+            if App.first_run_error != "": Label {
+                text: App.first_run_error;
+                tone: "danger";
+                size: "sm";
+                wrap: word-wrap;
+                overflow: clip;
+            }
+            HorizontalLayout {
+                alignment: space-between;
+                Btn { label: "Back"; clicked => { App.first_run_error = ""; App.first_run_stage = "provider"; } }
+                Btn {
+                    label: "Continue";
+                    kind: "primary";
+                    // The fields' own text is read, not the drafts, so a value set by
+                    // assistive technology without an edit event still counts.
+                    // The host validates it before anything is saved.
+                    enabled: server-endpoint.value != "" && server-model.value != "";
+                    clicked => {
+                        App.first_run_save_server(server-endpoint.value, server-model.value,
+                            server-context.value);
+                    }
+                }
+            }
+        }
+    }
+    if App.first_run_stage == "key": Scroller {
+        content-height: key-col.preferred-height + 80px;
+        key-col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp14;
+            Text {
+                text: "Add your " + App.provider_label + " API key";
+                color: Theme.text;
+                font-size: Theme.fs-2xl - 2px;
+                font-weight: Theme.w-medium;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "It goes straight to the system credential store. You can do this later in Settings.";
+                color: Theme.text-2;
+                font-size: Theme.fs-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            CredentialSection { }
+            if !App.provider_credential_supported: Text {
+                text: "This provider signs in through your browser, not with a key. For ChatGPT, run 'argentum provider login chatgpt' in a console.";
+                color: Theme.text-2;
+                font-size: Theme.fs-sm;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                Btn {
+                    label: App.provider_credential_configured ? "Continue" : "Skip for now";
+                    clicked => { App.first_run_stage = "modules"; }
+                }
+            }
+        }
+    }
+    if App.first_run_stage == "modules": VerticalLayout {
+        x: (root.width - root.column) / 2;
+        width: root.column;
+        padding-top: Theme.sp22;
+        padding-bottom: Theme.sp16;
+        spacing: Theme.sp14;
+        VerticalLayout {
+            spacing: Theme.sp8;
+            Text {
+                text: "Add what you need";
+                color: Theme.text;
+                font-size: Theme.fs-2xl - 2px;
+                font-weight: Theme.w-medium;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Argentum works with none of these. Turn on what suits you, or ask the agent to do it later.";
+                color: Theme.text-2;
+                font-size: Theme.fs-md;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        Scroller {
+            vertical-stretch: 1;
+            content-height: choices.preferred-height;
+            choices := VerticalLayout {
+                y: 0px;
+                width: root.column;
+                height: self.preferred-height;
+                for surface in App.harness_surfaces: Rectangle {
+                    visible: surface.configurable;
+                    height: surface.configurable ? Theme.row + 16px : 0px;
+                    HorizontalLayout {
+                        padding-left: Theme.sp8;
+                        padding-right: Theme.sp12;
+                        spacing: Theme.sp12;
+                        Icon { name: surface.icon; size: 18px; tint: Theme.silver; y: (parent.height - self.height) / 2; }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Label { text: surface.label; }
+                            Label { text: surface.detail; tone: "muted"; size: "xs"; }
+                        }
+                        Switch {
+                            y: (parent.height - self.height) / 2;
+                            label: surface.label;
+                            on: surface.visible;
+                            enabled: App.harness_pending == "";
+                            toggled(v) => { App.set_harness_surface_visibility(surface.id, v); }
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            Btn { label: "Start"; kind: "primary"; clicked => { App.first_run_finish(); } }
+        }
+    }
+}
+
+// Popover above the composer chip: providers on top, models of the selected one
+// below, with reported usage when the usage module is on.
+export component ProviderMenu inherits Sheet {
+    callback close();
+    width: min(380px, self.max-w);
+    in property <length> max-w: 380px;
+    // Rows from another provider's list are never shown as this one's.
+    private property <bool> models-shown: App.provider_models.length > 0
+        && App.provider_models_provider_id == App.provider_id;
+    height: min(lay.preferred-height, 520px);
+    clip: true;
+
+    lay := VerticalLayout {
+        padding: Theme.sp6;
+        spacing: Theme.sp2;
+        HorizontalLayout {
+            height: 26px;
+            padding-left: Theme.sp10;
+            SectionLabel { text: "PROVIDER"; }
+        }
+        for profile in App.provider_profiles: Row {
+            title: profile.label;
+            detail: profile.selected && App.provider_probe_state == "connected" ? "Connected"
+                : profile.selected && App.provider_probe_state == "failed" ? "Connection failed"
+                : profile.kind_label;
+            icon: profile.kind == "lm-studio" ? "hard-drive" : "provider";
+            selected: profile.selected;
+            enabled: !App.provider_selecting && !App.running;
+            clicked => {
+                if !profile.selected { App.select_provider_profile(profile.id); }
+            }
+        }
+        Row {
+            title: "Add or edit providers";
+            icon: "plus";
+            clicked => {
+                root.close();
+                App.settings_section = "providers";
+                App.open_settings();
+            }
+        }
+        Divider { }
+        HorizontalLayout {
+            height: 30px;
+            padding-left: Theme.sp10;
+            padding-right: Theme.sp4;
+            SectionLabel { text: "MODEL"; horizontal-stretch: 1; }
+            if App.provider_models_loading: Spinner { size: 13px; y: (parent.height - self.height) / 2; }
+            if !App.provider_models_loading: IconBtn {
+                icon: "refresh";
+                tip: "Refresh models";
+                size: 24px;
+                glyph: 13px;
+                y: (parent.height - self.height) / 2;
+                clicked => { App.refresh_provider_models(App.provider_id); }
+            }
+        }
+        if root.models-shown && App.provider_models_known: Rectangle {
+            height: 30px;
+            HorizontalLayout {
+                padding-left: Theme.sp10;
+                padding-right: Theme.sp10;
+                Label {
+                    text: "The provider's list could not be loaded. These are the models Argentum knows.";
+                    tone: "secondary";
+                    size: "sm";
+                }
+            }
+        }
+        if !root.models-shown && !App.provider_models_loading: Rectangle {
+            height: 34px;
+            HorizontalLayout {
+                padding-left: Theme.sp10;
+                padding-right: Theme.sp10;
+                Label {
+                    text: App.provider_models_error != "" ? App.provider_models_error : App.provider_model;
+                    tone: App.provider_models_error != "" ? "danger" : "secondary";
+                    size: "sm";
+                }
+            }
+        }
+        Scroller {
+            height: min(models.preferred-height, 240px);
+            vertical-stretch: 1;
+            content-height: models.preferred-height;
+            models := VerticalLayout {
+                y: 0px;
+                height: self.preferred-height;
+                width: parent.width;
+                spacing: Theme.sp1;
+                if root.models-shown: VerticalLayout {
+                spacing: Theme.sp1;
+                for model in App.provider_models: Row {
+                    title: model.label;
+                    detail: (model.label != model.id ? model.id : "")
+                        + (model.label != model.id && model.context_window_reported ? "  ·  " : "")
+                        + (model.context_window_reported ? model.context_window_tokens + " token context" : "");
+                    selected: model.selected;
+                    enabled: !App.provider_model_selecting && !App.running;
+                    clicked => {
+                        App.select_provider_model(App.provider_id, model.id);
+                        root.close();
+                    }
+                }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-user Windows installer for the Argentum desktop app and the Argentum
+  Genesis CLI. Built by scripts/build-windows-installer.ps1 with WiX 5.
+
+  - Installs to %LOCALAPPDATA%\Programs\Argentum\app without administrator rights.
+  - Adds Start menu entries and puts the CLI folder on the user PATH.
+  - Uninstall removes only the files, shortcuts, PATH entry and registry values
+    this package created. User data in %APPDATA%\Argentum and
+    %LOCALAPPDATA%\Argentum stays, unless the uninstall is run with
+    REMOVEUSERDATA=1.
+  - It ships no llama.cpp runtime and no models. Local inference is a separate
+    optional add-on.
+
+  The UpgradeCode must never change, or upgrades will install side by side.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Argentum"
+           Manufacturer="Argentum"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="4ad65771-6c99-4c4a-ab01-ef145817c9f2"
+           Scope="perUser"
+           Language="1033"
+           Compressed="yes"
+           InstallerVersion="500">
+    <SummaryInformation Description="Argentum $(var.DisplayVersion) for Windows x64" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Argentum is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="ArgentumIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="ArgentumIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/AG064/argentum" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/AG064/argentum/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="ArgentumDir" Name="Argentum">
+          <Directory Id="INSTALLFOLDER" Name="app" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MenuDir" Name="Argentum" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Argentum" AllowAbsent="no">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentRef Id="StartMenu" />
+      <ComponentRef Id="CliPath" />
+      <ComponentRef Id="UserDataCleanup" />
+    </Feature>
+
+    <Component Id="StartMenu" Directory="MenuDir" Guid="4afef812-90eb-4c5a-bf2c-3a0b0193018a">
+      <Shortcut Id="DesktopShortcut"
+                Name="Argentum"
+                Description="Argentum desktop app"
+                Target="[INSTALLFOLDER]Argentum.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="CliShortcut"
+                Name="Argentum Genesis CLI"
+                Description="Argentum Genesis command line and terminal UI"
+                Target="[INSTALLFOLDER]cli\argentum.exe"
+                WorkingDirectory="PersonalFolder" />
+      <RemoveFolder Id="RemoveMenuDir" Directory="MenuDir" On="uninstall" />
+      <!-- RemoveFolder only deletes a folder that is empty, so anything else in
+           these folders stays. -->
+      <RemoveFolder Id="RemoveArgentumDir" Directory="ArgentumDir" On="uninstall" />
+      <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\Argentum\Installer" Name="StartMenu"
+                     Type="integer" Value="1" KeyPath="yes" />
+      <RemoveRegistryKey Id="RemoveInstallerKey" Root="HKCU" Key="Software\Argentum\Installer"
+                         Action="removeOnUninstall" />
+    </Component>
+
+    <Component Id="CliPath" Directory="INSTALLFOLDER" Guid="33601731-578c-46a5-9aac-2227a7f1b967">
+      <Environment Id="CliOnPath" Name="PATH" Value="[INSTALLFOLDER]cli"
+                   Part="last" Action="set" System="no" Permanent="no" />
+      <RegistryValue Root="HKCU" Key="Software\Argentum\Installer" Name="CliPath"
+                     Type="string" Value="[INSTALLFOLDER]cli" KeyPath="yes" />
+    </Component>
+
+    <!-- Opt-in removal of user data: msiexec /x Argentum.msi REMOVEUSERDATA=1.
+         Without that property both folder properties stay empty and
+         RemoveFolderEx does nothing. Credentials saved in Windows Credential
+         Manager are not touched either way. -->
+    <SetProperty Id="ARGENTUMROAMINGDATA" Value="[AppDataFolder]Argentum\Argentum\"
+                 After="AppSearch" Sequence="execute"
+                 Condition="REMOVE~=&quot;ALL&quot; AND REMOVEUSERDATA=1" />
+    <SetProperty Id="ARGENTUMLOCALDATA" Value="[LocalAppDataFolder]Argentum\Argentum\"
+                 After="AppSearch" Sequence="execute"
+                 Condition="REMOVE~=&quot;ALL&quot; AND REMOVEUSERDATA=1" />
+    <Component Id="UserDataCleanup" Directory="INSTALLFOLDER" Guid="4039e1b8-bfdd-48b5-9528-d8b64eb876e0">
+      <util:RemoveFolderEx Id="RemoveRoamingData" Property="ARGENTUMROAMINGDATA" On="uninstall" />
+      <util:RemoveFolderEx Id="RemoveLocalData" Property="ARGENTUMLOCALDATA" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\Argentum\Installer" Name="UserDataCleanup"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

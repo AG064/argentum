@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app draws its own dark interface, so the window starts dark to avoid a
+         white flash, and the status and navigation bar icons are light. -->
+    <style name="Theme.Argentum" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/argentum_canvas</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#8A6D3B</item>
+    </style>
+    <color name="argentum_canvas">#0B0B0D</color>
+</resources>

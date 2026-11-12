@@ -1,0 +1,43 @@
+[package]
+name = "argentum-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+extensions = ["dep:argentum-extensions", "argentum-harness/extensions", "argentum-tools/extensions"]
+desktop-control = ["argentum-harness/desktop-control", "argentum-tools/desktop-control"]
+
+[dependencies]
+argentum-browser.workspace = true
+argentum-changes.workspace = true
+argentum-domain.workspace = true
+argentum-extensions = { workspace = true, optional = true }
+argentum-gitview.workspace = true
+argentum-harness.workspace = true
+argentum-platform.workspace = true
+argentum-providers.workspace = true
+argentum-security.workspace = true
+argentum-store.workspace = true
+argentum-tools.workspace = true
+argentum-workspaces.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+png = "=0.18.1"
+argentum-execution.workspace = true
+argentum-android-inference.workspace = true
+argentum-providers = { workspace = true, features = ["test-support"] }
+rusqlite.workspace = true
+tempfile.workspace = true

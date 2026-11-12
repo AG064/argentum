@@ -1,0 +1,210 @@
+// Renders the block model shared by chat Markdown and the reader-mode browser.
+import { Theme } from "theme.slint";
+import { CopyBtn, Label } from "kit.slint";
+import { RichBlockView, DiffLineView } from "../view-models.slint";
+
+// Plain text stays selectable. Text with inline formatting uses StyledText, which
+// Slint does not make selectable, so messages also carry a copy action.
+component Paragraph inherits VerticalLayout {
+    in property <RichBlockView> block;
+    in property <length> size: Theme.fs-md;
+    in property <color> tint: Theme.text;
+    in property <int> weight: Theme.w-normal;
+    callback link(string);
+    if block.rich: StyledText {
+        text: block.styled;
+        default-color: root.tint;
+        default-font-size: root.size;
+        link-color: Theme.accent-ink;
+        link-clicked(url) => { root.link(url); }
+    }
+    if !block.rich: TextInput {
+        text: block.text;
+        read-only: true;
+        single-line: false;
+        wrap: word-wrap;
+        color: root.tint;
+        font-size: root.size;
+        font-weight: root.weight;
+        selection-background-color: Theme.accent.with-alpha(0.4);
+        selection-foreground-color: Theme.text;
+    }
+}
+
+component CodeBlock inherits Rectangle {
+    in property <RichBlockView> block;
+    border-radius: Theme.r-md;
+    border-width: Theme.hair;
+    border-color: Theme.border;
+    background: Theme.code-bg;
+    clip: true;
+    VerticalLayout {
+        Rectangle {
+            height: Theme.control - 4px;
+            background: Theme.hover;
+            HorizontalLayout {
+                padding-left: Theme.sp12;
+                padding-right: Theme.sp3;
+                Label {
+                    text: block.lang != "" ? block.lang : (block.kind == "table" ? "table" : "text");
+                    tone: "muted";
+                    size: "xs";
+                    mono: true;
+                    horizontal-stretch: 1;
+                }
+                CopyBtn { text: block.text; tip: "Copy code"; y: (parent.height - self.height) / 2; }
+            }
+        }
+        // A table keeps its rows on one line each and scrolls sideways, so the
+        // columns stay aligned on a narrow screen.
+        if block.kind == "table": Flickable {
+            height: table-text.preferred-height + 2 * Theme.sp12;
+            content-width: max(self.width, table-text.preferred-width + 2 * Theme.sp12);
+            table-text := TextInput {
+                x: Theme.sp12;
+                y: Theme.sp12;
+                text: block.text;
+                read-only: true;
+                single-line: false;
+                wrap: no-wrap;
+                color: Theme.text;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-sm;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+            }
+        }
+        if block.kind != "table": VerticalLayout {
+            padding: Theme.sp12;
+            TextInput {
+                text: block.text;
+                read-only: true;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-sm;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+            }
+        }
+    }
+}
+
+component BlockView inherits VerticalLayout {
+    in property <RichBlockView> block;
+    callback link(string);
+    if block.kind == "p": Paragraph { block: root.block; link(u) => { root.link(u); } }
+    if block.kind == "h1": VerticalLayout {
+        padding-top: Theme.sp8;
+        Paragraph { block: root.block; size: Theme.fs-xl; weight: Theme.w-semibold; link(u) => { root.link(u); } }
+    }
+    if block.kind == "h2": VerticalLayout {
+        padding-top: Theme.sp6;
+        Paragraph { block: root.block; size: Theme.fs-lg; weight: Theme.w-semibold; link(u) => { root.link(u); } }
+    }
+    if block.kind == "h3": VerticalLayout {
+        padding-top: Theme.sp4;
+        Paragraph { block: root.block; size: Theme.fs-md; weight: Theme.w-semibold; link(u) => { root.link(u); } }
+    }
+    // Placed by hand: Slint measured wrapped text inside a HorizontalLayout as
+    // if it had the whole row, so long items got too little height and the end
+    // of a reply was cut off.
+    if block.kind == "li": Rectangle {
+        private property <length> inset: Theme.sp14 * block.depth + 16px + Theme.sp8;
+        height: item.preferred-height;
+        Text {
+            x: Theme.sp14 * block.depth;
+            y: 0;
+            width: 16px;
+            text: block.marker;
+            color: Theme.text-3;
+            font-size: Theme.fs-md;
+            horizontal-alignment: right;
+        }
+        item := Paragraph {
+            x: parent.inset;
+            y: 0;
+            width: parent.width - parent.inset;
+            block: root.block;
+            link(u) => { root.link(u); }
+        }
+    }
+    if block.kind == "quote": Rectangle {
+        height: quoted.preferred-height;
+        Rectangle { x: 0; y: 0; width: 2px; height: parent.height; background: Theme.border-strong; }
+        quoted := Paragraph {
+            x: 2px + Theme.sp12;
+            y: 0;
+            width: parent.width - self.x;
+            block: root.block;
+            tint: Theme.text-2;
+            link(u) => { root.link(u); }
+        }
+    }
+    if block.kind == "code" || block.kind == "table": CodeBlock { block: root.block; }
+    if block.kind == "hr": VerticalLayout {
+        padding-top: Theme.sp4;
+        padding-bottom: Theme.sp4;
+        Rectangle { height: Theme.hair; background: Theme.border; }
+    }
+}
+
+export component RichBlocks inherits VerticalLayout {
+    in property <[RichBlockView]> blocks;
+    callback link(string);
+    spacing: Theme.sp9;
+    for block in blocks: BlockView {
+        block: block;
+        link(u) => { root.link(u); }
+    }
+}
+
+// Unified diff with line numbers, shared by agent changes and working tree.
+export component DiffView inherits VerticalLayout {
+    in property <[DiffLineView]> lines;
+    for line in lines: Rectangle {
+        background: line.kind == "add" ? Theme.diff-add-bg
+            : line.kind == "del" ? Theme.diff-del-bg
+            : line.kind == "hunk" ? Theme.hover
+            : transparent;
+        HorizontalLayout {
+            padding-right: Theme.sp8;
+            spacing: Theme.sp6;
+            if line.kind == "add" || line.kind == "del" || line.kind == "ctx": Text {
+                width: 34px;
+                text: line.old-no;
+                color: Theme.text-3;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-xs;
+                horizontal-alignment: right;
+            }
+            if line.kind == "add" || line.kind == "del" || line.kind == "ctx": Text {
+                width: 34px;
+                text: line.new-no;
+                color: Theme.text-3;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-xs;
+                horizontal-alignment: right;
+            }
+            if line.kind == "add" || line.kind == "del" || line.kind == "ctx": Text {
+                width: 10px;
+                text: line.kind == "add" ? "+" : line.kind == "del" ? "-" : " ";
+                color: line.kind == "add" ? Theme.diff-add-text : Theme.diff-del-text;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: line.text;
+                wrap: word-wrap;
+                color: line.kind == "add" ? Theme.diff-add-text
+                    : line.kind == "del" ? Theme.diff-del-text
+                    : line.kind == "ctx" ? Theme.text-2
+                    : Theme.text-3;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+        }
+    }
+}

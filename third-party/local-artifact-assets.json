@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "pdfium": {
+    "version": "chromium/8100",
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8100/pdfium-win-x64.tgz",
+    "archive_bytes": 3875218,
+    "archive_sha256": "51621bcc1d9be9ea448f4b84b0516862b928e3968d3fca899af1a6d6e2848d6d",
+    "dll_sha256": "ae913f407e8d3f5cdbf08a9869564d647b13e132e01eb376c0a5a33b7a227a45",
+    "profile": "Windows x64, non-V8, non-XFA; no upstream signature claim"
+  },
+  "font": {
+    "source_revision": "2984c575fdce412ee02b2baaba67672b9a9434d8",
+    "url": "https://raw.githubusercontent.com/google/fonts/2984c575fdce412ee02b2baaba67672b9a9434d8/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf",
+    "bytes": 2049096,
+    "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+    "license_url": "https://raw.githubusercontent.com/google/fonts/2984c575fdce412ee02b2baaba67672b9a9434d8/ofl/notosans/OFL.txt",
+    "license_bytes": 4396,
+    "license_sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+  }
+}

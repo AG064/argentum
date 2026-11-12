@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "text": "licenses/Apache-2.0.txt",
+  "text_sha256": "751963a8b88c0e3a9f27e98933079fbcf09b9998b2c13ac49c2e4d58444520d6",
+  "terms_source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+  "packages": [
+    {
+      "name": "eventsource-stream",
+      "version": "0.2.3",
+      "declared": "MIT OR Apache-2.0",
+      "selected": "Apache-2.0",
+      "vcs": "3d46f1c758f9ee4681e9da0427556d24c53f9c01",
+      "grant_source": "https://github.com/jpopesculian/eventsource-stream/blob/3d46f1c758f9ee4681e9da0427556d24c53f9c01/Cargo.toml"
+    },
+    {
+      "name": "reqwest-eventsource",
+      "version": "0.6.0",
+      "declared": "MIT OR Apache-2.0",
+      "selected": "Apache-2.0",
+      "vcs": "ce0b972450fd16a417e2cfbe1cc522feef26545d",
+      "grant_source": "https://github.com/jpopesculian/reqwest-eventsource/blob/ce0b972450fd16a417e2cfbe1cc522feef26545d/Cargo.toml"
+    }
+  ]
+}

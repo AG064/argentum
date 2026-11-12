@@ -1,0 +1,826 @@
+// Settings overlay: providers, modules, appearance, permissions, about.
+import { AboutSlint } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { App, Mods } from "state.slint";
+import { Badge, Btn, Divider, VDivider, Field, Focus, Icon, IconBtn, Label, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
+import { BrandMark } from "../components/brand.slint";
+import { RichBlocks } from "rich.slint";
+import { BudgetSection, CapabilitiesPage, CredentialSection, DiagnosticsPage, GrantsSection, LocalModelSection, ProviderCatalog, ToolsPage, VerificationPage } from "ops.slint";
+
+component Heading inherits VerticalLayout {
+    in property <string> title;
+    in property <string> detail;
+    spacing: Theme.sp4;
+    padding-bottom: Theme.sp6;
+    Text { text: title; color: Theme.text; font-size: Theme.fs-lg; font-weight: Theme.w-semibold; }
+    if detail != "": Text { text: detail; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+}
+
+component SettingRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> icon;
+    min-height: lay.preferred-height;
+    lay := HorizontalLayout {
+        padding-top: Theme.sp9;
+        padding-bottom: Theme.sp9;
+        spacing: Theme.sp12;
+        if icon != "": Icon { name: icon; size: 17px; tint: Theme.text-2; y: (parent.height - self.height) / 2; }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: Theme.sp1;
+            Text { text: title; color: Theme.text; font-size: Theme.fs-sm + 0.5px; wrap: word-wrap; }
+            if detail != "": Text { text: detail; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
+        }
+        @children
+    }
+}
+
+component Stepper inherits HorizontalLayout {
+    in property <string> value;
+    in property <string> label;
+    callback step(int);
+    spacing: Theme.sp2;
+    alignment: end;
+    IconBtn { y: (parent.height - self.height) / 2; size: 26px; icon: "zoom-out"; glyph: 14px; tip: "Decrease " + label; clicked => { root.step(-5); } }
+    Text { width: 44px; text: value; color: Theme.text-2; font-size: Theme.fs-sm; horizontal-alignment: center; vertical-alignment: center; font-family: Theme.font-mono; }
+    IconBtn { y: (parent.height - self.height) / 2; size: 26px; icon: "zoom-in"; glyph: 14px; tip: "Increase " + label; clicked => { root.step(5); } }
+}
+
+component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in property <string> selected;
+    callback chose(string);
+    height: 28px;
+    width: lay.preferred-width;
+    border-radius: Theme.r-sm;
+    background: Theme.code-bg;
+    lay := HorizontalLayout {
+        padding: Theme.sp2;
+        spacing: Theme.sp2;
+        for option in root.options: Rectangle {
+            width: t.preferred-width + 18px;
+            border-radius: Theme.r-xs;
+            background: root.selected == option ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+            accessible-role: button;
+            accessible-label: option;
+            accessible-item-selected: root.selected == option;
+            accessible-action-default => { root.chose(option); }
+            t := Text {
+                text: option;
+                color: root.selected == option ? Theme.text : Theme.text-2;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+            Focus {
+                radius: Theme.r-xs;
+                activated => { root.chose(option); }
+            }
+            touch := TouchArea { mouse-cursor: pointer; clicked => { root.chose(option); } }
+        }
+    }
+}
+
+component ProvidersPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    Heading { title: "Providers"; detail: "Choose where Argentum sends this workspace's conversations."; }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        for profile in App.provider_profiles: Rectangle {
+            height: Theme.row + 18px;
+            border-radius: Theme.r-md;
+            background: profile.selected ? Theme.hover : touch.has-hover ? Theme.hover.with-alpha(0.03) : transparent;
+            function choose() {
+                App.provider_custom_draft = false;
+                App.provider_draft_label = profile.label;
+                App.provider_draft_endpoint = profile.endpoint;
+                App.provider_draft_model = profile.model;
+                if !profile.selected { App.select_provider_profile(profile.id); }
+            }
+            accessible-role: button;
+            accessible-label: profile.label;
+            accessible-item-selected: profile.selected;
+            accessible-action-default => { self.choose(); }
+            Focus {
+                radius: Theme.r-md;
+                activated => { parent.choose(); }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { parent.choose(); }
+            }
+            HorizontalLayout {
+                padding-left: Theme.sp12;
+                padding-right: Theme.sp10;
+                spacing: Theme.sp12;
+                Icon { name: profile.kind == "lm-studio" ? "hard-drive" : "provider"; size: 17px; tint: profile.selected ? Theme.accent-ink : Theme.text-3; y: (parent.height - self.height) / 2; }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Label { text: profile.label; strong: profile.selected; size: "sm"; }
+                    Label { text: profile.kind_label + "  ·  " + profile.model; tone: "muted"; size: "xs"; }
+                }
+                if profile.selected: Badge { y: (parent.height - self.height) / 2; text: "In use"; }
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        ProviderCatalog { }
+        Row {
+            title: "Custom endpoint";
+            detail: "Any OpenAI-compatible server, such as llama-server. API keys can't be saved for these yet.";
+            icon: "plus";
+            clicked => {
+                // A draft only. The provider in use stays as it is until this is saved.
+                App.provider_custom_draft = true;
+                App.provider_draft_label = "Custom";
+                App.provider_draft_endpoint = "https://";
+                App.provider_draft_model = "";
+                label-field.value = "Custom";
+                endpoint-field.value = "https://";
+                model-field.value = "";
+            }
+        }
+    }
+    Divider { }
+    Heading {
+        title: App.provider_custom_draft ? "Custom endpoint" : App.provider_label;
+        detail: App.provider_custom_draft ? "OpenAI-compatible" : App.provider_kind_label;
+    }
+    label-field := Field {
+        label: "Name";
+        value: App.provider_draft_label;
+        error: App.provider_label_error;
+        edited(text) => {
+            App.provider_draft_label = text;
+            App.provider_label_error = App.validate_provider_label(text);
+        }
+    }
+    endpoint-field := Field {
+        label: "Endpoint";
+        mono: true;
+        value: App.provider_draft_endpoint;
+        error: App.provider_endpoint_error;
+        edited(text) => {
+            App.provider_draft_endpoint = text;
+            App.provider_endpoint_error = App.validate_provider_endpoint(text);
+        }
+    }
+    model-field := Field {
+        label: "Model";
+        mono: true;
+        value: App.provider_draft_model;
+        error: App.provider_model_error;
+        edited(text) => {
+            App.provider_draft_model = text;
+            App.provider_model_error = App.validate_provider_model(text);
+        }
+    }
+    if App.provider_error != "": Label { text: App.provider_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+    if App.provider_notice != "": Label { text: App.provider_notice; tone: "ok"; size: "sm"; wrap: word-wrap; overflow: clip; }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        alignment: start;
+        Btn {
+            label: "Save";
+            kind: "primary";
+            busy: App.provider_saving;
+            enabled: App.provider_label_error == "" && App.provider_endpoint_error == "" && App.provider_model_error == "";
+            clicked => {
+                if App.provider_custom_draft {
+                    App.save_provider_profile("custom", App.provider_draft_label, "openai-compatible", App.provider_draft_endpoint, App.provider_draft_model, true);
+                } else {
+                    App.save_provider_profile(App.provider_id, App.provider_draft_label, App.provider_kind, App.provider_draft_endpoint, App.provider_draft_model, true);
+                }
+            }
+        }
+        Btn {
+            label: App.provider_probe_state == "connected" ? "Connected" : App.provider_probe_state == "failed" ? "Test again" : "Test connection";
+            busy: App.provider_testing;
+            enabled: !App.provider_custom_draft;
+            clicked => { App.probe_provider(App.provider_id); }
+        }
+    }
+    CredentialSection { }
+    BudgetSection { }
+    LocalModelSection { }
+}
+
+// Pairing a PC and a phone. Both screens show the same six digits, and the
+// owner confirms on each. Nothing is saved without that confirmation.
+component DevicesPage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    init => { App.device_refresh(); }
+    Heading {
+        title: "Devices";
+        detail: "Pair this device with your PC or phone on the same network. Pairing grants nothing by itself; permissions stay with each device.";
+    }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Label { text: "This device"; tone: "muted"; size: "sm"; }
+        // Monospace only for a real fingerprint, which always has four hyphens.
+        Label { text: App.device_fingerprint; size: "sm"; mono: App.device_fingerprint.character-count == 24; horizontal-stretch: 1; wrap: word-wrap; overflow: clip; }
+    }
+    SectionLabel { text: "PAIRED"; height: 22px; }
+    if App.devices.length == 0: Label { text: "No devices are paired with this one."; tone: "muted"; size: "sm"; }
+    for device in App.devices: HorizontalLayout {
+        spacing: Theme.sp8;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            Label { text: device.name; }
+            Label { text: device.fingerprint; tone: "muted"; size: "xs"; mono: true; }
+        }
+        Btn { label: "Forget"; small: true; clicked => { App.device_forget(device.fingerprint); } }
+    }
+    if App.device_remote_available: VerticalLayout {
+        spacing: Theme.sp4;
+        SectionLabel { text: "REMOTE CONTROL"; height: 22px; }
+        SettingRow {
+            title: "Let paired devices control this app";
+            detail: "They can chat and browse sessions here. Settings, keys and approvals stay on this device.";
+            Switch {
+                y: (parent.height - self.height) / 2;
+                label: "Let paired devices control this app";
+                enabled: App.devices.length > 0;
+                on: App.device_remote_on;
+                toggled(v) => { App.device_set_remote(v); }
+            }
+        }
+        if App.device_remote_detail != "": Label { text: App.device_remote_detail; tone: "muted"; size: "sm"; wrap: word-wrap; }
+    }
+    SectionLabel { text: "PAIR A DEVICE"; height: 22px; }
+    if App.device_pair_state == "idle" || App.device_pair_state == "error": VerticalLayout {
+        spacing: Theme.sp8;
+        Label {
+            text: "On one device, wait for a connection. On the other, enter the address it shows.";
+            tone: "muted";
+            size: "sm";
+            wrap: word-wrap;
+        }
+        Btn { label: "Wait for a device"; clicked => { App.device_listen(); } }
+        address := Field { label: "Address of the other device"; placeholder: "192.168.1.20:47910"; mono: true; }
+        Btn {
+            label: "Connect";
+            enabled: address.value != "";
+            clicked => { App.device_connect(address.value); }
+        }
+    }
+    if App.device_pair_state == "waiting" || App.device_pair_state == "connecting": Label {
+        text: App.device_pair_detail;
+        wrap: word-wrap;
+    }
+    if App.device_pair_state == "code": VerticalLayout {
+        spacing: Theme.sp10;
+        Label { text: "Check that the other device shows the same six digits."; wrap: word-wrap; }
+        Text {
+            text: App.device_pair_code;
+            color: Theme.text;
+            font-size: Theme.fs-2xl + 6px;
+            font-weight: Theme.w-medium;
+            horizontal-alignment: center;
+        }
+        Label { text: App.device_pair_detail; tone: "muted"; size: "xs"; mono: true; wrap: word-wrap; }
+        name := Field { label: "Name for the other device"; value: "Paired device"; }
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            alignment: start;
+            Btn { label: "They match"; kind: "primary"; clicked => { App.device_confirm(true, name.value); } }
+            Btn { label: "Cancel"; clicked => { App.device_confirm(false, ""); } }
+        }
+    }
+    if App.device_pair_state == "error": Label { text: App.device_pair_detail; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+}
+
+component ModulesPage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    Heading {
+        title: "Modules";
+        detail: "Everything beyond the conversation and provider chooser is optional. Modules change what you see. They never grant permissions.";
+    }
+    // Wraps, so the presets stay inside a narrow screen.
+    FlexboxLayout {
+        spacing: Theme.sp6;
+        for profile in App.harness_profiles: Rectangle {
+            visible: profile.selectable || profile.selected;
+            width: self.visible ? t.preferred-width + 20px : 0px;
+            height: 28px;
+            border-radius: Theme.r-sm;
+            background: profile.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+            border-width: Theme.hair;
+            border-color: profile.selected ? Theme.accent.with-alpha(0.5) : Theme.border;
+            accessible-role: button;
+            accessible-label: profile.label + ". " + profile.detail;
+            accessible-item-selected: profile.selected;
+            accessible-enabled: profile.selectable;
+            accessible-action-default => { self.choose(); }
+            function choose() {
+                if profile.selectable && App.harness_pending == "" { App.select_harness_profile(profile.id); }
+            }
+            t := Text {
+                text: profile.label;
+                color: profile.selected ? Theme.text : Theme.text-2;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+            Focus {
+                enabled: profile.selectable;
+                activated => { parent.choose(); }
+            }
+            touch := TouchArea {
+                mouse-cursor: profile.selectable ? pointer : default;
+                clicked => { parent.choose(); }
+            }
+        }
+    }
+    if App.harness_error != "": Label { text: App.harness_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+    VerticalLayout {
+        spacing: Theme.sp0;
+        for surface in App.harness_surfaces: VerticalLayout {
+            SettingRow {
+                title: surface.label + (surface.state == "unavailable" ? " (not in this build)" : "");
+                detail: surface.detail;
+                icon: surface.icon;
+                if surface.configurable: Switch {
+                    y: (parent.height - self.height) / 2;
+                    label: surface.label;
+                    on: surface.visible;
+                    enabled: App.harness_pending == "";
+                    toggled(v) => { App.set_harness_surface_visibility(surface.id, v); }
+                }
+                if !surface.configurable && surface.state != "unavailable": Badge { y: (parent.height - self.height) / 2; text: "Always on"; }
+            }
+            Divider { }
+        }
+    }
+}
+
+component AppearancePage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    Heading { title: "Appearance"; detail: "You can change all of this here, or ask the agent to change it for you."; }
+    if App.ui_last_agent_change != "": Rectangle {
+        border-radius: Theme.r-md;
+        background: Theme.hover;
+        height: note.preferred-height;
+        note := HorizontalLayout {
+            padding: Theme.sp10;
+            spacing: Theme.sp8;
+            Icon { name: "sparkles"; size: Theme.icon-sm; tint: Theme.silver; y: (parent.height - self.height) / 2; }
+            Text { horizontal-stretch: 1; text: "Last agent change: " + App.ui_last_agent_change; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+        }
+    }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        for preset in App.theme_presets: Rectangle {
+            horizontal-stretch: 1;
+            height: 78px;
+            border-radius: Theme.r-md;
+            background: preset.canvas;
+            border-width: preset.selected ? 2px : Theme.hair;
+            border-color: preset.selected ? Theme.accent : touch.has-hover ? Theme.border-strong : Theme.border;
+            accessible-role: button;
+            accessible-label: preset.label + " theme";
+            accessible-item-selected: preset.selected;
+            accessible-action-default => { App.ui_set_preset(preset.id); }
+            clip: true;
+            Rectangle {
+                x: 10px;
+                y: 10px;
+                width: parent.width - 20px;
+                height: 26px;
+                border-radius: 5px;
+                background: preset.surface;
+                Rectangle { x: parent.width - 18px; y: 7px; width: 12px; height: 12px; border-radius: 6px; background: preset.accent; }
+                Rectangle { x: 7px; y: 11px; width: min(30px, parent.width - 32px); height: 4px; border-radius: 2px; background: preset.text; }
+            }
+            Text {
+                x: 10px;
+                y: parent.height - 28px;
+                width: parent.width - 16px;
+                overflow: elide;
+                text: preset.label;
+                color: preset.text;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+            Focus {
+                radius: Theme.r-md;
+                activated => { App.ui_set_preset(preset.id); }
+            }
+            touch := TouchArea { mouse-cursor: pointer; clicked => { App.ui_set_preset(preset.id); } }
+        }
+    }
+    if App.ui_error != "": Label { text: App.ui_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+    VerticalLayout {
+        SettingRow {
+            title: "Density";
+            Segmented {
+                y: (parent.height - self.height) / 2;
+                options: ["Compact", "Comfortable", "Spacious"];
+                selected: App.ui_density == "compact" ? "Compact" : App.ui_density == "spacious" ? "Spacious" : "Comfortable";
+                chose(option) => { App.ui_set_density(option == "Compact" ? "compact" : option == "Spacious" ? "spacious" : "comfortable"); }
+            }
+        }
+        Divider { }
+        SettingRow {
+            title: "Text size";
+            Stepper { label: "text size"; value: App.ui_font_percent + "%"; step(d) => { App.ui_step_font(d); } }
+        }
+        Divider { }
+        SettingRow {
+            title: "Corner roundness";
+            Stepper { label: "corner roundness"; value: App.ui_radius_percent + "%"; step(d) => { App.ui_step_radius(d * 5); } }
+        }
+        Divider { }
+        SettingRow {
+            title: "Side panel position";
+            Segmented {
+                y: (parent.height - self.height) / 2;
+                options: ["Left", "Right"];
+                selected: Theme.panel-left ? "Left" : "Right";
+                chose(option) => { App.ui_set_panel_side(option == "Left"); }
+            }
+        }
+        Divider { }
+        SettingRow {
+            title: "Filled message bubbles";
+            detail: "Outlines your messages instead when off.";
+            Switch { y: (parent.height - self.height) / 2; label: "Filled message bubbles"; on: Theme.user-bubbles; toggled(v) => { App.ui_set_user_bubbles(v); } }
+        }
+        Divider { }
+    }
+    HorizontalLayout {
+        alignment: start;
+        Btn { label: "Reset appearance"; clicked => { App.ui_reset(); } }
+    }
+}
+
+component PermissionsPage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    Heading {
+        title: "Permissions";
+        detail: "Saved for this project and enforced by the runtime. Nothing the model writes can change these, and no module can grant them.";
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "APPROVAL MODE"; height: 22px; }
+        for profile in App.harness_execution_profiles: Row {
+            visible: profile.selectable || profile.selected;
+            height: self.visible ? self.min-height : 0px;
+            title: profile.label;
+            detail: profile.detail;
+            selected: profile.selected;
+            enabled: profile.selectable || profile.selected;
+            clicked => {
+                if !profile.selected && !App.running && App.harness_pending == "" {
+                    App.select_execution_profile(profile.id);
+                }
+            }
+        }
+    }
+    GrantsSection { }
+    VerticalLayout {
+        SectionLabel { text: "AGENT TOOLS"; height: 22px; }
+        for capability in App.harness_capabilities: VerticalLayout {
+            visible: capability.configurable;
+            height: capability.configurable ? self.preferred-height : 0px;
+            SettingRow {
+                title: capability.label;
+                detail: capability.detail;
+                Switch {
+                    y: (parent.height - self.height) / 2;
+                    label: capability.label;
+                    on: capability.enabled;
+                    enabled: !App.running && App.harness_pending == "";
+                    toggled(v) => { App.set_harness_capability_enabled(capability.id, v); }
+                }
+            }
+            Divider { }
+        }
+    }
+}
+
+component WorkspacePage inherits VerticalLayout {
+    spacing: Theme.sp16;
+    init => { App.usage_refresh(); }
+    Heading { title: "Workspace"; detail: "The folder Argentum works in. File access never leaves it."; }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        SectionLabel { text: "CURRENT"; height: 22px; }
+        Text { text: App.workspace_label; color: Theme.text; font-size: Theme.fs-sm; font-family: Theme.font-mono; wrap: word-wrap; }
+        if App.workspace_is_chosen_folder: HorizontalLayout {
+            alignment: start;
+            Btn {
+                label: "Use Argentum's own folder";
+                small: true;
+                enabled: !App.running;
+                clicked => { App.use_app_workspace(); }
+            }
+        }
+    }
+    // Android: the permission is read again while this page is open, so the
+    // status is current after the owner comes back from Android settings.
+    Rectangle {
+        height: 0px;
+        Timer {
+            interval: 1s;
+            running: App.workspace_all_files_supported;
+            triggered => { App.refresh_workspace_access(); }
+        }
+    }
+    // Direct children of the page, so wrapped text is measured at the page's
+    // width and the button below it is not drawn over the next row.
+    if App.workspace_all_files_supported: SectionLabel { text: "ALL FILES ACCESS"; height: 22px; }
+    if App.workspace_all_files_supported: Text {
+        text: App.workspace_all_files_granted
+            ? "On. You can choose a folder in Internal storage as the workspace."
+            : "Off. Argentum works in its own folder, which other apps cannot see.";
+        color: App.workspace_all_files_granted ? Theme.ok : Theme.text-2;
+        font-size: Theme.fs-sm;
+        wrap: word-wrap;
+    }
+    if App.workspace_all_files_supported: Text {
+        text: "Optional. To work in a folder you can also open from other apps, such as Documents, turn on All files access for Argentum in Android settings. Android then lets the Argentum app read and change any file in Internal storage. The agent itself stays limited to the folder you choose here, with the same approvals as before. You can turn it off again in the same place.";
+        color: Theme.text-3;
+        font-size: Theme.fs-xs + 0.5px;
+        wrap: word-wrap;
+    }
+    if App.workspace_all_files_supported: HorizontalLayout {
+        alignment: start;
+        Btn {
+            label: App.workspace_all_files_granted ? "Android settings" : "Turn on in Android settings";
+            small: true;
+            clicked => { App.open_all_files_settings(); }
+        }
+    }
+    if App.workspace_picker_available: HorizontalLayout {
+        alignment: start;
+        Btn {
+            label: "Choose folder";
+            icon: "folder";
+            enabled: !App.running;
+            clicked => { App.choose_workspace_folder(); }
+        }
+    }
+    Field {
+        label: App.workspace_picker_available ? "Or type a path" : "Open another folder";
+        placeholder: "A full path, such as " + App.workspace_path_example;
+        mono: true;
+        value <=> App.workspace_draft;
+        error: App.workspace_notice;
+        edited(text) => { App.workspace_notice = ""; }
+        accepted(text) => { if text != "" { App.open_workspace(text); } }
+    }
+    HorizontalLayout {
+        alignment: start;
+        Btn {
+            label: "Open and restart";
+            kind: "primary";
+            enabled: App.workspace_draft != "" && !App.running;
+            clicked => { App.open_workspace(App.workspace_draft); }
+        }
+    }
+    if App.projects.length > 0: VerticalLayout {
+        spacing: Theme.sp2;
+        SectionLabel { text: "RECENT PROJECTS"; height: 22px; }
+        for project in App.projects: Row {
+            title: project.name + (project.current ? "  (open)" : "");
+            detail: project.path + "  ·  " + project.detail;
+            icon: "folder";
+            selected: project.current;
+            enabled: !project.current && !App.running;
+            clicked => { App.open_workspace(project.path); }
+        }
+    }
+    Text { text: "Argentum restarts to open a different folder. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
+}
+
+// Updates live in Settings rather than in a module: keeping up to date should not
+// depend on which parts of the interface are turned on. Nothing here runs by itself.
+component UpdatesPage inherits VerticalLayout {
+    spacing: Theme.sp14;
+    private property <bool> busy: App.update_state == "checking" || App.update_state == "downloading" || App.update_state == "installing";
+    Heading { title: "Updates"; detail: "Argentum only contacts GitHub when you ask it to here."; }
+    Rectangle {
+        border-radius: Theme.r-md;
+        background: Theme.surface;
+        border-width: Theme.hair;
+        border-color: Theme.border;
+        height: status.preferred-height;
+        status := VerticalLayout {
+            padding: Theme.sp14;
+            spacing: Theme.sp10;
+            HorizontalLayout {
+                spacing: Theme.sp12;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: Theme.sp2;
+                    Text {
+                        text: App.update_state == "available" || App.update_state == "downloading" ? "Version " + App.update_version + " is available"
+                            : App.update_state == "ready" ? "Version " + App.update_version + " is ready to install"
+                            : App.update_state == "installing" ? "Installing version " + App.update_version
+                            : App.update_state == "current" ? "Argentum is up to date"
+                            : App.update_state == "checking" ? "Checking for updates"
+                            : App.update_state == "error" ? "The update did not finish"
+                            : "Version " + App.update_current;
+                        color: App.update_state == "error" ? Theme.danger : Theme.text;
+                        font-size: Theme.fs-md;
+                        font-weight: Theme.w-medium;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: App.update_message != "" ? App.update_message : "You have version " + App.update_current + ".";
+                        color: Theme.text-2;
+                        font-size: Theme.fs-sm;
+                        wrap: word-wrap;
+                    }
+                }
+                if App.update_state == "available": Btn {
+                    y: (parent.height - self.height) / 2;
+                    label: "Download";
+                    kind: "primary";
+                    clicked => { App.update_download(); }
+                }
+                if App.update_state == "ready": Btn {
+                    y: (parent.height - self.height) / 2;
+                    label: "Install and restart";
+                    kind: "primary";
+                    enabled: App.update_install_blocker == "" && !App.running;
+                    clicked => { App.update_install(); }
+                }
+                if App.update_in_app && App.update_state != "available" && App.update_state != "ready": Btn {
+                    y: (parent.height - self.height) / 2;
+                    label: "Check for updates";
+                    busy: root.busy;
+                    clicked => { App.update_check(); }
+                }
+            }
+            if App.update_state == "downloading": Meter {
+                fraction: max(0, App.update_progress);
+                fill: Theme.accent;
+            }
+            if App.update_state == "ready" && App.update_install_blocker != "": Label {
+                text: App.update_install_blocker;
+                tone: "muted";
+                size: "sm";
+                wrap: word-wrap;
+                overflow: clip;
+            }
+            if App.update_state == "ready" && App.running: Label {
+                text: "Installing waits until the current run finishes.";
+                tone: "muted";
+                size: "sm";
+            }
+        }
+    }
+    if App.update_notes.length > 0: VerticalLayout {
+        spacing: Theme.sp8;
+        SectionLabel { text: "WHAT'S NEW"; height: 22px; }
+        RichBlocks { blocks: App.update_notes; }
+    }
+    Text {
+        text: "Each download is checked against the checksum published with the release, and the previous version is restored if installing fails. Releases are not code signed yet, so authenticity rests on GitHub and the release account.";
+        color: Theme.text-3;
+        font-size: Theme.fs-xs + 0.5px;
+        wrap: word-wrap;
+    }
+}
+
+component AboutPage inherits VerticalLayout {
+    spacing: Theme.sp12;
+    alignment: start;
+    HorizontalLayout { alignment: start; BrandMark { size: 64px; } }
+    Text { text: "Argentum " + App.update_current; color: Theme.text; font-size: Theme.fs-xl; font-weight: Theme.w-semibold; }
+    Text { text: "Argentum by AG064 (https://github.com/AG064/argentum). A native Rust coding agent."; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+    Text { text: "Copyright (C) 2026 AG064. Free software under the GNU Affero General Public License 3.0, with no warranty. The source code and license are at https://github.com/AG064/argentum."; color: Theme.text-3; font-size: Theme.fs-xs; wrap: word-wrap; }
+    Text { text: "Licenses and third-party notices ship in LICENSE and THIRD_PARTY_NOTICES.md."; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
+    VerticalLayout {
+        spacing: Theme.sp4;
+        HorizontalLayout { alignment: start; Btn { label: "Report a problem"; clicked => { App.report_problem(); } } }
+        Text { text: "Opens a new issue on GitHub with the version and platform filled in. Nothing is sent until you submit it there. To share what happened in a session, attach a session export."; color: Theme.text-3; font-size: Theme.fs-xs; wrap: word-wrap; }
+    }
+    if App.session_export_available: VerticalLayout {
+        spacing: Theme.sp4;
+        HorizontalLayout {
+            alignment: start;
+            Btn {
+                label: "Export this session";
+                enabled: App.active_session_id != "";
+                clicked => { App.export_session(App.active_session_id); }
+            }
+        }
+        Text { text: "Saves the open session's messages, reasoning, usage, and events as a JSON file. Saved keys and anything shaped like a key or token are removed first. You choose where it goes."; color: Theme.text-3; font-size: Theme.fs-xs; wrap: word-wrap; }
+        if App.session_export_notice != "": Text { text: App.session_export_notice; color: App.session_export_failed ? Theme.danger : Theme.text-2; font-size: Theme.fs-xs; wrap: word-wrap; }
+    }
+    // Credit for the interface toolkit, kept small beside Argentum's own mark.
+    HorizontalLayout { alignment: start; AboutSlint { width: 120px; height: 44px; } }
+}
+
+export component Settings inherits Rectangle {
+    in property <bool> narrow: false;
+    callback close();
+    private property <float> shown: 0;
+    init => { root.shown = 1; }
+    animate shown { duration: Theme.calm; easing: ease-out; }
+    background: Theme.scrim.transparentize(1 - root.shown);
+    TouchArea { clicked => { root.close(); } }
+
+    Sheet {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.narrow ? parent.width : min(parent.width - 48px, 860px);
+        height: root.narrow ? parent.height : min(parent.height - 48px, 640px);
+        border-radius: root.narrow ? 0px : Theme.r-lg;
+        clip: true;
+
+        VerticalLayout {
+            if root.narrow: HorizontalLayout {
+                height: 46px;
+                padding-left: Theme.sp8;
+                padding-right: Theme.sp8;
+                spacing: Theme.sp2;
+                for tab in [
+                    { id: "providers", icon: "provider", label: "Providers" },
+                    { id: "workspace", icon: "folder", label: "Workspace" },
+                    { id: "modules", icon: "boxes", label: "Modules" },
+                    { id: "appearance", icon: "sparkles", label: "Appearance" },
+                    { id: "permissions", icon: "approval", label: "Permissions" },
+                    { id: "devices", icon: "lock", label: "Devices" },
+                    { id: "updates", icon: "refresh", label: "Updates" },
+                    { id: "about", icon: "info", label: "About" },
+                ]: IconBtn {
+                    y: (parent.height - self.height) / 2;
+                    icon: tab.icon;
+                    tip: tab.label;
+                    active: App.settings_section == tab.id;
+                    size: 38px;
+                    clicked => { App.settings_section = tab.id; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                IconBtn { y: (parent.height - self.height) / 2; icon: "close"; tip: "Close settings"; size: 38px; clicked => { root.close(); } }
+            }
+            if root.narrow: Divider { }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                if !root.narrow: Rectangle {
+                    width: 190px;
+                    background: Theme.surface;
+                    VerticalLayout {
+                        padding: Theme.sp8;
+                        spacing: Theme.sp1;
+                        alignment: start;
+                        HorizontalLayout {
+                            height: 38px;
+                            padding-left: Theme.sp10;
+                            Label { text: "Settings"; strong: true; }
+                        }
+                        Row { title: "Providers"; icon: "provider"; selected: App.settings_section == "providers"; clicked => { App.settings_section = "providers"; } }
+                        Row { title: "Workspace"; icon: "folder"; selected: App.settings_section == "workspace"; clicked => { App.settings_section = "workspace"; } }
+                        Row { title: "Modules"; icon: "boxes"; selected: App.settings_section == "modules"; clicked => { App.settings_section = "modules"; } }
+                        Row { title: "Appearance"; icon: "sparkles"; selected: App.settings_section == "appearance"; clicked => { App.settings_section = "appearance"; } }
+                        Row { title: "Verification"; icon: "circle-check"; selected: App.settings_section == "verification"; clicked => { App.settings_section = "verification"; } }
+                        Row { title: "Tools and skills"; icon: "wrench"; selected: App.settings_section == "tools"; clicked => { App.settings_section = "tools"; } }
+                        Row { title: "Capabilities"; icon: "plug"; selected: App.settings_section == "capabilities"; clicked => { App.settings_section = "capabilities"; } }
+                        Row { title: "Diagnostics"; icon: "activity"; selected: App.settings_section == "diagnostics"; clicked => { App.settings_section = "diagnostics"; } }
+                        Row { title: "Permissions"; icon: "approval"; selected: App.settings_section == "permissions"; clicked => { App.settings_section = "permissions"; } }
+                        Row { title: "Devices"; icon: "lock"; selected: App.settings_section == "devices"; clicked => { App.settings_section = "devices"; } }
+                        Row { title: "Updates"; icon: "refresh"; selected: App.settings_section == "updates"; clicked => { App.settings_section = "updates"; } }
+                        Row { title: "About"; icon: "info"; selected: App.settings_section == "about"; clicked => { App.settings_section = "about"; } }
+                    }
+                }
+                if !root.narrow: VDivider { }
+                pane := Rectangle {
+                    horizontal-stretch: 1;
+                    private property <length> gutter: root.narrow ? 16px : 26px;
+                    Scroller {
+                        content-height: page.preferred-height + 44px;
+                        page := VerticalLayout {
+                            height: self.preferred-height;
+                            x: pane.gutter;
+                            y: 22px;
+                            width: pane.width - 2 * pane.gutter;
+                            if App.settings_section == "providers": ProvidersPage { }
+                            if App.settings_section == "workspace": WorkspacePage { }
+                            if App.settings_section == "modules": ModulesPage { }
+                            if App.settings_section == "appearance": AppearancePage { }
+                            if App.settings_section == "permissions": PermissionsPage { }
+                            if App.settings_section == "verification": VerificationPage { }
+                            if App.settings_section == "tools": ToolsPage { }
+                            if App.settings_section == "capabilities": CapabilitiesPage { }
+                            if App.settings_section == "diagnostics": DiagnosticsPage { }
+                            if App.settings_section == "devices": DevicesPage { }
+                            if App.settings_section == "updates": UpdatesPage { }
+                            if App.settings_section == "about": AboutPage { }
+                        }
+                    }
+                    if !root.narrow: IconBtn {
+                        x: parent.width - self.width - 8px;
+                        y: 8px;
+                        icon: "close";
+                        tip: "Close settings";
+                        clicked => { root.close(); }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,48 @@
+[package]
+name = "argentum-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "argentum"
+path = "src/main.rs"
+
+[features]
+live-preview = ["argentum-ui/live-preview"]
+extensions = ["argentum-cli/extensions"]
+desktop-control = ["argentum-cli/desktop-control"]
+
+[dependencies]
+argentum-cli.workspace = true
+argentum-devices.workspace = true
+argentum-domain.workspace = true
+argentum-platform.workspace = true
+argentum-providers.workspace = true
+argentum-security.workspace = true
+argentum-store.workspace = true
+argentum-ui.workspace = true
+argentum-update.workspace = true
+serde_json.workspace = true
+slint.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.31"

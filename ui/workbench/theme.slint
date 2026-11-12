@@ -1,0 +1,159 @@
+// Runtime theme. Every value here is set from Rust through UiPreferences, so the
+// user and the agent can change it without a rebuild. The defaults below are the
+// Argentum preset and exist so the first frame is correct.
+//
+// Approval prompts do not use this global. See TrustTheme.
+
+export global Theme {
+    // Surfaces, darkest to lightest.
+    in-out property <color> canvas: #0B0B0D;
+    in-out property <color> sidebar: #070708;
+    in-out property <color> surface: #131316;
+    in-out property <color> raised: #1A1A1E;
+    in-out property <color> overlay: #1E1E23;
+    in-out property <color> hover: #FFFFFF0F;
+    in-out property <color> pressed: #FFFFFF1A;
+    in-out property <color> border: #FFFFFF14;
+    in-out property <color> border-strong: #FFFFFF2B;
+    in-out property <color> scrim: #000000A6;
+    in-out property <color> code-bg: #0E0E11;
+    in-out property <color> shadow: #00000090;
+    in-out property <color> thumb: #FFFFFF;
+
+    // Content.
+    in-out property <color> text: #EDEDEF;
+    in-out property <color> text-2: #A6A6AD;
+    in-out property <color> text-3: #75757D;
+    in-out property <color> silver: #C9CCD1;
+
+    // The logotype's red. Reserved for primary action, focus, and live state.
+    in-out property <color> accent: #D2202E;
+    in-out property <color> accent-hover: #E8323F;
+    in-out property <color> accent-text: #FFFFFF;
+    in-out property <color> accent-soft: #D2202E24;
+    in-out property <color> accent-ink: #F0646E;
+
+    // Meaning.
+    in-out property <color> ok: #8FB996;
+    in-out property <color> warn: #D9B36A;
+    in-out property <color> danger: #F0646E;
+    in-out property <color> diff-add-bg: #8FB9961A;
+    in-out property <color> diff-add-text: #A9D0AF;
+    in-out property <color> diff-del-bg: #D2202E1F;
+    in-out property <color> diff-del-text: #F0949B;
+
+    // Scales.
+    in-out property <float> font-scale: 1.0;
+    in-out property <float> radius-scale: 1.0;
+    in-out property <float> density: 1.0;
+    in-out property <string> font-ui: "Segoe UI Variable";
+    in-out property <string> font-mono: "Cascadia Mono";
+    in-out property <bool> reduced-motion: false;
+
+    // Layout.
+    in-out property <length> sidebar-width: 264px;
+    in-out property <length> panel-width: 460px;
+    in-out property <length> chat-width: 760px;
+    in-out property <bool> panel-left: false;
+    in-out property <bool> user-bubbles: true;
+
+    // Type. Sizes scale together so the agent cannot break hierarchy.
+    out property <length> fs-xs: 11px * font-scale;
+    out property <length> fs-sm: 12.5px * font-scale;
+    out property <length> fs-md: 14px * font-scale;
+    out property <length> fs-lg: 16px * font-scale;
+    out property <length> fs-xl: 20px * font-scale;
+    out property <length> fs-2xl: 28px * font-scale;
+    out property <int> w-normal: 400;
+    out property <int> w-medium: 500;
+    out property <int> w-semibold: 600;
+
+    // Radii.
+    out property <length> r-xs: 4px * radius-scale;
+    out property <length> r-sm: 6px * radius-scale;
+    out property <length> r-md: 9px * radius-scale;
+    out property <length> r-lg: 13px * radius-scale;
+    out property <length> r-xl: 18px * radius-scale;
+
+    // Spacing, named by its size at comfortable density.
+    out property <length> sp0: 0px * density;
+    out property <length> sp1: 1px * density;
+    out property <length> sp2: 2px * density;
+    out property <length> sp3: 3px * density;
+    out property <length> sp4: 4px * density;
+    out property <length> sp5: 5px * density;
+    out property <length> sp6: 6px * density;
+    out property <length> sp7: 7px * density;
+    out property <length> sp8: 8px * density;
+    out property <length> sp9: 9px * density;
+    out property <length> sp10: 10px * density;
+    out property <length> sp11: 11px * density;
+    out property <length> sp12: 12px * density;
+    out property <length> sp13: 13px * density;
+    out property <length> sp14: 14px * density;
+    out property <length> sp16: 16px * density;
+    out property <length> sp20: 20px * density;
+    out property <length> sp22: 22px * density;
+
+    // Rhythm.
+    out property <length> s1: 4px * density;
+    out property <length> s2: 8px * density;
+    out property <length> s3: 12px * density;
+    out property <length> s4: 16px * density;
+    out property <length> s5: 24px * density;
+    out property <length> s6: 32px * density;
+    // True below the narrow breakpoint, where a finger is the likely pointer.
+    in-out property <bool> coarse: false;
+    out property <length> touch: 48px;
+    out property <length> control: coarse ? touch : 32px * density;
+    out property <length> chip: coarse ? touch : 28px * density;
+    out property <length> row: coarse ? touch : 34px * density;
+    out property <length> header: coarse ? 56px : 48px * density;
+    out property <length> hair: 1px;
+
+    out property <length> icon-sm: 14px;
+    out property <length> icon-md: 16px;
+    out property <length> icon-lg: 18px;
+
+    // Motion. Short enough that nothing ever waits on it, and none of it takes
+    // input away: a control works the moment it is drawn.
+    out property <duration> quick: reduced-motion ? 0ms : 110ms;
+    out property <duration> calm: reduced-motion ? 0ms : 190ms;
+    // Drawers, sheets and anything that travels across the screen.
+    out property <duration> glide: reduced-motion ? 0ms : 230ms;
+    // How long a touch ripple takes to spread across its control.
+    out property <duration> ripple: reduced-motion ? 0ms : 250ms;
+    // How far a control shrinks under a finger, and how far new things travel.
+    out property <float> press-scale: reduced-motion ? 1 : 0.96;
+    out property <float> enter-scale: reduced-motion ? 1 : 0.96;
+    out property <length> rise: reduced-motion ? 0px : 12px;
+    // Furthest the conversation stretches when pulled down at its start.
+    out property <length> pull-reach: 72px;
+
+    out property <length> narrow-below: 768px;
+    out property <length> panel-dock-min: 980px;
+    out property <length> hero-compact-below: 420px;
+    out property <length> tab-label-min: 74px;
+}
+
+// Fixed colors for permission decisions. Nothing outside the Slint source can
+// change them, so a theme, a preset, or the agent cannot make an approval prompt
+// unreadable or disguise what it is asking for.
+export global TrustTheme {
+    out property <color> surface: #17171A;
+    out property <color> border: #FFFFFF33;
+    out property <color> text: #F5F5F6;
+    out property <color> text-2: #C4C4CA;
+    out property <color> code-bg: #0C0C0E;
+    out property <color> approve: #E8E8EA;
+    out property <color> approve-text: #0B0B0D;
+    out property <color> reject: #2A2A2F;
+    out property <color> reject-text: #F5F5F6;
+    out property <color> scrim: #000000CC;
+    out property <color> mark: #D2202E;
+    out property <color> shadow: #000000C0;
+    out property <length> sp8: 8px;
+    out property <length> sp9: 9px;
+    out property <length> sp12: 12px;
+    out property <length> sp20: 20px;
+}

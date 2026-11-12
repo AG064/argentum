@@ -1,0 +1,63 @@
+[package]
+name = "argentum-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "argentum_cli"
+path = "src/lib.rs"
+
+[features]
+default = []
+local-llama-cpp = ["argentum-providers/local-llama-cpp"]
+extensions = ["argentum-runtime/extensions", "dep:argentum-extensions", "dep:argentum-execution"]
+desktop-control = ["extensions", "argentum-extensions/desktop-control", "argentum-tools/desktop-control", "argentum-runtime/desktop-control"]
+artifacts = ["extensions", "dep:argentum-artifacts", "tokio/signal"]
+# Public benchmarks only: lets a disposable Linux container choose a permission profile
+# with no owner at a console. Never part of a release. See benchmarks/public/README.md.
+benchmark-unattended = ["argentum-tools/benchmark-process-group"]
+
+[[bin]]
+name = "argentum"
+path = "src/main.rs"
+
+[dependencies]
+argentum-android-inference.workspace = true
+argentum-devices.workspace = true
+argentum-domain.workspace = true
+argentum-extensions = { workspace = true, optional = true }
+argentum-execution = { workspace = true, optional = true }
+argentum-artifacts = { workspace = true, optional = true }
+argentum-platform.workspace = true
+argentum-providers.workspace = true
+argentum-runtime.workspace = true
+argentum-security.workspace = true
+argentum-store.workspace = true
+argentum-tools.workspace = true
+argentum-workspaces.workspace = true
+crossterm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["signal"] }
+tokio-util.workspace = true
+tracing.workspace = true
+sha2.workspace = true
+zeroize.workspace = true
+unicode-width = "=0.2.2"
+unicode-segmentation = "=1.13.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_DataExchange", "Win32_System_Memory"] }
+
+[dev-dependencies]
+rusqlite.workspace = true
+argentum-platform = { workspace = true, features = ["test-support"] }
+argentum-providers = { workspace = true, features = ["test-support"] }
+async-trait.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Threading"] }

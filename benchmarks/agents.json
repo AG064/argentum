@@ -1,0 +1,115 @@
+{
+  "argentum": {
+    "label": "Argentum Genesis",
+    "version": [
+      "argentum",
+      "--version"
+    ],
+    "setup": [
+      [
+        "argentum",
+        "provider",
+        "add",
+        "{env:ARGENTUM_BENCH_PRESET}",
+        "--workspace",
+        "{workspace}",
+        "--database",
+        "{state}/argentum.sqlite3"
+      ],
+      [
+        "argentum",
+        "provider",
+        "model",
+        "{env:ARGENTUM_BENCH_PRESET}",
+        "--model",
+        "{model}",
+        "--workspace",
+        "{workspace}",
+        "--database",
+        "{state}/argentum.sqlite3"
+      ],
+      {
+        "command": [
+          "argentum",
+          "permissions",
+          "select",
+          "{env:ARGENTUM_BENCH_PROFILE}",
+          "--workspace",
+          "{workspace}",
+          "--database",
+          "{state}/argentum.sqlite3"
+        ]
+      }
+    ],
+    "run": [
+      "argentum",
+      "run",
+      "--prompt",
+      "{prompt}",
+      "--json",
+      "--workspace",
+      "{workspace}",
+      "--database",
+      "{state}/argentum.sqlite3"
+    ]
+  },
+  "claude-code": {
+    "label": "Claude Code",
+    "version": [
+      "claude",
+      "--version"
+    ],
+    "run": [
+      "claude",
+      "-p",
+      "{prompt}",
+      "--model",
+      "{model}",
+      "--dangerously-skip-permissions"
+    ]
+  },
+  "codex": {
+    "label": "Codex",
+    "version": [
+      "codex",
+      "--version"
+    ],
+    "run": [
+      "codex",
+      "exec",
+      "--model",
+      "{model}",
+      "--full-auto",
+      "--skip-git-repo-check",
+      "{prompt}"
+    ]
+  },
+  "opencode": {
+    "label": "OpenCode",
+    "version": [
+      "opencode",
+      "--version"
+    ],
+    "run": [
+      "opencode",
+      "run",
+      "--model",
+      "{model}",
+      "{prompt}"
+    ]
+  },
+  "pi": {
+    "label": "Pi",
+    "version": [
+      "pi",
+      "--version"
+    ],
+    "run": [
+      "pi",
+      "--model",
+      "{model}",
+      "-p",
+      "{prompt}"
+    ]
+  }
+}

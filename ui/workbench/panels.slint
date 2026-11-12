@@ -1,0 +1,815 @@
+// Optional modules that live in the side panel. Each one only reads App and its
+// own callbacks, so turning a module off removes it completely.
+import { Theme } from "theme.slint";
+import { App } from "state.slint";
+import { Badge, Btn, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, Meter, Row, Scroller, SectionLabel, Spinner } from "kit.slint";
+import { DiffView, RichBlocks } from "rich.slint";
+
+component StateDot inherits Rectangle {
+    in property <string> state;
+    width: 7px;
+    height: 7px;
+    border-radius: 3.5px;
+    background: state == "running" || state == "active" ? Theme.accent
+        : state == "error" || state == "failed" ? Theme.danger
+        : state == "done" || state == "complete" || state == "completed" || state == "success" ? Theme.ok
+        : Theme.text-3;
+}
+
+component TimelineRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> state;
+    in property <string> stamp;
+    spacing: Theme.sp10;
+    padding-top: Theme.sp5;
+    padding-bottom: Theme.sp5;
+    VerticalLayout {
+        padding-top: Theme.sp6;
+        alignment: start;
+        StateDot { state: root.state; }
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Theme.sp1;
+        Text { text: root.title; color: Theme.text; font-size: Theme.fs-sm; wrap: word-wrap; }
+        if root.detail != "": Text { text: root.detail; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
+    }
+    if root.stamp != "": Text { text: root.stamp; color: Theme.text-3; font-size: Theme.fs-xs; font-family: Theme.font-mono; }
+}
+
+export component PlanPanel inherits Rectangle {
+    if App.plan_steps.length == 0: EmptyState { icon: "plan"; title: "No plan yet"; detail: "Stages appear here while a task runs."; }
+    if App.plan_steps.length > 0: Scroller {
+        content-height: col.preferred-height + 24px;
+        col := VerticalLayout {
+            height: self.preferred-height;
+            y: 12px;
+            x: 14px;
+            width: root.width - 28px;
+            for step in App.plan_steps: TimelineRow {
+                title: step.title;
+                detail: step.detail;
+                state: step.state;
+            }
+        }
+    }
+}
+
+export component ActivityPanel inherits Rectangle {
+    if App.activity_items.length == 0: EmptyState { icon: "activity"; title: "No activity yet"; detail: "Tool calls and run changes appear here."; }
+    if App.activity_items.length > 0: Scroller {
+        follow-tail: true;
+        content-height: col.preferred-height + 24px;
+        col := VerticalLayout {
+            height: self.preferred-height;
+            y: 12px;
+            x: 14px;
+            width: root.width - 28px;
+            for item in App.activity_items: TimelineRow {
+                title: item.title;
+                detail: item.detail;
+                state: item.state;
+            }
+        }
+    }
+}
+
+export component TrajectoryPanel inherits Rectangle {
+    VerticalLayout {
+        HorizontalLayout {
+            height: 38px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp6;
+            Label { text: App.trajectory_summary; tone: "secondary"; size: "sm"; horizontal-stretch: 1; }
+            if App.trajectory_loading: Spinner { size: 14px; y: (parent.height - self.height) / 2; }
+            IconBtn {
+                icon: "refresh";
+                tip: "Reload trajectory";
+                size: 26px;
+                glyph: 14px;
+                y: (parent.height - self.height) / 2;
+                clicked => { App.refresh_trajectory(App.active_session_id); }
+            }
+        }
+        if App.trajectory_error != "": HorizontalLayout {
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            Label { text: App.trajectory_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
+        }
+        Divider { }
+        if App.trajectory_items.length == 0 && !App.trajectory_loading: EmptyState {
+            vertical-stretch: 1;
+            icon: "trajectory";
+            title: "No durable records";
+            detail: "Saved run facts for this session appear here.";
+        }
+        if App.trajectory_items.length > 0: Scroller {
+            vertical-stretch: 1;
+            content-height: col.preferred-height + 24px;
+            col := VerticalLayout {
+                height: self.preferred-height;
+                y: 10px;
+                x: 14px;
+                width: root.width - 28px;
+                for item in App.trajectory_items: TimelineRow {
+                    title: item.title;
+                    detail: item.detail;
+                    state: item.state;
+                    stamp: item.timestamp;
+                }
+                if App.trajectory_truncated: Label { text: "Older records are not shown."; tone: "muted"; size: "xs"; }
+            }
+        }
+    }
+}
+
+// Agent-recorded changes, with restore through the existing approval path.
+export component ChangesPanel inherits Rectangle {
+    private property <bool> file-open: App.selected_file_change_id != "";
+    VerticalLayout {
+        HorizontalLayout {
+            height: 38px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            spacing: Theme.sp8;
+            Label { text: App.change_summary; tone: "secondary"; size: "sm"; horizontal-stretch: 1; }
+            if App.line_counts_known && App.changed_files > 0: Label { text: "+" + App.additions; size: "sm"; mono: true; color: Theme.diff-add-text; }
+            if App.line_counts_known && App.changed_files > 0: Label { text: "-" + App.removals; size: "sm"; mono: true; color: Theme.diff-del-text; }
+        }
+        if App.recovery_required: Rectangle {
+            background: Theme.diff-del-bg;
+            HorizontalLayout {
+                padding: Theme.sp10;
+                spacing: Theme.sp8;
+                Text { horizontal-stretch: 1; text: App.recovery_summary; color: Theme.text; font-size: Theme.fs-sm; wrap: word-wrap; }
+                Btn { label: "Recheck file"; small: true; clicked => { App.retry_change_recovery(App.recovery_operation_id); } }
+                if App.recovery_restore_available: Btn { label: "Restore prior"; small: true; kind: "danger"; clicked => { App.request_recovery_restore(App.recovery_operation_id); } }
+            }
+        }
+        Divider { }
+        if App.change_files.length == 0: EmptyState {
+            vertical-stretch: 1;
+            icon: "diff";
+            title: "No recorded changes";
+            detail: "Files the agent changes in this session appear here.";
+        }
+        if App.change_files.length > 0: Scroller {
+            preferred-height: files.preferred-height + 8px;
+            max-height: root.file-open ? root.height * 0.34 : root.height;
+            vertical-stretch: root.file-open ? 0 : 1;
+            content-height: files.preferred-height + 8px;
+            files := VerticalLayout {
+                height: self.preferred-height;
+                y: 4px;
+                x: 6px;
+                width: root.width - 12px;
+                for file in App.change_files: Row {
+                    title: file.path;
+                    detail: file.kind;
+                    icon: "file";
+                    selected: file.selected;
+                    clicked => { App.load_change_diff(file.id); }
+                }
+            }
+        }
+        if root.file-open: Divider { }
+        if root.file-open: HorizontalLayout {
+            height: 36px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp8;
+            spacing: Theme.sp8;
+            Label { text: App.selected_change_path; size: "sm"; mono: true; horizontal-stretch: 1; }
+            Btn {
+                label: "Restore prior";
+                small: true;
+                y: (parent.height - self.height) / 2;
+                enabled: App.selected_restore_available && !App.selected_recovery_blocked;
+                clicked => { App.request_restore(App.selected_file_change_id); }
+            }
+        }
+        if root.file-open: Scroller {
+            vertical-stretch: 1;
+            content-height: diff-col.preferred-height + 16px;
+            diff-col := VerticalLayout {
+                y: 0px;
+                height: self.preferred-height;
+                width: root.width;
+                if App.selected_diff_available: DiffView { lines: App.selected_diff_lines; }
+                if !App.selected_diff_available: EmptyState { icon: "diff"; title: App.selected_diff_reason; }
+                if App.selected_diff_truncated: HorizontalLayout {
+                    padding: Theme.sp10;
+                    Label { text: "This diff is truncated."; tone: "muted"; size: "xs"; }
+                }
+            }
+        }
+        Divider { }
+        HorizontalLayout {
+            height: 32px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            spacing: Theme.sp8;
+            StateDot { state: App.verification_state == "recorded" ? "done" : App.verification_state == "failed" ? "failed" : "idle"; y: (parent.height - self.height) / 2; }
+            Label { text: App.verification_summary; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
+        }
+    }
+}
+
+// Working-tree diff from Git. Git is an external process, so this is gated on the
+// project's external-process authority and only ever runs on an explicit refresh.
+export component GitPanel inherits Rectangle {
+    VerticalLayout {
+        HorizontalLayout {
+            height: 38px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp6;
+            spacing: Theme.sp8;
+            Icon { name: "trajectory"; size: Theme.icon-sm; tint: Theme.text-3; y: (parent.height - self.height) / 2; }
+            Label {
+                text: App.git_branch != "" ? App.git_branch : "Working tree";
+                size: "sm";
+                mono: App.git_branch != "";
+                tone: "secondary";
+                horizontal-stretch: 1;
+            }
+            if App.git_files.length > 0: Badge { y: (parent.height - self.height) / 2; text: App.git_files.length + (App.git_files.length == 1 ? " file" : " files"); }
+            if App.git_state == "loading": Spinner { size: 14px; y: (parent.height - self.height) / 2; }
+            IconBtn {
+                icon: "refresh";
+                tip: "Run git status and diff";
+                size: 26px;
+                glyph: 14px;
+                y: (parent.height - self.height) / 2;
+                enabled: App.git_state != "loading";
+                clicked => { App.git_refresh(); }
+            }
+        }
+        Divider { }
+        if App.git_state == "idle": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            EmptyState {
+                icon: "trajectory";
+                title: "Working tree diff";
+                detail: "Runs git status and git diff in this workspace when you ask.";
+            }
+            HorizontalLayout {
+                alignment: center;
+                Btn { label: "Load diff"; kind: "primary"; clicked => { App.git_refresh(); } }
+            }
+        }
+        if App.git_state == "blocked": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            EmptyState {
+                icon: "lock";
+                title: "External processes are blocked";
+                detail: App.git_message;
+            }
+            HorizontalLayout {
+                alignment: center;
+                Btn { label: "Open permissions"; clicked => { App.settings_section = "permissions"; App.open_settings(); } }
+            }
+        }
+        if App.git_state == "not-repo" || App.git_state == "error": EmptyState {
+            vertical-stretch: 1;
+            icon: App.git_state == "error" ? "triangle-alert" : "folder";
+            title: App.git_state == "error" ? "Git could not finish" : "Not a Git repository";
+            detail: App.git_message;
+        }
+        if App.git_state == "ready" && App.git_files.length == 0: EmptyState {
+            vertical-stretch: 1;
+            icon: "check";
+            title: "Working tree is clean";
+        }
+        if App.git_files.length > 0: Scroller {
+            preferred-height: files.preferred-height + 8px;
+            max-height: App.git_selected != "" ? root.height * 0.34 : root.height;
+            vertical-stretch: App.git_selected != "" ? 0 : 1;
+            content-height: files.preferred-height + 8px;
+            files := VerticalLayout {
+                height: self.preferred-height;
+                y: 4px;
+                x: 6px;
+                width: root.width - 12px;
+                for file in App.git_files: Rectangle {
+                    min-height: Theme.row - 4px;
+                    border-radius: Theme.r-sm;
+                    background: file.selected || file-touch.has-hover ? Theme.hover : transparent;
+                    accessible-role: button;
+                    accessible-label: file.status + " " + file.path;
+                    accessible-item-selected: file.selected;
+                    accessible-action-default => { App.git_select(file.path); }
+                    HorizontalLayout {
+                        padding-left: Theme.sp10;
+                        padding-right: Theme.sp10;
+                        spacing: Theme.sp8;
+                        Text {
+                            width: 14px;
+                            text: file.status;
+                            color: file.status == "A" || file.status == "?" ? Theme.diff-add-text : file.status == "D" ? Theme.diff-del-text : Theme.warn;
+                            font-family: Theme.font-mono;
+                            font-size: Theme.fs-xs + 0.5px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: file.path;
+                            color: file.selected ? Theme.text : Theme.text-2;
+                            font-size: Theme.fs-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                    Focus { activated => { App.git_select(file.path); } }
+                    file-touch := TouchArea { mouse-cursor: pointer; clicked => { App.git_select(file.path); } }
+                }
+            }
+        }
+        if App.git_selected != "": Divider { }
+        if App.git_selected != "": Scroller {
+            vertical-stretch: 1;
+            content-height: git-diff.preferred-height + 16px;
+            git-diff := VerticalLayout {
+                y: 0px;
+                height: self.preferred-height;
+                width: root.width;
+                DiffView { lines: App.git_diff_lines; }
+                if App.git_diff_truncated: HorizontalLayout {
+                    padding: Theme.sp10;
+                    Label { text: "This diff is truncated."; tone: "muted"; size: "xs"; }
+                }
+            }
+        }
+    }
+}
+
+// Reader-mode browser. No script runs, no cookies are kept, and every navigation
+// is a direct user action under the project's network authority.
+export component BrowserPanel inherits Rectangle {
+    VerticalLayout {
+        HorizontalLayout {
+            height: 44px;
+            padding-left: Theme.sp6;
+            padding-right: Theme.sp6;
+            spacing: Theme.sp2;
+            IconBtn { icon: "chevron-left"; tip: "Back"; size: 28px; y: (parent.height - self.height) / 2; enabled: App.browser_can_back; clicked => { App.browser_back(); } }
+            IconBtn { icon: "chevron-right"; tip: "Forward"; size: 28px; y: (parent.height - self.height) / 2; enabled: App.browser_can_forward; clicked => { App.browser_forward(); } }
+            IconBtn {
+                icon: "refresh";
+                tip: "Reload";
+                size: 28px;
+                glyph: 14px;
+                y: (parent.height - self.height) / 2;
+                enabled: App.browser_url != "" && App.browser_state != "loading";
+                clicked => { App.browser_reload(); }
+            }
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                height: 30px;
+                horizontal-stretch: 1;
+                border-radius: Theme.r-sm;
+                background: Theme.code-bg;
+                border-width: Theme.hair;
+                border-color: address.has-focus ? Theme.accent.with-alpha(0.75) : Theme.border;
+                TouchArea { mouse-cursor: text; clicked => { address.focus(); } }
+                if address.text == "": Text {
+                    x: 10px;
+                    height: parent.height;
+                    text: "Enter a URL";
+                    color: Theme.text-3;
+                    font-size: Theme.fs-sm;
+                    vertical-alignment: center;
+                }
+                address := TextInput {
+                    x: 10px;
+                    width: parent.width - 20px;
+                    height: parent.height;
+                    vertical-alignment: center;
+                    single-line: true;
+                    color: Theme.text;
+                    font-size: Theme.fs-sm;
+                    text: App.browser_url;
+                    selection-background-color: Theme.accent.with-alpha(0.4);
+                    selection-foreground-color: Theme.text;
+                    accessible-label: "Page address";
+                    accepted => { App.browser_go(self.text); }
+                }
+            }
+        }
+        Divider { }
+        if App.browser_state == "loading": Rectangle {
+            height: 2px;
+            background: Theme.accent.with-alpha(0.25);
+            Rectangle {
+                x: (parent.width + self.width) * mod(animation-tick() / 1ms, 1200) / 1200 - self.width;
+                width: parent.width * 0.3;
+                background: Theme.accent;
+            }
+        }
+        if App.browser_state == "idle": EmptyState {
+            vertical-stretch: 1;
+            icon: "globe";
+            title: "Reader-mode browser";
+            detail: "Pages load as text with no scripts and no cookies. Each page you open needs this project's network permission.";
+        }
+        if App.browser_state == "blocked": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            EmptyState { icon: "lock"; title: "Network access is blocked"; detail: App.browser_message; }
+            HorizontalLayout {
+                alignment: center;
+                Btn { label: "Open permissions"; clicked => { App.settings_section = "permissions"; App.open_settings(); } }
+            }
+        }
+        if App.browser_state == "error": EmptyState {
+            vertical-stretch: 1;
+            icon: "triangle-alert";
+            title: "This page could not load";
+            detail: App.browser_message;
+        }
+        if App.browser_state == "ready" || (App.browser_state == "loading" && App.browser_blocks.length > 0): Scroller {
+            vertical-stretch: 1;
+            content-height: page.preferred-height + 40px;
+            page := VerticalLayout {
+                height: self.preferred-height;
+                x: 18px;
+                y: 16px;
+                width: root.width - 36px;
+                spacing: Theme.sp12;
+                if App.browser_title != "": Text {
+                    text: App.browser_title;
+                    color: Theme.text;
+                    font-size: Theme.fs-xl;
+                    font-weight: Theme.w-semibold;
+                    wrap: word-wrap;
+                }
+                RichBlocks {
+                    blocks: App.browser_blocks;
+                    link(url) => { App.browser_go(url); }
+                }
+                if App.browser_truncated: Label { text: "This page was cut off at the size limit."; tone: "muted"; size: "xs"; }
+            }
+        }
+    }
+}
+
+// Tokens reported per provider. Argentum does not estimate missing usage, and
+// provider account limits are not available, so neither is shown.
+export component UsagePanel inherits Rectangle {
+    init => { App.usage_refresh(); }
+    VerticalLayout {
+        HorizontalLayout {
+            height: 38px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp6;
+            spacing: Theme.sp8;
+            Label { text: App.usage_total != "" ? App.usage_total : "Reported token use"; tone: "secondary"; size: "sm"; horizontal-stretch: 1; }
+            if App.usage_state == "loading": Spinner { size: 14px; y: (parent.height - self.height) / 2; }
+            IconBtn {
+                icon: "refresh";
+                tip: "Reload usage";
+                size: 26px;
+                glyph: 14px;
+                y: (parent.height - self.height) / 2;
+                clicked => { App.usage_refresh(); }
+            }
+        }
+        Divider { }
+        if App.usage_state == "error": EmptyState { vertical-stretch: 1; icon: "triangle-alert"; title: "Usage could not load"; detail: App.usage_message; }
+        if App.usage_state != "error" && App.usage_rows.length == 0: EmptyState {
+            vertical-stretch: 1;
+            icon: "activity";
+            title: "No usage reported";
+            detail: "Totals appear after a provider reports tokens for a completed turn.";
+        }
+        if App.usage_rows.length > 0: Scroller {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height + 20px;
+            rows := VerticalLayout {
+                height: self.preferred-height;
+                x: 14px;
+                y: 10px;
+                width: root.width - 28px;
+                spacing: Theme.sp16;
+                for row in App.usage_rows: VerticalLayout {
+                    spacing: Theme.sp6;
+                    HorizontalLayout {
+                        spacing: Theme.sp8;
+                        Label { text: row.label; strong: row.selected; horizontal-stretch: 1; }
+                        Label { text: row.total; mono: true; size: "sm"; }
+                    }
+                    Meter { fraction: row.share; fill: row.selected ? Theme.accent : Theme.silver; }
+                    HorizontalLayout {
+                        spacing: Theme.sp12;
+                        Label { text: row.turns; tone: "muted"; size: "xs"; }
+                        Label { text: row.input + " in"; tone: "muted"; size: "xs"; }
+                        Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
+                    }
+                }
+                if App.usage_days.length > 0: SectionLabel { text: "BY DAY, LAST 30 DAYS (UTC)"; height: 22px; }
+                for day in App.usage_days: HorizontalLayout {
+                    spacing: Theme.sp8;
+                    Label { text: day.day; mono: true; size: "xs"; tone: "muted"; }
+                    Label { text: day.model; size: "xs"; horizontal-stretch: 1; }
+                    Label { text: day.detail; mono: true; size: "xs"; tone: "secondary"; }
+                }
+                if App.projects.length > 1: SectionLabel { text: "ALL PROJECTS"; height: 22px; }
+                for project in App.projects: VerticalLayout {
+                    visible: App.projects.length > 1;
+                    height: self.visible ? self.preferred-height : 0px;
+                    Label { text: project.name + (project.current ? "  (this one)" : ""); size: "sm"; strong: project.current; }
+                    Label { text: project.detail; size: "xs"; tone: "muted"; }
+                }
+                Text {
+                    text: "Reported by each provider for turns in this workspace. Account limits and costs are not reported to Argentum.";
+                    color: Theme.text-3;
+                    font-size: Theme.fs-xs;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+// The session goal, above the composer. One row holds the objective, its state
+// and the actions. A second row shows progress against the goal's limits. On a
+// narrow window the state and actions move to the second row.
+component GoalActions inherits HorizontalLayout {
+    in property <string> lifecycle;
+    private property <bool> idle: !App.goal_action_pending && !App.running;
+    horizontal-stretch: 0;
+    spacing: Theme.sp4;
+    if root.lifecycle == "active": Btn {
+        label: "Pause";
+        small: true;
+        enabled: root.idle;
+        clicked => { App.pause_goal(); }
+    }
+    if root.lifecycle == "paused" || root.lifecycle == "complete": Btn {
+        label: "Resume";
+        small: true;
+        enabled: root.idle;
+        clicked => { App.resume_goal(); }
+    }
+    Btn {
+        label: "Clear";
+        small: true;
+        kind: "ghost";
+        enabled: root.idle;
+        clicked => { App.clear_goal(); }
+    }
+}
+
+component GoalState inherits HorizontalLayout {
+    in property <string> lifecycle;
+    in property <string> label;
+    private property <color> tint: root.lifecycle == "active" ? Theme.ok
+        : root.lifecycle == "budget-limited" ? Theme.warn
+        : root.lifecycle == "complete" ? Theme.silver
+        : Theme.text-3;
+    horizontal-stretch: 0;
+    spacing: Theme.sp5;
+    Rectangle {
+        width: Theme.sp6;
+        height: Theme.sp6;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.r-xs;
+        background: root.tint;
+    }
+    Label { text: root.label; tone: "secondary"; size: "xs"; min-width: self.preferred-width; }
+}
+
+export component GoalCard inherits Rectangle {
+    in property <bool> narrow: false;
+    private property <bool> active: App.goal_available;
+    private property <string> lifecycle: App.goal_lifecycle;
+    private property <bool> limited: App.goal_token_budget_reported && App.goal_token_budget > 0;
+    private property <float> used: root.limited ? App.goal_tokens_used / App.goal_token_budget : 0;
+    border-radius: Theme.r-md;
+    background: Theme.surface;
+    border-width: Theme.hair;
+    // The card grows and shrinks as a goal is set, reports done, or clears. The
+    // content keeps its own height and the clip shows what fits so far.
+    height: lay.preferred-height;
+    animate height { duration: Theme.glide; easing: ease-out; }
+    clip: true;
+    border-color: root.active && root.lifecycle == "active" ? Theme.border-strong : Theme.border;
+    animate border-color { duration: Theme.glide; }
+    accessible-role: groupbox;
+    accessible-label: root.active ? "Goal: " + App.goal_objective : "Goal";
+    lay := VerticalLayout {
+        y: 0;
+        height: self.preferred-height;
+        padding-left: Theme.sp10;
+        padding-right: Theme.sp6;
+        padding-top: Theme.sp6;
+        padding-bottom: Theme.sp6;
+        spacing: Theme.sp4;
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            min-height: Theme.chip;
+            Icon {
+                name: "goal";
+                size: Theme.icon-sm;
+                tint: root.active && root.lifecycle == "active" ? Theme.accent-ink : Theme.text-3;
+                y: (parent.height - self.height) / 2;
+            }
+            if root.active: Text {
+                text: App.goal_objective;
+                horizontal-stretch: 1;
+                color: Theme.text;
+                font-size: Theme.fs-sm;
+                font-weight: Theme.w-medium;
+                vertical-alignment: center;
+                wrap: root.narrow ? word-wrap : no-wrap;
+                overflow: elide;
+            }
+            // Keeps the state next to the actions when the objective is short.
+            if root.active: Rectangle { horizontal-stretch: 1; }
+            if root.active: GoalState { lifecycle: root.lifecycle; label: App.goal_state; }
+            if root.active && !root.narrow: GoalActions { lifecycle: root.lifecycle; }
+            if !root.active: HorizontalLayout {
+                horizontal-stretch: 1;
+                spacing: Theme.sp6;
+                // The field keeps its width while typing: a single-line input
+                // reports its text width as its minimum, which would push the
+                // button past the edge. Long text scrolls inside the clip.
+                Rectangle {
+                    horizontal-stretch: 1;
+                    min-width: Theme.sp0;
+                    clip: true;
+                    if draft.text == "": Text {
+                        width: parent.width;
+                        height: parent.height;
+                        text: "Set a goal for this session";
+                        color: Theme.text-3;
+                        font-size: Theme.fs-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    draft := TextInput {
+                        width: parent.width;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        color: Theme.text;
+                        font-size: Theme.fs-sm;
+                        font-family: Theme.font-ui;
+                        selection-background-color: Theme.accent.with-alpha(0.4);
+                        selection-foreground-color: Theme.text;
+                        single-line: true;
+                        enabled: !App.running && !App.goal_action_pending;
+                        accessible-label: "Goal for this session";
+                        accepted => {
+                            if self.text != "" && !App.running && !App.goal_action_pending {
+                                App.set_goal(self.text, 0, 0, 0);
+                            }
+                        }
+                    }
+                }
+                Btn {
+                    label: "Set goal";
+                    small: true;
+                    y: (parent.height - self.height) / 2;
+                    enabled: draft.text != "" && !App.running && !App.goal_action_pending;
+                    busy: App.goal_action_pending;
+                    clicked => {
+                        App.set_goal(draft.text, 0, 0, 0);
+                    }
+                }
+            }
+        }
+        if root.active: HorizontalLayout {
+            spacing: Theme.sp8;
+            padding-left: Theme.icon-sm + Theme.sp8;
+            Label {
+                text: App.goal_progress_summary;
+                tone: "muted";
+                size: "xs";
+                horizontal-stretch: 1;
+            }
+            if root.limited && !root.narrow: Meter {
+                width: Theme.tab-label-min;
+                y: (parent.height - self.height) / 2;
+                fraction: root.used;
+                fill: root.used >= 0.9 ? Theme.warn : Theme.silver;
+            }
+            if root.narrow: GoalActions { lifecycle: root.lifecycle; }
+        }
+        if root.active && root.limited && root.narrow: HorizontalLayout {
+            padding-left: Theme.icon-sm + Theme.sp8;
+            padding-right: Theme.sp4;
+            Meter {
+                horizontal-stretch: 1;
+                fraction: root.used;
+                fill: root.used >= 0.9 ? Theme.warn : Theme.silver;
+            }
+        }
+        // The agent's completion report. It is only a claim until the owner
+        // confirms it, so it is shown with the decision next to it.
+        if root.active && App.goal_report_pending: Rectangle {
+            private property <float> shown: 0;
+            init => { self.shown = 1; }
+            animate shown { duration: Theme.glide; easing: ease-out; }
+            opacity: self.shown;
+            border-radius: Theme.r-sm;
+            background: Theme.accent-soft;
+            height: report.preferred-height;
+            report := VerticalLayout {
+                padding: Theme.sp8;
+                spacing: Theme.sp6;
+                Text {
+                    text: "The agent reports this goal is done";
+                    color: Theme.text;
+                    font-size: Theme.fs-xs;
+                    font-weight: Theme.w-semibold;
+                }
+                Text {
+                    text: App.goal_report_summary;
+                    color: Theme.text-2;
+                    font-size: Theme.fs-xs;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: Theme.sp4;
+                    alignment: end;
+                    Btn {
+                        label: "Not yet";
+                        small: true;
+                        kind: "ghost";
+                        enabled: !App.goal_action_pending && !App.running;
+                        clicked => { App.dismiss_goal_report(); }
+                    }
+                    Btn {
+                        label: "Confirm done";
+                        small: true;
+                        enabled: !App.goal_action_pending && !App.running;
+                        clicked => { App.confirm_goal_report(); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// What filled the latest request's context, and every model request this session.
+export component RequestsPanel inherits Rectangle {
+    Scroller {
+        content-height: body.preferred-height + 24px;
+        body := VerticalLayout {
+            x: 14px;
+            y: 12px;
+            width: root.width - 28px;
+            height: self.preferred-height;
+            spacing: Theme.sp10;
+            SectionLabel { text: "CONTEXT OF THE LATEST REQUEST"; height: 22px; }
+            if App.context_parts.length == 0: Label {
+                text: "Appears after the next request. Sizes are estimated in bytes, which is never fewer than tokens.";
+                tone: "muted";
+                size: "sm";
+                wrap: word-wrap;
+            }
+            if App.request_context_summary != "": Label { text: App.request_context_summary; tone: "secondary"; size: "sm"; wrap: word-wrap; }
+            for part in App.context_parts: VerticalLayout {
+                spacing: Theme.sp2;
+                HorizontalLayout {
+                    spacing: Theme.sp6;
+                    Label { text: part.label; size: "sm"; horizontal-stretch: 1; }
+                    Label { text: part.amount; mono: true; size: "xs"; tone: "muted"; }
+                }
+                Rectangle {
+                    height: 5px;
+                    border-radius: 2.5px;
+                    background: Theme.hover;
+                    Rectangle {
+                        x: 0;
+                        width: max(2px, parent.width * part.share);
+                        border-radius: 2.5px;
+                        background: Theme.accent;
+                    }
+                }
+            }
+            SectionLabel { text: "REQUESTS"; height: 22px; }
+            if App.request_rows.length == 0: Label {
+                text: "No model requests yet in this session.";
+                tone: "muted";
+                size: "sm";
+            }
+            for row in App.request_rows: VerticalLayout {
+                spacing: Theme.sp2;
+                HorizontalLayout {
+                    spacing: Theme.sp6;
+                    Label { text: row.clock; mono: true; size: "xs"; tone: "muted"; }
+                    Label { text: row.duration; mono: true; size: "xs"; }
+                    Label { text: row.outcome; size: "xs"; tone: row.failed ? "danger" : "muted"; horizontal-stretch: 1; }
+                    Label { text: row.purpose; size: "xs"; tone: "muted"; }
+                }
+                Label { text: row.endpoint; mono: true; size: "xs"; wrap: word-wrap; }
+                Label { text: row.model + (row.tokens != "" ? "  ·  " + row.tokens : ""); size: "xs"; tone: "secondary"; wrap: word-wrap; }
+                if row.detail != "": Label { text: row.detail; size: "xs"; tone: "muted"; wrap: word-wrap; }
+                if row.tools != "": Label { text: row.tools; mono: true; size: "xs"; tone: "muted"; wrap: word-wrap; }
+                Divider { }
+            }
+        }
+    }
+}

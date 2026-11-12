@@ -1,0 +1,621 @@
+// Generated once from the previous MainWindow. Shared application state and
+// command callbacks. Rust reaches these through the aliases on MainWindow.
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
+
+export global App {
+    in-out property <string> draft: "";
+    in-out property <string> run_state: "Ready";
+    in-out property <string> transcript: "";
+    in-out property <string> current_reasoning: "";
+    in-out property <bool> current_reasoning_available: false;
+    in-out property <string> current_run_provider_label: "";
+    in-out property <string> current_run_model: "";
+    in-out property <string> served_model: "";
+    // The provider's name for what is running. Requests keep using provider_model.
+    in-out property <string> provider_model_name: "";
+    in-out property <string> live_steps: "";
+    in-out property <string> live_steps_title: "";
+    in-out property <int> live_additions: 0;
+    in-out property <int> live_removals: 0;
+    in-out property <[MessageChangeView]> live_changes: [];
+    // The file whose diff is open inside the conversation.
+    in-out property <string> open_message_diff: "";
+    in-out property <string> thinking_mode: "high";
+    callback set_thinking_mode(string);
+    // Whether the selected model has an effort control Argentum can send.
+    in-out property <bool> thinking_available: false;
+    callback cycle_thinking_mode();
+    in-out property <bool> usage_reported: false;
+    in-out property <int> usage_input_tokens: 0;
+    in-out property <int> usage_output_tokens: 0;
+    in-out property <int> usage_total_tokens: 0;
+    // Tokens reported for every turn in this session, summed.
+    in-out property <int> session_tokens_used: 0;
+    in-out property <bool> context_window_reported: false;
+    in-out property <int> context_window_tokens: 0;
+    in-out property <string> error_message: "";
+    in-out property <string> provider_label: "LM Studio";
+    in-out property <string> provider_id: "lm-studio";
+    in-out property <string> provider_kind: "lm-studio";
+    in-out property <string> provider_kind_label: "LM Studio";
+    in-out property <string> provider_endpoint: "";
+    in-out property <string> provider_model: "local-model";
+    in-out property <string> provider_detail: "Model is configured";
+    in-out property <bool> provider_connected: false;
+    in-out property <bool> provider_testing: false;
+    in-out property <bool> provider_loading: false;
+    in-out property <bool> provider_saving: false;
+    in-out property <bool> provider_selecting: false;
+    in-out property <string> provider_pending: "";
+    in-out property <string> provider_probe_state: "untested";
+    in-out property <string> provider_error: "";
+    in-out property <string> provider_notice: "";
+    in-out property <bool> provider_error_consumes_next: false;
+    in-out property <[ProviderProfileView]> provider_profiles: [];
+    in-out property <[ProviderModelView]> provider_models: [];
+    in-out property <bool> provider_models_loading: false;
+    in-out property <bool> provider_model_selecting: false;
+    in-out property <string> provider_models_pending: "";
+    in-out property <string> provider_models_provider_id: "";
+    in-out property <string> provider_models_error: "";
+    // The list shown is Argentum's own, because the provider's could not be loaded.
+    in-out property <bool> provider_models_known: false;
+    in-out property <string> provider_draft_label: "LM Studio";
+    in-out property <string> provider_draft_endpoint: "";
+    in-out property <string> provider_draft_model: "local-model";
+    in-out property <string> provider_label_error: "";
+    in-out property <string> provider_endpoint_error: "";
+    in-out property <string> provider_model_error: "";
+    in-out property <string> harness_profile_id: "standard";
+    in-out property <[HarnessProfileView]> harness_profiles: [];
+    in-out property <string> execution_profile_id: "confirm-before-changes";
+    in-out property <string> execution_profile_label: "Confirm Before Changes";
+    in-out property <[HarnessExecutionProfileView]> harness_execution_profiles: [];
+    in-out property <[HarnessSurfaceView]> harness_surfaces: [];
+    in-out property <[HarnessCapabilityView]> harness_capabilities: [];
+    in-out property <bool> harness_loading: false;
+    in-out property <string> harness_pending: "";
+    in-out property <string> harness_error: "";
+    in-out property <bool> harness_surfaces_open: false;
+    in-out property <bool> harness_capabilities_open: false;
+    in-out property <string> project_name: "Argentum";
+    in-out property <string> workspace_label: "Local workspace";
+    in-out property <string> session_title: "New session";
+    in-out property <string> active_session_id: "";
+    in-out property <[SessionItemView]> session_items: [];
+    in-out property <bool> goal_available: false;
+    in-out property <string> goal_objective: "";
+    in-out property <string> goal_draft: "";
+    in-out property <string> goal_state: "";
+    // Stable lifecycle id: "active", "paused", "budget-limited" or "complete".
+    in-out property <string> goal_lifecycle: "";
+    in-out property <string> goal_next_action: "";
+    // Runs, tokens and tools so far, against the goal's limits when it has them.
+    in-out property <string> goal_progress_summary: "";
+    // The model reported the goal achieved; the owner confirms or dismisses.
+    in-out property <bool> goal_report_pending: false;
+    in-out property <string> goal_report_summary: "";
+    in-out property <int> goal_iteration: 0;
+    in-out property <int> goal_tokens_used: 0;
+    in-out property <int> goal_token_budget: 0;
+    in-out property <bool> goal_token_budget_reported: false;
+    in-out property <int> goal_tools_used: 0;
+    in-out property <int> goal_tool_budget: 0;
+    in-out property <bool> goal_tool_budget_reported: false;
+    in-out property <int> goal_time_budget_seconds: 0;
+    in-out property <bool> goal_time_budget_reported: false;
+    in-out property <int> goal_verification_count: 0;
+    in-out property <bool> goal_action_pending: false;
+    // Set by Set goal, so the saved goal starts a turn toward it.
+    in-out property <bool> goal_start_pending: false;
+    in-out property <string> user_prompt: "";
+    in-out property <[ConversationMessageView]> conversation_messages: [];
+    in-out property <string> plan_summary: "No stages yet";
+    in-out property <[PlanStepView]> plan_steps: [];
+    in-out property <string> activity_summary: "No activity yet";
+    in-out property <[ActivityItemView]> activity_items: [];
+    in-out property <string> trajectory_summary: "No durable records";
+    in-out property <[TrajectoryItemView]> trajectory_items: [];
+    in-out property <[InspectorModeView]> inspector_modes: [];
+    in-out property <bool> trajectory_loading: false;
+    in-out property <bool> trajectory_truncated: false;
+    in-out property <string> trajectory_error: "";
+    in-out property <string> change_summary: "No files changed";
+    in-out property <[FileChangeView]> change_files: [];
+    in-out property <int> changed_files: 0;
+    in-out property <int> additions: 0;
+    in-out property <int> removals: 0;
+    in-out property <bool> line_counts_known: true;
+    in-out property <string> selected_file_change_id: "";
+    in-out property <string> selected_change_path: "";
+    in-out property <string> selected_diff: "";
+    in-out property <bool> selected_diff_available: false;
+    in-out property <bool> selected_diff_truncated: false;
+    in-out property <string> selected_diff_reason: "Select a file to load its diff.";
+    in-out property <bool> selected_restore_available: false;
+    in-out property <string> selected_restore_reason: "Select a file to inspect restore availability.";
+    in-out property <bool> selected_recovery_blocked: false;
+    in-out property <bool> recovery_required: false;
+    in-out property <string> recovery_summary: "";
+    in-out property <string> recovery_operation_id: "";
+    in-out property <bool> recovery_restore_available: false;
+    in-out property <string> verification_state: "pending";
+    in-out property <string> verification_summary: "No automated checks were run";
+    in-out property <string> active_run_id: "";
+    in-out property <bool> running: false;
+    in-out property <bool> submission_pending: false;
+    in-out property <bool> drawer_open: false;
+    in-out property <bool> inspector_collapsed: true;
+    in-out property <string> active_inspector: "";
+    in-out property <bool> approval_open: false;
+    in-out property <string> approval_id: "";
+    in-out property <string> approval_action: "";
+    in-out property <string> approval_target: "";
+    in-out property <string> approval_reason: "";
+    in-out property <bool> approval_response_pending: false;
+    in-out property <bool> about_open: false;
+    in-out property <bool> settings_open: false;
+    in-out property <bool> command_palette_open: false;
+    in-out property <bool> model_menu_open: false;
+    in-out property <bool> context_menu_open: false;
+    in-out property <bool> reduced_motion: false;
+    in-out property <length> safe_area_top: 0px;
+    in-out property <length> safe_area_bottom: 0px;
+    in-out property <length> keyboard_inset: 0px;
+    // Set by touch hosts such as Android. The composer then waits for a tap
+    // instead of taking focus, so the on-screen keyboard does not open by itself.
+    in-out property <bool> touch_device: false;
+    // Pairing with another device. The host owns the identity and the store;
+    // the page only shows state and passes the owner's decisions.
+    in-out property <string> device_fingerprint: "";
+    in-out property <[DeviceView]> devices: [];
+    // idle, waiting, connecting, code, or error.
+    in-out property <string> device_pair_state: "idle";
+    in-out property <string> device_pair_code: "";
+    in-out property <string> device_pair_detail: "";
+    callback device_refresh();
+    callback device_listen();
+    callback device_connect(string);
+    callback device_confirm(bool, string);
+    callback device_forget(string);
+    // Whether paired devices may drive this app, and what to tell the owner.
+    in-out property <bool> device_remote_on: false;
+    in-out property <bool> device_remote_available: false;
+    in-out property <string> device_remote_detail: "";
+    callback device_set_remote(bool);
+    callback submit_task(string);
+    callback cancel_run(string);
+    callback new_session();
+    callback select_session(string);
+    callback set_goal(string, int, int, int);
+    callback pause_goal();
+    callback resume_goal();
+    callback clear_goal();
+    callback confirm_goal_report();
+    callback dismiss_goal_report();
+    callback probe_provider(string);
+    callback open_settings();
+    callback save_provider_profile(string, string, string, string, string, bool);
+    callback select_provider_profile(string);
+    callback refresh_provider_models(string);
+    callback select_provider_model(string, string);
+    callback refresh_harness();
+    callback select_harness_profile(string);
+    callback set_harness_surface_visibility(string, bool);
+    callback select_execution_profile(string);
+    callback set_harness_capability_enabled(string, bool);
+    callback validate_provider_label(string) -> string;
+    callback validate_provider_endpoint(string) -> string;
+    callback validate_provider_model(string) -> string;
+    callback toggle_drawer();
+    callback set_inspector_surface(string);
+    callback refresh_trajectory(string);
+    callback load_change_diff(string);
+    callback request_restore(string);
+    callback load_change_recovery();
+    callback retry_change_recovery(string);
+    callback request_recovery_restore(string);
+    callback approve_tool(string, string);
+    callback reject_tool(string);
+
+    // === Workbench additions. ===
+    in-out property <[RichBlockView]> live_blocks: [];
+    in-out property <[DiffLineView]> selected_diff_lines: [];
+
+    // First-run. Provider choice only, then an optional module step.
+    in-out property <bool> first_run_open: false;
+    in-out property <string> first_run_stage: "provider";
+    in-out property <[ProviderPresetView]> provider_presets: [];
+    in-out property <string> first_run_error: "";
+    callback first_run_choose(ProviderPresetView);
+    // Saves a server chosen at first run with the context size the owner gave.
+    callback first_run_save_server(string, string, string);
+    in-out property <string> provider_draft_context: "32768";
+    callback first_run_finish();
+    in-out property <bool> provider_credential_needed: false;
+    in-out property <bool> provider_custom_draft: false;
+    in-out property <string> provider_credential_detail: "";
+
+    // Shell chrome.
+    in-out property <int> composer_focus_tick: 0;
+    in-out property <bool> sidebar_open: true;
+    in-out property <string> settings_section: "providers";
+    in-out property <bool> provider_menu_open: false;
+    in-out property <string> toast_text: "";
+    in-out property <string> toast_undo_token: "";
+    callback toast_undo();
+    callback set_panel_visible(bool);
+    callback open_link(string);
+    callback persist_layout(length, length);
+    callback open_workspace(string);
+    in-out property <string> workspace_notice: "";
+    // The folder typed or picked in Settings > Workspace, before it is opened.
+    in-out property <string> workspace_draft: "";
+    // True where the host can show the system folder picker.
+    in-out property <bool> workspace_picker_available: false;
+    // Shows the system folder picker. The host puts a checked path in
+    // workspace_draft, or a reason in workspace_notice. Nothing opens until
+    // the owner confirms with open_workspace.
+    callback choose_workspace_folder();
+    // Android only: the optional All files access permission. Without it the
+    // workspace is the app's own folder. With it, the owner can pick a folder
+    // in Internal storage. Nothing here grants the agent anything beyond the
+    // chosen workspace.
+    in-out property <bool> workspace_all_files_supported: false;
+    in-out property <bool> workspace_all_files_granted: false;
+    // True when the open workspace is a folder the owner picked, not the
+    // app's own folder.
+    in-out property <bool> workspace_is_chosen_folder: false;
+    in-out property <string> workspace_path_example: "C:\\projects\\my-app";
+    callback open_all_files_settings();
+    callback refresh_workspace_access();
+    callback use_app_workspace();
+    // Writes one session's messages and events, with credentials removed, to a
+    // place the owner chooses: a Save dialog on Windows, the share sheet on
+    // Android. False hides the action where the host has neither.
+    in-out property <bool> session_export_available: false;
+    callback export_session(string);
+    in-out property <string> session_export_notice: "";
+    in-out property <bool> session_export_failed: false;
+
+    // Git diff module.
+    in-out property <string> git_state: "idle"; // idle | loading | ready | blocked | not-repo | error
+    in-out property <string> git_message: "";
+    in-out property <string> git_branch: "";
+    in-out property <[GitFileView]> git_files: [];
+    in-out property <string> git_selected: "";
+    in-out property <[DiffLineView]> git_diff_lines: [];
+    in-out property <bool> git_diff_truncated: false;
+    callback git_refresh();
+    callback git_select(string);
+
+    // Browser module. Reader mode, see docs/UI_MODULES.md.
+    in-out property <string> browser_url: "";
+    in-out property <string> browser_title: "";
+    in-out property <string> browser_state: "idle"; // idle | loading | ready | blocked | error
+    in-out property <string> browser_message: "";
+    in-out property <[RichBlockView]> browser_blocks: [];
+    in-out property <bool> browser_can_back: false;
+    in-out property <bool> browser_can_forward: false;
+    in-out property <bool> browser_truncated: false;
+    callback browser_go(string);
+    callback browser_back();
+    callback browser_forward();
+    callback browser_reload();
+
+    // Usage module.
+    in-out property <[ProviderUsageView]> usage_rows: [];
+    // The Requests module, for this session only.
+    in-out property <[UsageDayView]> usage_days: [];
+    in-out property <[ProjectView]> projects: [];
+    in-out property <[ContextPartView]> context_parts: [];
+    in-out property <string> request_context_summary: "";
+    in-out property <[RequestRowView]> request_rows: [];
+    in-out property <string> usage_state: "idle"; // idle | loading | ready | error
+    in-out property <string> usage_message: "";
+    in-out property <string> usage_total: "";
+    callback usage_refresh();
+
+    // Customization.
+    in-out property <[ThemePresetView]> theme_presets: [];
+    in-out property <string> theme_preset_id: "argentum";
+    in-out property <string> ui_density: "comfortable";
+    in-out property <int> ui_font_percent: 100;
+    in-out property <int> ui_radius_percent: 100;
+    in-out property <string> ui_error: "";
+    in-out property <string> ui_last_agent_change: "";
+    callback ui_set_preset(string);
+    callback ui_set_density(string);
+    callback ui_step_font(int);
+    callback ui_step_radius(int);
+    callback ui_set_panel_side(bool);
+    callback ui_set_user_bubbles(bool);
+    callback ui_reset();
+
+    // Updates. Each step runs only from a click in Settings.
+    in-out property <string> update_current: "";
+    // False where the app cannot update itself, such as on Android.
+    in-out property <bool> update_in_app: true;
+    // Opens a new GitHub issue with the version and platform filled in.
+    callback report_problem();
+    // A platform clipboard copy. Returns false where the host has none, and
+    // the toolkit's own clipboard is used instead.
+    callback copy_text(string) -> bool;
+    // Actions on text selected in a reply. The offsets are UTF-8 byte offsets.
+    pure callback selection_text(string, int, int) -> string;
+    callback reply_with_quote(string);
+    callback clarify_quote(string);
+    callback new_chat_with_quote(string);
+    in-out property <string> update_state: "idle"; // idle | checking | current | available | downloading | ready | installing | error
+    in-out property <string> update_version: "";
+    in-out property <string> update_message: "";
+    in-out property <string> update_install_blocker: "";
+    in-out property <string> update_page: "";
+    in-out property <float> update_progress: -1;
+    in-out property <[RichBlockView]> update_notes: [];
+    callback update_check();
+    callback update_download();
+    callback update_install();
+
+    // Command palette.
+    in-out property <[PaletteItemView]> palette_items: [];
+    callback palette_query(string);
+    callback palette_run(string);
+
+    // Carried over from the earlier shell and wired by the bridge.
+    in-out property <bool> provider_credential_supported: false;
+    in-out property <bool> provider_credential_configured: false;
+    in-out property <bool> provider_credential_saving: false;
+    in-out property <bool> provider_credential_deleting: false;
+    in-out property <string> provider_credential_pending: "";
+    in-out property <int> provider_credential_generation: 0;
+    in-out property <string> provider_credential_draft: "";
+    in-out property <string> provider_credential_error: "";
+    in-out property <string> provider_credential_notice: "";
+    in-out property <bool> provider_budget_loading: false;
+    in-out property <bool> provider_budget_saved: false;
+    in-out property <string> provider_budget_error: "";
+    in-out property <string> provider_budget_notice: "";
+    in-out property <bool> provider_budget_pending: false;
+    in-out property <string> provider_budget_profile_id: "";
+    in-out property <string> provider_budget_total: "";
+    in-out property <string> provider_budget_input: "";
+    in-out property <string> provider_budget_max_output: "";
+    in-out property <string> provider_budget_requested_output: "";
+    in-out property <string> provider_budget_uncertainty: "";
+    in-out property <bool> provider_context_loading: false;
+    in-out property <bool> provider_context_available: false;
+    in-out property <string> provider_context_error: "";
+    in-out property <string> provider_context_notice: "";
+    in-out property <bool> provider_context_pending: false;
+    in-out property <string> provider_context_profile_id: "";
+    in-out property <int> provider_context_tokens: 0;
+    in-out property <[ProviderContextChoiceView]> provider_context_choices: [];
+    in-out property <[ProviderPresetView]> provider_presets_hosted: [];
+    in-out property <[ProviderPresetView]> provider_presets_aggregator: [];
+    in-out property <[ProviderPresetView]> provider_presets_local: [];
+    // Rows per catalog group on each tab: hosted, aggregator, local, custom.
+    in-out property <[int]> provider_group_tested: [0, 0, 0, 0];
+    in-out property <[int]> provider_group_testing: [0, 0, 0, 0];
+    in-out property <[ProviderPresetView]> provider_presets_custom: [];
+    in-out property <[ProviderPresetView]> provider_presets_unsupported: [];
+    in-out property <bool> provider_presets_loading: false;
+    in-out property <string> provider_presets_error: "";
+    in-out property <string> provider_preset_pending: "";
+    in-out property <ProviderPresetView> provider_preset_detail;
+    in-out property <string> provider_preset_notice: "";
+    in-out property <bool> browser_status_loading: false;
+    in-out property <string> browser_summary: "Not built";
+    in-out property <string> browser_status_error: "";
+    in-out property <bool> browser_extensions_built: false;
+    in-out property <bool> browser_configured: false;
+    in-out property <bool> browser_saved_active: false;
+    in-out property <bool> browser_definition_ready: false;
+    in-out property <string> browser_readiness_detail: "";
+    in-out property <string> browser_allowed_tools: "";
+    in-out property <string> browser_qualification: "";
+    in-out property <bool> desktop_status_loading: false;
+    in-out property <string> desktop_status_error: "";
+    in-out property <bool> desktop_built: false;
+    in-out property <bool> desktop_available: false;
+    in-out property <bool> desktop_capability_enabled: false;
+    in-out property <string> desktop_capability_availability: "";
+    in-out property <string> desktop_reason: "";
+    in-out property <string> desktop_summary: "Not built";
+    in-out property <string> desktop_capability_text: "";
+    in-out property <[DesktopToolView]> desktop_tools: [];
+    in-out property <bool> local_inference_available: false;
+    in-out property <bool> local_inference_active: false;
+    in-out property <bool> local_inference_busy: false;
+    in-out property <string> local_inference_detail: "Optional on-device model is not loaded.";
+    in-out property <[HarnessModuleView]> harness_modules: [];
+    // The optional llama.cpp add-on on Windows. Nothing downloads until the
+    // owner reviews the files and presses "Download and install".
+    in-out property <bool> addon_supported: false;
+    in-out property <string> addon_state: "not-installed"; // not-installed | confirm | installing | installed | removing | error
+    in-out property <string> addon_detail: "";
+    in-out property <string> addon_confirm_text: "";
+    in-out property <[AddonModelView]> addon_models: [];
+    in-out property <bool> diagnostics_enabled: false;
+    in-out property <bool> diagnostics_open: false;
+    in-out property <string> diagnostics_detail: "";
+    in-out property <[DiagnosticRecordView]> diagnostic_records: [];
+    in-out property <string> workspace_path: "";
+    in-out property <bool> accounting_loading: false;
+    in-out property <string> accounting_error: "";
+    in-out property <string> accounting_summary: "";
+    in-out property <string> accounting_counters: "";
+    in-out property <string> accounting_available: "";
+    in-out property <[RecordLineView]> accounting_runs: [];
+    in-out property <[RecordLineView]> accounting_requests: [];
+    in-out property <bool> accounting_runs_truncated: false;
+    in-out property <bool> accounting_requests_truncated: false;
+    in-out property <bool> run_diagnostics_loading: false;
+    in-out property <string> run_diagnostics_id: "";
+    in-out property <string> run_diagnostics_state: "Not loaded";
+    in-out property <string> run_diagnostics_summary: "";
+    in-out property <[RecordLineView]> run_diagnostics_records: [];
+    in-out property <string> run_diagnostics_error: "";
+    in-out property <bool> run_diagnostics_open: false;
+    in-out property <bool> run_result_loading: false;
+    in-out property <string> run_result_state: "Not loaded";
+    in-out property <string> run_result_summary: "";
+    in-out property <string> run_result_answer: "";
+    in-out property <string> run_result_error: "";
+    in-out property <bool> instructions_loading: false;
+    in-out property <string> instructions_directory: ".";
+    in-out property <string> instructions_summary: "";
+    in-out property <[RecordLineView]> instructions_documents: [];
+    in-out property <[RecordLineView]> instructions_selections: [];
+    in-out property <string> instructions_error: "";
+    in-out property <bool> context_loading: false;
+    in-out property <string> context_summary: "";
+    in-out property <[RecordLineView]> context_records: [];
+    in-out property <string> context_error: "";
+    in-out property <bool> compact_pending: false;
+    in-out property <bool> compact_confirm: false;
+    in-out property <bool> compact_deactivate: false;
+    in-out property <string> compact_notice: "";
+    in-out property <string> compact_error: "";
+    in-out property <bool> extension_loading: false;
+    in-out property <[RecordLineView]> extension_entries: [];
+    in-out property <[RecordLineView]> extension_receipts: [];
+    in-out property <bool> extension_receipts_truncated: false;
+    in-out property <string> extension_error: "";
+    in-out property <bool> local_backend_available: false;
+    in-out property <bool> local_backend_enabled: false;
+    in-out property <bool> local_backend_ready: false;
+    in-out property <bool> local_backend_toggle_supported: false;
+    in-out property <string> local_backend_detail: "";
+    in-out property <bool> activity_module_enabled: true;
+    in-out property <bool> trajectory_module_enabled: true;
+    in-out property <string> session_query: "";
+    in-out property <string> session_filter: "active";
+    in-out property <bool> session_actions_open: false;
+    in-out property <string> session_actions_id: "";
+    in-out property <string> session_actions_title: "";
+    in-out property <bool> session_actions_pinned: false;
+    in-out property <bool> session_actions_archived: false;
+    in-out property <bool> session_actions_active: false;
+    in-out property <bool> session_action_pending: false;
+    in-out property <string> session_action_error: "";
+    in-out property <bool> session_rename_open: false;
+    in-out property <string> session_rename_draft: "";
+    in-out property <bool> session_fork_open: false;
+    in-out property <string> session_fork_draft: "";
+    in-out property <string> goal_accounting_summary: "No accounting recorded";
+    in-out property <bool> goal_inspector_active: false;
+    in-out property <string> goal_id: "";
+    in-out property <string> goal_limits_summary: "No goal limits reported";
+    in-out property <string> goal_run_limits_summary: "No per-run limits reported";
+    in-out property <string> goal_criteria_summary: "No criteria configured";
+    in-out property <string> goal_attestation_summary: "No owner attestation";
+    in-out property <string> goal_completion_summary: "Not delivered";
+    in-out property <string> goal_invocation_state: "No supervision invocation";
+    in-out property <string> goal_invocation_next_action: "";
+    in-out property <string> goal_limits_draft: "";
+    in-out property <string> goal_limits_error: "";
+    in-out property <string> goal_criteria_draft: "";
+    in-out property <bool> goal_criteria_attestation: false;
+    in-out property <string> goal_criteria_error: "";
+    in-out property <string> goal_attestation_draft: "";
+    in-out property <string> goal_attestation_error: "";
+    in-out property <string> goal_supervise_iterations: "1";
+    in-out property <string> goal_supervise_seconds: "300";
+    in-out property <bool> goal_supervision_pending: false;
+    in-out property <string> goal_supervision_error: "";
+    in-out property <string> goal_supervision_notice: "";
+    in-out property <[ToolCatalogView]> tool_catalog: [];
+    in-out property <bool> tool_catalog_loading: false;
+    in-out property <string> tool_catalog_error: "";
+    in-out property <[SkillCatalogView]> skill_catalog: [];
+    in-out property <bool> skill_catalog_loading: false;
+    in-out property <string> skill_catalog_error: "";
+    in-out property <string> skill_selected: "";
+    in-out property <string> skill_body: "";
+    in-out property <bool> skill_inspect_loading: false;
+    in-out property <string> skill_inspect_error: "";
+    in-out property <[VerificationRunnerView]> verification_runners: [];
+    in-out property <int> verification_runner_count: 0;
+    in-out property <bool> verification_runners_loading: false;
+    in-out property <string> verification_runners_error: "";
+    in-out property <string> verification_approve_pending: "";
+    in-out property <bool> verification_review_open: false;
+    in-out property <string> verification_review_runner: "";
+    in-out property <string> verification_review_command: "";
+    in-out property <string> verification_review_scope: "";
+    in-out property <string> verification_review_binding: "";
+    in-out property <[VerificationEvidenceView]> verification_evidence: [];
+    in-out property <bool> verification_evidence_loading: false;
+    in-out property <string> verification_evidence_error: "";
+    in-out property <string> approval_tool_id: "";
+    in-out property <string> approval_binding: "";
+    in-out property <string> approval_capabilities: "";
+    in-out property <string> approval_request_scope: "once";
+    in-out property <string> approval_scope: "once";
+    in-out property <[ApprovalScopeChoiceView]> approval_scope_choices: [];
+    in-out property <[ApprovalGrantView]> approval_grants: [];
+    in-out property <bool> approval_grants_loading: false;
+    in-out property <string> approval_grants_error: "";
+    in-out property <bool> approval_grants_incomplete: false;
+    in-out property <string> approval_grant_pending: "";
+
+    callback search_sessions(string);
+    callback set_session_filter(string);
+    callback rename_session(string, string);
+    callback set_session_pinned(string, bool);
+    callback set_session_archived(string, bool);
+    callback fork_session(string, string);
+    callback configure_goal_limits(string, string);
+    callback configure_goal_criteria(string, string, bool);
+    callback attest_goal(string, string);
+    callback supervise_goal(string, string, string);
+    callback deliver_goal(string, string, string);
+    callback refresh_tool_catalog();
+    callback refresh_skill_catalog();
+    callback inspect_skill(string);
+    callback load_accounting();
+    callback load_run_diagnostics(string);
+    callback load_run_result(string);
+    callback load_instructions(string);
+    callback load_context();
+    callback compact_context(bool);
+    callback list_extensions();
+    callback save_provider_credential(string, string);
+    callback clear_provider_credential(string);
+    callback install_and_load_local_model();
+    callback unload_local_model();
+    callback addon_choose(string);
+    callback addon_install();
+    callback addon_cancel();
+    callback addon_remove();
+    callback refresh_provider_presets();
+    callback add_provider_preset(string);
+    callback select_provider_preset(string);
+    callback save_provider_budget();
+    callback reset_provider_budget();
+    callback set_provider_context(int);
+    callback refresh_browser_status();
+    callback refresh_desktop_status();
+    callback set_harness_module(string, string);
+    callback set_local_backend_enabled(bool);
+    callback refresh_approval_grants();
+    callback revoke_approval_grant(string);
+    callback refresh_verification();
+    callback review_verification_runner(string);
+    callback approve_verification_runner(string);
+    callback cancel_verification_review();
+}
+
+// One flag per optional module, set from the harness snapshot. Core parts of the
+// shell, the conversation, the provider chooser, and approvals, have no flag.
+export global Mods {
+    in-out property <bool> sessions: false;
+    in-out property <bool> context-meter: false;
+    in-out property <bool> reasoning: false;
+    in-out property <bool> status-bar: false;
+    in-out property <bool> palette: false;
+    in-out property <bool> goal: false;
+    in-out property <bool> usage: false;
+    in-out property <bool> any-panel: false;
+}

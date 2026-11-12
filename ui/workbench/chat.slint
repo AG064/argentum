@@ -1,0 +1,770 @@
+// Core: the conversation and the composer. Optional modules appear here only
+// through their Mods flags.
+import { Theme } from "theme.slint";
+import { App, Mods } from "state.slint";
+import { Btn, CopyBtn, Chip, Focus, Icon, IconBtn, Label, LiveDot, Ring, Ripple, Scroller, Spinner, Tooltip } from "kit.slint";
+import { BrandMark } from "../components/brand.slint";
+import { DiffView, RichBlocks } from "rich.slint";
+import { ConversationMessageView, MessageChangeView } from "../view-models.slint";
+import { GoalCard } from "panels.slint";
+
+component UserMessage inherits HorizontalLayout {
+    in property <string> text;
+    // True for a message just sent, which rises out of the composer. Stored
+    // messages are rebuilt whenever the history refreshes and must not move.
+    in property <bool> enter: false;
+    private property <float> shown: root.enter ? 0 : 1;
+    init => { root.shown = 1; }
+    animate shown { duration: Theme.calm; easing: ease-out; }
+    alignment: end;
+    Rectangle {
+        max-width: parent.width * 0.86;
+        horizontal-stretch: 0;
+        opacity: root.shown;
+        transform-scale: Theme.enter-scale + (1 - Theme.enter-scale) * root.shown;
+        transform-origin: { x: self.width, y: self.height };
+        border-radius: Theme.r-lg;
+        background: Theme.user-bubbles ? Theme.raised : transparent;
+        border-width: Theme.user-bubbles ? 0px : Theme.hair;
+        border-color: Theme.border;
+        VerticalLayout {
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp14;
+            padding-top: Theme.sp9;
+            padding-bottom: Theme.sp9;
+            TextInput {
+                text: root.text;
+                read-only: true;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                font-size: Theme.fs-md;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+            }
+        }
+    }
+}
+
+component ReasoningDisclosure inherits VerticalLayout {
+    in property <string> text;
+    in property <bool> live: false;
+    in property <string> title: "Reasoning";
+    in property <int> additions: 0;
+    in property <int> removals: 0;
+    // True in a live turn, where a summary fades in as the agent reaches it.
+    in property <bool> enter: false;
+    private property <bool> open: root.live;
+    // The body keeps its text while it folds away, then lets it go, so a closed
+    // summary costs nothing to lay out.
+    private property <bool> folding: false;
+    changed open => {
+        if !root.open && !Theme.reduced-motion {
+            root.folding = true;
+            fold.running = true;
+        }
+    }
+    private property <float> shown: root.enter ? 0 : 1;
+    init => { root.shown = 1; }
+    animate shown { duration: Theme.calm; easing: ease-out; }
+    opacity: root.shown;
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.sp2;
+        Rectangle {
+            height: 24px;
+            preferred-width: head.preferred-width;
+            border-radius: Theme.r-xs;
+            background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.quick; }
+            accessible-role: button;
+            accessible-label: root.title;
+            accessible-expanded: root.open;
+            accessible-action-default => { root.open = !root.open; }
+            head := HorizontalLayout {
+                padding-left: Theme.sp4;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp4;
+                Icon {
+                    name: "chevron-right";
+                    size: 13px;
+                    tint: Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                    transform-rotation: root.open ? 90deg : 0deg;
+                    animate transform-rotation { duration: Theme.calm; easing: ease-out; }
+                }
+                Label {
+                    text: root.title;
+                    tone: "muted";
+                    size: "sm";
+                }
+                if root.additions > 0: Text {
+                    text: "+" + root.additions;
+                    color: Theme.diff-add-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
+                }
+                if root.removals > 0: Text {
+                    text: "-" + root.removals;
+                    color: Theme.diff-del-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
+                }
+            }
+            Focus {
+                radius: Theme.r-xs;
+                activated => { root.open = !root.open; }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.open = !root.open; }
+            }
+            fold := Timer {
+                interval: Theme.calm;
+                running: false;
+                triggered => {
+                    self.running = false;
+                    root.folding = false;
+                }
+            }
+        }
+    }
+    // Placed by hand and measured at its real width: wrapped text inside a
+    // HorizontalLayout is measured as if it had the whole row. The height
+    // animates, and the clip hides what has not unfolded yet.
+    Rectangle {
+        private property <length> text-x: Theme.sp12 + 2px + Theme.sp12;
+        height: root.open ? body.preferred-height + Theme.sp6 : 0px;
+        animate height { duration: Theme.calm; easing: ease-out; }
+        clip: true;
+        Rectangle {
+            x: Theme.sp12;
+            y: Theme.sp6;
+            width: 2px;
+            height: max(0px, parent.height - Theme.sp6);
+            background: Theme.border;
+        }
+        body := TextInput {
+            x: parent.text-x;
+            y: Theme.sp6;
+            width: parent.width - self.x;
+            text: root.open || root.folding ? root.text : "";
+            read-only: true;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.text-2;
+            font-size: Theme.fs-sm;
+            selection-background-color: Theme.accent.with-alpha(0.4);
+            selection-foreground-color: Theme.text;
+        }
+    }
+}
+
+// The files a response changed. Opening one shows its diff in place.
+component ChangedFiles inherits VerticalLayout {
+    in property <[MessageChangeView]> changes;
+    spacing: Theme.sp2;
+    for change in root.changes: VerticalLayout {
+        private property <bool> opened: App.open_message_diff == change.id;
+        spacing: Theme.sp2;
+        Rectangle {
+            height: 26px;
+            border-radius: Theme.r-xs;
+            background: file-touch.pressed ? Theme.pressed : file-touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.quick; }
+            accessible-role: button;
+            accessible-label: "Show the diff of " + change.path;
+            accessible-expanded: opened;
+            accessible-action-default => { file-touch.clicked(); }
+            HorizontalLayout {
+                padding-left: Theme.sp4;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp4;
+                Icon {
+                    name: "chevron-right";
+                    size: 13px;
+                    tint: Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                    transform-rotation: opened ? 90deg : 0deg;
+                    animate transform-rotation { duration: Theme.calm; easing: ease-out; }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: change.path;
+                    color: Theme.text-2;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if change.additions > 0: Text {
+                    text: "+" + change.additions;
+                    color: Theme.diff-add-text;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    vertical-alignment: center;
+                }
+                if change.removals > 0: Text {
+                    text: "-" + change.removals;
+                    color: Theme.diff-del-text;
+                    font-family: Theme.font-mono;
+                    font-size: Theme.fs-xs + 0.5px;
+                    vertical-alignment: center;
+                }
+            }
+            file-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    if opened {
+                        App.open_message_diff = "";
+                    } else {
+                        App.open_message_diff = change.id;
+                        App.load_change_diff(change.id);
+                    }
+                }
+            }
+        }
+        if opened && App.selected_file_change_id == change.id && App.selected_diff_available: Rectangle {
+            private property <float> shown: 0;
+            init => { self.shown = 1; }
+            animate shown { duration: Theme.calm; easing: ease-out; }
+            opacity: self.shown;
+            background: Theme.hover;
+            border-radius: Theme.r-xs;
+            clip: true;
+            DiffView { lines: App.selected_diff_lines; }
+        }
+        if opened && App.selected_file_change_id == change.id && !App.selected_diff_available: Label {
+            text: App.selected_diff_reason;
+            tone: "muted";
+            size: "xs";
+        }
+    }
+}
+
+// A reply as one selectable field. Selecting text shows Copy, Clarify, Reply
+// and New chat for that selection.
+component SelectableReply inherits VerticalLayout {
+    in property <string> text;
+    callback done();
+    spacing: Theme.sp6;
+    private property <int> sel-start: min(field.anchor-position-byte-offset, field.cursor-position-byte-offset);
+    private property <int> sel-end: max(field.anchor-position-byte-offset, field.cursor-position-byte-offset);
+    private property <string> selected: root.sel-end > root.sel-start ? App.selection_text(root.text, root.sel-start, root.sel-end) : "";
+    field := TextInput {
+        text: root.text;
+        read-only: true;
+        single-line: false;
+        wrap: word-wrap;
+        color: Theme.text;
+        font-size: Theme.fs-md;
+        selection-background-color: Theme.accent.with-alpha(0.4);
+        selection-foreground-color: Theme.text;
+    }
+    HorizontalLayout {
+        spacing: Theme.sp6;
+        alignment: start;
+        if root.selected != "": Btn { label: "Copy"; small: true; clicked => { if !App.copy_text(root.selected) { field.copy(); } } }
+        if root.selected != "": Btn { label: "Clarify"; small: true; clicked => { App.clarify_quote(root.selected); root.done(); } }
+        if root.selected != "": Btn { label: "Reply"; small: true; clicked => { App.reply_with_quote(root.selected); root.done(); } }
+        if root.selected != "": Btn { label: "New chat"; small: true; clicked => { App.new_chat_with_quote(root.selected); root.done(); } }
+        if root.selected == "": Label { text: "Select text to copy it, ask about it, or reply to it."; tone: "muted"; size: "xs"; }
+        Btn { label: "Done"; small: true; clicked => { root.done(); } }
+    }
+}
+
+component AssistantMessage inherits Rectangle {
+    in property <ConversationMessageView> message;
+    private property <bool> selecting: false;
+    // Below the content: it only reports hover, and must not take taps.
+    hover := TouchArea { enabled: true; mouse-cursor: default; }
+    VerticalLayout {
+        spacing: Theme.sp7;
+        if Mods.reasoning && message.reasoning-available: ReasoningDisclosure { text: message.reasoning; title: "Thought process"; }
+        if Mods.reasoning && message.steps != "": ReasoningDisclosure {
+            text: message.steps;
+            title: message.steps-title != "" ? message.steps-title : "Steps";
+            additions: message.additions;
+            removals: message.removals;
+        }
+        if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
+        if !root.selecting: RichBlocks {
+            blocks: message.blocks;
+            link(url) => { App.open_link(url); }
+        }
+        if root.selecting: SelectableReply { text: message.text; done => { root.selecting = false; } }
+        if message.state == "Interrupted" || message.state == "Failed": Label {
+            text: message.state == "Failed" ? "This response failed before it finished." : "This response was interrupted.";
+            tone: "warn";
+            size: "sm";
+        }
+        HorizontalLayout {
+            // As tall as its buttons, so the label centers on them.
+            height: Theme.control - 6px;
+            spacing: Theme.sp4;
+            alignment: start;
+            opacity: App.touch_device || hover.has-hover || root.selecting ? 1 : 0;
+            animate opacity { duration: Theme.quick; }
+            CopyBtn { text: message.text; tip: "Copy response"; }
+            if !root.selecting: IconBtn {
+                size: Theme.control - 6px;
+                glyph: Theme.icon-sm;
+                icon: "text-cursor-input";
+                tip: "Select text";
+                tint: Theme.text-3;
+                clicked => { root.selecting = true; }
+            }
+            if message.meta != "": Label {
+                text: message.meta;
+                tone: "muted";
+                size: "xs";
+                vertical-alignment: center;
+                height: parent.height;
+            }
+        }
+    }
+}
+
+component LiveTurn inherits VerticalLayout {
+    private property <float> shown: 0;
+    init => { root.shown = 1; }
+    animate shown { duration: Theme.calm; easing: ease-out; }
+    opacity: root.shown;
+    spacing: Theme.sp8;
+    if Mods.reasoning && App.current_reasoning_available: ReasoningDisclosure { text: App.current_reasoning; live: App.running; enter: true; title: "Thinking"; }
+    if Mods.reasoning && App.live_steps != "": ReasoningDisclosure {
+        text: App.live_steps;
+        live: App.running;
+        enter: true;
+        title: App.live_steps_title != "" ? App.live_steps_title : "Steps";
+        additions: App.live_additions;
+        removals: App.live_removals;
+    }
+    if Mods.reasoning && App.live_changes.length > 0: ChangedFiles { changes: App.live_changes; }
+    RichBlocks {
+        blocks: App.live_blocks;
+        link(url) => { App.open_link(url); }
+    }
+    if App.running: HorizontalLayout {
+        spacing: Theme.sp8;
+        alignment: start;
+        height: 22px;
+        LiveDot { y: (parent.height - self.height) / 2; }
+        // The state line breathes while the agent works, so a long wait still
+        // reads as progress. Still when motion is reduced.
+        Label {
+            text: App.run_state;
+            tone: "muted";
+            size: "sm";
+            opacity: Theme.reduced-motion ? 1 : 0.72 + 0.28 * (1 + sin(360deg * mod(animation-tick() / 1ms, 2200) / 2200)) / 2;
+        }
+    }
+}
+
+export component Conversation inherits Rectangle {
+    in property <length> column;
+    // Touch only. A swipe to the right drags the session drawer out; the shell
+    // owns the drawer and gets the distance.
+    in property <bool> drawer-swipe: false;
+    callback drawer-dragged(length);
+    callback drawer-released(length);
+    private property <length> gutter: (root.width - root.column) / 2;
+    public function to-tail() { scroller.to-tail(); }
+    clip: true;
+
+    // Pulling down at the start of the conversation stretches it a little and
+    // shows the mark, so the edge answers the finger instead of feeling dead.
+    // Fixed as "drawer" or "pull" once a swipe is recognized.
+    private property <string> gesture: "";
+    private property <length> pull: 0px;
+    animate pull { duration: swipe.swiping ? 0ms : Theme.glide; easing: ease-out; }
+
+    swipe := SwipeGestureHandler {
+        enabled: App.touch_device;
+        handle-swipe-right: root.drawer-swipe;
+        handle-swipe-down: scroller.at-top;
+        private property <length> dx: self.current-position.x - self.pressed-position.x;
+        private property <length> dy: self.current-position.y - self.pressed-position.y;
+        moved => {
+            if self.swiping {
+                if root.gesture == "" {
+                    root.gesture = root.drawer-swipe && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer" : "pull";
+                }
+                if root.gesture == "drawer" {
+                    root.drawer-dragged(self.dx);
+                } else {
+                    root.pull = Theme.pull-reach * max(0px, self.dy) / (max(0px, self.dy) + 160px);
+                }
+            }
+        }
+        swiped => {
+            if root.gesture == "drawer" { root.drawer-released(self.dx); }
+            root.gesture = "";
+            root.pull = 0px;
+        }
+        cancelled => {
+            if root.gesture == "drawer" { root.drawer-released(0px); }
+            root.gesture = "";
+            root.pull = 0px;
+        }
+
+        if root.pull > 0.5px: Rectangle {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.pull;
+            private property <float> amount: min(1, root.pull / (Theme.pull-reach * 0.6));
+            Icon {
+                name: "chevron-down";
+                size: 18px;
+                tint: Theme.text-3;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                opacity: parent.amount;
+                transform-scale: 0.6 + 0.4 * parent.amount;
+            }
+        }
+
+        scroller := Scroller {
+            x: 0;
+            y: root.pull;
+            width: root.width;
+            height: root.height;
+            follow-tail: true;
+            // Measured from where the last block ends. Slint 1.18 measures the
+            // column's preferred height differently from how it lays the blocks out,
+            // so wrapped replies ran past that height and their end was cut off.
+            content-height: col.y + max(col.preferred-height, tail.y) + 20px;
+            col := VerticalLayout {
+                height: self.preferred-height;
+                x: root.gutter;
+                y: 20px;
+                width: root.column;
+                spacing: Theme.sp22;
+                for message in App.conversation_messages: VerticalLayout {
+                    if message.role == "user": UserMessage { text: message.text; }
+                    if message.role != "user": AssistantMessage { message: message; }
+                }
+                if App.user_prompt != "": UserMessage { text: App.user_prompt; enter: true; }
+                if App.running || App.submission_pending || App.live_blocks.length > 0: LiveTurn { }
+                // Placed by hand: a wrapped Text inside a HorizontalLayout is measured
+                // as one line, which cut long errors off on narrow screens.
+                if App.error_message != "": Rectangle {
+                    border-radius: Theme.r-md;
+                    background: Theme.diff-del-bg;
+                    border-width: Theme.hair;
+                    border-color: Theme.danger.with-alpha(0.35);
+                    height: max(error-text.preferred-height, Theme.icon-md) + 2 * Theme.sp11;
+                    Icon {
+                        x: Theme.sp11;
+                        y: Theme.sp11;
+                        name: "triangle-alert";
+                        size: Theme.icon-md;
+                        tint: Theme.danger;
+                    }
+                    error-text := Text {
+                        x: Theme.sp11 + Theme.icon-md + Theme.sp9;
+                        y: Theme.sp11;
+                        width: parent.width - self.x - Theme.sp11;
+                        text: App.error_message;
+                        color: Theme.text;
+                        font-size: Theme.fs-sm;
+                        wrap: word-wrap;
+                    }
+                }
+                // Marks where the last block really ends. See content-height.
+                tail := Rectangle { height: 0px; }
+            }
+        }
+    }
+    if !scroller.at-tail: Rectangle {
+        private property <float> shown: 0;
+        init => { self.shown = 1; }
+        animate shown { duration: Theme.calm; easing: ease-out; }
+        opacity: self.shown;
+        transform-scale: 0.7 + 0.3 * self.shown;
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 10px + Theme.rise * (1 - self.shown);
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        background: Theme.overlay;
+        border-width: Theme.hair;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 10px;
+        drop-shadow-color: Theme.shadow;
+        accessible-role: button;
+        accessible-label: "Scroll to latest";
+        accessible-action-default => { scroller.to-tail(); }
+        Icon { name: "chevron-down"; size: Theme.icon-md; tint: Theme.text-2; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+        Focus {
+            radius: 15px;
+            activated => { scroller.to-tail(); }
+        }
+        TouchArea { mouse-cursor: pointer; clicked => { scroller.to-tail(); } }
+    }
+}
+
+export component Composer inherits Rectangle {
+    callback open-providers();
+    public function focus-input() { input.focus(); }
+    in property <bool> narrow: false;
+    private property <int> focus-tick: App.composer_focus_tick;
+    changed focus-tick => { if !App.touch_device { input.focus(); } }
+    init => { if !App.touch_device { input.focus(); } }
+
+    private property <bool> can-send: input.text != "" && !App.submission_pending
+        && !App.approval_open && !App.first_run_open;
+    private property <float> context-fraction: App.usage_reported && App.context_window_reported && App.context_window_tokens > 0
+        ? App.usage_total_tokens / App.context_window_tokens : -1;
+    private property <length> text-height: min(max(input.preferred-height, 22px), 220px);
+    // The field grows and shrinks with its text instead of jumping a line.
+    private property <length> shown-height: root.text-height;
+    animate shown-height { duration: Theme.quick; easing: ease-out; }
+
+    function send() {
+        if root.can-send && !App.running {
+            App.submit_task(input.text);
+            input.text = "";
+        }
+    }
+
+    function send-or-stop() {
+        if App.running {
+            App.cancel_run(App.active_run_id);
+        } else {
+            root.send();
+        }
+    }
+
+    height: lay.preferred-height;
+    border-radius: Theme.r-xl;
+    background: Theme.surface;
+    border-width: Theme.hair;
+    border-color: input.has-focus ? Theme.border-strong : Theme.border;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-blur: 22px;
+    drop-shadow-offset-y: 6px;
+    animate border-color { duration: Theme.quick; }
+
+    TouchArea { mouse-cursor: text; clicked => { input.focus(); } }
+
+    lay := VerticalLayout {
+        padding-left: Theme.sp16;
+        padding-right: Theme.sp8;
+        padding-top: Theme.sp13;
+        padding-bottom: Theme.sp8;
+        spacing: Theme.sp8;
+        Rectangle {
+            height: root.shown-height;
+            clip: true;
+            if input.text == "": Text {
+                x: 0;
+                y: 0;
+                text: App.running ? "Add a follow-up when this run finishes" : "Ask Argentum anything about this workspace";
+                color: Theme.text-3;
+                font-size: Theme.fs-md;
+                overflow: elide;
+                width: parent.width;
+            }
+            input := TextInput {
+                // Shared with the host, which restores a prompt that failed
+                // before it was saved.
+                text <=> App.draft;
+                x: 0;
+                // Pinned to the bottom of the clip, so the line being typed
+                // stays in view while the field is still growing.
+                y: min(0px, root.shown-height - self.preferred-height);
+                width: parent.width - 8px;
+                single-line: false;
+                wrap: word-wrap;
+                color: Theme.text;
+                font-size: Theme.fs-md;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+                accessible-label: "Message Argentum";
+                accessible-placeholder-text: "Ask Argentum anything about this workspace";
+                key-pressed(event) => {
+                    if event.text == Key.Return && !event.modifiers.shift && !event.modifiers.control {
+                        root.send();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.sp2;
+            height: Theme.control;
+            Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "provider";
+                label: App.provider_model == "" ? "Choose a model"
+                    : (root.narrow ? "" : App.provider_label + "  ·  ")
+                        + (App.provider_model_name != "" ? App.provider_model_name : App.provider_model);
+                trailing-chevron: true;
+                active: App.provider_menu_open;
+                max-label: root.narrow ? 110px : 360px;
+                clicked => { root.open-providers(); }
+            }
+            if App.thinking_available: Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "sparkles";
+                // The icon already says what this is; the label is the setting alone.
+                label: App.thinking_mode == "off" ? "Off"
+                    : App.thinking_mode == "low" ? "Low"
+                    : App.thinking_mode == "max" ? "Max" : "High";
+                trailing-chevron: false;
+                max-label: 120px;
+                clicked => { App.cycle_thinking_mode(); }
+            }
+            if !root.narrow: Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "approval";
+                label: App.execution_profile_label;
+                trailing-chevron: false;
+                max-label: 170px;
+                clicked => { App.settings_section = "permissions"; App.open_settings(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if Mods.context-meter: ctx-meter := Rectangle {
+                width: Theme.control;
+                y: 0;
+                // Only the ring by default. A tap or click shows the numbers,
+                // which also works on a phone, where nothing can hover.
+                private property <bool> show-numbers: false;
+                accessible-role: button;
+                accessible-label: ctx-tip.text;
+                accessible-action-default => { self.show-numbers = !self.show-numbers; }
+                ctx-touch := TouchArea {
+                    clicked => { ctx-meter.show-numbers = !ctx-meter.show-numbers; }
+                }
+                Ring {
+                    x: parent.width - self.width - 7px;
+                    y: (parent.height - self.height) / 2;
+                    fraction: root.context-fraction;
+                }
+                if ctx-meter.show-numbers: Tooltip {
+                    x: parent.width - self.width;
+                    y: -self.height - 6px;
+                    text: ctx-tip.text;
+                }
+                ctx-tip := Text {
+                    visible: false;
+                    width: 0;
+                    height: 0;
+                    // The latest request carries the whole session's history, so its
+                    // size is the session's context use.
+                    text: (!App.usage_reported ? "Session context: not reported yet"
+                        : !App.context_window_reported ? "Session context: " + App.usage_total_tokens + " tokens, limit not reported"
+                        : "Session context: " + App.usage_total_tokens + " of " + App.context_window_tokens + " tokens (" + round(root.context-fraction * 100) + "%)")
+                        + (App.session_tokens_used > 0 ? "\nUsed this session: " + App.session_tokens_used + " tokens" : "");
+                }
+            }
+            Rectangle {
+                width: Theme.control;
+                height: Theme.control;
+                y: 0;
+                border-radius: Theme.control / 2;
+                private property <bool> stop: App.running;
+                private property <bool> live: self.stop || root.can-send;
+                background: !self.live ? Theme.raised
+                    : send-touch.pressed ? Theme.accent
+                    : send-touch.has-hover ? Theme.accent-hover
+                    : Theme.accent;
+                animate background { duration: Theme.calm; }
+                transform-scale: App.touch_device && send-touch.pressed && self.live ? Theme.press-scale - 0.04 : 1;
+                animate transform-scale { duration: Theme.quick; easing: ease-out; }
+                accessible-role: button;
+                accessible-label: self.stop ? "Stop run" : "Send message";
+                accessible-enabled: self.live;
+                accessible-action-default => { root.send-or-stop(); }
+                send-ink := Ripple {
+                    border-radius: parent.border-radius;
+                    centered: true;
+                    ink: Theme.accent-text;
+                }
+                // Send turns into stop: the arrow lifts away as the square
+                // settles in, and back again when the run ends.
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2 - (parent.stop ? Theme.rise / 2 : 0px);
+                    name: "arrow-up";
+                    size: Theme.icon-md;
+                    tint: parent.live ? Theme.accent-text : Theme.text-3;
+                    opacity: parent.stop ? 0 : 1;
+                    animate opacity, y { duration: Theme.calm; easing: ease-out; }
+                    animate tint { duration: Theme.calm; }
+                }
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: "stop";
+                    size: Theme.icon-md;
+                    tint: Theme.accent-text;
+                    opacity: parent.stop ? 1 : 0;
+                    transform-scale: parent.stop ? 1 : 0.5;
+                    transform-rotation: parent.stop ? 0deg : -90deg;
+                    animate opacity, transform-scale, transform-rotation { duration: Theme.calm; easing: ease-out; }
+                }
+                Focus {
+                    enabled: parent.live;
+                    radius: Theme.control / 2;
+                    activated => { root.send-or-stop(); }
+                }
+                send-touch := TouchArea {
+                    mouse-cursor: parent.live ? pointer : default;
+                    clicked => { root.send-or-stop(); }
+                    pointer-event(event) => { if parent.live { send-ink.react(event, self.mouse-x, self.mouse-y); } }
+                }
+            }
+        }
+    }
+}
+
+// Shown before the first message. Mark, one line, and the composer in the middle
+// of the window, in the manner of Claude and Codex.
+export component EmptyHero inherits VerticalLayout {
+    in property <length> column;
+    in property <bool> narrow: false;
+    callback open-providers();
+    public function focus-input() { composer.focus-input(); }
+    in property <bool> compact: false;
+    alignment: center;
+    spacing: root.compact ? Theme.sp12 : Theme.sp22;
+    if !root.compact: HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 72px;
+            height: 72px;
+            BrandMark { size: 72px; }
+        }
+    }
+    Text {
+        text: App.project_name != "" ? "What should we do in " + App.project_name + "?" : "What should we work on?";
+        color: Theme.text;
+        font-size: Theme.fs-2xl - (narrow ? 6px : 2px);
+        font-weight: Theme.w-medium;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    VerticalLayout {
+        spacing: Theme.sp8;
+        // A goal can be set before the first task, so the panel is here too.
+        if Mods.goal: HorizontalLayout {
+            alignment: center;
+            GoalCard { width: root.column; narrow: root.narrow; }
+        }
+        HorizontalLayout {
+            alignment: center;
+            composer := Composer {
+                width: root.column;
+                narrow: root.narrow;
+                open-providers => { root.open-providers(); }
+            }
+        }
+    }
+    if !root.compact: Rectangle { height: 40px; }
+}

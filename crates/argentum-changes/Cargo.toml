@@ -1,0 +1,15 @@
+[package]
+name = "argentum-changes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argentum-domain.workspace = true
+sha2.workspace = true
+similar.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

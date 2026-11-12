@@ -1,0 +1,258 @@
+name: Release
+# Builds the release files: the Windows installer and portable zips, the
+# release-signed Android arm64 APK, SHA-256 checksums, signed build provenance
+# and an SBOM. A version tag push also creates a draft GitHub release.
+# Nothing is published here. Publishing the draft is a manual owner step.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      draft_release:
+        description: Also create a draft release. Only works when run on a tag.
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Read the release version
+        id: read
+        run: |
+          set -euo pipefail
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml)
+          android=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' platforms/android/app/build.gradle.kts)
+          if [ -z "$version" ]; then echo 'No workspace version in Cargo.toml' >&2; exit 1; fi
+          echo "Workspace version $version, Android versionName $android"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "Tag $GITHUB_REF_NAME does not match workspace version $version" >&2
+              exit 1
+            fi
+            if [ "$android" != "$version" ]; then
+              echo "Android versionName $android does not match workspace version $version" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-2025
+    timeout-minutes: 240
+    env:
+      CARGO_INCREMENTAL: '0'
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - name: Build the desktop app
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow==12.2.0
+          if ($LASTEXITCODE -ne 0) { throw 'Pillow install failed' }
+          ./scripts/build-windows-release.ps1
+      - name: Build the CLI packages
+        shell: pwsh
+        run: |
+          ./scripts/package-windows-cli.ps1 -OutputDirectory "$env:RUNNER_TEMP/cli"
+          ./scripts/package-windows-cli.ps1 -DesktopControl -Jobs 1 -OutputDirectory "$env:RUNNER_TEMP/cli-desktop"
+      - name: Assemble the portable zips
+        shell: pwsh
+        run: |
+          python scripts/package-windows-release.py --output release-assets --cli "$env:RUNNER_TEMP/cli" --cli-desktop "$env:RUNNER_TEMP/cli-desktop"
+          if ($LASTEXITCODE -ne 0) { throw 'Assembling the release files failed' }
+          # The release-files job writes one checksum file for every platform.
+          Remove-Item -LiteralPath release-assets/SHA256SUMS.txt
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          ./scripts/build-windows-installer.ps1 `
+            -DesktopZip "release-assets/Argentum-$env:VERSION-windows-x64.zip" `
+            -CliZip "release-assets/argentum-genesis-$env:VERSION-windows-x64.zip" `
+            -OutputDirectory release-assets -Version $env:VERSION `
+            -WorkDirectory "$env:RUNNER_TEMP/installer"
+      - name: Install and uninstall the installer
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -Installer "release-assets/Argentum-$env:VERSION-windows-x64.msi" -LogDirectory "$env:RUNNER_TEMP/installer-logs" -TestDataRemoval
+      - name: Keep the installer logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-installer-logs
+          path: ${{ runner.temp }}/installer-logs
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: '0'
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD_TOOLS: '36.0.0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+          targets: aarch64-linux-android
+      - name: Install the pinned NDK, platform and build tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.0.12077973" "platforms;android-36" "build-tools;$BUILD_TOOLS" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 4.1.2 --locked
+      # Local llama.cpp is an optional add-on, so the release APK is built
+      # without -PonDeviceInference.
+      - name: Build the release APK
+        working-directory: platforms/android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          bash ./gradlew --no-daemon --stacktrace :app:assembleRelease -PreleaseAbis=arm64-v8a
+      - name: Sign the APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "Missing signing secret $name; refusing to ship an unsigned APK" >&2; exit 1; fi
+          done
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          unsigned=platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          keystore="$RUNNER_TEMP/release-signing.jks"
+          trap 'rm -f "$keystore"' EXIT
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          mkdir -p android-assets
+          "$tools/zipalign" -P 16 -f 4 "$unsigned" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "android-assets/Argentum-$VERSION-android-arm64.apk" "$RUNNER_TEMP/aligned.apk"
+          rm -f android-assets/*.idsig
+      - name: Check the signed APK
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          apk="android-assets/Argentum-$VERSION-android-arm64.apk"
+          "$tools/zipalign" -c -P 16 4 "$apk"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" | grep -E '^Verified using|^Signer #1 certificate (DN|SHA-256)'
+          abis=$(unzip -Z1 "$apk" | sed -n 's|^lib/\([^/]*\)/.*|\1|p' | sort -u)
+          echo "Native ABIs: $abis"
+          if [ "$abis" != arm64-v8a ]; then echo 'The release APK must contain only arm64-v8a libraries' >&2; exit 1; fi
+          if unzip -Z1 "$apk" | grep -iE 'llama|ggml|\.gguf$'; then echo 'The release APK must not contain llama.cpp or models' >&2; exit 1; fi
+          "$tools/aapt2" dump badging "$apk" | head -n 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android
+          path: android-assets
+          if-no-files-found: error
+          retention-days: 7
+
+  release-files:
+    needs: [version, windows, android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: '{windows,android}'
+          path: dist
+          merge-multiple: true
+      # Lists the Cargo, Gradle and npm dependencies declared in the source tree
+      # the release files were built from.
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/argentum-${{ env.VERSION }}-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Write the checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum -- * | sort -k 2 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        id: attest
+        with:
+          subject-path: dist/*
+      # Shipped with the release so anyone can check where each file came from:
+      # gh attestation verify <file> --repo AG064/argentum
+      - name: Add the provenance bundle
+        run: cp '${{ steps.attest.outputs.bundle-path }}' dist/provenance.intoto.jsonl
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: argentum-${{ env.VERSION }}-release
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+  # Creates a draft release only. It never publishes, and it never runs for a
+  # branch. The owner reviews the draft and publishes it by hand.
+  draft-release:
+    needs: [version, release-files]
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.draft_release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: argentum-${{ env.VERSION }}-release
+          path: dist
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "A release for $GITHUB_REF_NAME already exists; leaving it unchanged" >&2
+            exit 1
+          fi
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag "${prerelease[@]}" --title "Argentum $VERSION" \
+            --notes "Draft created by workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Replace these notes before publishing."

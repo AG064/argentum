@@ -1,0 +1,20 @@
+[package]
+name = "argentum-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+ring.workspace = true
+rustls-pki-types.workspace = true
+rustls-webpki.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

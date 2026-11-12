@@ -1,0 +1,8534 @@
+// Clippy reports thread-locals that are already `const` when this crate is
+// built for Android.
+#![cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local))]
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::path::Path;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use argentum_domain::{
+    ActiveRunState, AppCommand, AppEvent, ApprovalGrantRecord, ApprovalId, ApprovalScope,
+    ChangeOperationId, ChangeRecoveryState, ChangeSetSnapshot, ConversationMessageStatus,
+    ConversationRole, DesktopToolSummary, FileChangeId, FileChangeKind, FileChangeRecord, Goal,
+    GoalId, GoalLifecycle, GrantScope, GrantSubject, HarnessAvailability, HarnessCapabilityState,
+    HarnessExecutionProfileSummary, HarnessProfileSummary, HarnessReadiness, HarnessSnapshot,
+    HarnessSurfaceState, ProviderKind, ProviderModel, ProviderPresetSummary, ProviderProfile,
+    RecordLine, RunId, SessionArchiveFilter, SessionId, SkillSummaryView, SurfaceId, TaskLifecycle,
+    ToolDescriptor, ToolResultState, TrajectoryEntry, TrajectoryKind, TrajectorySnapshot,
+    TrajectoryState, VerificationEvidence, VerificationRunnerId, VerificationRunnerInspection,
+    VerificationState,
+};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use time::macros::format_description;
+use tracing::warn;
+
+slint::include_modules!();
+
+mod activity;
+mod markdown;
+mod requests;
+pub mod workbench;
+
+/// Formats a workspace path for presentation without exposing a raw verbatim
+/// Windows path. The full path remains authoritative elsewhere; this label is
+/// only the final directory name, which is enough for the navigation and
+/// conversation context.
+pub fn display_workspace_label(path: &Path) -> String {
+    let raw = path.display().to_string();
+    let stripped = if let Some(rest) = raw.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{rest}")
+    } else if let Some(rest) = raw.strip_prefix("\\\\?\\") {
+        rest.to_owned()
+    } else {
+        raw
+    };
+
+    Path::new(&stripped)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .unwrap_or(stripped)
+}
+
+const MAX_ACTIVITY_ITEMS: usize = 50;
+const MAX_TRAJECTORY_ITEMS: usize = 200;
+
+thread_local! {
+    static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
+    static DEFERRED: RefCell<DeferredCommands> = const {
+        RefCell::new(DeferredCommands {
+            dispatch: None,
+            after_profile: Vec::new(),
+        })
+    };
+}
+
+/// Commands that must wait for a provider profile to exist. The host runs
+/// commands concurrently, so a budget sent right after its profile could
+/// arrive first and be rejected. Both live on the UI thread.
+#[derive(Default)]
+struct DeferredCommands {
+    dispatch: Option<Rc<dyn Fn(AppCommand)>>,
+    after_profile: Vec<(String, AppCommand)>,
+}
+
+pub(crate) fn defer_until_profile_saved(profile_id: String, command: AppCommand) {
+    DEFERRED.with(|deferred| {
+        deferred
+            .borrow_mut()
+            .after_profile
+            .push((profile_id, command));
+    });
+}
+
+fn run_commands_waiting_for(profiles: &[ProviderProfile]) {
+    let ready = DEFERRED.with(|deferred| {
+        let mut deferred = deferred.borrow_mut();
+        let (ready, waiting): (Vec<_>, Vec<_>) = deferred
+            .after_profile
+            .drain(..)
+            .partition(|(id, _)| profiles.iter().any(|profile| &profile.id == id));
+        deferred.after_profile = waiting;
+        deferred.dispatch.clone().map(|dispatch| (dispatch, ready))
+    });
+    if let Some((dispatch, ready)) = ready {
+        for (_, command) in ready {
+            dispatch(command);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct UiHandle {
+    window: Rc<MainWindow>,
+    projection: Arc<Mutex<ProjectionState>>,
+}
+
+#[derive(Clone)]
+pub struct WeakUiHandle {
+    window: slint::Weak<MainWindow>,
+    projection: Arc<Mutex<ProjectionState>>,
+}
+
+#[derive(Default)]
+struct ProjectionState {
+    run_steps: std::collections::BTreeMap<RunId, activity::RunActivity>,
+    requests: requests::RequestLog,
+    run_sessions: HashMap<RunId, SessionId>,
+    pending_run_sessions: VecDeque<SessionId>,
+    approval_sessions: HashMap<ApprovalId, SessionId>,
+    provider_credentials: HashMap<String, bool>,
+    workspace: Option<argentum_domain::WorkspaceSnapshot>,
+    grants: Vec<ApprovalGrantRecord>,
+    verification_runners: Vec<VerificationRunnerInspection>,
+    verification_evidence: Vec<VerificationEvidence>,
+    verification_freshness: Vec<bool>,
+}
+
+impl UiHandle {
+    pub fn new() -> Result<Self, slint::PlatformError> {
+        Ok(Self {
+            window: Rc::new(MainWindow::new()?),
+            projection: Arc::default(),
+        })
+    }
+
+    pub fn from_window(window: MainWindow) -> Self {
+        Self {
+            window: Rc::new(window),
+            projection: Arc::default(),
+        }
+    }
+
+    pub fn window(&self) -> &MainWindow {
+        &self.window
+    }
+
+    pub fn weak_window(&self) -> slint::Weak<MainWindow> {
+        self.window.as_weak()
+    }
+
+    pub fn weak_handle(&self) -> WeakUiHandle {
+        WeakUiHandle {
+            window: self.window.as_weak(),
+            projection: self.projection.clone(),
+        }
+    }
+
+    pub fn show(&self) -> Result<(), slint::PlatformError> {
+        self.window.show()
+    }
+
+    pub fn hide(&self) -> Result<(), slint::PlatformError> {
+        self.window.hide()
+    }
+
+    fn projection(&self) -> MutexGuard<'_, ProjectionState> {
+        self.projection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn active_session_id(&self) -> Option<SessionId> {
+        self.window.get_active_session_id().as_str().parse().ok()
+    }
+
+    fn session_for_run(&self, run_id: RunId) -> Option<SessionId> {
+        let mut projection = self.projection();
+        if let Some(session_id) = projection.run_sessions.get(&run_id) {
+            return Some(*session_id);
+        }
+        let session_id = projection.pending_run_sessions.pop_front()?;
+        projection.run_sessions.insert(run_id, session_id);
+        Some(session_id)
+    }
+
+    fn run_targets_active_session(&self, run_id: RunId) -> bool {
+        let Some(session_id) = self.session_for_run(run_id) else {
+            return false;
+        };
+        self.active_session_id() == Some(session_id)
+    }
+
+    fn remember_approval_session(&self, approval_id: ApprovalId, run_id: RunId) {
+        if let Some(session_id) = self.session_for_run(run_id) {
+            self.projection()
+                .approval_sessions
+                .insert(approval_id, session_id);
+        }
+    }
+
+    fn approval_targets_active_session(&self, approval_id: ApprovalId) -> bool {
+        let session_id = self
+            .projection()
+            .approval_sessions
+            .get(&approval_id)
+            .copied();
+        session_id.is_none() || session_id == self.active_session_id()
+    }
+
+    pub fn apply_event(&self, event: &AppEvent) {
+        match event {
+            AppEvent::ContextCompactionProgress {
+                session_id, phase, ..
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.push_activity(
+                        "Context compaction",
+                        format!("Selected-model work may consume usage: {phase}"),
+                        "active",
+                    );
+                }
+            }
+            AppEvent::ContextCompactionCompleted {
+                session_id, result, ..
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.push_activity(
+                        "Context compaction",
+                        result.reason.clone(),
+                        if result.status
+                            == argentum_domain::context_summary::CompactionStatus::Failed
+                        {
+                            "error"
+                        } else {
+                            "complete"
+                        },
+                    );
+                    self.window.set_compact_pending(false);
+                    self.window.set_compact_confirm(false);
+                    if result.status == argentum_domain::context_summary::CompactionStatus::Failed {
+                        self.window
+                            .set_compact_error(bounded_summary(&result.reason, 400).into());
+                        self.window.set_compact_notice(SharedString::default());
+                    } else {
+                        self.window.set_compact_error(SharedString::default());
+                        self.window.set_compact_notice(
+                            format!("Compaction {:?}: {}", result.status, result.reason).into(),
+                        );
+                    }
+                }
+                // Projection work is not a task terminal event or observed main-model usage.
+            }
+            AppEvent::ContextRequestAccounted {
+                session_id,
+                run_id,
+                request_id,
+                purpose,
+                accounting,
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection()
+                        .requests
+                        .accounted(*request_id, *run_id, purpose, accounting);
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::ModelRequestAttempt {
+                session_id,
+                request_id,
+                attempt,
+                outcome,
+                error_class,
+                status,
+                planned_delay_ms,
+                stop_reason,
+                ..
+            } => {
+                if self.active_session_id() == Some(*session_id) {
+                    self.projection().requests.attempt(
+                        *request_id,
+                        *attempt,
+                        outcome,
+                        *status,
+                        error_class.as_deref(),
+                        stop_reason.as_deref(),
+                        *planned_delay_ms,
+                    );
+                    self.refresh_requests();
+                }
+            }
+            AppEvent::SummaryTransportObserved { .. }
+            | AppEvent::ExtensionOperationRecorded { .. }
+            | AppEvent::GoalRequestAccounting { .. } => {}
+            // The current Slint client has no supplemental-check surface. The
+            // typed receipt remains in the shared store/review; it is not a
+            // task-terminal event or independent proof of task correctness.
+            AppEvent::SupplementalCheckRecorded(_) => {}
+            AppEvent::WorkspaceStateLoaded(snapshot) => {
+                let previous_active_session_id = self.window.get_active_session_id().to_string();
+                self.window.set_project_name(
+                    workbench::display_project_name(&snapshot.project.name).into(),
+                );
+                self.window.set_workspace_label(
+                    display_workspace_label(&snapshot.project.workspace_root).into(),
+                );
+                self.window.set_workspace_path(
+                    snapshot.project.workspace_root.display().to_string().into(),
+                );
+                let active_session_id = snapshot
+                    .active_session_id
+                    .map(|session_id| session_id.to_string())
+                    .unwrap_or_default();
+                self.window
+                    .set_active_session_id(active_session_id.clone().into());
+                self.projection().workspace = Some(snapshot.clone());
+                self.refresh_session_items();
+                if let Some(active_session_uuid) = snapshot.active_session_id {
+                    if let Some(session) = snapshot
+                        .sessions
+                        .iter()
+                        .find(|session| session.id == active_session_uuid)
+                    {
+                        self.window.set_session_title(session.title.clone().into());
+                    }
+                }
+                if previous_active_session_id != active_session_id {
+                    self.reset_session_view();
+                }
+            }
+            AppEvent::SteeringChanged(status) => {
+                if self.run_targets_active_session(status.run_id) {
+                    let (title, state) = match status.lifecycle {
+                        argentum_domain::SteeringLifecycle::Pending => {
+                            ("Steering pending", "active")
+                        }
+                        argentum_domain::SteeringLifecycle::Included => {
+                            ("Steering included in request", "complete")
+                        }
+                        argentum_domain::SteeringLifecycle::NotApplied => {
+                            ("Steering not applied", "neutral")
+                        }
+                    };
+                    self.push_activity(
+                        title,
+                        format!(
+                            "Position {} | {} bytes. Inclusion does not prove model obedience.",
+                            status.position, status.text_bytes
+                        ),
+                        state,
+                    );
+                }
+            }
+            AppEvent::ConversationSnapshotLoaded(snapshot) => {
+                {
+                    let mut projection = self.projection();
+                    for message in &snapshot.messages {
+                        projection
+                            .run_sessions
+                            .insert(message.run_id, message.session_id);
+                    }
+                }
+                if self.active_session_id() != Some(snapshot.session_id) {
+                    return;
+                }
+                {
+                    // Steps seen live are richer, so keep them. Runs from before
+                    // this launch get their steps back from the stored calls.
+                    let mut projection = self.projection();
+                    let live = projection
+                        .run_steps
+                        .keys()
+                        .copied()
+                        .collect::<std::collections::HashSet<_>>();
+                    for trace in &snapshot.tool_traces {
+                        if live.contains(&trace.run_id) {
+                            continue;
+                        }
+                        let (verb, _) = tool_result_presentation(&trace.result);
+                        let title = format!("{} {verb}", tool_label(&trace.tool_id));
+                        let fallback = format!("{title}: {}", trace.summary.replace('\n', ", "));
+                        projection
+                            .run_steps
+                            .entry(trace.run_id)
+                            .or_default()
+                            .finish(trace, &fallback);
+                    }
+                }
+                {
+                    let steps = self.projection().run_steps.clone();
+                    self.window
+                        .set_conversation_messages(conversation_message_model_with_steps(
+                            &snapshot.messages,
+                            &steps,
+                        ));
+                    self.window
+                        .global::<App>()
+                        .set_session_tokens_used(saturating_i32_u64(session_tokens_used(
+                            &snapshot.messages,
+                        )));
+                }
+                self.apply_live_activity(&activity::RunActivity::default());
+                // A run that failed before its message was stored would lose
+                // what the owner typed. Put it back in the empty composer.
+                let prompt = self.window.get_user_prompt();
+                if !prompt.is_empty()
+                    && !self.window.get_error_message().is_empty()
+                    && self.window.get_draft().is_empty()
+                    && !snapshot
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == ConversationRole::User)
+                        .is_some_and(|message| message.text == prompt.as_str())
+                {
+                    self.window.set_draft(prompt);
+                }
+                self.window.set_user_prompt(SharedString::default());
+                self.window.set_transcript(SharedString::default());
+                self.window.set_live_blocks(ModelRc::default());
+                self.window.set_current_reasoning(SharedString::default());
+                self.window.set_current_reasoning_available(false);
+                self.window
+                    .set_current_run_provider_label(SharedString::default());
+                self.window.set_current_run_model(SharedString::default());
+                self.reset_usage_projection();
+                // The live numbers end with the run, so the meter shows the
+                // latest stored reply's usage instead of "not reported".
+                if let Some(usage) = snapshot
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| message.role == ConversationRole::Assistant)
+                    .and_then(|message| message.usage.as_ref())
+                {
+                    self.window.set_usage_reported(true);
+                    self.window
+                        .set_usage_input_tokens(saturating_i32_u64(usage.input_tokens));
+                    self.window
+                        .set_usage_output_tokens(saturating_i32_u64(usage.output_tokens));
+                    self.window
+                        .set_usage_total_tokens(saturating_i32_u64(usage.total_tokens));
+                    self.window
+                        .set_context_window_reported(usage.context_window_tokens.is_some());
+                    self.window.set_context_window_tokens(
+                        usage.context_window_tokens.map_or(0, saturating_i32_u64),
+                    );
+                }
+                self.window.set_error_message(SharedString::default());
+            }
+            AppEvent::GoalSnapshotLoaded { session_id, goal } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.apply_goal_snapshot(goal.as_deref());
+            }
+            AppEvent::GoalInvocationSnapshot {
+                session_id,
+                invocation,
+            } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.window.set_goal_supervision_pending(false);
+                self.window
+                    .set_goal_supervision_error(SharedString::default());
+                if let Some(invocation) = invocation.as_ref() {
+                    self.window.set_goal_supervision_notice(
+                        format!("Supervision: {:?}", invocation.state).into(),
+                    );
+                }
+                self.apply_goal_invocation(invocation.as_ref());
+            }
+            AppEvent::ToolCatalogSnapshot { tools } => {
+                self.window.set_tool_catalog(tool_catalog_model(tools));
+                self.window.set_tool_catalog_loading(false);
+                self.window.set_tool_catalog_error(SharedString::default());
+            }
+            AppEvent::SkillCatalogSnapshot { skills, complete } => {
+                self.window.set_skill_catalog(skill_catalog_model(skills));
+                self.window.set_skill_catalog_loading(false);
+                self.window.set_skill_catalog_error(
+                    if *complete {
+                        ""
+                    } else {
+                        "Skill catalog is incomplete."
+                    }
+                    .into(),
+                );
+            }
+            AppEvent::SkillInspectionSnapshot { inspection } => {
+                self.window
+                    .set_skill_selected(inspection.name.clone().into());
+                self.window.set_skill_body(inspection.body.clone().into());
+                self.window.set_skill_inspect_loading(false);
+                self.window.set_skill_inspect_error(
+                    if inspection.valid {
+                        String::new()
+                    } else if inspection.error.is_empty() {
+                        "Skill inspection is unavailable.".into()
+                    } else {
+                        inspection.error.clone()
+                    }
+                    .into(),
+                );
+            }
+            AppEvent::ActiveRunsSnapshot { runs } => {
+                self.apply_active_runs_snapshot(runs);
+            }
+            AppEvent::AccountingSnapshot {
+                session_id,
+                goal_id: _,
+                objective: _,
+                state: _,
+                summary,
+                counters,
+                available,
+                runs,
+                requests,
+                runs_truncated,
+                requests_truncated,
+            } => {
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                self.window.set_accounting_loading(false);
+                self.window.set_accounting_error(SharedString::default());
+                self.window.set_accounting_summary(summary.clone().into());
+                self.window.set_accounting_counters(counters.clone().into());
+                self.window
+                    .set_accounting_available(available.clone().into());
+                self.window.set_accounting_runs(record_line_model(runs));
+                self.window
+                    .set_accounting_requests(record_line_model(requests));
+                self.window.set_accounting_runs_truncated(*runs_truncated);
+                self.window
+                    .set_accounting_requests_truncated(*requests_truncated);
+            }
+            AppEvent::RunDiagnosticsSnapshot {
+                run_id,
+                state,
+                summary,
+                records,
+                error,
+            } => {
+                self.window.set_run_diagnostics_loading(false);
+                self.window
+                    .set_run_diagnostics_id(run_id.to_string().into());
+                self.window.set_run_diagnostics_state(state.clone().into());
+                self.window
+                    .set_run_diagnostics_summary(summary.clone().into());
+                self.window
+                    .set_run_diagnostics_records(record_line_model(records));
+                self.window.set_run_diagnostics_error(error.clone().into());
+                if error.is_empty() {
+                    self.window.set_run_diagnostics_open(true);
+                }
+            }
+            AppEvent::RunResultSnapshot {
+                run_id,
+                result,
+                error,
+            } => {
+                self.window.set_run_result_loading(false);
+                self.window
+                    .set_run_diagnostics_id(run_id.to_string().into());
+                if let Some(result) = result {
+                    let answer = result.answer.text.clone().unwrap_or_else(|| {
+                        result
+                            .answer
+                            .unavailable_reason
+                            .clone()
+                            .unwrap_or_else(|| "No final answer text is available.".into())
+                    });
+                    let answer = bounded_summary(&answer, 2_000);
+                    self.window
+                        .set_run_result_state(format!("{:?}", result.run_state).into());
+                    self.window.set_run_result_summary(
+                        format!(
+                            "final {} | answer available {} | changes {} | verification {} | usage reported {}",
+                            result.is_final,
+                            result.answer.available,
+                            result.changes.items.len(),
+                            result.verification.items.len(),
+                            result.usage.reported.available,
+                        )
+                        .into(),
+                    );
+                    self.window.set_run_result_answer(answer.into());
+                    self.window.set_run_result_error(
+                        result
+                            .failure
+                            .as_ref()
+                            .and_then(|failure| failure.message.clone())
+                            .unwrap_or_default()
+                            .into(),
+                    );
+                } else {
+                    self.window.set_run_result_state("Unavailable".into());
+                    self.window.set_run_result_summary(SharedString::default());
+                    self.window.set_run_result_answer(SharedString::default());
+                    self.window.set_run_result_error(error.clone().into());
+                }
+            }
+            AppEvent::InstructionsSnapshot {
+                summary,
+                documents,
+                selections,
+                error,
+            } => {
+                self.window.set_instructions_loading(false);
+                self.window.set_instructions_summary(summary.clone().into());
+                self.window
+                    .set_instructions_documents(record_line_model(documents));
+                self.window
+                    .set_instructions_selections(record_line_model(selections));
+                self.window.set_instructions_error(error.clone().into());
+            }
+            AppEvent::ContextSnapshotLoaded {
+                summary,
+                records,
+                error,
+            } => {
+                self.window.set_context_loading(false);
+                self.window.set_context_summary(summary.clone().into());
+                self.window.set_context_records(record_line_model(records));
+                self.window.set_context_error(error.clone().into());
+            }
+            AppEvent::ExtensionStatusSnapshot {
+                entries,
+                receipts,
+                receipts_truncated,
+                error,
+            } => {
+                self.window.set_extension_loading(false);
+                self.window
+                    .set_extension_entries(record_line_model(entries));
+                self.window
+                    .set_extension_receipts(record_line_model(receipts));
+                self.window
+                    .set_extension_receipts_truncated(*receipts_truncated);
+                self.window.set_extension_error(error.clone().into());
+            }
+            AppEvent::ProjectCreated(project) => {
+                let workspace_label = display_workspace_label(&project.workspace_root);
+                self.window
+                    .set_project_name(workbench::display_project_name(&project.name).into());
+                self.window
+                    .set_workspace_label(workspace_label.clone().into());
+                self.push_activity("Project created", workspace_label, "neutral");
+            }
+            AppEvent::SessionCreated(session) => {
+                self.window.set_submission_pending(false);
+                self.window
+                    .set_active_session_id(session.id.to_string().into());
+                self.window.set_session_title(session.title.clone().into());
+                self.reset_session_view();
+                self.push_activity("Session created", session.title.clone(), "neutral");
+            }
+            AppEvent::SessionForked(fork) => {
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
+                self.push_activity(
+                    "Conversation fork created",
+                    format!(
+                        "Created {} from {}. The selected session was not changed.",
+                        fork.child_session_id, fork.source_session_id
+                    ),
+                    "neutral",
+                );
+            }
+            AppEvent::TaskAccepted(task) => {
+                self.projection()
+                    .pending_run_sessions
+                    .push_back(task.session_id);
+                if self.active_session_id() != Some(task.session_id) {
+                    return;
+                }
+                self.window.set_submission_pending(false);
+                self.window.set_user_prompt(task.prompt.clone().into());
+                self.window.set_draft(SharedString::default());
+                self.window.set_transcript(SharedString::default());
+                self.window.set_live_blocks(ModelRc::default());
+                self.window.set_current_reasoning(SharedString::default());
+                self.window.set_current_reasoning_available(false);
+                self.window
+                    .set_current_run_provider_label(self.window.get_provider_label());
+                self.window
+                    .set_current_run_model(self.window.get_provider_model());
+                self.reset_usage_projection();
+                self.window.set_error_message(SharedString::default());
+                self.window.set_run_state(task.lifecycle.label().into());
+                self.window.set_running(is_active_lifecycle(task.lifecycle));
+                self.window.set_plan_summary("No stages yet".into());
+                self.window.set_plan_steps(empty_plan_model());
+                self.reset_change_and_verification_state();
+                self.close_approval();
+                self.push_activity("Task submitted", task.prompt.clone(), "active");
+            }
+            AppEvent::PlanUpdated { run_id, steps } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                self.window.set_active_run_id(run_id.to_string().into());
+                self.window
+                    .set_plan_summary(stage_count_label(steps.len()).into());
+                self.window.set_plan_steps(plan_step_model(steps));
+                self.push_activity(
+                    "Run stages updated",
+                    stage_count_label(steps.len()),
+                    "active",
+                );
+            }
+            AppEvent::AssistantDelta { run_id, text } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                self.window.set_active_run_id(run_id.to_string().into());
+                let mut transcript = self.window.get_transcript().to_string();
+                transcript.push_str(text);
+                self.window.set_live_blocks(markdown::model(&transcript));
+                self.window.set_transcript(transcript.into());
+                self.window.set_error_message(SharedString::default());
+            }
+            AppEvent::AssistantReasoningDelta { run_id, text } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                self.window.set_active_run_id(run_id.to_string().into());
+                let mut reasoning = self.window.get_current_reasoning().to_string();
+                reasoning.push_str(text);
+                self.window
+                    .set_current_reasoning(without_reasoning_markers(&reasoning).into());
+                self.window.set_current_reasoning_available(true);
+                self.window.set_error_message(SharedString::default());
+            }
+            AppEvent::ModelUsageUpdated {
+                session_id,
+                run_id,
+                profile_id,
+                model,
+                usage,
+            } => {
+                if self.active_session_id() != Some(*session_id)
+                    || !self.run_targets_active_session(*run_id)
+                {
+                    return;
+                }
+                self.projection().requests.usage(
+                    *run_id,
+                    usage.input_tokens,
+                    usage.cached_input_tokens,
+                    usage.output_tokens,
+                );
+                self.refresh_requests();
+                self.window.set_active_run_id(run_id.to_string().into());
+                self.window.set_usage_reported(true);
+                self.window
+                    .set_usage_input_tokens(saturating_i32_u64(usage.input_tokens));
+                self.window
+                    .set_usage_output_tokens(saturating_i32_u64(usage.output_tokens));
+                self.window
+                    .set_usage_total_tokens(saturating_i32_u64(usage.total_tokens));
+                self.window
+                    .set_context_window_reported(usage.context_window_tokens.is_some());
+                self.window.set_context_window_tokens(
+                    usage.context_window_tokens.map_or(0, saturating_i32_u64),
+                );
+                self.window.set_current_run_model(model.clone().into());
+                self.window
+                    .global::<App>()
+                    .set_served_model(model.clone().into());
+                self.refresh_model_name();
+                if !profile_id.is_empty() {
+                    let profiles = self.window.get_provider_profiles();
+                    let provider_label = (0..profiles.row_count())
+                        .filter_map(|index| profiles.row_data(index))
+                        .find(|profile| profile.id.as_str() == profile_id)
+                        .map_or_else(|| profile_id.clone(), |profile| profile.label.to_string());
+                    self.window
+                        .set_current_run_provider_label(provider_label.into());
+                }
+            }
+            AppEvent::RunStatusChanged { run_id, lifecycle } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                self.window.set_active_run_id(run_id.to_string().into());
+                self.window.set_run_state(lifecycle.label().into());
+                self.window.set_running(is_active_lifecycle(*lifecycle));
+                if lifecycle.is_terminal() {
+                    self.finish_stage_projection(*lifecycle);
+                }
+                self.push_activity(
+                    lifecycle_activity_title(*lifecycle),
+                    lifecycle.label(),
+                    lifecycle_activity_state(*lifecycle),
+                );
+            }
+            AppEvent::Error { message, .. } => {
+                self.window.set_submission_pending(false);
+                self.window.set_approval_response_pending(false);
+                if self.window.get_session_action_pending() {
+                    self.window.set_session_action_pending(false);
+                    self.window
+                        .set_session_action_error(present_error(message).into());
+                }
+                if self.window.get_approval_grants_loading()
+                    || !self.window.get_approval_grant_pending().is_empty()
+                {
+                    self.window.set_approval_grants_loading(false);
+                    self.window
+                        .set_approval_grant_pending(SharedString::default());
+                    self.window
+                        .set_approval_grants_error(present_error(message).into());
+                }
+                if self.window.get_verification_runners_loading()
+                    || !self.window.get_verification_approve_pending().is_empty()
+                {
+                    self.window.set_verification_runners_loading(false);
+                    self.window
+                        .set_verification_approve_pending(SharedString::default());
+                    self.window
+                        .set_verification_runners_error(present_error(message).into());
+                }
+                if self.window.get_verification_evidence_loading() {
+                    self.window.set_verification_evidence_loading(false);
+                    self.window
+                        .set_verification_evidence_error(present_error(message).into());
+                }
+                if self.window.get_provider_presets_loading()
+                    || !self.window.get_provider_preset_pending().is_empty()
+                {
+                    self.window.set_provider_presets_loading(false);
+                    self.window
+                        .set_provider_preset_pending(SharedString::default());
+                    self.window
+                        .set_provider_presets_error(present_error(message).into());
+                }
+                if self.window.get_browser_status_loading() {
+                    self.window.set_browser_status_loading(false);
+                    self.window
+                        .set_browser_status_error(present_error(message).into());
+                }
+                if self.window.get_desktop_status_loading() {
+                    self.window.set_desktop_status_loading(false);
+                    self.window
+                        .set_desktop_status_error(present_error(message).into());
+                }
+                let budget_failed = self.window.get_provider_budget_pending();
+                let context_failed = self.window.get_provider_context_pending();
+                if budget_failed {
+                    self.window.set_provider_budget_pending(false);
+                    self.window
+                        .set_provider_budget_error(present_error(message).into());
+                }
+                if context_failed {
+                    self.window.set_provider_context_pending(false);
+                    self.window
+                        .set_provider_context_error(present_error(message).into());
+                }
+                if self.window.get_goal_action_pending() {
+                    self.window.set_goal_action_pending(false);
+                    self.window
+                        .set_goal_limits_error(present_error(message).into());
+                    self.window
+                        .set_goal_criteria_error(present_error(message).into());
+                    self.window
+                        .set_goal_attestation_error(present_error(message).into());
+                }
+                if self.window.get_goal_supervision_pending() {
+                    self.window.set_goal_supervision_pending(false);
+                    self.window
+                        .set_goal_supervision_error(present_error(message).into());
+                }
+                if self.window.get_tool_catalog_loading() {
+                    self.window.set_tool_catalog_loading(false);
+                    self.window
+                        .set_tool_catalog_error(present_error(message).into());
+                }
+                if self.window.get_skill_catalog_loading() {
+                    self.window.set_skill_catalog_loading(false);
+                    self.window
+                        .set_skill_catalog_error(present_error(message).into());
+                }
+                if self.window.get_skill_inspect_loading() {
+                    self.window.set_skill_inspect_loading(false);
+                    self.window
+                        .set_skill_inspect_error(present_error(message).into());
+                }
+                if self.window.get_accounting_loading() {
+                    self.window.set_accounting_loading(false);
+                    self.window
+                        .set_accounting_error(present_error(message).into());
+                }
+                if self.window.get_run_diagnostics_loading() {
+                    self.window.set_run_diagnostics_loading(false);
+                    self.window
+                        .set_run_diagnostics_error(present_error(message).into());
+                }
+                if self.window.get_run_result_loading() {
+                    self.window.set_run_result_loading(false);
+                    self.window
+                        .set_run_result_error(present_error(message).into());
+                }
+                if self.window.get_instructions_loading() {
+                    self.window.set_instructions_loading(false);
+                    self.window
+                        .set_instructions_error(present_error(message).into());
+                }
+                if self.window.get_context_loading() {
+                    self.window.set_context_loading(false);
+                    self.window.set_context_error(present_error(message).into());
+                }
+                if self.window.get_compact_pending() {
+                    self.window.set_compact_pending(false);
+                    self.window.set_compact_error(present_error(message).into());
+                }
+                if self.window.get_extension_loading() {
+                    self.window.set_extension_loading(false);
+                    self.window
+                        .set_extension_error(present_error(message).into());
+                }
+                let consumes_provider_error = self.window.get_provider_error_consumes_next()
+                    && message == self.window.get_provider_error().as_str();
+                let provider_pending = self.window.get_provider_pending().to_string();
+                let provider_models_pending = self.window.get_provider_models_pending().to_string();
+                if consumes_provider_error {
+                    self.window.set_provider_error_consumes_next(false);
+                } else if !provider_pending.is_empty()
+                    || !provider_models_pending.is_empty()
+                    || budget_failed
+                    || context_failed
+                {
+                    // The command-specific failure callback owns provider presentation. Profile
+                    // and model requests can overlap, so a global error cannot safely identify
+                    // which operation failed.
+                } else {
+                    self.window.set_error_message(present_error(message).into());
+                    self.window.set_running(false);
+                    let current_state = self.window.get_run_state().to_string();
+                    if current_state != "Failed" && current_state != "Cancelled" {
+                        self.window.set_run_state("Could not continue".into());
+                    }
+                    self.push_activity("Could not continue", present_error(message), "error");
+                }
+            }
+            AppEvent::RunError {
+                session_id,
+                run_id,
+                message,
+                ..
+            } => {
+                {
+                    self.projection().run_sessions.insert(*run_id, *session_id);
+                }
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                let current_run_id = self.window.get_active_run_id().to_string();
+                if !current_run_id.is_empty() && current_run_id != run_id.to_string() {
+                    return;
+                }
+                self.window.set_submission_pending(false);
+                self.window.set_approval_response_pending(false);
+                self.window.set_active_run_id(run_id.to_string().into());
+                self.window.set_error_message(present_error(message).into());
+                self.window.set_run_state("Could not continue".into());
+                self.window.set_running(false);
+                self.push_activity("Run failed", present_error(message), "error");
+            }
+            AppEvent::ProviderStatus(status) => {
+                let profile_id = provider_status_id(status);
+                let current_id = self.window.get_provider_id().to_string();
+                let has_profile_snapshot = self.window.get_provider_profiles().row_count() > 0;
+                let targets_current =
+                    current_id.is_empty() || current_id == profile_id || !has_profile_snapshot;
+                if targets_current {
+                    let was_testing = self.window.get_provider_testing()
+                        && self.window.get_provider_pending().as_str() == "probe";
+                    self.window.set_provider_label(status.label.clone().into());
+                    self.window.set_provider_id(profile_id.into());
+                    self.window
+                        .set_provider_kind(provider_kind_id(status.kind).into());
+                    self.window
+                        .set_provider_kind_label(provider_kind_label(status.kind).into());
+                    self.window
+                        .set_provider_endpoint(status.endpoint.clone().into());
+                    self.window.set_provider_connected(status.connected);
+                    self.window.set_provider_testing(false);
+                    self.window.set_provider_pending(SharedString::default());
+                    self.window
+                        .set_provider_detail(status.detail.clone().into());
+                    if status.connected {
+                        self.window.set_provider_probe_state("connected".into());
+                        self.window.set_provider_error(SharedString::default());
+                        self.window
+                            .set_provider_notice("Connection verified.".into());
+                        self.window.set_provider_error_consumes_next(false);
+                    } else if was_testing {
+                        self.window.set_provider_probe_state("failed".into());
+                        self.window.set_provider_error(status.detail.clone().into());
+                        self.window.set_provider_notice(SharedString::default());
+                        self.window.set_provider_error_consumes_next(true);
+                    }
+                    self.push_activity(
+                        if status.connected {
+                            "Provider connected"
+                        } else if was_testing {
+                            "Connection failed"
+                        } else {
+                            "Provider configured"
+                        },
+                        status.detail.clone(),
+                        if status.connected {
+                            "success"
+                        } else if was_testing {
+                            "error"
+                        } else {
+                            "neutral"
+                        },
+                    );
+                }
+            }
+            AppEvent::ProviderCredentialStatus {
+                provider_id,
+                configured,
+            } => {
+                if !is_supported_provider_credential_id(provider_id) {
+                    return;
+                }
+                self.projection()
+                    .provider_credentials
+                    .insert(provider_id.clone(), *configured);
+                if self.window.get_provider_id().as_str() == provider_id
+                    && provider_credential_supported_id(
+                        provider_id,
+                        self.window.get_provider_kind().as_str(),
+                    )
+                {
+                    self.window.set_provider_credential_supported(true);
+                    self.window.set_provider_credential_configured(*configured);
+                }
+                let profiles = self.window.get_provider_profiles();
+                if profiles.row_count() > 0 {
+                    let profiles = (0..profiles.row_count())
+                        .filter_map(|row| profiles.row_data(row))
+                        .collect::<Vec<_>>();
+                    let credentials = self.projection().provider_credentials.clone();
+                    self.window.set_provider_profiles(
+                        provider_profile_view_model_with_credentials(&profiles, &credentials),
+                    );
+                }
+            }
+            AppEvent::ProviderProfilesSnapshot { profiles } => {
+                self.apply_provider_profiles(profiles);
+                run_commands_waiting_for(profiles);
+                if !self.window.get_provider_preset_pending().is_empty() {
+                    self.window
+                        .set_provider_preset_pending(SharedString::default());
+                    self.window.set_provider_presets_loading(false);
+                    self.window.set_provider_preset_notice(
+                        "Provider added. Review its credential and model before use.".into(),
+                    );
+                }
+            }
+            AppEvent::ProviderPresetsSnapshot { presets } => {
+                PROVIDER_PRESETS.with(|store| {
+                    *store.borrow_mut() = presets.clone();
+                });
+                self.window
+                    .set_provider_presets(provider_preset_model(presets));
+                self.window
+                    .set_provider_presets_hosted(provider_preset_model_for_group(
+                        presets, "hosted",
+                    ));
+                self.window
+                    .set_provider_presets_aggregator(provider_preset_model_for_group(
+                        presets,
+                        "aggregator",
+                    ));
+                self.window
+                    .set_provider_presets_local(provider_preset_model_for_group(presets, "local"));
+                self.window
+                    .set_provider_presets_custom(provider_preset_model_for_group(
+                        presets, "custom",
+                    ));
+                self.window
+                    .set_provider_presets_unsupported(provider_preset_model_for_group(
+                        presets,
+                        "unsupported",
+                    ));
+                let groups = ["hosted", "aggregator", "local", "custom"];
+                let count = |tested: bool| {
+                    let counts = groups
+                        .iter()
+                        .map(|group| {
+                            presets
+                                .iter()
+                                .filter(|preset| preset.group == *group && preset.tested == tested)
+                                .count() as i32
+                        })
+                        .collect::<Vec<_>>();
+                    ModelRc::new(VecModel::from(counts))
+                };
+                let app = self.window.global::<App>();
+                app.set_provider_group_tested(count(true));
+                app.set_provider_group_testing(count(false));
+                self.window.set_provider_presets_loading(false);
+                self.window
+                    .set_provider_presets_error(SharedString::default());
+            }
+            AppEvent::ProviderBudgetSnapshot {
+                profile_id,
+                budget,
+                error,
+                save_completed,
+            } => {
+                if self.window.get_provider_id().as_str() != profile_id {
+                    return;
+                }
+                let was_pending = self.window.get_provider_budget_pending();
+                self.window
+                    .set_provider_budget_profile_id(profile_id.clone().into());
+                self.window.set_provider_budget_loading(false);
+                self.window.set_provider_budget_pending(false);
+                self.window.set_provider_budget_error(error.clone().into());
+                if let Some(budget) = budget {
+                    self.window
+                        .set_provider_budget_total(budget.usable_context_tokens.to_string().into());
+                    self.window.set_provider_budget_input(
+                        budget
+                            .input_limit_tokens
+                            .map(|value| value.to_string())
+                            .unwrap_or_default()
+                            .into(),
+                    );
+                    self.window.set_provider_budget_max_output(
+                        budget.maximum_output_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_requested_output(
+                        budget.requested_output_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_uncertainty(
+                        budget.uncertainty_tokens.to_string().into(),
+                    );
+                    self.window.set_provider_budget_saved(true);
+                } else {
+                    self.window
+                        .set_provider_budget_total(SharedString::default());
+                    self.window
+                        .set_provider_budget_input(SharedString::default());
+                    self.window
+                        .set_provider_budget_max_output(SharedString::default());
+                    self.window
+                        .set_provider_budget_requested_output(SharedString::default());
+                    self.window
+                        .set_provider_budget_uncertainty(SharedString::default());
+                    self.window.set_provider_budget_saved(false);
+                }
+                if was_pending {
+                    if *save_completed {
+                        self.window.set_provider_budget_notice(
+                            "Budget limits saved for this profile.".into(),
+                        );
+                    } else {
+                        self.window.set_provider_budget_error(
+                            "Save did not complete. The displayed limits are the saved values."
+                                .into(),
+                        );
+                    }
+                }
+            }
+            AppEvent::ProviderContextSnapshot {
+                profile_id,
+                available,
+                context_tokens,
+                choices,
+                error,
+                save_completed,
+            } => {
+                if self.window.get_provider_id().as_str() != profile_id {
+                    return;
+                }
+                let was_pending = self.window.get_provider_context_pending();
+                self.window
+                    .set_provider_context_profile_id(profile_id.clone().into());
+                self.window.set_provider_context_loading(false);
+                self.window.set_provider_context_pending(false);
+                self.window.set_provider_context_error(error.clone().into());
+                self.window.set_provider_context_available(*available);
+                self.window
+                    .set_provider_context_tokens(*context_tokens as i32);
+                self.window
+                    .set_provider_context_choices(provider_context_choice_model(
+                        choices,
+                        *context_tokens,
+                    ));
+                if was_pending {
+                    if *save_completed {
+                        self.window.set_provider_context_notice(
+                            "Context size saved. It applies on the next approved local launch."
+                                .into(),
+                        );
+                    } else {
+                        self.window.set_provider_context_error(
+                            "Update did not complete. The displayed context is the saved value."
+                                .into(),
+                        );
+                    }
+                }
+            }
+            AppEvent::BrowserStatusSnapshot {
+                extensions_built,
+                configured,
+                saved_active,
+                definition_ready,
+                readiness_detail,
+                allowed_tools,
+                qualification,
+            } => {
+                self.window.set_browser_status_loading(false);
+                self.window
+                    .set_browser_status_error(SharedString::default());
+                self.window.set_browser_extensions_built(*extensions_built);
+                self.window.set_browser_configured(*configured);
+                self.window.set_browser_saved_active(*saved_active);
+                self.window.set_browser_definition_ready(*definition_ready);
+                self.window
+                    .set_browser_readiness_detail(readiness_detail.clone().into());
+                self.window
+                    .set_browser_allowed_tools(allowed_tools.join(", ").into());
+                self.window
+                    .set_browser_qualification(qualification.clone().into());
+                let browser_summary = if !*extensions_built {
+                    "Not built"
+                } else if !*configured {
+                    "Not configured"
+                } else if *saved_active {
+                    "Configured, active"
+                } else {
+                    "Configured, inactive"
+                };
+                self.window.set_browser_summary(browser_summary.into());
+            }
+            AppEvent::DesktopStatusSnapshot {
+                built,
+                available,
+                capability_enabled,
+                capability_availability,
+                reason,
+                tools,
+            } => {
+                self.window.set_desktop_status_loading(false);
+                self.window
+                    .set_desktop_status_error(SharedString::default());
+                self.window.set_desktop_built(*built);
+                self.window.set_desktop_available(*available);
+                self.window
+                    .set_desktop_capability_enabled(*capability_enabled);
+                self.window
+                    .set_desktop_capability_availability(capability_availability.clone().into());
+                let desktop_summary = if !*built {
+                    "Not built".to_owned()
+                } else if *available {
+                    "Optional Windows capability".to_owned()
+                } else {
+                    "Not available".to_owned()
+                };
+                let desktop_capability_text = format!(
+                    "Capability: {} | {}",
+                    if *capability_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
+                    capability_availability
+                );
+                self.window.set_desktop_summary(desktop_summary.into());
+                self.window
+                    .set_desktop_capability_text(desktop_capability_text.into());
+                self.window.set_desktop_reason(reason.clone().into());
+                self.window.set_desktop_tools(desktop_tool_model(tools));
+            }
+            AppEvent::ProviderModelsSnapshot {
+                provider_id,
+                models,
+                selected_model,
+                source,
+            } => {
+                self.apply_provider_models(provider_id, models, selected_model, *source);
+            }
+            AppEvent::TrajectoryEntryRecorded { session_id, entry } => {
+                self.append_trajectory_entry(*session_id, entry);
+            }
+            AppEvent::TrajectorySnapshotLoaded(snapshot) => {
+                self.apply_trajectory_snapshot(snapshot);
+            }
+            AppEvent::HarnessSnapshotLoaded(snapshot) => {
+                self.apply_harness_snapshot(snapshot);
+            }
+            AppEvent::ToolStarted(trace) => {
+                if !self.run_targets_active_session(trace.run_id) {
+                    return;
+                }
+                self.window
+                    .set_active_run_id(trace.run_id.to_string().into());
+                self.window
+                    .set_run_state(TaskLifecycle::Running.label().into());
+                self.window.set_running(true);
+                self.push_activity(
+                    format!("{} started", tool_label(&trace.tool_id)),
+                    trace.summary.clone(),
+                    "active",
+                );
+            }
+            AppEvent::ToolFinished(trace) => {
+                self.projection().requests.tool(trace);
+                if !self.run_targets_active_session(trace.run_id) {
+                    return;
+                }
+                self.window
+                    .set_active_run_id(trace.run_id.to_string().into());
+                let (verb, state) = tool_result_presentation(&trace.result);
+                let title = format!("{} {verb}", tool_label(&trace.tool_id));
+                let fallback = format!("{title}: {}", trace.summary.replace('\n', ", "));
+                let current = {
+                    let mut projection = self.projection();
+                    let activity = projection.run_steps.entry(trace.run_id).or_default();
+                    activity.finish(trace, &fallback);
+                    activity.clone()
+                };
+                self.apply_live_activity(&current);
+                self.push_activity(title, trace.summary.clone(), state);
+            }
+            AppEvent::ApprovalRequested(request) => {
+                self.remember_approval_session(request.id, request.run_id);
+                if !self.run_targets_active_session(request.run_id) {
+                    return;
+                }
+                self.window.set_approval_response_pending(false);
+                self.window
+                    .set_active_run_id(request.run_id.to_string().into());
+                self.window.set_approval_open(true);
+                self.window.set_approval_id(request.id.to_string().into());
+                self.window
+                    .set_approval_tool_id(request.tool_id.clone().into());
+                self.window
+                    .set_approval_action(request.action.clone().into());
+                self.window
+                    .set_approval_target(request.target.clone().into());
+                self.window
+                    .set_approval_reason(request.reason.clone().into());
+                self.window
+                    .set_approval_binding(request.binding.0.clone().into());
+                self.window.set_approval_capabilities(
+                    request
+                        .capabilities
+                        .iter()
+                        .map(|capability| capability.label())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .into(),
+                );
+                self.window
+                    .set_approval_request_scope(request.scope.id().into());
+                self.window.set_approval_scope(request.scope.id().into());
+                self.window
+                    .set_approval_scope_choices(request_scope_choices(request.scope.clone()));
+                self.window
+                    .set_run_state(TaskLifecycle::WaitingForApproval.label().into());
+                self.window.set_running(true);
+                self.push_activity(
+                    "Approval requested",
+                    format!("{}: {}", request.action, request.target),
+                    "attention",
+                );
+            }
+            AppEvent::ApprovalResolved {
+                approval_id,
+                approved,
+            } => {
+                if !self.approval_targets_active_session(*approval_id) {
+                    return;
+                }
+                self.projection().approval_sessions.remove(approval_id);
+                self.close_approval();
+                self.push_activity(
+                    if *approved {
+                        "Action approved"
+                    } else {
+                        "Action rejected"
+                    },
+                    if *approved {
+                        "The action can run once."
+                    } else {
+                        "The action was not run."
+                    },
+                    if *approved { "success" } else { "error" },
+                );
+                if !*approved {
+                    self.window.set_running(false);
+                    self.window.set_run_state("Cancelled".into());
+                }
+            }
+            AppEvent::ChangeSetReady(change_set) => {
+                if !self.run_targets_active_session(change_set.run_id) {
+                    return;
+                }
+                self.window
+                    .set_active_run_id(change_set.run_id.to_string().into());
+                self.window
+                    .set_changed_files(saturating_i32(change_set.files_changed));
+                self.window
+                    .set_additions(saturating_i32(change_set.additions));
+                self.window
+                    .set_removals(saturating_i32(change_set.removals));
+                let summary = change_summary(
+                    change_set.files_changed,
+                    change_set.additions,
+                    change_set.removals,
+                );
+                self.window.set_change_summary(summary.clone().into());
+                self.window.set_verification_state(
+                    if change_set.verification_ready {
+                        "ready"
+                    } else {
+                        "pending"
+                    }
+                    .into(),
+                );
+                self.window.set_verification_summary(
+                    if change_set.verification_ready {
+                        "Ready for verification"
+                    } else {
+                        "No automated checks were run"
+                    }
+                    .into(),
+                );
+                self.push_activity("Changes recorded", summary, "neutral");
+            }
+            AppEvent::ToolActivity {
+                run_id,
+                tool_call_id,
+                text,
+            } => {
+                self.projection()
+                    .run_steps
+                    .entry(*run_id)
+                    .or_default()
+                    .describe(*tool_call_id, text);
+            }
+            AppEvent::FileChangeRecorded(record) => {
+                if self.active_session_id() != Some(record.session_id) {
+                    return;
+                }
+                let current = {
+                    let mut projection = self.projection();
+                    let activity = projection.run_steps.entry(record.run_id).or_default();
+                    activity.record_change(record);
+                    activity.clone()
+                };
+                self.apply_live_activity(&current);
+                self.append_file_change(record);
+            }
+            AppEvent::ChangeSetSnapshotLoaded(snapshot) => {
+                if self.active_session_id() != Some(snapshot.session_id) {
+                    return;
+                }
+                self.apply_change_set_snapshot(snapshot);
+            }
+            AppEvent::UnifiedDiffLoaded(diff) => {
+                let selected_id = diff.file_change_id.to_string();
+                let rows = self.window.get_change_files();
+                let mut restore_available = false;
+                let mut restore_reason = SharedString::default();
+                let rows = (0..rows.row_count())
+                    .filter_map(|row| rows.row_data(row))
+                    .map(|mut row| {
+                        row.selected = row.id.as_str() == selected_id;
+                        if row.selected {
+                            restore_available = row.restore_available;
+                            restore_reason = row.restore_reason.clone();
+                        }
+                        row
+                    })
+                    .collect::<Vec<_>>();
+                self.window
+                    .set_change_files(ModelRc::new(VecModel::from(rows)));
+                self.window.set_selected_file_change_id(selected_id.into());
+                self.window
+                    .set_selected_change_path(diff.relative_path.clone().into());
+                self.window.set_selected_diff(diff.text.clone().into());
+                let (diff_lines, diff_cut) = workbench::parse_diff(&diff.text);
+                self.window
+                    .set_selected_diff_lines(ModelRc::new(VecModel::from(diff_lines)));
+                self.window.set_selected_diff_available(diff.available);
+                self.window
+                    .set_selected_diff_truncated(diff.truncated || diff_cut);
+                self.window.set_selected_diff_reason(if diff.available {
+                    SharedString::default()
+                } else {
+                    diff.unavailable_reason.clone().into()
+                });
+                self.window
+                    .set_selected_restore_available(restore_available);
+                self.window.set_selected_restore_reason(restore_reason);
+            }
+            AppEvent::RestoreCompleted(result) => {
+                self.window.set_verification_state("pending".into());
+                self.window
+                    .set_verification_summary("Restored content requires verification.".into());
+                self.push_activity(
+                    "Restore completed",
+                    if result.deleted {
+                        format!(
+                            "Deleted {} to restore its earlier state.",
+                            result.relative_path
+                        )
+                    } else {
+                        format!("Restored {} from retained content.", result.relative_path)
+                    },
+                    "neutral",
+                );
+            }
+            AppEvent::ChangeRecoverySnapshotLoaded(snapshot) => {
+                self.window
+                    .set_recovery_required(snapshot.recovery_required);
+                if let Some(operation) = snapshot.operations.first() {
+                    self.window
+                        .set_recovery_operation_id(operation.operation_id.to_string().into());
+                    self.window.set_recovery_summary(
+                        format!(
+                            "{} is in {} state. Review the current digest before choosing a repair.",
+                            operation.relative_path,
+                            recovery_state_label(operation.state)
+                        )
+                        .into(),
+                    );
+                } else {
+                    self.window
+                        .set_recovery_operation_id(SharedString::default());
+                    self.window.set_recovery_summary(
+                        if snapshot.recovery_required {
+                            "Recovery is required before more writes can run."
+                        } else {
+                            "No unresolved file operations."
+                        }
+                        .into(),
+                    );
+                }
+            }
+            AppEvent::ChangeRecoveryResolved {
+                operation_id,
+                state,
+            } => {
+                if self.window.get_recovery_operation_id().as_str() == operation_id.to_string() {
+                    let resolved = matches!(
+                        state,
+                        ChangeRecoveryState::Finalized | ChangeRecoveryState::NotApplied
+                    );
+                    self.window.set_recovery_required(!resolved);
+                    if resolved {
+                        self.window
+                            .set_recovery_operation_id(SharedString::default());
+                    }
+                }
+                self.window.set_recovery_summary(
+                    format!(
+                        "Recovery operation resolved as {}.",
+                        recovery_state_label(*state)
+                    )
+                    .into(),
+                );
+                self.push_activity(
+                    "Recovery resolved",
+                    format!(
+                        "Operation {operation_id} is {}.",
+                        recovery_state_label(*state)
+                    ),
+                    "neutral",
+                );
+            }
+            AppEvent::VerificationCompleted {
+                run_id,
+                passed,
+                summary,
+            } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                self.window.set_active_run_id(run_id.to_string().into());
+                self.window
+                    .set_verification_state(if *passed { "passed" } else { "failed" }.into());
+                self.window.set_verification_summary(summary.clone().into());
+                self.push_activity(
+                    if *passed {
+                        "Verification passed"
+                    } else {
+                        "Verification failed"
+                    },
+                    summary.clone(),
+                    if *passed { "success" } else { "error" },
+                );
+            }
+            AppEvent::ApprovalGrantsSnapshot { grants, coverage } => {
+                self.projection().grants = grants.clone();
+                self.window.set_approval_grants_loading(false);
+                self.window
+                    .set_approval_grants_error(SharedString::default());
+                self.window.set_approval_grants_incomplete(
+                    coverage.as_ref().is_some_and(|coverage| !coverage.complete),
+                );
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+            }
+            AppEvent::ApprovalGrantIssued(grant) => {
+                {
+                    let mut projection = self.projection();
+                    if !projection
+                        .grants
+                        .iter()
+                        .any(|existing| existing.id == grant.id)
+                    {
+                        projection.grants.push(grant.clone());
+                    }
+                }
+                self.window.set_approval_grants_loading(false);
+                self.window
+                    .set_approval_grants_error(SharedString::default());
+                self.window
+                    .set_verification_approve_pending(SharedString::default());
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+                self.push_activity(
+                    "Grant recorded",
+                    format!(
+                        "{} | {}",
+                        grant.capability.label(),
+                        grant_scope_label(grant.scope)
+                    ),
+                    "complete",
+                );
+            }
+            AppEvent::ApprovalGrantRevoked { grant_id, .. } => {
+                {
+                    let mut projection = self.projection();
+                    projection.grants.retain(|grant| grant.id != *grant_id);
+                }
+                self.window
+                    .set_approval_grant_pending(SharedString::default());
+                self.refresh_approval_grants();
+                self.refresh_verification_runners();
+                self.push_activity("Grant revoked", grant_id.to_string(), "neutral");
+            }
+            AppEvent::VerificationRunnersSnapshot { runners } => {
+                self.window
+                    .set_verification_runner_count(saturating_i32(runners.len() as u32));
+                self.window.set_verification_runners_loading(false);
+            }
+            AppEvent::VerificationRunnerInspectionSnapshot { runners } => {
+                self.projection().verification_runners = runners.clone();
+                self.window.set_verification_runners_loading(false);
+                self.window
+                    .set_verification_runners_error(SharedString::default());
+                self.refresh_verification_runners();
+            }
+            AppEvent::VerificationRunnerReviewSnapshot { review } => {
+                let scope = &review.input_scope;
+                let mut scope_detail = format!(
+                    "{} | {} | max {} files, {} bytes",
+                    review.cwd, scope.method, scope.max_files, scope.max_total_bytes
+                );
+                if scope.project_inputs.is_some() {
+                    scope_detail.push_str(" | project inputs reviewed");
+                }
+                if let Some(program_path) = &scope.program_path {
+                    scope_detail.push_str(&format!(" | program {program_path}"));
+                }
+                self.window
+                    .set_verification_review_runner(review.runner.id().into());
+                self.window.set_verification_review_command(
+                    format!("{} {}", review.program, review.args.join(" "))
+                        .trim()
+                        .into(),
+                );
+                self.window
+                    .set_verification_review_scope(scope_detail.into());
+                self.window
+                    .set_verification_review_binding(review.binding.0.clone().into());
+                self.window.set_verification_review_open(true);
+                self.window
+                    .set_verification_approve_pending(SharedString::default());
+            }
+            AppEvent::VerificationEvidenceSnapshot {
+                evidence,
+                freshness,
+            } => {
+                self.projection().verification_evidence = evidence.clone();
+                self.projection().verification_freshness = freshness.clone();
+                self.window.set_verification_evidence_loading(false);
+                self.window
+                    .set_verification_evidence_error(SharedString::default());
+                self.refresh_verification_evidence();
+            }
+            AppEvent::SessionRowUpdated(row) => {
+                if let Some(workspace) = self.projection().workspace.as_mut() {
+                    if let Some(session) = workspace
+                        .sessions
+                        .iter_mut()
+                        .find(|session| session.id == row.id)
+                    {
+                        session.title = row.title.clone();
+                        session.pinned = row.pinned;
+                        session.archived = row.archived;
+                    }
+                }
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
+                self.refresh_session_items();
+            }
+            AppEvent::SessionMetadataChanged {
+                session_id,
+                title,
+                pinned,
+                archived,
+            } => {
+                if let Some(workspace) = self.projection().workspace.as_mut() {
+                    if let Some(session) = workspace
+                        .sessions
+                        .iter_mut()
+                        .find(|session| session.id == *session_id)
+                    {
+                        session.title = title.clone();
+                        session.pinned = *pinned;
+                        session.archived = *archived;
+                    }
+                }
+                self.window.set_session_action_pending(false);
+                self.window
+                    .set_session_action_error(SharedString::default());
+                self.window.set_session_actions_open(false);
+                self.refresh_session_items();
+            }
+            AppEvent::SessionListLoaded(snapshot) => {
+                let rows = snapshot
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        let detail = if row.selected {
+                            "Current".to_owned()
+                        } else if row.pinned {
+                            "Pinned session".to_owned()
+                        } else if row.archived {
+                            "Archived session".to_owned()
+                        } else {
+                            "Saved session".to_owned()
+                        };
+                        SessionItemView {
+                            id: row.id.to_string().into(),
+                            title: row.title.clone().into(),
+                            detail: detail.into(),
+                            active: row.selected,
+                            pinned: row.pinned,
+                            archived: row.archived,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                self.window
+                    .set_session_items(ModelRc::new(VecModel::from(rows)));
+            }
+            AppEvent::PlatformAuthorityChanged(_)
+            | AppEvent::AnswerContractAccepted { .. }
+            | AppEvent::AnswerContractEvaluated { .. }
+            | AppEvent::ExecutionAuditRecorded(_)
+            | AppEvent::ExecutionAuditSnapshot { .. }
+            | AppEvent::VerificationEvidenceRecorded(_)
+            | AppEvent::OnboardingSnapshotLoaded(_) => {}
+            AppEvent::UiPreferencesLoaded {
+                preferences,
+                source,
+                summary,
+                undo,
+            } => {
+                workbench::apply_ui_change(
+                    &self.window,
+                    preferences,
+                    *source,
+                    summary,
+                    undo.as_deref(),
+                );
+                self.reconcile_first_run(preferences.first_run_complete);
+            }
+            AppEvent::ProviderUsageLoaded {
+                rows,
+                daily,
+                projects,
+            } => {
+                workbench::apply_provider_usage(&self.window, rows);
+                workbench::apply_usage_report(&self.window, daily, projects);
+            }
+            AppEvent::GitStatusLoaded(snapshot) => {
+                workbench::apply_git_status(&self.window, snapshot);
+            }
+            AppEvent::GitDiffLoaded(snapshot) => {
+                workbench::apply_git_diff(&self.window, snapshot);
+            }
+            AppEvent::BrowserPageLoaded(page) => {
+                workbench::apply_browser_page(&self.window, page);
+            }
+            AppEvent::LayoutChanged(profile) => {
+                let active_inspector = profile.active_inspector.map(surface_id).unwrap_or_default();
+                let module_disabled = (active_inspector == "activity"
+                    && !self.window.get_activity_module_enabled())
+                    || (active_inspector == "trajectory"
+                        && !self.window.get_trajectory_module_enabled());
+                let trajectory_active = !profile.inspector_collapsed
+                    && !module_disabled
+                    && profile.active_inspector == Some(SurfaceId::Trajectory);
+                if trajectory_active
+                    && (self.window.get_inspector_collapsed()
+                        || self.window.get_active_inspector().as_str() != "trajectory")
+                {
+                    self.window.set_trajectory_loading(true);
+                    self.window.set_trajectory_error(SharedString::default());
+                } else if !trajectory_active {
+                    self.window.set_trajectory_loading(false);
+                }
+                self.window.set_active_inspector(active_inspector.into());
+                self.window
+                    .set_inspector_collapsed(profile.inspector_collapsed || module_disabled);
+            }
+        }
+    }
+
+    pub fn apply_command_failure(&self, command: &AppCommand, message: &str) {
+        match command {
+            AppCommand::SaveProviderBudget { .. } | AppCommand::ResetProviderBudget { .. } => {
+                self.window.set_provider_budget_pending(false);
+                self.window
+                    .set_provider_budget_error(present_error(message).into());
+            }
+            AppCommand::SaveProviderContext { .. } => {
+                self.window.set_provider_context_pending(false);
+                self.window
+                    .set_provider_context_error(present_error(message).into());
+            }
+            AppCommand::ListProviderProfiles
+            | AppCommand::SaveProviderProfile { .. }
+            | AppCommand::SelectProviderProfile { .. }
+            | AppCommand::ProbeProvider { .. } => {
+                let pending = self.window.get_provider_pending().to_string();
+                let expected = match command {
+                    AppCommand::ListProviderProfiles => "list",
+                    AppCommand::SaveProviderProfile { .. } => "save",
+                    AppCommand::SelectProviderProfile { .. } => "select",
+                    AppCommand::ProbeProvider { .. } => "probe",
+                    _ => unreachable!("provider profile command matched above"),
+                };
+                if pending != expected {
+                    return;
+                }
+                let presented = present_error(message);
+                self.window.set_provider_error(presented.clone().into());
+                self.window.set_provider_notice(SharedString::default());
+                self.window.set_provider_loading(false);
+                self.window.set_provider_saving(false);
+                self.window.set_provider_selecting(false);
+                self.window.set_provider_testing(false);
+                self.window.set_provider_pending(SharedString::default());
+                if pending == "probe" {
+                    self.window.set_provider_probe_state("failed".into());
+                }
+                self.push_activity(provider_error_title(&pending), presented, "error");
+            }
+            AppCommand::ListProviderModels { provider_id }
+                if self.window.get_provider_models_provider_id().as_str() == provider_id
+                    && self.window.get_provider_models_pending().as_str() == "list" =>
+            {
+                let presented = present_error(message);
+                self.window.set_provider_models_error(presented.into());
+                self.window.set_provider_models_loading(false);
+                self.window
+                    .set_provider_models_pending(SharedString::default());
+            }
+            AppCommand::SelectProviderModel { provider_id, .. }
+                if self.window.get_provider_id().as_str() == provider_id
+                    && self.window.get_provider_models_pending().as_str() == "select" =>
+            {
+                let presented = present_error(message);
+                self.window.set_provider_models_error(presented.into());
+                self.window.set_provider_model_selecting(false);
+                self.window
+                    .set_provider_models_pending(SharedString::default());
+            }
+            AppCommand::ListHarnessState
+            | AppCommand::SetLocalBackendEnabled { .. }
+            | AppCommand::SetHarnessModule { .. }
+            | AppCommand::SelectHarnessProfile { .. }
+            | AppCommand::SelectExecutionProfile { .. }
+            | AppCommand::SetHarnessCapabilityEnabled { .. } => {
+                self.window.set_harness_loading(false);
+                self.window.set_harness_pending(SharedString::default());
+                self.window.set_harness_error(present_error(message).into());
+            }
+            AppCommand::UpdateUiPreferences { .. } => {
+                self.window.set_ui_error(present_error(message).into());
+            }
+            AppCommand::LoadProviderUsage => {
+                self.window.set_usage_state("error".into());
+                self.window.set_usage_message(present_error(message).into());
+            }
+            AppCommand::RefreshGitStatus | AppCommand::LoadGitFileDiff { .. } => {
+                self.window.set_git_state("error".into());
+                self.window.set_git_message(present_error(message).into());
+            }
+            AppCommand::BrowserNavigate { .. } => {
+                self.window.set_browser_state("error".into());
+                self.window
+                    .set_browser_message(present_error(message).into());
+            }
+            AppCommand::SetSurfaceVisibility { surface, visible } => {
+                self.window.set_harness_loading(false);
+                self.window.set_harness_pending(SharedString::default());
+                self.window.set_harness_error(present_error(message).into());
+                if *surface == SurfaceId::Trajectory && *visible {
+                    self.window.set_trajectory_loading(false);
+                    self.window
+                        .set_trajectory_error(present_error(message).into());
+                }
+            }
+            AppCommand::SetInspectorSurface { surface } => {
+                self.window.set_harness_loading(false);
+                self.window.set_harness_pending(SharedString::default());
+                self.window.set_harness_error(present_error(message).into());
+                if *surface == Some(SurfaceId::Trajectory) {
+                    self.window.set_trajectory_loading(false);
+                    self.window
+                        .set_trajectory_error(present_error(message).into());
+                }
+            }
+            AppCommand::LoadTrajectory { session_id }
+                if session_id.is_none() || *session_id == self.active_session_id() =>
+            {
+                self.window.set_trajectory_loading(false);
+                self.window
+                    .set_trajectory_error(present_error(message).into());
+            }
+            AppCommand::LoadChangeSet { .. } => {
+                self.window
+                    .set_change_summary(present_error(message).into());
+            }
+            AppCommand::LoadUnifiedDiff { file_change_id }
+                if self.window.get_selected_file_change_id().as_str()
+                    == file_change_id.to_string() =>
+            {
+                self.window.set_selected_diff_available(false);
+                self.window.set_selected_diff_truncated(false);
+                self.window
+                    .set_selected_diff_reason(present_error(message).into());
+            }
+            AppCommand::RequestRestore { .. } => {
+                self.push_activity("Restore failed", present_error(message), "error");
+            }
+            AppCommand::LoadChangeRecovery
+            | AppCommand::RetryChangeRecovery { .. }
+            | AppCommand::RequestRecoveryRestore { .. } => {
+                self.window.set_recovery_required(true);
+                self.window
+                    .set_recovery_summary(present_error(message).into());
+            }
+            AppCommand::SubmitTask { .. } | AppCommand::SubmitGoalTask { .. }
+                if self.window.get_submission_pending() =>
+            {
+                self.window.set_submission_pending(false);
+                self.window.set_error_message(present_error(message).into());
+                self.window.set_run_state("Could not start".into());
+                self.window.set_running(false);
+            }
+            AppCommand::ApproveTool { .. } | AppCommand::RejectTool { .. }
+                if self.window.get_approval_response_pending() =>
+            {
+                self.window.set_approval_response_pending(false);
+                self.window.set_error_message(present_error(message).into());
+            }
+            AppCommand::SetGoal { .. }
+            | AppCommand::PauseGoal
+            | AppCommand::ResumeGoal
+            | AppCommand::ClearGoal
+            | AppCommand::ConfirmGoalReport { .. }
+            | AppCommand::DismissGoalReport { .. }
+                if self.window.get_goal_action_pending() =>
+            {
+                self.window.set_goal_action_pending(false);
+                self.window.global::<App>().set_goal_start_pending(false);
+                self.window.set_error_message(present_error(message).into());
+                self.push_activity("Goal action failed", present_error(message), "error");
+            }
+            _ => {}
+        }
+    }
+
+    pub fn apply_provider_credential_success(
+        &self,
+        provider_id: &str,
+        action: &str,
+        generation: i32,
+    ) {
+        if !self.provider_credential_operation_matches(provider_id, action, generation) {
+            return;
+        }
+        self.window
+            .set_provider_credential_configured(action == "save");
+        self.window
+            .set_provider_credential_draft(SharedString::default());
+        self.window.set_provider_credential_saving(false);
+        self.window.set_provider_credential_deleting(false);
+        self.window
+            .set_provider_credential_pending(SharedString::default());
+        self.window
+            .set_provider_credential_error(SharedString::default());
+        self.window.set_provider_credential_notice(
+            match action {
+                "save" => "Credential saved securely.",
+                "delete" => "Saved credential removed.",
+                _ => return,
+            }
+            .into(),
+        );
+    }
+
+    pub fn apply_provider_credential_failure(
+        &self,
+        provider_id: &str,
+        action: &str,
+        generation: i32,
+        _message: &str,
+    ) {
+        if !self.provider_credential_operation_matches(provider_id, action, generation) {
+            return;
+        }
+        self.window.set_provider_credential_saving(false);
+        self.window.set_provider_credential_deleting(false);
+        self.window
+            .set_provider_credential_pending(SharedString::default());
+        self.window.set_provider_credential_error(
+            "Argentum could not update the secure provider credential. Try again.".into(),
+        );
+        self.window
+            .set_provider_credential_notice(SharedString::default());
+        self.push_activity(
+            "Credential update failed",
+            "Argentum could not update the secure provider credential. Try again.",
+            "error",
+        );
+    }
+
+    fn provider_credential_operation_matches(
+        &self,
+        provider_id: &str,
+        action: &str,
+        generation: i32,
+    ) -> bool {
+        matches!(action, "save" | "delete")
+            && provider_credential_supported_id(
+                provider_id,
+                self.window.get_provider_kind().as_str(),
+            )
+            && self.window.get_provider_id().as_str() == provider_id
+            && self.window.get_provider_credential_pending().as_str() == action
+            && self.window.get_provider_credential_generation() == generation
+    }
+
+    fn apply_active_runs_snapshot(&self, runs: &[ActiveRunState]) {
+        {
+            let mut projection = self.projection();
+            projection.run_sessions.clear();
+            projection.pending_run_sessions.clear();
+            for run in runs {
+                projection.run_sessions.insert(run.run_id, run.session_id);
+            }
+        }
+
+        let active_session = self.active_session_id();
+        if let Some(run) = runs
+            .iter()
+            .find(|run| Some(run.session_id) == active_session)
+        {
+            self.window.set_active_run_id(run.run_id.to_string().into());
+            self.window.set_run_state(run.lifecycle.label().into());
+            self.window.set_running(is_active_lifecycle(run.lifecycle));
+            self.window.set_submission_pending(false);
+        } else {
+            self.window.set_active_run_id(SharedString::default());
+            self.window.set_running(false);
+            self.window.set_submission_pending(false);
+            if is_active_run_state(self.window.get_run_state().as_str()) {
+                self.window.set_run_state("Ready".into());
+            }
+        }
+    }
+
+    fn close_approval(&self) {
+        self.window.set_approval_open(false);
+        self.window.set_approval_response_pending(false);
+        self.window.set_approval_id(SharedString::default());
+        self.window.set_approval_action(SharedString::default());
+        self.window.set_approval_target(SharedString::default());
+        self.window.set_approval_reason(SharedString::default());
+    }
+
+    fn apply_provider_profiles(&self, profiles: &[ProviderProfile]) {
+        let pending = self.window.get_provider_pending().to_string();
+        let previous_id = self.window.get_provider_id().to_string();
+        let previous_endpoint = self.window.get_provider_endpoint().to_string();
+        let previous_model = self.window.get_provider_model().to_string();
+        let credentials = self.projection().provider_credentials.clone();
+        self.window
+            .set_provider_profiles(provider_profile_model_with_credentials(
+                profiles,
+                &credentials,
+            ));
+
+        if let Some(profile) = profiles.iter().find(|profile| profile.selected) {
+            // The first profile list after start is not a change: the shown
+            // conversation and its usage already belong to this profile.
+            let execution_target_changed = !previous_id.is_empty()
+                && (previous_id != profile.id
+                    || previous_endpoint != profile.endpoint
+                    || previous_model != profile.model);
+            let profile_changed = previous_id != profile.id
+                || previous_endpoint != profile.endpoint
+                || previous_model != profile.model
+                || matches!(pending.as_str(), "save" | "select");
+            self.window.set_provider_id(profile.id.clone().into());
+            self.window.set_provider_custom_draft(false);
+            self.window.set_provider_label(profile.label.clone().into());
+            self.window
+                .set_provider_kind(provider_kind_id(profile.kind).into());
+            self.window
+                .set_provider_kind_label(provider_kind_label(profile.kind).into());
+            self.window
+                .set_provider_endpoint(profile.endpoint.clone().into());
+            self.window.set_provider_model(profile.model.clone().into());
+            self.refresh_model_name();
+            self.window
+                .set_provider_draft_label(profile.label.clone().into());
+            self.window
+                .set_provider_draft_endpoint(profile.endpoint.clone().into());
+            self.window
+                .set_provider_draft_model(profile.model.clone().into());
+            let credential_supported = provider_credential_supported(profile);
+            self.window
+                .set_provider_credential_supported(credential_supported);
+            self.window.set_provider_credential_configured(
+                credential_supported && credentials.get(&profile.id).copied().unwrap_or(false),
+            );
+            if profile_changed {
+                self.window.set_provider_connected(false);
+                self.window.set_provider_probe_state("untested".into());
+                self.window
+                    .set_provider_detail(format!("Configured for {}", profile.model).into());
+                self.window
+                    .set_provider_credential_draft(SharedString::default());
+                self.window
+                    .set_provider_credential_error(SharedString::default());
+                self.window
+                    .set_provider_credential_notice(SharedString::default());
+                self.window.set_provider_budget_loading(true);
+                self.window
+                    .set_provider_budget_error(SharedString::default());
+                self.window
+                    .set_provider_budget_notice(SharedString::default());
+                self.window.set_provider_context_loading(true);
+                self.window
+                    .set_provider_context_error(SharedString::default());
+                self.window
+                    .set_provider_context_notice(SharedString::default());
+            }
+            if execution_target_changed {
+                self.reset_current_model_context();
+            }
+        } else {
+            self.window.set_provider_id(SharedString::default());
+            self.window.set_provider_label("No provider".into());
+            self.window.set_provider_kind("unknown".into());
+            self.window.set_provider_kind_label("Unavailable".into());
+            self.window.set_provider_endpoint(SharedString::default());
+            self.window.set_provider_model(SharedString::default());
+            self.refresh_model_name();
+            self.window
+                .set_provider_draft_label(SharedString::default());
+            self.window
+                .set_provider_draft_endpoint(SharedString::default());
+            self.window
+                .set_provider_draft_model(SharedString::default());
+            self.window.set_provider_connected(false);
+            self.window.set_provider_probe_state("untested".into());
+            self.window
+                .set_provider_detail("No profile selected".into());
+            self.window.set_provider_credential_supported(false);
+            self.window.set_provider_credential_configured(false);
+            self.window
+                .set_provider_credential_draft(SharedString::default());
+            self.window
+                .set_provider_credential_error(SharedString::default());
+            self.window
+                .set_provider_credential_notice(SharedString::default());
+            self.window.set_provider_budget_loading(false);
+            self.window.set_provider_budget_saved(false);
+            self.window
+                .set_provider_budget_error(SharedString::default());
+            self.window
+                .set_provider_budget_notice(SharedString::default());
+            self.window
+                .set_provider_budget_total(SharedString::default());
+            self.window
+                .set_provider_budget_input(SharedString::default());
+            self.window
+                .set_provider_budget_max_output(SharedString::default());
+            self.window
+                .set_provider_budget_requested_output(SharedString::default());
+            self.window
+                .set_provider_budget_uncertainty(SharedString::default());
+            self.window.set_provider_context_loading(false);
+            self.window.set_provider_context_available(false);
+            self.window.set_provider_context_tokens(0);
+            self.window.set_provider_context_choices(ModelRc::default());
+            self.window
+                .set_provider_context_error(SharedString::default());
+            self.window
+                .set_provider_context_notice(SharedString::default());
+        }
+
+        self.window
+            .set_provider_label_error(SharedString::default());
+        self.window
+            .set_provider_endpoint_error(SharedString::default());
+        self.window
+            .set_provider_model_error(SharedString::default());
+        self.window.set_provider_error(SharedString::default());
+        self.window.set_provider_error_consumes_next(false);
+        self.window.set_provider_notice(
+            match pending.as_str() {
+                "save" => "Profile saved. Test the connection to verify it.",
+                "select" => "Profile selected. Test the connection before starting a task.",
+                _ => "",
+            }
+            .into(),
+        );
+        match pending.as_str() {
+            "list" => self.window.set_provider_loading(false),
+            "save" => self.window.set_provider_saving(false),
+            "select" => self.window.set_provider_selecting(false),
+            _ => return,
+        }
+        self.window.set_provider_pending(SharedString::default());
+    }
+
+    fn apply_provider_models(
+        &self,
+        provider_id: &str,
+        models: &[ProviderModel],
+        selected_model: &str,
+        source: argentum_domain::ProviderCatalogSource,
+    ) {
+        if self.window.get_provider_models_provider_id().as_str() != provider_id {
+            return;
+        }
+        self.window
+            .global::<App>()
+            .set_provider_models_known(source == argentum_domain::ProviderCatalogSource::Known);
+        let pending = self.window.get_provider_models_pending().to_string();
+        self.window.set_provider_models(provider_model_view_model(
+            &self.window.get_provider_endpoint(),
+            models,
+            selected_model,
+        ));
+        match pending.as_str() {
+            "list" => self.window.set_provider_models_loading(false),
+            "select" => self.window.set_provider_model_selecting(false),
+            _ => {}
+        }
+        self.window
+            .set_provider_models_error(SharedString::default());
+
+        if pending == "select" && self.window.get_provider_id().as_str() == provider_id {
+            self.reset_current_model_context();
+            self.window.set_provider_model(selected_model.into());
+            self.refresh_model_name();
+            self.window.set_provider_draft_model(selected_model.into());
+            self.window.set_provider_connected(false);
+            self.window.set_provider_probe_state("untested".into());
+            self.window
+                .set_provider_detail(format!("Configured for {selected_model}").into());
+            self.window
+                .set_provider_notice("Model updated for this profile.".into());
+        }
+        if !pending.is_empty() {
+            self.window
+                .set_provider_models_pending(SharedString::default());
+        }
+        self.refresh_model_name();
+    }
+
+    /// The name on screen: what the server said it ran, or what is configured.
+    fn refresh_model_name(&self) {
+        let app = self.window.global::<App>();
+        let served = app.get_served_model();
+        let model = if served.is_empty() {
+            self.window.get_provider_model()
+        } else {
+            served
+        };
+        let mut name =
+            argentum_domain::model_display_name(&self.window.get_provider_endpoint(), &model);
+        if name == model.as_str()
+            && self.window.get_provider_models_provider_id() == self.window.get_provider_id()
+        {
+            let rows = self.window.get_provider_models();
+            if let Some(row) = (0..rows.row_count())
+                .filter_map(|index| rows.row_data(index))
+                .find(|row| row.id == model)
+            {
+                name = row.label.to_string();
+            }
+        }
+        app.set_provider_model_name(name.into());
+        app.set_thinking_available(!thinking_levels(&self.window).is_empty());
+    }
+
+    /// First run shows the provider chooser and nothing else. A workspace already
+    /// using another provider has made that choice, so it skips straight in.
+    fn reconcile_first_run(&self, complete: bool) {
+        let chose_provider = !self.window.get_provider_id().is_empty()
+            && self.window.get_provider_id().as_str() != argentum_domain::DEFAULT_PROVIDER_ID;
+        self.window.set_first_run_open(!complete && !chose_provider);
+    }
+
+    fn apply_harness_snapshot(&self, snapshot: &HarnessSnapshot) {
+        self.window
+            .set_diagnostics_enabled(snapshot.diagnostics.is_some());
+        if let Some(capture) = &snapshot.diagnostics {
+            self.window.set_diagnostics_detail(
+                format!(
+                    "{} captured; {} dropped{}",
+                    capture.recorded,
+                    capture.dropped,
+                    if capture.degraded {
+                        "; capture degraded"
+                    } else {
+                        ""
+                    }
+                )
+                .into(),
+            );
+            self.window
+                .set_diagnostic_records(ModelRc::new(VecModel::from(
+                    capture
+                        .records
+                        .iter()
+                        .rev()
+                        .take(32)
+                        .map(|record| DiagnosticRecordView {
+                            code: record.code.clone().into(),
+                            detail: format!(
+                                "{} UTC | {} | {}{}",
+                                record
+                                    .occurred_at
+                                    .format(format_description!("[hour]:[minute]:[second]"))
+                                    .unwrap_or_default(),
+                                record.level,
+                                record.component,
+                                record
+                                    .line
+                                    .map(|line| format!(":{line}"))
+                                    .unwrap_or_default()
+                            )
+                            .into(),
+                        })
+                        .collect::<Vec<_>>(),
+                )));
+        } else {
+            self.window.set_diagnostics_open(false);
+            self.window.set_diagnostics_detail(SharedString::default());
+            self.window
+                .set_diagnostic_records(ModelRc::new(VecModel::from(
+                    Vec::<DiagnosticRecordView>::new(),
+                )));
+        }
+        self.window
+            .set_local_backend_available(snapshot.local_backend.is_some());
+        if snapshot.local_backend.is_none() {
+            self.window.set_local_backend_toggle_supported(false);
+            self.window.set_local_backend_enabled(false);
+            self.window.set_local_backend_ready(false);
+            self.window
+                .set_local_backend_detail(SharedString::default());
+        }
+        if let Some(backend) = &snapshot.local_backend {
+            self.window.set_local_backend_ready(
+                backend.enabled && !backend.changing && !backend.recovery_pending,
+            );
+            if backend.id == "llama.cpp.android" && (!backend.enabled || backend.recovery_pending) {
+                self.window.set_local_inference_active(false);
+                self.window.set_local_inference_busy(false);
+                self.window
+                    .set_local_inference_detail(if backend.recovery_pending {
+                        "Backend cleanup is pending. Retry disabling it before loading a model."
+                            .into()
+                    } else {
+                        "Backend disabled. Enable it before loading a model.".into()
+                    });
+            } else if backend.id == "llama.cpp.android"
+                && backend.enabled
+                && !backend.changing
+                && !self.window.get_local_inference_active()
+                && !self.window.get_local_inference_busy()
+            {
+                self.window
+                    .set_local_inference_detail("Backend enabled. No model is loaded.".into());
+            }
+            self.window.set_local_backend_enabled(backend.enabled);
+            self.window
+                .set_local_backend_toggle_supported(backend.toggle_supported && !backend.changing);
+            self.window
+                .set_local_backend_detail(if backend.recovery_pending {
+                    "Backend cleanup is incomplete. Retry disabling it.".into()
+                } else if backend.changing {
+                    "Waiting for active operations and changing backend.".into()
+                } else {
+                    backend.detail.clone().into()
+                });
+        }
+        self.window.set_harness_modules(ModelRc::new(VecModel::from(
+            snapshot
+                .modules
+                .iter()
+                .map(|module| HarnessModuleView {
+                    id: module.id.clone().into(),
+                    label: module.label.clone().into(),
+                    detail: module.detail.clone().into(),
+                    installed: module.installed,
+                    enabled: module.enabled,
+                    recovery_pending: module.recovery_pending,
+                })
+                .collect::<Vec<_>>(),
+        )));
+        if let Some(module) = snapshot
+            .modules
+            .iter()
+            .find(|m| m.id == "first-party.activity")
+        {
+            self.window.set_activity_module_enabled(module.enabled);
+            if !module.enabled {
+                self.window.set_activity_items(ModelRc::new(VecModel::from(
+                    Vec::<ActivityItemView>::new(),
+                )));
+                self.window.set_activity_summary("Activity disabled".into());
+                if self.window.get_active_inspector() == "activity" {
+                    self.window.set_inspector_collapsed(true);
+                }
+            }
+        }
+        if let Some(module) = snapshot
+            .modules
+            .iter()
+            .find(|m| m.id == "first-party.trajectory")
+        {
+            self.window.set_trajectory_module_enabled(module.enabled);
+            if !module.enabled {
+                self.window.set_trajectory_items(empty_trajectory_model());
+                self.window
+                    .set_trajectory_summary("Session trajectory disabled".into());
+                self.window.set_trajectory_loading(false);
+                if self.window.get_active_inspector() == "trajectory" {
+                    self.window.set_inspector_collapsed(true);
+                }
+            }
+        }
+        self.window
+            .set_harness_profile_id(snapshot.selected_profile_id.clone().into());
+        self.window
+            .set_harness_profiles(harness_profile_model(&snapshot.profiles));
+        self.window
+            .set_execution_profile_id(snapshot.selected_execution_profile_id.clone().into());
+        self.window
+            .set_harness_execution_profiles(harness_execution_profile_model(
+                &snapshot.execution_profiles,
+            ));
+        let selected_label = snapshot
+            .execution_profiles
+            .iter()
+            .find(|profile| profile.selected)
+            .map(|profile| profile.label.as_str())
+            .unwrap_or("Custom");
+        self.window
+            .set_execution_profile_label(selected_label.into());
+        self.window
+            .set_harness_surfaces(harness_surface_model(&snapshot.surfaces));
+        self.window
+            .set_inspector_modes(inspector_mode_model(&snapshot.surfaces));
+        self.window
+            .set_harness_capabilities(harness_capability_model(&snapshot.capabilities));
+        workbench::apply_harness_modules(&self.window, snapshot);
+        self.window.set_harness_loading(false);
+        self.window.set_harness_pending(SharedString::default());
+        self.window.set_harness_error(SharedString::default());
+    }
+
+    fn apply_trajectory_snapshot(&self, snapshot: &TrajectorySnapshot) {
+        if !self.window.get_trajectory_module_enabled() {
+            return;
+        }
+        if self.active_session_id() != Some(snapshot.session_id) {
+            return;
+        }
+        self.window
+            .set_trajectory_items(trajectory_item_model(snapshot));
+        self.window
+            .set_trajectory_summary(trajectory_summary_label(snapshot.entries.len()).into());
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_truncated(snapshot.truncated);
+        self.window.set_trajectory_error(SharedString::default());
+    }
+
+    fn append_trajectory_entry(&self, session_id: SessionId, entry: &TrajectoryEntry) {
+        if !self.window.get_trajectory_module_enabled() {
+            return;
+        }
+        if self.active_session_id() != Some(session_id) {
+            return;
+        }
+        let sequence = entry.sequence.to_string();
+        let current = self.window.get_trajectory_items();
+        if (0..current.row_count()).any(|row| {
+            current
+                .row_data(row)
+                .is_some_and(|item| item.sequence.as_str() == sequence)
+        }) {
+            return;
+        }
+        let mut items = (0..current.row_count())
+            .filter_map(|row| current.row_data(row))
+            .collect::<Vec<_>>();
+        items.push(trajectory_item_view(entry));
+        items.sort_by_key(|item| item.sequence.as_str().parse::<u64>().unwrap_or(u64::MAX));
+        let truncated =
+            self.window.get_trajectory_truncated() || items.len() > MAX_TRAJECTORY_ITEMS;
+        if items.len() > MAX_TRAJECTORY_ITEMS {
+            items.drain(..items.len() - MAX_TRAJECTORY_ITEMS);
+        }
+        let count = items.len();
+        self.window
+            .set_trajectory_items(ModelRc::new(VecModel::from(items)));
+        self.window
+            .set_trajectory_summary(trajectory_summary_label(count).into());
+        self.window.set_trajectory_truncated(truncated);
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_error(SharedString::default());
+    }
+
+    fn refresh_session_items(&self) {
+        let projection = self.projection();
+        let Some(snapshot) = projection.workspace.as_ref() else {
+            return;
+        };
+        let query = self.window.get_session_query().to_string();
+        let filter = session_filter_from_id(self.window.get_session_filter().as_str());
+        let model = session_item_model(snapshot, &query, filter);
+        drop(projection);
+        self.window.set_session_items(model);
+    }
+
+    fn refresh_approval_grants(&self) {
+        let projection = self.projection();
+        let model = approval_grant_model(&projection.grants);
+        drop(projection);
+        self.window.set_approval_grants(model);
+    }
+
+    fn refresh_verification_runners(&self) {
+        let projection = self.projection();
+        let model = verification_runner_model(&projection.verification_runners, &projection.grants);
+        drop(projection);
+        self.window.set_verification_runners(model);
+    }
+
+    fn refresh_verification_evidence(&self) {
+        let projection = self.projection();
+        let model = verification_evidence_model(
+            &projection.verification_evidence,
+            &projection.verification_freshness,
+        );
+        let (state, summary) = verification_evidence_summary(
+            &projection.verification_evidence,
+            &projection.verification_freshness,
+        );
+        drop(projection);
+        self.window.set_verification_evidence(model);
+        self.window.set_verification_state(state.into());
+        self.window.set_verification_summary(summary.into());
+    }
+
+    fn reset_session_view(&self) {
+        self.window.set_user_prompt(SharedString::default());
+        self.window
+            .set_conversation_messages(empty_conversation_model());
+        self.window.global::<App>().set_session_tokens_used(0);
+        self.window.set_draft(SharedString::default());
+        self.window.set_transcript(SharedString::default());
+        self.window.set_live_blocks(ModelRc::default());
+        self.window.set_current_reasoning(SharedString::default());
+        self.window.set_current_reasoning_available(false);
+        self.window
+            .set_current_run_provider_label(SharedString::default());
+        self.window.set_current_run_model(SharedString::default());
+        self.reset_usage_projection();
+        self.window.set_error_message(SharedString::default());
+        self.window.set_run_state("Ready".into());
+        self.window.set_active_run_id(SharedString::default());
+        self.window.set_running(false);
+        self.window.set_submission_pending(false);
+        self.window.set_plan_summary("No stages yet".into());
+        self.window.set_plan_steps(empty_plan_model());
+        self.window.set_trajectory_items(empty_trajectory_model());
+        self.window
+            .set_trajectory_summary("No durable records".into());
+        self.window.set_trajectory_loading(false);
+        self.window.set_trajectory_truncated(false);
+        self.window.set_trajectory_error(SharedString::default());
+        self.reset_change_and_verification_state();
+        self.apply_goal_snapshot(None);
+        self.close_approval();
+    }
+
+    fn apply_goal_snapshot(&self, goal: Option<&Goal>) {
+        self.window.set_goal_available(goal.is_some());
+        self.window.set_goal_action_pending(false);
+        if let Some(goal) = goal {
+            self.window
+                .set_goal_objective(goal.objective.clone().into());
+            self.window.set_goal_draft(goal.objective.clone().into());
+            self.window.set_goal_id(goal.id.to_string().into());
+            self.window.set_goal_state(goal.lifecycle.label().into());
+            self.window.set_goal_lifecycle(goal.lifecycle.id().into());
+            self.window
+                .set_goal_progress_summary(goal_progress_summary(goal).into());
+            self.window
+                .set_goal_report_pending(goal.completion_report.is_some());
+            self.window.set_goal_report_summary(
+                goal.completion_report
+                    .as_ref()
+                    .map(|report| bounded_summary(&report.summary, 240))
+                    .unwrap_or_default()
+                    .into(),
+            );
+            self.window
+                .set_goal_next_action(goal.next_action.clone().into());
+            let (limits, run_limits) = goal.accounting.as_ref().map_or_else(
+                || {
+                    (
+                        "Goal: tokens unset | requests unset | iterations unset".to_owned(),
+                        "Run: tokens unset | requests unset | tools unset | seconds unset"
+                            .to_owned(),
+                    )
+                },
+                |account| {
+                    let per_run = &account.per_run;
+                    (
+                        format!(
+                            "Goal: tokens {} | requests {} | iterations {}",
+                            goal.token_budget
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            account
+                                .request_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            account
+                                .iteration_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                        ),
+                        format!(
+                            "Run: tokens {} | requests {} | tools {} | seconds {}",
+                            per_run
+                                .token_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .request_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .tool_limit
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                            per_run
+                                .elapsed_seconds
+                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                        ),
+                    )
+                },
+            );
+            self.window
+                .set_goal_limits_summary(bounded_summary(&limits, 72).into());
+            self.window
+                .set_goal_run_limits_summary(bounded_summary(&run_limits, 72).into());
+            let criteria = goal.acceptance.as_ref().map_or_else(
+                || "No criteria configured".to_owned(),
+                |acceptance| {
+                    let runners = acceptance
+                        .criteria
+                        .iter()
+                        .map(|criterion| criterion.runner.id())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!(
+                        "Criteria: {}",
+                        if runners.is_empty() { "none" } else { &runners }
+                    )
+                },
+            );
+            self.window
+                .set_goal_criteria_summary(bounded_summary(&criteria, 72).into());
+            self.window.set_goal_attestation_summary(
+                bounded_summary(
+                    &goal
+                        .owner_attestation
+                        .as_ref()
+                        .map(|attestation| format!("Attested: {}", attestation.summary))
+                        .unwrap_or_else(|| "No owner attestation".into()),
+                    60,
+                )
+                .into(),
+            );
+            self.window.set_goal_completion_summary(
+                bounded_summary(
+                    &goal
+                        .completion
+                        .as_ref()
+                        .map(|completion| format!("Delivered: {}", completion.statement))
+                        .unwrap_or_else(|| "Not delivered".into()),
+                    72,
+                )
+                .into(),
+            );
+            if let Some(account) = &goal.accounting {
+                self.window.set_goal_accounting_summary(
+                    format!(
+                        "Requests {} | tokens {} | reserved {} | unresolved {}",
+                        account.counters.request_attempts,
+                        account.counters.observed_tokens,
+                        account.counters.outstanding_tokens,
+                        account.counters.unresolved_tokens,
+                    )
+                    .into(),
+                );
+            } else {
+                self.window
+                    .set_goal_accounting_summary("No accounting recorded".into());
+            }
+            self.window
+                .set_goal_iteration(saturating_i32_u64(u64::from(goal.iteration)));
+            self.window
+                .set_goal_tokens_used(saturating_i32_u64(goal.tokens_used));
+            self.window
+                .set_goal_token_budget_reported(goal.token_budget.is_some());
+            self.window
+                .set_goal_token_budget(goal.token_budget.map_or(0, saturating_i32_u64));
+            self.window
+                .set_goal_tools_used(saturating_i32_u64(u64::from(goal.tools_used)));
+            self.window
+                .set_goal_tool_budget_reported(goal.tool_budget.is_some());
+            self.window.set_goal_tool_budget(
+                goal.tool_budget
+                    .map_or(0, |budget| saturating_i32_u64(u64::from(budget))),
+            );
+            self.window
+                .set_goal_time_budget_reported(goal.time_budget_seconds.is_some());
+            self.window.set_goal_time_budget_seconds(
+                goal.time_budget_seconds.map_or(0, saturating_i32_u64),
+            );
+            self.window.set_goal_verification_count(
+                goal.verification_history.len().min(i32::MAX as usize) as i32,
+            );
+        } else {
+            self.window.set_goal_objective(SharedString::default());
+            self.window.set_goal_draft(SharedString::default());
+            self.window.set_goal_id(SharedString::default());
+            self.window.set_goal_state(SharedString::default());
+            self.window.set_goal_lifecycle(SharedString::default());
+            self.window
+                .set_goal_progress_summary(SharedString::default());
+            self.window.set_goal_report_pending(false);
+            self.window.set_goal_report_summary(SharedString::default());
+            self.window.set_goal_next_action(SharedString::default());
+            self.window
+                .set_goal_accounting_summary("No accounting recorded".into());
+            self.window
+                .set_goal_limits_summary("No goal limits reported".into());
+            self.window
+                .set_goal_run_limits_summary("No per-run limits reported".into());
+            self.window
+                .set_goal_criteria_summary("No criteria configured".into());
+            self.window
+                .set_goal_attestation_summary("No owner attestation".into());
+            self.window
+                .set_goal_completion_summary("Not delivered".into());
+            self.window
+                .set_goal_invocation_state("No supervision invocation".into());
+            self.window
+                .set_goal_invocation_next_action(SharedString::default());
+            self.window.set_goal_iteration(0);
+            self.window.set_goal_tokens_used(0);
+            self.window.set_goal_token_budget(0);
+            self.window.set_goal_token_budget_reported(false);
+            self.window.set_goal_tools_used(0);
+            self.window.set_goal_tool_budget(0);
+            self.window.set_goal_tool_budget_reported(false);
+            self.window.set_goal_time_budget_seconds(0);
+            self.window.set_goal_time_budget_reported(false);
+            self.window.set_goal_verification_count(0);
+        }
+        self.start_pending_goal_turn(goal);
+    }
+
+    /// After Set goal saves an active goal, starts a turn toward it, so the
+    /// agent begins working without a separate message.
+    fn start_pending_goal_turn(&self, goal: Option<&Goal>) {
+        let app = self.window.global::<App>();
+        if !app.get_goal_start_pending() {
+            return;
+        }
+        let Some(goal) = goal else {
+            app.set_goal_start_pending(false);
+            return;
+        };
+        if goal.lifecycle != GoalLifecycle::Active {
+            app.set_goal_start_pending(false);
+            return;
+        }
+        if self.window.get_running() || self.window.get_submission_pending() {
+            return;
+        }
+        app.set_goal_start_pending(false);
+        app.invoke_submit_task(goal_start_prompt(&goal.objective).into());
+    }
+
+    fn apply_goal_invocation(
+        &self,
+        invocation: Option<&argentum_domain::goal_supervision::GoalInvocationStatus>,
+    ) {
+        if let Some(invocation) = invocation {
+            self.window
+                .set_goal_invocation_state(format!("Supervision: {:?}", invocation.state).into());
+            self.window.set_goal_invocation_next_action(
+                invocation
+                    .stop_reason
+                    .clone()
+                    .unwrap_or_else(|| {
+                        format!(
+                            "attempts {} | criteria {} | elapsed {}s",
+                            invocation.attempts.len(),
+                            invocation.evaluated_criteria.len(),
+                            invocation.elapsed_seconds
+                        )
+                    })
+                    .into(),
+            );
+        } else {
+            self.window
+                .set_goal_invocation_state("No supervision invocation".into());
+            self.window
+                .set_goal_invocation_next_action(SharedString::default());
+        }
+    }
+
+    fn reset_usage_projection(&self) {
+        self.window.set_usage_reported(false);
+        self.window.set_usage_input_tokens(0);
+        self.window.set_usage_output_tokens(0);
+        self.window.set_usage_total_tokens(0);
+        self.window.set_context_window_reported(false);
+        self.window.set_context_window_tokens(0);
+    }
+
+    fn reset_current_model_context(&self) {
+        self.window.set_current_reasoning(SharedString::default());
+        self.window.set_current_reasoning_available(false);
+        self.window
+            .set_current_run_provider_label(SharedString::default());
+        self.window.set_current_run_model(SharedString::default());
+        self.window
+            .global::<App>()
+            .set_served_model(SharedString::default());
+        self.refresh_model_name();
+        self.reset_usage_projection();
+    }
+
+    fn reset_change_and_verification_state(&self) {
+        self.window.set_change_files(empty_file_change_model());
+        self.window.set_changed_files(0);
+        self.window.set_additions(0);
+        self.window.set_removals(0);
+        self.window.set_change_summary("No files changed".into());
+        self.window.set_verification_state("pending".into());
+        self.window
+            .set_verification_summary("No automated checks were run".into());
+        self.window
+            .set_selected_file_change_id(SharedString::default());
+        self.window
+            .set_selected_change_path(SharedString::default());
+        self.window.set_selected_diff(SharedString::default());
+        self.window.set_selected_diff_available(false);
+        self.window.set_selected_diff_truncated(false);
+        self.window
+            .set_selected_diff_reason("Select a file to load its diff.".into());
+        self.window.set_selected_restore_available(false);
+        self.window
+            .set_selected_restore_reason("Select a file to inspect restore availability.".into());
+    }
+
+    fn apply_change_set_snapshot(&self, snapshot: &ChangeSetSnapshot) {
+        self.window
+            .set_active_run_id(snapshot.run_id.to_string().into());
+        self.window
+            .set_change_files(file_change_model(&snapshot.files, None));
+        self.window
+            .set_changed_files(saturating_i32(snapshot.files.len() as u32));
+        self.window
+            .set_additions(saturating_i32(snapshot.additions));
+        self.window.set_removals(saturating_i32(snapshot.removals));
+        let summary = change_summary(
+            snapshot.files.len() as u32,
+            snapshot.additions,
+            snapshot.removals,
+        );
+        self.window.set_change_summary(summary.clone().into());
+        self.window.set_verification_state("pending".into());
+        self.window
+            .set_verification_summary("Recorded changes require verification.".into());
+        self.push_activity("Changes loaded", summary, "neutral");
+    }
+
+    fn refresh_requests(&self) {
+        let app = self.window.global::<App>();
+        let projection = self.projection();
+        let log = &projection.requests;
+        let parts = log
+            .latest()
+            .map(|record| requests::context_parts(&record.accounting))
+            .unwrap_or_default();
+        app.set_context_parts(ModelRc::new(VecModel::from(
+            parts
+                .iter()
+                .map(|part| ContextPartView {
+                    label: part.label.into(),
+                    amount: format!("{} ({:.0}%)", part.amount, part.share * 100.0).into(),
+                    share: part.share,
+                })
+                .collect::<Vec<_>>(),
+        )));
+        app.set_request_context_summary(
+            log.latest()
+                .map(|record| {
+                    let accounting = &record.accounting;
+                    format!(
+                        "{} of {} usable, estimated in bytes. {}",
+                        accounting.accounted_input,
+                        accounting.usable_context,
+                        if accounting.fits {
+                            "It fits."
+                        } else {
+                            "It does not fit, so it was not sent."
+                        }
+                    )
+                })
+                .unwrap_or_default()
+                .into(),
+        );
+        let rows = log
+            .records()
+            .map(|record| RequestRowView {
+                clock: record.clock.clone().into(),
+                duration: record
+                    .duration_ms
+                    .map_or_else(String::new, |ms| {
+                        if ms >= 1000 {
+                            format!("{:.1}s", ms as f64 / 1000.0)
+                        } else {
+                            format!("{ms} ms")
+                        }
+                    })
+                    .into(),
+                purpose: record.purpose.clone().into(),
+                endpoint: record.endpoint.clone().into(),
+                model: record.model.clone().into(),
+                outcome: match (record.status, record.attempts) {
+                    (Some(status), attempts) if attempts > 1 => {
+                        format!("{} (HTTP {status}, attempt {attempts})", record.outcome)
+                    }
+                    (Some(status), _) => format!("{} (HTTP {status})", record.outcome),
+                    (None, attempts) if attempts > 1 => {
+                        format!("{} (attempt {attempts})", record.outcome)
+                    }
+                    _ => record.outcome.clone(),
+                }
+                .into(),
+                failed: matches!(record.outcome.as_str(), "failed" | "exhausted" | "rejected"),
+                detail: record.detail.clone().into(),
+                tokens: match (record.input_tokens, record.output_tokens) {
+                    (Some(input), Some(output)) => match record.cached_tokens {
+                        Some(cached) if cached > 0 => {
+                            format!("in {input} ({cached} cached), out {output} tokens")
+                        }
+                        _ => format!("in {input}, out {output} tokens"),
+                    },
+                    _ => String::new(),
+                }
+                .into(),
+                tools: record.tools.join(", ").into(),
+            })
+            .collect::<Vec<_>>();
+        app.set_request_rows(ModelRc::new(VecModel::from(rows)));
+    }
+
+    fn apply_live_activity(&self, activity: &activity::RunActivity) {
+        let app = self.window.global::<App>();
+        app.set_live_steps(activity.details().into());
+        app.set_live_steps_title(activity.title().into());
+        app.set_live_additions(saturating_i32_u32(activity.additions()));
+        app.set_live_removals(saturating_i32_u32(activity.removals()));
+        app.set_live_changes(message_change_model(activity));
+    }
+
+    fn append_file_change(&self, record: &FileChangeRecord) {
+        let same_run = self.window.get_active_run_id().as_str() == record.run_id.to_string();
+        let current = self.window.get_change_files();
+        let mut rows = if same_run {
+            (0..current.row_count())
+                .filter_map(|row| current.row_data(row))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let already_present = rows
+            .iter()
+            .any(|row| row.id.as_str() == record.id.to_string());
+        if !already_present {
+            rows.push(file_change_view(record, false));
+        }
+        let additions = if same_run {
+            self.window.get_additions().max(0) as u32
+        } else {
+            0
+        }
+        .saturating_add(if already_present { 0 } else { record.additions });
+        let removals = if same_run {
+            self.window.get_removals().max(0) as u32
+        } else {
+            0
+        }
+        .saturating_add(if already_present { 0 } else { record.removals });
+        self.window
+            .set_active_run_id(record.run_id.to_string().into());
+        self.window
+            .set_change_files(ModelRc::new(VecModel::from(rows.clone())));
+        self.window
+            .set_changed_files(rows.len().min(i32::MAX as usize) as i32);
+        self.window.set_additions(saturating_i32(additions));
+        self.window.set_removals(saturating_i32(removals));
+        let summary = change_summary(rows.len() as u32, additions, removals);
+        self.window.set_change_summary(summary.clone().into());
+        self.window.set_verification_state("pending".into());
+        self.window
+            .set_verification_summary("Recorded changes require verification.".into());
+        self.push_activity(
+            "File change recorded",
+            record.relative_path.clone(),
+            "neutral",
+        );
+    }
+
+    fn finish_stage_projection(&self, lifecycle: TaskLifecycle) {
+        let current = self.window.get_plan_steps();
+        let rows = (0..current.row_count())
+            .filter_map(|row| current.row_data(row))
+            .map(|mut step| {
+                if lifecycle == TaskLifecycle::Complete {
+                    step.state = "complete".into();
+                } else if step.state == "active" {
+                    step.state = if lifecycle == TaskLifecycle::Failed {
+                        "blocked"
+                    } else {
+                        "upcoming"
+                    }
+                    .into();
+                }
+                step
+            })
+            .collect::<Vec<_>>();
+        self.window
+            .set_plan_steps(ModelRc::new(VecModel::from(rows)));
+    }
+
+    fn push_activity(
+        &self,
+        title: impl Into<SharedString>,
+        detail: impl Into<SharedString>,
+        state: impl Into<SharedString>,
+    ) {
+        if !self.window.get_activity_module_enabled() {
+            return;
+        }
+        let current = self.window.get_activity_items();
+        let start = current
+            .row_count()
+            .saturating_add(1)
+            .saturating_sub(MAX_ACTIVITY_ITEMS);
+        let mut items = (start..current.row_count())
+            .filter_map(|row| current.row_data(row))
+            .collect::<Vec<_>>();
+        let title = title.into();
+        self.window.set_activity_summary(title.clone());
+        items.push(ActivityItemView {
+            title,
+            detail: detail.into(),
+            state: state.into(),
+        });
+        self.window
+            .set_activity_items(ModelRc::new(VecModel::from(items)));
+    }
+}
+
+impl WeakUiHandle {
+    pub fn upgrade(&self) -> Option<UiHandle> {
+        self.window.upgrade().map(|window| UiHandle {
+            window: Rc::new(window),
+            projection: self.projection.clone(),
+        })
+    }
+}
+
+fn empty_plan_model() -> ModelRc<PlanStepView> {
+    ModelRc::new(VecModel::from(Vec::<PlanStepView>::new()))
+}
+
+fn empty_file_change_model() -> ModelRc<FileChangeView> {
+    ModelRc::new(VecModel::from(Vec::<FileChangeView>::new()))
+}
+
+fn file_change_model(
+    changes: &[FileChangeRecord],
+    selected: Option<FileChangeId>,
+) -> ModelRc<FileChangeView> {
+    ModelRc::new(VecModel::from(
+        changes
+            .iter()
+            .map(|change| file_change_view(change, selected == Some(change.id)))
+            .collect::<Vec<_>>(),
+    ))
+}
+
+fn file_change_view(change: &FileChangeRecord, selected: bool) -> FileChangeView {
+    let restore_available = change
+        .before
+        .as_ref()
+        .is_none_or(|snapshot| snapshot.retained);
+    FileChangeView {
+        id: change.id.to_string().into(),
+        path: change.relative_path.clone().into(),
+        kind: file_change_kind_label(change.kind).into(),
+        revision: i32::try_from(change.revision).unwrap_or(i32::MAX),
+        selected,
+        restore_available,
+        restore_reason: if restore_available {
+            SharedString::default()
+        } else {
+            "The exact pre-change snapshot was not retained within the safe size limit.".into()
+        },
+    }
+}
+
+fn empty_conversation_model() -> ModelRc<ConversationMessageView> {
+    ModelRc::new(VecModel::from(Vec::<ConversationMessageView>::new()))
+}
+
+fn empty_trajectory_model() -> ModelRc<TrajectoryItemView> {
+    ModelRc::new(VecModel::from(Vec::<TrajectoryItemView>::new()))
+}
+
+fn trajectory_item_model(snapshot: &TrajectorySnapshot) -> ModelRc<TrajectoryItemView> {
+    let rows = snapshot
+        .entries
+        .iter()
+        .map(trajectory_item_view)
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn trajectory_item_view(entry: &TrajectoryEntry) -> TrajectoryItemView {
+    TrajectoryItemView {
+        sequence: entry.sequence.to_string().into(),
+        title: entry.title.clone().into(),
+        detail: entry.detail.clone().into(),
+        state: trajectory_state_id(entry.state).into(),
+        kind: trajectory_kind_id(entry.kind).into(),
+        timestamp: entry
+            .occurred_at
+            .format(format_description!(
+                "[year]-[month]-[day] [hour]:[minute] UTC"
+            ))
+            .unwrap_or_else(|_| entry.occurred_at.unix_timestamp().to_string())
+            .into(),
+    }
+}
+
+fn trajectory_summary_label(count: usize) -> String {
+    match count {
+        0 => "No durable records".to_owned(),
+        1 => "1 durable record".to_owned(),
+        _ => format!("{count} durable records"),
+    }
+}
+
+const fn trajectory_kind_id(kind: TrajectoryKind) -> &'static str {
+    match kind {
+        TrajectoryKind::Task => "task",
+        TrajectoryKind::Plan => "plan",
+        TrajectoryKind::Lifecycle => "lifecycle",
+        TrajectoryKind::Tool => "tool",
+        TrajectoryKind::Approval => "approval",
+        TrajectoryKind::Usage => "usage",
+        TrajectoryKind::Change => "change",
+        TrajectoryKind::Verification => "verification",
+        TrajectoryKind::Error => "error",
+    }
+}
+
+const fn trajectory_state_id(state: TrajectoryState) -> &'static str {
+    match state {
+        TrajectoryState::Neutral => "neutral",
+        TrajectoryState::Active => "active",
+        TrajectoryState::Attention => "attention",
+        TrajectoryState::Success => "success",
+        TrajectoryState::Error => "error",
+        TrajectoryState::Cancelled => "cancelled",
+    }
+}
+
+/// Exposed for the visual QA example, which renders real message models.
+pub fn conversation_message_model_for_tools(
+    messages: &[argentum_domain::ConversationMessage],
+) -> ModelRc<ConversationMessageView> {
+    conversation_message_model(messages)
+}
+
+fn conversation_message_model(
+    messages: &[argentum_domain::ConversationMessage],
+) -> ModelRc<ConversationMessageView> {
+    conversation_message_model_with_steps(messages, &Default::default())
+}
+
+fn saturating_i32_u32(value: u32) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn message_change_model(activity: &activity::RunActivity) -> ModelRc<MessageChangeView> {
+    let rows = activity
+        .files
+        .iter()
+        .map(|(path, file)| MessageChangeView {
+            id: file.id.clone().into(),
+            path: path.clone().into(),
+            additions: saturating_i32_u32(file.additions),
+            removals: saturating_i32_u32(file.removals),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+/// The text between two UTF-8 byte offsets, widened to whole characters.
+fn selection_slice(text: &str, start: i32, end: i32) -> &str {
+    let clamp = |offset: i32| {
+        let mut offset = usize::try_from(offset.max(0)).unwrap_or(0).min(text.len());
+        while !text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        offset
+    };
+    let (start, end) = (clamp(start), clamp(end));
+    if start < end {
+        &text[start..end]
+    } else {
+        ""
+    }
+}
+
+/// A composer draft that quotes a selection, keeping anything already typed.
+fn quoted_draft(kind: &str, selected: &str, existing: &str) -> String {
+    let quote = selected
+        .trim()
+        .lines()
+        .map(|line| format!("> {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lead = if kind == "clarify" {
+        "Can you clarify this part?\n\n"
+    } else {
+        ""
+    };
+    let existing = existing.trim();
+    if existing.is_empty() {
+        format!("{lead}{quote}\n\n")
+    } else {
+        format!("{existing}\n\n{lead}{quote}\n\n")
+    }
+}
+
+fn conversation_message_model_with_steps(
+    messages: &[argentum_domain::ConversationMessage],
+    steps: &std::collections::BTreeMap<RunId, activity::RunActivity>,
+) -> ModelRc<ConversationMessageView> {
+    let rows = messages
+        .iter()
+        .map(|message| {
+            let usage = message.usage.as_ref();
+            let (text, tagged_reasoning) = match message.role {
+                ConversationRole::User => (message.text.clone(), String::new()),
+                ConversationRole::Assistant => split_tagged_reasoning(&message.text),
+            };
+            let mut reasoning = without_reasoning_markers(&message.reasoning);
+            if !tagged_reasoning.is_empty() && !reasoning.contains(&tagged_reasoning) {
+                if !reasoning.is_empty() {
+                    reasoning.push_str("\n\n");
+                }
+                reasoning.push_str(&tagged_reasoning);
+            }
+            let empty = activity::RunActivity::default();
+            let activity = if message.role == ConversationRole::Assistant {
+                steps.get(&message.run_id).unwrap_or(&empty)
+            } else {
+                &empty
+            };
+            ConversationMessageView {
+                steps: activity.details().into(),
+                steps_title: activity.title().into(),
+                additions: saturating_i32_u32(activity.additions()),
+                removals: saturating_i32_u32(activity.removals()),
+                changes: message_change_model(activity),
+                role: match message.role {
+                    ConversationRole::User => "user",
+                    ConversationRole::Assistant => "assistant",
+                }
+                .into(),
+                blocks: markdown::model(&text),
+                text: text.into(),
+                reasoning: reasoning.clone().into(),
+                reasoning_available: message.role == ConversationRole::Assistant
+                    && !reasoning.is_empty(),
+                provider_label: message.profile_id.clone().into(),
+                model: message.model.clone().into(),
+                usage_reported: usage.is_some(),
+                input_tokens: usage.map_or(0, |usage| saturating_i32_u64(usage.input_tokens)),
+                output_tokens: usage.map_or(0, |usage| saturating_i32_u64(usage.output_tokens)),
+                total_tokens: usage.map_or(0, |usage| saturating_i32_u64(usage.total_tokens)),
+                context_window_reported: usage
+                    .and_then(|usage| usage.context_window_tokens)
+                    .is_some(),
+                context_window_tokens: usage
+                    .and_then(|usage| usage.context_window_tokens)
+                    .map_or(0, saturating_i32_u64),
+                state: match message.status {
+                    ConversationMessageStatus::Complete => "Complete",
+                    ConversationMessageStatus::Interrupted => "Interrupted",
+                    ConversationMessageStatus::Failed => "Failed",
+                }
+                .into(),
+                meta: match message.role {
+                    ConversationRole::Assistant => reply_meta(message.created_at, usage),
+                    ConversationRole::User => String::new(),
+                }
+                .into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+/// Tokens a turn used: every request summed when recorded, otherwise the
+/// latest request.
+fn turn_tokens(usage: &argentum_domain::ModelUsage) -> u64 {
+    usage.turn_total.map_or(usage.total_tokens, |total| {
+        total.input_tokens.saturating_add(total.output_tokens)
+    })
+}
+
+fn session_tokens_used(messages: &[argentum_domain::ConversationMessage]) -> u64 {
+    messages
+        .iter()
+        .filter_map(|message| message.usage.as_ref())
+        .map(turn_tokens)
+        .fold(0, u64::saturating_add)
+}
+
+/// "14:32 - 12.4k tokens" in local time. An older day also shows its date.
+fn reply_meta(
+    received: time::OffsetDateTime,
+    usage: Option<&argentum_domain::ModelUsage>,
+) -> String {
+    use chrono::TimeZone;
+    let time = chrono::Local
+        .timestamp_opt(received.unix_timestamp(), 0)
+        .single()
+        .map(|local| {
+            if local.date_naive() == chrono::Local::now().date_naive() {
+                local.format("%H:%M").to_string()
+            } else {
+                local.format("%b %-d, %H:%M").to_string()
+            }
+        })
+        .unwrap_or_default();
+    match usage {
+        Some(usage) => format!(
+            "{time} \u{b7} {} tokens",
+            workbench::compact_count(turn_tokens(usage))
+        ),
+        None => time,
+    }
+}
+
+fn split_tagged_reasoning(text: &str) -> (String, String) {
+    const OPEN: &str = "<think>";
+    const CLOSE: &str = "</think>";
+
+    let mut remaining = text;
+    let mut visible = String::new();
+    let mut reasoning = String::new();
+    while let Some(open_index) = remaining.find(OPEN) {
+        visible.push_str(&remaining[..open_index]);
+        let hidden = &remaining[open_index + OPEN.len()..];
+        if !reasoning.is_empty() {
+            reasoning.push_str("\n\n");
+        }
+        let Some(close_index) = hidden.find(CLOSE) else {
+            reasoning.push_str(hidden);
+            remaining = "";
+            break;
+        };
+        reasoning.push_str(&hidden[..close_index]);
+        remaining = &hidden[close_index + CLOSE.len()..];
+    }
+    visible.push_str(&remaining.replace(CLOSE, ""));
+    (visible, reasoning)
+}
+
+fn without_reasoning_markers(text: &str) -> String {
+    text.replace("<think>", "").replace("</think>", "")
+}
+
+fn session_item_model(
+    snapshot: &argentum_domain::WorkspaceSnapshot,
+    query: &str,
+    filter: SessionArchiveFilter,
+) -> ModelRc<SessionItemView> {
+    let query = query.trim().to_lowercase();
+    let mut sessions = snapshot
+        .sessions
+        .iter()
+        .filter(|session| match filter {
+            SessionArchiveFilter::Active => !session.archived,
+            SessionArchiveFilter::Archived => session.archived,
+            SessionArchiveFilter::All => true,
+        })
+        .filter(|session| query.is_empty() || session.title.to_lowercase().contains(&query))
+        .collect::<Vec<_>>();
+    sessions.sort_by(|left, right| {
+        right
+            .pinned
+            .cmp(&left.pinned)
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+    });
+    let rows = sessions
+        .into_iter()
+        .map(|session| {
+            let active = Some(session.id) == snapshot.active_session_id;
+            let detail = if active {
+                "Current".to_owned()
+            } else if session.pinned {
+                "Pinned session".to_owned()
+            } else if session.archived {
+                "Archived session".to_owned()
+            } else {
+                "Saved session".to_owned()
+            };
+            SessionItemView {
+                id: session.id.to_string().into(),
+                title: session.title.clone().into(),
+                detail: detail.into(),
+                active,
+                pinned: session.pinned,
+                archived: session.archived,
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn session_filter_from_id(value: &str) -> SessionArchiveFilter {
+    match value {
+        "archived" => SessionArchiveFilter::Archived,
+        "all" => SessionArchiveFilter::All,
+        _ => SessionArchiveFilter::Active,
+    }
+}
+
+fn format_record_time(value: time::OffsetDateTime) -> String {
+    value
+        .format(format_description!(
+            "[year]-[month]-[day] [hour]:[minute] UTC"
+        ))
+        .unwrap_or_else(|_| value.unix_timestamp().to_string())
+}
+
+fn grant_scope_label(scope: GrantScope) -> &'static str {
+    match scope {
+        GrantScope::Action => "Action",
+        GrantScope::ToolCall => "Tool call",
+        GrantScope::Run => "Run",
+        GrantScope::Session => "Session",
+        GrantScope::Workspace => "Workspace",
+        GrantScope::PersistentProfile => "Profile",
+    }
+}
+
+fn grant_subject_label(subject: &GrantSubject) -> String {
+    match subject {
+        GrantSubject::Action {
+            tool_id, target, ..
+        } => {
+            format!("{tool_id} | {target}")
+        }
+        GrantSubject::ToolCall { tool_call_id } => format!("Tool call {tool_call_id}"),
+        GrantSubject::Run { run_id } => format!("Run {run_id}"),
+        GrantSubject::Session { session_id } => format!("Session {session_id}"),
+        GrantSubject::Workspace { project_id } => format!("Workspace {project_id}"),
+        GrantSubject::PersistentProfile { profile_id } => format!("Profile {profile_id}"),
+    }
+}
+
+fn grant_subject_binding(subject: &GrantSubject) -> String {
+    match subject {
+        GrantSubject::Action { binding, .. } => binding.0.clone(),
+        _ => String::new(),
+    }
+}
+
+fn request_scope_choices(scope: ApprovalScope) -> ModelRc<ApprovalScopeChoiceView> {
+    let mut choices = vec![scope];
+    for candidate in [ApprovalScope::Once, ApprovalScope::Session] {
+        if !choices.contains(&candidate) {
+            choices.push(candidate);
+        }
+    }
+    let rows = choices
+        .into_iter()
+        .map(|scope| ApprovalScopeChoiceView {
+            id: scope.id().into(),
+            label: match scope {
+                ApprovalScope::Once => "Once",
+                ApprovalScope::Session => "This session",
+                ApprovalScope::Action => "This action",
+                ApprovalScope::ToolCall => "This tool call",
+                ApprovalScope::Run => "This run",
+                ApprovalScope::Workspace => "This workspace",
+                ApprovalScope::PersistentProfile => "This profile",
+            }
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn approval_grant_model(grants: &[ApprovalGrantRecord]) -> ModelRc<ApprovalGrantView> {
+    let rows = grants
+        .iter()
+        .filter(|grant| grant.revoked_at.is_none())
+        .map(|grant| ApprovalGrantView {
+            id: grant.id.to_string().into(),
+            capability: grant.capability.label().into(),
+            scope: grant_scope_label(grant.scope).into(),
+            subject: grant_subject_label(&grant.subject).into(),
+            reason: grant.reason.clone().into(),
+            created: format_record_time(grant.created_at).into(),
+            binding: grant_subject_binding(&grant.subject).into(),
+            issuer: format!("{:?}", grant.issuer).into(),
+            expiry: grant
+                .expires_at
+                .map(format_record_time)
+                .unwrap_or_else(|| "No expiry".into())
+                .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn empty_record_line_model() -> ModelRc<RecordLineView> {
+    ModelRc::new(VecModel::from(Vec::<RecordLineView>::new()))
+}
+
+fn record_line_model(lines: &[RecordLine]) -> ModelRc<RecordLineView> {
+    let rows = lines
+        .iter()
+        .map(|line| RecordLineView {
+            label: line.label.clone().into(),
+            detail: line.detail.clone().into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+/// Tool summaries are written for the model and can run to a paragraph. The
+/// settings list shows the first sentence, cut at a word near 140 characters.
+fn short_summary(summary: &str) -> String {
+    const LIMIT: usize = 140;
+    let first = summary
+        .find(". ")
+        .or_else(|| summary.find("; "))
+        .map_or(summary, |end| &summary[..end]);
+    let first = first.trim().trim_end_matches('.');
+    if first.chars().count() <= LIMIT {
+        return first.to_owned();
+    }
+    let cut = first
+        .char_indices()
+        .nth(LIMIT)
+        .map_or(first.len(), |(index, _)| index);
+    let head = &first[..cut];
+    let head = head.rfind(' ').map_or(head, |space| &head[..space]);
+    format!("{}...", head.trim_end_matches([',', ';', ':']))
+}
+
+fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
+    let rows = tools
+        .iter()
+        .map(|tool| ToolCatalogView {
+            id: tool.id.clone().into(),
+            capability: tool.capability_id.clone().into(),
+            title: tool.title.clone().into(),
+            summary: short_summary(&tool.summary).into(),
+            risk: format!("{:?}", tool.risk).into(),
+            requires_approval: tool.requires_approval,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn skill_catalog_model(skills: &[SkillSummaryView]) -> ModelRc<SkillCatalogView> {
+    let rows = skills
+        .iter()
+        .map(|skill| SkillCatalogView {
+            name: skill.name.clone().into(),
+            description: skill.description.clone().into(),
+            relative_path: skill.relative_path.clone().into(),
+            valid: skill.valid,
+            error: skill.error.clone().into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_grant_for(grant: &ApprovalGrantRecord, runner_id: &str) -> bool {
+    if grant.revoked_at.is_some() {
+        return false;
+    }
+    matches!(
+        &grant.subject,
+        GrantSubject::Action { tool_id, target, .. }
+            if tool_id == "verify" && target == &format!("fixed runners: {runner_id}")
+    )
+}
+
+fn verification_runner_description(id: &str) -> Option<&'static str> {
+    Some(match id {
+        "cargo-fmt-check" => "Runs cargo fmt --check.",
+        "cargo-check-locked" => "Runs cargo check --locked.",
+        "cargo-test-locked" => "Runs cargo test --locked.",
+        "cargo-clippy-strict" => "Runs cargo clippy with warnings as errors.",
+        _ => return None,
+    })
+}
+
+fn verification_runner_model(
+    runners: &[VerificationRunnerInspection],
+    grants: &[ApprovalGrantRecord],
+) -> ModelRc<VerificationRunnerView> {
+    let rows = runners
+        .iter()
+        .map(|runner| {
+            let approved = grants
+                .iter()
+                .any(|grant| verification_grant_for(grant, &runner.id));
+            let state = if !runner.available {
+                "Unavailable"
+            } else if runner.approval_required && !approved {
+                "Approval required"
+            } else if runner.approval_required {
+                "Approved"
+            } else {
+                "Available"
+            };
+            // The definition digest has its own line, so this says what the
+            // runner is and does in words.
+            let detail = runner.reason.clone().unwrap_or_else(|| {
+                let origin = match runner.origin.as_str() {
+                    "built_in" => "Built in",
+                    "project" => "From this project",
+                    other => other,
+                };
+                match verification_runner_description(&runner.id) {
+                    Some(description) => format!("{origin}. {description}"),
+                    None => format!("{origin}."),
+                }
+            });
+            VerificationRunnerView {
+                id: runner.id.clone().into(),
+                origin: runner.origin.clone().into(),
+                state: state.into(),
+                detail: detail.into(),
+                available: runner.available,
+                approval_required: runner.approval_required,
+                approved,
+                definition: runner
+                    .definition_sha256
+                    .as_ref()
+                    .map(|digest| digest.0.clone())
+                    .unwrap_or_default()
+                    .into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_state_label(state: VerificationState) -> &'static str {
+    match state {
+        VerificationState::Passed => "Passed",
+        VerificationState::Failed => "Failed",
+        VerificationState::Cancelled => "Cancelled",
+        VerificationState::TimedOut => "Timed out",
+        VerificationState::SpawnFailed => "Could not start",
+        VerificationState::Stale => "Stale",
+    }
+}
+
+fn verification_evidence_model(
+    evidence: &[VerificationEvidence],
+    freshness: &[bool],
+) -> ModelRc<VerificationEvidenceView> {
+    let rows = evidence
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let fresh = freshness.get(index).copied().unwrap_or(false);
+            let detail = format!(
+                "{} | {} ms | exit {} | {}",
+                item.runner.id(),
+                item.duration_ms,
+                item.exit_code
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "none".into()),
+                if fresh {
+                    "current inputs"
+                } else {
+                    "inputs changed"
+                }
+            );
+            VerificationEvidenceView {
+                runner: item.runner.id().to_owned().into(),
+                state: verification_state_label(item.state).into(),
+                fresh,
+                detail: detail.into(),
+                recorded: format_record_time(item.started_at).into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn verification_evidence_summary(
+    evidence: &[VerificationEvidence],
+    freshness: &[bool],
+) -> (&'static str, String) {
+    if evidence.is_empty() {
+        return (
+            "not_run",
+            "No automated checks were recorded for this run.".to_owned(),
+        );
+    }
+    let mut failed = 0usize;
+    let mut fresh_passed = 0usize;
+    for (index, item) in evidence.iter().enumerate() {
+        let fresh = freshness.get(index).copied().unwrap_or(false);
+        match item.state {
+            VerificationState::Passed if fresh => fresh_passed += 1,
+            VerificationState::Passed => {}
+            _ => failed += 1,
+        }
+    }
+    if failed > 0 {
+        (
+            "failed",
+            format!(
+                "{failed} of {} recorded checks did not pass.",
+                evidence.len()
+            ),
+        )
+    } else if fresh_passed == evidence.len() {
+        (
+            "passed",
+            format!(
+                "All {} recorded checks passed on current inputs.",
+                evidence.len()
+            ),
+        )
+    } else {
+        (
+            "stale",
+            format!(
+                "{} recorded checks passed but their inputs changed.",
+                evidence.len()
+            ),
+        )
+    }
+}
+
+fn provider_profile_model_with_credentials(
+    profiles: &[ProviderProfile],
+    credentials: &HashMap<String, bool>,
+) -> ModelRc<ProviderProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| ProviderProfileView {
+            id: profile.id.clone().into(),
+            label: profile.label.clone().into(),
+            kind: provider_kind_id(profile.kind).into(),
+            kind_label: provider_kind_label(profile.kind).into(),
+            endpoint: profile.endpoint.clone().into(),
+            model: profile.model.clone().into(),
+            selected: profile.selected,
+            credential_supported: provider_credential_supported(profile),
+            credential_configured: provider_credential_supported(profile)
+                && credentials.get(&profile.id).copied().unwrap_or(false),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn provider_preset_view(preset: &ProviderPresetSummary) -> ProviderPresetView {
+    let credential = if preset.id == "chatgpt" {
+        "Browser sign-in (CLI-only in this build)".to_owned()
+    } else if let Some(variable) = &preset.api_key_env {
+        // Keys are saved in the system credential store. The environment
+        // variable is a desktop alternative and does not exist on Android.
+        if cfg!(target_os = "android") {
+            "API key".to_owned()
+        } else {
+            format!("API key or {variable}")
+        }
+    } else if preset.credential_profile_id.is_some() {
+        "Saved credential required".to_owned()
+    } else {
+        "No credential required".to_owned()
+    };
+    let group_label = match preset.group.as_str() {
+        "hosted" => "Hosted",
+        "aggregator" => "Aggregator",
+        "local" => "Local",
+        "custom" => "Custom",
+        _ => "Unsupported",
+    };
+    ProviderPresetView {
+        // First run shows what has been tested, plus ways to run a model yourself.
+        featured: preset.tested || matches!(preset.id.as_str(), "llama-cpp" | "openai-compatible"),
+        tested: preset.tested,
+        detail: if preset.notes.is_empty() {
+            credential.clone().into()
+        } else {
+            preset.notes.clone().into()
+        },
+        model: preset.default_model.clone().into(),
+        needs_key: preset.credential_profile_id.is_some(),
+        icon: if preset.local {
+            "hard-drive"
+        } else if preset.group == "custom" {
+            "globe"
+        } else {
+            "provider"
+        }
+        .into(),
+        id: preset.id.clone().into(),
+        label: preset.label.clone().into(),
+        kind: provider_kind_id(preset.kind).into(),
+        kind_label: provider_kind_label(preset.kind).into(),
+        endpoint: preset.endpoint.clone().unwrap_or_default().into(),
+        default_model: preset.default_model.clone().into(),
+        credential: credential.into(),
+        api_key_env: preset.api_key_env.clone().unwrap_or_default().into(),
+        docs_url: preset.docs_url.clone().into(),
+        group: preset.group.clone().into(),
+        group_label: group_label.into(),
+        local: preset.local,
+        supported: preset.supported,
+        notes: preset.notes.clone().into(),
+    }
+}
+
+fn provider_preset_model(presets: &[ProviderPresetSummary]) -> ModelRc<ProviderPresetView> {
+    let rows = presets.iter().map(provider_preset_view).collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn provider_preset_model_for_group(
+    presets: &[ProviderPresetSummary],
+    group: &str,
+) -> ModelRc<ProviderPresetView> {
+    let filtered = presets
+        .iter()
+        .filter(|preset| preset.group == group)
+        .cloned()
+        .collect::<Vec<_>>();
+    provider_preset_model(&filtered)
+}
+
+fn provider_context_choice_model(
+    choices: &[u32],
+    selected: u32,
+) -> ModelRc<ProviderContextChoiceView> {
+    let rows = choices
+        .iter()
+        .enumerate()
+        .map(|(index, tokens)| ProviderContextChoiceView {
+            tokens: *tokens as i32,
+            // The add-on starts with the smallest window, which is listed first.
+            label: if index == 0 {
+                format!("{}K (Default)", tokens / 1024)
+            } else {
+                format!("{}K", tokens / 1024)
+            }
+            .into(),
+            selected: *tokens == selected,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn desktop_tool_model(tools: &[DesktopToolSummary]) -> ModelRc<DesktopToolView> {
+    let rows = tools
+        .iter()
+        .map(|tool| DesktopToolView {
+            id: tool.id.clone().into(),
+            title: tool.title.clone().into(),
+            summary: tool.summary.clone().into(),
+            risk: tool.risk.clone().into(),
+            requires_approval: tool.requires_approval,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn provider_profile_view_model_with_credentials(
+    profiles: &[ProviderProfileView],
+    credentials: &HashMap<String, bool>,
+) -> ModelRc<ProviderProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| ProviderProfileView {
+            id: profile.id.clone(),
+            label: profile.label.clone(),
+            kind: profile.kind.clone(),
+            kind_label: profile.kind_label.clone(),
+            endpoint: profile.endpoint.clone(),
+            model: profile.model.clone(),
+            selected: profile.selected,
+            credential_supported: profile.credential_supported,
+            credential_configured: profile.credential_supported
+                && credentials
+                    .get(profile.id.as_str())
+                    .copied()
+                    .unwrap_or(profile.credential_configured),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn provider_model_view_model(
+    endpoint: &str,
+    models: &[ProviderModel],
+    selected_model: &str,
+) -> ModelRc<ProviderModelView> {
+    let rows = models
+        .iter()
+        .map(|model| ProviderModelView {
+            id: model.id.clone().into(),
+            label: {
+                let published = argentum_domain::model_display_name(endpoint, &model.id);
+                if published == model.id {
+                    model.label.clone().into()
+                } else {
+                    published.into()
+                }
+            },
+            context_window_tokens: model.context_window_tokens.map_or(0, saturating_i32_u64),
+            context_window_reported: model.context_window_tokens.is_some(),
+            selected: model.id == selected_model,
+            thinking_levels: model
+                .thinking_levels
+                .iter()
+                .map(|level| level.id())
+                .collect::<Vec<_>>()
+                .join(",")
+                .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+/// The effort levels the configured model supports: what the provider's list
+/// reported for it, or Argentum's known table before a list has loaded.
+fn thinking_levels(window: &MainWindow) -> Vec<argentum_domain::ThinkingMode> {
+    let model = window.get_provider_model();
+    if window.get_provider_models_provider_id() == window.get_provider_id() {
+        let rows = window.get_provider_models();
+        if let Some(row) = (0..rows.row_count())
+            .filter_map(|index| rows.row_data(index))
+            .find(|row| row.id == model)
+        {
+            return row
+                .thinking_levels
+                .split(',')
+                .filter_map(argentum_domain::ThinkingMode::from_id)
+                .filter(|level| *level != argentum_domain::ThinkingMode::Off)
+                .collect();
+        }
+    }
+    argentum_domain::known_thinking_levels(&window.get_provider_endpoint(), &model).to_vec()
+}
+
+fn harness_profile_model(profiles: &[HarnessProfileSummary]) -> ModelRc<HarnessProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| HarnessProfileView {
+            id: profile.id.clone().into(),
+            label: profile.label.clone().into(),
+            detail: profile.detail.clone().into(),
+            selected: profile.selected,
+            selectable: profile.selectable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn harness_execution_profile_model(
+    profiles: &[HarnessExecutionProfileSummary],
+) -> ModelRc<HarnessExecutionProfileView> {
+    let rows = profiles
+        .iter()
+        .map(|profile| HarnessExecutionProfileView {
+            id: profile.id.clone().into(),
+            label: profile.label.clone().into(),
+            detail: profile.detail.clone().into(),
+            selected: profile.selected,
+            selectable: profile.selectable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn harness_surface_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<HarnessSurfaceView> {
+    let rank = |surface: &&HarnessSurfaceState| {
+        if surface.availability != HarnessAvailability::Available {
+            3
+        } else {
+            match workbench::surface_group(surface.id) {
+                "core" => 0,
+                "shell" => 1,
+                _ => 2,
+            }
+        }
+    };
+    let mut ordered = surfaces.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(rank);
+    let rows = ordered
+        .into_iter()
+        .map(|surface| HarnessSurfaceView {
+            id: surface_id(surface.id).into(),
+            label: surface.label.clone().into(),
+            state: harness_surface_state(surface).into(),
+            detail: if surface.unavailable_reason.is_empty() {
+                surface.detail.clone()
+            } else {
+                surface.unavailable_reason.clone()
+            }
+            .into(),
+            visible: surface.visible,
+            configurable: surface.configurable,
+            icon: workbench::surface_icon(surface.id).into(),
+            group: workbench::surface_group(surface.id).into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn inspector_mode_model(surfaces: &[HarnessSurfaceState]) -> ModelRc<InspectorModeView> {
+    let rows = argentum_domain::INSPECTOR_SURFACE_ORDER
+        .iter()
+        .filter_map(|id| surfaces.iter().find(|surface| surface.id == *id))
+        .filter(|surface| surface.availability == HarnessAvailability::Available && surface.visible)
+        .map(|surface| InspectorModeView {
+            id: surface.id.id().into(),
+            label: surface.label.clone().into(),
+            icon: workbench::surface_icon(surface.id).into(),
+            detail: surface.detail.clone().into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn harness_capability_model(
+    capabilities: &[HarnessCapabilityState],
+) -> ModelRc<HarnessCapabilityView> {
+    let rows = capabilities
+        .iter()
+        .map(|capability| HarnessCapabilityView {
+            id: capability.id.clone().into(),
+            label: capability.label.clone().into(),
+            state: harness_capability_state(capability).into(),
+            detail: if capability.unavailable_reason.is_empty() {
+                capability.detail.clone()
+            } else {
+                capability.unavailable_reason.clone()
+            }
+            .into(),
+            enabled: capability.enabled,
+            configurable: capability.configurable,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn plan_step_model(steps: &[argentum_domain::PlanStep]) -> ModelRc<PlanStepView> {
+    let active_index = steps
+        .iter()
+        .position(|step| !step.complete && !step.blocked);
+    let rows = steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| PlanStepView {
+            index: i32::try_from(index.saturating_add(1)).unwrap_or(i32::MAX),
+            title: step.title.clone().into(),
+            detail: step.detail.clone().into(),
+            state: if step.blocked {
+                "blocked"
+            } else if step.complete {
+                "complete"
+            } else if active_index == Some(index) {
+                "active"
+            } else {
+                "upcoming"
+            }
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn stage_count_label(count: usize) -> String {
+    match count {
+        0 => "No stages".into(),
+        1 => "1 stage".into(),
+        _ => format!("{count} stages"),
+    }
+}
+
+const fn is_active_lifecycle(lifecycle: TaskLifecycle) -> bool {
+    matches!(
+        lifecycle,
+        TaskLifecycle::Queued
+            | TaskLifecycle::Planning
+            | TaskLifecycle::Running
+            | TaskLifecycle::WaitingForApproval
+            | TaskLifecycle::Reviewing
+            | TaskLifecycle::Verifying
+    )
+}
+
+fn is_active_run_state(label: &str) -> bool {
+    matches!(
+        label,
+        "Queued" | "Planning" | "Running" | "Waiting for approval" | "Reviewing" | "Verifying"
+    )
+}
+
+const fn lifecycle_activity_state(lifecycle: TaskLifecycle) -> &'static str {
+    match lifecycle {
+        TaskLifecycle::Complete => "success",
+        TaskLifecycle::Failed | TaskLifecycle::Cancelled => "error",
+        TaskLifecycle::WaitingForApproval | TaskLifecycle::Interrupted => "attention",
+        TaskLifecycle::Queued
+        | TaskLifecycle::Planning
+        | TaskLifecycle::Running
+        | TaskLifecycle::Reviewing
+        | TaskLifecycle::Verifying => "active",
+        TaskLifecycle::Draft | TaskLifecycle::Paused => "neutral",
+    }
+}
+
+fn tool_result_presentation(result: &ToolResultState) -> (&'static str, &'static str) {
+    match result {
+        ToolResultState::Running => ("is running", "active"),
+        ToolResultState::Succeeded => ("completed", "success"),
+        ToolResultState::Failed => ("failed", "error"),
+        ToolResultState::Cancelled => ("cancelled", "neutral"),
+        ToolResultState::NotExecuted => ("not executed", "neutral"),
+    }
+}
+
+fn saturating_i32(value: u32) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn saturating_i32_u64(value: u64) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+/// One short line for the goal panel: runs so far, then tokens and tools
+/// against their limits when the goal has them.
+fn goal_progress_summary(goal: &Goal) -> String {
+    let count = workbench::compact_count;
+    let mut parts = vec![match goal.iteration {
+        0 => "No runs yet".to_owned(),
+        1 => "1 run".to_owned(),
+        runs => format!("{runs} runs"),
+    }];
+    parts.push(match goal.token_budget {
+        Some(budget) => format!("{} of {} tokens", count(goal.tokens_used), count(budget)),
+        None => format!("{} tokens", count(goal.tokens_used)),
+    });
+    match goal.tool_budget {
+        Some(budget) => parts.push(format!("{} of {budget} tools", goal.tools_used)),
+        None if goal.tools_used > 0 => parts.push(format!("{} tools", goal.tools_used)),
+        None => {}
+    }
+    if let Some(seconds) = goal.time_budget_seconds {
+        parts.push(format!("{} min limit", seconds.div_ceil(60)));
+    }
+    let account_limited = goal.accounting.as_ref().is_some_and(|account| {
+        account.request_limit.is_some()
+            || account.iteration_limit.is_some()
+            || account.per_run.token_limit.is_some()
+            || account.per_run.request_limit.is_some()
+            || account.per_run.tool_limit.is_some()
+            || account.per_run.elapsed_seconds.is_some()
+    });
+    if goal.token_budget.is_none()
+        && goal.tool_budget.is_none()
+        && goal.time_budget_seconds.is_none()
+        && !account_limited
+    {
+        parts.push("no limits".to_owned());
+    }
+    parts.join(", ")
+}
+
+/// A goal budget field is unset when it is zero or negative. The store
+/// rejects zero limits, so zero must never reach it as a real limit.
+fn positive_budget(value: i32) -> Option<u64> {
+    (value > 0).then_some(value as u64)
+}
+
+/// The composer runs a task toward the session goal when the goal module is
+/// on and the goal is active. Otherwise it submits an ordinary task.
+fn goal_start_prompt(objective: &str) -> String {
+    format!("Start working on the session goal: {objective}")
+}
+
+fn composer_submission(window: &MainWindow, prompt: String) -> AppCommand {
+    let goal_id = window.get_goal_id();
+    let goal_active = window.global::<Mods>().get_goal()
+        && window.get_goal_available()
+        && window.get_goal_lifecycle() == GoalLifecycle::Active.id();
+    match goal_id.parse::<GoalId>() {
+        Ok(goal_id) if goal_active => AppCommand::SubmitGoalTask { goal_id, prompt },
+        _ => AppCommand::SubmitTask { prompt },
+    }
+}
+
+fn bounded_summary(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_owned();
+    }
+    let mut bounded = value
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    bounded.push_str("...");
+    bounded
+}
+
+fn change_summary(files_changed: u32, additions: u32, removals: u32) -> String {
+    if files_changed == 0 {
+        return "No files changed".into();
+    }
+    let file_label = if files_changed == 1 { "file" } else { "files" };
+    let _ = (additions, removals);
+    format!("{files_changed} {file_label} changed")
+}
+
+const fn file_change_kind_label(kind: FileChangeKind) -> &'static str {
+    match kind {
+        FileChangeKind::Added => "Added",
+        FileChangeKind::Modified => "Modified",
+        FileChangeKind::Deleted => "Deleted",
+    }
+}
+
+const fn recovery_state_label(state: ChangeRecoveryState) -> &'static str {
+    match state {
+        ChangeRecoveryState::Prepared => "prepared",
+        ChangeRecoveryState::Applied => "applied",
+        ChangeRecoveryState::Finalized => "finalized",
+        ChangeRecoveryState::NotApplied => "not applied",
+        ChangeRecoveryState::Conflicted => "conflicted",
+    }
+}
+
+const fn lifecycle_activity_title(lifecycle: TaskLifecycle) -> &'static str {
+    match lifecycle {
+        TaskLifecycle::Draft => "Task drafted",
+        TaskLifecycle::Queued => "Task queued",
+        TaskLifecycle::Planning => "Preparation started",
+        TaskLifecycle::Running => "Run started",
+        TaskLifecycle::WaitingForApproval => "Approval needed",
+        TaskLifecycle::Reviewing => "Review started",
+        TaskLifecycle::Verifying => "Checks started",
+        TaskLifecycle::Complete => "Run completed",
+        TaskLifecycle::Paused => "Run paused",
+        TaskLifecycle::Interrupted => "Run interrupted",
+        TaskLifecycle::Cancelled => "Run cancelled",
+        TaskLifecycle::Failed => "Run failed",
+    }
+}
+
+fn tool_label(tool_id: &str) -> &str {
+    match tool_id {
+        "read_text" => "Read file",
+        "write_text" => "Write file",
+        _ => "Tool",
+    }
+}
+
+fn present_error(message: &str) -> String {
+    if message == "no provider is configured" {
+        return "No model provider is configured.".into();
+    }
+    if message.contains("provider request failed")
+        || message.contains("provider stream")
+        || message.contains("connection")
+    {
+        return "Argentum could not reach the model provider. Check that it is running, then try again.".into();
+    }
+    if message.starts_with("context_token_capacity_exceeded") {
+        return "This request does not fit the model's context size. Start a new chat, compact this one, or raise the context size in Settings > Providers.".into();
+    }
+    if message.starts_with("context_budget_invalid: usable model limits are unknown") {
+        return "Argentum does not know how much this model can hold. Set its context size in Settings > Providers, under Budget and context.".into();
+    }
+    if message.contains("outside the workspace boundary") {
+        return "That path is outside the current workspace.".into();
+    }
+
+    let mut presented = message.trim().to_string();
+    if presented.is_empty() {
+        return "Argentum could not continue.".into();
+    }
+    if let Some(first) = presented.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    if !presented.ends_with(['.', '!', '?']) {
+        presented.push('.');
+    }
+    presented
+}
+
+const fn provider_kind_id(kind: ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::OpenAiCompatible => "openai-compatible",
+        ProviderKind::Anthropic => "anthropic",
+        ProviderKind::LocalLmStudio => "lm-studio",
+        ProviderKind::LocalLlamaCpp => "llama-cpp",
+        ProviderKind::Unknown => "unknown",
+    }
+}
+
+const fn provider_kind_label(kind: ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::OpenAiCompatible => "OpenAI compatible",
+        ProviderKind::Anthropic => "Anthropic",
+        ProviderKind::LocalLmStudio => "LM Studio",
+        ProviderKind::LocalLlamaCpp => "llama.cpp",
+        ProviderKind::Unknown => "Unavailable",
+    }
+}
+
+pub(crate) fn provider_kind_from_id(kind: &str) -> Option<ProviderKind> {
+    match kind {
+        "openai-compatible" => Some(ProviderKind::OpenAiCompatible),
+        "anthropic" => Some(ProviderKind::Anthropic),
+        "lm-studio" => Some(ProviderKind::LocalLmStudio),
+        "llama-cpp" => Some(ProviderKind::LocalLlamaCpp),
+        _ => None,
+    }
+}
+
+fn is_supported_provider_credential_id(provider_id: &str) -> bool {
+    argentum_domain::is_supported_hosted_credential_provider_id(provider_id)
+}
+
+fn provider_credential_supported(profile: &ProviderProfile) -> bool {
+    profile.kind == ProviderKind::OpenAiCompatible
+        && is_supported_provider_credential_id(&profile.id)
+}
+
+fn provider_credential_supported_id(provider_id: &str, kind: &str) -> bool {
+    // A saved key is bound to the catalog provider and its wire format.
+    let expected_kind = if provider_id == "anthropic" {
+        "anthropic"
+    } else {
+        "openai-compatible"
+    };
+    kind == expected_kind && is_supported_provider_credential_id(provider_id)
+}
+
+fn provider_status_id(status: &argentum_domain::ProviderStatus) -> String {
+    let profile_id = status.profile_id.trim();
+    if profile_id.is_empty() {
+        provider_kind_id(status.kind).into()
+    } else {
+        profile_id.into()
+    }
+}
+
+const fn surface_id(surface: SurfaceId) -> &'static str {
+    surface.id()
+}
+
+fn surface_from_id(surface: &str) -> Option<SurfaceId> {
+    SurfaceId::from_id(surface)
+}
+
+fn harness_surface_state(surface: &HarnessSurfaceState) -> &'static str {
+    match surface.availability {
+        HarnessAvailability::Unavailable => "unavailable",
+        HarnessAvailability::Available if surface.visible => "visible",
+        HarnessAvailability::Available if surface.configurable => "hidden",
+        HarnessAvailability::Available => "automatic",
+    }
+}
+
+fn harness_capability_state(capability: &HarnessCapabilityState) -> &'static str {
+    match capability.availability {
+        HarnessAvailability::Unavailable => "unavailable",
+        HarnessAvailability::Available if !capability.enabled => "disabled",
+        HarnessAvailability::Available => match capability.readiness {
+            HarnessReadiness::Ready => "ready",
+            HarnessReadiness::NeedsConfiguration => "needs configuration",
+            HarnessReadiness::NotVerified => "not verified",
+            HarnessReadiness::Blocked => "blocked",
+            HarnessReadiness::Unavailable => "unavailable",
+        },
+    }
+}
+
+fn provider_error_title(operation: &str) -> &'static str {
+    match operation {
+        "list" => "Could not load providers",
+        "save" => "Could not save provider",
+        "select" => "Could not select provider",
+        "probe" => "Connection failed",
+        _ => "Provider command failed",
+    }
+}
+
+fn validate_provider_label(value: &str) -> String {
+    validate_printable_field(value, 80, "Enter a profile name.", "Profile name")
+}
+
+fn validate_provider_model(value: &str) -> String {
+    validate_printable_field(value, 256, "Enter a model name.", "Model name")
+}
+
+fn validate_provider_credential(value: &str) -> String {
+    if value.trim().is_empty() {
+        return "Enter an API key.".into();
+    }
+    if value.len() > 16 * 1024 || value.chars().any(char::is_control) {
+        return "API key must be printable and no larger than 16 KiB.".into();
+    }
+    String::new()
+}
+
+fn validate_printable_field(
+    value: &str,
+    max_characters: usize,
+    empty_message: &str,
+    field_name: &str,
+) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return empty_message.into();
+    }
+    if value.chars().any(char::is_control) || value.chars().count() > max_characters {
+        return format!("{field_name} must use 1 to {max_characters} printable characters.");
+    }
+    String::new()
+}
+
+fn validate_provider_endpoint(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return "Enter an endpoint.".into();
+    }
+    if value.chars().any(char::is_control) {
+        return "Endpoint cannot contain control characters.".into();
+    }
+    let Ok(endpoint) = url::Url::parse(value) else {
+        return "Enter a valid http or https endpoint.".into();
+    };
+    if !matches!(endpoint.scheme(), "http" | "https") || endpoint.host_str().is_none() {
+        return "Enter a valid http or https endpoint.".into();
+    }
+    if !endpoint.username().is_empty()
+        || endpoint.password().is_some()
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+    {
+        return "Endpoint cannot include credentials, a query, or a fragment.".into();
+    }
+    String::new()
+}
+
+fn parse_provider_budget_limits(
+    total: &str,
+    input: &str,
+    maximum_output: &str,
+    requested_output: &str,
+    uncertainty: &str,
+) -> Result<[u64; 5], String> {
+    let parse = |label: &str, value: &str| {
+        value
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| format!("{label} must be a non-negative integer."))
+    };
+    let total = parse("Total context tokens", total)?;
+    let input = parse("Input limit tokens", input)?;
+    let maximum_output = parse("Maximum output tokens", maximum_output)?;
+    let requested_output = parse("Requested output tokens", requested_output)?;
+    let uncertainty = parse("Uncertainty tokens", uncertainty)?;
+    if total == 0 {
+        return Err("Total context tokens must be greater than zero.".into());
+    }
+    if input == 0 || input > total {
+        return Err(
+            "Input limit tokens must be greater than zero and no larger than total context tokens."
+                .into(),
+        );
+    }
+    if maximum_output == 0 || maximum_output >= total {
+        return Err("Maximum output tokens must be greater than zero and smaller than total context tokens.".into());
+    }
+    if maximum_output > u64::from(u32::MAX) || requested_output > u64::from(u32::MAX) {
+        return Err("Output token values exceed the supported 32-bit limit.".into());
+    }
+    if requested_output > maximum_output {
+        return Err("Requested output tokens cannot exceed maximum output tokens.".into());
+    }
+    if uncertainty < 128 {
+        return Err("Uncertainty tokens must be at least 128.".into());
+    }
+    if requested_output
+        .checked_add(uncertainty)
+        .is_none_or(|reserved| reserved >= total)
+    {
+        return Err(
+            "Requested output plus uncertainty must be smaller than total context tokens.".into(),
+        );
+    }
+    Ok([total, input, maximum_output, requested_output, uncertainty])
+}
+
+fn parse_goal_limits_csv(value: &str) -> Result<[u64; 9], String> {
+    let values = value
+        .split(',')
+        .map(|part| part.trim().parse::<u64>())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Limits require nine unsigned integers.".to_owned())?;
+    values
+        .try_into()
+        .map_err(|_| "Limits require GOAL_TOKENS,REQUESTS,ITERATIONS,TOOLS,SECONDS,RUN_TOKENS,RUN_REQUESTS,RUN_TOOLS,RUN_SECONDS.".to_owned())
+}
+
+fn parse_goal_runner(value: &str) -> Option<VerificationRunnerId> {
+    match value.trim() {
+        "cargo-fmt-check" => Some(VerificationRunnerId::CargoFmtCheck),
+        "cargo-check-locked" => Some(VerificationRunnerId::CargoCheckLocked),
+        "cargo-test-locked" => Some(VerificationRunnerId::CargoTestLocked),
+        "cargo-clippy-strict" => Some(VerificationRunnerId::CargoClippyStrict),
+        other if other.starts_with("project:") && other.len() > "project:".len() => Some(
+            VerificationRunnerId::Project(other["project:".len()..].to_owned()),
+        ),
+        _ => None,
+    }
+}
+
+pub fn connect_commands<F>(window: &MainWindow, dispatch: F)
+where
+    F: Fn(AppCommand) + 'static,
+{
+    let dispatch = Rc::new(dispatch);
+    {
+        let deferred_dispatch: Rc<dyn Fn(AppCommand)> = dispatch.clone();
+        DEFERRED.with(|deferred| deferred.borrow_mut().dispatch = Some(deferred_dispatch));
+    }
+    {
+        let workbench_dispatch = dispatch.clone();
+        workbench::connect(window, move |command| workbench_dispatch(command));
+    }
+
+    let submit_dispatch = dispatch.clone();
+    let submit_window = window.as_weak();
+    window.global::<App>().on_submit_task(move |prompt| {
+        let Some(window) = submit_window.upgrade() else {
+            return;
+        };
+        if window.get_submission_pending() {
+            return;
+        }
+        window.set_submission_pending(true);
+        submit_dispatch(composer_submission(&window, prompt.to_string()));
+    });
+
+    let cancel_dispatch = dispatch.clone();
+    window.global::<App>().on_cancel_run(move |run_id| {
+        let Ok(run_id) = run_id.to_string().parse() else {
+            warn!("cancel requested without a valid run id");
+            return;
+        };
+        cancel_dispatch(AppCommand::CancelRun { run_id });
+    });
+
+    let new_dispatch = dispatch.clone();
+    let thinking_dispatch = dispatch.clone();
+    let cycle_thinking_dispatch = thinking_dispatch.clone();
+    window.global::<App>().on_set_thinking_mode(move |mode| {
+        if let Some(mode) = argentum_domain::ThinkingMode::from_id(&mode) {
+            thinking_dispatch(AppCommand::SetThinkingMode { mode });
+        }
+    });
+    let cycle_thinking_window = window.as_weak();
+    window.global::<App>().on_cycle_thinking_mode(move || {
+        let Some(window) = cycle_thinking_window.upgrade() else {
+            return;
+        };
+        let levels = thinking_levels(&window);
+        if levels.is_empty() {
+            return;
+        }
+        let current =
+            argentum_domain::ThinkingMode::from_id(&window.global::<App>().get_thinking_mode())
+                .unwrap_or_default();
+        cycle_thinking_dispatch(AppCommand::SetThinkingMode {
+            mode: current.next_for(&levels),
+        });
+    });
+
+    window.global::<App>().on_new_session(move || {
+        new_dispatch(AppCommand::NewSession);
+    });
+
+    window
+        .global::<App>()
+        .on_selection_text(|text, start, end| selection_slice(&text, start, end).into());
+    let quote_into_draft = |kind: &'static str| {
+        let weak = window.as_weak();
+        move |selected: SharedString| {
+            if let Some(window) = weak.upgrade() {
+                let draft = window.get_draft();
+                window.set_draft(quoted_draft(kind, &selected, &draft).into());
+            }
+        }
+    };
+    window
+        .global::<App>()
+        .on_reply_with_quote(quote_into_draft("reply"));
+    window
+        .global::<App>()
+        .on_clarify_quote(quote_into_draft("clarify"));
+    let quote_dispatch = dispatch.clone();
+    let quote_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_new_chat_with_quote(move |selected| {
+            quote_dispatch(AppCommand::NewSession);
+            if let Some(window) = quote_window.upgrade() {
+                window.set_draft(quoted_draft("reply", &selected, "").into());
+            }
+        });
+
+    let select_dispatch = dispatch.clone();
+    window.global::<App>().on_select_session(move |session_id| {
+        let Ok(session_id) = session_id.to_string().parse() else {
+            warn!("session selection requested without a valid session id");
+            return;
+        };
+        select_dispatch(AppCommand::SelectSession { session_id });
+    });
+
+    let search_dispatch = dispatch.clone();
+    let search_window = window.as_weak();
+    window.global::<App>().on_search_sessions(move |query| {
+        let filter = search_window
+            .upgrade()
+            .map(|window| session_filter_from_id(window.get_session_filter().as_str()))
+            .unwrap_or_default();
+        search_dispatch(AppCommand::ListSessions {
+            query: query.to_string(),
+            filter,
+            limit: 50,
+            cursor: None,
+        });
+    });
+
+    let filter_dispatch = dispatch.clone();
+    let filter_window = window.as_weak();
+    window.global::<App>().on_set_session_filter(move |filter| {
+        let query = filter_window
+            .upgrade()
+            .map(|window| window.get_session_query().to_string())
+            .unwrap_or_default();
+        filter_dispatch(AppCommand::ListSessions {
+            query,
+            filter: session_filter_from_id(filter.as_str()),
+            limit: 50,
+            cursor: None,
+        });
+    });
+
+    let title_dispatch = dispatch.clone();
+    let title_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_rename_session(move |session_id, title| {
+            let Ok(session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            let title = title.trim().to_owned();
+            if title.is_empty() {
+                return;
+            }
+            if let Some(window) = title_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            title_dispatch(AppCommand::SetSessionTitle { session_id, title });
+        });
+
+    let pin_dispatch = dispatch.clone();
+    let pin_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_session_pinned(move |session_id, pinned| {
+            let Ok(session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            if let Some(window) = pin_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            pin_dispatch(AppCommand::SetSessionPinned { session_id, pinned });
+        });
+
+    let archive_dispatch = dispatch.clone();
+    let archive_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_session_archived(move |session_id, archived| {
+            let Ok(session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            if let Some(window) = archive_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            archive_dispatch(AppCommand::SetSessionArchived {
+                session_id,
+                archived,
+            });
+        });
+
+    let fork_dispatch = dispatch.clone();
+    let fork_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_fork_session(move |session_id, title| {
+            let Ok(source_session_id) = session_id.to_string().parse() else {
+                return;
+            };
+            let title = title.trim().to_owned();
+            if title.is_empty() {
+                return;
+            }
+            if let Some(window) = fork_window.upgrade() {
+                if window.get_session_action_pending() {
+                    return;
+                }
+                window.set_session_action_pending(true);
+                window.set_session_action_error(SharedString::default());
+            }
+            fork_dispatch(AppCommand::ForkSession {
+                source_session_id,
+                title,
+                expected_last_message_id: None,
+            });
+        });
+
+    let grants_dispatch = dispatch.clone();
+    let grants_window = window.as_weak();
+    window.global::<App>().on_refresh_approval_grants(move || {
+        if let Some(window) = grants_window.upgrade() {
+            window.set_approval_grants_loading(true);
+            window.set_approval_grants_error(SharedString::default());
+        }
+        grants_dispatch(AppCommand::ListApprovalGrants);
+    });
+
+    let revoke_dispatch = dispatch.clone();
+    let revoke_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_revoke_approval_grant(move |grant_id| {
+            let Ok(grant_id) = grant_id.to_string().parse::<argentum_domain::GrantId>() else {
+                return;
+            };
+            if let Some(window) = revoke_window.upgrade() {
+                if !window.get_approval_grant_pending().is_empty() {
+                    return;
+                }
+                window.set_approval_grant_pending(grant_id.to_string().into());
+                window.set_approval_grants_error(SharedString::default());
+            }
+            revoke_dispatch(AppCommand::RevokeApprovalGrant { grant_id });
+        });
+
+    let verification_dispatch = dispatch.clone();
+    let verification_window = window.as_weak();
+    window.global::<App>().on_refresh_verification(move || {
+        let active_run_id = verification_window
+            .upgrade()
+            .map(|window| window.get_active_run_id().to_string())
+            .unwrap_or_default();
+        if let Some(window) = verification_window.upgrade() {
+            window.set_verification_runners_loading(true);
+            window.set_verification_runners_error(SharedString::default());
+            window.set_verification_evidence_loading(true);
+            window.set_verification_evidence_error(SharedString::default());
+            window.set_approval_grants_loading(true);
+        }
+        verification_dispatch(AppCommand::ListVerificationRunners);
+        verification_dispatch(AppCommand::InspectVerificationRunners);
+        verification_dispatch(AppCommand::ListApprovalGrants);
+        verification_dispatch(AppCommand::LoadVerificationEvidence {
+            run_id: active_run_id.parse().ok(),
+        });
+    });
+
+    let review_dispatch = dispatch.clone();
+    let review_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_review_verification_runner(move |runner| {
+            let Ok(runner) = runner
+                .to_string()
+                .parse::<argentum_domain::VerificationRunnerId>()
+            else {
+                return;
+            };
+            if let Some(window) = review_window.upgrade() {
+                window.set_verification_approve_pending(runner.id().into());
+                window.set_verification_runners_error(SharedString::default());
+            }
+            review_dispatch(AppCommand::ReviewProjectVerification { runner });
+        });
+
+    let approve_verification_dispatch = dispatch.clone();
+    let approve_verification_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_approve_verification_runner(move |runner| {
+            let Ok(runner) = runner
+                .to_string()
+                .parse::<argentum_domain::VerificationRunnerId>()
+            else {
+                return;
+            };
+            let binding = approve_verification_window
+                .upgrade()
+                .map(|window| window.get_verification_review_binding().to_string())
+                .unwrap_or_default();
+            if binding.is_empty() {
+                return;
+            }
+            if let Some(window) = approve_verification_window.upgrade() {
+                window.set_verification_approve_pending(runner.id().into());
+                window.set_verification_review_open(false);
+                window.set_verification_runners_error(SharedString::default());
+            }
+            approve_verification_dispatch(AppCommand::ApproveProjectVerification {
+                runner,
+                expected_binding: Some(argentum_domain::Sha256Digest(binding)),
+            });
+        });
+
+    let cancel_review_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_cancel_verification_review(move || {
+            if let Some(window) = cancel_review_window.upgrade() {
+                window.set_verification_review_open(false);
+                window.set_verification_approve_pending(SharedString::default());
+            }
+        });
+
+    let set_goal_dispatch = dispatch.clone();
+    let set_goal_window = window.as_weak();
+    window.global::<App>().on_set_goal(
+        move |objective, token_budget, tool_budget, time_budget_seconds| {
+            let Some(window) = set_goal_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                warn!("goal update ignored while a run or goal action is active");
+                return;
+            }
+            let objective = objective.trim().to_string();
+            if objective.is_empty() {
+                window.set_error_message("Enter a goal objective.".into());
+                return;
+            }
+            window.set_goal_action_pending(true);
+            window.global::<App>().set_goal_start_pending(true);
+            set_goal_dispatch(AppCommand::SetGoal {
+                objective,
+                token_budget: positive_budget(token_budget),
+                tool_budget: positive_budget(tool_budget).map(|budget| budget as u32),
+                time_budget_seconds: positive_budget(time_budget_seconds),
+            });
+        },
+    );
+
+    let pause_goal_dispatch = dispatch.clone();
+    let pause_goal_window = window.as_weak();
+    window.global::<App>().on_pause_goal(move || {
+        let Some(window) = pause_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        pause_goal_dispatch(AppCommand::PauseGoal);
+    });
+
+    let resume_goal_dispatch = dispatch.clone();
+    let resume_goal_window = window.as_weak();
+    window.global::<App>().on_resume_goal(move || {
+        let Some(window) = resume_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        resume_goal_dispatch(AppCommand::ResumeGoal);
+    });
+
+    let clear_goal_dispatch = dispatch.clone();
+    let clear_goal_window = window.as_weak();
+    window.global::<App>().on_clear_goal(move || {
+        let Some(window) = clear_goal_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        window.set_goal_action_pending(true);
+        clear_goal_dispatch(AppCommand::ClearGoal);
+    });
+
+    for confirm in [true, false] {
+        let report_dispatch = dispatch.clone();
+        let report_window = window.as_weak();
+        let handler = move || {
+            let Some(window) = report_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                return;
+            }
+            let Ok(goal_id) = window.get_goal_id().parse::<GoalId>() else {
+                return;
+            };
+            window.set_goal_action_pending(true);
+            report_dispatch(if confirm {
+                AppCommand::ConfirmGoalReport { goal_id }
+            } else {
+                AppCommand::DismissGoalReport { goal_id }
+            });
+        };
+        if confirm {
+            window.global::<App>().on_confirm_goal_report(handler);
+        } else {
+            window.global::<App>().on_dismiss_goal_report(handler);
+        }
+    }
+
+    let goal_limits_dispatch = dispatch.clone();
+    let goal_limits_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_configure_goal_limits(move |goal_id, limits| {
+            let Some(window) = goal_limits_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_limits_error("A current goal is required.".into());
+                return;
+            };
+            let limits = match parse_goal_limits_csv(limits.as_str()) {
+                Ok(limits) => limits,
+                Err(error) => {
+                    window.set_goal_limits_error(error.into());
+                    return;
+                }
+            };
+            window.set_goal_limits_error(SharedString::default());
+            window.set_goal_action_pending(true);
+            goal_limits_dispatch(AppCommand::ConfigureGoalLimits { goal_id, limits });
+        });
+
+    let goal_criteria_dispatch = dispatch.clone();
+    let goal_criteria_window = window.as_weak();
+    window.global::<App>().on_configure_goal_criteria(move |goal_id, runners, attestation| {
+        let Some(window) = goal_criteria_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_goal_action_pending() {
+            return;
+        }
+        let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+            window.set_goal_criteria_error("A current goal is required.".into());
+            return;
+        };
+        let runners = runners
+            .split(',')
+            .filter(|value| !value.trim().is_empty())
+            .map(parse_goal_runner)
+            .collect::<Option<Vec<_>>>();
+        let Some(runners) = runners.filter(|runners| !runners.is_empty()) else {
+            window.set_goal_criteria_error(
+                "Use comma-separated cargo-fmt-check, cargo-check-locked, cargo-test-locked, cargo-clippy-strict, or project:ID.".into(),
+            );
+            return;
+        };
+        window.set_goal_criteria_error(SharedString::default());
+        window.set_goal_action_pending(true);
+        goal_criteria_dispatch(AppCommand::ConfigureGoalCriteria {
+            goal_id,
+            runners,
+            owner_attestation_required: attestation,
+        });
+    });
+
+    let goal_attest_dispatch = dispatch.clone();
+    let goal_attest_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_attest_goal(move |goal_id, summary| {
+            let Some(window) = goal_attest_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_action_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_attestation_error("A current goal is required.".into());
+                return;
+            };
+            let summary = summary.trim().to_owned();
+            if summary.is_empty() {
+                window.set_goal_attestation_error("Enter an owner attestation summary.".into());
+                return;
+            }
+            window.set_goal_attestation_error(SharedString::default());
+            window.set_goal_action_pending(true);
+            goal_attest_dispatch(AppCommand::AttestGoal { goal_id, summary });
+        });
+
+    let goal_supervise_dispatch = dispatch.clone();
+    let goal_supervise_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_supervise_goal(move |goal_id, iterations, seconds| {
+            let Some(window) = goal_supervise_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_supervision_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_supervision_error("A current goal is required.".into());
+                return;
+            };
+            let Ok(iterations) = iterations.trim().parse::<u32>() else {
+                window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+                return;
+            };
+            let Ok(seconds) = seconds.trim().parse::<u64>() else {
+                window.set_goal_supervision_error(
+                    "Elapsed seconds must be a positive integer.".into(),
+                );
+                return;
+            };
+            if iterations == 0 || seconds == 0 {
+                window.set_goal_supervision_error(
+                    "Iterations and elapsed seconds must be positive.".into(),
+                );
+                return;
+            }
+            window.set_goal_supervision_pending(true);
+            window.set_goal_supervision_error(SharedString::default());
+            window.set_goal_supervision_notice("Supervision requested.".into());
+            goal_supervise_dispatch(AppCommand::SuperviseGoal {
+                goal_id,
+                iteration_limit: iterations,
+                elapsed_seconds: seconds,
+            });
+        });
+
+    let goal_deliver_dispatch = dispatch.clone();
+    let goal_deliver_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_deliver_goal(move |goal_id, iterations, seconds| {
+            let Some(window) = goal_deliver_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_goal_supervision_pending() {
+                return;
+            }
+            let Ok(goal_id) = goal_id.trim().parse::<GoalId>() else {
+                window.set_goal_supervision_error("A current goal is required.".into());
+                return;
+            };
+            let Ok(iterations) = iterations.trim().parse::<u32>() else {
+                window.set_goal_supervision_error("Iterations must be a positive integer.".into());
+                return;
+            };
+            let Ok(seconds) = seconds.trim().parse::<u64>() else {
+                window.set_goal_supervision_error(
+                    "Elapsed seconds must be a positive integer.".into(),
+                );
+                return;
+            };
+            if iterations == 0 || seconds == 0 {
+                window.set_goal_supervision_error(
+                    "Iterations and elapsed seconds must be positive.".into(),
+                );
+                return;
+            }
+            window.set_goal_supervision_pending(true);
+            window.set_goal_supervision_error(SharedString::default());
+            window.set_goal_supervision_notice("Delivery requested.".into());
+            goal_deliver_dispatch(AppCommand::DeliverGoal {
+                goal_id,
+                iteration_limit: iterations,
+                elapsed_seconds: seconds,
+            });
+        });
+
+    let tool_catalog_dispatch = dispatch.clone();
+    let tool_catalog_window = window.as_weak();
+    window.global::<App>().on_refresh_tool_catalog(move || {
+        if let Some(window) = tool_catalog_window.upgrade() {
+            window.set_tool_catalog_loading(true);
+            window.set_tool_catalog_error(SharedString::default());
+        }
+        tool_catalog_dispatch(AppCommand::ListToolCatalog);
+    });
+
+    let skill_catalog_dispatch = dispatch.clone();
+    let skill_catalog_window = window.as_weak();
+    window.global::<App>().on_refresh_skill_catalog(move || {
+        if let Some(window) = skill_catalog_window.upgrade() {
+            window.set_skill_catalog_loading(true);
+            window.set_skill_catalog_error(SharedString::default());
+        }
+        skill_catalog_dispatch(AppCommand::ListSkillCatalog);
+    });
+
+    let inspect_skill_dispatch = dispatch.clone();
+    let inspect_skill_window = window.as_weak();
+    window.global::<App>().on_inspect_skill(move |name| {
+        let name = name.trim().to_owned();
+        if name.is_empty() {
+            return;
+        }
+        if let Some(window) = inspect_skill_window.upgrade() {
+            window.set_skill_selected(name.clone().into());
+            window.set_skill_inspect_loading(true);
+            window.set_skill_inspect_error(SharedString::default());
+            window.set_skill_body(SharedString::default());
+        }
+        inspect_skill_dispatch(AppCommand::InspectSkill { name });
+    });
+
+    let accounting_dispatch = dispatch.clone();
+    let accounting_window = window.as_weak();
+    window.global::<App>().on_load_accounting(move || {
+        if let Some(window) = accounting_window.upgrade() {
+            window.set_accounting_loading(true);
+            window.set_accounting_error(SharedString::default());
+        }
+        accounting_dispatch(AppCommand::LoadAccounting);
+    });
+
+    let diagnostics_dispatch = dispatch.clone();
+    let diagnostics_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_load_run_diagnostics(move |run_id| {
+            let Some(window) = diagnostics_window.upgrade() else {
+                return;
+            };
+            let Ok(run_id) = run_id.trim().parse::<RunId>() else {
+                window.set_run_diagnostics_error("Enter a valid run identifier.".into());
+                return;
+            };
+            window.set_run_diagnostics_loading(true);
+            window.set_run_diagnostics_error(SharedString::default());
+            window.set_run_diagnostics_state("Loading".into());
+            window.set_run_diagnostics_records(empty_record_line_model());
+            diagnostics_dispatch(AppCommand::LoadRunDiagnostics { run_id });
+        });
+
+    let result_dispatch = dispatch.clone();
+    let result_window = window.as_weak();
+    window.global::<App>().on_load_run_result(move |run_id| {
+        let Some(window) = result_window.upgrade() else {
+            return;
+        };
+        let Ok(run_id) = run_id.trim().parse::<RunId>() else {
+            window.set_run_result_error("Enter a valid run identifier.".into());
+            return;
+        };
+        window.set_run_result_loading(true);
+        window.set_run_result_error(SharedString::default());
+        window.set_run_result_state("Loading".into());
+        window.set_run_result_summary(SharedString::default());
+        window.set_run_result_answer(SharedString::default());
+        result_dispatch(AppCommand::LoadRunResult { run_id });
+    });
+
+    let instructions_dispatch = dispatch.clone();
+    let instructions_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_load_instructions(move |directory| {
+            let Some(window) = instructions_window.upgrade() else {
+                return;
+            };
+            let directory = directory.trim();
+            let directory = if directory.is_empty() { "." } else { directory };
+            window.set_instructions_loading(true);
+            window.set_instructions_error(SharedString::default());
+            window.set_instructions_summary(SharedString::default());
+            window.set_instructions_documents(empty_record_line_model());
+            window.set_instructions_selections(empty_record_line_model());
+            instructions_dispatch(AppCommand::LoadInstructions {
+                directory: directory.to_owned(),
+            });
+        });
+
+    let context_dispatch = dispatch.clone();
+    let context_window = window.as_weak();
+    window.global::<App>().on_load_context(move || {
+        if let Some(window) = context_window.upgrade() {
+            window.set_context_loading(true);
+            window.set_context_error(SharedString::default());
+        }
+        context_dispatch(AppCommand::LoadContextSnapshot);
+    });
+
+    let compact_dispatch = dispatch.clone();
+    let compact_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_compact_context(move |deactivate| {
+            let Some(window) = compact_window.upgrade() else {
+                return;
+            };
+            if window.get_running() || window.get_compact_pending() {
+                return;
+            }
+            window.set_compact_pending(true);
+            window.set_compact_confirm(false);
+            window.set_compact_error(SharedString::default());
+            window.set_compact_notice("Compaction requested.".into());
+            compact_dispatch(AppCommand::CompactContext { deactivate });
+        });
+
+    let extensions_dispatch = dispatch.clone();
+    let extensions_window = window.as_weak();
+    window.global::<App>().on_list_extensions(move || {
+        if let Some(window) = extensions_window.upgrade() {
+            window.set_extension_loading(true);
+            window.set_extension_error(SharedString::default());
+        }
+        extensions_dispatch(AppCommand::ListExtensions);
+    });
+
+    let probe_dispatch = dispatch.clone();
+    let probe_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_probe_provider(move |provider_id| {
+            let Some(window) = probe_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider probe ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            if provider_id.is_empty() {
+                warn!("provider probe requested without a provider id");
+                return;
+            }
+            probe_dispatch(AppCommand::ProbeProvider { provider_id });
+        });
+
+    let save_provider_dispatch = dispatch.clone();
+    let save_provider_window = window.as_weak();
+    window.global::<App>().on_save_provider_profile(
+        move |provider_id, label, kind, endpoint, model, selected| {
+            let Some(window) = save_provider_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider save ignored while a run is active");
+                return;
+            }
+            let kind = provider_kind_from_id(kind.as_str()).unwrap_or(ProviderKind::Unknown);
+            save_provider_dispatch(AppCommand::SaveProviderProfile {
+                profile: ProviderProfile {
+                    id: provider_id.to_string(),
+                    label: label.to_string(),
+                    kind,
+                    endpoint: endpoint.to_string(),
+                    model: model.to_string(),
+                    selected,
+                },
+            });
+        },
+    );
+
+    let select_provider_dispatch = dispatch.clone();
+    let select_provider_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_select_provider_profile(move |provider_id| {
+            let Some(window) = select_provider_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("provider selection ignored while a run is active");
+                return;
+            }
+            select_provider_dispatch(AppCommand::SelectProviderProfile {
+                provider_id: provider_id.to_string(),
+            });
+        });
+
+    let refresh_models_dispatch = dispatch.clone();
+    let refresh_models_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_refresh_provider_models(move |provider_id| {
+            let Some(window) = refresh_models_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("model catalog refresh ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            if provider_id.is_empty() {
+                warn!("model refresh requested without a provider id");
+                return;
+            }
+            // The reply is applied only to the provider named here.
+            window.set_provider_models_loading(true);
+            window.set_provider_models_pending("list".into());
+            window.set_provider_models_provider_id(provider_id.as_str().into());
+            window.set_provider_models_error(SharedString::default());
+            refresh_models_dispatch(AppCommand::ListProviderModels { provider_id });
+        });
+
+    let select_model_dispatch = dispatch.clone();
+    let select_model_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_select_provider_model(move |provider_id, model| {
+            let Some(window) = select_model_window.upgrade() else {
+                return;
+            };
+            if window.get_running() {
+                warn!("model selection ignored while a run is active");
+                return;
+            }
+            let provider_id = provider_id.trim().to_string();
+            let model = model.trim().to_string();
+            if provider_id.is_empty() || model.is_empty() {
+                warn!("model selection requested without a provider id or model");
+                return;
+            }
+            window.set_provider_model_selecting(true);
+            window.set_provider_models_pending("select".into());
+            window.set_provider_models_provider_id(provider_id.as_str().into());
+            select_model_dispatch(AppCommand::SelectProviderModel { provider_id, model });
+        });
+
+    let refresh_presets_dispatch = dispatch.clone();
+    let refresh_presets_window = window.as_weak();
+    window.global::<App>().on_refresh_provider_presets(move || {
+        if let Some(window) = refresh_presets_window.upgrade() {
+            window.set_provider_presets_loading(true);
+            window.set_provider_presets_error(SharedString::default());
+        }
+        refresh_presets_dispatch(AppCommand::ListProviderPresets);
+    });
+
+    let add_preset_dispatch = dispatch.clone();
+    let add_preset_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_add_provider_preset(move |preset_id| {
+            let preset_id = preset_id.trim().to_owned();
+            if preset_id.is_empty() {
+                return;
+            }
+            if let Some(window) = add_preset_window.upgrade() {
+                if window.get_running() || !window.get_provider_preset_pending().is_empty() {
+                    return;
+                }
+                window.set_provider_preset_pending(preset_id.clone().into());
+                window.set_provider_preset_notice(SharedString::default());
+                window.set_provider_presets_error(SharedString::default());
+            }
+            add_preset_dispatch(AppCommand::AddProviderPreset { preset_id });
+        });
+
+    let select_preset_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_select_provider_preset(move |preset_id| {
+            let Some(window) = select_preset_window.upgrade() else {
+                return;
+            };
+            let preset_id = preset_id.to_string();
+            PROVIDER_PRESETS.with(|store| {
+                if let Some(preset) = store.borrow().iter().find(|preset| preset.id == preset_id) {
+                    window.set_provider_preset_detail(provider_preset_view(preset));
+                }
+            });
+        });
+
+    let save_budget_dispatch = dispatch.clone();
+    let save_budget_window = window.as_weak();
+    window.global::<App>().on_save_provider_budget(move || {
+        let Some(window) = save_budget_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || !window.get_provider_pending().is_empty() {
+            return;
+        }
+        let profile_id = window.get_provider_id().to_string();
+        if profile_id.is_empty() {
+            window.set_provider_budget_pending(false);
+            window.set_provider_budget_error("Select a saved provider profile first.".into());
+            return;
+        }
+        let limits = match parse_provider_budget_limits(
+            window.get_provider_budget_total().as_str(),
+            window.get_provider_budget_input().as_str(),
+            window.get_provider_budget_max_output().as_str(),
+            window.get_provider_budget_requested_output().as_str(),
+            window.get_provider_budget_uncertainty().as_str(),
+        ) {
+            Ok(limits) => limits,
+            Err(error) => {
+                window.set_provider_budget_pending(false);
+                window.set_provider_budget_error(error.into());
+                return;
+            }
+        };
+        window.set_provider_budget_pending(true);
+        window.set_provider_budget_error(SharedString::default());
+        window.set_provider_budget_notice(
+            "Save requested. Waiting for the provider runtime to accept it.".into(),
+        );
+        save_budget_dispatch(AppCommand::SaveProviderBudget { profile_id, limits });
+    });
+
+    let reset_budget_dispatch = dispatch.clone();
+    let reset_budget_window = window.as_weak();
+    window.global::<App>().on_reset_provider_budget(move || {
+        let Some(window) = reset_budget_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || !window.get_provider_pending().is_empty() {
+            return;
+        }
+        let profile_id = window.get_provider_id().to_string();
+        if profile_id.is_empty() {
+            window.set_provider_budget_error("Select a saved provider profile first.".into());
+            return;
+        }
+        window.set_provider_budget_pending(true);
+        window.set_provider_budget_error(SharedString::default());
+        window.set_provider_budget_notice(
+            "Reset requested. Waiting for the provider runtime to accept it.".into(),
+        );
+        reset_budget_dispatch(AppCommand::ResetProviderBudget { profile_id });
+    });
+
+    let context_dispatch = dispatch.clone();
+    let context_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_provider_context(move |tokens| {
+            let Some(window) = context_window.upgrade() else {
+                return;
+            };
+            if tokens <= 0 || window.get_running() || !window.get_provider_pending().is_empty() {
+                return;
+            }
+            let profile_id = window.get_provider_id().to_string();
+            if profile_id.is_empty() {
+                window.set_provider_context_pending(false);
+                window.set_provider_context_error(
+                    "Select the built-in llama.cpp profile first.".into(),
+                );
+                return;
+            }
+            window.set_provider_context_pending(true);
+            window.set_provider_context_error(SharedString::default());
+            window.set_provider_context_notice(
+                "Update requested. Waiting for the provider runtime to accept it.".into(),
+            );
+            context_dispatch(AppCommand::SaveProviderContext {
+                profile_id,
+                context_tokens: tokens as u32,
+            });
+        });
+
+    let refresh_browser_dispatch = dispatch.clone();
+    let refresh_browser_window = window.as_weak();
+    window.global::<App>().on_refresh_browser_status(move || {
+        if let Some(window) = refresh_browser_window.upgrade() {
+            window.set_browser_status_loading(true);
+            window.set_browser_status_error(SharedString::default());
+        }
+        refresh_browser_dispatch(AppCommand::LoadBrowserStatus);
+    });
+
+    let refresh_desktop_dispatch = dispatch.clone();
+    let refresh_desktop_window = window.as_weak();
+    window.global::<App>().on_refresh_desktop_status(move || {
+        if let Some(window) = refresh_desktop_window.upgrade() {
+            window.set_desktop_status_loading(true);
+            window.set_desktop_status_error(SharedString::default());
+        }
+        refresh_desktop_dispatch(AppCommand::LoadDesktopStatus);
+    });
+
+    let refresh_harness_dispatch = dispatch.clone();
+    let refresh_harness_window = window.as_weak();
+    window.global::<App>().on_refresh_harness(move || {
+        let Some(window) = refresh_harness_window.upgrade() else {
+            return;
+        };
+        if window.get_harness_loading() || !window.get_harness_pending().is_empty() {
+            return;
+        }
+        window.set_harness_loading(true);
+        window.set_harness_pending("list".into());
+        window.set_harness_error(SharedString::default());
+        refresh_harness_dispatch(AppCommand::ListHarnessState);
+    });
+
+    let module_dispatch = dispatch.clone();
+    let backend_dispatch = dispatch.clone();
+    let backend_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_local_backend_enabled(move |enabled| {
+            let Some(window) = backend_window.upgrade() else {
+                return;
+            };
+            if window.get_running()
+                || window.get_approval_open()
+                || window.get_local_inference_busy()
+                || !window.get_harness_pending().is_empty()
+                || !window.get_local_backend_toggle_supported()
+            {
+                return;
+            }
+            window.set_harness_pending("backend".into());
+            window.set_harness_error(SharedString::default());
+            backend_dispatch(AppCommand::SetLocalBackendEnabled { enabled });
+        });
+    let module_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_harness_module(move |module_id, action| {
+            let Some(window) = module_window.upgrade() else {
+                return;
+            };
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+            {
+                return;
+            }
+            let action = match action.as_str() {
+                "install" => argentum_domain::ModuleAction::Install,
+                "enable" => argentum_domain::ModuleAction::Enable,
+                "disable" => argentum_domain::ModuleAction::Disable,
+                "remove" => argentum_domain::ModuleAction::Remove,
+                _ => return,
+            };
+            if !window
+                .get_harness_modules()
+                .iter()
+                .any(|module| module.id == module_id)
+            {
+                return;
+            }
+            window.set_harness_pending("module".into());
+            window.set_harness_error(SharedString::default());
+            module_dispatch(AppCommand::SetHarnessModule {
+                module_id: module_id.to_string(),
+                action,
+            });
+        });
+
+    let select_harness_dispatch = dispatch.clone();
+    let select_harness_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_select_harness_profile(move |profile_id| {
+            let Some(window) = select_harness_window.upgrade() else {
+                return;
+            };
+            let profile_id = profile_id.trim().to_string();
+            if !window.get_harness_pending().is_empty()
+                || profile_id.is_empty()
+                || profile_id == "custom"
+            {
+                return;
+            }
+            window.set_harness_pending("profile".into());
+            window.set_harness_error(SharedString::default());
+            select_harness_dispatch(AppCommand::SelectHarnessProfile { profile_id });
+        });
+
+    let surface_visibility_dispatch = dispatch.clone();
+    let surface_visibility_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_harness_surface_visibility(move |surface, visible| {
+            let Some(window) = surface_visibility_window.upgrade() else {
+                return;
+            };
+            if !window.get_harness_pending().is_empty() {
+                return;
+            }
+            let Some(surface) = surface_from_id(surface.trim()) else {
+                warn!("harness surface visibility requested with an invalid surface id");
+                window.set_harness_pending(SharedString::default());
+                window.set_harness_error("Unknown harness surface.".into());
+                return;
+            };
+            window.set_harness_pending("surface".into());
+            window.set_harness_error(SharedString::default());
+            surface_visibility_dispatch(AppCommand::SetSurfaceVisibility { surface, visible });
+        });
+
+    let execution_profile_dispatch = dispatch.clone();
+    let execution_profile_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_select_execution_profile(move |profile_id| {
+            let Some(window) = execution_profile_window.upgrade() else {
+                return;
+            };
+            let profile_id = profile_id.trim().to_string();
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+                || profile_id.is_empty()
+                || profile_id == "custom"
+            {
+                return;
+            }
+            window.set_harness_pending("execution".into());
+            window.set_harness_error(SharedString::default());
+            execution_profile_dispatch(AppCommand::SelectExecutionProfile { profile_id });
+        });
+
+    let capability_dispatch = dispatch.clone();
+    let capability_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_harness_capability_enabled(move |capability_id, enabled| {
+            let Some(window) = capability_window.upgrade() else {
+                return;
+            };
+            let capability_id = capability_id.trim().to_string();
+            if window.get_running()
+                || window.get_approval_open()
+                || !window.get_harness_pending().is_empty()
+                || capability_id.is_empty()
+            {
+                return;
+            }
+            window.set_harness_pending("capability".into());
+            window.set_harness_error(SharedString::default());
+            capability_dispatch(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id,
+                enabled,
+            });
+        });
+
+    window
+        .global::<App>()
+        .on_validate_provider_label(|value| validate_provider_label(value.as_str()).into());
+    window
+        .global::<App>()
+        .on_validate_provider_endpoint(|value| validate_provider_endpoint(value.as_str()).into());
+    window
+        .global::<App>()
+        .on_validate_provider_model(|value| validate_provider_model(value.as_str()).into());
+
+    let drawer_dispatch = dispatch.clone();
+    window.global::<App>().on_toggle_drawer(move || {
+        let _ = &drawer_dispatch;
+    });
+
+    let inspector_dispatch = dispatch.clone();
+    let inspector_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_set_inspector_surface(move |surface| {
+            let Some(window) = inspector_window.upgrade() else {
+                return;
+            };
+            let surface = surface.trim();
+            let surface = if surface.is_empty() {
+                None
+            } else {
+                let Some(surface) =
+                    surface_from_id(surface).filter(|surface| surface.is_inspector())
+                else {
+                    warn!("inspector selection requested with an invalid surface id");
+                    window.set_harness_error("Unknown inspector surface.".into());
+                    return;
+                };
+                Some(surface)
+            };
+            if surface == Some(SurfaceId::Changes) {
+                window.set_verification_runners_loading(true);
+                window.set_verification_runners_error(SharedString::default());
+                window.set_verification_evidence_loading(true);
+                window.set_verification_evidence_error(SharedString::default());
+                inspector_dispatch(AppCommand::ListVerificationRunners);
+                inspector_dispatch(AppCommand::InspectVerificationRunners);
+                inspector_dispatch(AppCommand::ListApprovalGrants);
+                let active_run_id = window.get_active_run_id().to_string();
+                inspector_dispatch(AppCommand::LoadVerificationEvidence {
+                    run_id: active_run_id.parse().ok(),
+                });
+            }
+            inspector_dispatch(AppCommand::SetInspectorSurface { surface });
+        });
+
+    let refresh_trajectory_dispatch = dispatch.clone();
+    let refresh_trajectory_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_refresh_trajectory(move |session_id| {
+            let Some(window) = refresh_trajectory_window.upgrade() else {
+                return;
+            };
+            let Ok(session_id) = session_id.trim().parse::<SessionId>() else {
+                window.set_trajectory_loading(false);
+                window.set_trajectory_error("Invalid session identifier.".into());
+                return;
+            };
+            refresh_trajectory_dispatch(AppCommand::LoadTrajectory {
+                session_id: Some(session_id),
+            });
+        });
+
+    let diff_dispatch = dispatch.clone();
+    let diff_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_load_change_diff(move |file_change_id| {
+            let Some(window) = diff_window.upgrade() else {
+                return;
+            };
+            let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
+                window.set_selected_diff_available(false);
+                window.set_selected_diff_reason("Invalid file change identifier.".into());
+                return;
+            };
+            window.set_selected_file_change_id(file_change_id.to_string().into());
+            window.set_selected_diff(SharedString::default());
+            window.set_selected_diff_available(false);
+            window.set_selected_diff_truncated(false);
+            window.set_selected_diff_reason("Loading bounded diff...".into());
+            diff_dispatch(AppCommand::LoadUnifiedDiff { file_change_id });
+        });
+
+    let restore_dispatch = dispatch.clone();
+    window
+        .global::<App>()
+        .on_request_restore(move |file_change_id| {
+            let Ok(file_change_id) = file_change_id.trim().parse::<FileChangeId>() else {
+                warn!("restore requested without a valid file change id");
+                return;
+            };
+            restore_dispatch(AppCommand::RequestRestore { file_change_id });
+        });
+
+    let load_recovery_dispatch = dispatch.clone();
+    window.global::<App>().on_load_change_recovery(move || {
+        load_recovery_dispatch(AppCommand::LoadChangeRecovery);
+    });
+
+    let retry_recovery_dispatch = dispatch.clone();
+    window
+        .global::<App>()
+        .on_retry_change_recovery(move |operation_id| {
+            let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
+                warn!("recovery retry requested without a valid operation id");
+                return;
+            };
+            retry_recovery_dispatch(AppCommand::RetryChangeRecovery { operation_id });
+        });
+
+    let recovery_restore_dispatch = dispatch.clone();
+    window
+        .global::<App>()
+        .on_request_recovery_restore(move |operation_id| {
+            let Ok(operation_id) = operation_id.trim().parse::<ChangeOperationId>() else {
+                warn!("recovery restore requested without a valid operation id");
+                return;
+            };
+            recovery_restore_dispatch(AppCommand::RequestRecoveryRestore { operation_id });
+        });
+
+    let approve_dispatch = dispatch.clone();
+    let approve_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_approve_tool(move |approval_id, scope| {
+            let Ok(approval_id) = approval_id.to_string().parse() else {
+                warn!("approval requested without a valid approval id");
+                return;
+            };
+            let scope = ApprovalScope::from_id(scope.as_str()).unwrap_or_default();
+            let Some(window) = approve_window.upgrade() else {
+                return;
+            };
+            if window.get_approval_response_pending() {
+                return;
+            }
+            window.set_approval_response_pending(true);
+            approve_dispatch(AppCommand::ApproveTool { approval_id, scope });
+        });
+
+    let reject_dispatch = dispatch.clone();
+    let reject_window = window.as_weak();
+    window.global::<App>().on_reject_tool(move |approval_id| {
+        let Ok(approval_id) = approval_id.to_string().parse() else {
+            warn!("rejection requested without a valid approval id");
+            return;
+        };
+        let Some(window) = reject_window.upgrade() else {
+            return;
+        };
+        if window.get_approval_response_pending() {
+            return;
+        }
+        window.set_approval_response_pending(true);
+        reject_dispatch(AppCommand::RejectTool { approval_id });
+    });
+
+    let settings_dispatch = dispatch.clone();
+    let settings_window = window.as_weak();
+    window.global::<App>().on_open_settings(move || {
+        if let Some(window) = settings_window.upgrade() {
+            window.set_settings_open(true);
+            window.set_provider_draft_label(window.get_provider_label());
+            window.set_provider_draft_endpoint(window.get_provider_endpoint());
+            window.set_provider_draft_model(window.get_provider_model());
+            window.set_harness_loading(true);
+            window.set_harness_pending("list".into());
+            window.set_harness_error(SharedString::default());
+            window.set_approval_grants_loading(true);
+            window.set_approval_grants_error(SharedString::default());
+            window.set_provider_presets_loading(true);
+            window.set_provider_presets_error(SharedString::default());
+            window.set_browser_status_loading(true);
+            window.set_browser_status_error(SharedString::default());
+            window.set_desktop_status_loading(true);
+            window.set_desktop_status_error(SharedString::default());
+            window.set_provider_budget_loading(!window.get_provider_id().is_empty());
+            window.set_provider_budget_pending(false);
+            window.set_provider_budget_error(SharedString::default());
+            window.set_provider_budget_notice(SharedString::default());
+            window.set_provider_context_loading(!window.get_provider_id().is_empty());
+            window.set_provider_context_pending(false);
+            window.set_provider_context_error(SharedString::default());
+            window.set_provider_context_notice(SharedString::default());
+            window.set_tool_catalog_loading(true);
+            window.set_tool_catalog_error(SharedString::default());
+            window.set_skill_catalog_loading(true);
+            window.set_skill_catalog_error(SharedString::default());
+            window.set_skill_inspect_loading(false);
+            window.set_skill_inspect_error(SharedString::default());
+            window.set_accounting_loading(true);
+            window.set_accounting_error(SharedString::default());
+            window.set_context_loading(true);
+            window.set_context_error(SharedString::default());
+            window.set_instructions_loading(true);
+            window.set_instructions_error(SharedString::default());
+            window.set_extension_loading(true);
+            window.set_extension_error(SharedString::default());
+        }
+        settings_dispatch(AppCommand::ListProviderProfiles);
+        settings_dispatch(AppCommand::ListProviderPresets);
+        settings_dispatch(AppCommand::ListHarnessState);
+        settings_dispatch(AppCommand::ListApprovalGrants);
+        settings_dispatch(AppCommand::ListToolCatalog);
+        settings_dispatch(AppCommand::ListSkillCatalog);
+        settings_dispatch(AppCommand::LoadAccounting);
+        settings_dispatch(AppCommand::LoadContextSnapshot);
+        settings_dispatch(AppCommand::LoadInstructions {
+            directory: ".".into(),
+        });
+        settings_dispatch(AppCommand::ListExtensions);
+        settings_dispatch(AppCommand::ListVerificationRunners);
+        settings_dispatch(AppCommand::InspectVerificationRunners);
+        settings_dispatch(AppCommand::LoadBrowserStatus);
+        settings_dispatch(AppCommand::LoadDesktopStatus);
+    });
+}
+
+pub fn connect_provider_credentials<Save, Clear>(window: &MainWindow, save: Save, clear: Clear)
+where
+    Save: Fn(String, String, i32) + 'static,
+    Clear: Fn(String, i32) + 'static,
+{
+    let save = Rc::new(save);
+    let save_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_save_provider_credential(move |provider_id, credential| {
+            let Some(window) = save_window.upgrade() else {
+                return;
+            };
+            let provider_id = provider_id.as_str();
+            let current_provider_id = window.get_provider_id();
+            let valid_identity =
+                provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
+                    && current_provider_id.as_str() == provider_id;
+            let valid_state = !window.get_running()
+                && window.get_provider_credential_supported()
+                && matches!(
+                    window.get_provider_credential_pending().as_str(),
+                    "" | "save"
+                );
+            if !valid_identity || !valid_state {
+                return;
+            }
+            let validation = validate_provider_credential(credential.as_str());
+            if !validation.is_empty() {
+                window.set_provider_credential_saving(false);
+                window.set_provider_credential_deleting(false);
+                window.set_provider_credential_pending(SharedString::default());
+                window.set_provider_credential_error(validation.into());
+                window.set_provider_credential_notice(SharedString::default());
+                return;
+            }
+            window.set_provider_credential_saving(true);
+            window.set_provider_credential_deleting(false);
+            window.set_provider_credential_pending("save".into());
+            let generation =
+                next_provider_credential_generation(window.get_provider_credential_generation());
+            window.set_provider_credential_generation(generation);
+            window.set_provider_credential_error(SharedString::default());
+            window.set_provider_credential_notice(SharedString::default());
+            save(provider_id.to_owned(), credential.to_string(), generation);
+        });
+
+    let clear = Rc::new(clear);
+    let clear_window = window.as_weak();
+    window
+        .global::<App>()
+        .on_clear_provider_credential(move |provider_id| {
+            let Some(window) = clear_window.upgrade() else {
+                return;
+            };
+            let provider_id = provider_id.as_str();
+            let current_provider_id = window.get_provider_id();
+            let valid_identity =
+                provider_credential_supported_id(provider_id, window.get_provider_kind().as_str())
+                    && current_provider_id.as_str() == provider_id;
+            let valid_state = !window.get_running()
+                && window.get_provider_credential_supported()
+                && window.get_provider_credential_configured()
+                && matches!(
+                    window.get_provider_credential_pending().as_str(),
+                    "" | "delete"
+                );
+            if !valid_identity || !valid_state {
+                return;
+            }
+            window.set_provider_credential_saving(false);
+            window.set_provider_credential_deleting(true);
+            window.set_provider_credential_pending("delete".into());
+            let generation =
+                next_provider_credential_generation(window.get_provider_credential_generation());
+            window.set_provider_credential_generation(generation);
+            window.set_provider_credential_error(SharedString::default());
+            window.set_provider_credential_notice(SharedString::default());
+            clear(provider_id.to_owned(), generation);
+        });
+}
+
+fn next_provider_credential_generation(current: i32) -> i32 {
+    current
+        .checked_add(1)
+        .filter(|value| *value > 0)
+        .unwrap_or(1)
+}
+
+pub fn empty_string_model() -> ModelRc<SharedString> {
+    ModelRc::new(VecModel::from(Vec::<SharedString>::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn selections_are_cut_on_character_boundaries_and_quoted() {
+        use super::{quoted_draft, selection_slice};
+        assert_eq!(selection_slice("héllo world", 0, 2), "h");
+        assert_eq!(selection_slice("hello", 3, 1), "");
+        assert_eq!(selection_slice("hello", 1, 99), "ello");
+        assert_eq!(quoted_draft("reply", "a\nb", ""), "> a\n> b\n\n");
+        assert_eq!(
+            quoted_draft("clarify", "x", "draft"),
+            "draft\n\nCan you clarify this part?\n\n> x\n\n"
+        );
+    }
+
+    #[test]
+    fn tool_summaries_show_their_first_sentence_within_the_limit() {
+        use super::short_summary;
+        assert_eq!(
+            short_summary("Copy one prepared bounded file"),
+            "Copy one prepared bounded file"
+        );
+        assert_eq!(
+            short_summary("Make a localized edit. Prefer old_text for one match."),
+            "Make a localized edit"
+        );
+        assert_eq!(
+            short_summary("Cancel a job; cancellation does not undo effects"),
+            "Cancel a job"
+        );
+        let long = "word ".repeat(60);
+        let short = short_summary(&long);
+        assert!(short.ends_with("..."));
+        assert!(short.chars().count() <= 143);
+    }
+
+    use argentum_domain::context_budget::ModelBudget;
+    use argentum_domain::{
+        now, ChangeRecoveryEntry, ChangeRecoverySnapshot, ChangeRecoveryState, ChangeSetSnapshot,
+        ConversationMessage, ConversationMessageStatus, ConversationRole, ConversationSnapshot,
+        FileChangeKind, FileChangeOrigin, FileChangeRecord, Goal, GoalLifecycle,
+        HarnessAvailability, HarnessCapabilityKind, HarnessCapabilityState, HarnessProfileSummary,
+        HarnessReadiness, HarnessSnapshot, HarnessSurfaceState, LayoutProfile, PlanStep, Project,
+        ProjectId, ProviderCatalogSource, ProviderProfile, RunId, SessionId, SessionSummary, Task,
+        TaskLifecycle, ToolResultState, UnifiedDiffSnapshot, WorkspaceSnapshot,
+    };
+    use slint::Model;
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+    use std::rc::Rc;
+
+    use super::*;
+
+    fn assert_reviewable_changes_projection(
+        ui: &UiHandle,
+        commands: &Rc<RefCell<Vec<AppCommand>>>,
+    ) {
+        let project_id: ProjectId = "00000000-0000-0000-0000-0000000001a1"
+            .parse()
+            .expect("project id");
+        let session_id: SessionId = "00000000-0000-0000-0000-0000000001a2"
+            .parse()
+            .expect("session id");
+        let run_id: RunId = "00000000-0000-0000-0000-0000000001a3"
+            .parse()
+            .expect("run id");
+        let change_set_id = "00000000-0000-0000-0000-0000000001a4"
+            .parse()
+            .expect("change set id");
+        let file_change_id = "00000000-0000-0000-0000-0000000001a5"
+            .parse()
+            .expect("file change id");
+        let operation_id = "00000000-0000-0000-0000-0000000001a6"
+            .parse()
+            .expect("operation id");
+        ui.window()
+            .set_active_session_id(session_id.to_string().into());
+
+        let record = FileChangeRecord {
+            id: file_change_id,
+            change_set_id,
+            project_id,
+            session_id,
+            run_id,
+            revision: 2,
+            relative_path: "src/lib.rs".into(),
+            kind: FileChangeKind::Modified,
+            origin: FileChangeOrigin::ToolCall,
+            before: None,
+            after: None,
+            additions: 3,
+            removals: 1,
+            line_count_availability: argentum_domain::LineCountAvailability::Unknown,
+            restored_from: None,
+            created_at: now(),
+        };
+        ui.apply_event(&AppEvent::ChangeSetSnapshotLoaded(ChangeSetSnapshot {
+            id: change_set_id,
+            project_id,
+            session_id,
+            run_id,
+            revision: 2,
+            files: vec![record],
+            additions: 3,
+            removals: 1,
+        }));
+        assert_eq!(ui.window().get_changed_files(), 1);
+        let files = ui.window().get_change_files();
+        assert_eq!(files.row_count(), 1);
+        let file = files.row_data(0).expect("change row");
+        assert_eq!(file.path, "src/lib.rs");
+        assert!(file.restore_available);
+        assert!(file.restore_reason.is_empty());
+
+        ui.apply_event(&AppEvent::UnifiedDiffLoaded(UnifiedDiffSnapshot {
+            file_change_id,
+            relative_path: "src/lib.rs".into(),
+            text: "@@ -1 +1 @@\n-old\n+new\n".into(),
+            line_count: 3,
+            byte_count: 24,
+            truncated: true,
+            available: true,
+            unavailable_reason: String::new(),
+        }));
+        assert!(ui.window().get_selected_diff_available());
+        assert!(ui.window().get_selected_diff().contains("+new"));
+        assert!(ui.window().get_selected_diff_truncated());
+
+        ui.apply_event(&AppEvent::ChangeRecoverySnapshotLoaded(
+            ChangeRecoverySnapshot {
+                operations: vec![ChangeRecoveryEntry {
+                    operation_id,
+                    relative_path: "src/lib.rs".into(),
+                    pre_image_digest: None,
+                    proposed_post_image_digest: None,
+                    current_digest: None,
+                    created_at: now(),
+                    state: ChangeRecoveryState::Conflicted,
+                }],
+                recovery_required: true,
+            },
+        ));
+        assert!(ui.window().get_recovery_required());
+        assert_eq!(
+            ui.window().get_recovery_operation_id(),
+            operation_id.to_string()
+        );
+
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_load_change_diff(file_change_id.to_string().into());
+        ui.window()
+            .global::<App>()
+            .invoke_request_restore(file_change_id.to_string().into());
+        ui.window().global::<App>().invoke_load_change_recovery();
+        ui.window()
+            .global::<App>()
+            .invoke_request_recovery_restore(operation_id.to_string().into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::LoadUnifiedDiff { file_change_id: id }) if *id == file_change_id
+        ));
+        assert!(matches!(
+            commands.borrow().get(1),
+            Some(AppCommand::RequestRestore { file_change_id: id }) if *id == file_change_id
+        ));
+        assert!(matches!(
+            commands.borrow().get(2),
+            Some(AppCommand::LoadChangeRecovery)
+        ));
+        assert!(matches!(
+            commands.borrow().get(3),
+            Some(AppCommand::RequestRecoveryRestore { operation_id: id }) if *id == operation_id
+        ));
+    }
+
+    #[test]
+    fn approval_prompt_cannot_be_themed_or_turned_off() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+        let prompt = shell
+            .split("component ApprovalPrompt")
+            .nth(1)
+            .expect("approval prompt")
+            .split("component Palette")
+            .next()
+            .expect("approval prompt boundary");
+
+        assert!(
+            !prompt.replace("TrustTheme.", "").contains("Theme."),
+            "uses only TrustTheme colors"
+        );
+        assert!(prompt.contains("TrustTheme.surface"));
+        assert!(shell.contains("if App.approval_open: ApprovalPrompt"));
+        assert!(!shell.contains("Mods.approvals"));
+    }
+
+    #[test]
+    fn approval_prompt_starts_on_the_safe_choice_and_keeps_tab_inside() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(shell.contains("init => { reject-button.take-focus(); }"));
+        assert!(shell.contains("event.text == Key.Tab || event.text == Key.Backtab"));
+    }
+
+    #[test]
+    fn every_custom_button_has_an_assistive_action_and_keyboard_focus() {
+        for (name, source) in [
+            ("chat", include_str!("../../../ui/workbench/chat.slint")),
+            ("panels", include_str!("../../../ui/workbench/panels.slint")),
+            (
+                "provider",
+                include_str!("../../../ui/workbench/provider.slint"),
+            ),
+            (
+                "settings",
+                include_str!("../../../ui/workbench/settings.slint"),
+            ),
+            ("shell", include_str!("../../../ui/workbench/shell.slint")),
+        ] {
+            let source = source.replace("\r\n", "\n");
+            for (index, _) in source.match_indices("accessible-role: button;") {
+                let block = &source[index..source.len().min(index + 420)];
+                assert!(
+                    block.contains("accessible-action-default"),
+                    "{name}: a button has no action: {}",
+                    &block[..block.len().min(120)]
+                );
+            }
+            for (index, _) in source.match_indices("accessible-role: tab;") {
+                let block = &source[index..source.len().min(index + 420)];
+                assert!(block.contains("accessible-action-default"), "{name}: tab");
+            }
+        }
+    }
+
+    #[test]
+    fn focus_follows_overlays_and_returns_afterwards() {
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(shell.contains("App.approval_open || App.settings_open"));
+        assert!(shell.contains("changed overlay-open => {"));
+        assert!(shell.contains("root.focus-composer();"));
+    }
+
+    #[test]
+    fn no_fabricated_preview_data_remains_in_production_code() {
+        let source = include_str!("lib.rs");
+        let workbench = include_str!("workbench.rs");
+        for forbidden in [
+            "default_conversation_messages",
+            "default_tools",
+            "Telegram bridge",
+        ] {
+            assert!(
+                !source
+                    .split("#[cfg(test)]")
+                    .next()
+                    .unwrap_or_default()
+                    .contains(forbidden),
+                "{forbidden}"
+            );
+            assert!(!workbench
+                .split("#[cfg(test)]")
+                .next()
+                .unwrap_or_default()
+                .contains(forbidden));
+        }
+    }
+
+    #[test]
+    fn overlays_stay_clear_of_safe_areas_and_the_on_screen_keyboard() {
+        let app = include_str!("../../../ui/app.slint");
+        let shell = include_str!("../../../ui/workbench/shell.slint");
+
+        assert!(app.contains(
+            "height: root.height - root.safe_area_top - root.safe_area_bottom - root.keyboard_inset;"
+        ));
+        assert!(shell.contains("compact: root.height < Theme.hero-compact-below;"));
+    }
+
+    #[test]
+    fn context_use_copy_describes_the_session() {
+        let chat = include_str!("../../../ui/workbench/chat.slint");
+
+        assert!(chat.contains("\"Session context: \" + App.usage_total_tokens"));
+        assert!(chat.contains("App.session_tokens_used"));
+    }
+
+    #[test]
+    fn reply_meta_shows_time_and_turn_tokens() {
+        let received = time::OffsetDateTime::now_utc();
+        let usage = argentum_domain::ModelUsage {
+            input_tokens: 900,
+            output_tokens: 100,
+            total_tokens: 1_000,
+            reasoning_tokens: None,
+            cached_input_tokens: None,
+            context_window_tokens: None,
+            turn_total: Some(argentum_domain::UsageTotal {
+                requests: 2,
+                input_tokens: 2_000,
+                cached_input_tokens: 0,
+                output_tokens: 400,
+            }),
+        };
+        let meta = reply_meta(received, Some(&usage));
+        assert!(meta.ends_with(" \u{b7} 2.4k tokens"), "{meta}");
+        assert_eq!(
+            meta.chars().count(),
+            "00:00 \u{b7} 2.4k tokens".chars().count()
+        );
+        assert!(!reply_meta(received, None).contains("tokens"));
+    }
+
+    #[test]
+    fn plan_projection_marks_only_the_first_pending_step_active() {
+        let model = plan_step_model(&[
+            PlanStep {
+                id: "done".into(),
+                title: "Done".into(),
+                detail: String::new(),
+                complete: true,
+                blocked: false,
+            },
+            PlanStep {
+                id: "current".into(),
+                title: "Current".into(),
+                detail: String::new(),
+                complete: false,
+                blocked: false,
+            },
+            PlanStep {
+                id: "later".into(),
+                title: "Later".into(),
+                detail: String::new(),
+                complete: false,
+                blocked: false,
+            },
+        ]);
+
+        assert_eq!(model.row_data(0).expect("first step").state, "complete");
+        assert_eq!(model.row_data(1).expect("second step").state, "active");
+        assert_eq!(model.row_data(2).expect("third step").state, "upcoming");
+    }
+
+    #[test]
+    fn trajectory_projection_preserves_exact_factual_labels() {
+        let session_id = SessionId::new_v4();
+        let snapshot = TrajectorySnapshot {
+            session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 4,
+                run_id: Some(RunId::new_v4()),
+                kind: TrajectoryKind::Usage,
+                state: TrajectoryState::Neutral,
+                title: "Model usage recorded".into(),
+                detail: "deepseek | deepseek-chat | 12 input | 7 output | 19 total".into(),
+                occurred_at: now(),
+            }],
+            truncated: false,
+        };
+
+        let model = trajectory_item_model(&snapshot);
+        let row = model.row_data(0).expect("trajectory row");
+        assert_eq!(row.kind, "usage");
+        assert_eq!(row.state, "neutral");
+        assert_eq!(row.title, "Model usage recorded");
+        assert!(row.detail.contains("12 input"));
+        assert!(row.timestamp.ends_with("UTC"));
+    }
+
+    #[test]
+    fn session_projection_is_newest_first_and_marks_the_active_row() {
+        let project_id = "00000000-0000-0000-0000-000000000081"
+            .parse()
+            .expect("project id");
+        let older_id = "00000000-0000-0000-0000-000000000082"
+            .parse()
+            .expect("older id");
+        let newer_id = "00000000-0000-0000-0000-000000000083"
+            .parse()
+            .expect("newer id");
+        let timestamp = now();
+        let snapshot = WorkspaceSnapshot {
+            project: Project {
+                id: project_id,
+                name: "Workspace".into(),
+                workspace_root: PathBuf::from("workspace"),
+                created_at: timestamp,
+            },
+            sessions: vec![
+                SessionSummary {
+                    id: older_id,
+                    title: "Older".into(),
+                    created_at: timestamp - time::Duration::seconds(1),
+                    updated_at: timestamp - time::Duration::seconds(1),
+                    pinned: false,
+                    archived: false,
+                },
+                SessionSummary {
+                    id: newer_id,
+                    title: "Newer".into(),
+                    created_at: timestamp,
+                    updated_at: timestamp,
+                    pinned: false,
+                    archived: false,
+                },
+            ],
+            active_session_id: Some(older_id),
+        };
+
+        let model = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
+
+        assert_eq!(model.row_data(0).expect("newest session").title, "Newer");
+        assert!(!model.row_data(0).expect("newest session").active);
+        assert_eq!(model.row_data(1).expect("active session").title, "Older");
+        assert!(model.row_data(1).expect("active session").active);
+    }
+
+    #[test]
+    fn provider_preset_projection_preserves_credentials_and_groups() {
+        let preset = ProviderPresetSummary {
+            id: "deepseek".into(),
+            label: "DeepSeek".into(),
+            kind: ProviderKind::OpenAiCompatible,
+            endpoint: Some("https://api.deepseek.com/v1/".into()),
+            default_model: "deepseek-chat".into(),
+            credential_profile_id: Some("deepseek".into()),
+            api_key_env: Some("DEEPSEEK_API_KEY".into()),
+            docs_url: "https://api-docs.deepseek.com".into(),
+            local: false,
+            supported: true,
+            group: "hosted".into(),
+            notes: String::new(),
+            tested: false,
+        };
+        let view = provider_preset_view(&preset);
+        assert_eq!(view.id.as_str(), "deepseek");
+        assert_eq!(view.credential.as_str(), "API key or DEEPSEEK_API_KEY");
+        assert_eq!(view.api_key_env.as_str(), "DEEPSEEK_API_KEY");
+        assert_eq!(view.group_label.as_str(), "Hosted");
+        assert!(view.supported);
+
+        let chatgpt = ProviderPresetSummary {
+            id: "chatgpt".into(),
+            label: "ChatGPT".into(),
+            kind: ProviderKind::OpenAiCompatible,
+            endpoint: Some("https://api.openai.com/v1/".into()),
+            default_model: "gpt-5".into(),
+            credential_profile_id: Some("chatgpt".into()),
+            api_key_env: None,
+            docs_url: String::new(),
+            local: false,
+            supported: true,
+            group: "hosted".into(),
+            notes: String::new(),
+            tested: false,
+        };
+        assert_eq!(
+            provider_preset_view(&chatgpt).credential.as_str(),
+            "Browser sign-in (CLI-only in this build)"
+        );
+    }
+
+    #[test]
+    fn desktop_status_projection_lists_tools_and_capability() {
+        let tools = vec![
+            DesktopToolSummary {
+                id: "desktop_inspect".into(),
+                title: "Inspect desktop".into(),
+                summary: "Inspect one owned window".into(),
+                risk: "Read only".into(),
+                requires_approval: true,
+            },
+            DesktopToolSummary {
+                id: "desktop_invoke".into(),
+                title: "Invoke desktop".into(),
+                summary: "Invoke one owned control".into(),
+                risk: "Mutation".into(),
+                requires_approval: true,
+            },
+        ];
+        let model = desktop_tool_model(&tools);
+        assert_eq!(model.row_count(), 2);
+        assert_eq!(
+            model.row_data(0).expect("first tool").id.as_str(),
+            "desktop_inspect"
+        );
+        assert!(model.row_data(1).expect("second tool").requires_approval);
+    }
+
+    #[test]
+    fn provider_budget_validation_rejects_invalid_limits() {
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "512", "512").is_ok());
+        assert!(parse_provider_budget_limits("-1", "8192", "4096", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "9000", "4096", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "8192", "512", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "4097", "512").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "512", "127").is_err());
+        assert!(parse_provider_budget_limits("8192", "8192", "4096", "8000", "512").is_err());
+    }
+
+    #[test]
+    fn session_model_orders_pinned_first_and_filters_archived() {
+        let project_id = ProjectId::new_v4();
+        let timestamp = now();
+        let session = |title: &str, pinned: bool, archived: bool, age: i64| SessionSummary {
+            id: SessionId::new_v4(),
+            title: title.into(),
+            created_at: timestamp - time::Duration::seconds(age),
+            updated_at: timestamp - time::Duration::seconds(age),
+            pinned,
+            archived,
+        };
+        let snapshot = WorkspaceSnapshot {
+            project: Project {
+                id: project_id,
+                name: "Workspace".into(),
+                workspace_root: PathBuf::from("workspace"),
+                created_at: timestamp,
+            },
+            sessions: vec![
+                session("Archived", false, true, 1),
+                session("Newer", false, false, 2),
+                session("Pinned", true, false, 30),
+            ],
+            active_session_id: None,
+        };
+
+        let active = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
+        assert_eq!(active.row_count(), 2);
+        assert_eq!(active.row_data(0).expect("pinned").title, "Pinned");
+        assert!(active.row_data(0).expect("pinned").pinned);
+        assert_eq!(active.row_data(1).expect("newer").title, "Newer");
+
+        let archived = session_item_model(&snapshot, "", SessionArchiveFilter::Archived);
+        assert_eq!(archived.row_count(), 1);
+        assert_eq!(archived.row_data(0).expect("archived").title, "Archived");
+        assert!(archived.row_data(0).expect("archived").archived);
+
+        let searched = session_item_model(&snapshot, "pin", SessionArchiveFilter::All);
+        assert_eq!(searched.row_count(), 1);
+        assert_eq!(searched.row_data(0).expect("search").title, "Pinned");
+    }
+
+    #[test]
+    fn active_run_states_include_approval_and_verification() {
+        assert!(is_active_lifecycle(TaskLifecycle::WaitingForApproval));
+        assert!(is_active_lifecycle(TaskLifecycle::Verifying));
+        assert!(!is_active_lifecycle(TaskLifecycle::Complete));
+    }
+
+    #[test]
+    fn provider_kinds_map_to_stable_ids() {
+        assert_eq!(provider_kind_id(ProviderKind::LocalLmStudio), "lm-studio");
+        assert_eq!(provider_kind_id(ProviderKind::LocalLlamaCpp), "llama-cpp");
+        assert_eq!(
+            provider_kind_label(ProviderKind::LocalLlamaCpp),
+            "llama.cpp"
+        );
+        assert_eq!(
+            provider_kind_from_id("llama-cpp"),
+            Some(ProviderKind::LocalLlamaCpp)
+        );
+        assert_eq!(
+            provider_kind_id(ProviderKind::OpenAiCompatible),
+            "openai-compatible"
+        );
+        assert_eq!(provider_kind_id(ProviderKind::Anthropic), "anthropic");
+        assert_eq!(provider_kind_id(ProviderKind::Unknown), "unknown");
+    }
+
+    #[test]
+    fn inspector_mode_projection_lists_only_enabled_available_modes() {
+        let modes = inspector_mode_model(&[
+            HarnessSurfaceState {
+                id: SurfaceId::Changes,
+                label: "Changes".into(),
+                availability: HarnessAvailability::Available,
+                visible: true,
+                configurable: true,
+                detail: "Current review summary.".into(),
+                unavailable_reason: String::new(),
+            },
+            HarnessSurfaceState {
+                id: SurfaceId::Activity,
+                label: "Activity".into(),
+                availability: HarnessAvailability::Available,
+                visible: false,
+                configurable: true,
+                detail: "Recent factual events.".into(),
+                unavailable_reason: String::new(),
+            },
+            HarnessSurfaceState {
+                id: SurfaceId::Trajectory,
+                label: "Trajectory".into(),
+                availability: HarnessAvailability::Unavailable,
+                visible: true,
+                configurable: false,
+                detail: String::new(),
+                unavailable_reason: "Not available.".into(),
+            },
+        ]);
+
+        assert_eq!(modes.row_count(), 1);
+        let mode = modes.row_data(0).expect("changes mode");
+        assert_eq!(mode.id, "changes");
+        assert_eq!(mode.icon, "diff");
+    }
+
+    /// Run from the shared UI test: the window backend allows one instance.
+    fn a_prompt_lost_by_a_failed_run_returns_to_the_composer(ui: &UiHandle) {
+        let project_id: argentum_domain::ProjectId = "00000000-0000-0000-0000-0000000000d1"
+            .parse()
+            .expect("project id");
+        let session_id: SessionId = "00000000-0000-0000-0000-0000000000d2"
+            .parse()
+            .expect("session id");
+        let snapshot = |messages: Vec<ConversationMessage>| {
+            AppEvent::ConversationSnapshotLoaded(ConversationSnapshot {
+                project_id,
+                session_id,
+                tool_traces: Vec::new(),
+                messages,
+            })
+        };
+        ui.window()
+            .set_active_session_id(session_id.to_string().into());
+
+        // The run failed before the prompt was stored.
+        ui.window().set_user_prompt("Unsaved question".into());
+        ui.window().set_error_message("Could not continue.".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Unsaved question");
+        assert_eq!(ui.window().get_user_prompt(), "");
+
+        // A stored prompt is not repeated.
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_user_prompt("Saved question".into());
+        ui.apply_event(&snapshot(vec![ConversationMessage {
+            id: "00000000-0000-0000-0000-0000000000d3"
+                .parse()
+                .expect("message id"),
+            project_id,
+            session_id,
+            run_id: "00000000-0000-0000-0000-0000000000d4"
+                .parse()
+                .expect("run id"),
+            role: ConversationRole::User,
+            text: "Saved question".into(),
+            reasoning: String::new(),
+            usage: None,
+            profile_id: String::new(),
+            model: String::new(),
+            status: ConversationMessageStatus::Complete,
+            created_at: now(),
+        }]));
+        assert_eq!(ui.window().get_draft(), "");
+
+        // Without an error nothing is restored, and a typed draft is kept.
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_user_prompt("Fine".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "");
+        ui.window().set_error_message("Could not continue.".into());
+        ui.window().set_draft("Typed already".into());
+        ui.window().set_user_prompt("Lost".into());
+        ui.apply_event(&snapshot(Vec::new()));
+        assert_eq!(ui.window().get_draft(), "Typed already");
+    }
+
+    fn model_picker_and_thinking_chip_follow_the_selected_model(ui: &UiHandle) {
+        use argentum_domain::ProviderCatalogSource;
+        use argentum_domain::ThinkingMode::{High, Low, Max};
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let dispatched = commands.clone();
+        connect_commands(ui.window(), move |command| {
+            dispatched.borrow_mut().push(command);
+        });
+        let app = ui.window().global::<App>();
+        ui.window().set_running(false);
+        ui.window().set_provider_id("deepseek".into());
+        ui.window()
+            .set_provider_endpoint("https://api.deepseek.com/".into());
+        ui.window().set_provider_model("deepseek-flash".into());
+        ui.refresh_model_name();
+        // Before any list has loaded, the documented levels show the chip.
+        assert!(app.get_thinking_available());
+
+        // A refresh names its provider, so the reply is applied, not dropped.
+        app.invoke_refresh_provider_models("deepseek".into());
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::ListProviderModels { provider_id }) if provider_id == "deepseek"
+        ));
+        assert_eq!(ui.window().get_provider_models_pending(), "list");
+        assert_eq!(ui.window().get_provider_models_provider_id(), "deepseek");
+        assert!(ui.window().get_provider_models_loading());
+        let model = |id: &str, levels: Vec<argentum_domain::ThinkingMode>| ProviderModel {
+            id: id.into(),
+            label: id.into(),
+            context_window_tokens: Some(1_000_000),
+            thinking_levels: levels,
+        };
+        ui.apply_event(&AppEvent::ProviderModelsSnapshot {
+            provider_id: "deepseek".into(),
+            models: vec![
+                model("deepseek-flash", vec![Low, High, Max]),
+                model("deepseek-v4-pro", vec![High]),
+            ],
+            selected_model: "deepseek-flash".into(),
+            source: ProviderCatalogSource::Live,
+        });
+        let rows = ui.window().get_provider_models();
+        assert_eq!(rows.row_count(), 2);
+        assert_eq!(rows.row_data(0).unwrap().thinking_levels, "low,high,max");
+        assert!(rows.row_data(0).unwrap().selected);
+        assert_eq!(ui.window().get_provider_models_pending(), "");
+        assert!(!ui.window().get_provider_models_loading());
+        assert!(!app.get_provider_models_known());
+
+        // The chip steps through the levels the selected model reports.
+        app.set_thinking_mode("off".into());
+        app.invoke_cycle_thinking_mode();
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SetThinkingMode { mode: Low })
+        ));
+        app.set_thinking_mode("max".into());
+        app.invoke_cycle_thinking_mode();
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SetThinkingMode {
+                mode: argentum_domain::ThinkingMode::Off
+            })
+        ));
+        ui.window().set_provider_model("deepseek-v4-pro".into());
+        app.set_thinking_mode("off".into());
+        app.invoke_cycle_thinking_mode();
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SetThinkingMode { mode: High })
+        ));
+
+        // Argentum's own list is marked, and a model without levels hides the chip.
+        ui.apply_event(&AppEvent::ProviderModelsSnapshot {
+            provider_id: "deepseek".into(),
+            models: vec![
+                model("deepseek-flash", vec![Low, High, Max]),
+                model("custom-model", Vec::new()),
+            ],
+            selected_model: "custom-model".into(),
+            source: ProviderCatalogSource::Known,
+        });
+        assert!(app.get_provider_models_known());
+        ui.window().set_provider_model("custom-model".into());
+        ui.refresh_model_name();
+        assert!(!app.get_thinking_available());
+        let sent = commands.borrow().len();
+        app.invoke_cycle_thinking_mode();
+        assert_eq!(commands.borrow().len(), sent);
+
+        // Another provider's list is never applied as this one's.
+        ui.apply_event(&AppEvent::ProviderModelsSnapshot {
+            provider_id: "minimax".into(),
+            models: vec![model("MiniMax-M3", Vec::new())],
+            selected_model: "MiniMax-M3".into(),
+            source: ProviderCatalogSource::Live,
+        });
+        assert_eq!(ui.window().get_provider_models().row_count(), 2);
+
+        ui.window()
+            .set_provider_models_provider_id(SharedString::default());
+        ui.window()
+            .set_provider_models(ModelRc::new(VecModel::from(Vec::new())));
+        app.set_provider_models_known(false);
+    }
+
+    #[test]
+    fn event_callback_and_credential_projections_share_one_ui_instance() {
+        let ui = UiHandle::new().expect("create UI projection");
+        a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
+        model_picker_and_thinking_chip_follow_the_selected_model(&ui);
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_active_session_id(SharedString::default());
+
+        let goal_session_id: SessionId = "00000000-0000-0000-0000-0000000000c1"
+            .parse()
+            .expect("goal session id");
+        ui.window()
+            .set_active_session_id(goal_session_id.to_string().into());
+        ui.apply_event(&AppEvent::GoalSnapshotLoaded {
+            session_id: goal_session_id,
+            goal: Some(Box::new(Goal {
+                accounting: None,
+                definition_revision: argentum_domain::GoalId::new_v4(),
+                acceptance: None,
+                owner_attestation: None,
+                completion: None,
+                completion_report: Some(argentum_domain::GoalCompletionReport {
+                    run_id: RunId::new_v4(),
+                    summary: "Shipped the slice.".into(),
+                    reported_at: now(),
+                }),
+                id: "00000000-0000-0000-0000-0000000000c2"
+                    .parse()
+                    .expect("goal id"),
+                project_id: "00000000-0000-0000-0000-0000000000c3"
+                    .parse()
+                    .expect("goal project id"),
+                session_id: goal_session_id,
+                objective: "Ship the bounded slice".into(),
+                lifecycle: GoalLifecycle::Paused,
+                token_budget: Some(4_000),
+                tool_budget: Some(8),
+                time_budget_seconds: Some(1_800),
+                tokens_used: 640,
+                tools_used: 2,
+                iteration: 3,
+                next_action: "Resume the goal when ready".into(),
+                verification_history: Vec::new(),
+                created_at: now(),
+                updated_at: now(),
+            })),
+        });
+        assert!(ui.window().get_goal_available());
+        assert_eq!(ui.window().get_goal_objective(), "Ship the bounded slice");
+        assert_eq!(ui.window().get_goal_state(), "Paused");
+        assert_eq!(ui.window().get_goal_iteration(), 3);
+        assert_eq!(ui.window().get_goal_token_budget(), 4_000);
+        assert_eq!(ui.window().get_goal_tokens_used(), 640);
+        // Panel logic keys on the stable id, never the display label.
+        assert_eq!(ui.window().get_goal_lifecycle(), "paused");
+        assert_eq!(
+            ui.window().get_goal_progress_summary(),
+            "3 runs, 640 of 4.0k tokens, 2 of 8 tools, 30 min limit"
+        );
+        assert!(ui.window().get_goal_report_pending());
+        assert_eq!(ui.window().get_goal_report_summary(), "Shipped the slice.");
+        ui.apply_event(&AppEvent::GoalSnapshotLoaded {
+            session_id: goal_session_id,
+            goal: None,
+        });
+        assert!(!ui.window().get_goal_available());
+        assert_eq!(ui.window().get_goal_lifecycle(), "");
+        assert_eq!(ui.window().get_goal_progress_summary(), "");
+
+        ui.apply_event(&AppEvent::ToolCatalogSnapshot {
+            tools: vec![argentum_domain::ToolDescriptor {
+                id: "read_text".into(),
+                capability_id: "tool.read-text".into(),
+                title: "Read text".into(),
+                summary: "Read a bounded file".into(),
+                capabilities: Vec::new(),
+                risk: argentum_domain::ToolRisk::ReadOnly,
+                requires_approval: false,
+            }],
+        });
+        assert_eq!(ui.window().get_tool_catalog().row_count(), 1);
+        assert!(!ui.window().get_tool_catalog_loading());
+        assert_eq!(ui.window().get_tool_catalog_error(), "");
+
+        ui.apply_event(&AppEvent::SkillCatalogSnapshot {
+            skills: vec![
+                argentum_domain::SkillSummaryView {
+                    name: "release-review".into(),
+                    description: "Review a bounded release slice".into(),
+                    relative_path: ".agents/skills/release-review/SKILL.md".into(),
+                    digest: "abc".into(),
+                    valid: true,
+                    error: String::new(),
+                },
+                argentum_domain::SkillSummaryView {
+                    name: "broken".into(),
+                    description: String::new(),
+                    relative_path: ".agents/skills/broken/SKILL.md".into(),
+                    digest: String::new(),
+                    valid: false,
+                    error: "missing frontmatter".into(),
+                },
+            ],
+            complete: false,
+        });
+        assert_eq!(ui.window().get_skill_catalog().row_count(), 2);
+        assert!(!ui.window().get_skill_catalog_loading());
+        assert_eq!(
+            ui.window().get_skill_catalog_error(),
+            "Skill catalog is incomplete."
+        );
+
+        ui.apply_event(&AppEvent::SkillInspectionSnapshot {
+            inspection: argentum_domain::SkillInspectionView {
+                name: "broken".into(),
+                description: String::new(),
+                relative_path: ".agents/skills/broken/SKILL.md".into(),
+                digest: String::new(),
+                body: "bounded body".into(),
+                valid: false,
+                error: "missing frontmatter".into(),
+            },
+        });
+        assert_eq!(ui.window().get_skill_selected(), "broken");
+        assert_eq!(ui.window().get_skill_body(), "bounded body");
+        assert_eq!(ui.window().get_skill_inspect_error(), "missing frontmatter");
+        assert!(!ui.window().get_skill_inspect_loading());
+
+        ui.apply_event(&AppEvent::AccountingSnapshot {
+            session_id: goal_session_id,
+            goal_id: Some(
+                "00000000-0000-0000-0000-0000000000c2"
+                    .parse()
+                    .expect("goal id"),
+            ),
+            objective: "Ship the bounded slice".into(),
+            state: "Active".into(),
+            summary: "Session and goal accounting".into(),
+            counters: "observed 10".into(),
+            available: "90 tokens available".into(),
+            runs: vec![RecordLine::new("Run 1", "observed 10")],
+            requests: vec![RecordLine::new("Request 1", "reserved 4")],
+            runs_truncated: false,
+            requests_truncated: true,
+        });
+        assert_eq!(
+            ui.window().get_accounting_summary(),
+            "Session and goal accounting"
+        );
+        assert_eq!(ui.window().get_accounting_runs().row_count(), 1);
+        assert!(ui.window().get_accounting_requests_truncated());
+
+        ui.apply_event(&AppEvent::RunDiagnosticsSnapshot {
+            run_id: "00000000-0000-0000-0000-0000000000c4"
+                .parse()
+                .expect("run id"),
+            state: "Loaded".into(),
+            summary: "Run diagnostics".into(),
+            records: vec![RecordLine::new("", "outcome: complete")],
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_run_diagnostics_state(), "Loaded");
+        assert_eq!(ui.window().get_run_diagnostics_records().row_count(), 1);
+
+        ui.apply_event(&AppEvent::RunResultSnapshot {
+            run_id: "00000000-0000-0000-0000-0000000000c4"
+                .parse()
+                .expect("run id"),
+            result: None,
+            error: "No final result is recorded for this run.".into(),
+        });
+        assert_eq!(ui.window().get_run_result_state(), "Unavailable");
+        assert_eq!(
+            ui.window().get_run_result_error(),
+            "No final result is recorded for this run."
+        );
+
+        ui.apply_event(&AppEvent::InstructionsSnapshot {
+            summary: "1 document".into(),
+            documents: vec![RecordLine::new("AGENTS.md", "workspace")],
+            selections: Vec::new(),
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_instructions_documents().row_count(), 1);
+
+        ui.apply_event(&AppEvent::ContextSnapshotLoaded {
+            summary: "Context loaded".into(),
+            records: vec![RecordLine::new("Session", "active")],
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_context_summary(), "Context loaded");
+        assert_eq!(ui.window().get_context_records().row_count(), 1);
+
+        ui.apply_event(&AppEvent::ExtensionStatusSnapshot {
+            entries: vec![RecordLine::new("extension", "inactive")],
+            receipts: vec![RecordLine::new("#1", "complete")],
+            receipts_truncated: false,
+            error: String::new(),
+        });
+        assert_eq!(ui.window().get_extension_entries().row_count(), 1);
+        assert_eq!(ui.window().get_extension_receipts().row_count(), 1);
+
+        // A provider probe failure is kept out of the task error surface.
+        let detail = "LM Studio could not be reached. Start the service or check the endpoint.";
+        ui.window().set_provider_testing(true);
+        ui.window().set_provider_pending("probe".into());
+
+        ui.apply_event(&AppEvent::ProviderStatus(argentum_domain::ProviderStatus {
+            profile_id: "lm-studio".into(),
+            kind: ProviderKind::LocalLmStudio,
+            label: "LM Studio".into(),
+            endpoint: "http://127.0.0.1:1234/v1/".into(),
+            connected: false,
+            detail: detail.into(),
+        }));
+        ui.apply_event(&AppEvent::Error {
+            message: detail.into(),
+            recoverable: true,
+        });
+
+        assert_eq!(ui.window().get_error_message(), "");
+        assert_eq!(ui.window().get_run_state(), "Ready");
+        assert_eq!(ui.window().get_provider_probe_state(), "failed");
+        assert_eq!(ui.window().get_provider_error(), detail);
+
+        // A rapid second submit is ignored until acceptance or error.
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let dispatched = commands.clone();
+        connect_commands(ui.window(), move |command| {
+            dispatched.borrow_mut().push(command);
+        });
+        ui.window()
+            .global::<App>()
+            .invoke_submit_task("Inspect the workspace".into());
+        ui.window()
+            .global::<App>()
+            .invoke_submit_task("Inspect the workspace".into());
+        assert!(ui.window().get_submission_pending());
+        assert_eq!(commands.borrow().len(), 1);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SubmitTask { prompt }) if prompt == "Inspect the workspace"
+        ));
+        ui.apply_command_failure(
+            &AppCommand::SubmitTask {
+                prompt: "Inspect the workspace".into(),
+            },
+            "provider unavailable",
+        );
+        assert!(!ui.window().get_submission_pending());
+
+        // An unset budget is sent as no limit. The store rejects zero limits.
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_set_goal("Ship the bounded slice".into(), 0, 0, 0);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetGoal {
+                token_budget: None,
+                tool_budget: None,
+                time_budget_seconds: None,
+                ..
+            })
+        ));
+        // Once the goal is saved and active, a turn toward it starts by itself.
+        let start_session_id: SessionId = "00000000-0000-0000-0000-0000000000c4"
+            .parse()
+            .expect("session id");
+        let start_goal_id: GoalId = "00000000-0000-0000-0000-0000000000c5"
+            .parse()
+            .expect("goal id");
+        ui.window().global::<Mods>().set_goal(true);
+        ui.window()
+            .set_active_session_id(start_session_id.to_string().into());
+        commands.borrow_mut().clear();
+        ui.apply_event(&AppEvent::GoalSnapshotLoaded {
+            session_id: start_session_id,
+            goal: Some(Box::new(Goal {
+                accounting: None,
+                definition_revision: GoalId::new_v4(),
+                acceptance: None,
+                owner_attestation: None,
+                completion: None,
+                completion_report: None,
+                id: start_goal_id,
+                project_id: "00000000-0000-0000-0000-0000000000c6"
+                    .parse()
+                    .expect("project id"),
+                session_id: start_session_id,
+                objective: "Ship the bounded slice".into(),
+                lifecycle: GoalLifecycle::Active,
+                token_budget: None,
+                tool_budget: None,
+                time_budget_seconds: None,
+                tokens_used: 0,
+                tools_used: 0,
+                iteration: 0,
+                next_action: String::new(),
+                verification_history: Vec::new(),
+                created_at: now(),
+                updated_at: now(),
+            })),
+        });
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SubmitGoalTask { goal_id, prompt })
+                if *goal_id == start_goal_id && prompt.contains("Ship the bounded slice")
+        ));
+        assert!(!ui.window().global::<App>().get_goal_start_pending());
+        // A later snapshot of the same goal does not start another turn.
+        let sent = commands.borrow().len();
+        ui.window().set_submission_pending(false);
+        ui.apply_goal_snapshot(None);
+        assert_eq!(commands.borrow().len(), sent);
+        ui.window().set_active_session_id(SharedString::default());
+        ui.window().set_goal_action_pending(false);
+
+        // With the goal module on and the goal active, the composer runs the
+        // task toward that goal. A paused goal leaves it an ordinary task.
+        let goal_id: GoalId = "00000000-0000-0000-0000-0000000000c2"
+            .parse()
+            .expect("goal id");
+        ui.window().global::<Mods>().set_goal(true);
+        ui.window().set_goal_available(true);
+        ui.window().set_goal_id(goal_id.to_string().into());
+        for (lifecycle, bound) in [("active", true), ("paused", false)] {
+            commands.borrow_mut().clear();
+            ui.window().set_goal_lifecycle(lifecycle.into());
+            ui.window()
+                .global::<App>()
+                .invoke_submit_task("Inspect the workspace".into());
+            let command = commands.borrow().first().cloned();
+            if bound {
+                assert!(matches!(
+                    command,
+                    Some(AppCommand::SubmitGoalTask { goal_id: id, ref prompt })
+                        if id == goal_id && prompt == "Inspect the workspace"
+                ));
+            } else {
+                assert!(matches!(command, Some(AppCommand::SubmitTask { .. })));
+            }
+            ui.apply_command_failure(&command.expect("submission"), "provider unavailable");
+            assert!(!ui.window().get_submission_pending());
+        }
+        // The owner's decision on a completion report names the current goal.
+        for (confirm, expected) in [(true, "confirm"), (false, "dismiss")] {
+            commands.borrow_mut().clear();
+            if confirm {
+                ui.window().global::<App>().invoke_confirm_goal_report();
+            } else {
+                ui.window().global::<App>().invoke_dismiss_goal_report();
+            }
+            let command = commands.borrow().first().cloned();
+            match (expected, &command) {
+                ("confirm", Some(AppCommand::ConfirmGoalReport { goal_id: id }))
+                | ("dismiss", Some(AppCommand::DismissGoalReport { goal_id: id })) => {
+                    assert_eq!(*id, goal_id);
+                }
+                _ => panic!("unexpected {expected} command: {command:?}"),
+            }
+            assert!(ui.window().get_goal_action_pending());
+            ui.apply_command_failure(&command.expect("decision"), "stale goal");
+            assert!(!ui.window().get_goal_action_pending());
+        }
+        ui.window().global::<Mods>().set_goal(false);
+        ui.window().set_goal_available(false);
+        ui.window().set_goal_lifecycle(SharedString::default());
+
+        // Approval actions share one immediate response latch.
+        commands.borrow_mut().clear();
+        let approval_id = "00000000-0000-0000-0000-000000000091";
+        ui.window()
+            .global::<App>()
+            .invoke_approve_tool(approval_id.into(), "once".into());
+        ui.window()
+            .global::<App>()
+            .invoke_reject_tool(approval_id.into());
+        assert!(ui.window().get_approval_response_pending());
+        assert_eq!(commands.borrow().len(), 1);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::ApproveTool { .. })
+        ));
+        ui.apply_event(&AppEvent::ApprovalResolved {
+            approval_id: approval_id.parse().expect("approval id"),
+            approved: true,
+        });
+        assert!(!ui.window().get_approval_response_pending());
+
+        // A provider list failure clears every busy flag.
+        ui.window().set_provider_loading(true);
+        ui.window().set_provider_saving(true);
+        ui.window().set_provider_selecting(true);
+        ui.window().set_provider_testing(true);
+        ui.window().set_provider_pending("list".into());
+        ui.apply_command_failure(
+            &AppCommand::ListProviderProfiles,
+            "provider profile store unavailable",
+        );
+        assert!(!ui.window().get_provider_loading());
+        assert!(!ui.window().get_provider_saving());
+        assert!(!ui.window().get_provider_selecting());
+        assert!(!ui.window().get_provider_testing());
+        assert_eq!(ui.window().get_provider_pending(), "");
+        assert_ne!(ui.window().get_provider_error(), "");
+
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_refresh_provider_models("minimax".into());
+        ui.window()
+            .global::<App>()
+            .invoke_select_provider_model("minimax".into(), "MiniMax-M2.7".into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::ListProviderModels { provider_id }) if provider_id == "minimax"
+        ));
+        assert!(matches!(
+            commands.borrow().get(1),
+            Some(AppCommand::SelectProviderModel { provider_id, model })
+                if provider_id == "minimax" && model == "MiniMax-M2.7"
+        ));
+
+        ui.window().set_run_state("Ready".into());
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_provider_models_loading(true);
+        ui.window().set_provider_models_pending("list".into());
+        ui.window()
+            .set_provider_models_provider_id("minimax".into());
+        ui.apply_command_failure(
+            &AppCommand::ListProviderModels {
+                provider_id: "minimax".into(),
+            },
+            "MiniMax could not return its model catalog. Check its settings.",
+        );
+        assert_eq!(ui.window().get_run_state(), "Ready");
+        assert_eq!(ui.window().get_error_message(), "");
+        assert_ne!(ui.window().get_provider_models_error(), "");
+
+        // Provider budget and context snapshots are projected only for the
+        // currently selected profile and clear their pending states.
+        ui.window().set_provider_id("llama-cpp".into());
+        ui.window().set_provider_budget_pending(true);
+        ui.apply_event(&AppEvent::ProviderBudgetSnapshot {
+            profile_id: "llama-cpp".into(),
+            budget: Some(ModelBudget {
+                revision: RunId::new_v4(),
+                profile_id: "llama-cpp".into(),
+                provider_kind: ProviderKind::LocalLlamaCpp,
+                endpoint: "local://llama-cpp/".into(),
+                model: "Qwen3.5-0.8B-Q8_0.gguf".into(),
+                usable_context_tokens: 8192,
+                input_limit_tokens: Some(8192),
+                maximum_output_tokens: 4096,
+                requested_output_tokens: 512,
+                uncertainty_tokens: 512,
+            }),
+            error: String::new(),
+            save_completed: true,
+        });
+        assert_eq!(ui.window().get_provider_budget_total().as_str(), "8192");
+        assert_eq!(ui.window().get_provider_budget_input().as_str(), "8192");
+        assert_eq!(
+            ui.window().get_provider_budget_max_output().as_str(),
+            "4096"
+        );
+        assert_eq!(
+            ui.window().get_provider_budget_requested_output().as_str(),
+            "512"
+        );
+        assert_eq!(
+            ui.window().get_provider_budget_uncertainty().as_str(),
+            "512"
+        );
+        assert!(ui.window().get_provider_budget_saved());
+        assert!(!ui.window().get_provider_budget_pending());
+        assert!(ui
+            .window()
+            .get_provider_budget_notice()
+            .as_str()
+            .contains("saved"));
+
+        ui.window().set_provider_context_pending(true);
+        ui.apply_event(&AppEvent::ProviderContextSnapshot {
+            profile_id: "llama-cpp".into(),
+            available: true,
+            context_tokens: 16384,
+            choices: vec![8192, 16384, 32768],
+            error: String::new(),
+            save_completed: true,
+        });
+        assert!(ui.window().get_provider_context_available());
+        assert_eq!(ui.window().get_provider_context_tokens(), 16384);
+        let context_choices = ui.window().get_provider_context_choices();
+        assert_eq!(context_choices.row_count(), 3);
+        assert_eq!(
+            context_choices.row_data(0).expect("8K").label.as_str(),
+            "8K (Default)"
+        );
+        assert_eq!(
+            context_choices.row_data(1).expect("16K").label.as_str(),
+            "16K"
+        );
+        assert!(!context_choices.row_data(0).expect("8K").selected);
+        assert!(context_choices.row_data(1).expect("16K").selected);
+        assert!(!ui.window().get_provider_context_pending());
+
+        ui.window().set_provider_id("llama-cpp".into());
+        ui.window().set_provider_pending(SharedString::default());
+        ui.window().set_provider_budget_total("8192".into());
+        ui.window().set_provider_budget_input("8192".into());
+        ui.window().set_provider_budget_max_output("4096".into());
+        ui.window()
+            .set_provider_budget_requested_output("512".into());
+        ui.window().set_provider_budget_uncertainty("512".into());
+        commands.borrow_mut().clear();
+        ui.window().global::<App>().invoke_save_provider_budget();
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SaveProviderBudget { profile_id, limits })
+                if profile_id == "llama-cpp"
+                    && *limits == [8192, 8192, 4096, 512, 512]
+        ));
+        assert!(ui.window().get_provider_budget_pending());
+
+        ui.window().set_provider_budget_pending(true);
+        ui.apply_command_failure(
+            &AppCommand::SaveProviderBudget {
+                profile_id: "llama-cpp".into(),
+                limits: [8192, 8192, 4096, 512, 512],
+            },
+            "invalid context/input/output/uncertainty relationship",
+        );
+        assert!(!ui.window().get_provider_budget_pending());
+        assert!(!ui.window().get_provider_budget_error().is_empty());
+
+        ui.window().set_provider_context_pending(true);
+        ui.apply_command_failure(
+            &AppCommand::SaveProviderContext {
+                profile_id: "llama-cpp".into(),
+                context_tokens: 16384,
+            },
+            "context presets configure the built-in llama.cpp profile only",
+        );
+        assert!(!ui.window().get_provider_context_pending());
+        assert!(!ui.window().get_provider_context_error().is_empty());
+
+        // Harness state keeps presentation visibility separate from capability
+        // availability and dispatches only typed profile or surface changes.
+        commands.borrow_mut().clear();
+        let harness_snapshot = HarnessSnapshot {
+            diagnostics: None,
+            local_backend: None,
+            modules: Vec::new(),
+            selected_profile_id: "standard".into(),
+            profiles: vec![HarnessProfileSummary {
+                id: "review".into(),
+                label: "Review".into(),
+                detail: "Open the Changes summary.".into(),
+                selected: false,
+                selectable: true,
+            }],
+            selected_execution_profile_id: "confirm-before-changes".into(),
+            execution_profiles: vec![
+                HarnessExecutionProfileSummary {
+                    id: "read-only".into(),
+                    label: "Read Only".into(),
+                    detail: "File changes are disabled.".into(),
+                    selected: false,
+                    selectable: true,
+                },
+                HarnessExecutionProfileSummary {
+                    id: "confirm-before-changes".into(),
+                    label: "Confirm Before Changes".into(),
+                    detail: "Every write needs approval.".into(),
+                    selected: true,
+                    selectable: true,
+                },
+            ],
+            capabilities: vec![
+                HarnessCapabilityState {
+                    id: "verification.runner".into(),
+                    label: "Verification runners".into(),
+                    kind: HarnessCapabilityKind::Review,
+                    availability: HarnessAvailability::Unavailable,
+                    readiness: HarnessReadiness::Unavailable,
+                    enabled: false,
+                    configurable: false,
+                    detail: String::new(),
+                    unavailable_reason: "No verification runner is registered.".into(),
+                    dependencies: Vec::new(),
+                },
+                HarnessCapabilityState {
+                    id: "tool.write-text".into(),
+                    label: "Write text tool".into(),
+                    kind: HarnessCapabilityKind::Tool,
+                    availability: HarnessAvailability::Available,
+                    readiness: HarnessReadiness::Ready,
+                    enabled: true,
+                    configurable: true,
+                    detail: "Writes require approval.".into(),
+                    unavailable_reason: String::new(),
+                    dependencies: vec!["approval.write".into()],
+                },
+            ],
+            surfaces: vec![HarnessSurfaceState {
+                id: SurfaceId::Changes,
+                label: "Changes".into(),
+                availability: HarnessAvailability::Available,
+                visible: true,
+                configurable: true,
+                detail: "Current review summary.".into(),
+                unavailable_reason: String::new(),
+            }],
+        };
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
+        assert_eq!(ui.window().get_harness_profile_id(), "standard");
+        assert_eq!(
+            ui.window().get_execution_profile_id(),
+            "confirm-before-changes"
+        );
+        assert_eq!(
+            ui.window().get_execution_profile_label(),
+            "Confirm Before Changes"
+        );
+        assert_eq!(ui.window().get_harness_profiles().row_count(), 1);
+        assert_eq!(ui.window().get_inspector_modes().row_count(), 1);
+        assert_eq!(
+            ui.window()
+                .get_harness_capabilities()
+                .row_data(0)
+                .expect("capability")
+                .state,
+            "unavailable"
+        );
+        ui.window()
+            .global::<App>()
+            .invoke_select_execution_profile("read-only".into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SelectExecutionProfile { profile_id })
+                if profile_id == "read-only"
+        ));
+        let mut read_only_snapshot = harness_snapshot.clone();
+        let mut diagnostic_snapshot = harness_snapshot.clone();
+        diagnostic_snapshot.diagnostics = Some(argentum_domain::DiagnosticSnapshot {
+            records: vec![argentum_domain::DiagnosticRecord {
+                sequence: 1,
+                occurred_at: argentum_domain::now(),
+                code: "model_ready".into(),
+                component: "argentum.local-model".into(),
+                line: None,
+                level: "INFO".into(),
+                run_id: None,
+            }],
+            recorded: 1,
+            dropped: 0,
+            evicted: 0,
+            degraded: false,
+        });
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(diagnostic_snapshot));
+        assert!(ui.window().get_diagnostics_enabled());
+        assert_eq!(ui.window().get_diagnostic_records().row_count(), 1);
+        ui.window().set_diagnostics_open(true);
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
+        assert!(!ui.window().get_diagnostics_enabled());
+        assert!(!ui.window().get_diagnostics_open());
+        assert_eq!(ui.window().get_diagnostic_records().row_count(), 0);
+        read_only_snapshot.selected_execution_profile_id = "read-only".into();
+        read_only_snapshot.execution_profiles[0].selected = true;
+        read_only_snapshot.execution_profiles[1].selected = false;
+        read_only_snapshot.capabilities[1].enabled = false;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(read_only_snapshot));
+        assert_eq!(ui.window().get_execution_profile_label(), "Read Only");
+        assert_eq!(
+            ui.window()
+                .get_harness_capabilities()
+                .row_data(1)
+                .expect("write capability")
+                .state,
+            "disabled"
+        );
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_set_harness_capability_enabled("tool.write-text".into(), true);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id,
+                enabled: true,
+            }) if capability_id == "tool.write-text"
+        ));
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(harness_snapshot.clone()));
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_select_harness_profile("review".into());
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SelectHarnessProfile { profile_id }) if profile_id == "review"
+        ));
+        let mut review_snapshot = harness_snapshot.clone();
+        review_snapshot.selected_profile_id = "review".into();
+        review_snapshot.profiles[0].selected = true;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(review_snapshot));
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_set_harness_surface_visibility("activity".into(), true);
+        assert!(matches!(
+            commands.borrow().first(),
+            Some(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Activity,
+                visible: true,
+            })
+        ));
+        commands.borrow_mut().clear();
+        ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface("activity".into());
+        ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface("changes".into());
+        ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface("trajectory".into());
+        ui.window()
+            .global::<App>()
+            .invoke_set_inspector_surface(SharedString::default());
+        let surfaces = commands
+            .borrow()
+            .iter()
+            .filter_map(|command| match command {
+                AppCommand::SetInspectorSurface { surface } => Some(*surface),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            surfaces,
+            vec![
+                Some(SurfaceId::Activity),
+                Some(SurfaceId::Changes),
+                Some(SurfaceId::Trajectory),
+                None
+            ]
+        );
+
+        let mut inspector_layout = LayoutProfile::default();
+        inspector_layout.visible.insert(SurfaceId::Activity, true);
+        inspector_layout.active_inspector = Some(SurfaceId::Activity);
+        inspector_layout.inspector_collapsed = false;
+        ui.apply_event(&AppEvent::LayoutChanged(inspector_layout));
+        assert_eq!(ui.window().get_active_inspector(), "activity");
+        assert!(!ui.window().get_inspector_collapsed());
+
+        // Provider mutations and catalog refreshes are rejected at the Rust callback
+        // boundary while a run is active, even if a caller bypasses Slint enabled state.
+        commands.borrow_mut().clear();
+        ui.window().set_running(true);
+        ui.window()
+            .global::<App>()
+            .invoke_probe_provider("minimax".into());
+        ui.window().global::<App>().invoke_save_provider_profile(
+            "minimax".into(),
+            "MiniMax".into(),
+            "openai-compatible".into(),
+            "https://api.minimax.io/v1/".into(),
+            "MiniMax-M2.7".into(),
+            true,
+        );
+        ui.window()
+            .global::<App>()
+            .invoke_select_provider_profile("minimax".into());
+        ui.window()
+            .global::<App>()
+            .invoke_refresh_provider_models("minimax".into());
+        ui.window()
+            .global::<App>()
+            .invoke_select_provider_model("minimax".into(), "MiniMax-M2.7".into());
+        ui.window()
+            .global::<App>()
+            .invoke_select_execution_profile("read-only".into());
+        ui.window()
+            .global::<App>()
+            .invoke_set_harness_capability_enabled("tool.write-text".into(), false);
+        assert!(commands.borrow().is_empty());
+        ui.window().set_running(false);
+
+        // Run events known to target another session cannot alter the active view.
+        let active_session_id: SessionId = "00000000-0000-0000-0000-0000000000a1"
+            .parse()
+            .expect("active session id");
+        let other_session_id: SessionId = "00000000-0000-0000-0000-0000000000a2"
+            .parse()
+            .expect("other session id");
+        let run_id: RunId = "00000000-0000-0000-0000-0000000000a3"
+            .parse()
+            .expect("run id");
+        ui.window()
+            .set_active_session_id(active_session_id.to_string().into());
+        ui.apply_event(&AppEvent::TrajectorySnapshotLoaded(TrajectorySnapshot {
+            session_id: other_session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 1,
+                run_id: Some(run_id),
+                kind: TrajectoryKind::Lifecycle,
+                state: TrajectoryState::Active,
+                title: "Background run".into(),
+                detail: "Must stay hidden".into(),
+                occurred_at: now(),
+            }],
+            truncated: false,
+        }));
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 0);
+        ui.apply_event(&AppEvent::TrajectorySnapshotLoaded(TrajectorySnapshot {
+            session_id: active_session_id,
+            entries: vec![argentum_domain::TrajectoryEntry {
+                sequence: 2,
+                run_id: Some(run_id),
+                kind: TrajectoryKind::Lifecycle,
+                state: TrajectoryState::Active,
+                title: "Run started".into(),
+                detail: "Run lifecycle changed.".into(),
+                occurred_at: now(),
+            }],
+            truncated: true,
+        }));
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 1);
+        assert_eq!(ui.window().get_trajectory_summary(), "1 durable record");
+        assert!(ui.window().get_trajectory_truncated());
+        let recorded_entry = argentum_domain::TrajectoryEntry {
+            sequence: 3,
+            run_id: Some(run_id),
+            kind: TrajectoryKind::Verification,
+            state: TrajectoryState::Success,
+            title: "Verification passed".into(),
+            detail: "Exact check result.".into(),
+            occurred_at: now(),
+        };
+        ui.apply_event(&AppEvent::TrajectoryEntryRecorded {
+            session_id: active_session_id,
+            entry: recorded_entry.clone(),
+        });
+        ui.apply_event(&AppEvent::TrajectoryEntryRecorded {
+            session_id: active_session_id,
+            entry: recorded_entry,
+        });
+        assert_eq!(ui.window().get_trajectory_items().row_count(), 2);
+        assert_eq!(ui.window().get_trajectory_summary(), "2 durable records");
+        ui.window().set_active_run_id(SharedString::default());
+        ui.window().set_plan_steps(empty_plan_model());
+        ui.window().set_user_prompt(SharedString::default());
+        ui.window().set_transcript(SharedString::default());
+        let unknown_run_id: RunId = "00000000-0000-0000-0000-0000000000a5"
+            .parse()
+            .expect("unknown run id");
+        ui.apply_event(&AppEvent::AssistantDelta {
+            run_id: unknown_run_id,
+            text: "Must stay hidden".into(),
+        });
+        assert_eq!(ui.window().get_transcript(), "");
+        assert_eq!(ui.window().get_live_blocks().row_count(), 0);
+        ui.apply_event(&AppEvent::TaskAccepted(Task {
+            id: "00000000-0000-0000-0000-0000000000a4"
+                .parse()
+                .expect("task id"),
+            session_id: other_session_id,
+            prompt: "Background task".into(),
+            lifecycle: TaskLifecycle::Queued,
+            created_at: now(),
+        }));
+        ui.apply_event(&AppEvent::PlanUpdated {
+            run_id,
+            steps: vec![PlanStep {
+                id: "one".into(),
+                title: "Should stay hidden".into(),
+                detail: String::new(),
+                complete: false,
+                blocked: false,
+            }],
+        });
+        assert_eq!(ui.window().get_active_run_id(), "");
+        assert_eq!(ui.window().get_plan_steps().row_count(), 0);
+        assert_eq!(ui.window().get_user_prompt(), "");
+
+        // Conversation history is a multi-message projection for the active session.
+        let project_id: argentum_domain::ProjectId = "00000000-0000-0000-0000-0000000000b1"
+            .parse()
+            .expect("project id");
+        let session_id: SessionId = "00000000-0000-0000-0000-0000000000b2"
+            .parse()
+            .expect("session id");
+        let run_id: RunId = "00000000-0000-0000-0000-0000000000b3"
+            .parse()
+            .expect("run id");
+        ui.window()
+            .set_active_session_id(session_id.to_string().into());
+        ui.window()
+            .set_live_blocks(markdown::model("left over from streaming"));
+        ui.apply_event(&AppEvent::ConversationSnapshotLoaded(
+            ConversationSnapshot {
+                project_id,
+                session_id,
+                tool_traces: Vec::new(),
+                messages: vec![
+                    ConversationMessage {
+                        id: "00000000-0000-0000-0000-0000000000b4"
+                            .parse()
+                            .expect("message id"),
+                        project_id,
+                        session_id,
+                        run_id,
+                        role: ConversationRole::User,
+                        text: "Question".into(),
+                        reasoning: String::new(),
+                        usage: None,
+                        profile_id: String::new(),
+                        model: String::new(),
+                        status: ConversationMessageStatus::Complete,
+                        created_at: now(),
+                    },
+                    ConversationMessage {
+                        id: "00000000-0000-0000-0000-0000000000b5"
+                            .parse()
+                            .expect("message id"),
+                        project_id,
+                        session_id,
+                        run_id,
+                        role: ConversationRole::Assistant,
+                        text: "Answer".into(),
+                        reasoning: "Checked the available evidence.".into(),
+                        usage: Some(argentum_domain::ModelUsage {
+                            input_tokens: 12,
+                            output_tokens: 7,
+                            total_tokens: 19,
+                            reasoning_tokens: Some(3),
+                            cached_input_tokens: None,
+                            context_window_tokens: Some(128_000),
+                            turn_total: None,
+                        }),
+                        profile_id: "minimax".into(),
+                        model: "MiniMax-M2.7".into(),
+                        status: ConversationMessageStatus::Interrupted,
+                        created_at: now(),
+                    },
+                ],
+            },
+        ));
+        let messages = ui.window().get_conversation_messages();
+        assert_eq!(messages.row_count(), 2);
+        assert_eq!(messages.row_data(0).expect("user message").role, "user");
+        assert_eq!(
+            messages.row_data(1).expect("assistant message").text,
+            "Answer"
+        );
+        assert_eq!(
+            messages.row_data(1).expect("assistant message").state,
+            "Interrupted"
+        );
+        let restored_assistant = messages.row_data(1).expect("assistant message");
+        assert!(restored_assistant.reasoning_available);
+        assert_eq!(
+            restored_assistant.reasoning,
+            "Checked the available evidence."
+        );
+        assert_eq!(restored_assistant.provider_label, "minimax");
+        assert_eq!(restored_assistant.model, "MiniMax-M2.7");
+        assert!(restored_assistant.usage_reported);
+        assert_eq!(restored_assistant.input_tokens, 12);
+        assert_eq!(restored_assistant.output_tokens, 7);
+        assert_eq!(restored_assistant.total_tokens, 19);
+        assert!(restored_assistant.context_window_reported);
+        assert_eq!(restored_assistant.context_window_tokens, 128_000);
+
+        ui.apply_event(&AppEvent::AssistantReasoningDelta {
+            run_id,
+            text: "<think>Live reasoning</think>".into(),
+        });
+        assert_eq!(ui.window().get_current_reasoning(), "Live reasoning");
+        assert!(ui.window().get_current_reasoning_available());
+
+        ui.apply_event(&AppEvent::ProviderProfilesSnapshot {
+            profiles: vec![ProviderProfile {
+                id: "minimax".into(),
+                label: "MiniMax".into(),
+                kind: ProviderKind::OpenAiCompatible,
+                endpoint: "https://api.minimax.io/v1/".into(),
+                model: "MiniMax-M2.7".into(),
+                selected: true,
+            }],
+        });
+        ui.window().set_current_reasoning("Live reasoning".into());
+        ui.window().set_current_reasoning_available(true);
+        ui.apply_event(&AppEvent::ModelUsageUpdated {
+            session_id,
+            run_id,
+            profile_id: "minimax".into(),
+            model: "MiniMax-M2.7".into(),
+            usage: argentum_domain::ModelUsage {
+                input_tokens: 40,
+                output_tokens: 10,
+                total_tokens: 50,
+                reasoning_tokens: Some(6),
+                cached_input_tokens: Some(4),
+                context_window_tokens: Some(204_800),
+                turn_total: None,
+            },
+        });
+        assert!(ui.window().get_usage_reported());
+        assert_eq!(ui.window().get_usage_total_tokens(), 50);
+        assert_eq!(ui.window().get_context_window_tokens(), 204_800);
+        assert_eq!(ui.window().get_current_run_provider_label(), "MiniMax");
+
+        // A failed provider switch preserves reasoning and usage from the valid
+        // current execution target.
+        ui.window().set_provider_selecting(true);
+        ui.window().set_provider_pending("select".into());
+        ui.apply_command_failure(
+            &AppCommand::SelectProviderProfile {
+                provider_id: "secondary".into(),
+            },
+            "provider selection failed",
+        );
+        assert_eq!(ui.window().get_current_reasoning(), "Live reasoning");
+        assert!(ui.window().get_usage_reported());
+        assert_eq!(ui.window().get_usage_total_tokens(), 50);
+        ui.window().set_provider_model_selecting(true);
+        ui.window().set_provider_models_pending("select".into());
+        ui.apply_command_failure(
+            &AppCommand::SelectProviderModel {
+                provider_id: "minimax".into(),
+                model: "MiniMax-M2.7-highspeed".into(),
+            },
+            "model selection failed",
+        );
+        assert_eq!(ui.window().get_current_reasoning(), "Live reasoning");
+        assert!(ui.window().get_usage_reported());
+        assert_eq!(ui.window().get_usage_total_tokens(), 50);
+
+        // A target catalog may finish before the profile-selection snapshot. It
+        // remains available and does not clear the independent profile operation.
+        ui.window()
+            .set_provider_models_provider_id("secondary".into());
+        ui.window().set_provider_models_loading(true);
+        ui.window().set_provider_models_pending("list".into());
+        ui.window().set_provider_selecting(true);
+        ui.window().set_provider_pending("select".into());
+        ui.apply_event(&AppEvent::ProviderModelsSnapshot {
+            provider_id: "secondary".into(),
+            models: vec![ProviderModel {
+                id: "secondary-model".into(),
+                label: "Secondary model".into(),
+                context_window_tokens: Some(32_768),
+                thinking_levels: Vec::new(),
+            }],
+            selected_model: "secondary-model".into(),
+            source: ProviderCatalogSource::Live,
+        });
+        let provider_models = ui.window().get_provider_models();
+        assert_eq!(provider_models.row_count(), 1);
+        let projected_model = provider_models.row_data(0).expect("provider model");
+        assert!(projected_model.selected);
+        assert_eq!(projected_model.context_window_tokens, 32_768);
+        assert!(!ui.window().get_provider_models_loading());
+        assert_eq!(ui.window().get_provider_models_pending(), "");
+        assert_eq!(ui.window().get_provider_pending(), "select");
+        assert_eq!(ui.window().get_provider_id(), "minimax");
+
+        ui.apply_event(&AppEvent::ProviderProfilesSnapshot {
+            profiles: vec![
+                ProviderProfile {
+                    id: "minimax".into(),
+                    label: "MiniMax".into(),
+                    kind: ProviderKind::OpenAiCompatible,
+                    endpoint: "https://api.minimax.io/v1/".into(),
+                    model: "MiniMax-M2.7".into(),
+                    selected: false,
+                },
+                ProviderProfile {
+                    id: "secondary".into(),
+                    label: "Secondary".into(),
+                    kind: ProviderKind::OpenAiCompatible,
+                    endpoint: "https://secondary.example/v1/".into(),
+                    model: "secondary-model".into(),
+                    selected: true,
+                },
+            ],
+        });
+        assert_eq!(ui.window().get_provider_id(), "secondary");
+        assert_eq!(ui.window().get_provider_models_provider_id(), "secondary");
+        assert_eq!(ui.window().get_provider_models().row_count(), 1);
+        assert!(!ui.window().get_provider_selecting());
+        assert_eq!(ui.window().get_provider_pending(), "");
+        assert_eq!(ui.window().get_current_reasoning(), "");
+        assert!(!ui.window().get_usage_reported());
+
+        // A concurrent model-catalog success cannot consume profile-list state.
+        // The correlated list failure remains in Settings and does not become a
+        // task failure.
+        ui.window().set_run_state("Ready".into());
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_provider_error(SharedString::default());
+        ui.window().set_provider_loading(true);
+        ui.window().set_provider_pending("list".into());
+        ui.window().set_provider_models_loading(true);
+        ui.window().set_provider_models_pending("list".into());
+        ui.window()
+            .set_provider_models_provider_id("secondary".into());
+        ui.apply_event(&AppEvent::ProviderModelsSnapshot {
+            provider_id: "secondary".into(),
+            models: vec![ProviderModel {
+                id: "secondary-model".into(),
+                label: "Secondary model".into(),
+                context_window_tokens: Some(32_768),
+                thinking_levels: Vec::new(),
+            }],
+            selected_model: "secondary-model".into(),
+            source: ProviderCatalogSource::Live,
+        });
+        assert_eq!(ui.window().get_provider_pending(), "list");
+        assert!(ui.window().get_provider_loading());
+        ui.apply_event(&AppEvent::Error {
+            message: "provider profile store unavailable".into(),
+            recoverable: true,
+        });
+        assert_eq!(ui.window().get_error_message(), "");
+        assert_eq!(ui.window().get_run_state(), "Ready");
+        assert!(ui.window().get_provider_loading());
+        ui.apply_command_failure(
+            &AppCommand::ListProviderProfiles,
+            "provider profile store unavailable",
+        );
+        assert!(!ui.window().get_provider_loading());
+        assert_eq!(ui.window().get_provider_pending(), "");
+        assert_ne!(ui.window().get_provider_error(), "");
+
+        // Active-run resync restores the visible run and an empty snapshot clears it.
+        let active_run_id: RunId = "00000000-0000-0000-0000-0000000000b6"
+            .parse()
+            .expect("active run id");
+        ui.apply_event(&AppEvent::ActiveRunsSnapshot {
+            runs: vec![ActiveRunState {
+                session_id,
+                run_id: active_run_id,
+                lifecycle: TaskLifecycle::WaitingForApproval,
+            }],
+        });
+        assert_eq!(ui.window().get_active_run_id(), active_run_id.to_string());
+        assert_eq!(ui.window().get_run_state(), "Approval needed");
+        assert!(ui.window().get_running());
+
+        // Run errors for another session or run cannot alter the visible run.
+        let background_session_id: SessionId = "00000000-0000-0000-0000-0000000000b7"
+            .parse()
+            .expect("background session id");
+        let background_run_id: RunId = "00000000-0000-0000-0000-0000000000b8"
+            .parse()
+            .expect("background run id");
+        for (error_session_id, error_run_id) in [
+            (background_session_id, background_run_id),
+            (session_id, background_run_id),
+        ] {
+            ui.apply_event(&AppEvent::RunError {
+                session_id: error_session_id,
+                run_id: error_run_id,
+                message: "background failure".into(),
+                recoverable: true,
+            });
+        }
+        assert_eq!(ui.window().get_run_state(), "Approval needed");
+        assert!(ui.window().get_running());
+
+        ui.apply_event(&AppEvent::RunError {
+            session_id,
+            run_id: active_run_id,
+            message: "provider request failed".into(),
+            recoverable: true,
+        });
+        assert_eq!(ui.window().get_run_state(), "Could not continue");
+        assert!(!ui.window().get_running());
+        assert_ne!(ui.window().get_error_message(), "");
+
+        ui.window().set_run_state("Running".into());
+        ui.window().set_running(true);
+        ui.apply_event(&AppEvent::ActiveRunsSnapshot { runs: Vec::new() });
+        assert_eq!(ui.window().get_active_run_id(), "");
+        assert_eq!(ui.window().get_run_state(), "Ready");
+        assert!(!ui.window().get_running());
+
+        assert_reviewable_changes_projection(&ui, &commands);
+        let mut module_snapshot = harness_snapshot.clone();
+        module_snapshot.modules = vec![argentum_domain::HarnessModuleState {
+            id: "first-party.activity".into(),
+            label: "Activity".into(),
+            installed: true,
+            enabled: false,
+            recovery_pending: false,
+            detail: "Optional live activity".into(),
+        }];
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        assert!(!ui.window().get_activity_module_enabled());
+        assert_eq!(ui.window().get_activity_items().row_count(), 0);
+        ui.push_activity("ignored", "disabled module", "neutral");
+        assert_eq!(ui.window().get_activity_items().row_count(), 0);
+        ui.window().set_running(false);
+        ui.window().set_approval_open(false);
+        ui.window()
+            .global::<App>()
+            .invoke_set_harness_module("first-party.activity".into(), "enable".into());
+        assert!(
+            matches!(commands.borrow().last(), Some(AppCommand::SetHarnessModule { module_id, action: argentum_domain::ModuleAction::Enable }) if module_id == "first-party.activity")
+        );
+        module_snapshot.modules[0].enabled = true;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        ui.push_activity("visible", "enabled module", "neutral");
+        assert_eq!(ui.window().get_activity_items().row_count(), 1);
+        module_snapshot.local_backend = Some(argentum_domain::HarnessBackendState {
+            id: "llama.cpp.sidecar".into(),
+            enabled: true,
+            changing: false,
+            recovery_pending: false,
+            toggle_supported: true,
+            detail: "Windows backend".into(),
+        });
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        assert!(ui.window().get_local_backend_available());
+        ui.window()
+            .global::<App>()
+            .invoke_set_local_backend_enabled(false);
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SetLocalBackendEnabled { enabled: false })
+        ));
+        module_snapshot.local_backend.as_mut().unwrap().enabled = false;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        assert!(!ui.window().get_local_backend_enabled());
+        ui.window().set_local_inference_active(true);
+        module_snapshot.local_backend.as_mut().unwrap().id = "llama.cpp.android".into();
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        assert!(!ui.window().get_local_inference_active());
+        let disabled_detail = ui.window().get_local_inference_detail();
+        module_snapshot.local_backend.as_mut().unwrap().enabled = true;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot.clone()));
+        assert!(ui.window().get_local_backend_ready());
+        assert!(!ui.window().get_local_inference_active());
+        assert_ne!(ui.window().get_local_inference_detail(), disabled_detail);
+        module_snapshot
+            .local_backend
+            .as_mut()
+            .unwrap()
+            .toggle_supported = false;
+        ui.apply_event(&AppEvent::HarnessSnapshotLoaded(module_snapshot));
+        let before = commands.borrow().len();
+        ui.window()
+            .global::<App>()
+            .invoke_set_local_backend_enabled(true);
+        assert_eq!(commands.borrow().len(), before);
+
+        // Status events update configured state but never settle a local operation.
+        ui.window().set_provider_id("deepseek".into());
+        ui.window().set_provider_kind("openai-compatible".into());
+        ui.window()
+            .set_provider_credential_draft("typing-fixture".into());
+        ui.apply_event(&AppEvent::ProviderCredentialStatus {
+            provider_id: "deepseek".into(),
+            configured: true,
+        });
+        assert!(ui.window().get_provider_credential_supported());
+        assert!(ui.window().get_provider_credential_configured());
+        assert_eq!(
+            ui.window().get_provider_credential_draft().as_str(),
+            "typing-fixture"
+        );
+        assert_eq!(ui.window().get_provider_credential_pending(), "");
+
+        // Credential callbacks preserve the exact provider ID and never use AppCommand.
+        let delivered_credentials = Rc::new(RefCell::new(Vec::new()));
+        let cleared_credentials = Rc::new(RefCell::new(Vec::new()));
+        connect_provider_credentials(
+            ui.window(),
+            {
+                let delivered_credentials = delivered_credentials.clone();
+                move |id, value, generation| {
+                    delivered_credentials
+                        .borrow_mut()
+                        .push((id, value, generation))
+                }
+            },
+            {
+                let cleared_credentials = cleared_credentials.clone();
+                move |id, generation| cleared_credentials.borrow_mut().push((id, generation))
+            },
+        );
+        ui.window()
+            .global::<App>()
+            .invoke_save_provider_credential("deepseek".into(), "bad\nkey".into());
+        assert!(delivered_credentials.borrow().is_empty());
+        assert_eq!(
+            ui.window().get_provider_credential_error(),
+            "API key must be printable and no larger than 16 KiB."
+        );
+        ui.window()
+            .global::<App>()
+            .invoke_save_provider_credential("deepseek".into(), "x".repeat(16 * 1024 + 1).into());
+        assert!(delivered_credentials.borrow().is_empty());
+        ui.window().global::<App>().invoke_save_provider_credential(
+            "custom".into(),
+            "credential-that-must-not-be-delivered".into(),
+        );
+        for invalid_id in [
+            " deepseek",
+            "deepseek ",
+            "DeepSeek",
+            "deep\nseek",
+            "deepseek-extra",
+            "xdeepseek",
+        ] {
+            ui.window().global::<App>().invoke_save_provider_credential(
+                invalid_id.into(),
+                "credential-that-must-not-be-delivered".into(),
+            );
+            ui.window()
+                .global::<App>()
+                .invoke_clear_provider_credential(invalid_id.into());
+        }
+        assert!(delivered_credentials.borrow().is_empty());
+        assert!(cleared_credentials.borrow().is_empty());
+
+        // A replacement remains pending across stale configured status events.
+        let replacement = "replacement-credential-fixture-that-must-not-leak";
+        ui.window()
+            .set_provider_credential_draft(replacement.into());
+        ui.window()
+            .global::<App>()
+            .invoke_save_provider_credential("deepseek".into(), replacement.into());
+        let replacement_generation = delivered_credentials.borrow()[0].2;
+        assert_eq!(ui.window().get_provider_credential_pending(), "save");
+        ui.apply_event(&AppEvent::ProviderCredentialStatus {
+            provider_id: "deepseek".into(),
+            configured: true,
+        });
+        assert_eq!(ui.window().get_provider_credential_pending(), "save");
+        assert_eq!(ui.window().get_provider_credential_draft(), replacement);
+        for (provider_id, action, generation) in [
+            ("openai", "save", replacement_generation),
+            ("deepseek", "delete", replacement_generation),
+            ("deepseek", "save", replacement_generation + 1),
+        ] {
+            ui.apply_provider_credential_success(provider_id, action, generation);
+            assert_eq!(ui.window().get_provider_credential_pending(), "save");
+            assert_eq!(ui.window().get_provider_credential_draft(), replacement);
+        }
+        ui.apply_provider_credential_success("deepseek", "save", replacement_generation);
+        assert_eq!(ui.window().get_provider_credential_pending(), "");
+        assert_eq!(ui.window().get_provider_credential_draft(), "");
+        assert!(ui.window().get_provider_credential_configured());
+
+        // A clear remains pending across stale status and settles only on matching success.
+        ui.window()
+            .set_provider_credential_draft("clear-draft-fixture".into());
+        ui.window()
+            .global::<App>()
+            .invoke_clear_provider_credential("deepseek".into());
+        let clear_generation = cleared_credentials.borrow()[0].1;
+        assert_eq!(ui.window().get_provider_credential_pending(), "delete");
+        ui.apply_event(&AppEvent::ProviderCredentialStatus {
+            provider_id: "deepseek".into(),
+            configured: true,
+        });
+        assert_eq!(ui.window().get_provider_credential_pending(), "delete");
+        assert_eq!(
+            ui.window().get_provider_credential_draft(),
+            "clear-draft-fixture"
+        );
+        ui.apply_provider_credential_success("deepseek", "save", clear_generation);
+        assert_eq!(ui.window().get_provider_credential_pending(), "delete");
+        ui.apply_provider_credential_success("deepseek", "delete", clear_generation);
+        assert_eq!(ui.window().get_provider_credential_pending(), "");
+        assert_eq!(ui.window().get_provider_credential_draft(), "");
+        assert!(!ui.window().get_provider_credential_configured());
+
+        // Failure is correlated, generic, and preserves the draft for retry.
+        ui.apply_event(&AppEvent::ProviderCredentialStatus {
+            provider_id: "deepseek".into(),
+            configured: true,
+        });
+        let failure_fixture = "failure-credential-fixture-that-must-not-leak";
+        ui.window()
+            .set_provider_credential_draft(failure_fixture.into());
+        ui.window()
+            .global::<App>()
+            .invoke_save_provider_credential("deepseek".into(), failure_fixture.into());
+        let failure_generation = delivered_credentials.borrow()[1].2;
+        for (provider_id, action, generation) in [
+            ("openai", "save", failure_generation),
+            ("deepseek", "delete", failure_generation),
+            ("deepseek", "save", failure_generation + 1),
+        ] {
+            ui.apply_provider_credential_failure(provider_id, action, generation, failure_fixture);
+            assert_eq!(ui.window().get_provider_credential_pending(), "save");
+            assert_eq!(ui.window().get_provider_credential_draft(), failure_fixture);
+        }
+        ui.apply_provider_credential_failure(
+            "deepseek",
+            "save",
+            failure_generation,
+            failure_fixture,
+        );
+        assert_eq!(ui.window().get_provider_credential_pending(), "");
+        assert_eq!(ui.window().get_provider_credential_draft(), failure_fixture);
+        assert!(!ui
+            .window()
+            .get_provider_credential_error()
+            .as_str()
+            .contains(failure_fixture));
+        assert!(commands
+            .borrow()
+            .iter()
+            .all(|command| !format!("{command:?}").contains(failure_fixture)));
+    }
+
+    #[test]
+    fn provider_profile_projection_preserves_selection_and_profile_identity() {
+        let profiles = vec![
+            ProviderProfile {
+                id: "secondary".into(),
+                label: "Secondary".into(),
+                kind: ProviderKind::OpenAiCompatible,
+                endpoint: "http://127.0.0.1:8000/v1/".into(),
+                model: "small".into(),
+                selected: false,
+            },
+            ProviderProfile {
+                id: "local-main".into(),
+                label: "Local main".into(),
+                kind: ProviderKind::LocalLmStudio,
+                endpoint: "http://127.0.0.1:1234/v1/".into(),
+                model: "large".into(),
+                selected: true,
+            },
+        ];
+
+        let rows = provider_profile_model_with_credentials(&profiles, &HashMap::new());
+        assert_eq!(rows.row_count(), 2);
+        assert_eq!(rows.row_data(0).expect("first profile").id, "secondary");
+        let selected = rows.row_data(1).expect("selected profile");
+        assert_eq!(selected.id, "local-main");
+        assert_eq!(selected.kind, "lm-studio");
+        assert_eq!(selected.model, "large");
+        assert!(selected.selected);
+    }
+
+    #[test]
+    fn restored_assistant_copy_separates_tagged_reasoning_from_exact_visible_text() {
+        assert_eq!(
+            split_tagged_reasoning(
+                "<think>private chain of thought</think>\nARGENTUM_MINIMAX_SMOKE_OK"
+            ),
+            (
+                "\nARGENTUM_MINIMAX_SMOKE_OK".into(),
+                "private chain of thought".into()
+            )
+        );
+        assert_eq!(
+            split_tagged_reasoning("ordinary answer"),
+            ("ordinary answer".into(), String::new())
+        );
+        assert_eq!(
+            split_tagged_reasoning("visible<think>unfinished private reasoning"),
+            ("visible".into(), "unfinished private reasoning".into())
+        );
+        assert_eq!(
+            split_tagged_reasoning("A<think>one</think>B<think>two</think>C"),
+            ("ABC".into(), "one\n\ntwo".into())
+        );
+    }
+
+    #[test]
+    fn provider_validation_matches_safe_profile_contract() {
+        assert_eq!(validate_provider_label(""), "Enter a profile name.");
+        assert!(validate_provider_label("Local main").is_empty());
+        assert_eq!(validate_provider_model("\n"), "Enter a model name.");
+        assert!(validate_provider_model("mistral-small").is_empty());
+        assert!(validate_provider_endpoint("http://127.0.0.1:1234/v1/").is_empty());
+        assert_eq!(
+            validate_provider_endpoint("https://user:secret@example.com/v1"),
+            "Endpoint cannot include credentials, a query, or a fragment."
+        );
+        assert_eq!(
+            validate_provider_endpoint("file:///tmp/provider"),
+            "Enter a valid http or https endpoint."
+        );
+    }
+
+    #[test]
+    fn provider_status_uses_exact_profile_id_with_legacy_fallback() {
+        let exact = argentum_domain::ProviderStatus {
+            profile_id: "local-secondary".into(),
+            kind: ProviderKind::LocalLmStudio,
+            label: "Secondary".into(),
+            endpoint: "http://127.0.0.1:1234/v1/".into(),
+            connected: false,
+            detail: "Configured".into(),
+        };
+        let mut legacy = exact.clone();
+        legacy.profile_id.clear();
+
+        assert_eq!(provider_status_id(&exact), "local-secondary");
+        assert_eq!(provider_status_id(&legacy), "lm-studio");
+    }
+
+    #[test]
+    fn tool_result_labels_are_honest() {
+        assert_eq!(
+            tool_result_presentation(&ToolResultState::Failed),
+            ("failed", "error")
+        );
+        assert_eq!(
+            tool_result_presentation(&ToolResultState::Cancelled),
+            ("cancelled", "neutral")
+        );
+    }
+
+    #[test]
+    fn change_summary_reports_file_count_without_duplicate_metrics() {
+        assert_eq!(change_summary(0, 0, 0), "No files changed");
+        assert_eq!(change_summary(1, 12, 4), "1 file changed");
+        assert_eq!(change_summary(3, 20, 7), "3 files changed");
+    }
+
+    #[test]
+    fn error_presentation_is_actionable_and_never_empty() {
+        assert_eq!(
+            present_error("no provider is configured"),
+            "No model provider is configured."
+        );
+        assert_eq!(present_error(""), "Argentum could not continue.");
+    }
+
+    #[test]
+    fn credential_status_updates_only_the_matching_supported_profile() {
+        assert!(provider_credential_supported_id(
+            "deepseek",
+            "openai-compatible"
+        ));
+        assert!(!provider_credential_supported_id(
+            "custom",
+            "openai-compatible"
+        ));
+        assert!(!provider_credential_supported_id("deepseek", "anthropic"));
+        assert!(provider_credential_supported_id("anthropic", "anthropic"));
+        assert!(!provider_credential_supported_id(
+            "anthropic",
+            "openai-compatible"
+        ));
+    }
+
+    #[test]
+    fn credential_callback_rejects_control_characters_before_delivery() {
+        assert_eq!(
+            validate_provider_credential("bad\nkey"),
+            "API key must be printable and no larger than 16 KiB."
+        );
+        assert_eq!(
+            validate_provider_credential(&"x".repeat(16 * 1024 + 1)),
+            "API key must be printable and no larger than 16 KiB."
+        );
+        assert!(validate_provider_credential(&"x".repeat(16 * 1024)).is_empty());
+    }
+
+    #[test]
+    fn record_line_model_preserves_labels_and_details() {
+        let model = record_line_model(&[
+            RecordLine::new("Run 1", "observed 10"),
+            RecordLine::new("Request 2", "reserved 4"),
+        ]);
+        assert_eq!(model.row_count(), 2);
+        assert_eq!(model.row_data(0).expect("record row").label, "Run 1");
+        assert_eq!(model.row_data(1).expect("record row").detail, "reserved 4");
+        assert_eq!(empty_record_line_model().row_count(), 0);
+    }
+
+    #[test]
+    fn tool_catalog_projection_preserves_capability_risk_and_approval() {
+        let tools = vec![argentum_domain::ToolDescriptor {
+            id: "write_text".into(),
+            capability_id: "tool.write-text".into(),
+            title: "Write text".into(),
+            summary: "Write a prepared bounded UTF-8 file".into(),
+            capabilities: Vec::new(),
+            risk: argentum_domain::ToolRisk::Mutation,
+            requires_approval: true,
+        }];
+        let model = tool_catalog_model(&tools);
+        assert_eq!(model.row_count(), 1);
+        let row = model.row_data(0).expect("tool row");
+        assert_eq!(row.id, "write_text");
+        assert_eq!(row.capability, "tool.write-text");
+        assert_eq!(row.risk, "Mutation");
+        assert!(row.requires_approval);
+    }
+
+    #[test]
+    fn approval_grant_projection_includes_issuer_and_expiry() {
+        let created = now();
+        let grant = ApprovalGrantRecord {
+            id: "00000000-0000-0000-0000-0000000000d1"
+                .parse()
+                .expect("grant id"),
+            audit_id: "00000000-0000-0000-0000-0000000000d2"
+                .parse()
+                .expect("audit id"),
+            capability: argentum_domain::Capability::ExternalProcess,
+            scope: GrantScope::Action,
+            subject: GrantSubject::Action {
+                tool_id: "verify".into(),
+                target: "fixed runners: project:unit-check".into(),
+                binding: argentum_domain::Sha256Digest("00".repeat(32)),
+            },
+            created_at: created,
+            expires_at: Some(created + time::Duration::hours(1)),
+            issuer: argentum_domain::GrantIssuer::User,
+            reason: "Owner approved the exact runner".into(),
+            revoked_at: None,
+        };
+        let model = approval_grant_model(&[grant]);
+        assert_eq!(model.row_count(), 1);
+        let row = model.row_data(0).expect("grant row");
+        assert_eq!(row.capability, "External process");
+        assert_eq!(row.scope, "Action");
+        assert_eq!(row.issuer, "User");
+        assert_ne!(row.expiry, "No expiry");
+        assert_eq!(row.subject, "verify | fixed runners: project:unit-check");
+    }
+
+    #[test]
+    fn goal_limits_and_runner_parsing_is_bounded() {
+        assert_eq!(
+            parse_goal_limits_csv("1,2,3,4,5,6,7,8,9").expect("nine limits"),
+            [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
+        assert!(parse_goal_limits_csv("1,2,3").is_err());
+        assert!(parse_goal_limits_csv("1,2,3,4,5,6,7,8,x").is_err());
+        assert_eq!(
+            parse_goal_runner("cargo-fmt-check"),
+            Some(VerificationRunnerId::CargoFmtCheck)
+        );
+        assert_eq!(
+            parse_goal_runner("project:unit-check"),
+            Some(VerificationRunnerId::Project("unit-check".into()))
+        );
+        assert_eq!(parse_goal_runner("unknown"), None);
+    }
+}

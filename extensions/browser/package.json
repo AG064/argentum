@@ -1,0 +1,9 @@
+{
+  "name": "argentum-playwright-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "dependencies": { "playwright": "1.64.0" },
+  "scripts": { "test": "node --test adapter.test.mjs" }
+}
