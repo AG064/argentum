@@ -63,8 +63,12 @@ the zips or the APK.
 ## Merging pull requests
 
 Merge with the maintainer's public address as the commit author, so no private
-address enters the history:
+address enters the history. GitHub accepts an author address for a squash merge
+only when it is a verified email on the merging account:
 
 ```powershell
 gh pr merge <number> --squash --author-email contact@ag064.eu
 ```
+
+After any merge, check the author and committer with
+`git log -1 --format='%an <%ae> / %cn <%ce>'`.
