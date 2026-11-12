@@ -340,6 +340,13 @@ AG064; more projects are at [ag064.eu](https://ag064.eu).
 Report security problems privately as described in [SECURITY.md](SECURITY.md), and
 everything else as a [GitHub issue](https://github.com/AG064/argentum/issues).
 
+## Support Argentum
+
+Argentum is free and stays free. Support pays for Windows code signing, so Windows
+stops warning on install, a Google Play listing, and test devices. You can help on
+[GitHub Sponsors](https://github.com/sponsors/AG064) or
+[Patreon](https://www.patreon.com/ag064), where the free tier gets every public update.
+
 ## Contributing
 
 Issues and pull requests are welcome. Contributions need the

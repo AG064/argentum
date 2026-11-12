@@ -38,3 +38,9 @@ secrets/
 .DS_Store
 Thumbs.db
 /extensions/browser/node_modules/
+
+# Fuzzing output
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/

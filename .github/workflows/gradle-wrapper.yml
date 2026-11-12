@@ -1,9 +1,9 @@
 name: Gradle wrapper
 # Checks that the committed gradle-wrapper.jar is an official Gradle release.
 on:
+  # Every push, so the validation always covers the latest commit.
   push:
     branches: [development]
-    paths: ['platforms/android/gradle/wrapper/**']
   pull_request:
     paths: ['platforms/android/gradle/wrapper/**']
   workflow_dispatch:

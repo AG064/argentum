@@ -1,0 +1,33 @@
+[package]
+name = "argentum-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "AGPL-3.0-only"
+
+[package.metadata]
+cargo-fuzz = true
+
+# A workspace of its own, so the fuzz targets and libFuzzer stay out of the
+# product build and its dependency policy.
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+argentum-cli = { path = "../crates/argentum-cli" }
+argentum-providers = { path = "../crates/argentum-providers" }
+
+[[bin]]
+name = "jsonl_request"
+path = "fuzz_targets/jsonl_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sidecar_context"
+path = "fuzz_targets/sidecar_context.rs"
+test = false
+doc = false
+bench = false
