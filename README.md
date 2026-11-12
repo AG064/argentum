@@ -126,21 +126,23 @@ was built with `gh attestation verify FILE --repo AG064/argentum`.
 
 ## How it compares
 
-| | Argentum | Codex CLI | Claude Code | Pi |
-| --- | --- | --- | --- | --- |
-| License | AGPL-3.0 | Apache-2.0 | Proprietary | MIT |
-| Written in | Rust | Rust | TypeScript | TypeScript |
-| Models | Over 40 presets, local models, any OpenAI-compatible server | OpenAI models, others through configuration | Anthropic models | Many providers |
-| Native app on Windows | Yes | Separate app | Separate app | Terminal only |
-| Agent runs on an Android phone | Yes, native app | No | No, remote sessions only | No |
-| Interface | Every panel is an optional module | Fixed | Fixed | Minimal, extensible |
-| Terminal agent | Argentum Genesis | Yes | Yes | Yes |
+| | Argentum | Codex CLI | Claude Code | Pi | DeepSeek Harness |
+| --- | --- | --- | --- | --- | --- |
+| License | AGPL-3.0 | Apache-2.0 | Proprietary | MIT | MIT |
+| Written in | Rust | Rust | TypeScript | TypeScript | TypeScript |
+| Models | Over 40 presets, local models, any OpenAI-compatible server | OpenAI models, others through configuration | Anthropic models | Many providers | Many providers |
+| Native app on Windows | Yes | Separate app | Separate app | Terminal only | Separate Electron app |
+| Agent runs on an Android phone | Yes, native app | No | No, remote sessions only | No | No |
+| Interface | Every panel is an optional module | Fixed | Fixed | Minimal, extensible | Swappable runtime plugins |
+| Terminal agent | Argentum Genesis | Yes | Yes | Yes | Yes (`dsh`) |
 
 This comparison is drawn from each project's public documentation in November 2026.
 Corrections are welcome as an issue.
 
 **Benchmarks:** [`benchmarks/`](benchmarks/README.md) holds a harness that runs Argentum
 Genesis, Codex, Claude Code, OpenCode, and Pi on the same tasks with the same model.
+DeepSeek Harness is left out of the public task set because it uploads session logs
+to DeepSeek by default, which that task set's data rules do not allow.
 No results have been published yet. They will be added here once the runs are done.
 
 ## See what it did
