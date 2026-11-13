@@ -66,20 +66,9 @@ pub(crate) fn seed(server: &Server, fixture: &CliFixture, size: usize) -> Value 
     observation
 }
 
-/// Serialized wire bytes behind a context preview's token estimate.
-pub(crate) fn wire_bytes(accounting: &Value) -> u64 {
-    [
-        "serialized_message_bytes",
-        "serialized_catalog_bytes",
-        "serialized_envelope_bytes",
-    ]
-    .iter()
-    .map(|field| accounting[*field].as_u64().expect("wire byte field"))
-    .sum()
-}
-
-pub(crate) fn estimated_tokens(bytes: u64) -> u64 {
-    argentum_domain::context_budget::estimated_tokens_for_wire_bytes(bytes)
+/// Estimated tokens for a request body, as Argentum counts them.
+pub(crate) fn estimated_tokens(body: &[u8]) -> u64 {
+    argentum_domain::context_budget::estimated_tokens_for_wire(body)
 }
 
 pub(crate) fn summary_request(server: &Server) -> Value {
@@ -186,8 +175,9 @@ fn retained_search_prefix_automatically_compacts_at_unchanged_declared_limits() 
             "budget",
             "f01-fixture",
             "--limits",
-            // The MiniMax limits (204800, 196608) scaled to 2.5 bytes per estimated token.
-            "81920,78644,4096,4096,1024",
+            // Roomy while the history is seeded; the run that must compact
+            // declares its limits from the measured estimate below.
+            "1000000,995904,4096,4096,1024",
             "--json"
         ])
         .status
@@ -237,6 +227,25 @@ fn retained_search_prefix_automatically_compacts_at_unchanged_declared_limits() 
         "required-current-data\n".repeat(2000),
     )
     .unwrap();
+    // The retained history plus the next prompt fits; adding the 42,000-byte
+    // pressure read (about 16,800 estimated tokens) does not. These limits stay
+    // unchanged for the whole run that has to compact.
+    let history = context(&fixture)["accounting"]["accounted_input"]
+        .as_u64()
+        .unwrap();
+    let input_limit = history + 1024 + 8000;
+    let total_limit = input_limit + 4096;
+    assert!(fixture
+        .run(&[
+            "provider",
+            "budget",
+            "f01-fixture",
+            "--limits",
+            &format!("{total_limit},{input_limit},4096,4096,1024"),
+            "--json"
+        ])
+        .status
+        .success());
     let output = thread::scope(|scope| {
         let process = scope.spawn(|| {
             fixture.run(&[
@@ -267,9 +276,9 @@ fn retained_search_prefix_automatically_compacts_at_unchanged_declared_limits() 
             .as_str()
             .unwrap()
             .contains("required-current-data"));
-        let input = serde_json::to_vec(&admitted).unwrap().len() as u64;
-        assert!(input + 1024 <= 196608);
-        assert!(input + 4096 + 1024 <= 204800);
+        let input = estimated_tokens(&serde_json::to_vec(&admitted).unwrap());
+        assert!(input + 1024 <= input_limit);
+        assert!(input + 4096 + 1024 <= total_limit);
         assert_eq!(admitted["max_tokens"], 4096);
         server.complete();
         process.join().unwrap()
@@ -394,20 +403,29 @@ fn manual_useful_compaction_restart_and_deactivation_preserve_original_tool_line
 
 #[test]
 fn estimated_wire_boundary_unknown_and_invalid_budget_fail_before_inference() {
+    let prompt = "é中\"\\ Unicode boundary";
+    // The estimate depends on the request's content, not only its length, so
+    // measure the exact request once on a fresh fixture with a roomy budget.
+    // Every fresh fixture sends the same request apart from identifiers of
+    // equal length and character class, which estimate the same.
+    let (input, expected_tokens) = {
+        let server = Server::start();
+        let fixture = CliFixture::new(&server.endpoint);
+        thread::scope(|scope| {
+            let process = scope.spawn(|| fixture.run(&["run", "--prompt", prompt, "--json"]));
+            let request = serde_json::to_vec(&server.request()).unwrap();
+            server.complete();
+            assert!(process.join().unwrap().status.success());
+            (
+                request.len() as u64,
+                argentum_domain::context_budget::estimated_tokens_for_wire(&request),
+            )
+        })
+    };
     for mode in ["exact", "over", "unknown", "invalid"] {
         let server = Server::start();
         let fixture = CliFixture::new(&server.endpoint);
-        let prompt = "é中\"\\ Unicode boundary";
-        let preview = context(&fixture);
-        let run_json = serde_json::to_string("00000000-0000-0000-0000-000000000000").unwrap();
-        let scoped_run_wire_bytes = serde_json::to_vec(&run_json).unwrap().len() - 2;
-        let no_run_wire_bytes = serde_json::to_vec("null").unwrap().len() - 2;
-        let scoped_run_overhead = scoped_run_wire_bytes - no_run_wire_bytes;
-        let input = wire_bytes(&preview["accounting"])
-            + serde_json::to_string(prompt).unwrap().len() as u64
-            - 2
-            + scoped_run_overhead as u64;
-        let total = estimated_tokens(input) + 4096 + 1024 - u64::from(mode == "over");
+        let total = expected_tokens + 4096 + 1024 - u64::from(mode == "over");
         let declared = fixture.run(&[
             "provider",
             "budget",
@@ -520,8 +538,7 @@ fn automatic_pressure_between_tasks_and_settled_rounds_uses_one_admitted_summary
                     .contains("required-current-data"));
             }
             assert!(
-                estimated_tokens(serde_json::to_vec(&admitted).unwrap().len() as u64) + 4096 + 1024
-                    <= total
+                estimated_tokens(&serde_json::to_vec(&admitted).unwrap()) + 4096 + 1024 <= total
             );
             server.complete();
             process.join().unwrap()

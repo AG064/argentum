@@ -105,19 +105,68 @@ pub struct RequestAccounting {
 /// uncertainty allowance and the provider's own limit cover that case.
 pub const WIRE_BYTES_PER_ESTIMATED_TOKEN_TIMES_TWO: u64 = 5;
 
-/// Estimated input tokens for a serialized request of `bytes` UTF-8 bytes.
+/// Estimated input tokens for a serialized request of `bytes` UTF-8 bytes,
+/// when only the length is known.
 pub fn estimated_tokens_for_wire_bytes(bytes: u64) -> u64 {
     bytes
         .saturating_mul(2)
         .div_ceil(WIRE_BYTES_PER_ESTIMATED_TOKEN_TIMES_TWO)
 }
 
+/// A run of letters, digits and `+/=_-` at least this long, with at least one
+/// digit per ten characters, is treated as dense data such as hex or base64.
+const DENSE_RUN_MINIMUM: usize = 32;
+
+/// Estimated input tokens for a serialized request body.
+///
+/// Ordinary text counts at 2.5 bytes per token. Tokenizers split some content
+/// much more finely, so those parts count higher: dense runs such as hex and
+/// base64 count one token per byte, and non-ASCII text such as emoji or CJK
+/// counts one token per two bytes. Measured ratios: prose 4 to 5 bytes per
+/// token, code 3.5 to 4.5, JSON 2.7, base64 1.35, hex 1.14, emoji 2.0.
+pub fn estimated_tokens_for_wire(body: &[u8]) -> u64 {
+    let is_dense_byte =
+        |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=' | b'_' | b'-');
+    let mut ordinary_twice: u64 = 0; // ordinary ASCII bytes, counted in halves below
+    let mut dense: u64 = 0;
+    let mut non_ascii: u64 = 0;
+    let mut index = 0;
+    while index < body.len() {
+        let byte = body[index];
+        if !byte.is_ascii() {
+            non_ascii += 1;
+            index += 1;
+            continue;
+        }
+        if is_dense_byte(byte) {
+            let start = index;
+            let mut digits = 0usize;
+            while index < body.len() && body[index].is_ascii() && is_dense_byte(body[index]) {
+                digits += usize::from(body[index].is_ascii_digit());
+                index += 1;
+            }
+            let run = index - start;
+            if run >= DENSE_RUN_MINIMUM && digits.saturating_mul(10) >= run {
+                dense += run as u64;
+            } else {
+                ordinary_twice += 2 * run as u64;
+            }
+            continue;
+        }
+        ordinary_twice += 2;
+        index += 1;
+    }
+    ordinary_twice
+        .div_ceil(WIRE_BYTES_PER_ESTIMATED_TOKEN_TIMES_TWO)
+        .saturating_add(dense)
+        .saturating_add(non_ascii.div_ceil(2))
+}
+
 impl RequestAccounting {
-    /// Estimated tokens from the serialized UTF-8 wire bytes, including
-    /// escaping, at 2.5 bytes per token, plus an owner allowance for unknown
-    /// tokenization and protocol overhead. Conservative for common text, but
-    /// NOT a proof of an upper bound for every tokenizer or vendor-side
-    /// transformation.
+    /// Estimated tokens from the serialized UTF-8 wire bytes when only their
+    /// length is known, at 2.5 bytes per token, plus an owner allowance for
+    /// unknown tokenization and protocol overhead. Prefer `from_wire_body`,
+    /// which also counts dense content correctly.
     pub fn from_wire_bytes(
         budget: &ModelBudget,
         message_bytes: u64,
@@ -128,7 +177,65 @@ impl RequestAccounting {
             .checked_add(catalog_bytes)
             .and_then(|n| n.checked_add(envelope_bytes))
             .ok_or("context accounting overflow")?;
-        let input = estimated_tokens_for_wire_bytes(wire_bytes);
+        Self::build(
+            budget,
+            estimated_tokens_for_wire_bytes(wire_bytes),
+            [message_bytes, catalog_bytes, envelope_bytes],
+            "estimated_utf8_wire_bytes_v2_2_5_bytes_per_token_not_tokenizer_upper_bound",
+        )
+    }
+
+    /// Estimated tokens from the exact serialized request body, counting
+    /// ordinary text, dense data and non-ASCII text separately (see
+    /// `estimated_tokens_for_wire`), plus the owner allowance. Conservative for
+    /// common content, but NOT a proof of an upper bound for every tokenizer.
+    pub fn from_wire_body(
+        budget: &ModelBudget,
+        body: &[u8],
+        message_bytes: u64,
+        catalog_bytes: u64,
+        envelope_bytes: u64,
+    ) -> Result<Self, &'static str> {
+        let wire_bytes = message_bytes
+            .checked_add(catalog_bytes)
+            .and_then(|n| n.checked_add(envelope_bytes))
+            .ok_or("context accounting overflow")?;
+        if wire_bytes != body.len() as u64 {
+            return Err("wire byte components do not match the request body");
+        }
+        Self::build(
+            budget,
+            estimated_tokens_for_wire(body),
+            [message_bytes, catalog_bytes, envelope_bytes],
+            "estimated_utf8_wire_content_v3_dense_aware_not_tokenizer_upper_bound",
+        )
+    }
+
+    /// Accounting from token counts a provider path already estimated, such
+    /// as the on-device engine. The serialized fields then hold those token
+    /// estimates.
+    pub fn from_estimated_tokens(
+        budget: &ModelBudget,
+        message_tokens: u64,
+        catalog_tokens: u64,
+    ) -> Result<Self, &'static str> {
+        let input = message_tokens
+            .checked_add(catalog_tokens)
+            .ok_or("context accounting overflow")?;
+        Self::build(
+            budget,
+            input,
+            [message_tokens, catalog_tokens, 0],
+            "estimated_native_engine_tokens_not_tokenizer_upper_bound",
+        )
+    }
+
+    fn build(
+        budget: &ModelBudget,
+        input: u64,
+        [message_bytes, catalog_bytes, envelope_bytes]: [u64; 3],
+        method: &str,
+    ) -> Result<Self, &'static str> {
         let uncertain_input = input
             .checked_add(budget.uncertainty_tokens)
             .ok_or("context accounting overflow")?;
@@ -143,8 +250,7 @@ impl RequestAccounting {
             .checked_add(u64::from(output_reserve))
             .ok_or("context accounting overflow")?;
         Ok(Self {
-            method: "estimated_utf8_wire_bytes_v2_2_5_bytes_per_token_not_tokenizer_upper_bound"
-                .into(),
+            method: method.into(),
             capacity_source: ModelBudget::SOURCE.into(),
             budget_revision: budget.revision,
             profile_id: budget.profile_id.clone(),
@@ -251,6 +357,48 @@ mod tests {
                 .fits
         );
         assert!(RequestAccounting::from_wire_bytes(&budget, u64::MAX, 1, 0).is_err());
+    }
+
+    #[test]
+    fn dense_and_non_ascii_content_never_count_below_their_measured_ratio() {
+        // Measured on a real tokenizer: hex 1.14 bytes per token, base64 1.35,
+        // emoji 2.0, CJK and prose well above 2.5.
+        let hex = "0123456789abcdef".repeat(64);
+        assert!(estimated_tokens_for_wire(hex.as_bytes()) as f64 >= hex.len() as f64 / 1.14);
+        let base64 = "QmFzZTY0IGRhdGEgd2l0aCBkaWdpdHMgMTIzNDU2Nzg5MA==".repeat(32);
+        assert!(estimated_tokens_for_wire(base64.as_bytes()) as f64 >= base64.len() as f64 / 1.35);
+        let emoji = "😀🎉🚀".repeat(100);
+        assert!(estimated_tokens_for_wire(emoji.as_bytes()) as f64 >= emoji.len() as f64 / 2.0);
+        // Ordinary prose, code and identifiers keep the 2.5 bytes per token rate.
+        let prose = "The quick brown fox jumps over the lazy dog. ".repeat(50);
+        assert_eq!(
+            estimated_tokens_for_wire(prose.as_bytes()),
+            estimated_tokens_for_wire_bytes(prose.len() as u64)
+        );
+        let identifier = "fn estimated_tokens_for_wire_body_without_digits_anywhere() {}";
+        assert_eq!(
+            estimated_tokens_for_wire(identifier.as_bytes()),
+            estimated_tokens_for_wire_bytes(identifier.len() as u64)
+        );
+        assert_eq!(estimated_tokens_for_wire(b""), 0);
+    }
+
+    #[test]
+    fn wire_body_accounting_rejects_components_that_do_not_match_the_body() {
+        let (_, budget) = fixture();
+        let body = br#"{"messages":[]}"#;
+        assert!(RequestAccounting::from_wire_body(&budget, body, 10, 0, 0).is_err());
+        let accounting =
+            RequestAccounting::from_wire_body(&budget, body, body.len() as u64, 0, 0).unwrap();
+        assert_eq!(accounting.wire_bytes(), Some(body.len() as u64));
+        assert_eq!(accounting.accounted_input, estimated_tokens_for_wire(body));
+    }
+
+    #[test]
+    fn native_token_estimates_are_taken_as_tokens() {
+        let (_, budget) = fixture();
+        let accounting = RequestAccounting::from_estimated_tokens(&budget, 300, 200).unwrap();
+        assert_eq!(accounting.accounted_input, 500);
     }
 
     #[test]

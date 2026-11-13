@@ -3741,13 +3741,13 @@ pub fn account_chat_request(
         let estimated_message_tokens = native
             .estimated_input_tokens
             .saturating_sub(native.estimated_catalog_tokens);
-        let mut accounting = argentum_domain::context_budget::RequestAccounting::from_wire_bytes(
-            budget,
-            estimated_message_tokens,
-            native.estimated_catalog_tokens,
-            0,
-        )
-        .map_err(ProviderError::InvalidRequest)?;
+        let mut accounting =
+            argentum_domain::context_budget::RequestAccounting::from_estimated_tokens(
+                budget,
+                estimated_message_tokens,
+                native.estimated_catalog_tokens,
+            )
+            .map_err(ProviderError::InvalidRequest)?;
         accounting.serialized_message_bytes = message_bytes;
         accounting.serialized_catalog_bytes = native.catalog_bytes;
         accounting.serialized_envelope_bytes = native.envelope_bytes;
@@ -3870,8 +3870,8 @@ fn prepare_compatible_wire(
         .checked_sub(messages)
         .and_then(|n| n.checked_sub(catalog))
         .ok_or(ProviderError::InvalidRequest("wire accounting overflow"))?;
-    let mut accounting = argentum_domain::context_budget::RequestAccounting::from_wire_bytes(
-        budget, messages, catalog, envelope,
+    let mut accounting = argentum_domain::context_budget::RequestAccounting::from_wire_body(
+        budget, &encoded, messages, catalog, envelope,
     )
     .map_err(ProviderError::InvalidRequest)?;
     let system_end = usize::from(request.system.is_some());

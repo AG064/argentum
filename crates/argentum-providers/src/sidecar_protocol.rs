@@ -61,11 +61,12 @@ pub(super) fn account_request(
     let tools = serde_json::to_vec(&body.tools)
         .map_err(|_| ProviderError::InvalidRequest("tool serialization failed"))?
         .len() as u64;
-    let total = serde_json::to_vec(&body)
-        .map_err(|_| ProviderError::InvalidRequest("request serialization failed"))?
-        .len() as u64;
-    let mut result = RequestAccounting::from_wire_bytes(
+    let encoded = serde_json::to_vec(&body)
+        .map_err(|_| ProviderError::InvalidRequest("request serialization failed"))?;
+    let total = encoded.len() as u64;
+    let mut result = RequestAccounting::from_wire_body(
         budget,
+        &encoded,
         messages,
         tools,
         total.saturating_sub(messages + tools),

@@ -152,8 +152,9 @@ impl ChatGptProvider {
             return Err(ProviderError::PreparedRequestBindingMismatch);
         }
         let body = Self::wire_body(request, None)?;
-        argentum_domain::context_budget::RequestAccounting::from_wire_bytes(
+        argentum_domain::context_budget::RequestAccounting::from_wire_body(
             budget,
+            &body,
             body.len() as u64,
             0,
             0,
@@ -901,8 +902,9 @@ impl ModelProvider for ChatGptProvider {
             .validate(profile)
             .map_err(ProviderError::ContextBudgetInvalid)?;
         let body = Bytes::from(self.body(&request)?);
-        let accounting = argentum_domain::context_budget::RequestAccounting::from_wire_bytes(
+        let accounting = argentum_domain::context_budget::RequestAccounting::from_wire_body(
             budget,
+            &body,
             body.len() as u64,
             0,
             0,

@@ -241,8 +241,9 @@ pub(crate) fn prepare_messages_wire(
         .and_then(|n| n.checked_sub(system))
         .and_then(|n| n.checked_sub(catalog))
         .ok_or(ProviderError::InvalidRequest("wire accounting overflow"))?;
-    let mut accounting = argentum_domain::context_budget::RequestAccounting::from_wire_bytes(
+    let mut accounting = argentum_domain::context_budget::RequestAccounting::from_wire_body(
         budget,
+        &encoded,
         messages + system,
         catalog,
         envelope,
