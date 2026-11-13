@@ -391,7 +391,7 @@ export component ProviderMenu inherits Sheet {
                     title: model.label;
                     detail: (model.label != model.id ? model.id : "")
                         + (model.label != model.id && model.context_window_reported ? "  ·  " : "")
-                        + (model.context_window_reported ? model.context_window_tokens + " token context" : "");
+                        + (model.context_window_reported ? model.context_window_label + " token context" : "");
                     selected: model.selected;
                     enabled: !App.provider_model_selecting && !App.running;
                     clicked => {

@@ -58,7 +58,7 @@ conversation, the provider and model chooser, and the approval prompt. The model
 the name the provider gives what is running. Each response starts with one line
 saying what the agent did, like "Changed app.py, read a file, ran a command". Open it
 for the exact steps, and open a file to read its diff in place. With DeepSeek, the
-Thinking chip next to the model switches between off, high, and max.
+Thinking chip next to the model steps through the effort levels that model supports, from Off, Low, High, and Max.
 
 ![The minimal interface](../../docs/screenshots/desktop-minimal.png)
 
@@ -82,6 +82,7 @@ in Settings, or pick a set: Minimal, Standard, Review, Trace, or Everything.
 | Plan | Plan stages for the current task |
 | Activity | Recent run, tool, and approval events |
 | Trajectory | Durable records for one session |
+| Requests | Every model request in this session, with timing, endpoint, and what filled its context |
 
 ![Choosing modules in Settings](../../docs/screenshots/desktop-modules.png)
 

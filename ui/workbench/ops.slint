@@ -14,7 +14,7 @@ export component SectionHead inherits HorizontalLayout {
     in property <string> action;
     in property <bool> busy;
     callback activated();
-    height: 28px;
+    height: max(28px, Theme.chip);
     spacing: Theme.sp8;
     SectionLabel { text: root.title; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
     if root.busy: Spinner { size: 13px; y: (parent.height - self.height) / 2; }

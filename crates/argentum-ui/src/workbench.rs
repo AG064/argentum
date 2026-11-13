@@ -365,11 +365,42 @@ pub fn set_update_notes(window: &MainWindow, notes: &str) {
     window.set_update_notes(crate::markdown::model(notes));
 }
 
+/// An exact count with thousands separators, for limits and ledgers where the
+/// precise value matters.
+pub(crate) fn grouped_count(value: u64) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
 pub(crate) fn compact_count(value: u64) -> String {
     match value {
         0..=999 => value.to_string(),
-        1_000..=999_999 => format!("{:.1}k", value as f64 / 1_000.0),
-        _ => format!("{:.2}M", value as f64 / 1_000_000.0),
+        1_000..=99_999 => {
+            let tenths = (value as f64 / 100.0).round() as u64;
+            let (whole, tenth) = (tenths / 10, tenths % 10);
+            if tenth == 0 {
+                format!("{whole}k")
+            } else {
+                format!("{whole}.{tenth}k")
+            }
+        }
+        100_000..=999_499 => format!("{}k", (value as f64 / 1_000.0).round() as u64),
+        _ => {
+            let hundredths = (value as f64 / 10_000.0).round() as u64;
+            let (whole, rest) = (hundredths / 100, hundredths % 100);
+            match rest {
+                0 => format!("{whole}M"),
+                rest if rest % 10 == 0 => format!("{whole}.{}M", rest / 10),
+                rest => format!("{whole}.{rest:02}M"),
+            }
+        }
     }
 }
 
@@ -572,6 +603,15 @@ fn palette_items(window: &MainWindow, query: &str) -> Vec<PaletteItemView> {
             },
         });
     }
+    // A phone has no keyboard shortcuts, so the hint would only mislead.
+    let touch = window.global::<App>().get_touch_device();
+    let shortcut = |keys: &str| -> String {
+        if touch {
+            String::new()
+        } else {
+            keys.to_owned()
+        }
+    };
     let mut add = |id: String, label: String, detail: String, icon: &str| {
         let matches = needle.is_empty()
             || label.to_ascii_lowercase().contains(&needle)
@@ -588,13 +628,13 @@ fn palette_items(window: &MainWindow, query: &str) -> Vec<PaletteItemView> {
     add(
         "cmd:new".into(),
         "New chat".into(),
-        "Ctrl+N".into(),
+        shortcut("Ctrl+N"),
         "new-task",
     );
     add(
         "cmd:settings".into(),
         "Open settings".into(),
-        "Ctrl+,".into(),
+        shortcut("Ctrl+,"),
         "settings",
     );
     add(
@@ -1161,9 +1201,17 @@ mod tests {
 
     #[test]
     fn counts_read_compactly() {
+        assert_eq!(grouped_count(1_234_567), "1,234,567");
+        assert_eq!(grouped_count(999), "999");
         assert_eq!(compact_count(950), "950");
         assert_eq!(compact_count(12_345), "12.3k");
-        assert_eq!(compact_count(2_500_000), "2.50M");
+        assert_eq!(compact_count(2_500_000), "2.5M");
+        assert_eq!(compact_count(200_000), "200k");
+        assert_eq!(compact_count(41_800), "41.8k");
+        assert_eq!(compact_count(1_000), "1k");
+        assert_eq!(compact_count(99_960), "100k");
+        assert_eq!(compact_count(999_600), "1M");
+        assert_eq!(compact_count(1_234_567), "1.23M");
     }
 
     #[test]

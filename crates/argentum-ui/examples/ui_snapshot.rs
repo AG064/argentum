@@ -33,7 +33,7 @@ impl Platform for Headless {
     }
 }
 
-const REPLY: &str = "I found the problem. The session store opens a new transaction per row, so a large import holds the write lock for **minutes**.\n\n## What I changed\n\n1. Batched the inserts in `import_sessions`.\n2. Added a `busy_timeout` so readers wait instead of failing.\n3. Kept the public API the same.\n\n```rust\nlet tx = connection.transaction()?;\nfor row in rows {\n    insert_session(&tx, &row)?;\n}\ntx.commit()?;\n```\n\n> The existing tests pass, and the import went from 94 s to 2.1 s on the sample file.\n\n| Step | Before | After |\n| --- | --- | --- |\n| Import | 94 s | 2.1 s |\n| Lookup | 3 ms | 3 ms |\n\nSee the [SQLite docs](https://sqlite.org/lang_transaction.html) for why this matters.";
+const REPLY: &str = "I found the problem. The session store opens a new transaction per row, so a large import holds the write lock for **minutes**.\n\n## What I changed\n\n1. Batched the inserts in `import_sessions`.\n2. Added a `busy_timeout` so readers wait instead of failing.\n3. Kept the public API the same.\n\n```rust\nlet tx = connection.transaction()?;\nfor row in rows {\n    insert_session(&tx, &row)?;\n}\ntx.commit()?;\n```\n\n> The existing tests pass, and the import went from 94 s to 2.1 s on the sample file.\n\n| Step | Before | After |\n| --- | --- | --- |\n| Import | 94 s | 2.1 s |\n| Lookup | 3 ms | 3 ms |\n\nCompared with the other options:\n\n| Option | Where it runs | Needs approval | Notes |\n| :--- | :---: | ---: | --- |\n| `read_file` | Workspace | No | Reads only files inside the resolved workspace and never follows links out of it. |\n| `write_file` | Workspace | Yes | Shows the diff before anything is written to disk. |\n| `shell` | Your machine | Yes | Each command is approved once, for the session, or never. |\n\nSee the [SQLite docs](https://sqlite.org/lang_transaction.html) for why this matters.";
 
 const DIFF: &str = "diff --git a/src/store.rs b/src/store.rs\n--- a/src/store.rs\n+++ b/src/store.rs\n@@ -41,7 +41,9 @@ pub fn import_sessions(rows: &[Row]) -> Result<()> {\n     let connection = open()?;\n-    for row in rows {\n-        insert_session(&connection, row)?;\n+    let tx = connection.transaction()?;\n+    for row in rows {\n+        insert_session(&tx, row)?;\n     }\n+    tx.commit()?;\n     Ok(())\n }\n";
 
@@ -81,6 +81,13 @@ fn conversation(ui: &UiHandle) {
     window.set_session_title("Slow session import".into());
     window.set_usage_reported(true);
     window.set_usage_total_tokens(41_810);
+    window.global::<App>().set_usage_total_label("41.8k".into());
+    window
+        .global::<App>()
+        .set_context_window_label("200k".into());
+    window
+        .global::<App>()
+        .set_session_tokens_label("83.6k".into());
     window.set_context_window_reported(true);
     window.set_context_window_tokens(200_000);
 }
@@ -129,6 +136,7 @@ fn base(ui: &UiHandle) {
             id: "qwen3-coder-next".into(),
             label: "qwen3-coder-next".into(),
             context_window_tokens: 200_000,
+            context_window_label: "200k".into(),
             context_window_reported: true,
             selected: true,
             thinking_levels: Default::default(),
@@ -137,6 +145,7 @@ fn base(ui: &UiHandle) {
             id: "gemma-4-large".into(),
             label: "gemma-4-large".into(),
             context_window_tokens: 0,
+            context_window_label: Default::default(),
             context_window_reported: false,
             selected: false,
             thinking_levels: Default::default(),
@@ -675,6 +684,67 @@ fn scenes() -> Vec<Scene> {
         s("20-phone-360-empty", (360, 720), |ui| {
             ui.window().set_touch_device(true);
             modules(ui, "standard")
+        }),
+        s("40-phone-360-table", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation(ui);
+        }),
+        s("41-phone-360-palette", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_command_palette_open(true);
+            ui.window().global::<App>().invoke_palette_query("".into());
+        }),
+        s("42-phone-360-settings-verification", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            ui.window().set_settings_open(true);
+            ui.window().set_settings_section("verification".into());
+        }),
+        s("43-phone-360-settings-modules", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            ui.window().set_settings_open(true);
+            ui.window().set_settings_section("modules".into());
+        }),
+        s("44-phone-360-approval-scopes", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_approval_open(true);
+            ui.window().set_approval_action("Run a command".into());
+            ui.window()
+                .set_approval_target("cargo test --workspace".into());
+            ui.window().set_approval_scope("once".into());
+            ui.window()
+                .set_approval_scope_choices(ModelRc::new(VecModel::from(vec![
+                    argentum_ui::ApprovalScopeChoiceView {
+                        id: "once".into(),
+                        label: "Once".into(),
+                    },
+                    argentum_ui::ApprovalScopeChoiceView {
+                        id: "session".into(),
+                        label: "This session".into(),
+                    },
+                ])));
+        }),
+        s("45-context-meter-amber", D, |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_usage_total_tokens(150_000);
+            ui.window()
+                .global::<App>()
+                .set_usage_total_label("150k".into());
+        }),
+        s("46-context-meter-red", D, |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_usage_total_tokens(190_000);
+            ui.window()
+                .global::<App>()
+                .set_usage_total_label("190k".into());
         }),
         s("21-phone-360-settings", (360, 720), |ui| {
             ui.window().set_touch_device(true);

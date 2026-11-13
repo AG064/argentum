@@ -27,6 +27,7 @@ the next is a conversation. Modules are harness surfaces (`SurfaceId`).
 | `plan` | Side panel | Plan stages for the current task |
 | `activity` | Side panel | Recent run, tool, and approval events |
 | `trajectory` | Side panel | Durable records for one session |
+| `requests` | Side panel | Every model request in this session: when, how long, which endpoint, and what filled its context. Kept for this session only |
 
 `files`, `terminal`, and `preview` are listed in Settings as not in this build.
 

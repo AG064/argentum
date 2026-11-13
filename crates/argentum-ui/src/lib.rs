@@ -401,6 +401,9 @@ impl UiHandle {
                         .set_session_tokens_used(saturating_i32_u64(session_tokens_used(
                             &snapshot.messages,
                         )));
+                    self.window.global::<App>().set_session_tokens_label(
+                        workbench::compact_count(session_tokens_used(&snapshot.messages)).into(),
+                    );
                 }
                 self.apply_live_activity(&activity::RunActivity::default());
                 // A run that failed before its message was stored would lose
@@ -443,6 +446,7 @@ impl UiHandle {
                         .set_usage_output_tokens(saturating_i32_u64(usage.output_tokens));
                     self.window
                         .set_usage_total_tokens(saturating_i32_u64(usage.total_tokens));
+                    self.set_usage_labels(usage);
                     self.window
                         .set_context_window_reported(usage.context_window_tokens.is_some());
                     self.window.set_context_window_tokens(
@@ -766,6 +770,7 @@ impl UiHandle {
                     .set_usage_output_tokens(saturating_i32_u64(usage.output_tokens));
                 self.window
                     .set_usage_total_tokens(saturating_i32_u64(usage.total_tokens));
+                self.set_usage_labels(usage);
                 self.window
                     .set_context_window_reported(usage.context_window_tokens.is_some());
                 self.window.set_context_window_tokens(
@@ -2614,6 +2619,9 @@ impl UiHandle {
         self.window
             .set_conversation_messages(empty_conversation_model());
         self.window.global::<App>().set_session_tokens_used(0);
+        self.window
+            .global::<App>()
+            .set_session_tokens_label(SharedString::default());
         self.window.set_draft(SharedString::default());
         self.window.set_transcript(SharedString::default());
         self.window.set_live_blocks(ModelRc::default());
@@ -2678,28 +2686,32 @@ impl UiHandle {
                         format!(
                             "Goal: tokens {} | requests {} | iterations {}",
                             goal.token_budget
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
-                            account
-                                .request_limit
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
-                            account
-                                .iteration_limit
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                                .map_or_else(|| "unset".into(), workbench::grouped_count),
+                            account.request_limit.map_or_else(
+                                || "unset".into(),
+                                |v| workbench::grouped_count(u64::from(v))
+                            ),
+                            account.iteration_limit.map_or_else(
+                                || "unset".into(),
+                                |v| workbench::grouped_count(u64::from(v))
+                            ),
                         ),
                         format!(
                             "Run: tokens {} | requests {} | tools {} | seconds {}",
                             per_run
                                 .token_limit
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
-                            per_run
-                                .request_limit
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
-                            per_run
-                                .tool_limit
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                                .map_or_else(|| "unset".into(), workbench::grouped_count),
+                            per_run.request_limit.map_or_else(
+                                || "unset".into(),
+                                |v| workbench::grouped_count(u64::from(v))
+                            ),
+                            per_run.tool_limit.map_or_else(
+                                || "unset".into(),
+                                |v| workbench::grouped_count(u64::from(v))
+                            ),
                             per_run
                                 .elapsed_seconds
-                                .map_or_else(|| "unset".into(), |v| v.to_string()),
+                                .map_or_else(|| "unset".into(), workbench::grouped_count),
                         ),
                     )
                 },
@@ -2752,9 +2764,9 @@ impl UiHandle {
                     format!(
                         "Requests {} | tokens {} | reserved {} | unresolved {}",
                         account.counters.request_attempts,
-                        account.counters.observed_tokens,
-                        account.counters.outstanding_tokens,
-                        account.counters.unresolved_tokens,
+                        workbench::grouped_count(account.counters.observed_tokens),
+                        workbench::grouped_count(account.counters.outstanding_tokens),
+                        workbench::grouped_count(account.counters.unresolved_tokens),
                     )
                     .into(),
                 );
@@ -2878,11 +2890,26 @@ impl UiHandle {
         }
     }
 
+    fn set_usage_labels(&self, usage: &argentum_domain::ModelUsage) {
+        self.window
+            .global::<App>()
+            .set_usage_total_label(workbench::compact_count(usage.total_tokens).into());
+        self.window.global::<App>().set_context_window_label(
+            workbench::compact_count(usage.context_window_tokens.unwrap_or(0)).into(),
+        );
+    }
+
     fn reset_usage_projection(&self) {
         self.window.set_usage_reported(false);
         self.window.set_usage_input_tokens(0);
         self.window.set_usage_output_tokens(0);
         self.window.set_usage_total_tokens(0);
+        self.window
+            .global::<App>()
+            .set_usage_total_label(SharedString::default());
+        self.window
+            .global::<App>()
+            .set_context_window_label(SharedString::default());
         self.window.set_context_window_reported(false);
         self.window.set_context_window_tokens(0);
     }
@@ -3014,9 +3041,18 @@ impl UiHandle {
                 tokens: match (record.input_tokens, record.output_tokens) {
                     (Some(input), Some(output)) => match record.cached_tokens {
                         Some(cached) if cached > 0 => {
-                            format!("in {input} ({cached} cached), out {output} tokens")
+                            format!(
+                                "in {} ({} cached), out {} tokens",
+                                workbench::compact_count(input),
+                                workbench::compact_count(cached),
+                                workbench::compact_count(output)
+                            )
                         }
-                        _ => format!("in {input}, out {output} tokens"),
+                        _ => format!(
+                            "in {}, out {} tokens",
+                            workbench::compact_count(input),
+                            workbench::compact_count(output)
+                        ),
                     },
                     _ => String::new(),
                 }
@@ -4014,6 +4050,10 @@ fn provider_model_view_model(
                 }
             },
             context_window_tokens: model.context_window_tokens.map_or(0, saturating_i32_u64),
+            context_window_label: model
+                .context_window_tokens
+                .map_or_else(String::new, workbench::compact_count)
+                .into(),
             context_window_reported: model.context_window_tokens.is_some(),
             selected: model.id == selected_model,
             thinking_levels: model
@@ -6383,8 +6423,8 @@ mod tests {
     fn context_use_copy_describes_the_session() {
         let chat = include_str!("../../../ui/workbench/chat.slint");
 
-        assert!(chat.contains("\"Session context: \" + App.usage_total_tokens"));
-        assert!(chat.contains("App.session_tokens_used"));
+        assert!(chat.contains("\"Session context: \" + App.usage_total_label"));
+        assert!(chat.contains("App.session_tokens_label"));
     }
 
     #[test]
@@ -6935,7 +6975,7 @@ mod tests {
         assert_eq!(ui.window().get_goal_lifecycle(), "paused");
         assert_eq!(
             ui.window().get_goal_progress_summary(),
-            "3 runs, 640 of 4.0k tokens, 2 of 8 tools, 30 min limit"
+            "3 runs, 640 of 4k tokens, 2 of 8 tools, 30 min limit"
         );
         assert!(ui.window().get_goal_report_pending());
         assert_eq!(ui.window().get_goal_report_summary(), "Shipped the slice.");
