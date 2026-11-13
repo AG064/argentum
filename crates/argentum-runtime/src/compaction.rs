@@ -28,6 +28,80 @@ const MAX_SUMMARIZER_PROMPT_BYTES: usize = 128 * 1024;
 /// the same two minutes.
 const SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Output tokens a summary may use. A summary must stay under
+/// `MAX_SUMMARY_BYTES`, so asking for the profile's full output allowance only
+/// lets a slow model run long before the result is rejected anyway.
+const SUMMARY_OUTPUT_TOKENS: u32 = 2048;
+
+/// Tool results longer than this are clipped to their start and end in the
+/// summarizer input. The originals stay retained and referenced.
+const SUMMARY_RESULT_CLIP_BYTES: usize = 4096;
+const SUMMARY_RESULT_HEAD_BYTES: usize = 1536;
+const SUMMARY_RESULT_TAIL_BYTES: usize = 512;
+
+/// Used when the model summary fails or is rejected, so a session that needs
+/// compaction can always continue. It names no work because nothing was
+/// summarized; the retained originals and evidence stay authoritative.
+const FALLBACK_SUMMARY_OBJECTIVE: &str = "Earlier turns of this session were compacted without a model summary, because the summary request did not succeed. Their details are not repeated here. Recorded file changes and verification results remain the authoritative record of that work.";
+
+/// The budget a summary request is prepared and checked with: the profile's
+/// own budget, with the requested output capped at `SUMMARY_OUTPUT_TOKENS`.
+/// Uncapped plan output (requested 0) keeps its exact declaration.
+fn summary_budget(
+    budget: &argentum_domain::context_budget::ModelBudget,
+) -> argentum_domain::context_budget::ModelBudget {
+    let mut summary = budget.clone();
+    if summary.requested_output_tokens != 0 {
+        summary.requested_output_tokens =
+            summary.requested_output_tokens.min(SUMMARY_OUTPUT_TOKENS);
+    }
+    summary
+}
+
+/// Clips long text inside one tool result for the summarizer input to its
+/// start and end, keeping the result's structure, paths and digests.
+fn clip_summary_result(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(text) if text.len() > SUMMARY_RESULT_CLIP_BYTES => {
+            let mut head_end = SUMMARY_RESULT_HEAD_BYTES;
+            while !text.is_char_boundary(head_end) {
+                head_end -= 1;
+            }
+            let mut tail_start = text.len() - SUMMARY_RESULT_TAIL_BYTES;
+            while !text.is_char_boundary(tail_start) {
+                tail_start += 1;
+            }
+            serde_json::Value::String(format!(
+                "{}\n[{} bytes left out of the summary input]\n{}",
+                &text[..head_end],
+                tail_start - head_end,
+                &text[tail_start..]
+            ))
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(clip_summary_result).collect())
+        }
+        serde_json::Value::Object(object) => serde_json::Value::Object(
+            object
+                .iter()
+                .map(|(key, value)| (key.clone(), clip_summary_result(value)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+fn fallback_summary_text(coverage: &[argentum_domain::context_summary::SourceCoverage]) -> String {
+    json!({
+        "objective": FALLBACK_SUMMARY_OBJECTIVE,
+        "decisions_constraints": [],
+        "observed_changes_verification": [],
+        "unresolved_work": [],
+        "source_references": coverage.iter().map(|source| source.identity.clone()).collect::<Vec<_>>(),
+    })
+    .to_string()
+}
+
 /// Debug builds let tests shorten the summary timeout. Release builds always
 /// use `SUMMARY_TIMEOUT`.
 fn summary_timeout() -> Duration {
@@ -126,7 +200,11 @@ fn summary_message_source(
                                     "source result is not valid structured data",
                                 )
                             })?;
-                        item[key] = structured;
+                        item[key] = if field == "results" {
+                            clip_summary_result(&structured)
+                        } else {
+                            structured
+                        };
                     }
                 }
             }
@@ -559,6 +637,7 @@ impl RuntimeService {
                 &base,
                 &mut instruction_run,
                 &cancellation,
+                false,
             ))
             .await
         };
@@ -639,6 +718,10 @@ impl RuntimeService {
         base: &ModelRequest,
         instruction_run: &mut instructions::InstructionRun,
         cancellation: &CancellationToken,
+        // Automatic compaction inside a run falls back to a host summary when
+        // the model summary is unusable, so the session can continue. Manual
+        // compaction reports the failure and changes nothing.
+        host_fallback: bool,
     ) -> Result<CompactionResult, RuntimeError> {
         let _activity = self
             .context_activity
@@ -686,6 +769,7 @@ impl RuntimeService {
         let before_validation = provider.validate_request(&original).await?;
         ensure_compaction_runtime_evidence(&before_validation, &admitted_runtime_evidence)?;
         self.apply_provider_request_validation(budget, &mut before, &before_validation)?;
+        let summary_budget = summary_budget(budget);
         let mut prefix = Vec::new();
         let mut coverage = Vec::new();
         let mut anchors = Vec::new();
@@ -729,7 +813,7 @@ impl RuntimeService {
             let request = ModelRequest {
                 require_tool_call: false,
                 continuation_scope: None,
-                output_limit: budget.requested_output_tokens,
+                output_limit: summary_budget.requested_output_tokens,
                 model: profile.model.clone(),
                 system: Some(format!(
                     "{}{SUMMARY_RULES}{SUMMARY_ENCODING_RULES}",
@@ -746,11 +830,11 @@ impl RuntimeService {
                 &[],
             )?;
             let prepared =
-                self.prepare_context_request(provider.as_ref(), profile, budget, request)?;
+                self.prepare_context_request(provider.as_ref(), profile, &summary_budget, request)?;
             let mut accounting = prepared.accounting().clone();
             let validation = provider.validate_prepared_request(&prepared).await?;
             ensure_compaction_runtime_evidence(&validation, &admitted_runtime_evidence)?;
-            self.apply_provider_request_validation(budget, &mut accounting, &validation)?;
+            self.apply_provider_request_validation(&summary_budget, &mut accounting, &validation)?;
             if !accounting.fits {
                 break;
             }
@@ -771,7 +855,7 @@ impl RuntimeService {
         let validation = provider.validate_prepared_request(&prepared).await?;
         ensure_compaction_runtime_evidence(&validation, &admitted_runtime_evidence)?;
         let mut accounting = accounting;
-        self.apply_provider_request_validation(budget, &mut accounting, &validation)?;
+        self.apply_provider_request_validation(&summary_budget, &mut accounting, &validation)?;
         if !accounting.fits {
             return Err(RuntimeError::ContextTokenCapacity);
         }
@@ -814,7 +898,7 @@ impl RuntimeService {
             };
             let mut attempt_accounting = accounting.clone();
             self.apply_provider_request_validation(
-                budget,
+                &summary_budget,
                 &mut attempt_accounting,
                 &attempt_validation,
             )?;
@@ -1088,8 +1172,16 @@ impl RuntimeService {
                 }
             }
         };
-        let text = match text_result {
-            Ok(text) => text,
+        // The model summary is tried first. When it fails or is rejected for its
+        // content, a host summary that leaves out the earlier turns is tried, so
+        // a session that needs compaction can always continue.
+        let mut model_failure_reason = None;
+        let mut candidates: Vec<(String, bool)> = Vec::new();
+        match text_result {
+            Ok(text) => candidates.push((text, false)),
+            Err(error) if host_fallback && fallback_allowed(&error) => {
+                model_failure_reason = Some(public_failure_reason(&error));
+            }
             Err(error) => {
                 return Ok(CompactionResult {
                     status: CompactionStatus::Failed,
@@ -1102,9 +1194,15 @@ impl RuntimeService {
                     observed_usage: usage,
                 })
             }
-        };
+        }
+        if host_fallback {
+            candidates.push((fallback_summary_text(&coverage), true));
+        }
         let mut rejected_after = None;
-        let validated = async {
+        let mut outcome = Err(RuntimeError::ContextCompaction("no summary candidate"));
+        let mut used_fallback = false;
+        for (text, fallback) in candidates {
+            let validated = async {
             let mut narrative: SummaryNarrative = serde_json::from_str(&text)
                 .map_err(|_| RuntimeError::ContextCompaction("invalid summary JSON"))?;
             if alias_references {
@@ -1159,9 +1257,9 @@ impl RuntimeService {
                 session_id: session,
                 budget_revision: budget.revision,
                 input_binding_sha256: format!("{:x}", Sha256::digest(input_binding)),
-                sources: coverage,
+                sources: coverage.clone(),
                 narrative,
-                evidence_anchors: anchors,
+                evidence_anchors: anchors.clone(),
             };
             candidate
                 .validate()
@@ -1262,27 +1360,58 @@ impl RuntimeService {
                 })?;
             Ok::<_, RuntimeError>((candidate, after))
         }.await;
-        let (candidate, after) = match validated {
+            match validated {
+                Ok(committed) => {
+                    outcome = Ok(committed);
+                    used_fallback = fallback;
+                    break;
+                }
+                Err(error) => {
+                    let try_fallback = host_fallback && !fallback && fallback_allowed(&error);
+                    if !fallback {
+                        model_failure_reason = Some(public_failure_reason(&error));
+                    }
+                    outcome = Err(error);
+                    if !try_fallback {
+                        break;
+                    }
+                }
+            }
+        }
+        let (candidate, after) = match outcome {
             Ok(committed) => committed,
             Err(error) => {
+                let reason = match (&model_failure_reason, used_fallback) {
+                    (Some(model), false) if model != &public_failure_reason(&error) => format!(
+                        "{model}; the host summary fallback also failed: {}",
+                        public_failure_reason(&error)
+                    ),
+                    _ => public_failure_reason(&error),
+                };
                 return Ok(CompactionResult {
                     status: CompactionStatus::Failed,
-                    reason: public_failure_reason(&error),
+                    reason,
                     checkpoint_id: previous_checkpoint,
                     source_references,
                     before: Some(before),
                     after: rejected_after,
                     summarizer_accounting: Some(accounting),
                     observed_usage: usage,
-                })
+                });
             }
         };
         // No fallible operations after activation. A crash here may leave the
         // command outcome unknown, but the committed projection is complete.
         Ok(CompactionResult {
             status: CompactionStatus::Success,
-            reason: "Committed one lossy summary; originals and historical evidence unchanged"
-                .into(),
+            reason: if used_fallback {
+                format!(
+                    "The model summary was not usable ({}), so a host summary that leaves out the earlier turns was committed; originals and historical evidence unchanged",
+                    model_failure_reason.as_deref().unwrap_or("unknown reason")
+                )
+            } else {
+                "Committed one lossy summary; originals and historical evidence unchanged".into()
+            },
             checkpoint_id: Some(candidate.id),
             source_references: candidate
                 .sources
@@ -1294,6 +1423,31 @@ impl RuntimeService {
             summarizer_accounting: Some(accounting),
             observed_usage: usage,
         })
+    }
+}
+
+/// Whether a failed or rejected model summary may be replaced by the host
+/// summary. Never after cancellation, or when the profile, policy, files or
+/// stored state changed underneath the compaction.
+fn fallback_allowed(error: &RuntimeError) -> bool {
+    match error {
+        RuntimeError::ContextCompaction(reason) => !matches!(
+            *reason,
+            "cancelled"
+                | "cancelled by shutdown"
+                | "cancelled before activation"
+                | "summarizer retry interrupted"
+                | "profile, policy or instructions changed"
+                | "profile, capability or instructions changed during compaction retry"
+                | "storage or snapshot conflict prevented activation"
+                | "provider runtime changed before activation"
+                | "provider accounting method changed during compaction"
+                | "source eligibility changed or rebuilt projection dropped additional groups"
+                | "instruction exclusion check failed"
+                | "input binding failed"
+        ),
+        RuntimeError::Provider(_) => true,
+        _ => false,
     }
 }
 

@@ -491,6 +491,19 @@ fn milestone_delayed_deepseek_terminal_compaction_recovery_edit_verification() {
             frames.push(json!({"choices":[{"index":0,"delta":{"content":"","role":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":17,"completion_tokens":9,"total_tokens":26,"prompt_cache_hit_tokens":2,"prompt_cache_miss_tokens":15,"prompt_tokens_details":{"cached_tokens":2}}}));
             server.replies.send(json!({"fixture_frames":frames,"fixture_first_event_delay_ms":if mode=="delayed_first"{12000}else{0},"fixture_frame_interval_ms":if mode=="useful_stream"{1200}else{0}})).unwrap();
             if matches!(mode, "oversized_terminal_usage" | "wrong_reference_alias") {
+                // The unusable model summary is replaced by the host summary and
+                // the goal continues with its next coding request. End it here.
+                let continued = server
+                    .requests
+                    .recv_timeout(Duration::from_secs(30))
+                    .expect("the goal continued after the host summary");
+                assert!(continued
+                    .to_string()
+                    .contains("compacted without a model summary"));
+                server
+                    .replies
+                    .send(json!({"fixture_disconnect":true}))
+                    .unwrap();
                 return child.join().unwrap();
             }
             println!("delayed-compaction-control stage=await-coding mode={mode}");
@@ -570,21 +583,29 @@ fn milestone_delayed_deepseek_terminal_compaction_recovery_edit_verification() {
                 account["goal"]["accounting"]["counters"]["unresolved_tokens"],
                 0
             );
-            assert_eq!(
-                account["execution"]["requests"]
-                    .as_array()
-                    .unwrap()
-                    .last()
-                    .unwrap()["observed"]["total_tokens"],
-                26
-            );
-            assert!(context(&fixture)["summary_checkpoint_id"].is_null());
+            assert!(account["execution"]["requests"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|q| q["purpose"] == "compaction_tools_disabled"
+                    && q["observed"]["total_tokens"] == 26));
+            // The unusable model summary was replaced by the host summary, so
+            // the session can continue; the model's own summary never activated.
+            assert!(context(&fixture)["summary_checkpoint_id"].is_string());
+            let db = rusqlite::Connection::open(&fixture.database).unwrap();
+            let checkpoint: String = db
+                .query_row(
+                    "SELECT payload FROM context_checkpoints ORDER BY rowid DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(checkpoint.contains("compacted without a model summary"));
             assert!(
                 std::fs::read_to_string(fixture.workspace.join("src/lib.rs"))
                     .unwrap()
                     .contains("    7\n")
             );
-            let db = rusqlite::Connection::open(&fixture.database).unwrap();
             let payload:String=db.query_row("SELECT payload FROM event_log WHERE event_type='summary_transport_observed' ORDER BY id DESC LIMIT 1",[],|row|row.get(0)).unwrap();
             let event: Value = serde_json::from_str(&payload).unwrap();
             let observation = &event["SummaryTransportObserved"]["observation"];

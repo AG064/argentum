@@ -4896,6 +4896,7 @@ impl RuntimeService {
                         prepared.request(),
                         &mut instruction_run,
                         &context.cancellation,
+                        true,
                     ))
                     .await;
                     if let Ok(compacted) = &compaction {

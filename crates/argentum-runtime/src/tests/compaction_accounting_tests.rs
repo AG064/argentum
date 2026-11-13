@@ -558,30 +558,35 @@ async fn automatic_compaction_resumes_only_after_exact_rebuilt_validation() {
 }
 
 #[tokio::test]
-async fn automatic_failure_preserves_specific_reason_and_does_not_dispatch_main_request() {
+async fn unusable_model_summary_falls_back_to_a_host_summary_and_the_run_continues() {
+    // A model summary that is not valid JSON used to fail every later run in
+    // the session. The host summary keeps the session usable instead.
     let fixture = Fixture::new(Mode::InvalidJson).await;
     fixture
         .runtime
         .declare_model_budget("exact-compaction", [7000, 7000, 2048, 512, 128])
         .unwrap();
     let mut events = fixture.runtime.subscribe();
-    let error = fixture
+    fixture
         .runtime
         .dispatch(AppCommand::SubmitTask {
             prompt: "Continue the task".into(),
         })
         .await
-        .unwrap_err();
-    assert!(error.to_string().contains("invalid summary JSON"));
-    assert!(error.to_string().contains("no oversized main request"));
-    assert!(fixture
-        .requests
-        .lock()
-        .unwrap()
-        .last()
-        .is_some_and(summarizing));
+        .expect("the run continues with the host summary");
+    let requests = fixture.requests.lock().unwrap().clone();
+    let summary_index = requests
+        .iter()
+        .position(summarizing)
+        .expect("a model summary was attempted first");
+    let main = requests[summary_index + 1..]
+        .iter()
+        .find(|request| !summarizing(request))
+        .expect("the main request was sent after the fallback");
+    let history = serde_json::to_string(&main.history).unwrap();
+    assert!(history.contains("compacted without a model summary"));
     let events = drain_events(&mut events);
-    assert!(events.iter().any(
-        |e| matches!(e, AppEvent::RunError {message,..} if message.contains("invalid summary JSON"))
-    ));
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, AppEvent::RunError { .. })));
 }

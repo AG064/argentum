@@ -77,7 +77,7 @@ pub(crate) fn summary_request(server: &Server) -> Value {
         .recv_timeout(Duration::from_secs(15))
         .expect("compaction request watchdog");
     assert!(request.get("tools").is_none());
-    assert_eq!(request["max_tokens"], 4096);
+    assert_eq!(request["max_tokens"], 2048);
     let messages = request["messages"].as_array().unwrap();
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0]["role"], "system");
