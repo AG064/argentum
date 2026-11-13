@@ -5,10 +5,10 @@
 //! and web pages, so it is treated as untrusted: raw HTML stays literal and links
 //! keep only http and https targets.
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use slint::{ModelRc, VecModel};
 
-use crate::RichBlockView;
+use crate::{RichBlockView, TableRowView};
 
 const MAX_BLOCKS: usize = 1500;
 
@@ -70,7 +70,85 @@ pub(crate) fn make_block(
         lang: lang.into(),
         depth,
         marker: marker.into(),
+        rows: ModelRc::default(),
+        weights: ModelRc::default(),
+        aligns: ModelRc::default(),
     }
+}
+
+const MAX_TABLE_COLUMNS: usize = 24;
+const MAX_TABLE_ROWS: usize = 400;
+
+/// Plain table data before it becomes a Slint block. Rows are padded to the
+/// widest row so every row has the same number of cells.
+#[derive(Debug, PartialEq)]
+pub(crate) struct TableData {
+    pub rows: Vec<Vec<String>>,
+    pub aligns: Vec<i32>,
+    pub weights: Vec<f32>,
+}
+
+pub(crate) fn table_data(rows: &[Vec<String>], alignments: &[Alignment]) -> TableData {
+    let columns = rows
+        .iter()
+        .map(Vec::len)
+        .max()
+        .unwrap_or(0)
+        .max(alignments.len())
+        .min(MAX_TABLE_COLUMNS);
+    let rows = rows
+        .iter()
+        .take(MAX_TABLE_ROWS)
+        .map(|row| {
+            (0..columns)
+                .map(|column| row.get(column).cloned().unwrap_or_default())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let aligns = (0..columns)
+        .map(|column| match alignments.get(column) {
+            Some(Alignment::Center) => 1,
+            Some(Alignment::Right) => 2,
+            _ => 0,
+        })
+        .collect();
+    // A column's share follows its longest cell, bounded so one long cell
+    // cannot starve the others.
+    let raw = (0..columns)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .unwrap_or(0)
+                .clamp(4, 36) as f32
+        })
+        .collect::<Vec<_>>();
+    let total = raw.iter().sum::<f32>().max(1.0);
+    TableData {
+        rows,
+        aligns,
+        weights: raw.into_iter().map(|width| width / total).collect(),
+    }
+}
+
+fn make_table(rows: &[Vec<String>], alignments: &[Alignment]) -> RichBlockView {
+    let data = table_data(rows, alignments);
+    let mut block = make_block("table", render_table(&data.rows), None, "", 0, "");
+    block.rows = ModelRc::new(VecModel::from(
+        data.rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| TableRowView {
+                cells: ModelRc::new(VecModel::from(
+                    row.iter().map(|cell| cell.into()).collect::<Vec<_>>(),
+                )),
+                head: index == 0,
+            })
+            .collect::<Vec<_>>(),
+    ));
+    block.weights = ModelRc::new(VecModel::from(data.weights));
+    block.aligns = ModelRc::new(VecModel::from(data.aligns));
+    block
 }
 
 #[derive(Default)]
@@ -107,6 +185,7 @@ pub fn parse(source: &str) -> Vec<RichBlockView> {
     let mut code: Option<(String, String)> = None;
     let mut table: Vec<Vec<String>> = Vec::new();
     let mut in_table = false;
+    let mut table_alignments: Vec<Alignment> = Vec::new();
     let mut link_open = false;
 
     let flush = |inline: &mut Inline,
@@ -163,14 +242,14 @@ pub fn parse(source: &str) -> Vec<RichBlockView> {
                     body.push_str(&text);
                 }
             }
-            Event::Start(Tag::Table(_)) => {
+            Event::Start(Tag::Table(alignments)) => {
                 in_table = true;
+                table_alignments = alignments;
                 table.clear();
             }
             Event::End(TagEnd::Table) => {
                 in_table = false;
-                let rendered = render_table(&table);
-                blocks.push(make_block("table", rendered, None, "", 0, ""));
+                blocks.push(make_table(&table, &table_alignments));
             }
             Event::Start(Tag::TableHead | Tag::TableRow) if in_table => table.push(Vec::new()),
             Event::Start(Tag::TableCell) if in_table => inline = Inline::default(),
@@ -334,6 +413,8 @@ pub fn model(source: &str) -> ModelRc<RichBlockView> {
 
 #[cfg(test)]
 mod tests {
+    use slint::Model;
+
     use super::*;
 
     fn kinds(source: &str) -> Vec<String> {
@@ -392,14 +473,75 @@ mod tests {
         );
     }
 
+    fn cells(block: &RichBlockView) -> Vec<Vec<String>> {
+        block
+            .rows
+            .iter()
+            .map(|row| row.cells.iter().map(|cell| cell.to_string()).collect())
+            .collect()
+    }
+
+    fn aligns(block: &RichBlockView) -> Vec<i32> {
+        block.aligns.iter().collect()
+    }
+
     #[test]
-    fn tables_render_as_aligned_text() {
+    fn tables_keep_a_copyable_aligned_text_form() {
         let blocks = parse("| A | Long |\n| - | - |\n| 1 | 2 |\n");
         assert_eq!(blocks[0].kind, "table");
         assert_eq!(
             blocks[0].text,
             "A \u{2502} Long\n\u{2500}\u{2500}\u{253c}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n1 \u{2502} 2"
         );
+    }
+
+    #[test]
+    fn tables_become_header_and_body_rows() {
+        let blocks = parse("| A | B |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n");
+        assert_eq!(cells(&blocks[0]), [["A", "B"], ["1", "2"], ["3", "4"]]);
+        let heads = blocks[0]
+            .rows
+            .iter()
+            .map(|row| row.head)
+            .collect::<Vec<_>>();
+        assert_eq!(heads, [true, false, false]);
+    }
+
+    #[test]
+    fn table_alignment_row_sets_column_alignment() {
+        let blocks = parse("| L | C | R | N |\n| :-- | :-: | --: | --- |\n| a | b | c | d |\n");
+        assert_eq!(aligns(&blocks[0]), [0, 1, 2, 0]);
+    }
+
+    #[test]
+    fn uneven_table_rows_are_padded_to_the_widest_row() {
+        let blocks = parse("| A | B | C |\n| - | - | - |\n| 1 |\n| 1 | 2 | 3 | 4 |\n");
+        let rows = cells(&blocks[0]);
+        assert!(rows.iter().all(|row| row.len() == rows[0].len()));
+        assert_eq!(rows[1], ["1", "", ""]);
+        assert_eq!(blocks[0].weights.row_count(), rows[0].len());
+        let total: f32 = blocks[0].weights.iter().sum();
+        assert!((total - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn table_cells_keep_inline_code_and_escaped_pipes() {
+        let blocks = parse(
+            "| Call | Note |\n| - | - |\n| `read(path)` | a \\| b |\n| `x \\| y` | **bold** |\n",
+        );
+        let rows = cells(&blocks[0]);
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[1][0], "read(path)");
+        assert_eq!(rows[1][1], "a | b");
+        assert_eq!(rows[2][0], "x | y");
+        assert_eq!(rows[2][1], "bold");
+    }
+
+    #[test]
+    fn partial_streamed_tables_never_panic() {
+        for source in ["| a |\n| -", "| a | b |\n| - | - |\n|", "|||\n|-|-|\n"] {
+            let _ = parse(source);
+        }
     }
 
     #[test]

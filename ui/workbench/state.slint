@@ -31,6 +31,10 @@ export global App {
     in-out property <int> usage_input_tokens: 0;
     in-out property <int> usage_output_tokens: 0;
     in-out property <int> usage_total_tokens: 0;
+    // The same counts in the compact form used everywhere else, such as 41.8k.
+    in-out property <string> usage_total_label: "";
+    in-out property <string> context_window_label: "";
+    in-out property <string> session_tokens_label: "";
     // Tokens reported for every turn in this session, summed.
     in-out property <int> session_tokens_used: 0;
     in-out property <bool> context_window_reported: false;

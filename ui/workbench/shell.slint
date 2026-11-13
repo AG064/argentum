@@ -49,7 +49,7 @@ component Sidebar inherits Rectangle {
             padding-left: Theme.sp8;
             padding-right: Theme.sp8;
             Rectangle {
-                height: 28px;
+                height: Theme.row;
                 horizontal-stretch: 1;
                 border-radius: Theme.r-sm;
                 background: project-touch.has-hover ? Theme.hover : transparent;
@@ -159,9 +159,9 @@ component PanelTabs inherits Rectangle {
         spacing: Theme.sp2;
         for mode in App.inspector_modes: Rectangle {
             y: (parent.height - self.height) / 2;
-            height: 30px;
+            height: Theme.chip;
             preferred-width: tab-row.preferred-width;
-            min-width: 30px;
+            min-width: Theme.chip;
             horizontal-stretch: 0;
             border-radius: Theme.r-sm;
             background: App.active_inspector == mode.id ? Theme.hover : touch.has-hover ? Theme.hover.with-alpha(0.03) : transparent;
@@ -348,7 +348,7 @@ component ApprovalPrompt inherits FocusScope {
             if App.approval_scope_choices.length > 1: HorizontalLayout {
                 spacing: TrustTheme.sp8;
                 for choice in App.approval_scope_choices: Rectangle {
-                    height: 26px;
+                    height: App.touch_device ? 48px : 26px;
                     width: choice-label.preferred-width + 16px;
                     border-radius: 6px;
                     border-width: 1px;
@@ -357,7 +357,7 @@ component ApprovalPrompt inherits FocusScope {
                     accessible-label: "Applies to: " + choice.label;
                     accessible-item-selected: App.approval_scope == choice.id;
                     accessible-action-default => { App.approval_scope = choice.id; }
-                    choice-label := Text { text: choice.label; color: TrustTheme.text; font-size: 12px; vertical-alignment: center; }
+                    choice-label := Text { text: choice.label; color: TrustTheme.text; font-size: 12px; vertical-alignment: center; height: parent.height; }
                     TouchArea { clicked => { App.approval_scope = choice.id; } }
                 }
                 Rectangle { horizontal-stretch: 1; }

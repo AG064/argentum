@@ -660,9 +660,9 @@ export component Composer inherits Rectangle {
                     // The latest request carries the whole session's history, so its
                     // size is the session's context use.
                     text: (!App.usage_reported ? "Session context: not reported yet"
-                        : !App.context_window_reported ? "Session context: " + App.usage_total_tokens + " tokens, limit not reported"
-                        : "Session context: " + App.usage_total_tokens + " of " + App.context_window_tokens + " tokens (" + round(root.context-fraction * 100) + "%)")
-                        + (App.session_tokens_used > 0 ? "\nUsed this session: " + App.session_tokens_used + " tokens" : "");
+                        : !App.context_window_reported ? "Session context: " + App.usage_total_label + " tokens, limit not reported"
+                        : "Session context: " + App.usage_total_label + " of " + App.context_window_label + " tokens (" + round(root.context-fraction * 100) + "%)")
+                        + (App.session_tokens_used > 0 ? "\nUsed this session: " + App.session_tokens_label + " tokens" : "");
                 }
             }
             Rectangle {

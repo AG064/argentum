@@ -306,7 +306,7 @@ component ModulesPage inherits VerticalLayout {
         for profile in App.harness_profiles: Rectangle {
             visible: profile.selectable || profile.selected;
             width: self.visible ? t.preferred-width + 20px : 0px;
-            height: 28px;
+            height: Theme.chip;
             border-radius: Theme.r-sm;
             background: profile.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
             border-width: Theme.hair;
@@ -321,6 +321,7 @@ component ModulesPage inherits VerticalLayout {
             }
             t := Text {
                 text: profile.label;
+                y: (parent.height - self.height) / 2;
                 color: profile.selected ? Theme.text : Theme.text-2;
                 font-size: Theme.fs-xs + 0.5px;
             }
@@ -370,10 +371,11 @@ component AppearancePage inherits VerticalLayout {
             Text { horizontal-stretch: 1; text: "Last agent change: " + App.ui_last_agent_change; color: Theme.text-2; font-size: Theme.fs-sm; wrap: word-wrap; }
         }
     }
-    HorizontalLayout {
+    // Three to a row on a phone, so every name fits whole.
+    FlexboxLayout {
         spacing: Theme.sp8;
         for preset in App.theme_presets: Rectangle {
-            horizontal-stretch: 1;
+            width: Theme.coarse ? (root.width - 2 * Theme.sp8) / 3 : (root.width - 4 * Theme.sp8) / 5;
             height: 78px;
             border-radius: Theme.r-md;
             background: preset.canvas;
@@ -735,30 +737,44 @@ export component Settings inherits Rectangle {
         clip: true;
 
         VerticalLayout {
+            // Every section stays reachable on a phone: the tabs scroll sideways and
+            // the close button stays put.
             if root.narrow: HorizontalLayout {
-                height: 46px;
+                height: Theme.header;
                 padding-left: Theme.sp8;
                 padding-right: Theme.sp8;
                 spacing: Theme.sp2;
-                for tab in [
-                    { id: "providers", icon: "provider", label: "Providers" },
-                    { id: "workspace", icon: "folder", label: "Workspace" },
-                    { id: "modules", icon: "boxes", label: "Modules" },
-                    { id: "appearance", icon: "sparkles", label: "Appearance" },
-                    { id: "permissions", icon: "approval", label: "Permissions" },
-                    { id: "devices", icon: "lock", label: "Devices" },
-                    { id: "updates", icon: "refresh", label: "Updates" },
-                    { id: "about", icon: "info", label: "About" },
-                ]: IconBtn {
-                    y: (parent.height - self.height) / 2;
-                    icon: tab.icon;
-                    tip: tab.label;
-                    active: App.settings_section == tab.id;
-                    size: 38px;
-                    clicked => { App.settings_section = tab.id; }
+                tab-scroll := Flickable {
+                    horizontal-stretch: 1;
+                    content-width: max(self.width, tab-row.preferred-width);
+                    content-height: self.height;
+                    tab-row := HorizontalLayout {
+                        spacing: Theme.sp2;
+                        alignment: start;
+                        for tab in [
+                            { id: "providers", icon: "provider", label: "Providers" },
+                            { id: "workspace", icon: "folder", label: "Workspace" },
+                            { id: "modules", icon: "boxes", label: "Modules" },
+                            { id: "appearance", icon: "sparkles", label: "Appearance" },
+                            { id: "verification", icon: "circle-check", label: "Verification" },
+                            { id: "tools", icon: "wrench", label: "Tools and skills" },
+                            { id: "capabilities", icon: "plug", label: "Capabilities" },
+                            { id: "diagnostics", icon: "activity", label: "Diagnostics" },
+                            { id: "permissions", icon: "approval", label: "Permissions" },
+                            { id: "devices", icon: "lock", label: "Devices" },
+                            { id: "updates", icon: "refresh", label: "Updates" },
+                            { id: "about", icon: "info", label: "About" },
+                        ]: IconBtn {
+                            y: (parent.height - self.height) / 2;
+                            icon: tab.icon;
+                            tip: tab.label;
+                            active: App.settings_section == tab.id;
+                            size: Theme.touch;
+                            clicked => { App.settings_section = tab.id; }
+                        }
+                    }
                 }
-                Rectangle { horizontal-stretch: 1; }
-                IconBtn { y: (parent.height - self.height) / 2; icon: "close"; tip: "Close settings"; size: 38px; clicked => { root.close(); } }
+                IconBtn { y: (parent.height - self.height) / 2; icon: "close"; tip: "Close settings"; size: Theme.touch; clicked => { root.close(); } }
             }
             if root.narrow: Divider { }
             HorizontalLayout {

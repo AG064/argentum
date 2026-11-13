@@ -48,7 +48,7 @@ component CodeBlock inherits Rectangle {
                 padding-left: Theme.sp12;
                 padding-right: Theme.sp3;
                 Label {
-                    text: block.lang != "" ? block.lang : (block.kind == "table" ? "table" : "text");
+                    text: block.lang != "" ? block.lang : "text";
                     tone: "muted";
                     size: "xs";
                     mono: true;
@@ -57,26 +57,7 @@ component CodeBlock inherits Rectangle {
                 CopyBtn { text: block.text; tip: "Copy code"; y: (parent.height - self.height) / 2; }
             }
         }
-        // A table keeps its rows on one line each and scrolls sideways, so the
-        // columns stay aligned on a narrow screen.
-        if block.kind == "table": Flickable {
-            height: table-text.preferred-height + 2 * Theme.sp12;
-            content-width: max(self.width, table-text.preferred-width + 2 * Theme.sp12);
-            table-text := TextInput {
-                x: Theme.sp12;
-                y: Theme.sp12;
-                text: block.text;
-                read-only: true;
-                single-line: false;
-                wrap: no-wrap;
-                color: Theme.text;
-                font-family: Theme.font-mono;
-                font-size: Theme.fs-sm;
-                selection-background-color: Theme.accent.with-alpha(0.4);
-                selection-foreground-color: Theme.text;
-            }
-        }
-        if block.kind != "table": VerticalLayout {
+        VerticalLayout {
             padding: Theme.sp12;
             TextInput {
                 text: block.text;
@@ -88,6 +69,81 @@ component CodeBlock inherits Rectangle {
                 font-size: Theme.fs-sm;
                 selection-background-color: Theme.accent.with-alpha(0.4);
                 selection-foreground-color: Theme.text;
+            }
+        }
+    }
+}
+
+component TableCell inherits Rectangle {
+    in property <string> text;
+    in property <bool> head;
+    in property <int> align;
+    in property <length> column-width;
+    width: column-width;
+    background: head ? Theme.hover : transparent;
+    VerticalLayout {
+        padding-left: Theme.sp10;
+        padding-right: Theme.sp10;
+        padding-top: Theme.sp8;
+        padding-bottom: Theme.sp8;
+        Text {
+            text: root.text;
+            wrap: word-wrap;
+            color: head ? Theme.text : Theme.text-2;
+            font-size: Theme.fs-sm;
+            font-weight: head ? Theme.w-semibold : Theme.w-normal;
+            horizontal-alignment: align == 1 ? center : align == 2 ? right : left;
+        }
+    }
+    Rectangle { x: 0; y: parent.height - self.height; width: parent.width; height: Theme.hair; background: Theme.border; }
+    Rectangle { x: parent.width - self.width; y: 0; width: Theme.hair; height: parent.height; background: Theme.border; }
+}
+
+// A real grid: header row, hairline separators, wrapping cells. Columns share the
+// reply width by content length, never narrower than a readable minimum, so a
+// wide table scrolls sideways instead of crushing its text.
+component TableView inherits Rectangle {
+    in property <RichBlockView> block;
+    border-radius: Theme.r-md;
+    border-width: Theme.hair;
+    border-color: Theme.border;
+    background: Theme.code-bg;
+    clip: true;
+    VerticalLayout {
+        Rectangle {
+            height: Theme.control - 4px;
+            background: Theme.hover;
+            HorizontalLayout {
+                padding-left: Theme.sp12;
+                padding-right: Theme.sp3;
+                Label {
+                    text: "table";
+                    tone: "muted";
+                    size: "xs";
+                    mono: true;
+                    horizontal-stretch: 1;
+                }
+                CopyBtn { text: block.text; tip: "Copy table"; y: (parent.height - self.height) / 2; }
+            }
+        }
+        grid-scroll := Flickable {
+            // Fixed bounds keep the columns from feeding their own width back.
+            min-width: 0px;
+            max-width: 100000px;
+            height: grid.preferred-height;
+            content-width: max(self.width, grid.preferred-width);
+            content-height: grid.preferred-height;
+            grid := VerticalLayout {
+                alignment: start;
+                for row in block.rows: HorizontalLayout {
+                    alignment: start;
+                    for cell[column] in row.cells: TableCell {
+                        text: cell;
+                        head: row.head;
+                        align: block.aligns[column];
+                        column-width: max(104px, grid-scroll.width * block.weights[column]);
+                    }
+                }
             }
         }
     }
@@ -144,7 +200,8 @@ component BlockView inherits VerticalLayout {
             link(u) => { root.link(u); }
         }
     }
-    if block.kind == "code" || block.kind == "table": CodeBlock { block: root.block; }
+    if block.kind == "code": CodeBlock { block: root.block; }
+    if block.kind == "table": TableView { block: root.block; }
     if block.kind == "hr": VerticalLayout {
         padding-top: Theme.sp4;
         padding-bottom: Theme.sp4;

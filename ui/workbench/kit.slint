@@ -678,18 +678,19 @@ export component Scrim inherits Rectangle {
 export component Ring inherits Rectangle {
     in property <float> fraction: -1;
     in property <length> size: 18px;
-    in property <length> stroke: 2.5px;
+    in property <length> stroke: 3px;
     width: size;
     height: size;
     // The arc sweeps to a new reading instead of jumping to it.
     private property <float> f: clamp(fraction, 0, 1);
     animate f { duration: Theme.glide; easing: ease-out; }
-    private property <color> tone: fraction >= 0.9 ? Theme.danger : fraction >= 0.7 ? Theme.warn : Theme.silver;
+    private property <color> tone: fraction >= 0.9 ? Theme.meter-full : fraction >= 0.7 ? Theme.meter-warn : Theme.meter-ok;
     animate tone { duration: Theme.glide; }
     Rectangle {
         border-radius: root.size / 2;
         border-width: root.stroke;
-        border-color: Theme.pressed;
+        // A track strong enough to read as a gauge, not a spinner.
+        border-color: Theme.border-strong;
     }
     if fraction >= 0: Path {
         x: 0;

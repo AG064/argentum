@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 
+export struct TableRowView {
+    cells: [string],
+    head: bool,
+}
+
 export struct RichBlockView {
     kind: string, // p | h1 | h2 | h3 | li | quote | code | table | hr
     text: string,
@@ -9,6 +14,11 @@ export struct RichBlockView {
     lang: string,
     depth: int,
     marker: string,
+    // Tables only. `weights` sum to 1 and size the columns; `aligns` is 0 left,
+    // 1 center, 2 right. `text` holds an aligned plain-text copy for the clipboard.
+    rows: [TableRowView],
+    weights: [float],
+    aligns: [int],
 }
 
 export struct PlanStepView {
@@ -164,6 +174,7 @@ export struct ProviderModelView {
     id: string,
     label: string,
     context_window_tokens: int,
+    context_window_label: string,
     context_window_reported: bool,
     selected: bool,
     // Effort level IDs the model supports, comma separated. Empty for none.
