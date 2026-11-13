@@ -14,6 +14,19 @@ The first stable release, for Windows x64 and Android arm64:
 - goals with limits, and context compaction;
 - pairing a phone with a computer to drive one from the other.
 
+## Planned for 0.1.1
+
+- **Lighter requests:** shorter tool descriptions and only the tools a session
+  needs, to roughly halve the fixed cost of each request.
+- **Faster compaction:** old tool output is trimmed first, with no model call,
+  and compaction starts before the context is full.
+- **Exact token counts:** counting with each provider's own tokenizer where one
+  is available, and learning from the usage each provider reports.
+- **Clearer diagnostics:** runs that stop for an approval, and the tokens a
+  compaction used, show up in run details and usage totals.
+- **Interface polish:** notices that no longer cover the composer, and clearer
+  wording in Settings.
+
 ## Planned for future builds
 
 - **Computer use:** the agent works in desktop applications, with each action
