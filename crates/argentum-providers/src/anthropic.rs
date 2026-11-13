@@ -254,7 +254,7 @@ pub(crate) fn prepare_messages_wire(
     accounting
         .message_components
         .insert("historical_projection_and_current_task".into(), messages);
-    if accounting.accounted_input != total {
+    if accounting.wire_bytes() != Some(total) {
         return Err(ProviderError::InvalidRequest(
             "prepared body accounting mismatch",
         ));
@@ -880,7 +880,7 @@ impl AnthropicProvider {
             || messages.output_limit != prepared.request.output_limit
             || messages.profile_id != prepared.accounting.profile_id
             || messages.budget_revision != prepared.accounting.budget_revision
-            || messages.body.len() as u64 != prepared.accounting.accounted_input
+            || Some(messages.body.len() as u64) != prepared.accounting.wire_bytes()
         {
             return Err(ProviderError::PreparedRequestBindingMismatch);
         }

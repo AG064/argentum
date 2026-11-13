@@ -97,21 +97,38 @@ pub struct RequestAccounting {
     pub fits: bool,
 }
 
+/// Serialized UTF-8 bytes counted as one estimated token.
+///
+/// Measured requests run near 3.6 bytes per token for code, JSON and English
+/// text, so 2.5 keeps a margin of about 1.5 times. Text that tokenizes more
+/// densely, such as some CJK scripts, can still exceed the estimate; the owner
+/// uncertainty allowance and the provider's own limit cover that case.
+pub const WIRE_BYTES_PER_ESTIMATED_TOKEN_TIMES_TWO: u64 = 5;
+
+/// Estimated input tokens for a serialized request of `bytes` UTF-8 bytes.
+pub fn estimated_tokens_for_wire_bytes(bytes: u64) -> u64 {
+    bytes
+        .saturating_mul(2)
+        .div_ceil(WIRE_BYTES_PER_ESTIMATED_TOKEN_TIMES_TWO)
+}
+
 impl RequestAccounting {
-    /// One estimated token per serialized UTF-8 wire byte, including escaping,
-    /// with an additional owner allowance for unknown tokenization/protocol
-    /// overhead. Deliberately conservative for common text, but NOT a proof of
-    /// an upper bound for arbitrary tokenizers or vendor-side transformations.
+    /// Estimated tokens from the serialized UTF-8 wire bytes, including
+    /// escaping, at 2.5 bytes per token, plus an owner allowance for unknown
+    /// tokenization and protocol overhead. Conservative for common text, but
+    /// NOT a proof of an upper bound for every tokenizer or vendor-side
+    /// transformation.
     pub fn from_wire_bytes(
         budget: &ModelBudget,
         message_bytes: u64,
         catalog_bytes: u64,
         envelope_bytes: u64,
     ) -> Result<Self, &'static str> {
-        let input = message_bytes
+        let wire_bytes = message_bytes
             .checked_add(catalog_bytes)
             .and_then(|n| n.checked_add(envelope_bytes))
             .ok_or("context accounting overflow")?;
+        let input = estimated_tokens_for_wire_bytes(wire_bytes);
         let uncertain_input = input
             .checked_add(budget.uncertainty_tokens)
             .ok_or("context accounting overflow")?;
@@ -126,7 +143,8 @@ impl RequestAccounting {
             .checked_add(u64::from(output_reserve))
             .ok_or("context accounting overflow")?;
         Ok(Self {
-            method: "estimated_utf8_wire_bytes_v1_not_tokenizer_upper_bound".into(),
+            method: "estimated_utf8_wire_bytes_v2_2_5_bytes_per_token_not_tokenizer_upper_bound"
+                .into(),
             capacity_source: ModelBudget::SOURCE.into(),
             budget_revision: budget.revision,
             profile_id: budget.profile_id.clone(),
@@ -151,6 +169,14 @@ impl RequestAccounting {
                     .input_limit_tokens
                     .is_none_or(|limit| uncertain_input <= limit),
         })
+    }
+
+    /// Total serialized wire bytes the estimate was computed from. Request
+    /// bodies are checked against this, never against the token estimate.
+    pub fn wire_bytes(&self) -> Option<u64> {
+        self.serialized_message_bytes
+            .checked_add(self.serialized_catalog_bytes)?
+            .checked_add(self.serialized_envelope_bytes)
     }
 }
 
@@ -191,7 +217,9 @@ mod tests {
         budget.endpoint = profile.endpoint.clone();
         budget.requested_output_tokens = 0;
         assert!(budget.validate(&profile).is_ok());
-        let accounting = RequestAccounting::from_wire_bytes(&budget, 673, 0, 0).unwrap();
+        // 1681 bytes estimate 673 tokens, one past the 672 that fit beside the
+        // reserved maximum output (200) and the uncertainty allowance (128).
+        let accounting = RequestAccounting::from_wire_bytes(&budget, 1681, 0, 0).unwrap();
         assert_eq!(accounting.output_reserve, 200);
         assert!(!accounting.fits);
         budget.requested_output_tokens = 100;
@@ -211,15 +239,33 @@ mod tests {
     fn exact_boundary_and_one_byte_overflow_keep_requested_output() {
         let (profile, budget) = fixture();
         budget.validate(&profile).unwrap();
-        let exact = RequestAccounting::from_wire_bytes(&budget, 700, 60, 12).unwrap();
+        // 1930 wire bytes estimate exactly 772 tokens: 772 + 128 + 100 = 1000.
+        let exact = RequestAccounting::from_wire_bytes(&budget, 1858, 60, 12).unwrap();
+        assert_eq!(exact.accounted_input, 772);
+        assert_eq!(exact.wire_bytes(), Some(1930));
         assert!(exact.fits);
         assert_eq!(exact.output_reserve, 100);
         assert!(
-            !RequestAccounting::from_wire_bytes(&budget, 701, 60, 12)
+            !RequestAccounting::from_wire_bytes(&budget, 1859, 60, 12)
                 .unwrap()
                 .fits
         );
         assert!(RequestAccounting::from_wire_bytes(&budget, u64::MAX, 1, 0).is_err());
+    }
+
+    #[test]
+    fn wire_bytes_estimate_two_and_a_half_bytes_per_token_rounded_up() {
+        assert_eq!(estimated_tokens_for_wire_bytes(0), 0);
+        assert_eq!(estimated_tokens_for_wire_bytes(1), 1);
+        assert_eq!(estimated_tokens_for_wire_bytes(5), 2);
+        assert_eq!(estimated_tokens_for_wire_bytes(6), 3);
+        // The measured 25,627-byte request (about 7,000 real tokens) now fits a
+        // 16K window instead of being refused before it is sent.
+        assert_eq!(estimated_tokens_for_wire_bytes(25_627), 10_251);
+        assert_eq!(
+            estimated_tokens_for_wire_bytes(u64::MAX),
+            u64::MAX.div_ceil(5)
+        );
     }
 
     #[test]

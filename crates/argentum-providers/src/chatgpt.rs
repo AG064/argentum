@@ -1133,7 +1133,7 @@ mod tests {
             uncertainty_tokens: 1024,
         };
         let accounting = ChatGptProvider::account_request(&profile, &budget, &request).unwrap();
-        assert_eq!(accounting.accounted_input, bytes.len() as u64);
+        assert_eq!(accounting.wire_bytes(), Some(bytes.len() as u64));
         assert_eq!(accounting.output_reserve, 128000);
         assert!(ChatGptProvider::wire_body(&request, Some((binding, "wrong_account"))).is_err());
         assert!(ChatGptProvider::wire_body(
@@ -1268,8 +1268,8 @@ mod tests {
         assert_eq!(
             ChatGptProvider::account_request(&profile, &budget, &request)
                 .unwrap()
-                .accounted_input,
-            wire.len() as u64
+                .wire_bytes(),
+            Some(wire.len() as u64)
         );
         assert!(
             ModelImage::from_png(png, &"0".repeat(64), "http://127.0.0.1:18080".into()).is_err()

@@ -66,6 +66,22 @@ pub(crate) fn seed(server: &Server, fixture: &CliFixture, size: usize) -> Value 
     observation
 }
 
+/// Serialized wire bytes behind a context preview's token estimate.
+pub(crate) fn wire_bytes(accounting: &Value) -> u64 {
+    [
+        "serialized_message_bytes",
+        "serialized_catalog_bytes",
+        "serialized_envelope_bytes",
+    ]
+    .iter()
+    .map(|field| accounting[*field].as_u64().expect("wire byte field"))
+    .sum()
+}
+
+pub(crate) fn estimated_tokens(bytes: u64) -> u64 {
+    argentum_domain::context_budget::estimated_tokens_for_wire_bytes(bytes)
+}
+
 pub(crate) fn summary_request(server: &Server) -> Value {
     let request = server
         .requests
@@ -170,7 +186,8 @@ fn retained_search_prefix_automatically_compacts_at_unchanged_declared_limits() 
             "budget",
             "f01-fixture",
             "--limits",
-            "204800,196608,4096,4096,1024",
+            // The MiniMax limits (204800, 196608) scaled to 2.5 bytes per estimated token.
+            "81920,78644,4096,4096,1024",
             "--json"
         ])
         .status
@@ -386,11 +403,11 @@ fn estimated_wire_boundary_unknown_and_invalid_budget_fail_before_inference() {
         let scoped_run_wire_bytes = serde_json::to_vec(&run_json).unwrap().len() - 2;
         let no_run_wire_bytes = serde_json::to_vec("null").unwrap().len() - 2;
         let scoped_run_overhead = scoped_run_wire_bytes - no_run_wire_bytes;
-        let input = preview["accounting"]["accounted_input"].as_u64().unwrap()
+        let input = wire_bytes(&preview["accounting"])
             + serde_json::to_string(prompt).unwrap().len() as u64
             - 2
             + scoped_run_overhead as u64;
-        let total = input + 4096 + 1024 - u64::from(mode == "over");
+        let total = estimated_tokens(input) + 4096 + 1024 - u64::from(mode == "over");
         let declared = fixture.run(&[
             "provider",
             "budget",
@@ -502,7 +519,10 @@ fn automatic_pressure_between_tasks_and_settled_rounds_uses_one_admitted_summary
                     .unwrap()
                     .contains("required-current-data"));
             }
-            assert!(serde_json::to_vec(&admitted).unwrap().len() as u64 + 4096 + 1024 <= total);
+            assert!(
+                estimated_tokens(serde_json::to_vec(&admitted).unwrap().len() as u64) + 4096 + 1024
+                    <= total
+            );
             server.complete();
             process.join().unwrap()
         });

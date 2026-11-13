@@ -2274,7 +2274,9 @@ impl Fixture {
             .arg("--database")
             .arg(&self.database)
             .current_dir(self.root.path())
-            .env_clear();
+            .env_clear()
+            // Debug builds only: keep compaction timeout tests short.
+            .env("ARGENTUM_TEST_SUMMARY_TIMEOUT_MS", "10000");
         for variable in [
             "SystemRoot",
             "WINDIR",

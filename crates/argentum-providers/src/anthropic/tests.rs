@@ -572,7 +572,7 @@ fn prepared_accounting_matches_the_exact_body() {
     request.tools = vec![tool("read_text")];
     request.system = Some("System".into());
     let (body, accounting) = prepare_messages_wire(&profile, &budget, &request).expect("prepared");
-    assert_eq!(accounting.accounted_input, body.len() as u64);
+    assert_eq!(accounting.wire_bytes(), Some(body.len() as u64));
     assert!(accounting.serialized_catalog_bytes > 0);
     assert_eq!(
         crate::account_chat_request(&profile, &budget, &request)
@@ -661,8 +661,8 @@ async fn loopback_stream_sends_versioned_headers_and_maps_tool_events() {
     assert!(!lowered.contains("authorization:"));
     let sent_body = request.split("\r\n\r\n").nth(1).expect("body");
     assert_eq!(
-        sent_body.len() as u64,
-        prepared.accounting().accounted_input
+        Some(sent_body.len() as u64),
+        prepared.accounting().wire_bytes()
     );
 
     let calls = events

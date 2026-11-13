@@ -276,7 +276,7 @@ impl GoalAccounting {
                 }),
             reason: reason.into(),
             method:
-                "estimated_utf8_wire_bytes_v1_not_tokenizer_upper_bound_with_observed_settlement"
+                "estimated_utf8_wire_bytes_v2_2_5_bytes_per_token_not_tokenizer_upper_bound_with_observed_settlement"
                     .into(),
             provider_billing_ceiling: false,
             dollar_cost_enforcement: false,

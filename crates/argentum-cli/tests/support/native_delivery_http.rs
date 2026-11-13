@@ -329,15 +329,16 @@ fn milestone_delayed_deepseek_terminal_compaction_recovery_edit_verification() {
             assert!(output.status.success());
         }
         // Bound only this disposable fixture. The real owner's limits do not change.
+        // The input limits keep the same overflow point in wire bytes at 2.5 bytes per token.
         json_output(fixture.run(&[
             "provider",
             "budget",
             "f01-fixture",
             "--limits",
             if mode == "pretty_json" {
-                "204800,85000,4096,4096,1024"
+                "204800,34614,4096,4096,1024"
             } else {
-                "204800,70000,4096,4096,1024"
+                "204800,28614,4096,4096,1024"
             },
             "--json",
         ]));

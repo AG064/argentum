@@ -1805,7 +1805,7 @@ impl OpenAiCompatibleProvider {
             || compatible.output_limit != prepared.request.output_limit
             || compatible.profile_id != prepared.accounting.profile_id
             || compatible.budget_revision != prepared.accounting.budget_revision
-            || compatible.body.len() as u64 != prepared.accounting.accounted_input
+            || Some(compatible.body.len() as u64) != prepared.accounting.wire_bytes()
         {
             return Err(ProviderError::PreparedRequestBindingMismatch);
         }
@@ -3930,7 +3930,7 @@ fn prepare_compatible_wire(
             ))?,
     );
     accounting.bundled_model_context_limit = bundled_limit;
-    if accounting.accounted_input != total {
+    if accounting.wire_bytes() != Some(total) {
         return Err(ProviderError::InvalidRequest(
             "prepared body accounting mismatch",
         ));
@@ -5499,8 +5499,8 @@ mod tests {
         };
         assert_eq!(compatible.body.as_ref(), expected);
         assert_eq!(
-            prepared.accounting().accounted_input,
-            compatible.body.len() as u64
+            prepared.accounting().wire_bytes(),
+            Some(compatible.body.len() as u64)
         );
         assert!(!format!("{prepared:?}").contains("Tere maailm"));
         let validation = provider

@@ -23,7 +23,23 @@ use super::{instructions, working_context, RuntimeError, RuntimeService};
 
 const KEEP_RECENT_GROUPS: usize = 3;
 const MAX_SUMMARIZER_PROMPT_BYTES: usize = 128 * 1024;
-const SUMMARY_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long one summary request may run. Local models and long sessions need
+/// well over ten seconds just to read the prompt, so every compaction path gets
+/// the same two minutes.
+const SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Debug builds let tests shorten the summary timeout. Release builds always
+/// use `SUMMARY_TIMEOUT`.
+fn summary_timeout() -> Duration {
+    #[cfg(debug_assertions)]
+    if let Some(milliseconds) = std::env::var("ARGENTUM_TEST_SUMMARY_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        return Duration::from_millis(milliseconds);
+    }
+    SUMMARY_TIMEOUT
+}
 const NATIVE_SUMMARY_ENVELOPE: Duration = Duration::from_secs(120);
 const SUMMARY_DRAIN_RESERVE: Duration = Duration::from_secs(5);
 // Count transport text without retaining it. The summary buffer and canonical
@@ -334,7 +350,7 @@ impl RuntimeService {
         let maximum = if native {
             NATIVE_SUMMARY_ENVELOPE
         } else {
-            SUMMARY_TIMEOUT + SUMMARY_DRAIN_RESERVE
+            summary_timeout() + SUMMARY_DRAIN_RESERVE
         };
         let mut deadline = now + maximum;
         if let Some(parent) = scope.and_then(|scope| scope.deadline) {
@@ -348,11 +364,10 @@ impl RuntimeService {
         } else if deadline <= now {
             Err(RuntimeError::GoalDeadline)
         } else {
-            // Preserve short legacy run admission and its ten-second execution
-            // ceiling. Drainage still cannot extend past its parent envelope.
+            // Drainage still cannot extend past its parent envelope.
             Ok(SummaryDeadlines {
                 admitted: now,
-                execution: (now + SUMMARY_TIMEOUT).min(deadline),
+                execution: (now + summary_timeout()).min(deadline),
                 envelope: deadline,
             })
         }

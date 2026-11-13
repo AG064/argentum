@@ -417,7 +417,9 @@ impl CliFixture {
             .arg("--database")
             .arg(&self.database)
             .current_dir(self.root.path())
-            .env_clear();
+            .env_clear()
+            // Debug builds only: keep compaction timeout tests short.
+            .env("ARGENTUM_TEST_SUMMARY_TIMEOUT_MS", "10000");
         for variable in ["SystemRoot", "WINDIR", "SystemDrive", "PATH", "TEMP", "TMP"] {
             if let Some(value) = std::env::var_os(variable) {
                 command.env(variable, value);

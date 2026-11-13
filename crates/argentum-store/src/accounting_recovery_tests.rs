@@ -247,7 +247,8 @@ impl Fixture {
                 requested_output_tokens: 4096,
                 uncertainty_tokens: 1024,
             },
-            149807,
+            // 374,517 wire bytes estimate 149,807 tokens at 2.5 bytes per token.
+            374_517,
             0,
             0,
         )

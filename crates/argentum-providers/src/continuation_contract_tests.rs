@@ -367,10 +367,12 @@ fn exact_continuation_wire_bytes_participate_in_capacity_admission() {
         .prepare_request(&profile, &budget, request.clone())
         .unwrap();
     let bytes = provider.prepared_compatible_body(&prepared).unwrap().len() as u64;
-    assert_eq!(prepared.accounting().accounted_input, bytes);
+    assert_eq!(prepared.accounting().wire_bytes(), Some(bytes));
+    let tokens = argentum_domain::context_budget::estimated_tokens_for_wire_bytes(bytes);
+    assert_eq!(prepared.accounting().accounted_input, tokens);
     budget.usable_context_tokens =
-        bytes + u64::from(budget.requested_output_tokens) + budget.uncertainty_tokens;
-    budget.input_limit_tokens = Some(bytes + budget.uncertainty_tokens);
+        tokens + u64::from(budget.requested_output_tokens) + budget.uncertainty_tokens;
+    budget.input_limit_tokens = Some(tokens + budget.uncertainty_tokens);
     assert!(
         provider
             .prepare_request(&profile, &budget, request.clone())
@@ -378,7 +380,7 @@ fn exact_continuation_wire_bytes_participate_in_capacity_admission() {
             .accounting()
             .fits
     );
-    budget.input_limit_tokens = Some(bytes + budget.uncertainty_tokens - 1);
+    budget.input_limit_tokens = Some(tokens + budget.uncertainty_tokens - 1);
     assert!(
         !provider
             .prepare_request(&profile, &budget, request)
@@ -458,8 +460,8 @@ async fn completed_state_stable_503_retry_keeps_identical_accounted_body() {
         .collect();
     assert_eq!(bodies[0], bodies[1]);
     assert_eq!(
-        bodies[0].len() as u64,
-        prepared.accounting().accounted_input
+        Some(bodies[0].len() as u64),
+        prepared.accounting().wire_bytes()
     );
 }
 
@@ -622,7 +624,7 @@ async fn minimax_split_continuation_retains_documented_blocks_on_actual_next_htt
         .prepare_request(&profile, &budget, request)
         .expect("canonical prepared request");
     let body = transport.prepared_compatible_body(&prepared).unwrap();
-    assert_eq!(body.len() as u64, prepared.accounting().accounted_input);
+    assert_eq!(Some(body.len() as u64), prepared.accounting().wire_bytes());
     let validation = transport
         .validate_prepared_request(&prepared)
         .await

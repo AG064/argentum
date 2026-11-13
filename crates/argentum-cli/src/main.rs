@@ -322,6 +322,45 @@ async fn write_final_result_value(
     Ok(())
 }
 
+fn run_identity(event: &argentum_domain::AppEvent) -> Option<argentum_domain::RunId> {
+    match event {
+        argentum_domain::AppEvent::RunStatusChanged { run_id, .. }
+        | argentum_domain::AppEvent::RunError { run_id, .. } => Some(*run_id),
+        _ => None,
+    }
+}
+
+/// Watches events while `dispatch` runs, so the run identity is captured as
+/// soon as the run starts. A long run emits more events than the broadcast
+/// channel holds, so reading them only afterwards would lose the first ones.
+async fn dispatch_and_capture_run_id<T>(
+    mut events: tokio::sync::broadcast::Receiver<argentum_domain::AppEvent>,
+    dispatch: impl Future<Output = T>,
+) -> (T, Option<argentum_domain::RunId>) {
+    use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+    let mut run_id = None;
+    let mut watching = true;
+    tokio::pin!(dispatch);
+    let result = loop {
+        tokio::select! {
+            result = &mut dispatch => break result,
+            event = events.recv(), if watching && run_id.is_none() => match event {
+                Ok(event) => run_id = run_identity(&event),
+                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => watching = false,
+            },
+        }
+    };
+    while run_id.is_none() {
+        match events.try_recv() {
+            Ok(event) => run_id = run_identity(&event),
+            Err(TryRecvError::Lagged(_)) => {}
+            Err(_) => break,
+        }
+    }
+    (result, run_id)
+}
+
 async fn run_final_result_command(
     options: CommonOptions,
     prompt: String,
@@ -332,7 +371,7 @@ async fn run_final_result_command(
     let operation = with_one_shot_host(config, move |host| {
         Box::pin(async move {
             let client = host.client();
-            let mut events = client.subscribe();
+            let events = client.subscribe();
             let command = match answer_schema {
                 Some(answer_schema) => AppCommand::SubmitTaskWithAnswerSchema {
                     prompt,
@@ -341,13 +380,8 @@ async fn run_final_result_command(
                 },
                 None => AppCommand::SubmitTask { prompt },
             };
-            let command_result = client.dispatch(command).await;
-            let emitted = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
-            let run_id = emitted.iter().find_map(|event| match event {
-                argentum_domain::AppEvent::RunStatusChanged { run_id, .. }
-                | argentum_domain::AppEvent::RunError { run_id, .. } => Some(*run_id),
-                _ => None,
-            });
+            let (command_result, run_id) =
+                dispatch_and_capture_run_id(events, client.dispatch(command)).await;
             let output = match run_id {
                 Some(run_id) => match host.final_run_result(run_id)? {
                     Some(result) => FinalResultOutput::Result(Box::new(result)),
@@ -8923,6 +8957,52 @@ mod tests {
     use argentum_cli::protocol::RequestEnvelope;
 
     use super::*;
+
+    #[tokio::test]
+    async fn final_result_keeps_the_run_identity_when_events_overflow() {
+        // A long run streams far more events than the channel holds. The run
+        // identity arrives first and must survive the overflow that follows.
+        let (sender, events) = tokio::sync::broadcast::channel(4);
+        let run_id = argentum_domain::RunId::new_v4();
+        let dispatch = async {
+            sender
+                .send(argentum_domain::AppEvent::RunStatusChanged {
+                    run_id,
+                    lifecycle: argentum_domain::TaskLifecycle::Running,
+                })
+                .unwrap();
+            for index in 0..1_000 {
+                tokio::task::yield_now().await;
+                sender
+                    .send(argentum_domain::AppEvent::AssistantDelta {
+                        run_id,
+                        text: index.to_string(),
+                    })
+                    .unwrap();
+            }
+            "done"
+        };
+        let (result, captured) = dispatch_and_capture_run_id(events, dispatch).await;
+        assert_eq!(result, "done");
+        assert_eq!(captured, Some(run_id));
+    }
+
+    #[tokio::test]
+    async fn final_result_reports_no_identity_when_no_run_started() {
+        let (sender, events) = tokio::sync::broadcast::channel(4);
+        let dispatch = async move {
+            sender
+                .send(argentum_domain::AppEvent::AssistantDelta {
+                    run_id: argentum_domain::RunId::new_v4(),
+                    text: "not a run start".into(),
+                })
+                .unwrap();
+            drop(sender);
+            "failed before admission"
+        };
+        let (_, captured) = dispatch_and_capture_run_id(events, dispatch).await;
+        assert_eq!(captured, None);
+    }
 
     #[cfg(not(feature = "benchmark-unattended"))]
     #[test]
