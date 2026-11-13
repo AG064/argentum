@@ -71,8 +71,8 @@ jobs:
       - name: Build the CLI packages
         shell: pwsh
         run: |
-          ./scripts/package-windows-cli.ps1 -OutputDirectory "$env:RUNNER_TEMP/cli"
-          ./scripts/package-windows-cli.ps1 -DesktopControl -Jobs 1 -OutputDirectory "$env:RUNNER_TEMP/cli-desktop"
+          ./scripts/package-windows-cli.ps1 -Jobs 4 -OutputDirectory "$env:RUNNER_TEMP/cli"
+          ./scripts/package-windows-cli.ps1 -DesktopControl -Jobs 4 -OutputDirectory "$env:RUNNER_TEMP/cli-desktop"
       - name: Assemble the portable zips
         shell: pwsh
         run: |
