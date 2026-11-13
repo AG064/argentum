@@ -136,10 +136,11 @@ async fn run_main() -> ExitCode {
         }
         #[cfg(not(feature = "extensions"))]
         {
+            // `extensions browser status` is documented to always print JSON.
             return finish_feature_unavailable(
                 "this build omits optional extensions; use an extensions-enabled artifact",
                 &command_path,
-                json_requested,
+                json_requested || command_path == "extensions browser status",
             );
         }
     }
@@ -158,8 +159,12 @@ async fn run_main() -> ExitCode {
         },
         Err(message) => {
             if json_requested {
-                let envelope =
-                    json_contract::JsonErrorEnvelope::from_message(&command_path, &message);
+                // A parse failure is an argument error unless it names a more specific code.
+                let code = match json_contract::classify_error(&message) {
+                    "command_failed" => "invalid_argument",
+                    other => other,
+                };
+                let envelope = json_contract::JsonErrorEnvelope::new(&command_path, code, &message);
                 json_contract::emit(&envelope);
                 ExitCode::from(2)
             } else {
@@ -202,6 +207,24 @@ fn command_path_from_args(args: &[String]) -> String {
         "cli".into()
     } else {
         fallback.join(" ")
+    }
+}
+
+/// Turn the store's "record is not in this project" failures into a plain
+/// "not found" message. Any other failure is returned unchanged.
+fn missing_record(
+    kind: &str,
+    id: impl std::fmt::Display,
+    error: impl std::fmt::Display,
+) -> Box<dyn std::error::Error> {
+    let text = error.to_string();
+    if text.contains("does not belong to the current project")
+        || text.contains("review run unavailable in this scope")
+        || text.contains("does not exist in this project")
+    {
+        format!("{kind} not found: {id}").into()
+    } else {
+        text.into()
     }
 }
 
@@ -838,7 +861,23 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         SkillAction::Inspect { name } => {
-                            let inspection = host.inspect_skill(&name)?;
+                            let inspection = host.inspect_skill(&name).map_err(|error| {
+                                let missing = matches!(
+                                    &error,
+                                    argentum_cli::HostError::Runtime(
+                                        argentum_runtime::RuntimeError::Skill(
+                                            argentum_workspaces::SkillError::Unavailable(missing)
+                                        )
+                                    ) if missing == &name
+                                );
+                                if missing {
+                                    Box::<dyn std::error::Error>::from(format!(
+                                        "skill not found: {name}"
+                                    ))
+                                } else {
+                                    Box::<dyn std::error::Error>::from(error)
+                                }
+                            })?;
                             if json {
                                 println!(
                                     "{}",
@@ -922,7 +961,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                         if let Some(issue) = coding_issue {
                             println!("Coding setup incomplete: {issue}");
                         } else {
-                            println!("Local coding configuration ready; provider connection not tested.");
+                            println!("{}", coding_ready_message(selected.as_ref()));
                         }
                         if credential_configured == Some(false) {
                             println!("Selected provider credential is missing; use secure credential entry.");
@@ -1246,7 +1285,8 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                 Box::pin(async move {
                     host.client()
                         .dispatch(AppCommand::SelectSession { session_id })
-                        .await?;
+                        .await
+                        .map_err(|error| missing_record("session", session_id, error))?;
                     print_sessions(host.workspace_snapshot()?, json).await?;
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })
@@ -1261,35 +1301,45 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             let config = options.host_config()?;
             with_one_shot_host(config, move |host| {
                 Box::pin(async move {
-                    let row = match action {
-                        SessionAction::Inspect { session_id } => {
-                            host.inspect_session(session_id)?
-                        }
-                        SessionAction::Title { session_id, title } => {
-                            host.client()
-                                .dispatch(AppCommand::SetSessionTitle { session_id, title })
-                                .await?;
-                            host.inspect_session(session_id)?
-                        }
-                        SessionAction::Pin { session_id, pinned } => {
-                            host.client()
-                                .dispatch(AppCommand::SetSessionPinned { session_id, pinned })
-                                .await?;
-                            host.inspect_session(session_id)?
-                        }
-                        SessionAction::Archive {
-                            session_id,
-                            archived,
-                        } => {
-                            host.client()
-                                .dispatch(AppCommand::SetSessionArchived {
-                                    session_id,
-                                    archived,
-                                })
-                                .await?;
-                            host.inspect_session(session_id)?
-                        }
+                    let target = match &action {
+                        SessionAction::Inspect { session_id }
+                        | SessionAction::Title { session_id, .. }
+                        | SessionAction::Pin { session_id, .. }
+                        | SessionAction::Archive { session_id, .. } => *session_id,
                     };
+                    let outcome: Result<_, Box<dyn std::error::Error>> = async {
+                        Ok(match action {
+                            SessionAction::Inspect { session_id } => {
+                                host.inspect_session(session_id)?
+                            }
+                            SessionAction::Title { session_id, title } => {
+                                host.client()
+                                    .dispatch(AppCommand::SetSessionTitle { session_id, title })
+                                    .await?;
+                                host.inspect_session(session_id)?
+                            }
+                            SessionAction::Pin { session_id, pinned } => {
+                                host.client()
+                                    .dispatch(AppCommand::SetSessionPinned { session_id, pinned })
+                                    .await?;
+                                host.inspect_session(session_id)?
+                            }
+                            SessionAction::Archive {
+                                session_id,
+                                archived,
+                            } => {
+                                host.client()
+                                    .dispatch(AppCommand::SetSessionArchived {
+                                        session_id,
+                                        archived,
+                                    })
+                                    .await?;
+                                host.inspect_session(session_id)?
+                            }
+                        })
+                    }
+                    .await;
+                    let row = outcome.map_err(|error| missing_record("session", target, error))?;
                     print_session_row(row, json).await?;
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })
@@ -2327,7 +2377,18 @@ where
                 provider_id,
             }));
         }
-        write_setup_text(writer, "That provider profile is not available.\n").await?;
+        let saved = profiles
+            .iter()
+            .map(|profile| profile.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        write_setup_text(
+            writer,
+            &format!(
+                "'{provider_id}' is not a saved profile or a supported catalog id. Accepted: a saved profile id ({saved}), a catalog id from the list above, server (connect a new OpenAI-compatible server), local, or /cancel.\n"
+            ),
+        )
+        .await?;
     }
     Err(setup_error("too many invalid provider choices"))
 }
@@ -3359,6 +3420,10 @@ async fn run_desktop_command(
     let name = action.name();
     let dry_run = action.dry_run();
     let result = match action {
+        // Same answer as the other desktop commands and `commands --json`.
+        DesktopAction::Status if !cfg!(all(windows, feature = "desktop-control")) => {
+            Err("desktop control is unavailable: rebuild with --features desktop-control".into())
+        }
         DesktopAction::Status => run_desktop_status_command(options, json).await,
         action => run_desktop_control_command(action, json).await,
     };
@@ -4227,6 +4292,13 @@ async fn run_verification_command(
                     }
                 }
                 VerificationAction::Approve { runner } => {
+                    if runner.project_id().is_none() {
+                        return Err(format!(
+                            "verification approve only accepts project runners (project:ID); {} is a fixed runner and needs no approval",
+                            runner.id()
+                        )
+                        .into());
+                    }
                     let review = host.project_verification_review(&runner)?;
                     if review.input_scope.project_inputs.is_some() {
                         if json || !io::stdin().is_terminal() || !io::stdout().is_terminal() {
@@ -4318,7 +4390,8 @@ async fn run_changes_command(
             None if options.isolated => None,
             None => Some(AppPaths::discover()?.database),
         };
-        let page = CommandHost::inspect_existing_change_page(config, *run_id, *limit, after)?;
+        let page = CommandHost::inspect_existing_change_page(config, *run_id, *limit, after)
+            .map_err(|error| missing_record("run", run_id, error))?;
         if json {
             let mut value = serde_json::to_value(&page)?;
             value["next_cursor"] = page
@@ -4347,6 +4420,10 @@ async fn run_changes_command(
         return Ok(());
     }
     let config = options.host_config()?;
+    let listed_run = match &action {
+        ChangeAction::List { run_id } => Some(*run_id),
+        _ => None,
+    };
     with_one_shot_host(config, move |host| {
         Box::pin(async move {
             let command = match action {
@@ -4371,15 +4448,35 @@ async fn run_changes_command(
             let client = host.client();
             let mut events = client.subscribe();
             if let Err(error) = client.dispatch(command).await {
+                // A change-set lookup misses when the run does not exist, not a file change.
+                let missing_run = listed_run.filter(|_| {
+                    matches!(
+                        error,
+                        argentum_cli::HostError::Runtime(
+                            argentum_runtime::RuntimeError::ChangeNotFound
+                        )
+                    )
+                });
                 if json {
+                    let payload = match missing_run {
+                        Some(run_id) => ServerPayload::command_failed(
+                            "not_found",
+                            format!("run not found: {run_id}"),
+                            true,
+                        ),
+                        None => ServerPayload::host_command_failed(&error),
+                    };
                     write_machine_response(
                         &mut tokio::io::stdout(),
                         &AtomicU64::new(0),
                         Some("changes-1".into()),
-                        ServerPayload::host_command_failed(&error),
+                        payload,
                     )
                     .await?;
                     return Err(json_contract::JsonEmitted.into());
+                }
+                if let Some(run_id) = missing_run {
+                    return Err(format!("run not found: {run_id}").into());
                 }
                 return Err(error.into());
             }
@@ -4567,7 +4664,7 @@ async fn run_goal_command(
                         .map(|goal| host.local_handle().inspect_goal_supervision(goal.id))
                         .transpose()?;
                     if json {
-                        println!("{}", serde_json::json!({"goal":goal,"allowance":goal.as_ref().and_then(|goal| goal.accounting.as_ref().map(|account| account.remaining(goal.token_budget))),"execution":host.inspect_goal_accounting()?,"supervision":supervision}));
+                        println!("{}", rfc3339_timestamps(serde_json::json!({"goal":goal,"allowance":goal.as_ref().and_then(|goal| goal.accounting.as_ref().map(|account| account.remaining(goal.token_budget))),"execution":host.inspect_goal_accounting()?,"supervision":supervision})));
                     } else {
                         print_goal(goal, false).await?;
                         if let Some(inspection) = supervision {
@@ -4588,19 +4685,30 @@ async fn run_goal_command(
                     )?;
                     let supervision = host.local_handle().inspect_goal_supervision(goal_id)?;
                     if json {
-                        println!("{}", serde_json::json!({"command_status":"accepted","goal":goal,"supervision":supervision}));
+                        println!("{}", rfc3339_timestamps(serde_json::json!({"command_status":"accepted","goal":goal,"supervision":supervision})));
                     } else {
                         print_goal(Some(goal), false).await?;
                         print_goal_supervision(&supervision);
                     }
                 }
                 GoalAction::Attest { goal_id, summary } => {
+                    if let Some(current) = host.goal()?.filter(|current| current.id == goal_id) {
+                        match current.acceptance.as_ref() {
+                            Some(acceptance) if acceptance.owner_attestation_required => {}
+                            Some(_) => {
+                                return Err("invalid request: this goal does not require owner attestation; run 'goal criteria --owner-attestation-required' to require it".into());
+                            }
+                            None => {
+                                return Err("invalid request: this goal has no acceptance criteria; run 'goal criteria --runners RUNNER --owner-attestation-required' first".into());
+                            }
+                        }
+                    }
                     let goal = host
                         .local_handle()
                         .attest_goal_acceptance(goal_id, &summary)?;
                     let supervision = host.local_handle().inspect_goal_supervision(goal_id)?;
                     if json {
-                        println!("{}", serde_json::json!({"command_status":"accepted","goal":goal,"supervision":supervision}));
+                        println!("{}", rfc3339_timestamps(serde_json::json!({"command_status":"accepted","goal":goal,"supervision":supervision})));
                     } else {
                         print_goal(Some(goal), false).await?;
                         print_goal_supervision(&supervision);
@@ -4631,7 +4739,7 @@ async fn run_goal_command(
                     let task_success = invocation.state
                         == argentum_domain::goal_supervision::GoalInvocationState::Verified;
                     if json {
-                        println!("{}", serde_json::json!({"command_status":"accepted_and_settled","task_success":task_success,"invocation":invocation,"goal":goal,"supervision":supervision}));
+                        println!("{}", rfc3339_timestamps(serde_json::json!({"command_status":"accepted_and_settled","task_success":task_success,"invocation":invocation,"goal":goal,"supervision":supervision})));
                     } else {
                         println!("Invocation: {}", invocation.id);
                         println!("Invocation state: {:?}", invocation.state);
@@ -4706,6 +4814,104 @@ fn print_goal_supervision(
     }
 }
 
+/// The stored format writes a timestamp as the array
+/// `[year, ordinal, hour, minute, second, nanosecond, offset_h, offset_m, offset_s]`.
+/// CLI JSON output shows the same instant as an RFC 3339 string. Only arrays that
+/// have exactly that shape and valid ranges are converted. Stored data is unchanged.
+fn rfc3339_timestamps(mut value: serde_json::Value) -> serde_json::Value {
+    fn convert(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Array(items) => {
+                if let Some(text) = timestamp_array_to_rfc3339(items) {
+                    *value = serde_json::Value::String(text);
+                } else {
+                    items.iter_mut().for_each(convert);
+                }
+            }
+            serde_json::Value::Object(map) => map.values_mut().for_each(convert),
+            _ => {}
+        }
+    }
+    convert(&mut value);
+    value
+}
+
+fn timestamp_array_to_rfc3339(items: &[serde_json::Value]) -> Option<String> {
+    if items.len() != 9 {
+        return None;
+    }
+    let numbers = items
+        .iter()
+        .map(serde_json::Value::as_i64)
+        .collect::<Option<Vec<_>>>()?;
+    let [year, ordinal, hour, minute, second, nanosecond, offset_h, offset_m, offset_s] =
+        numbers[..]
+    else {
+        return None;
+    };
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days_in_year = if leap { 366 } else { 365 };
+    let offset_signs_agree = (offset_h >= 0 && offset_m >= 0 && offset_s >= 0)
+        || (offset_h <= 0 && offset_m <= 0 && offset_s <= 0);
+    if !(1..=9999).contains(&year)
+        || !(1..=days_in_year).contains(&ordinal)
+        || !(0..24).contains(&hour)
+        || !(0..60).contains(&minute)
+        || !(0..60).contains(&second)
+        || !(0..1_000_000_000).contains(&nanosecond)
+        || !(-25..=25).contains(&offset_h)
+        || !(-59..=59).contains(&offset_m)
+        || !(-59..=59).contains(&offset_s)
+        || !offset_signs_agree
+    {
+        return None;
+    }
+    let lengths = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut day = ordinal;
+    let mut month = 1;
+    for length in lengths {
+        if day <= length {
+            break;
+        }
+        day -= length;
+        month += 1;
+    }
+    let mut text = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}");
+    if nanosecond != 0 {
+        let fraction = format!("{nanosecond:09}");
+        text.push('.');
+        text.push_str(fraction.trim_end_matches('0'));
+    }
+    if offset_h == 0 && offset_m == 0 && offset_s == 0 {
+        text.push('Z');
+    } else {
+        let sign = if offset_h < 0 || offset_m < 0 || offset_s < 0 {
+            '-'
+        } else {
+            '+'
+        };
+        text.push_str(&format!(
+            "{sign}{:02}:{:02}",
+            offset_h.abs(),
+            offset_m.abs()
+        ));
+    }
+    Some(text)
+}
+
 async fn print_goal(
     goal: Option<argentum_domain::Goal>,
     json: bool,
@@ -4713,9 +4919,9 @@ async fn print_goal(
     if json {
         println!(
             "{}",
-            serde_json::to_string(
-                &serde_json::json!({ "allowance": goal.as_ref().and_then(|goal| goal.accounting.as_ref().map(|account| account.remaining(goal.token_budget))), "goal": goal })
-            )?
+            serde_json::to_string(&rfc3339_timestamps(
+                serde_json::json!({ "allowance": goal.as_ref().and_then(|goal| goal.accounting.as_ref().map(|account| account.remaining(goal.token_budget))), "goal": goal }),
+            ))?
         );
     } else if let Some(goal) = goal {
         println!("Goal identity: {}", goal.id);
@@ -4804,9 +5010,32 @@ async fn run_provider_credential_command(
                     host.set_provider_credential(&provider_id, secret)?;
                     print_credential_status(&provider_id, true, json);
                 }
-                ProviderCredentialAction::Clear => {
-                    host.clear_provider_credential(&provider_id)?;
-                    print_credential_status(&provider_id, false, json);
+                ProviderCredentialAction::Clear { yes } => {
+                    if !yes {
+                        let interactive = !options.non_interactive
+                            && !json
+                            && io::stdin().is_terminal()
+                            && io::stdout().is_terminal();
+                        if !interactive {
+                            return Err(format!(
+                                "invalid request: provider credential clear needs confirmation; pass --yes to remove the credential for {provider_id} without a prompt"
+                            )
+                            .into());
+                        }
+                        print!(
+                            "Remove the stored credential for {provider_id}? Type the profile id or y to confirm: "
+                        );
+                        std::io::Write::flush(&mut io::stdout())?;
+                        let mut answer = String::new();
+                        io::stdin().read_line(&mut answer)?;
+                        let answer = answer.trim();
+                        if !(answer.eq_ignore_ascii_case("y") || answer == provider_id) {
+                            println!("Not removed. The stored credential for {provider_id} was left as it is.");
+                            return Ok(());
+                        }
+                    }
+                    let removed = host.remove_provider_credential(&provider_id)?;
+                    print_credential_cleared(&provider_id, removed, json);
                 }
             }
             Ok(())
@@ -4848,6 +5077,23 @@ fn print_credential_status(provider_id: &str, configured: bool, json: bool) {
         println!("Credential stored securely for {provider_id}.");
     } else {
         println!("Credential removed for {provider_id}.");
+    }
+}
+
+fn print_credential_cleared(provider_id: &str, removed: bool, json: bool) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "provider_id": provider_id,
+                "configured": false,
+                "removed": removed,
+            })
+        );
+    } else if removed {
+        println!("Credential removed for {provider_id}.");
+    } else {
+        println!("No stored credential existed for {provider_id}. Nothing was removed.");
     }
 }
 
@@ -4969,7 +5215,18 @@ async fn run_provider_profile_command(
         Box::pin(async move {
             let client = host.client();
             let mut events = client.subscribe();
-            client.dispatch(command).await?;
+            let target = match &command {
+                AppCommand::SelectProviderProfile { provider_id }
+                | AppCommand::SelectProviderModel { provider_id, .. } => Some(provider_id.clone()),
+                _ => None,
+            };
+            client
+                .dispatch(command)
+                .await
+                .map_err(|error| match &target {
+                    Some(provider_id) => missing_record("provider profile", provider_id, error),
+                    None => Box::<dyn std::error::Error>::from(error),
+                })?;
             let mut profiles = None;
             while let Ok(event) = events.try_recv() {
                 if let argentum_domain::AppEvent::ProviderProfilesSnapshot { profiles: snapshot } =
@@ -4984,13 +5241,46 @@ async fn run_provider_profile_command(
             if !json {
                 match host.selected_provider_coding_issue()? {
                     Some(issue) => println!("Coding setup incomplete: {issue}"),
-                    None => println!("Local coding configuration ready. Provider connection and task success have not been tested."),
+                    None => {
+                        let selected = profiles.iter().find(|profile| profile.selected);
+                        println!("{}", coding_ready_message(selected));
+                    }
                 }
             }
             Ok(())
         })
     })
     .await
+}
+
+/// True when the profile runs on this machine: a local runtime kind or a
+/// loopback endpoint.
+fn provider_profile_is_local(profile: &argentum_domain::ProviderProfile) -> bool {
+    if matches!(
+        profile.kind,
+        argentum_domain::ProviderKind::LocalLmStudio | argentum_domain::ProviderKind::LocalLlamaCpp
+    ) {
+        return true;
+    }
+    let endpoint = profile.endpoint.to_ascii_lowercase();
+    let host = endpoint
+        .split_once("://")
+        .map_or(endpoint.as_str(), |(_, rest)| rest)
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    host.starts_with("localhost") || host.starts_with("127.0.0.1") || host.starts_with("[::1]")
+}
+
+/// Wording for a complete coding setup. Local profiles keep the local wording;
+/// hosted profiles are not local, so they say "Provider ready".
+fn coding_ready_message(profile: Option<&argentum_domain::ProviderProfile>) -> &'static str {
+    match profile {
+        Some(profile) if !provider_profile_is_local(profile) => {
+            "Provider ready. Connection and task success have not been tested."
+        }
+        _ => "Local coding configuration ready. Provider connection and task success have not been tested.",
+    }
 }
 
 async fn print_provider_profiles(
@@ -6212,7 +6502,7 @@ enum VerificationAction {
 #[derive(Debug)]
 enum ProviderCredentialAction {
     Set,
-    Clear,
+    Clear { yes: bool },
 }
 
 #[derive(Debug)]
@@ -6463,6 +6753,7 @@ where
     let mut provider_action = None;
     let mut chatgpt_account = None;
     let mut provider_subaction = None;
+    let mut credential_yes = false;
     let mut provider_id = None;
     let mut provider_label = None;
     let mut provider_kind = None;
@@ -6808,6 +7099,14 @@ where
                     return Err("--probe-local may be supplied once".into());
                 }
                 probe_local = true;
+            }
+            "--yes"
+                if command == "provider" && provider_action.as_deref() == Some("credential") =>
+            {
+                if credential_yes {
+                    return Err("--yes may be supplied once".into());
+                }
+                credential_yes = true;
             }
             "--json" => json = true,
             "--no-color" => options.no_color = true,
@@ -7556,6 +7855,9 @@ where
                 json,
             }),
             Some("credential") => match provider_subaction.as_deref() {
+                Some("set") if credential_yes => {
+                    Err("--yes is accepted only by provider credential clear".into())
+                }
                 Some("set") => Ok(Arguments::ProviderCredential {
                     options,
                     provider_id: provider_id
@@ -7568,7 +7870,7 @@ where
                     provider_id: provider_id.ok_or_else(|| {
                         "provider credential clear requires PROFILE_ID".to_owned()
                     })?,
-                    action: ProviderCredentialAction::Clear,
+                    action: ProviderCredentialAction::Clear { yes: credential_yes },
                     json,
                 }),
                 _ => Err("provider credential requires 'set PROFILE_ID' or 'clear PROFILE_ID'".into()),
@@ -8732,7 +9034,7 @@ argentum context --json [OPTIONS]\n  \
 argentum instructions [--directory RELATIVE_DIRECTORY] [OPTIONS]\n  \
 argentum compact [--deactivate | --goal GOAL_ID] --json [OPTIONS]\n  \
 argentum provider credential set PROFILE_ID < credential.txt\n  \
-argentum provider credential clear PROFILE_ID [OPTIONS]\n  \
+argentum provider credential clear PROFILE_ID [--yes] [OPTIONS]\n  \
 argentum workspace status [OPTIONS]\n  \
 argentum workspace set PATH [OPTIONS]\n  \
 argentum sessions [OPTIONS]\n  \
@@ -10947,7 +11249,7 @@ mod tests {
                 .expect("credential clear"),
             Arguments::ProviderCredential {
                 provider_id,
-                action: ProviderCredentialAction::Clear,
+                action: ProviderCredentialAction::Clear { yes: false },
                 json: false,
                 ..
             } if provider_id == "deepseek"
@@ -11074,5 +11376,81 @@ mod tests {
         let request = RequestEnvelope::command("test", AppCommand::NewSession);
         assert_eq!(request.protocol_version, PROTOCOL_VERSION);
         assert!(request.validate().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod cli_polish_tests {
+    use super::*;
+
+    #[test]
+    fn timestamp_arrays_become_rfc3339_strings_only_when_they_have_the_stored_shape() {
+        let value = rfc3339_timestamps(serde_json::json!({
+            "started_at": [2026, 317, 18, 4, 5, 123_000_000, 0, 0, 0],
+            "plain": [2026, 317, 18, 4, 5, 0, 0, 0, 0],
+            "offset": [2024, 60, 1, 2, 3, 0, 2, 30, 0],
+            "nested": {"items": [[2026, 1, 0, 0, 0, 0, 0, 0, 0]]},
+            "not_a_time": [1, 2, 3],
+            "bad_ordinal": [2026, 400, 18, 4, 5, 0, 0, 0, 0],
+            "text": "unchanged",
+        }));
+        assert_eq!(value["started_at"], "2026-11-13T18:04:05.123Z");
+        assert_eq!(value["plain"], "2026-11-13T18:04:05Z");
+        // 2024 is a leap year, so ordinal 60 is 29 February.
+        assert_eq!(value["offset"], "2024-02-29T01:02:03+02:30");
+        assert_eq!(value["nested"]["items"][0], "2026-01-01T00:00:00Z");
+        assert_eq!(value["not_a_time"], serde_json::json!([1, 2, 3]));
+        assert_eq!(
+            value["bad_ordinal"],
+            serde_json::json!([2026, 400, 18, 4, 5, 0, 0, 0, 0])
+        );
+        assert_eq!(value["text"], "unchanged");
+    }
+
+    #[test]
+    fn credential_clear_accepts_yes_only_for_clear() {
+        assert!(matches!(
+            parse_args(["provider", "credential", "clear", "minimax", "--yes"]).expect("clear"),
+            Arguments::ProviderCredential {
+                action: ProviderCredentialAction::Clear { yes: true },
+                ..
+            }
+        ));
+        assert!(parse_args(["provider", "credential", "set", "minimax", "--yes"]).is_err());
+        assert!(parse_args(["provider", "list", "--yes"]).is_err());
+    }
+
+    #[test]
+    fn ready_message_depends_on_where_the_profile_runs() {
+        use argentum_domain::ProviderKind;
+        let profile = |kind, endpoint: &str| argentum_domain::ProviderProfile {
+            id: "p".into(),
+            label: "P".into(),
+            kind,
+            endpoint: endpoint.into(),
+            model: "m".into(),
+            selected: true,
+        };
+        assert!(coding_ready_message(Some(&profile(
+            ProviderKind::Anthropic,
+            "https://api.anthropic.com/v1/"
+        )))
+        .starts_with("Provider ready"));
+        assert!(coding_ready_message(Some(&profile(
+            ProviderKind::OpenAiCompatible,
+            "https://api.minimax.io/v1/"
+        )))
+        .starts_with("Provider ready"));
+        assert!(coding_ready_message(Some(&profile(
+            ProviderKind::OpenAiCompatible,
+            "http://127.0.0.1:1234/v1"
+        )))
+        .starts_with("Local coding configuration ready"));
+        assert!(coding_ready_message(Some(&profile(
+            ProviderKind::LocalLlamaCpp,
+            "local://llama-cpp/"
+        )))
+        .starts_with("Local coding configuration ready"));
+        assert!(coding_ready_message(None).starts_with("Local coding configuration ready"));
     }
 }

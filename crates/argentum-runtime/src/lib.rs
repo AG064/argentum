@@ -7495,10 +7495,26 @@ impl RuntimeService {
     }
 
     fn load_change_set(&self, run_id: RunId) -> Result<(), RuntimeError> {
-        let snapshot = self
-            .store
-            .change_set(self.project_id, run_id)?
-            .ok_or(RuntimeError::ChangeNotFound)?;
+        let snapshot = match self.store.change_set(self.project_id, run_id)? {
+            Some(snapshot) => snapshot,
+            None => {
+                // A valid run that changed no files has no change set: report it as empty.
+                let session_id = self
+                    .store
+                    .run_session(self.project_id, run_id)?
+                    .ok_or(RuntimeError::ChangeNotFound)?;
+                argentum_domain::ChangeSetSnapshot {
+                    id: argentum_domain::ChangeSetId::nil(),
+                    project_id: self.project_id,
+                    session_id,
+                    run_id,
+                    revision: 0,
+                    files: Vec::new(),
+                    additions: 0,
+                    removals: 0,
+                }
+            }
+        };
         self.publish_transient(AppEvent::ChangeSetSnapshotLoaded(snapshot));
         Ok(())
     }

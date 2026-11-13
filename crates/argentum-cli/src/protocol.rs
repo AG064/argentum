@@ -284,6 +284,11 @@ impl ServerPayload {
                 tool_call_id: context.tool_call_id,
                 approval_id: Some(context.approval_id),
             }
+        } else if matches!(
+            error,
+            crate::HostError::Runtime(argentum_runtime::RuntimeError::ChangeNotFound)
+        ) {
+            Self::command_failed("not_found", error.to_string(), true)
         } else {
             Self::command_failed("command_failed", error.to_string(), true)
         }

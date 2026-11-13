@@ -109,6 +109,12 @@ pub(crate) fn classify_error(message: &str) -> &'static str {
     {
         return "confirmation_mismatch";
     }
+    if value.contains("does not belong to the current project")
+        || value.contains("does not exist in this project")
+        || value.contains("review run unavailable in this scope")
+    {
+        return "not_found";
+    }
     if value.contains("not built with")
         || value.contains("rebuild with --features")
         || value.contains("omits optional")
@@ -153,6 +159,9 @@ pub(crate) fn classify_error(message: &str) -> &'static str {
         || value.contains("only accepts")
         || value.contains("is accepted only")
         || value.contains("must be")
+        || value.contains("is not selectable")
+        || value.contains("endpoint is invalid")
+        || value.contains("credentials are not allowed")
         || value.contains("invalid ")
         || value.contains("unexpected ")
     {
@@ -323,6 +332,17 @@ mod tests {
             classify_error("--hwnd requires a hexadecimal window handle"),
             "invalid_argument"
         );
+        assert_eq!(
+            classify_error(
+                "stored record is invalid: session does not belong to the current project"
+            ),
+            "not_found"
+        );
+        assert_eq!(
+            classify_error("the requested file change does not exist in this project"),
+            "not_found"
+        );
+        assert_eq!(classify_error("session not found: abc"), "not_found");
     }
 
     #[test]

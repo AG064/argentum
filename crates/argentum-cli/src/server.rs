@@ -176,11 +176,21 @@ where
             let request = match parse_request(&buffer) {
                 Ok(request) => request,
                 Err(error_value) => {
+                    // Text that is not one JSON object is invalid_json. A well-formed
+                    // object with an unknown field, type or shape is invalid_request.
+                    let code = if matches!(
+                        error_value.as_str(),
+                        "malformed JSON request" | "duplicate JSON object member"
+                    ) {
+                        "invalid_json"
+                    } else {
+                        "invalid_request"
+                    };
                     responses
                         .send(OutboundResponse::new(
                             None,
                             ServerPayload::error(
-                                "invalid_json",
+                                code,
                                 format!("invalid request: {error_value}"),
                                 true,
                             ),
