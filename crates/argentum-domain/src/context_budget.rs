@@ -367,7 +367,7 @@ mod tests {
         assert!(estimated_tokens_for_wire(hex.as_bytes()) as f64 >= hex.len() as f64 / 1.14);
         let base64 = "QmFzZTY0IGRhdGEgd2l0aCBkaWdpdHMgMTIzNDU2Nzg5MA==".repeat(32);
         assert!(estimated_tokens_for_wire(base64.as_bytes()) as f64 >= base64.len() as f64 / 1.35);
-        let emoji = "😀🎉🚀".repeat(100);
+        let emoji = "\u{1F600}\u{1F389}\u{1F680}".repeat(100);
         assert!(estimated_tokens_for_wire(emoji.as_bytes()) as f64 >= emoji.len() as f64 / 2.0);
         // Ordinary prose, code and identifiers keep the 2.5 bytes per token rate.
         let prose = "The quick brown fox jumps over the lazy dog. ".repeat(50);
