@@ -344,8 +344,9 @@ everything else as a [GitHub issue](https://github.com/AG064/argentum/issues).
 
 Argentum is free and stays free. Support pays for Windows code signing, so Windows
 stops warning on install, a Google Play listing, and test devices. You can help on
-[GitHub Sponsors](https://github.com/sponsors/AG064) or
-[Patreon](https://www.patreon.com/ag064), where the free tier gets every public update.
+[GitHub Sponsors](https://github.com/sponsors/AG064),
+[Patreon](https://www.patreon.com/ag064), where the free tier gets every public update, or
+with a one-time tip on [Ko-fi](https://ko-fi.com/ag064).
 
 ## Contributing
 

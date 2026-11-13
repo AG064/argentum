@@ -42,8 +42,8 @@ More will be added as it is planned.
 
 Argentum is free and stays free. Support pays for Windows code signing, a Google
 Play listing and test devices:
-[GitHub Sponsors](https://github.com/sponsors/AG064) and
-[Patreon](https://www.patreon.com/ag064).
+[GitHub Sponsors](https://github.com/sponsors/AG064),
+[Patreon](https://www.patreon.com/ag064) and [Ko-fi](https://ko-fi.com/ag064).
 
 ## Release process
 
