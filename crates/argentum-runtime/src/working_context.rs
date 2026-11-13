@@ -1354,7 +1354,55 @@ impl RuntimeService {
         self.context_tool_allowed("read_text", policy)
     }
 
+    /// Records one tool call for later turns. A result too large to ever fit
+    /// beside the rest of a request is kept as a placeholder instead, so one
+    /// huge read cannot make every later request in the session overflow. The
+    /// current run still saw the full result; later turns can run it again.
     pub(super) fn capture_observation(
+        &self,
+        session_id: SessionId,
+        run_id: RunId,
+        call: &ModelToolCall,
+        runtime_call_id: Option<argentum_domain::ToolCallId>,
+        result: Option<&ModelToolResult>,
+        state: ObservationState,
+    ) -> Result<Observation, RuntimeError> {
+        let mut observation = self.capture_observation_unbounded(
+            session_id,
+            run_id,
+            call,
+            runtime_call_id,
+            result,
+            state,
+        )?;
+        if observation.retention == Retention::Retained
+            && observation
+                .result
+                .as_deref()
+                .is_some_and(|body| self.too_large_for_history(body).unwrap_or(false))
+        {
+            observation.retention = Retention::OmittedLimit;
+            observation.result = None;
+        }
+        Ok(observation)
+    }
+
+    /// A retained result may use at most a quarter of the selected model's
+    /// input limit. Without a declared budget there is no extra limit.
+    fn too_large_for_history(&self, body: &str) -> Result<bool, RuntimeError> {
+        let Some(budget) = self.selected_model_budget()? else {
+            return Ok(false);
+        };
+        let input_limit = budget
+            .input_limit_tokens
+            .unwrap_or(budget.usable_context_tokens);
+        Ok(
+            argentum_domain::context_budget::estimated_tokens_for_wire(body.as_bytes())
+                > input_limit / 4,
+        )
+    }
+
+    fn capture_observation_unbounded(
         &self,
         session_id: SessionId,
         run_id: RunId,
