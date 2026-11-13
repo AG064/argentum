@@ -1531,6 +1531,16 @@ impl CommandHost {
         )
     }
 
+    /// Like `clear_provider_credential`, but reports whether a credential was stored.
+    pub fn remove_provider_credential(&self, profile_id: &str) -> Result<bool, HostError> {
+        remove_hosted_provider_credential(
+            &self.runtime,
+            self.secret_store.as_ref(),
+            &self.credential_transaction,
+            profile_id,
+        )
+    }
+
     pub fn workspace_root(&self) -> &Path {
         self.runtime.workspace_root()
     }
@@ -1748,19 +1758,31 @@ fn clear_hosted_provider_credential(
     credential_transaction: &Mutex<()>,
     profile_id: &str,
 ) -> Result<(), HostError> {
+    remove_hosted_provider_credential(runtime, secret_store, credential_transaction, profile_id)
+        .map(|_| ())
+}
+
+/// Removes the stored credential and reports whether one was stored.
+fn remove_hosted_provider_credential(
+    runtime: &RuntimeService,
+    secret_store: &dyn SecretStore,
+    credential_transaction: &Mutex<()>,
+    profile_id: &str,
+) -> Result<bool, HostError> {
     let _transaction = credential_transaction
         .lock()
         .map_err(|_| HostError::ProviderCredentialTransactionUnavailable)?;
     validate_hosted_credential_profile(profile_id)?;
     let key = provider_credential_key(profile_id)?;
     let previous = secret_store_result(secret_store.get(&key))?;
+    let existed = previous.is_some();
     if secret_store.delete(&key).is_err() {
         let _ = restore_hosted_provider_credential(secret_store, &key, previous);
         return Err(HostError::ProviderCredentialStorageUnavailable);
     }
     runtime.clear_provider_credential(profile_id);
     refresh_provider_credential_projection(runtime, profile_id, "removal");
-    Ok(())
+    Ok(existed)
 }
 
 fn secret_store_result<T>(result: Result<T, PlatformError>) -> Result<T, HostError> {

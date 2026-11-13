@@ -63,6 +63,18 @@ with addresses, default models and key variables, is in [Providers](PROVIDERS.md
 environment variable listed for the provider. A key is only sent to its own provider's
 address. Never put a key in a command line.
 
+`provider credential clear PROFILE` removes the stored key for a profile. In an
+interactive terminal it asks you to type the profile id or `y` first. Add `--yes` to skip
+the question, which scripts and `--json` need. Without `--yes`, a command that is not
+interactive refuses with `invalid_argument` and removes nothing. The command says whether
+a key was removed or none was stored. With `--json`, the result has `provider_id`,
+`configured` (always false) and `removed`.
+
+When the selected profile is ready for coding, `provider list`, `provider add`,
+`provider select` and `provider model` say so. A profile that runs on this computer prints
+"Local coding configuration ready". A hosted profile prints "Provider ready". Neither
+message means the provider was contacted.
+
 Two presets work a little differently:
 
 - Anthropic uses its native Messages API. Tools, approvals and output limits work the same
@@ -136,6 +148,19 @@ current state of your files. A change page covers one run, and the output says w
 records are missing, filtered or cut off. Restoring a change needs your exact approval,
 and Argentum first checks that the file still matches what the change left behind.
 
+A run that changed no files is a valid run. `changes list RUN` and `changes page --run-id
+RUN` print an empty list for it. They report `not_found` only when the run is unknown to
+this project.
+
+In goal output, `--json` shows timestamps as RFC 3339 strings, such as
+`2026-11-13T18:04:05.123Z`. The saved format is unchanged. `goal attest` is accepted only
+for a goal whose criteria require owner attestation (`goal criteria
+--owner-attestation-required`). For any other goal it fails with `invalid_argument`.
+
+`verification approve` takes a project runner (`project:ID`). The fixed runners
+(`cargo-fmt-check`, `cargo-check-locked`, `cargo-test-locked` and `cargo-clippy-strict`)
+need no approval, and approving one fails with `invalid_argument`.
+
 After a crash or a forced close, Argentum does not take over by itself. If the writable
 session was truly abandoned, close any other Argentum windows and follow the recovery
 command that `--help` and `recovery inspect` show. Review uncertain work before you
@@ -148,6 +173,10 @@ clear grants or copy the database to remove a hold.
 no sign-in, so treat whatever is connected to it as untrusted, and do not expose it
 remotely. An action that needs a new approval fails with `approval_required`. There is no
 auto-approve switch. Approve in an interactive session.
+
+A request line that is not valid JSON gets an `invalid_json` error. A line that is valid
+JSON but has an unknown field, an unsupported type or the wrong shape gets an
+`invalid_request` error. Both are recoverable and the server keeps reading.
 
 `--isolated` runs with the workspace and database paths you give and ignores saved and
 environment provider credentials and the local runtime. It does not change the saved
@@ -220,7 +249,10 @@ error.
 
 Error codes:
 
-- `invalid_argument`: an argument is missing, repeated, malformed or conflicting.
+- `invalid_argument`: an argument is missing, repeated, malformed, conflicting or names a
+  value that cannot be used. Examples are an unknown verification runner or permission
+  profile, an endpoint with credentials in it, `--json` on `result`, and
+  `provider credential clear` without `--yes` outside a terminal.
 - `feature_unavailable`: this build does not include the feature.
 - `database_unavailable`: the database is missing or cannot be opened.
 - `required_check_failed`: a required check failed, as in `doctor`.
@@ -229,7 +261,10 @@ Error codes:
 - `browser_prepare_failed`: installing or verifying a browser dependency failed.
 - `confirmation_mismatch`: a desktop confirmation does not match its target.
 - `interactive_required`: the command needs an interactive console.
-- `not_found`: the run, session or record does not exist.
+- `not_found`: the run, session, change, provider profile, skill or other record does not
+  exist in this project. A record that belongs to another project is reported the same
+  way. `changes list`, `changes diff` and `changes restore` with `--json` print this code
+  in their one machine response (`type: "command_failed"`, `code: "not_found"`).
 - `command_failed`: any other failure.
 
 Argument errors exit with `2`. Other failures exit with `1`.
@@ -245,7 +280,12 @@ Some commands keep their own output:
   report and add an `error` object on failure. Their `next_action` and `install.commands`
   fields can include your workspace and database paths, because they are repair
   instructions.
-- `extensions browser status` always prints JSON, with or without `--json`.
+- `extensions browser status` always prints JSON, with or without `--json`. In a build
+  without extensions it prints the `feature_unavailable` error object and exits with `1`.
+- `result` always prints one JSON result envelope, so `result --json` is rejected with
+  `invalid_argument`. Remove `--json`.
+- `desktop status` in a build without desktop control fails with `feature_unavailable`,
+  like `desktop list`. This matches the `unavailable` entry in `commands --json`.
 - `run --json`, `provider probe --json` and `changes --json` write one final machine
   response and no second error object. `result` and `--final-result` print the final-result
   document. `compact` and `context` print their own JSON status objects.

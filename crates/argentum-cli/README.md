@@ -115,6 +115,21 @@ reserved.
 
 The [CLI guide](../../docs/CLI_GUIDE.md) covers each of these in depth.
 
+A few behaviors worth knowing:
+
+- A missing run, session, change, provider profile or skill fails with the `not_found`
+  error code. Unusable values, such as an unknown permission profile or an endpoint with
+  credentials in it, fail with `invalid_argument`.
+- `changes list` and `changes page` return an empty list for a run that changed no files.
+- `provider credential clear PROFILE` asks you to confirm in a terminal. Use `--yes` in
+  scripts. It says whether a credential was removed.
+- `verification approve` is for project runners only. Fixed runners need no approval.
+- `goal attest` works only for a goal that requires owner attestation. Goal timestamps in
+  `--json` output are RFC 3339 strings.
+- `result` always prints JSON, so `result --json` is rejected.
+- In a build without desktop control or extensions, `desktop status` and
+  `extensions browser status` report `feature_unavailable`.
+
 ## How it stays in your control
 
 - **Confirmation first:** a new setup asks before changes. Inspect the effective policy

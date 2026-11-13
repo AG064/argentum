@@ -213,6 +213,31 @@ impl Store {
         })
     }
 
+    /// Session that recorded events for this run, if the run is known to the project.
+    /// A run that changed no files has no change set but is still a valid run.
+    pub fn run_session(
+        &self,
+        project: ProjectId,
+        run: RunId,
+    ) -> Result<Option<SessionId>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let session: Option<String> = connection
+            .query_row(
+                "SELECT session_id FROM event_log
+                 WHERE project_id=?1 AND run_id=?2 AND session_id IS NOT NULL
+                 ORDER BY id DESC LIMIT 1",
+                params![project.to_string(), run.to_string()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        session
+            .map(|value| parse_uuid(&value, "run session id"))
+            .transpose()
+    }
+
     pub fn change_page(
         &self,
         project: ProjectId,
@@ -246,7 +271,8 @@ impl Store {
             "SELECT EXISTS(
                 SELECT 1 FROM file_changes WHERE project_id=?1 AND session_id=?2 AND run_id=?3
                 UNION ALL SELECT 1 FROM change_operations WHERE project_id=?1 AND session_id=?2 AND run_id=?3
-                UNION ALL SELECT 1 FROM verification_evidence WHERE project_id=?1 AND session_id=?2 AND run_id=?3)",
+                UNION ALL SELECT 1 FROM verification_evidence WHERE project_id=?1 AND session_id=?2 AND run_id=?3
+                UNION ALL SELECT 1 FROM event_log WHERE project_id=?1 AND session_id=?2 AND run_id=?3)",
             params![project.to_string(), session.to_string(), run.to_string()],
             |row| row.get(0),
         )?;
