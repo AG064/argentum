@@ -2,5 +2,5 @@
 // Copyright (C) 2026 AG064
 
 plugins {
-    id("com.android.application") version "9.0.1" apply false
+    id("com.android.application") version "9.5.1" apply false
 }
