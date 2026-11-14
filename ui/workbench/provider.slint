@@ -7,7 +7,7 @@ import { App, Mods } from "state.slint";
 import { Badge, Btn, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
 import { BrandMark } from "../components/brand.slint";
 import { ProviderPresetView } from "../view-models.slint";
-import { CredentialSection } from "ops.slint";
+import { CredentialSection, PresetChips } from "ops.slint";
 
 component PresetCard inherits Rectangle {
     in property <ProviderPresetView> preset;
@@ -80,7 +80,7 @@ export component FirstRun inherits Rectangle {
                     horizontal-alignment: center;
                 }
                 Text {
-                    text: "That is all Argentum needs to start. Everything else is an optional module you can add now or later.";
+                    text: "Pick where answers come from. You can skip this and add a provider later in Settings. Everything else is an optional module.";
                     color: Theme.text-2;
                     font-size: Theme.fs-md;
                     horizontal-alignment: center;
@@ -103,9 +103,11 @@ export component FirstRun inherits Rectangle {
                         chosen => { App.first_run_choose(preset); }
                     }
                 }
-                if !root.show-all: HorizontalLayout {
+                HorizontalLayout {
                     alignment: center;
-                    Btn { label: "Show all providers"; small: true; clicked => { root.show-all = true; } }
+                    spacing: Theme.sp8;
+                    if !root.show-all: Btn { label: "Show all providers"; small: true; clicked => { root.show-all = true; } }
+                    Btn { label: "Continue without a provider"; small: true; clicked => { App.first_run_stage = "modules"; } }
                 }
                 if App.first_run_error != "": Label {
                     text: App.first_run_error;
@@ -256,6 +258,7 @@ export component FirstRun inherits Rectangle {
                 wrap: word-wrap;
             }
         }
+        PresetChips { }
         Scroller {
             vertical-stretch: 1;
             content-height: choices.preferred-height;

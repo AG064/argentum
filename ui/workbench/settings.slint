@@ -7,7 +7,7 @@ import { App, Mods } from "state.slint";
 import { Badge, Btn, Divider, VDivider, Field, Focus, Icon, IconBtn, Label, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
 import { BrandMark } from "../components/brand.slint";
 import { RichBlocks } from "rich.slint";
-import { BudgetSection, CapabilitiesPage, CredentialSection, DiagnosticsPage, GrantsSection, LocalModelSection, ProviderCatalog, ToolsPage, VerificationPage } from "ops.slint";
+import { BudgetSection, CapabilitiesPage, CredentialSection, DiagnosticsPage, GrantsSection, LocalModelSection, PresetChips, ProviderCatalog, ToolsPage, VerificationPage } from "ops.slint";
 
 component Heading inherits VerticalLayout {
     in property <string> title;
@@ -300,41 +300,7 @@ component ModulesPage inherits VerticalLayout {
         title: "Modules";
         detail: "Everything beyond the conversation and provider chooser is optional. Modules change what you see. They never grant permissions.";
     }
-    // Wraps, so the presets stay inside a narrow screen.
-    FlexboxLayout {
-        spacing: Theme.sp6;
-        for profile in App.harness_profiles: Rectangle {
-            visible: profile.selectable || profile.selected;
-            width: self.visible ? t.preferred-width + 20px : 0px;
-            height: Theme.chip;
-            border-radius: Theme.r-sm;
-            background: profile.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
-            border-width: Theme.hair;
-            border-color: profile.selected ? Theme.accent.with-alpha(0.5) : Theme.border;
-            accessible-role: button;
-            accessible-label: profile.label + ". " + profile.detail;
-            accessible-item-selected: profile.selected;
-            accessible-enabled: profile.selectable;
-            accessible-action-default => { self.choose(); }
-            function choose() {
-                if profile.selectable && App.harness_pending == "" { App.select_harness_profile(profile.id); }
-            }
-            t := Text {
-                text: profile.label;
-                y: (parent.height - self.height) / 2;
-                color: profile.selected ? Theme.text : Theme.text-2;
-                font-size: Theme.fs-xs + 0.5px;
-            }
-            Focus {
-                enabled: profile.selectable;
-                activated => { parent.choose(); }
-            }
-            touch := TouchArea {
-                mouse-cursor: profile.selectable ? pointer : default;
-                clicked => { parent.choose(); }
-            }
-        }
-    }
+    PresetChips { }
     if App.harness_error != "": Label { text: App.harness_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
     VerticalLayout {
         spacing: Theme.sp0;
@@ -350,7 +316,7 @@ component ModulesPage inherits VerticalLayout {
                     enabled: App.harness_pending == "";
                     toggled(v) => { App.set_harness_surface_visibility(surface.id, v); }
                 }
-                if !surface.configurable && surface.state != "unavailable": Badge { y: (parent.height - self.height) / 2; text: "Always on"; }
+                if !surface.configurable && surface.state != "unavailable": Badge { y: (parent.height - self.height) / 2; text: surface.id == "approvals" ? "When needed" : "Always on"; }
             }
             Divider { }
         }

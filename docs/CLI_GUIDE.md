@@ -135,6 +135,26 @@ multi-crate workspaces, custom build scripts or arbitrary dependencies. A tempor
 or Cargo's offline mode is not a sandbox, so do not use this tool to run shell commands.
 To turn it on, run `harness capability verification.supplemental-rust enable`.
 
+### Read-only subagent
+
+The agent can hand one investigation to a read-only subagent, for example "read these
+files and summarize each one". The subagent starts with a fresh context, can only read
+and search files in the project, and returns a short report. It cannot write files, run
+commands or reach the network. Its result is a lead for the main agent, not a verified
+answer.
+
+It is off by default. To turn it on, open `argentum chat`, go to `/tools`, select
+"Read-only delegated investigation" and confirm, or run
+`argentum harness capability model.delegate-readonly enable` yourself in an interactive
+terminal. Turning a tool on raises what the agent may do, so Argentum accepts it only from
+you at a terminal, never from `--json`, `--non-interactive` or a script.
+
+Limits for each delegation: 4 model requests, 8 tool calls, 32,000 tokens, 1,024 output
+tokens and 2 minutes. A run can delegate once. It works with providers that use the
+OpenAI-compatible interface, such as DeepSeek and most hosted presets, Ollama, and
+`llama-server` added as a custom server. It is not available with Anthropic, ChatGPT plan,
+LM Studio or the built-in llama.cpp profile, or inside a goal.
+
 ## Inspect and recover
 
 ```powershell

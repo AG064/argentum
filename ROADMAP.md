@@ -40,6 +40,9 @@ The first stable release, for Windows x64 and Android arm64:
   as a reviewer or a careful refactorer.
 - **Interface:** a refreshed interface for desktop and phone, including
   two-handle text selection on Android.
+- **Agent-made widgets:** the agent adds its own widgets to the interface and
+  the conversation, such as a progress bar for a long task in colors it picks,
+  with the same checks and approvals as other interface changes.
 - **Android:** working with folders on shared storage, and Termux as an optional
   shell.
 - **Platforms:** release files for Linux and macOS.

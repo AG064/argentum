@@ -131,7 +131,7 @@ pub enum RuntimeError {
     AutomaticCompactionFailed(String),
     #[error("context_budget_invalid: {0}; set model limits in Settings > Providers or with 'argentum provider budget'")]
     ContextBudget(&'static str),
-    #[error("context_token_capacity_exceeded: estimated input, uncertainty and requested output do not fit the declared model limits")]
+    #[error("context_token_capacity_exceeded: estimated input, uncertainty and requested output do not fit the declared model limits; the session or its files need more room than the model allows. Compact the session, start a new one, or raise the limits with 'argentum provider budget' or Settings > Providers")]
     ContextTokenCapacity,
     #[error("context_capacity_exceeded: required context exceeds the byte/message bound; reduce the task or tool result size; completed effects remain recorded")]
     ContextCapacity,
@@ -279,7 +279,7 @@ pub enum RuntimeError {
     ToolBindingUnavailable,
     #[error("runtime is shutting down")]
     ShuttingDown,
-    #[error("local authority is required for this command")]
+    #[error("local authority is required for this command; run it yourself in an interactive terminal, without --json or --non-interactive")]
     LocalAuthorityRequired,
     #[error("local authority is unavailable or stale")]
     LocalAuthorityUnavailable,
@@ -2202,10 +2202,9 @@ impl RuntimeService {
                 _ => continue,
             };
             if !module.enabled {
+                // The switch stays: turning it on starts the service as well.
                 if let Some(surface) = snapshot.surfaces.iter_mut().find(|s| s.id == surface_id) {
                     surface.visible = false;
-                    surface.configurable = false;
-                    surface.detail = "Enable its module in Settings to use this surface.".into();
                 }
             }
         }
@@ -2771,40 +2770,27 @@ impl RuntimeService {
                 Ok(())
             }
             AppCommand::SetHarnessModule { module_id, action } => {
-                let mut guard = self.modules.lock().await;
-                if self.shutdown_cancellation.is_cancelled() {
-                    return Err(RuntimeError::ShuttingDown);
-                }
-                if !self
-                    .active_session_runs
-                    .lock()
-                    .map_err(|_| RuntimeError::StateLockPoisoned)?
-                    .is_empty()
-                {
-                    return Err(RuntimeError::ExecutionPolicyBusy);
-                }
-                let managed = guard.as_mut().ok_or(RuntimeError::ModuleBusy)?;
-                let result = managed
-                    .change(&self.store, self.project_id, &module_id, action)
-                    .await;
-                *self
-                    .module_states
-                    .lock()
-                    .map_err(|_| RuntimeError::StateLockPoisoned)? = managed.snapshot();
-                drop(guard);
-                result?;
-                self.publish_harness_snapshot()?;
-                Ok(())
+                self.change_harness_module(&module_id, action).await
             }
             AppCommand::SelectHarnessProfile { profile_id } => {
                 let layout = self.load_harness_layout()?;
                 let layout =
                     self.with_harness(|harness| harness.apply_profile(&layout, &profile_id))?;
+                for surface in [
+                    argentum_domain::SurfaceId::Activity,
+                    argentum_domain::SurfaceId::Trajectory,
+                ] {
+                    // Best effort: a ready set still applies while a run is
+                    // busy, and the panel then says how to start the service.
+                    if layout.visible.get(&surface).copied().unwrap_or(false) {
+                        let _ = self.start_surface_service(surface).await;
+                    }
+                }
                 self.save_and_publish_harness_layout(layout)
             }
             AppCommand::SetSurfaceVisibility { surface, visible } => {
                 if visible {
-                    self.ensure_surface_module_enabled(surface)?;
+                    self.start_surface_service(surface).await?;
                 }
                 let layout = self.load_harness_layout()?;
                 let layout = self.with_harness(|harness| {
@@ -3014,6 +3000,71 @@ impl RuntimeService {
             &self.load_harness_layout()?,
             argentum_domain::SurfaceId::Trajectory,
         ))
+    }
+
+    async fn change_harness_module(
+        &self,
+        module_id: &str,
+        action: argentum_domain::ModuleAction,
+    ) -> Result<(), RuntimeError> {
+        let mut guard = self.modules.lock().await;
+        if self.shutdown_cancellation.is_cancelled() {
+            return Err(RuntimeError::ShuttingDown);
+        }
+        if !self
+            .active_session_runs
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .is_empty()
+        {
+            return Err(RuntimeError::ExecutionPolicyBusy);
+        }
+        let managed = guard.as_mut().ok_or(RuntimeError::ModuleBusy)?;
+        let result = managed
+            .change(&self.store, self.project_id, module_id, action)
+            .await;
+        *self
+            .module_states
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)? = managed.snapshot();
+        drop(guard);
+        result?;
+        self.publish_harness_snapshot()?;
+        Ok(())
+    }
+
+    /// Turning on the Activity or Trajectory module, by itself or with a ready
+    /// set, also starts the service that fills it. Otherwise the panel would
+    /// stay empty with no sign of why. Both services only read the session's
+    /// own records and grant no capability.
+    async fn start_surface_service(
+        &self,
+        surface: argentum_domain::SurfaceId,
+    ) -> Result<(), RuntimeError> {
+        let id = match surface {
+            argentum_domain::SurfaceId::Activity => modules::ACTIVITY,
+            argentum_domain::SurfaceId::Trajectory => modules::TRAJECTORY,
+            _ => return Ok(()),
+        };
+        let state = self
+            .module_states
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| (m.installed, m.enabled, m.recovery_pending));
+        match state {
+            None | Some((_, true, _)) => Ok(()),
+            Some((_, _, true)) => Err(RuntimeError::ModuleDisabled),
+            Some((installed, false, false)) => {
+                if !installed {
+                    self.change_harness_module(id, argentum_domain::ModuleAction::Install)
+                        .await?;
+                }
+                self.change_harness_module(id, argentum_domain::ModuleAction::Enable)
+                    .await
+            }
+        }
     }
 
     fn ensure_surface_module_enabled(
@@ -12480,6 +12531,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn turning_on_activity_or_trajectory_starts_its_service() {
+        let (_workspace_dir, runtime) = composed_runtime().await;
+        let enabled = |id: &str| {
+            runtime
+                .module_states
+                .lock()
+                .expect("states")
+                .iter()
+                .any(|m| m.id == id && m.enabled)
+        };
+        assert!(!enabled(modules::ACTIVITY));
+        assert!(!enabled(modules::TRAJECTORY));
+        runtime
+            .dispatch(AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Activity,
+                visible: true,
+            })
+            .await
+            .expect("activity on");
+        assert!(enabled(modules::ACTIVITY));
+        runtime
+            .dispatch(AppCommand::SelectHarnessProfile {
+                profile_id: "trace".into(),
+            })
+            .await
+            .expect("trace set");
+        assert!(enabled(modules::TRAJECTORY));
+        assert!(!enabled(modules::DIAGNOSTICS));
+        runtime.shutdown().await.expect("runtime shutdown");
+    }
+
+    #[tokio::test]
     async fn turning_a_module_on_does_not_grant_its_capability() {
         let (runtime, _requests, _workspace_dir) = interface_tool_runtime("ui_inspect", "{}");
         let mut policy = runtime.load_execution_policy().expect("policy");
@@ -12918,8 +13001,6 @@ mod tests {
                 argentum_domain::SurfaceId::Activity | argentum_domain::SurfaceId::Trajectory
             ) {
                 surface.visible = false;
-                surface.configurable = false;
-                surface.detail = "Enable its module in Settings to use this surface.".into();
             }
         }
         assert_eq!(

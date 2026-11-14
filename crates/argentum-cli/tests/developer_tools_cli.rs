@@ -196,7 +196,7 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
     assert_eq!(failure["command"], "permissions select");
     assert_eq!(
         failure["error"]["message"],
-        "local authority is required for this command"
+        "local authority is required for this command; run it yourself in an interactive terminal, without --json or --non-interactive"
     );
 
     let still_guided = json(run_cli(

@@ -6,6 +6,16 @@ What Argentum 0.1.0 runs on, what it needs, and what has been tested.
 tested" means it may work, but nobody has checked it. Reports are welcome at
 contact@ag064.eu or as GitHub issues.
 
+## What is supported
+
+Official support covers the release files listed below: the Argentum app, its
+built-in modules and themes, and Argentum Genesis. Bugs in them are fixed in
+later releases.
+
+Extensions, MCP servers, widgets, modules, themes and other additions made by
+other people, and builds changed from source, are not officially supported.
+Questions about them are still welcome, and help is given when time allows.
+
 ## Downloads
 
 | File | For |

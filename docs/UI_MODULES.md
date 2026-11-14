@@ -19,20 +19,25 @@ the next is a conversation. Modules are harness surfaces (`SurfaceId`).
 | `reasoning` | Message | Provider reasoning, a one-line step summary, and changed files with diffs on each response |
 | `goal` | Above composer | Session objective, state, progress against limits, Pause, Resume and Clear. Composer tasks run toward an active goal |
 | `command-palette` | Overlay | Ctrl+K search over commands, modules, themes, sessions |
-| `status-bar` | Bottom | Workspace, run state, changed files, provider |
+| `status-bar` | Bottom | Workspace, run state, changed files, provider. Desktop only |
 | `changes` | Side panel | Files the agent changed, per-file diff, restore |
 | `git` | Side panel | Working tree status and diff from Git |
 | `browser` | Side panel | Reader-mode pages |
 | `usage` | Side panel | Tokens reported per provider |
 | `plan` | Side panel | Plan stages for the current task |
-| `activity` | Side panel | Recent run, tool, and approval events |
-| `trajectory` | Side panel | Durable records for one session |
+| `activity` | Side panel | A live list of requests, tools, approvals, and checks |
+| `trajectory` | Side panel | The saved record of one session |
 | `requests` | Side panel | Every model request in this session: when, how long, which endpoint, and what filled its context. Kept for this session only |
 
 `files`, `terminal`, and `preview` are listed in Settings as not in this build.
 
 Module sets (`module_profile`) switch several at once: `focused` (shown as
-Minimal), `standard`, `review`, `trace`, and `full` (shown as Everything).
+Minimal), `standard`, `review`, `trace`, and `full` (shown as Everything). The
+Modules page shows what the chosen set includes.
+
+Activity and Trajectory are filled by services of the same names under Settings >
+Capabilities > Harness services. Turning either module on, by itself or with a set,
+starts its service too. Both only read the session's own records.
 
 ## A module never grants authority
 
@@ -100,8 +105,10 @@ Rules the agent cannot get around:
 1. Choose a provider from the catalog. The short list shows the providers that have
    been tested, local llama.cpp, and a custom server. "Show all providers" opens the
    rest. A provider that needs a key asks for it next. The key goes straight to the
-   system credential store and the field is cleared.
-2. Optionally turn on modules, or go straight to the conversation.
+   system credential store and the field is cleared. "Continue without a provider"
+   skips this; you can add one later in Settings > Providers.
+2. Optionally pick a module set or turn on modules one by one, or go straight to the
+   conversation.
 
 A workspace already using a provider skips this.
 

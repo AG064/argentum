@@ -339,6 +339,9 @@ AG064; more projects are at [ag064.eu](https://ag064.eu).
 
 Report security problems privately as described in [SECURITY.md](SECURITY.md), and
 everything else as a [GitHub issue](https://github.com/AG064/argentum/issues).
+Official support covers the released app and CLI; help with your own extensions,
+widgets and modules is given when time allows. See
+[what is supported](docs/SUPPORT_MATRIX.md#what-is-supported).
 
 ## Support Argentum
 

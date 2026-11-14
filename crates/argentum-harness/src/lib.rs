@@ -1170,12 +1170,12 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::ContextMeter,
             true,
-            "Ring in the composer showing context use, when the provider reports it.",
+            "Ring beside the send button that fills as the context is used. Tap or hover it for the numbers.",
         ),
         available_surface(
             SurfaceId::Reasoning,
             true,
-            "Collapsed provider reasoning on each response.",
+            "Collapsed reasoning, step summaries, and the list of changed files on each response.",
         ),
         available_surface(
             SurfaceId::Goal,
@@ -1190,7 +1190,7 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::StatusBar,
             true,
-            "Thin bar with workspace, run state, and changed files.",
+            "Thin bar with workspace, run state, and changed files. Desktop only; phones have no room for it.",
         ),
         available_surface(
             SurfaceId::Changes,
@@ -1200,12 +1200,12 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::GitDiff,
             true,
-            "Working tree status and diff from Git. Runs git only when you ask, and needs the Git inspection permission.",
+            "Working tree status and diff from Git. Runs git only when you ask, and needs Git inspection turned on in Settings > Permissions.",
         ),
         available_surface(
             SurfaceId::Browser,
             true,
-            "Reader-mode pages with no scripts or cookies. Needs the page reader permission.",
+            "Reader-mode pages with no scripts or cookies. Needs the Page reader turned on in Settings > Permissions.",
         ),
         available_surface(
             SurfaceId::Usage,
@@ -1215,12 +1215,12 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::Plan,
             true,
-            "Runtime plan stages for the current task.",
+            "The stages of the current task: what is done, running, and next.",
         ),
         available_surface(
             SurfaceId::Activity,
             true,
-            "Recent factual run, provider, tool, approval, and verification events.",
+            "A live list of what the agent is doing: requests, tools, approvals, and checks.",
         ),
         available_surface(
             SurfaceId::Requests,
@@ -1230,7 +1230,7 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         available_surface(
             SurfaceId::Trajectory,
             true,
-            "Bounded durable task, lifecycle, tool, approval, usage, change, and verification records for one session.",
+            "The saved record of one session: tasks, tools, approvals, usage, changes, and checks.",
         ),
         unavailable_surface(
             SurfaceId::Files,
@@ -1281,7 +1281,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
         profile(
             "standard",
             "Standard",
-            "Adds sessions, context meter, reasoning, and the command palette.",
+            "Adds sessions, the context meter, and the command palette.",
             20,
             &EVERYDAY,
         ),

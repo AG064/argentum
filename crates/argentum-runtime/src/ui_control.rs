@@ -23,9 +23,9 @@ use super::{RuntimeError, RuntimeService};
 
 const GIT_CAPABILITY: &str = "git.read";
 const BROWSER_CAPABILITY: &str = "browser.reader";
-const GIT_BLOCKED_MESSAGE: &str = "Git runs as an external process, and the current execution profile does not allow it. Turn on Git inspection under Permissions.";
+const GIT_BLOCKED_MESSAGE: &str = "Git runs as an external process, and the current execution profile does not allow it. Turn on Git inspection in Settings > Permissions.";
 const BROWSER_BLOCKED_MESSAGE: &str =
-    "Opening a page needs network access, and the current execution profile does not allow it. Turn on the page reader under Permissions.";
+    "Opening a page needs network access, and the current execution profile does not allow it. Turn on the Page reader in Settings > Permissions.";
 
 /// JSON schema for `ui_update`. Enumerations come from the same tables validation
 /// uses, so the model is told exactly what will be accepted.

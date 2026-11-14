@@ -59,7 +59,11 @@ export component PlanPanel inherits Rectangle {
 }
 
 export component ActivityPanel inherits Rectangle {
-    if App.activity_items.length == 0: EmptyState { icon: "activity"; title: "No activity yet"; detail: "Tool calls and run changes appear here."; }
+    if App.activity_items.length == 0: EmptyState {
+        icon: "activity";
+        title: App.activity_module_enabled ? "No activity yet" : "Activity is off";
+        detail: App.activity_module_enabled ? "Tool calls and run changes appear here." : "Turn on Activity in Settings > Capabilities > Harness services to collect it.";
+    }
     if App.activity_items.length > 0: Scroller {
         follow-tail: true;
         content-height: col.preferred-height + 24px;
@@ -103,8 +107,8 @@ export component TrajectoryPanel inherits Rectangle {
         if App.trajectory_items.length == 0 && !App.trajectory_loading: EmptyState {
             vertical-stretch: 1;
             icon: "trajectory";
-            title: "No durable records";
-            detail: "Saved run facts for this session appear here.";
+            title: App.trajectory_module_enabled ? "No saved records yet" : "Trajectory is off";
+            detail: App.trajectory_module_enabled ? "Saved run facts for this session appear here." : "Turn on Session trajectory in Settings > Capabilities > Harness services to view it.";
         }
         if App.trajectory_items.length > 0: Scroller {
             vertical-stretch: 1;
@@ -265,7 +269,7 @@ export component GitPanel inherits Rectangle {
             alignment: center;
             EmptyState {
                 icon: "lock";
-                title: "External processes are blocked";
+                title: "Git inspection is off";
                 detail: App.git_message;
             }
             HorizontalLayout {
@@ -413,7 +417,7 @@ export component BrowserPanel inherits Rectangle {
             vertical-stretch: 1;
             icon: "globe";
             title: "Reader-mode browser";
-            detail: "Pages load as text with no scripts and no cookies. Each page you open needs this project's network permission.";
+            detail: "Pages load as text with no scripts and no cookies. Turn on the Page reader in Settings > Permissions to open pages.";
         }
         if App.browser_state == "blocked": VerticalLayout {
             vertical-stretch: 1;

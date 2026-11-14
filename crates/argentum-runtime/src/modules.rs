@@ -339,9 +339,8 @@ mod tests {
         let (_dir, runtime) = super::super::tests::composed_runtime().await;
         assert!(matches!(
             runtime
-                .dispatch(AppCommand::SetSurfaceVisibility {
-                    surface: SurfaceId::Activity,
-                    visible: true
+                .dispatch(AppCommand::SetInspectorSurface {
+                    surface: Some(SurfaceId::Activity),
                 })
                 .await,
             Err(RuntimeError::ModuleDisabled)

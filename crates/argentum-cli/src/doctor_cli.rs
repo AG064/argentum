@@ -422,7 +422,18 @@ fn populate_initialized(
         .find(|profile| profile.selected)
         .is_some_and(|profile| profile.coding_supported)
     {
-        "ready"
+        // Same rule as a run: a model with no bundled context size needs
+        // declared limits before any request is sent.
+        let selected = profiles.iter().find(|profile| profile.selected);
+        match selected.map(|profile| (profile, store.model_budget(project_id, profile))) {
+            Some((_, Err(_))) => "model_limits_invalid",
+            Some((profile, Ok(None)))
+                if argentum_providers::bundled_context_window(profile).is_none() =>
+            {
+                "model_limits_unknown"
+            }
+            _ => "ready",
+        }
     } else {
         "coding_unavailable"
     };
@@ -465,7 +476,11 @@ pub fn format_text(report: &DoctorReport) -> String {
     let mut output = String::new();
     output.push_str(&format!(
         "Workspace: {} [{}]\n",
-        report.workspace.path, report.workspace.status
+        report.workspace.path,
+        match report.workspace.status {
+            "missing" => "not set up yet",
+            status => status,
+        }
     ));
     if let Some(project) = &report.workspace.project_id {
         output.push_str(&format!("  project: {project}\n"));
@@ -577,7 +592,24 @@ pub fn format_text(report: &DoctorReport) -> String {
             check.detail
         ));
     }
+    if let Some(next) = next_step(report) {
+        output.push_str(&format!("Next: {next}\n"));
+    }
     output
+}
+
+/// One plain next step for the most basic missing piece, so a new install does
+/// not end on a list of failures.
+fn next_step(report: &DoctorReport) -> Option<String> {
+    let profile = report.providers.selected.as_deref().unwrap_or("PROFILE_ID");
+    match (report.database.exists, report.providers.readiness) {
+        (false, _) => Some("this looks like a new install. Run 'argentum setup' to choose a provider, or 'argentum' to start a chat.".into()),
+        (true, "ready") => None,
+        (true, "model_limits_unknown" | "model_limits_invalid") => Some(format!(
+            "Argentum does not know how much the selected model can hold. Run 'argentum provider budget {profile} --limits TOTAL,INPUT,MAX_OUTPUT,REQUESTED_OUTPUT,UNCERTAINTY'. For a 32K local model, try --limits \"32768,28672,4096,2048,2048\"."
+        )),
+        (true, _) => Some("no provider is ready. Run 'argentum setup', or 'argentum provider presets' to see what you can add.".into()),
+    }
 }
 
 fn build_local_probe(

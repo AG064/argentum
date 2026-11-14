@@ -33,7 +33,7 @@ fn assert_local_authority_required(output: Output) {
     assert_eq!(failure["ok"], false);
     assert_eq!(
         failure["error"]["message"],
-        "local authority is required for this command"
+        "local authority is required for this command; run it yourself in an interactive terminal, without --json or --non-interactive"
     );
 }
 
@@ -135,16 +135,11 @@ fn harness_presentation_and_execution_policy_persist_without_enabling_missing_wo
         .iter()
         .any(|surface| surface["id"] == "Changes" && surface["visible"] == true));
 
-    let disabled_surface = run_cli(
-        workspace.path(),
-        &database,
-        &["harness", "surface", "activity", "show"],
-    );
-    assert!(!disabled_surface.status.success());
+    // Showing Activity starts the service that fills it.
     let enabled_module = harness_snapshot(&run_cli(
         workspace.path(),
         &database,
-        &["harness", "module", "first-party.activity", "enable"],
+        &["harness", "surface", "activity", "show"],
     ));
     assert!(enabled_module["harness"]["modules"]
         .as_array()

@@ -145,10 +145,20 @@ async fn run_main() -> ExitCode {
         }
     }
     match parse_args(raw_os_args.iter().cloned()) {
-        Ok(Arguments::Help) => {
+        Ok(Arguments::Help(None)) => {
             print_help();
             ExitCode::SUCCESS
         }
+        Ok(Arguments::Help(Some(topic))) => match topic_help(&topic) {
+            Some(text) => {
+                print!("{text}");
+                ExitCode::SUCCESS
+            }
+            None => {
+                eprintln!("argentum: unknown command '{topic}'\nRun 'argentum help' for usage.");
+                ExitCode::from(2)
+            }
+        },
         Ok(Arguments::Version) => {
             print_version();
             ExitCode::SUCCESS
@@ -1484,7 +1494,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_changes_command(options, action, json).await?;
         }
-        Arguments::Help | Arguments::Version => {
+        Arguments::Help(_) | Arguments::Version => {
             unreachable!("help and version exit before command execution")
         }
     }
@@ -6215,7 +6225,8 @@ enum Arguments {
         database: Option<PathBuf>,
         out: Option<PathBuf>,
     },
-    Help,
+    /// The full help, or the help for one command.
+    Help(Option<String>),
     Version,
 }
 
@@ -6667,7 +6678,19 @@ where
         return Ok(Arguments::Serve(CommonOptions::default()));
     }
     if matches!(command, "help" | "--help" | "-h") {
-        return Ok(Arguments::Help);
+        return Ok(Arguments::Help(
+            (command == "help")
+                .then(|| values.get(1).cloned())
+                .flatten(),
+        ));
+    }
+    // `argentum run --help` and the like. Only a trailing flag counts, so a
+    // reserved flag in an option's value position is still rejected.
+    if !command.starts_with('-')
+        && values.len() > 1
+        && matches!(values.last().map(String::as_str), Some("--help" | "-h"))
+    {
+        return Ok(Arguments::Help(Some(command.to_owned())));
     }
     if matches!(command, "version" | "--version" | "-V") {
         return if values.len() == 1 {
@@ -8445,6 +8468,29 @@ mod genesis_polish_parser_tests {
     }
 
     #[test]
+    fn each_command_has_its_own_help() {
+        for (values, topic) in [
+            (&["run", "--help"][..], "run"),
+            (&["chat", "-h"][..], "chat"),
+            (&["help", "doctor"][..], "doctor"),
+            (&["provider", "budget", "--help"][..], "provider"),
+        ] {
+            match parse_args(values.iter().copied()) {
+                Ok(Arguments::Help(Some(found))) => assert_eq!(found, topic),
+                other => panic!("{values:?} gave {other:?}"),
+            }
+        }
+        assert!(matches!(parse_args(["--help"]), Ok(Arguments::Help(None))));
+        let run = topic_help("run").expect("run has help");
+        assert!(run.starts_with("Submit one task"), "{run}");
+        assert!(run.contains("argentum run [OPTIONS]"));
+        assert!(!run.contains("argentum result"));
+        let provider = topic_help("provider").expect("provider has help");
+        assert!(provider.contains("argentum provider budget"));
+        assert!(topic_help("no-such-command").is_none());
+    }
+
+    #[test]
     fn help_text_lists_implemented_subcommands_and_reserved_commands() {
         let text = help_text();
         for expected in [
@@ -9157,6 +9203,49 @@ fn help_text() -> String {
     );
     text.push('\n');
     text
+}
+
+/// The usage lines and description for one command, taken from the full help so
+/// the two never disagree. `None` when no such command exists.
+fn topic_help(topic: &str) -> Option<String> {
+    let prefix = format!("argentum {topic}");
+    let usage = HELP_BODY
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.strip_prefix(&prefix)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+        })
+        .collect::<Vec<_>>();
+    if usage.is_empty() {
+        return None;
+    }
+    let description = HELP_BODY
+        .split("Commands:\n")
+        .nth(1)
+        .and_then(|commands| commands.split("Options:\n").next())
+        .and_then(|commands| {
+            commands.lines().map(str::trim).find_map(|line| {
+                line.strip_prefix(topic)
+                    .filter(|rest| rest.starts_with(' '))
+                    .map(str::trim)
+            })
+        });
+    let mut text = String::new();
+    if let Some(description) = description {
+        text.push_str(description);
+        text.push_str("\n\n");
+    }
+    text.push_str("Usage:\n");
+    for line in usage {
+        text.push_str("  ");
+        text.push_str(line);
+        text.push('\n');
+    }
+    text.push_str(
+        "\nOptions such as --workspace, --database, --json and --isolated are described in 'argentum help'.\n",
+    );
+    Some(text)
 }
 
 fn print_help() {
@@ -10180,10 +10269,10 @@ mod tests {
     #[test]
     fn parses_interactive_launch_and_non_tty_mode() {
         let empty = parse_args(std::iter::empty::<&str>()).expect("default launch");
-        assert!(!matches!(empty, Arguments::Help));
+        assert!(!matches!(empty, Arguments::Help(_)));
 
         let chat = parse_args(["chat"]).expect("chat launch");
-        assert!(!matches!(chat, Arguments::Help));
+        assert!(!matches!(chat, Arguments::Help(_)));
 
         assert!(parse_args(["--non-interactive"]).is_ok());
         #[cfg(not(feature = "benchmark-unattended"))]

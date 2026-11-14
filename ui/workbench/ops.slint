@@ -5,7 +5,7 @@
 // what Rust reports and offers only the commands Rust owns.
 import { Theme } from "theme.slint";
 import { App } from "state.slint";
-import { Badge, Btn, Divider, EmptyState, Field, Icon, Label, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
+import { Badge, Btn, Divider, EmptyState, Field, Focus, Icon, Label, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
 import { RecordLineView, ProviderPresetView } from "../view-models.slint";
 
 // A heading with its refresh action and loading state.
@@ -905,6 +905,60 @@ export component SessionActionsSheet inherits Sheet {
             }
             Rectangle { horizontal-stretch: 1; }
             Btn { label: "Close"; small: true; clicked => { App.session_actions_open = false; } }
+        }
+    }
+}
+
+// The ready sets as chips, with what the chosen one includes underneath.
+// Used on the Modules page and in first run.
+export component PresetChips inherits VerticalLayout {
+    spacing: Theme.sp8;
+    // Wraps, so the presets stay inside a narrow screen.
+    FlexboxLayout {
+        spacing: Theme.sp6;
+        for profile in App.harness_profiles: Rectangle {
+            visible: profile.selectable || profile.selected;
+            width: self.visible ? t.preferred-width + 20px : 0px;
+            height: Theme.chip;
+            border-radius: Theme.r-sm;
+            background: profile.selected ? Theme.accent-soft : touch.has-hover ? Theme.hover : transparent;
+            border-width: Theme.hair;
+            border-color: profile.selected ? Theme.accent.with-alpha(0.5) : Theme.border;
+            accessible-role: button;
+            accessible-label: profile.label + ". " + profile.detail;
+            accessible-item-selected: profile.selected;
+            accessible-enabled: profile.selectable;
+            accessible-action-default => { self.choose(); }
+            function choose() {
+                if profile.selectable && App.harness_pending == "" { App.select_harness_profile(profile.id); }
+            }
+            t := Text {
+                text: profile.label;
+                y: (parent.height - self.height) / 2;
+                color: profile.selected ? Theme.text : Theme.text-2;
+                font-size: Theme.fs-xs + 0.5px;
+            }
+            Focus {
+                enabled: profile.selectable;
+                activated => { parent.choose(); }
+            }
+            touch := TouchArea {
+                mouse-cursor: profile.selectable ? pointer : default;
+                clicked => { parent.choose(); }
+            }
+        }
+    }
+    // What the chosen ready set includes, so the chips explain themselves.
+    VerticalLayout {
+        spacing: Theme.sp0;
+        for profile in App.harness_profiles: Label {
+            visible: profile.selected;
+            height: profile.selected ? self.preferred-height : 0px;
+            text: profile.detail;
+            tone: "secondary";
+            size: "sm";
+            wrap: word-wrap;
+            overflow: clip;
         }
     }
 }

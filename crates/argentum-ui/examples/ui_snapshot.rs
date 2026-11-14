@@ -466,6 +466,12 @@ fn scenes() -> Vec<Scene> {
             open_panel(ui, SurfaceId::Usage);
             usage(ui);
         }),
+        s("47-full-activity-off", (1440, 900), |ui| {
+            modules(ui, "full");
+            conversation(ui);
+            open_panel(ui, SurfaceId::Activity);
+            ui.window().set_activity_module_enabled(false);
+        }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");
             conversation(ui);
