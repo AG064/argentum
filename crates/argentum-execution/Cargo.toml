@@ -18,7 +18,7 @@ argentum-security.workspace = true
 argentum-workspaces.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-toml = "=1.1.4"
+toml = "=1.1.6"
 serde_yaml.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
@@ -34,7 +34,7 @@ rustix = { workspace = true, features = ["process"], optional = true }
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
-find-msvc-tools = "=0.1.9"
+find-msvc-tools = "=0.1.15"
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",

@@ -18,10 +18,10 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
-skrifa = "=0.44.0"
+skrifa = "=0.46.2"
 
 [target.'cfg(windows)'.dependencies]
-libloading = "=0.8.9"
+libloading = "=0.9.0"
 png = "=0.18.1"
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
