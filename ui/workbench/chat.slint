@@ -530,6 +530,16 @@ export component Composer inherits Rectangle {
         if root.can-send && !App.running {
             App.submit_task(input.text);
             input.text = "";
+        } else if root.can-send && App.running {
+            App.queue_prompt(input.text);
+            input.text = "";
+        }
+    }
+
+    function steer() {
+        if root.can-send && App.running {
+            App.steer_run(App.active_run_id, input.text);
+            input.text = "";
         }
     }
 
@@ -559,13 +569,28 @@ export component Composer inherits Rectangle {
         padding-top: Theme.sp13;
         padding-bottom: Theme.sp8;
         spacing: Theme.sp8;
+        if App.queued_prompts.length > 0: HorizontalLayout {
+            spacing: Theme.sp6;
+            Label {
+                horizontal-stretch: 1;
+                text: (App.queued_prompts.length == 1 ? "1 follow-up queued" : App.queued_prompts.length + " follow-ups queued")
+                    + (App.queue_paused ? ", paused after the last run stopped" : App.running ? ", sent when this run finishes" : "");
+                tone: "secondary";
+                size: "sm";
+                wrap: word-wrap;
+                overflow: clip;
+            }
+            if !App.running: Btn { small: true; label: "Send next"; clicked => { App.send_next_queued(); } }
+            Btn { small: true; kind: "ghost"; label: "Clear"; clicked => { App.clear_queue(); } }
+        }
+        if App.steer_notice != "": Label { text: App.steer_notice; tone: "secondary"; size: "sm"; wrap: word-wrap; overflow: clip; }
         Rectangle {
             height: root.shown-height;
             clip: true;
             if input.text == "": Text {
                 x: 0;
                 y: 0;
-                text: App.running ? "Add a follow-up when this run finishes" : "Ask Argentum anything about this workspace";
+                text: App.running ? "Queue a follow-up, or steer this run" : "Ask Argentum anything about this workspace";
                 color: Theme.text-3;
                 font-size: Theme.fs-md;
                 overflow: elide;
@@ -631,6 +656,13 @@ export component Composer inherits Rectangle {
                 clicked => { App.settings_section = "permissions"; App.open_settings(); }
             }
             Rectangle { horizontal-stretch: 1; }
+            // While a run works, Enter queues the text and Steer adds it to the run.
+            if App.running && input.text != "": Btn {
+                y: (parent.height - self.height) / 2;
+                small: true;
+                label: "Steer";
+                clicked => { root.steer(); }
+            }
             if Mods.context-meter: ctx-meter := Rectangle {
                 width: Theme.control;
                 y: 0;

@@ -104,6 +104,8 @@ component TableCell inherits Rectangle {
 // wide table scrolls sideways instead of crushing its text.
 component TableView inherits Rectangle {
     in property <RichBlockView> block;
+    // Wider than the reply, so it scrolls sideways.
+    private property <bool> wide: grid.preferred-width > grid-scroll.width + 8px;
     border-radius: Theme.r-md;
     border-width: Theme.hair;
     border-color: Theme.border;
@@ -117,7 +119,7 @@ component TableView inherits Rectangle {
                 padding-left: Theme.sp12;
                 padding-right: Theme.sp3;
                 Label {
-                    text: "table";
+                    text: root.wide ? "table, scroll sideways" : "table";
                     tone: "muted";
                     size: "xs";
                     mono: true;
@@ -126,11 +128,16 @@ component TableView inherits Rectangle {
                 CopyBtn { text: block.text; tip: "Copy table"; y: (parent.height - self.height) / 2; }
             }
         }
+        Rectangle {
+        min-width: 0px;
+        max-width: 100000px;
+        height: grid.preferred-height;
         grid-scroll := Flickable {
             // Fixed bounds keep the columns from feeding their own width back.
-            min-width: 0px;
-            max-width: 100000px;
-            height: grid.preferred-height;
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
             content-width: max(self.width, grid.preferred-width);
             content-height: grid.preferred-height;
             grid := VerticalLayout {
@@ -141,10 +148,21 @@ component TableView inherits Rectangle {
                         text: cell;
                         head: row.head;
                         align: block.aligns[column];
-                        column-width: max(104px, grid-scroll.width * block.weights[column]);
+                        // A long text column keeps room for whole words on a
+                        // narrow screen, as if the table were 560 px wide.
+                        column-width: max(104px, grid-scroll.width * block.weights[column], block.weights[column] >= 0.4 ? 560px * block.weights[column] : 0px);
                     }
                 }
             }
+        }
+        // Fades the cut edge while there is more to the right.
+        if root.wide && grid-scroll.content-x > grid-scroll.width - grid-scroll.content-width + 1px: Rectangle {
+            x: parent.width - self.width;
+            y: 0;
+            width: 28px;
+            height: parent.height;
+            background: @linear-gradient(90deg, Theme.code-bg.with-alpha(0) 0%, Theme.code-bg 100%);
+        }
         }
     }
 }

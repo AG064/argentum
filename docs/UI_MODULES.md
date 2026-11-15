@@ -8,6 +8,12 @@ The core is always present and has no switch:
 - the provider and model chooser;
 - the approval prompt.
 
+While a run works, the composer queues what you type and sends it when the run
+finishes, up to 16 follow-ups. A failed or stopped run pauses the queue until you
+choose Send next or Clear. Steer adds your text to the running task at its next
+model request instead. On a phone, the header shows when a run is working, a goal
+is paused, or an approval is waiting.
+
 Everything else is an optional module. New projects start in the Minimal profile,
 with only collapsed reasoning on, so the first screen is the provider chooser and
 the next is a conversation. Modules are harness surfaces (`SurfaceId`).

@@ -333,6 +333,20 @@ impl UiHandle {
             }
             AppEvent::SteeringChanged(status) => {
                 if self.run_targets_active_session(status.run_id) {
+                    self.window.global::<App>().set_steer_notice(
+                        match status.lifecycle {
+                            argentum_domain::SteeringLifecycle::Pending => {
+                                "Your note will reach the model at its next request."
+                            }
+                            argentum_domain::SteeringLifecycle::Included => {
+                                "Your note was added to the run."
+                            }
+                            argentum_domain::SteeringLifecycle::NotApplied => {
+                                "Your note was not added. The run ended first."
+                            }
+                        }
+                        .into(),
+                    );
                     let (title, state) = match status.lifecycle {
                         argentum_domain::SteeringLifecycle::Pending => {
                             ("Steering pending", "active")
@@ -800,6 +814,7 @@ impl UiHandle {
                 self.window.set_running(is_active_lifecycle(*lifecycle));
                 if lifecycle.is_terminal() {
                     self.finish_stage_projection(*lifecycle);
+                    self.continue_queue(*lifecycle);
                 }
                 self.push_activity(
                     lifecycle_activity_title(*lifecycle),
@@ -2615,6 +2630,17 @@ impl UiHandle {
     }
 
     fn reset_session_view(&self) {
+        // Queued follow-ups belong to the session they were typed in.
+        let app = self.window.global::<App>();
+        if let Some(queue) = app
+            .get_queued_prompts()
+            .as_any()
+            .downcast_ref::<VecModel<SharedString>>()
+        {
+            queue.set_vec(Vec::new());
+        }
+        app.set_queue_paused(false);
+        app.set_steer_notice(SharedString::default());
         self.window.set_user_prompt(SharedString::default());
         self.window
             .set_conversation_messages(empty_conversation_model());
@@ -3118,6 +3144,28 @@ impl UiHandle {
             record.relative_path.clone(),
             "neutral",
         );
+    }
+
+    /// After a run, the next queued follow-up is sent once the run settled
+    /// cleanly. Otherwise the queue waits for the owner.
+    fn continue_queue(&self, lifecycle: TaskLifecycle) {
+        let app = self.window.global::<App>();
+        if app.get_queued_prompts().row_count() == 0 {
+            return;
+        }
+        if lifecycle != TaskLifecycle::Complete {
+            app.set_queue_paused(true);
+            return;
+        }
+        let window = self.window.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(300), move || {
+            if let Some(window) = window.upgrade() {
+                let app = window.global::<App>();
+                if !app.get_queue_paused() {
+                    app.invoke_send_next_queued();
+                }
+            }
+        });
     }
 
     fn finish_stage_projection(&self, lifecycle: TaskLifecycle) {
@@ -4402,6 +4450,9 @@ fn tool_label(tool_id: &str) -> &str {
     }
 }
 
+/// The most follow-ups that can wait behind a run, as in the terminal.
+const MAX_QUEUED_PROMPTS: usize = 16;
+
 fn present_error(message: &str) -> String {
     if message == "no provider is configured" {
         return "No model provider is configured.".into();
@@ -4690,6 +4741,9 @@ where
             return;
         }
         window.set_submission_pending(true);
+        window
+            .global::<App>()
+            .set_steer_notice(SharedString::default());
         submit_dispatch(composer_submission(&window, prompt.to_string()));
     });
 
@@ -4700,6 +4754,71 @@ where
             return;
         };
         cancel_dispatch(AppCommand::CancelRun { run_id });
+    });
+
+    let steer_dispatch = dispatch.clone();
+    let steer_window = window.as_weak();
+    window.global::<App>().on_steer_run(move |run_id, text| {
+        let Some(window) = steer_window.upgrade() else {
+            return;
+        };
+        let text = text.trim().to_owned();
+        let Ok(run_id) = run_id.to_string().parse() else {
+            return;
+        };
+        if text.is_empty() || !window.get_running() {
+            return;
+        }
+        window
+            .global::<App>()
+            .set_steer_notice("Adding your note to this run...".into());
+        steer_dispatch(AppCommand::SteerRun { run_id, text });
+    });
+
+    // Follow-ups typed during a run wait here, in memory, and are sent in order.
+    let queue = Rc::new(VecModel::<SharedString>::default());
+    window
+        .global::<App>()
+        .set_queued_prompts(ModelRc::from(Rc::clone(&queue)));
+    let queue_add = Rc::clone(&queue);
+    let queue_window = window.as_weak();
+    window.global::<App>().on_queue_prompt(move |prompt| {
+        let prompt = prompt.trim().to_owned();
+        if prompt.is_empty() {
+            return;
+        }
+        if queue_add.row_count() >= MAX_QUEUED_PROMPTS {
+            if let Some(window) = queue_window.upgrade() {
+                window.set_draft(prompt.into());
+                window.global::<App>().set_steer_notice(
+                    format!("Up to {MAX_QUEUED_PROMPTS} follow-ups can wait. Your text is back in the box.")
+                        .into(),
+                );
+            }
+            return;
+        }
+        queue_add.push(prompt.into());
+    });
+    let queue_clear = Rc::clone(&queue);
+    let clear_window = window.as_weak();
+    window.global::<App>().on_clear_queue(move || {
+        queue_clear.set_vec(Vec::new());
+        if let Some(window) = clear_window.upgrade() {
+            window.global::<App>().set_queue_paused(false);
+        }
+    });
+    let queue_next = Rc::clone(&queue);
+    let next_window = window.as_weak();
+    window.global::<App>().on_send_next_queued(move || {
+        let Some(window) = next_window.upgrade() else {
+            return;
+        };
+        if window.get_running() || window.get_submission_pending() || queue_next.row_count() == 0 {
+            return;
+        }
+        let prompt = queue_next.remove(0);
+        window.global::<App>().set_queue_paused(false);
+        window.global::<App>().invoke_submit_task(prompt);
     });
 
     let new_dispatch = dispatch.clone();
@@ -6917,11 +7036,61 @@ mod tests {
         app.set_provider_models_known(false);
     }
 
+    fn steering_and_the_queue_follow_the_run(ui: &UiHandle) {
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let dispatched = commands.clone();
+        connect_commands(ui.window(), move |command| {
+            dispatched.borrow_mut().push(command);
+        });
+        let app = ui.window().global::<App>();
+        let run_id = RunId::new_v4();
+        ui.window().set_running(true);
+        app.invoke_steer_run(run_id.to_string().into(), "  Use the new API  ".into());
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SteerRun { run_id: id, text }) if *id == run_id && text == "Use the new API"
+        ));
+        commands.borrow_mut().clear();
+        app.invoke_queue_prompt("Run the tests".into());
+        app.invoke_queue_prompt("Summarize".into());
+        assert_eq!(app.get_queued_prompts().row_count(), 2);
+        // Nothing is sent while the run works.
+        app.invoke_send_next_queued();
+        assert!(commands.borrow().is_empty());
+        // A failed run pauses the queue instead of sending into a broken state.
+        ui.continue_queue(TaskLifecycle::Failed);
+        assert!(app.get_queue_paused());
+        ui.window().set_running(false);
+        ui.window().set_submission_pending(false);
+        app.invoke_send_next_queued();
+        assert!(matches!(
+            commands.borrow().last(),
+            Some(AppCommand::SubmitTask { prompt }) if prompt == "Run the tests"
+        ));
+        assert_eq!(app.get_queued_prompts().row_count(), 1);
+        assert!(!app.get_queue_paused());
+        app.invoke_clear_queue();
+        assert_eq!(app.get_queued_prompts().row_count(), 0);
+        for index in 0..=MAX_QUEUED_PROMPTS {
+            app.invoke_queue_prompt(format!("Follow-up {index}").into());
+        }
+        assert_eq!(app.get_queued_prompts().row_count(), MAX_QUEUED_PROMPTS);
+        assert_eq!(
+            ui.window().get_draft(),
+            format!("Follow-up {MAX_QUEUED_PROMPTS}")
+        );
+        app.invoke_clear_queue();
+        ui.window().set_draft(SharedString::default());
+        app.set_steer_notice(SharedString::default());
+        ui.window().set_submission_pending(false);
+    }
+
     #[test]
     fn event_callback_and_credential_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
         a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
         model_picker_and_thinking_chip_follow_the_selected_model(&ui);
+        steering_and_the_queue_follow_the_run(&ui);
         ui.window().set_error_message(SharedString::default());
         ui.window().set_draft(SharedString::default());
         ui.window().set_active_session_id(SharedString::default());

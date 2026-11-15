@@ -394,13 +394,27 @@ component Palette inherits Sheet {
             padding-right: Theme.sp14;
             spacing: Theme.sp10;
             Icon { name: "search"; size: Theme.icon-md; tint: Theme.text-3; y: (parent.height - self.height) / 2; }
-            query := TextInput {
+            Rectangle {
                 horizontal-stretch: 1;
+                if query.text == "": Text {
+                    x: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    vertical-alignment: center;
+                    text: "Search commands, sessions and modules";
+                    color: Theme.text-3;
+                    font-size: Theme.fs-md;
+                    overflow: elide;
+                }
+            query := TextInput {
+                width: parent.width;
+                height: parent.height;
                 vertical-alignment: center;
                 single-line: true;
                 color: Theme.text;
                 font-size: Theme.fs-md;
                 accessible-label: "Search commands";
+                accessible-placeholder-text: "Search commands, sessions and modules";
                 edited => { App.palette_query(self.text); }
                 accepted => {
                     // A command with a mistake has no id; it stays open to explain.
@@ -409,6 +423,7 @@ component Palette inherits Sheet {
                         root.close();
                     }
                 }
+            }
             }
         }
         Divider { }
@@ -603,6 +618,14 @@ export component Workbench inherits Rectangle {
                                         tone: "secondary";
                                         size: "sm";
                                         horizontal-stretch: 1;
+                                    }
+                                    // A phone has no status bar, so the header says what the
+                                    // run or goal is doing.
+                                    if root.narrow && (App.approval_open || App.running || App.goal_lifecycle == "paused"): Badge {
+                                        y: (parent.height - self.height) / 2;
+                                        text: App.approval_open ? "Approval needed"
+                                            : App.running ? App.run_state
+                                            : "Goal paused";
                                     }
                                     if !Mods.sessions: IconBtn {
                                         y: (parent.height - self.height) / 2;

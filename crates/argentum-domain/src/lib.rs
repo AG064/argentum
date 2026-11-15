@@ -2807,6 +2807,12 @@ pub enum AppCommand {
     CancelRun {
         run_id: RunId,
     },
+    /// Text for the active run, applied at its next model request. The same
+    /// limits as `/steer` in the terminal apply.
+    SteerRun {
+        run_id: RunId,
+        text: String,
+    },
     ApproveTool {
         approval_id: ApprovalId,
         scope: ApprovalScope,

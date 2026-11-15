@@ -2943,6 +2943,7 @@ impl RuntimeService {
             }
             AppCommand::RequestTool { request } => self.request_tool(request).await,
             AppCommand::CancelRun { run_id } => self.cancel(run_id),
+            AppCommand::SteerRun { run_id, text } => self.steer_run(run_id, text).map(|_| ()),
             AppCommand::ApproveTool { approval_id, scope } => {
                 self.approve_tool(approval_id, scope, authority).await
             }

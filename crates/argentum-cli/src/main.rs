@@ -5253,7 +5253,18 @@ async fn run_provider_profile_command(
                     Some(issue) => println!("Coding setup incomplete: {issue}"),
                     None => {
                         let selected = profiles.iter().find(|profile| profile.selected);
-                        println!("{}", coding_ready_message(selected));
+                        let key_missing = selected
+                            .filter(|p| {
+                                argentum_domain::is_supported_hosted_credential_provider_id(&p.id)
+                            })
+                            .is_some_and(|p| !host.provider_credential_configured(&p.id));
+                        match selected {
+                            Some(profile) if key_missing => println!(
+                                "Provider added. It needs an API key before it can answer: add it in Settings > Providers, or run 'argentum provider credential set {}' with the key on standard input.",
+                                profile.id
+                            ),
+                            _ => println!("{}", coding_ready_message(selected)),
+                        }
                     }
                 }
             }
@@ -9088,6 +9099,7 @@ argentum session select SESSION_ID [OPTIONS]\n  \
 argentum session inspect|pin|unpin|archive|unarchive SESSION_ID [OPTIONS]\n  \
 argentum session title SESSION_ID TITLE [OPTIONS]\n  \
 argentum session fork SOURCE_SESSION_ID --title TITLE [OPTIONS]\n  \
+argentum session export SESSION_ID [--database PATH] [--out FILE]\n  \
 argentum goal status [OPTIONS]\n  \
 argentum goal limits --goal-id GOAL_ID (--limits GOAL_TOKENS,REQUESTS,ITERATIONS,TOOLS,SECONDS,RUN_TOKENS,RUN_REQUESTS,RUN_TOOLS,RUN_SECONDS | --remove-aggregate) [OPTIONS]\n  \
 argentum goal criteria --goal-id GOAL_ID --runners RUNNER[,RUNNER] [--owner-attestation-required] [OPTIONS]\n  \
@@ -9157,7 +9169,7 @@ harness     Inspect composition, presentation, execution policy, and surfaces\n 
 tool        List registered developer tools and current availability\n  \
 desktop     Governed Windows desktop windows: list, inspect, screenshot, invoke, type, keys\n  \
 instructions Preview selected project instruction metadata (--directory RELATIVE_DIRECTORY)\n  \
-context     Preview selected working-context metadata; no tool bodies or token estimates\n  \
+context     Show how full the context is and what fills it; no tool bodies or message text\n  \
 permissions Inspect profiles, select local authority, and manage grants\n  \
 verification List fixed runners and inspect freshness-bound evidence\n  \
   changes     Inspect durable changes, load a diff, or request approved restore\n\n\

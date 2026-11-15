@@ -293,6 +293,11 @@ export component ToolsPage inherits VerticalLayout {
         title: "Tools and skills";
         detail: "What the agent can use in this workspace, and which actions ask first.";
     }
+    HorizontalLayout {
+        spacing: Theme.sp8;
+        Notice { text: "Turn optional tools, such as the read-only subagent, on or off in Permissions."; tone: "muted"; horizontal-stretch: 1; }
+        Btn { small: true; label: "Open permissions"; clicked => { App.settings_section = "permissions"; } }
+    }
     VerticalLayout {
         spacing: Theme.sp2;
         SectionHead {

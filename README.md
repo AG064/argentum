@@ -212,8 +212,10 @@ Give a session one objective, and let it work across several runs within limits 
 ```powershell
 argentum goal set "Migrate the parser and keep the tests passing" --token-budget 1000000 --tool-budget 200 --time-budget 3600
 argentum goal status
-argentum goal supervise
+argentum goal supervise --goal-id GOAL_ID --iterations 4 --elapsed-seconds 3600
 ```
+
+`goal status` shows the goal's ID.
 
 You can amend limits, require verification runners, attest completion, pause, resume, and clear a
 goal. `goal deliver` runs a finite goal in stages. See [goal accounting](docs/GOAL_ACCOUNTING.md).
@@ -229,12 +231,13 @@ The catalog covers hosted services, aggregators, your own server, and local mode
 | Plans | ChatGPT plan, with browser sign-in |
 | Aggregators | OpenRouter, Together, Fireworks, GitHub Models, OpenCode Zen, DeepInfra, Novita, Hugging Face, Chutes, Venice, Avian, Requesty, Vercel AI Gateway, Nebius, Hyperbolic, SiliconFlow, Featherless |
 | On your computer | llama.cpp, LM Studio, Ollama, vLLM |
-| Your own | Any OpenAI-compatible server |
+| Your own | Any OpenAI-compatible server that needs no key, such as `llama-server` or vLLM on your network |
 
 Every preset, with its address, default model, and key variable, is listed in
 [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 - **Thinking:** choose Off, Low, High, or Max from the composer, or with `/thinking`. Only the levels the model supports are offered.
+- **While it works:** type a follow-up and press Enter to queue it for when the run finishes, or press Steer to add a note the model reads at its next request. The terminal has the same with `/queue` and `/steer`.
 - **Secure keys:** API keys go in the operating system's credential store, and each is only sent to its provider's own address.
 - **Tested and Testing tabs:** Settings > Providers lists tested providers first, and the rest on a Testing tab, so you know which have not been run against Argentum. First run shows only tested providers until you choose Show all.
 

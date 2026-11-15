@@ -94,7 +94,7 @@ on them.
 | Anthropic | Supported through its native Messages API |
 | OpenAI, Azure OpenAI, Google Gemini, MiniMax, OpenRouter, Groq, Mistral, xAI, and the other hosted entries | Supported. Listed on the Testing tab in Settings until tested with Argentum |
 | llama.cpp, LM Studio, Ollama, vLLM | Supported on your own computer |
-| Any OpenAI-compatible server | Supported with an address and model you enter |
+| Any OpenAI-compatible server | Supported with an address and model you enter, when it needs no API key. Keys are stored only for the presets |
 | Amazon Bedrock, Google Vertex AI | Not supported, because they need a cloud sign-in instead of an API key |
 
 A model needs tool calling to work as a coding agent. Every preset, with its

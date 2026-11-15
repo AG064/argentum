@@ -23,7 +23,7 @@ use argentum_harness::{HarnessFacts, HarnessRegistry};
 use argentum_ui::{workbench, App, UiHandle};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{Platform, WindowAdapter};
-use slint::{ComponentHandle, Model, ModelRc, PhysicalSize, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, PhysicalSize, SharedString, VecModel};
 
 struct Headless(Rc<MinimalSoftwareWindow>);
 
@@ -471,6 +471,28 @@ fn scenes() -> Vec<Scene> {
             conversation(ui);
             open_panel(ui, SurfaceId::Activity);
             ui.window().set_activity_module_enabled(false);
+        }),
+        s("48-running-queue", D, |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_running(true);
+            ui.window().set_run_state("Running".into());
+            ui.window().set_draft("Also update the changelog".into());
+            ui.window()
+                .global::<App>()
+                .set_queued_prompts(ModelRc::new(VecModel::from(vec![
+                    SharedString::from("Run the tests again"),
+                    SharedString::from("Summarize what changed"),
+                ])));
+            ui.window()
+                .global::<App>()
+                .set_steer_notice("Your note was added to the run.".into());
+        }),
+        s("49-phone-running", (360, 760), |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_running(true);
+            ui.window().set_run_state("Running".into());
         }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");

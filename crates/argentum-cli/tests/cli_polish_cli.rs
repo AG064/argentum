@@ -277,7 +277,9 @@ fn hosted_profiles_do_not_claim_local_coding_configuration() {
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(!text.contains("Local coding configuration ready"), "{text}");
     assert!(
-        text.contains("Provider ready") || text.contains("Coding setup incomplete"),
+        text.contains("Provider ready")
+            || text.contains("needs an API key")
+            || text.contains("Coding setup incomplete"),
         "{text}"
     );
 }

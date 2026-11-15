@@ -860,6 +860,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::RevokeApprovalGrant { .. }
         | AppCommand::ApproveTool { .. }
         | AppCommand::ApproveProjectVerification { .. }
+        | AppCommand::SteerRun { .. }
         | AppCommand::RejectTool { .. } => false,
     }
 }

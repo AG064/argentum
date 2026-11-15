@@ -706,7 +706,7 @@ export component Settings inherits Rectangle {
             // Every section stays reachable on a phone: the tabs scroll sideways and
             // the close button stays put.
             if root.narrow: HorizontalLayout {
-                height: Theme.header;
+                height: Theme.header + 12px;
                 padding-left: Theme.sp8;
                 padding-right: Theme.sp8;
                 spacing: Theme.sp2;
@@ -730,13 +730,32 @@ export component Settings inherits Rectangle {
                             { id: "devices", icon: "lock", label: "Devices" },
                             { id: "updates", icon: "refresh", label: "Updates" },
                             { id: "about", icon: "info", label: "About" },
-                        ]: IconBtn {
-                            y: (parent.height - self.height) / 2;
-                            icon: tab.icon;
-                            tip: tab.label;
-                            active: App.settings_section == tab.id;
-                            size: Theme.touch;
-                            clicked => { App.settings_section = tab.id; }
+                        ]: tab-item := Rectangle {
+                            // An icon with its name under it, so each tab says what it is.
+                            property <bool> active: App.settings_section == tab.id;
+                            width: max(Theme.touch, tab-name.preferred-width + 12px);
+                            height: Theme.header + 8px;
+                            border-radius: Theme.r-sm;
+                            background: self.active ? Theme.hover : transparent;
+                            accessible-role: AccessibleRole.tab;
+                            accessible-label: tab.label;
+                            accessible-item-selected: self.active;
+                            accessible-action-default => { App.settings_section = tab.id; }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: Theme.sp2;
+                                HorizontalLayout {
+                                    alignment: center;
+                                    Icon { name: tab.icon; size: Theme.icon-md; tint: tab-item.active ? Theme.text : Theme.text-2; }
+                                }
+                                tab-name := Text {
+                                    text: tab.label;
+                                    horizontal-alignment: center;
+                                    color: tab-item.active ? Theme.text : Theme.text-2;
+                                    font-size: Theme.fs-xs;
+                                }
+                            }
+                            TouchArea { clicked => { App.settings_section = tab.id; } }
                         }
                     }
                 }

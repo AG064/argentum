@@ -266,19 +266,22 @@ export component FirstRun inherits Rectangle {
                 y: 0px;
                 width: root.column;
                 height: self.preferred-height;
+                // Descriptions wrap, so what a module needs is never cut off.
                 for surface in App.harness_surfaces: Rectangle {
                     visible: surface.configurable;
-                    height: surface.configurable ? Theme.row + 16px : 0px;
-                    HorizontalLayout {
+                    height: surface.configurable ? max(Theme.row + 16px, choice.preferred-height) : 0px;
+                    choice := HorizontalLayout {
                         padding-left: Theme.sp8;
                         padding-right: Theme.sp12;
+                        padding-top: Theme.sp8;
+                        padding-bottom: Theme.sp8;
                         spacing: Theme.sp12;
                         Icon { name: surface.icon; size: 18px; tint: Theme.silver; y: (parent.height - self.height) / 2; }
                         VerticalLayout {
                             alignment: center;
                             horizontal-stretch: 1;
                             Label { text: surface.label; }
-                            Label { text: surface.detail; tone: "muted"; size: "xs"; }
+                            Label { text: surface.detail; tone: "muted"; size: "xs"; wrap: word-wrap; overflow: clip; }
                         }
                         Switch {
                             y: (parent.height - self.height) / 2;

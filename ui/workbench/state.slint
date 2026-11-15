@@ -191,6 +191,16 @@ export global App {
     callback device_set_remote(bool);
     callback submit_task(string);
     callback cancel_run(string);
+    // Steering adds text to the running task at its next model request.
+    callback steer_run(string, string);
+    in-out property <string> steer_notice: "";
+    // Follow-ups typed during a run, sent in order once it completes. A
+    // failed or cancelled run pauses the queue until you send or clear it.
+    in-out property <[string]> queued_prompts: [];
+    in-out property <bool> queue_paused: false;
+    callback queue_prompt(string);
+    callback send_next_queued();
+    callback clear_queue();
     callback new_session();
     callback select_session(string);
     callback set_goal(string, int, int, int);

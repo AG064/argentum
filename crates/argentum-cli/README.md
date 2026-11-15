@@ -90,7 +90,7 @@ reject. Esc rejects too.
 
 Add `--final-result` to `run` for one settled result document, and `--answer-schema` to
 validate that answer against a schema file in the workspace. `--json` failures follow
-[the JSON error contract](../../docs/CLI_GUIDE.md#json-error-contract).
+[the JSON error contract](../../docs/CLI_GUIDE.md#json-errors).
 
 ## Common commands
 

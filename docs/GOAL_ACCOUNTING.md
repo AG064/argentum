@@ -153,7 +153,8 @@ refund. Recovered work can be restarted with `goal supervise` or `goal deliver`.
 
 If a request's usage is unknown, `argentum accounting inspect --session-id SESSION_ID
 --goal-id GOAL_ID --request-id REQUEST_ID --json` shows that request without changing
-anything. `argentum accounting resolve --resolution FILE --json` records your decision,
+anything. `argentum accounting resolve --workspace PATH --database PATH --resolution FILE
+--json` records your decision,
 either the usage found in a saved settlement event, or, for a missing report, accepting the
 whole reservation as the charge with `--confirm-reservation UNITS`. Accepting a reservation
 is a budget decision, not a statement of what the provider billed. Both commands are for

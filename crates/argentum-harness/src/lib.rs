@@ -929,7 +929,7 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "model.delegate-readonly",
             "Read-only delegated investigation",
             HarnessCapabilityKind::Agent,
-            "Allow one bounded sequential worker investigation on the selected compatible-HTTP coding route. The worker can only use enabled read_text, search_text, and search_filenames capabilities.",
+            "Lets the agent hand one investigation to a subagent that can only read and search files, and gets a short report back. Works with OpenAI-compatible providers.",
             vec!["model.streaming", "tool.read-text"],
         ),
         available_capability(

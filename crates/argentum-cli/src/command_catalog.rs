@@ -443,6 +443,13 @@ pub const COMMANDS: &[CommandEntry] = &[
         true,
     ),
     cmd(
+        "session",
+        &["session", "export"],
+        "Write one session's messages and events as JSON",
+        Gate::None,
+        false,
+    ),
+    cmd(
         "goal",
         &["goal", "status"],
         "Show the active goal contract",

@@ -32,7 +32,7 @@ Interaction and lines: `hover` `#FFFFFF0F`, `pressed` `#FFFFFF1A`, `border`
 `#FFFFFF14`, `border-strong` `#FFFFFF2B`, `scrim` `#000000A6`, `shadow`
 `#00000090`, `thumb` `#FFFFFF`.
 
-Text: `text` `#EDEDEF`, `text-2` `#A6A6AD`, `text-3` `#75757D`, `silver`
+Text: `text` `#EDEDEF`, `text-2` `#A6A6AD`, `text-3` `#87878F`, `silver`
 `#C9CCD1`.
 
 Accent: `accent` `#D2202E`, `accent-hover` `#E8323F`, `accent-text` `#FFFFFF`,

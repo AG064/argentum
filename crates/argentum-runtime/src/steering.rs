@@ -138,6 +138,29 @@ impl RuntimeService {
         Ok(())
     }
 
+    /// Steers a run of this runtime from the app, whose own target is the
+    /// run's. Each call is a new entry.
+    pub(super) fn steer_run(
+        &self,
+        run_id: RunId,
+        text: String,
+    ) -> Result<SteeringReceipt, RuntimeError> {
+        let target = self
+            .steering
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .runs
+            .get(&run_id)
+            .map(|run| run.target.clone())
+            .ok_or(RuntimeError::NoActiveSteeringRun)?;
+        self.steer_active_run(SteeringSubmission {
+            id: Uuid::new_v4(),
+            run_id,
+            target,
+            text,
+        })
+    }
+
     pub fn steer_active_run(
         &self,
         submission: SteeringSubmission,

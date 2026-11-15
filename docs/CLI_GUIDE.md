@@ -72,8 +72,9 @@ a key was removed or none was stored. With `--json`, the result has `provider_id
 
 When the selected profile is ready for coding, `provider list`, `provider add`,
 `provider select` and `provider model` say so. A profile that runs on this computer prints
-"Local coding configuration ready". A hosted profile prints "Provider ready". Neither
-message means the provider was contacted.
+"Local coding configuration ready". A hosted profile prints "Provider ready", or, when its
+API key is not saved yet, says so and how to add it. None of these messages means the
+provider was contacted.
 
 Two presets work a little differently:
 
@@ -143,8 +144,9 @@ and search files in the project, and returns a short report. It cannot write fil
 commands or reach the network. Its result is a lead for the main agent, not a verified
 answer.
 
-It is off by default. To turn it on, open `argentum chat`, go to `/tools`, select
-"Read-only delegated investigation" and confirm, or run
+It is off by default. To turn it on, open Settings > Permissions in the app and switch on
+"Read-only delegated investigation" under Agent tools. In the terminal, open
+`argentum chat`, go to `/tools`, select it and confirm, or run
 `argentum harness capability model.delegate-readonly enable` yourself in an interactive
 terminal. Turning a tool on raises what the agent may do, so Argentum accepts it only from
 you at a terminal, never from `--json`, `--non-interactive` or a script.
@@ -203,6 +205,11 @@ environment provider credentials and the local runtime. It does not change the s
 workspace. It is not a filesystem sandbox: the workspace policy still decides what the
 agent can touch. Use a separate database for evaluations.
 
+`--isolated` needs absolute `--workspace` and `--database` paths. Commands that do not run
+the agent or read provider settings do not accept it: `commands`, `workspace`, `recovery`,
+`device`, `accounting`, `session export` and `terminal-diagnostic`. Run those without it,
+with an explicit `--database` where they take one.
+
 ## Doctor
 
 ```powershell
@@ -233,10 +240,13 @@ Required checks: `database_exists`, `database_openable`, `schema_current`.
 Advisory checks: `workspace_exists`, `workspace_initialized`, `provider_ready`,
 `harness_configured`, `recovery_clear`.
 
-Local probe checks, all advisory: `node_present`, `browser_definition_present`,
-`browser_adapter_present`, `playwright_present`, `chromium_present`, `desktop_feature`,
-`artifact_feature`. A missing browser definition shows as a failed check with a suggested
-next step, not as an error. The probe never changes `healthy` or the exit code.
+`local_probe` is one object, not a list of checks. It has `node_path`, `node_present`,
+`browser_definition_present`, `chromium_present`, `desktop_feature` and
+`artifact_feature`, the file reports `adapter`, `adapter_package`, `package_lock` and
+`configuration`, the module reports `playwright` and `playwright_core`, the
+`browser_cache` report, and `next_actions`, a list of suggested next steps. A missing
+browser definition shows up as `false` with a next step, not as an error. The probe never
+changes `healthy` or the exit code.
 
 The exit code is `0` only when all required checks pass. The full report is printed first,
 including with `--json`. A failed advisory check leaves the exit code at `0` and sets
@@ -287,7 +297,10 @@ Error codes:
   in their one machine response (`type: "command_failed"`, `code: "not_found"`).
 - `command_failed`: any other failure.
 
-Argument errors exit with `2`. Other failures exit with `1`.
+A command line that cannot be parsed, such as a missing value or an unknown option, exits
+with `2`. Every other failure exits with `1`, including a well-formed request that the
+project rejects with `invalid_argument`, such as `goal attest` on a goal without owner
+attestation.
 
 Some commands keep their own output:
 
@@ -306,8 +319,10 @@ Some commands keep their own output:
   `invalid_argument`. Remove `--json`.
 - `desktop status` in a build without desktop control fails with `feature_unavailable`,
   like `desktop list`. This matches the `unavailable` entry in `commands --json`.
-- `run --json`, `provider probe --json` and `changes --json` write one final machine
-  response and no second error object. `result` and `--final-result` print the final-result
+- `run --json` streams events as JSON Lines while the run works, starting with
+  `command_accepted` and ending with one `command_completed` or `command_failed` line.
+  `provider probe --json` and `changes --json` write one final machine response. None of
+  them adds a second error object. `result` and `--final-result` print the final-result
   document. `compact` and `context` print their own JSON status objects.
 - Successful output is unchanged. `schema_version` and `ok` are added to errors only.
 
@@ -403,7 +418,8 @@ few suggest. Shell completion is not included.
 | `session archive` | session | Archive a session |  |
 | `session unarchive` | session | Unarchive a session |  |
 | `session title` | session | Set a session title |  |
-| `session fork` | session | Fork a session |  |
+| `session fork` | session | Fork a session. It asks to confirm in a terminal; without one, add `--json` |  |
+| `session export` | session | Write one session's messages and events as JSON, to a file with `--out` |  |
 | `goal status` | goal | Show the active goal contract |  |
 | `goal limits` | goal | Amend aggregate goal limits |  |
 | `goal criteria` | goal | Set goal verification runners |  |
