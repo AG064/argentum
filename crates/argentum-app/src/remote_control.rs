@@ -142,6 +142,9 @@ fn serve_one(stream: TcpStream, host: &RemoteHost, identity: &DeviceIdentity, pa
         return;
     }
     let (sender, receiver) = channel.split(writer);
+    if receiver.get_ref().set_read_timeout(None).is_err() {
+        return;
+    }
     let host = host.clone();
     let _ = host.runtime.clone().block_on(async move {
         let (read, write) = tokio::io::split(bridge_channel(receiver, sender));

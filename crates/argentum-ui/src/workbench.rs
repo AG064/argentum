@@ -801,6 +801,10 @@ where
         app.on_first_run_finish(move || {
             if let Some(window) = weak.upgrade() {
                 window.set_first_run_open(false);
+                // A phone starts on the conversation, not a full-screen panel.
+                if window.global::<App>().get_touch_device() {
+                    window.set_inspector_collapsed(true);
+                }
                 window
                     .global::<App>()
                     .set_composer_focus_tick(window.global::<App>().get_composer_focus_tick() + 1);

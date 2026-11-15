@@ -736,22 +736,22 @@ export component BudgetSection inherits VerticalLayout {
     spacing: Theme.sp6;
     SectionHead { title: "BUDGET AND CONTEXT"; busy: App.provider_budget_loading || App.provider_context_loading; }
     Label {
-        text: "Most models work with the defaults. Change these only if you know the model's limits.";
+        text: "Hosted presets and models Argentum knows have their limits filled in. For your own server, enter them here: for a 32K model, Total 32768, Input 28672, Max output 4096, Output 2048 and Uncertainty 2048.";
         tone: "muted";
         size: "sm";
         wrap: word-wrap;
     }
     HorizontalLayout {
         spacing: Theme.sp8;
-        Field { label: "Input tokens"; value: App.provider_budget_input; edited(text) => { App.provider_budget_input = text; } }
-        Field { label: "Output tokens"; value: App.provider_budget_requested_output; edited(text) => { App.provider_budget_requested_output = text; } }
+        Field { numeric: true; label: "Input tokens"; value: App.provider_budget_input; edited(text) => { App.provider_budget_input = text; } }
+        Field { numeric: true; label: "Output tokens"; value: App.provider_budget_requested_output; edited(text) => { App.provider_budget_requested_output = text; } }
     }
     HorizontalLayout {
         spacing: Theme.sp8;
-        Field { label: "Max output"; value: App.provider_budget_max_output; edited(text) => { App.provider_budget_max_output = text; } }
-        Field { label: "Total"; value: App.provider_budget_total; edited(text) => { App.provider_budget_total = text; } }
+        Field { numeric: true; label: "Max output"; value: App.provider_budget_max_output; edited(text) => { App.provider_budget_max_output = text; } }
+        Field { numeric: true; label: "Total"; value: App.provider_budget_total; edited(text) => { App.provider_budget_total = text; } }
     }
-    Field { label: "Uncertainty"; value: App.provider_budget_uncertainty; edited(text) => { App.provider_budget_uncertainty = text; } }
+    Field { numeric: true; label: "Uncertainty"; value: App.provider_budget_uncertainty; edited(text) => { App.provider_budget_uncertainty = text; } }
     if App.provider_budget_error != "": Notice { text: App.provider_budget_error; tone: "danger"; }
     if App.provider_budget_notice != "": Notice { text: App.provider_budget_notice; tone: "ok"; }
     HorizontalLayout {

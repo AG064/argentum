@@ -5670,6 +5670,7 @@ async fn run_device_serve(port: u16) -> Result<(), Box<dyn std::error::Error>> {
         argentum_devices::fingerprint(&channel.peer())
     );
     let (sender, receiver) = channel.split(writer);
+    receiver.get_ref().set_read_timeout(None)?;
     let host = start_active_host(CommonOptions::default().host_config()?).await?;
     let result = argentum_cli::remote::serve_jsonl_over_channel(host, receiver, sender).await;
     let _ = stream.shutdown(std::net::Shutdown::Both);
@@ -5703,6 +5704,7 @@ fn run_device_connect(address: &str) -> Result<(), Box<dyn std::error::Error + S
         argentum_devices::fingerprint(&channel.peer())
     );
     let (mut sender, mut receiver) = channel.split(writer);
+    receiver.get_ref().set_read_timeout(None)?;
     let shutdown = stream.try_clone()?;
     std::thread::spawn(move || {
         let mut stdin = std::io::stdin().lock();

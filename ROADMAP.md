@@ -31,6 +31,12 @@ The first stable release, for Windows x64 and Android arm64:
 - **Plan in the terminal:** the stages of the current task in `argentum chat`,
   as the Plan module shows them in the app.
 
+## Planned for 0.2.0
+
+- **Marketplace:** browse and install add-ons, such as modules, themes, skills and
+  MCP servers, and local models from inside the app, with each item's source,
+  permissions and checksum shown before it installs.
+
 ## Planned for future builds
 
 - **Computer use:** the agent works in desktop applications, with each action

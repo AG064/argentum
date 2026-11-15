@@ -71,7 +71,9 @@ desktop code.
 The Android app is the same agent, with the same providers, modules, approvals, and
 history, in a layout made for touch. It works in its own folder, or in your shared
 storage once you allow "All files access", and runs shell commands on the phone with
-the same approvals as on a PC. Pair it with your computer to drive one from the other.
+the same approvals as on a PC. Pair it with your computer, and the computer can send it
+tasks with `argentum device connect`; see
+[pair devices](docs/CLI_GUIDE.md#pair-devices-and-control-one-from-another).
 
 <table>
   <tr>

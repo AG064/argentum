@@ -494,6 +494,12 @@ fn scenes() -> Vec<Scene> {
             ui.window().set_running(true);
             ui.window().set_run_state("Running".into());
         }),
+        s("50-phone-everything-panel", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "full");
+            conversation(ui);
+            open_panel(ui, SurfaceId::Changes);
+        }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");
             conversation(ui);

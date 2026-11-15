@@ -496,6 +496,8 @@ export component Row inherits Rectangle {
 // Single-line labelled text input.
 export component Field inherits VerticalLayout {
     in property <bool> secret: false;
+    // Whole numbers only, so a phone shows its number pad.
+    in property <bool> numeric: false;
     in property <string> label;
     in property <string> placeholder;
     in property <string> hint;
@@ -537,7 +539,7 @@ export component Field inherits VerticalLayout {
             overflow: elide;
         }
         input := TextInput {
-            input-type: root.secret ? InputType.password : InputType.text;
+            input-type: root.secret ? InputType.password : root.numeric ? InputType.number : InputType.text;
             x: 10px;
             width: parent.width - 20px;
             height: parent.height;

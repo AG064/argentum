@@ -326,6 +326,42 @@ Some commands keep their own output:
   document. `compact` and `context` print their own JSON status objects.
 - Successful output is unchanged. `schema_version` and `ok` are added to errors only.
 
+## Pair devices and control one from another
+
+Two devices on the same network can be paired, for example your phone and your PC.
+Pairing only lets them recognize each other. It grants no permission: settings, keys and
+approvals stay on each device.
+
+1. On one device, start waiting: in the app, Settings > Devices > Wait for a device, or
+   `argentum device pair --listen` in a terminal. It shows the address to connect to.
+2. On the other, connect to that address: enter it under Settings > Devices and press
+   Connect, or run `argentum device pair --connect 192.168.0.3:47910 --name Phone`.
+3. Both devices show the same six digits. Confirm only when they match.
+
+`device list` shows paired devices and `device forget FINGERPRINT` removes one. In the app,
+paired devices are listed under Settings > Devices with a Forget button.
+
+To control the app from a paired computer, turn on "Let paired devices control this app"
+under Settings > Devices. The app shows the address it listens on, port 47911 by default.
+Then, on the computer:
+
+```powershell
+& $exe device connect 192.168.0.3:47911
+```
+
+Type JSON Lines requests, one per line, in the same format as `serve`. For example:
+
+```json
+{"protocol_version":1,"request_id":"1","type":"command","command":{"kind":"submit_task","prompt":"Summarize README.md"}}
+{"protocol_version":1,"request_id":"2","type":"command","command":{"kind":"list_sessions"}}
+```
+
+A paired device can send tasks, cancel a run and browse sessions. Settings, keys,
+permissions and approvals are refused with `not_allowed_remotely`; they stay on the
+device that does the work, and the run uses that device's own provider and policy. The
+app has no screen for controlling another device yet; use `device connect` from a
+computer. `argentum device serve` offers the same from a terminal session on a computer.
+
 ## Desktop commands
 
 These are available in the `argentum-genesis-desktop-control` download.

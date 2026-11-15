@@ -153,49 +153,59 @@ component Sidebar inherits Rectangle {
 component PanelTabs inherits Rectangle {
     callback close();
     height: Theme.header;
+    // The tabs scroll sideways when they do not fit, so every tab keeps its
+    // full size and the close button is always on screen.
     HorizontalLayout {
         padding-left: Theme.sp8;
         padding-right: Theme.sp6;
         spacing: Theme.sp2;
-        for mode in App.inspector_modes: Rectangle {
-            y: (parent.height - self.height) / 2;
-            height: Theme.chip;
-            preferred-width: tab-row.preferred-width;
-            min-width: Theme.chip;
-            horizontal-stretch: 0;
-            border-radius: Theme.r-sm;
-            background: App.active_inspector == mode.id ? Theme.hover : touch.has-hover ? Theme.hover.with-alpha(0.03) : transparent;
-            accessible-role: tab;
-            accessible-label: mode.label;
-            accessible-item-selected: App.active_inspector == mode.id;
-            accessible-action-default => { App.set_inspector_surface(mode.id); }
-            tab-row := HorizontalLayout {
-                padding-left: Theme.sp8;
-                padding-right: Theme.sp9;
-                spacing: Theme.sp6;
-                Icon {
-                    name: mode.icon;
-                    size: Theme.icon-sm;
-                    tint: App.active_inspector == mode.id ? Theme.accent-ink : Theme.text-3;
-                    y: (parent.height - self.height) / 2;
+        tab-scroll := Flickable {
+            horizontal-stretch: 1;
+            height: Theme.header;
+            content-width: max(self.width, tabs.preferred-width);
+            content-height: Theme.header;
+            tabs := HorizontalLayout {
+                height: Theme.header;
+                spacing: Theme.sp2;
+                alignment: start;
+                for mode in App.inspector_modes: Rectangle {
+                    y: (Theme.header - self.height) / 2;
+                    height: Theme.chip;
+                    width: tab-row.preferred-width;
+                    border-radius: Theme.r-sm;
+                    background: App.active_inspector == mode.id ? Theme.hover : touch.has-hover ? Theme.hover.with-alpha(0.03) : transparent;
+                    accessible-role: tab;
+                    accessible-label: mode.label;
+                    accessible-item-selected: App.active_inspector == mode.id;
+                    accessible-action-default => { App.set_inspector_surface(mode.id); }
+                    tab-row := HorizontalLayout {
+                        padding-left: Theme.sp8;
+                        padding-right: Theme.sp9;
+                        spacing: Theme.sp6;
+                        Icon {
+                            name: mode.icon;
+                            size: Theme.icon-sm;
+                            tint: App.active_inspector == mode.id ? Theme.accent-ink : Theme.text-3;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        if root.width > Theme.tab-label-min * App.inspector_modes.length || App.active_inspector == mode.id: Text {
+                            text: mode.label;
+                            color: App.active_inspector == mode.id ? Theme.text : Theme.text-2;
+                            font-size: Theme.fs-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Focus { activated => { App.set_inspector_surface(mode.id); } }
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { App.set_inspector_surface(mode.id); }
+                    }
                 }
-                if root.width > Theme.tab-label-min * App.inspector_modes.length || App.active_inspector == mode.id: Text {
-                    text: mode.label;
-                    color: App.active_inspector == mode.id ? Theme.text : Theme.text-2;
-                    font-size: Theme.fs-sm;
-                    vertical-alignment: center;
-                }
-            }
-            Focus { activated => { App.set_inspector_surface(mode.id); } }
-            touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { App.set_inspector_surface(mode.id); }
             }
         }
-        Rectangle { horizontal-stretch: 1; }
         IconBtn {
             y: (parent.height - self.height) / 2;
-            size: 28px;
+            size: Theme.coarse ? Theme.touch : 28px;
             icon: "close";
             tip: "Close panel";
             clicked => { root.close(); }
@@ -546,12 +556,15 @@ export component Workbench inherits Rectangle {
         focus-on-click: false;
         focus-on-tab-navigation: false;
         capture-key-pressed(event) => {
-            if event.text == Key.Escape {
+            // Android's Back button works like Escape: it closes what is on top,
+            // and leaves the app only when nothing is open.
+            if event.text == Key.Escape || event.text == Key.Back {
                 if App.approval_open { return accept; }
                 if App.settings_open { App.settings_open = false; return accept; }
                 if App.command_palette_open { App.command_palette_open = false; return accept; }
                 if App.provider_menu_open { App.provider_menu_open = false; return accept; }
                 if App.drawer_open { App.drawer_open = false; return accept; }
+                if root.panel-wanted && !root.wide-enough-for-panel { App.set_panel_visible(false); return accept; }
                 return reject;
             }
             if event.modifiers.control && !App.approval_open && !App.first_run_open {

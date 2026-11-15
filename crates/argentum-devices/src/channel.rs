@@ -233,6 +233,13 @@ pub struct ChannelReceiver<R: Read> {
 }
 
 impl<R: Read> ChannelReceiver<R> {
+    /// The stream this side reads from. A handshake timeout must be cleared
+    /// here: on Windows a cloned socket handle keeps its own read timeout, so
+    /// clearing it on another handle leaves this one ending quiet sessions.
+    pub fn get_ref(&self) -> &R {
+        self.reader.get_ref()
+    }
+
     /// Returns [`ChannelError::Closed`] once the other device has hung up.
     pub fn receive(&mut self) -> Result<Vec<u8>, ChannelError> {
         open_frame(&mut self.reader, &self.opening, &mut self.received)
@@ -549,5 +556,36 @@ mod tests {
         assert_eq!(receiver.receive().unwrap(), b"second");
         phone_side.join().unwrap();
         assert!(matches!(receiver.receive(), Err(ChannelError::Closed)));
+    }
+
+    /// A session stays open while nothing is sent, such as during a long model
+    /// request, once the handshake timeout is cleared on the reading handle.
+    #[test]
+    fn a_quiet_session_outlives_the_handshake_timeout() {
+        let (pc, phone) = (identity(), identity());
+        let (pc_key, phone_key) = (pc.public_key(), phone.public_key());
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        let handshake = Duration::from_millis(300);
+        let phone_side = std::thread::spawn(move || {
+            server.set_read_timeout(Some(handshake)).unwrap();
+            let writer = server.try_clone().unwrap();
+            let channel =
+                SecureChannel::accept(server.try_clone().unwrap(), &phone, |key| *key == pc_key)
+                    .unwrap();
+            let (mut sender, _receiver) = channel.split(writer);
+            std::thread::sleep(handshake * 4);
+            sender.send(b"late").unwrap();
+        });
+        client.set_read_timeout(Some(handshake)).unwrap();
+        let writer = client.try_clone().unwrap();
+        let channel =
+            SecureChannel::connect(client.try_clone().unwrap(), &pc, |key| *key == phone_key)
+                .unwrap();
+        let (_sender, mut receiver) = channel.split(writer);
+        receiver.get_ref().set_read_timeout(None).unwrap();
+        assert_eq!(receiver.receive().unwrap(), b"late");
+        phone_side.join().unwrap();
     }
 }

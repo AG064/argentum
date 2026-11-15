@@ -127,6 +127,10 @@ struct ProjectionState {
     verification_runners: Vec<VerificationRunnerInspection>,
     verification_evidence: Vec<VerificationEvidence>,
     verification_freshness: Vec<bool>,
+    /// A touch device has seen its first saved layout. On a phone a panel
+    /// covers the whole screen, so the app starts on the conversation and a
+    /// panel opens only when asked.
+    touch_layout_seen: bool,
 }
 
 impl UiHandle {
@@ -1854,8 +1858,15 @@ impl UiHandle {
                     self.window.set_trajectory_loading(false);
                 }
                 self.window.set_active_inspector(active_inspector.into());
-                self.window
-                    .set_inspector_collapsed(profile.inspector_collapsed || module_disabled);
+                let first_touch_layout = self.window.get_touch_device()
+                    && self
+                        .projection
+                        .lock()
+                        .map(|mut state| !std::mem::replace(&mut state.touch_layout_seen, true))
+                        .unwrap_or(false);
+                self.window.set_inspector_collapsed(
+                    profile.inspector_collapsed || module_disabled || first_touch_layout,
+                );
             }
         }
     }
