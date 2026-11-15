@@ -59,7 +59,7 @@ The first stable release, for Windows x64 and Android arm64:
   with the same checks and approvals as other interface changes.
 - **Android:** working with folders on shared storage, and Termux as an optional
   shell.
-- **Platforms:** release files for Linux and macOS.
+- **Platforms:** release files for Linux and macOS, then an iOS app.
 - **Signing:** code-signed Windows releases.
 - **Extensions:** MCP servers and portable skills in the standard build, with the
   same approvals as built-in tools.
