@@ -24,8 +24,12 @@ The first stable release, for Windows x64 and Android arm64:
   is available, and learning from the usage each provider reports.
 - **Clearer diagnostics:** runs that stop for an approval, and the tokens a
   compaction used, show up in run details and usage totals.
-- **Interface polish:** notices that no longer cover the composer, and clearer
-  wording in Settings.
+- **Interface polish:** notices that no longer cover the composer, clearer
+  wording in Settings, and a history of interface changes you can undo.
+- **Session list:** each session shows whether it is working, waiting for you,
+  unread, and how many files it changed.
+- **Plan in the terminal:** the stages of the current task in `argentum chat`,
+  as the Plan module shows them in the app.
 
 ## Planned for future builds
 
@@ -49,6 +53,15 @@ The first stable release, for Windows x64 and Android arm64:
 - **Signing:** code-signed Windows releases.
 - **Extensions:** MCP servers and portable skills in the standard build, with the
   same approvals as built-in tools.
+- **Images:** attach screenshots and pictures to a message, for models that can
+  read them.
+- **Web fetch:** a tool that lets the agent read a web page as text, with
+  approval, using the same reader as the Browser module.
+- **Terminal sessions:** long-running commands the agent can start, read and
+  type into, such as a dev server or a test watcher.
+- **Stronger verification:** checks that a verified file is not a link and is
+  not changed while it is checked.
+- **Phone notifications:** a notice when a run finishes or an approval waits.
 - **Voice:** talking to the agent and having replies read aloud.
 - **Benchmarks:** published results against other coding agents on public task sets.
 
