@@ -28,6 +28,10 @@ The first stable release, for Windows x64 and Android arm64:
   wording in Settings, and a history of interface changes you can undo.
 - **Session list:** each session shows whether it is working, waiting for you,
   unread, and how many files it changed.
+- **Android Back button:** Back closes panels, settings and menus before it
+  leaves the app.
+- **Phone text fields:** server addresses and model names are not
+  auto-capitalized by the keyboard.
 - **Plan in the terminal:** the stages of the current task in `argentum chat`,
   as the Plan module shows them in the app.
 
