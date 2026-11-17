@@ -73,11 +73,14 @@ pub(crate) fn make_block(
         rows: ModelRc::default(),
         weights: ModelRc::default(),
         aligns: ModelRc::default(),
+        wide: ModelRc::default(),
     }
 }
 
 const MAX_TABLE_COLUMNS: usize = 24;
 const MAX_TABLE_ROWS: usize = 400;
+/// A column with a cell this long holds sentences, not values.
+const WIDE_COLUMN_CHARS: usize = 60;
 
 /// Plain table data before it becomes a Slint block. Rows are padded to the
 /// widest row so every row has the same number of cells.
@@ -86,6 +89,7 @@ pub(crate) struct TableData {
     pub rows: Vec<Vec<String>>,
     pub aligns: Vec<i32>,
     pub weights: Vec<f32>,
+    pub wide: Vec<bool>,
 }
 
 pub(crate) fn table_data(rows: &[Vec<String>], alignments: &[Alignment]) -> TableData {
@@ -112,22 +116,31 @@ pub(crate) fn table_data(rows: &[Vec<String>], alignments: &[Alignment]) -> Tabl
             _ => 0,
         })
         .collect();
-    // A column's share follows its longest cell, bounded so one long cell
-    // cannot starve the others.
-    let raw = (0..columns)
+    // A column's share follows its longest cell on a square-root curve, so a
+    // column of paragraphs gets clearly more room than a column of years, and
+    // one huge cell still cannot starve the others. A flat cap gave a notes
+    // column the same narrow width as the rest, so each row grew screens tall.
+    let longest = (0..columns)
         .map(|column| {
             rows.iter()
                 .map(|row| row[column].chars().count())
                 .max()
                 .unwrap_or(0)
-                .clamp(4, 36) as f32
         })
+        .collect::<Vec<_>>();
+    let raw = longest
+        .iter()
+        .map(|length| ((*length).clamp(4, 600) as f32).sqrt())
         .collect::<Vec<_>>();
     let total = raw.iter().sum::<f32>().max(1.0);
     TableData {
         rows,
         aligns,
         weights: raw.into_iter().map(|width| width / total).collect(),
+        wide: longest
+            .iter()
+            .map(|length| *length >= WIDE_COLUMN_CHARS)
+            .collect(),
     }
 }
 
@@ -148,6 +161,7 @@ fn make_table(rows: &[Vec<String>], alignments: &[Alignment]) -> RichBlockView {
     ));
     block.weights = ModelRc::new(VecModel::from(data.weights));
     block.aligns = ModelRc::new(VecModel::from(data.aligns));
+    block.wide = ModelRc::new(VecModel::from(data.wide));
     block
 }
 
@@ -511,6 +525,27 @@ mod tests {
     fn table_alignment_row_sets_column_alignment() {
         let blocks = parse("| L | C | R | N |\n| :-- | :-: | --: | --- |\n| a | b | c | d |\n");
         assert_eq!(aligns(&blocks[0]), [0, 1, 2, 0]);
+    }
+
+    #[test]
+    fn columns_of_sentences_get_more_room_than_columns_of_values() {
+        let notes = "Designed around readability, so it uses indentation instead of braces and rewards writing code that looks like pseudocode. ".repeat(4);
+        let rows = vec![
+            vec!["Language".to_owned(), "Year".to_owned(), "Notes".to_owned()],
+            vec!["Python".to_owned(), "1991".to_owned(), notes],
+        ];
+        let data = table_data(&rows, &[]);
+        assert_eq!(data.wide, vec![false, false, true]);
+        assert!(data.weights[2] > 0.5, "{:?}", data.weights);
+        assert!(data.weights[1] < data.weights[0], "{:?}", data.weights);
+        let short = table_data(
+            &[
+                vec!["Step".to_owned(), "Before".to_owned(), "After".to_owned()],
+                vec!["Import".to_owned(), "94 s".to_owned(), "2.1 s".to_owned()],
+            ],
+            &[],
+        );
+        assert_eq!(short.wide, vec![false, false, false]);
     }
 
     #[test]

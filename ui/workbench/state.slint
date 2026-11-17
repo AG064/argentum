@@ -171,9 +171,11 @@ export global App {
     // Set by touch hosts such as Android. The composer then waits for a tap
     // instead of taking focus, so the on-screen keyboard does not open by itself.
     in-out property <bool> touch_device: false;
-    // A finger is on a wide table that is scrolled away from its left edge, so a
-    // swipe to the right scrolls the table back instead of opening the drawer.
-    in-out property <bool> table_scroll_held: false;
+    // Where on screen a table sits that is scrolled away from its left edge. A
+    // swipe to the right that starts there scrolls the table back instead of
+    // opening the drawer. Empty (top == bottom) when no table is scrolled.
+    in-out property <length> scrolled_table_top: 0px;
+    in-out property <length> scrolled_table_bottom: 0px;
     // Pairing with another device. The host owns the identity and the store;
     // the page only shows state and passes the owner's decisions.
     in-out property <string> device_fingerprint: "";

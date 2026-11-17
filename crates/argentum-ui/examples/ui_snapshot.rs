@@ -37,7 +37,18 @@ const REPLY: &str = "I found the problem. The session store opens a new transact
 
 const DIFF: &str = "diff --git a/src/store.rs b/src/store.rs\n--- a/src/store.rs\n+++ b/src/store.rs\n@@ -41,7 +41,9 @@ pub fn import_sessions(rows: &[Row]) -> Result<()> {\n     let connection = open()?;\n-    for row in rows {\n-        insert_session(&connection, row)?;\n+    let tx = connection.transaction()?;\n+    for row in rows {\n+        insert_session(&tx, row)?;\n     }\n+    tx.commit()?;\n     Ok(())\n }\n";
 
+/// A reply whose table has a column of sentences, as models often write.
+const LONG_NOTES_TABLE: &str = "| Language | Year | Typing | Notes |
+| --- | --- | --- | --- |
+| Python | 1991 | Dynamic | Designed around readability, so it uses indentation instead of braces. Its standard library and package ecosystem are the real reason it dominates data work, though the global interpreter lock limits threads. |
+| Rust | 2015 | Static | Memory safety without a garbage collector, checked at compile time. The borrow checker takes time to learn, and compile times are long, but whole classes of bugs disappear. |
+| Go | 2009 | Static | Small language with fast builds and simple concurrency through goroutines. Generics arrived late, in 1.18, and error handling stays verbose. |";
+
 fn conversation(ui: &UiHandle) {
+    conversation_with(ui, REPLY);
+}
+
+fn conversation_with(ui: &UiHandle, reply: &str) {
     use argentum_domain::{
         ConversationMessage, ConversationMessageStatus, ConversationRole, ModelUsage,
     };
@@ -59,7 +70,7 @@ fn conversation(ui: &UiHandle) {
     };
     let assistant = ConversationMessage {
         role: ConversationRole::Assistant,
-        text: REPLY.into(),
+        text: reply.into(),
         reasoning: "The trace shows one fsync per row, which points at autocommit.".into(),
         usage: Some(ModelUsage {
             input_tokens: 41_200,
@@ -499,6 +510,11 @@ fn scenes() -> Vec<Scene> {
             modules(ui, "full");
             conversation(ui);
             open_panel(ui, SurfaceId::Changes);
+        }),
+        s("51-phone-long-notes-table", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation_with(ui, LONG_NOTES_TABLE);
         }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");

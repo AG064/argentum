@@ -385,14 +385,18 @@ export component Conversation inherits Rectangle {
 
     swipe := SwipeGestureHandler {
         enabled: App.touch_device;
-        handle-swipe-right: root.drawer-swipe && !App.table_scroll_held;
+        // A swipe that starts on a table scrolled away from its left edge belongs
+        // to the table.
+        private property <length> press-y: root.absolute-position.y + self.pressed-position.y;
+        private property <bool> on-scrolled-table: self.press-y >= App.scrolled_table_top && self.press-y < App.scrolled_table_bottom;
+        handle-swipe-right: root.drawer-swipe && !self.on-scrolled-table;
         handle-swipe-down: scroller.at-top;
         private property <length> dx: self.current-position.x - self.pressed-position.x;
         private property <length> dy: self.current-position.y - self.pressed-position.y;
         moved => {
             if self.swiping {
                 if root.gesture == "" {
-                    root.gesture = root.drawer-swipe && !App.table_scroll_held && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer" : "pull";
+                    root.gesture = root.drawer-swipe && !self.on-scrolled-table && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer" : "pull";
                 }
                 if root.gesture == "drawer" {
                     root.drawer-dragged(self.dx);
@@ -402,13 +406,11 @@ export component Conversation inherits Rectangle {
             }
         }
         swiped => {
-            App.table_scroll_held = false;
             if root.gesture == "drawer" { root.drawer-released(self.dx); }
             root.gesture = "";
             root.pull = 0px;
         }
         cancelled => {
-            App.table_scroll_held = false;
             if root.gesture == "drawer" { root.drawer-released(0px); }
             root.gesture = "";
             root.pull = 0px;

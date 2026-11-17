@@ -19,6 +19,8 @@ export struct RichBlockView {
     rows: [TableRowView],
     weights: [float],
     aligns: [int],
+    // Columns whose cells hold sentences. They keep a readable width on a phone.
+    wide: [bool],
 }
 
 export struct PlanStepView {

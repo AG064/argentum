@@ -2652,6 +2652,9 @@ impl UiHandle {
         }
         app.set_queue_paused(false);
         app.set_steer_notice(SharedString::default());
+        // A table from the previous session no longer holds any part of the screen.
+        app.set_scrolled_table_top(0.0);
+        app.set_scrolled_table_bottom(0.0);
         self.window.set_user_prompt(SharedString::default());
         self.window
             .set_conversation_messages(empty_conversation_model());

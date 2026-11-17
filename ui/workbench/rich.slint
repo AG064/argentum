@@ -107,6 +107,21 @@ component TableView inherits Rectangle {
     in property <RichBlockView> block;
     // Wider than the reply, so it scrolls sideways.
     private property <bool> wide: grid.preferred-width > grid-scroll.width + 8px;
+    // While scrolled away from its left edge, the table tells the drawer swipe
+    // where it is on screen, so a right swipe on it scrolls the table back.
+    private property <bool> scrolled: root.wide && grid-scroll.content-x < -1px;
+    private property <length> screen-top: root.absolute-position.y;
+    changed scrolled => { root.publish(); }
+    changed screen-top => { root.publish(); }
+    function publish() {
+        if root.scrolled {
+            App.scrolled_table_top = root.screen-top;
+            App.scrolled_table_bottom = root.screen-top + root.height;
+        } else if App.scrolled_table_top == root.screen-top && App.scrolled_table_bottom == root.screen-top + root.height {
+            App.scrolled_table_top = 0px;
+            App.scrolled_table_bottom = 0px;
+        }
+    }
     border-radius: Theme.r-md;
     border-width: Theme.hair;
     border-color: Theme.border;
@@ -141,19 +156,6 @@ component TableView inherits Rectangle {
             height: parent.height;
             content-width: max(self.width, grid.preferred-width);
             content-height: grid.preferred-height;
-            // Behind the cells: notes where a touch starts, so the drawer swipe
-            // leaves a scrolled table alone. The table scrolls as before.
-            TouchArea {
-                width: grid.preferred-width;
-                height: grid.preferred-height;
-                pointer-event(event) => {
-                    if event.kind == PointerEventKind.down {
-                        App.table_scroll_held = root.wide && grid-scroll.content-x < -1px;
-                    } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
-                        App.table_scroll_held = false;
-                    }
-                }
-            }
             grid := VerticalLayout {
                 alignment: start;
                 for row in block.rows: HorizontalLayout {
@@ -162,9 +164,9 @@ component TableView inherits Rectangle {
                         text: cell;
                         head: row.head;
                         align: block.aligns[column];
-                        // A long text column keeps room for whole words on a
-                        // narrow screen, as if the table were 560 px wide.
-                        column-width: max(104px, grid-scroll.width * block.weights[column], block.weights[column] >= 0.4 ? 560px * block.weights[column] : 0px);
+                        // A column of long text keeps room for whole sentences on a
+                        // narrow screen; the table scrolls sideways instead.
+                        column-width: max(104px, grid-scroll.width * block.weights[column], block.wide[column] ? max(260px, 600px * block.weights[column]) : 0px);
                     }
                 }
             }
