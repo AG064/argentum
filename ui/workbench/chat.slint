@@ -385,14 +385,14 @@ export component Conversation inherits Rectangle {
 
     swipe := SwipeGestureHandler {
         enabled: App.touch_device;
-        handle-swipe-right: root.drawer-swipe;
+        handle-swipe-right: root.drawer-swipe && !App.table_scroll_held;
         handle-swipe-down: scroller.at-top;
         private property <length> dx: self.current-position.x - self.pressed-position.x;
         private property <length> dy: self.current-position.y - self.pressed-position.y;
         moved => {
             if self.swiping {
                 if root.gesture == "" {
-                    root.gesture = root.drawer-swipe && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer" : "pull";
+                    root.gesture = root.drawer-swipe && !App.table_scroll_held && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer" : "pull";
                 }
                 if root.gesture == "drawer" {
                     root.drawer-dragged(self.dx);
@@ -402,11 +402,13 @@ export component Conversation inherits Rectangle {
             }
         }
         swiped => {
+            App.table_scroll_held = false;
             if root.gesture == "drawer" { root.drawer-released(self.dx); }
             root.gesture = "";
             root.pull = 0px;
         }
         cancelled => {
+            App.table_scroll_held = false;
             if root.gesture == "drawer" { root.drawer-released(0px); }
             root.gesture = "";
             root.pull = 0px;

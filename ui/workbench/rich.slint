@@ -2,6 +2,7 @@
 // Copyright (C) 2026 AG064
 // Renders the block model shared by chat Markdown and the reader-mode browser.
 import { Theme } from "theme.slint";
+import { App } from "state.slint";
 import { CopyBtn, Label } from "kit.slint";
 import { RichBlockView, DiffLineView } from "../view-models.slint";
 
@@ -140,6 +141,19 @@ component TableView inherits Rectangle {
             height: parent.height;
             content-width: max(self.width, grid.preferred-width);
             content-height: grid.preferred-height;
+            // Behind the cells: notes where a touch starts, so the drawer swipe
+            // leaves a scrolled table alone. The table scrolls as before.
+            TouchArea {
+                width: grid.preferred-width;
+                height: grid.preferred-height;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        App.table_scroll_held = root.wide && grid-scroll.content-x < -1px;
+                    } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                        App.table_scroll_held = false;
+                    }
+                }
+            }
             grid := VerticalLayout {
                 alignment: start;
                 for row in block.rows: HorizontalLayout {

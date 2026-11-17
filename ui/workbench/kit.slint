@@ -169,7 +169,11 @@ export component Ripple inherits Rectangle {
         // A quick tap still lets the ink spread most of the way before it fades.
         private property <duration> fade-from: max(root.lifted, root.began + Theme.ripple * 0.6);
         private property <float> fade: root.held ? 0 : clamp((animation-tick() - self.fade-from) / Theme.calm, 0, 1);
-        private property <length> reach: (root.width + root.height) * (1 - (1 - self.spread) * (1 - self.spread));
+        // A round button keeps its ink inside its own circle. The software renderer
+        // on Android clips to the rectangle, not the rounded shape, so ink that
+        // grew past the circle showed as a gray square around it.
+        private property <length> reach: (root.centered ? min(root.width, root.height) : root.width + root.height)
+            * (1 - (1 - self.spread) * (1 - self.spread));
         x: root.cx - self.reach / 2;
         y: root.cy - self.reach / 2;
         width: self.reach;
@@ -578,9 +582,18 @@ export component Scroller inherits Rectangle {
 
     private property <bool> tailing: true;
     private property <length> measured: root.content-height;
-    changed measured => {
+    changed measured => { root.settle(); }
+    changed height => { root.settle(); }
+
+    // Follows new content while at the end. Otherwise keeps the view inside the
+    // content: when a long reply is rebuilt while streaming, the content can
+    // shrink under a scrolled view and leave it pointing at empty space, which
+    // looked like the whole conversation had vanished.
+    function settle() {
         if follow-tail && tailing {
             fl.content-y = min(0px, fl.height - fl.content-height);
+        } else {
+            fl.content-y = clamp(fl.content-y, min(0px, fl.height - fl.content-height), 0px);
         }
     }
 
