@@ -32,6 +32,8 @@ The first stable release, for Windows x64 and Android arm64:
   leaves the app.
 - **Phone text fields:** server addresses and model names are not
   auto-capitalized by the keyboard.
+- **Dependencies:** replace the unmaintained chrono crate, used for local reply
+  times, with jiff.
 - **Plan in the terminal:** the stages of the current task in `argentum chat`,
   as the Plan module shows them in the app.
 

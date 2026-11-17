@@ -6,7 +6,13 @@ all-features = true
 version = 2
 unmaintained = "workspace"
 yanked = "deny"
-ignore = []
+# Each exception names its advisory, why it is accepted, and when it ends.
+ignore = [
+    # chrono is unmaintained, with no known vulnerability. Argentum uses it only to
+    # show a reply's local time, on Windows and Android, where the time crate
+    # cannot read the local offset. It is replaced with jiff in 0.1.1.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained, no vulnerability; local reply times only; replaced in 0.1.1" },
+]
 
 [bans]
 multiple-versions = "warn"
