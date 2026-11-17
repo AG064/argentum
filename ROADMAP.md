@@ -25,7 +25,8 @@ The first stable release, for Windows x64 and Android arm64:
 - **Clearer diagnostics:** runs that stop for an approval, and the tokens a
   compaction used, show up in run details and usage totals.
 - **Interface polish:** notices that no longer cover the composer, clearer
-  wording in Settings, and a history of interface changes you can undo.
+  wording in Settings, a history of interface changes you can undo, and long
+  session titles that no longer run into their menu button.
 - **Session list:** each session shows whether it is working, waiting for you,
   unread, and how many files it changed.
 - **Android Back button:** Back closes panels, settings and menus before it
