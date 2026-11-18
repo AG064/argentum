@@ -10,7 +10,7 @@ import { DiffView, RichBlocks } from "rich.slint";
 import { ConversationMessageView, MessageChangeView } from "../view-models.slint";
 import { GoalCard } from "panels.slint";
 
-component UserMessage inherits HorizontalLayout {
+component UserMessage inherits Rectangle {
     in property <string> text;
     // Shown above the text when this message steered a running task.
     in property <string> note: "";
@@ -20,46 +20,121 @@ component UserMessage inherits HorizontalLayout {
     private property <float> shown: root.enter ? 0 : 1;
     init => { root.shown = 1; }
     animate shown { duration: Theme.calm; easing: ease-out; }
-    alignment: end;
-    Rectangle {
-        max-width: parent.width * 0.86;
-        horizontal-stretch: 0;
+
+    // Sized by hand from the wrapped text. In a layout, a long word that wraps
+    // was measured as one line, so its last line ran past the bubble.
+    private property <length> pad-x: Theme.sp14;
+    private property <length> pad-y: Theme.sp9;
+    private property <length> note-indent: Theme.icon-sm + Theme.sp5;
+    private property <length> widest: max(body-measure.preferred-width, root.note != "" ? note-measure.preferred-width + root.note-indent : 0px);
+    private property <length> inner-width: min(root.widest + 1px, root.width * 0.86 - 2 * root.pad-x);
+    private property <length> note-height: root.note != "" ? max(note-text.preferred-height, Theme.icon-sm) + Theme.sp5 : 0px;
+    height: bubble.height;
+
+    body-measure := Text { visible: false; text: root.text; font-size: Theme.fs-md; wrap: no-wrap; }
+    note-measure := Text { visible: false; text: root.note; font-size: Theme.fs-sm; wrap: no-wrap; }
+
+    // A sent message is fixed text. On a phone a tap or a scroll selects
+    // nothing; holding the message copies all of it.
+    private property <bool> holding: false;
+    private property <bool> copied: false;
+
+    bubble := Rectangle {
+        x: root.width - self.width;
+        y: 0;
+        width: root.inner-width + 2 * root.pad-x;
+        height: root.pad-y + root.note-height + body.preferred-height + root.pad-y;
         opacity: root.shown;
         transform-scale: Theme.enter-scale + (1 - Theme.enter-scale) * root.shown;
         transform-origin: { x: self.width, y: self.height };
         border-radius: Theme.r-lg;
         background: Theme.user-bubbles ? Theme.raised : transparent;
         border-width: Theme.user-bubbles ? 0px : Theme.hair;
-        border-color: Theme.border;
-        VerticalLayout {
-            padding-left: Theme.sp14;
-            padding-right: Theme.sp14;
-            padding-top: Theme.sp9;
-            padding-bottom: Theme.sp9;
-            spacing: Theme.sp5;
-            if root.note != "": HorizontalLayout {
-                spacing: Theme.sp5;
-                Icon { name: "chevron-right"; size: Theme.icon-sm; tint: Theme.accent; y: (parent.height - self.height) / 2; }
-                Text {
-                    text: root.note;
-                    color: Theme.text-2;
-                    font-size: Theme.fs-sm;
-                    wrap: word-wrap;
-                    horizontal-stretch: 1;
+        border-color: root.copied ? Theme.accent : Theme.border;
+
+        if root.note != "": Icon {
+            x: root.pad-x;
+            y: root.pad-y + (max(note-text.preferred-height, Theme.icon-sm) - Theme.icon-sm) / 2;
+            name: "chevron-right";
+            size: Theme.icon-sm;
+            tint: Theme.accent;
+        }
+        note-text := Text {
+            visible: root.note != "";
+            x: root.pad-x + root.note-indent;
+            y: root.pad-y;
+            width: root.inner-width - root.note-indent;
+            text: root.note;
+            color: Theme.text-2;
+            font-size: Theme.fs-sm;
+            wrap: word-wrap;
+        }
+        body := Text {
+            visible: App.touch_device;
+            x: root.pad-x;
+            y: root.pad-y + root.note-height;
+            width: root.inner-width;
+            text: root.text;
+            color: Theme.text;
+            font-size: Theme.fs-md;
+            wrap: word-wrap;
+        }
+        // With a mouse, the text can be selected and copied but not changed.
+        if !App.touch_device: TextInput {
+            x: root.pad-x;
+            y: root.pad-y + root.note-height;
+            width: root.inner-width;
+            height: body.preferred-height;
+            text: root.text;
+            read-only: true;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.text;
+            font-size: Theme.fs-md;
+            selection-background-color: Theme.accent.with-alpha(0.4);
+            selection-foreground-color: Theme.text;
+        }
+        if App.touch_device: TouchArea {
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down {
+                    root.holding = true;
+                } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                    root.holding = false;
                 }
             }
-            TextInput {
-                text: root.text;
-                read-only: true;
-                single-line: false;
-                wrap: word-wrap;
-                color: Theme.text;
-                font-size: Theme.fs-md;
-                selection-background-color: Theme.accent.with-alpha(0.4);
-                selection-foreground-color: Theme.text;
+            moved => {
+                if abs(self.mouse-x - self.pressed-x) > 8px || abs(self.mouse-y - self.pressed-y) > 8px {
+                    root.holding = false;
+                }
             }
         }
     }
+    if root.copied: Label {
+        x: bubble.x - self.width - Theme.sp8;
+        y: bubble.height - self.height;
+        text: "Copied";
+        tone: "muted";
+        size: "xs";
+    }
+    Timer {
+        interval: 550ms;
+        running: root.holding;
+        triggered => {
+            root.holding = false;
+            if !App.copy_text(root.text) {
+                buffer.select-all();
+                buffer.copy();
+                buffer.clear-selection();
+            }
+            root.copied = true;
+        }
+    }
+    Timer {
+        interval: 1500ms;
+        running: root.copied;
+        triggered => { root.copied = false; }
+    }
+    buffer := TextInput { visible: false; width: 0px; height: 0px; text: root.text; }
 }
 
 component ReasoningDisclosure inherits VerticalLayout {

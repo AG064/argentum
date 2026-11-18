@@ -516,6 +516,34 @@ fn scenes() -> Vec<Scene> {
             modules(ui, "standard");
             conversation_with(ui, LONG_NOTES_TABLE);
         }),
+        s("52-phone-sent-messages", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_running(true);
+            ui.window().set_run_state("Running".into());
+            ui.window()
+                .set_user_prompt("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+            ui.window()
+                .global::<App>()
+                .set_live_steers(ModelRc::new(VecModel::from(vec![
+                    argentum_ui::SteerNoteView {
+                        run_id: "".into(),
+                        entry_id: "".into(),
+                        text: "Keep it short".into(),
+                        note: "Steering. Added to the run.".into(),
+                    },
+                ])));
+        }),
+        s("53-desktop-sent-messages", D, |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            ui.window().set_running(true);
+            ui.window().set_run_state("Running".into());
+            ui.window().set_user_prompt(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            );
+        }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");
             conversation(ui);
