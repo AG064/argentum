@@ -49,6 +49,14 @@ fn conversation(ui: &UiHandle) {
 }
 
 fn conversation_with(ui: &UiHandle, reply: &str) {
+    conversation_full(
+        ui,
+        reply,
+        "The trace shows one fsync per row, which points at autocommit.",
+    );
+}
+
+fn conversation_full(ui: &UiHandle, reply: &str, reasoning: &str) {
     use argentum_domain::{
         ConversationMessage, ConversationMessageStatus, ConversationRole, ModelUsage,
     };
@@ -71,7 +79,7 @@ fn conversation_with(ui: &UiHandle, reply: &str) {
     let assistant = ConversationMessage {
         role: ConversationRole::Assistant,
         text: reply.into(),
-        reasoning: "The trace shows one fsync per row, which points at autocommit.".into(),
+        reasoning: reasoning.into(),
         usage: Some(ModelUsage {
             input_tokens: 41_200,
             output_tokens: 610,
@@ -543,6 +551,18 @@ fn scenes() -> Vec<Scene> {
             ui.window().set_user_prompt(
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
             );
+        }),
+        s("54-phone-reply-steps", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            let first = "I will check the import loop first.";
+            let reply =
+                format!("{first}The loop opens one transaction per row. Batching them fixes it.");
+            let reasoning = format!(
+                "The user reports slow imports. Look at the store first.{}The trace shows one fsync per row.",
+                argentum_domain::reply_steps::step_start(first.len())
+            );
+            conversation_full(ui, &reply, &reasoning);
         }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");

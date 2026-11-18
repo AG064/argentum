@@ -19,6 +19,8 @@ pub mod desktop;
 pub mod extensions;
 pub mod final_result;
 pub mod goal_accounting;
+pub mod reply_steps;
+pub use reply_steps::{REASONING_STEP_BREAK, REASONING_STEP_MARK};
 pub mod goal_supervision;
 pub mod process_job_contract;
 pub mod recovery;
@@ -1126,11 +1128,6 @@ pub struct SessionListQuery {
 
 pub const SESSION_FORK_WARNING: &str =
     "This forks conversation context only. Workspace files are shared and are not restored or copied.";
-/// Separates the reasoning of one model step from the next in a run's shown
-/// reasoning, so each step gets its own thinking block. Only the shown copy
-/// carries it; reasoning sent back to a provider never does.
-pub const REASONING_STEP_BREAK: &str = "\n\n\u{2063}\n\n";
-pub const REASONING_STEP_MARK: char = '\u{2063}';
 
 pub const MAX_SESSION_FORK_SOURCES: usize = 128;
 pub const MAX_SESSION_FORK_MESSAGES: usize = 200;

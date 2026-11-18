@@ -77,6 +77,13 @@ export struct SteerNoteView {
     note: string,
 }
 
+// One model step of a reply: its thinking, then the answer it wrote.
+export struct ReplyStepView {
+    reasoning: string,
+    title: string,
+    blocks: [RichBlockView],
+}
+
 export struct ConversationMessageView {
     role: string,
     // Set on a user message that steered a running task: what became of it.
@@ -88,8 +95,9 @@ export struct ConversationMessageView {
     changes: [MessageChangeView],
     text: string,
     reasoning: string,
-    // The reasoning split by model step, one thinking block each.
-    reasoning_steps: [string],
+    // The reply in the order it was written: each step's thinking, then
+    // that step's answer.
+    segments: [ReplyStepView],
     reasoning_available: bool,
     provider_label: string,
     model: string,

@@ -564,7 +564,9 @@ impl TuiState {
                         run_id: Some(message.run_id),
                         tool_call_id: None,
                         text: bounded_text(&message.text),
-                        detail: bounded_text(&message.reasoning),
+                        detail: bounded_text(&argentum_domain::reply_steps::plain_reasoning(
+                            &message.reasoning,
+                        )),
                         state: format!("{:?}", message.status).to_lowercase(),
                     })
                     .collect();
@@ -705,6 +707,13 @@ impl TuiState {
                 if self.active_run_id != Some(run_id) && self.active_session_id.is_some() {
                     return;
                 }
+                // The app splits a reply into steps; the terminal shows the
+                // thinking as plain text.
+                let text = if text.contains(argentum_domain::REASONING_STEP_MARK) {
+                    argentum_domain::reply_steps::plain_reasoning(&text)
+                } else {
+                    text
+                };
                 self.transcript_changed();
                 if let Some(entry) = self.timeline.iter_mut().rev().find(|entry| {
                     entry.run_id == Some(run_id) && entry.kind == TimelineKind::Assistant

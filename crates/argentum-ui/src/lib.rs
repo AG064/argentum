@@ -495,10 +495,7 @@ impl UiHandle {
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
-                sync_reasoning_steps(
-                    &self.window.global::<App>().get_current_reasoning_steps(),
-                    "",
-                );
+                clear_live_segments(&self.window.global::<App>());
                 self.window.set_current_reasoning_available(false);
                 self.window
                     .set_current_run_provider_label(SharedString::default());
@@ -765,10 +762,7 @@ impl UiHandle {
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
-                sync_reasoning_steps(
-                    &self.window.global::<App>().get_current_reasoning_steps(),
-                    "",
-                );
+                clear_live_segments(&self.window.global::<App>());
                 self.window.set_current_reasoning_available(false);
                 self.window
                     .set_current_run_provider_label(self.window.get_provider_label());
@@ -2749,10 +2743,7 @@ impl UiHandle {
         self.window.set_transcript(SharedString::default());
         self.window.set_live_blocks(ModelRc::default());
         self.window.set_current_reasoning(SharedString::default());
-        sync_reasoning_steps(
-            &self.window.global::<App>().get_current_reasoning_steps(),
-            "",
-        );
+        clear_live_segments(&self.window.global::<App>());
         self.window.set_current_reasoning_available(false);
         self.window
             .set_current_run_provider_label(SharedString::default());
@@ -3043,10 +3034,7 @@ impl UiHandle {
 
     fn reset_current_model_context(&self) {
         self.window.set_current_reasoning(SharedString::default());
-        sync_reasoning_steps(
-            &self.window.global::<App>().get_current_reasoning_steps(),
-            "",
-        );
+        clear_live_segments(&self.window.global::<App>());
         self.window.set_current_reasoning_available(false);
         self.window
             .set_current_run_provider_label(SharedString::default());
@@ -3356,10 +3344,111 @@ impl UiHandle {
             self.window
                 .set_live_blocks(ModelRc::new(VecModel::from(blocks)));
         }
-        sync_reasoning_steps(
-            &self.window.global::<App>().get_current_reasoning_steps(),
-            &self.window.get_current_reasoning(),
+        sync_live_segments(
+            &self.window.global::<App>().get_live_segments(),
+            reply_step_rows(
+                &self.window.get_current_reasoning(),
+                &self.window.get_transcript(),
+                true,
+            ),
         );
+    }
+}
+
+fn clear_live_segments(app: &App<'_>) {
+    if let Some(rows) = app
+        .get_live_segments()
+        .as_any()
+        .downcast_ref::<VecModel<ReplyStepView>>()
+    {
+        rows.set_vec(Vec::new());
+    }
+}
+
+/// One model step ready to show: its thinking, the title of that thinking
+/// block, and its answer text.
+struct StepRow {
+    reasoning: String,
+    title: String,
+    answer: String,
+}
+
+/// A reply as its model steps, in the order they were written. Thinking a
+/// model wrote inside `<think>` tags in its answer moves to that step's
+/// thinking block.
+fn reply_step_rows(reasoning: &str, text: &str, live: bool) -> Vec<StepRow> {
+    let steps =
+        argentum_domain::reply_steps::reply_steps(&without_reasoning_markers(reasoning), text);
+    let mut rows = steps
+        .into_iter()
+        .map(|step| {
+            let (answer, tagged) = split_tagged_reasoning(&step.answer);
+            let mut reasoning = step.reasoning;
+            if !tagged.is_empty() && !reasoning.contains(&tagged) {
+                if !reasoning.is_empty() {
+                    reasoning.push_str("\n\n");
+                }
+                reasoning.push_str(&tagged);
+            }
+            StepRow {
+                reasoning,
+                title: String::new(),
+                answer: answer.trim().to_owned(),
+            }
+        })
+        .filter(|row| !row.reasoning.is_empty() || !row.answer.is_empty())
+        .collect::<Vec<_>>();
+    let thinking = rows.iter().filter(|row| !row.reasoning.is_empty()).count();
+    let label = if live { "Thinking" } else { "Thought process" };
+    let mut number = 0;
+    for row in &mut rows {
+        if row.reasoning.is_empty() {
+            continue;
+        }
+        number += 1;
+        row.title = if thinking > 1 {
+            format!("{label}, step {number}")
+        } else {
+            label.to_owned()
+        };
+    }
+    rows
+}
+
+/// Brings the live steps up to the reply so far. A step that is still the
+/// same keeps its row and its blocks, so a long reply does not rebuild what
+/// has already settled.
+fn sync_live_segments(model: &ModelRc<ReplyStepView>, rows: Vec<StepRow>) {
+    let Some(live) = model.as_any().downcast_ref::<VecModel<ReplyStepView>>() else {
+        return;
+    };
+    let fresh = |row: &StepRow| ReplyStepView {
+        reasoning: row.reasoning.clone().into(),
+        title: row.title.clone().into(),
+        blocks: ModelRc::new(VecModel::from(markdown::parse(&row.answer))),
+    };
+    if rows.len() < live.row_count() {
+        live.set_vec(rows.iter().map(fresh).collect::<Vec<_>>());
+        return;
+    }
+    for (index, row) in rows.iter().enumerate() {
+        let Some(mut current) = live.row_data(index) else {
+            live.push(fresh(row));
+            continue;
+        };
+        match current
+            .blocks
+            .as_any()
+            .downcast_ref::<VecModel<RichBlockView>>()
+        {
+            Some(blocks) => sync_live_blocks(blocks, markdown::parse(&row.answer)),
+            None => current.blocks = fresh(row).blocks,
+        }
+        if current.reasoning != row.reasoning.as_str() || current.title != row.title.as_str() {
+            current.reasoning = row.reasoning.clone().into();
+            current.title = row.title.clone().into();
+            live.set_row_data(index, current);
+        }
     }
 }
 
@@ -3685,19 +3774,27 @@ fn conversation_message_view(
     {
         {
             let usage = message.usage.as_ref();
-            let (text, tagged_reasoning) = match message.role {
-                ConversationRole::User => (message.text.clone(), String::new()),
-                ConversationRole::Assistant => split_tagged_reasoning(&message.text),
-            };
-            let mut reasoning = without_reasoning_markers(&message.reasoning);
-            if !tagged_reasoning.is_empty() && !reasoning.contains(&tagged_reasoning) {
-                if !reasoning.is_empty() {
-                    reasoning.push_str(argentum_domain::REASONING_STEP_BREAK);
+            let rows = match message.role {
+                ConversationRole::User => Vec::new(),
+                ConversationRole::Assistant => {
+                    reply_step_rows(&message.reasoning, &message.text, false)
                 }
-                reasoning.push_str(&tagged_reasoning);
-            }
-            let thoughts = reasoning_steps(&reasoning);
-            let reasoning = thoughts.join("\n\n");
+            };
+            let text = match message.role {
+                ConversationRole::User => message.text.clone(),
+                ConversationRole::Assistant => rows
+                    .iter()
+                    .map(|row| row.answer.as_str())
+                    .filter(|answer| !answer.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            };
+            let reasoning = rows
+                .iter()
+                .map(|row| row.reasoning.as_str())
+                .filter(|reasoning| !reasoning.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
             let empty = activity::RunActivity::default();
             let activity = if message.role == ConversationRole::Assistant {
                 steps.get(&message.run_id).unwrap_or(&empty)
@@ -3719,10 +3816,13 @@ fn conversation_message_view(
                 blocks: markdown::model(&text),
                 text: text.into(),
                 reasoning: reasoning.clone().into(),
-                reasoning_steps: ModelRc::new(VecModel::from(
-                    thoughts
-                        .into_iter()
-                        .map(SharedString::from)
+                segments: ModelRc::new(VecModel::from(
+                    rows.iter()
+                        .map(|row| ReplyStepView {
+                            reasoning: row.reasoning.clone().into(),
+                            title: row.title.clone().into(),
+                            blocks: markdown::model(&row.answer),
+                        })
                         .collect::<Vec<_>>(),
                 )),
                 reasoning_available: message.role == ConversationRole::Assistant
@@ -3820,42 +3920,6 @@ fn split_tagged_reasoning(text: &str) -> (String, String) {
     }
     visible.push_str(&remaining.replace(CLOSE, ""));
     (visible, reasoning)
-}
-
-/// Reasoning split at each model step, without empty steps.
-fn reasoning_steps(text: &str) -> Vec<String> {
-    text.split(argentum_domain::REASONING_STEP_MARK)
-        .map(str::trim)
-        .filter(|step| !step.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
-/// Brings the live thinking blocks up to date, touching only the blocks
-/// that changed, so a streaming step does not rebuild the earlier ones.
-fn sync_reasoning_steps(model: &ModelRc<SharedString>, text: &str) {
-    let Some(rows) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
-        return;
-    };
-    let steps = reasoning_steps(text);
-    if steps.len() < rows.row_count() {
-        rows.set_vec(
-            steps
-                .into_iter()
-                .map(SharedString::from)
-                .collect::<Vec<_>>(),
-        );
-        return;
-    }
-    for (index, step) in steps.into_iter().enumerate() {
-        if index < rows.row_count() {
-            if rows.row_data(index).is_some_and(|row| row != step.as_str()) {
-                rows.set_row_data(index, step.into());
-            }
-        } else {
-            rows.push(step.into());
-        }
-    }
 }
 
 fn without_reasoning_markers(text: &str) -> String {
@@ -5109,7 +5173,7 @@ where
         .set_live_steers(ModelRc::new(VecModel::<SteerNoteView>::default()));
     window
         .global::<App>()
-        .set_current_reasoning_steps(ModelRc::new(VecModel::<SharedString>::default()));
+        .set_live_segments(ModelRc::new(VecModel::<ReplyStepView>::default()));
 
     // Follow-ups typed during a run wait here, in memory, and are sent in order.
     let queue = Rc::new(VecModel::<SharedString>::default());
@@ -7494,6 +7558,59 @@ Second grows
         sync_live_blocks(&rows, markdown::parse("Only"));
         assert_eq!(rows.row_count(), 1);
         assert_eq!(rows.row_data(0).expect("only").text, "Only");
+    }
+
+    #[test]
+    fn reply_steps_alternate_thinking_and_answers() {
+        use argentum_domain::reply_steps::step_start;
+        let text = "Here is your answer.Actually, here is your answer.";
+        let reasoning = format!("First{}Second", step_start(20));
+        let rows = reply_step_rows(&reasoning, text, false)
+            .into_iter()
+            .map(|row| (row.title, row.reasoning, row.answer))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            [
+                (
+                    "Thought process, step 1".to_owned(),
+                    "First".to_owned(),
+                    "Here is your answer.".to_owned()
+                ),
+                (
+                    "Thought process, step 2".to_owned(),
+                    "Second".to_owned(),
+                    "Actually, here is your answer.".to_owned()
+                ),
+            ]
+        );
+        // Thinking written in tags inside an answer joins that step's block.
+        let rows = reply_step_rows("", "<think>Plan</think>Done.", true);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            (rows[0].title.as_str(), rows[0].reasoning.as_str()),
+            ("Thinking", "Plan")
+        );
+        assert_eq!(rows[0].answer, "Done.");
+    }
+
+    #[test]
+    fn live_steps_keep_settled_rows() {
+        use argentum_domain::reply_steps::step_start;
+        let live: ModelRc<ReplyStepView> = ModelRc::new(VecModel::<ReplyStepView>::default());
+        sync_live_segments(&live, reply_step_rows("Plan", "One.", true));
+        assert_eq!(live.row_count(), 1);
+        let first = live.row_data(0).expect("first step");
+        let reasoning = format!("Plan{}Check", step_start(4));
+        sync_live_segments(&live, reply_step_rows(&reasoning, "One.Two.", true));
+        assert_eq!(live.row_count(), 2);
+        // The first step kept its blocks model, so its blocks were not rebuilt.
+        let still = live.row_data(0).expect("first step");
+        assert!(still.blocks == first.blocks);
+        assert_eq!(still.title, "Thinking, step 1");
+        assert_eq!(live.row_data(1).expect("second").reasoning, "Check");
+        sync_live_segments(&live, Vec::new());
+        assert_eq!(live.row_count(), 0);
     }
 
     #[test]

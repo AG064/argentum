@@ -5638,19 +5638,25 @@ impl RuntimeService {
             Err(RuntimeError::ToolLoopLimit)
         }
         .await;
-        (
-            result,
+        (result, {
+            let text = terminal_answer.map_or_else(
+                || stream.assistant_text.clone(),
+                |answer| join_round_text(earlier_rounds_text, answer),
+            );
+            let reasoning = argentum_domain::reply_steps::remap_step_anchors(
+                &stream.assistant_reasoning,
+                &stream.assistant_text,
+                &text,
+            );
             RunOutput {
-                text: terminal_answer.map_or(stream.assistant_text, |answer| {
-                    join_round_text(earlier_rounds_text, answer)
-                }),
-                reasoning: stream.assistant_reasoning,
+                text,
+                reasoning,
                 usage: stream.latest_usage.map(|mut usage| {
                     usage.turn_total = Some(stream.turn_total);
                     usage
                 }),
-            },
-        )
+            }
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -5681,6 +5687,25 @@ impl RuntimeService {
         let mut receiver_open = true;
         let mut cancellation_seen = false;
         let mut round = ModelRoundState::default();
+        // A later model step opens its own block in the chat: its thinking,
+        // then the answer it writes, which starts where the text is now.
+        // Only the shown reasoning carries this; providers never see it.
+        if !stream.assistant_text.is_empty() || !stream.assistant_reasoning.is_empty() {
+            let start = argentum_domain::reply_steps::step_start(stream.assistant_text.len());
+            append_bounded_fragment(
+                &mut stream.assistant_reasoning,
+                &mut stream.reasoning_bytes,
+                &start,
+                MAX_VISIBLE_REASONING_BYTES,
+                "provider reasoning exceeded the safety limit",
+            )?;
+            if publish_deltas {
+                self.publish_transient(AppEvent::AssistantReasoningDelta {
+                    run_id: context.run_id,
+                    text: start,
+                });
+            }
+        }
 
         loop {
             tokio::select! {
@@ -5842,17 +5867,10 @@ impl RuntimeService {
                 }
             }
             ProviderEvent::ReasoningDelta(delta) if !round.completed => {
-                // A later model step starts its own thinking block in the chat.
-                let shown = if round.reasoning.is_empty() && !stream.assistant_reasoning.is_empty()
-                {
-                    format!("{}{delta}", argentum_domain::REASONING_STEP_BREAK)
-                } else {
-                    delta.clone()
-                };
                 append_bounded_fragment(
                     &mut stream.assistant_reasoning,
                     &mut stream.reasoning_bytes,
-                    &shown,
+                    &delta,
                     MAX_VISIBLE_REASONING_BYTES,
                     "provider reasoning exceeded the safety limit",
                 )?;
@@ -5860,7 +5878,7 @@ impl RuntimeService {
                 if publish_deltas {
                     self.publish_transient(AppEvent::AssistantReasoningDelta {
                         run_id: context.run_id,
-                        text: shown,
+                        text: delta,
                     });
                 }
             }

@@ -242,6 +242,8 @@ component ReasoningDisclosure inherits VerticalLayout {
             y: Theme.sp6;
             width: parent.width - self.x;
             text: root.open || root.folding ? root.text : "";
+            // Fixed on a phone, so a scroll over the steps selects nothing.
+            enabled: !App.touch_device;
             read-only: true;
             single-line: false;
             wrap: word-wrap;
@@ -373,13 +375,6 @@ component AssistantMessage inherits Rectangle {
     hover := TouchArea { enabled: true; mouse-cursor: default; }
     VerticalLayout {
         spacing: Theme.sp7;
-        if Mods.reasoning && message.reasoning-available: VerticalLayout {
-            spacing: Theme.sp7;
-            for step[index] in message.reasoning-steps: ReasoningDisclosure {
-                text: step;
-                title: message.reasoning-steps.length > 1 ? "Thought process, step \{index + 1}" : "Thought process";
-            }
-        }
         if Mods.reasoning && message.steps != "": ReasoningDisclosure {
             text: message.steps;
             title: message.steps-title != "" ? message.steps-title : "Steps";
@@ -387,9 +382,17 @@ component AssistantMessage inherits Rectangle {
             removals: message.removals;
         }
         if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
-        if !root.selecting: RichBlocks {
-            blocks: message.blocks;
-            link(url) => { App.open_link(url); }
+        // In the order it was written: each step's thinking, then its answer.
+        if !root.selecting: VerticalLayout {
+            spacing: Theme.sp7;
+            for step in message.segments: VerticalLayout {
+                spacing: Theme.sp7;
+                if Mods.reasoning && step.reasoning != "": ReasoningDisclosure { text: step.reasoning; title: step.title; }
+                if step.blocks.length > 0: RichBlocks {
+                    blocks: step.blocks;
+                    link(url) => { App.open_link(url); }
+                }
+            }
         }
         if root.selecting: SelectableReply { text: message.text; done => { root.selecting = false; } }
         if message.state == "Interrupted" || message.state == "Failed": Label {
@@ -405,7 +408,8 @@ component AssistantMessage inherits Rectangle {
             opacity: App.touch_device || hover.has-hover || root.selecting ? 1 : 0;
             animate opacity { duration: Theme.quick; }
             CopyBtn { text: message.text; tip: "Copy response"; }
-            if !root.selecting: IconBtn {
+            // On a phone replies are copied whole, so there is no select mode.
+            if !root.selecting && !App.touch_device: IconBtn {
                 size: Theme.control - 6px;
                 glyph: Theme.icon-sm;
                 icon: "text-cursor-input";
@@ -430,16 +434,6 @@ component LiveTurn inherits VerticalLayout {
     animate shown { duration: Theme.calm; easing: ease-out; }
     opacity: root.shown;
     spacing: Theme.sp8;
-    // One block per model step. Only the newest stays open while it streams.
-    if Mods.reasoning && App.current_reasoning_available: VerticalLayout {
-        spacing: Theme.sp8;
-        for step[index] in App.current_reasoning_steps: ReasoningDisclosure {
-            text: step;
-            live: App.running && index == App.current_reasoning_steps.length - 1;
-            enter: true;
-            title: App.current_reasoning_steps.length > 1 ? "Thinking, step \{index + 1}" : "Thinking";
-        }
-    }
     if Mods.reasoning && App.live_steps != "": ReasoningDisclosure {
         text: App.live_steps;
         live: App.running;
@@ -449,9 +443,23 @@ component LiveTurn inherits VerticalLayout {
         removals: App.live_removals;
     }
     if Mods.reasoning && App.live_changes.length > 0: ChangedFiles { changes: App.live_changes; }
-    RichBlocks {
-        blocks: App.live_blocks;
-        link(url) => { App.open_link(url); }
+    // Each model step in turn: its thinking, then its answer. Only the newest
+    // thinking stays open while it streams.
+    VerticalLayout {
+        spacing: Theme.sp8;
+        for step[index] in App.live_segments: VerticalLayout {
+            spacing: Theme.sp8;
+            if Mods.reasoning && step.reasoning != "": ReasoningDisclosure {
+                text: step.reasoning;
+                live: App.running && index == App.live_segments.length - 1;
+                enter: true;
+                title: step.title;
+            }
+            if step.blocks.length > 0: RichBlocks {
+                blocks: step.blocks;
+                link(url) => { App.open_link(url); }
+            }
+        }
     }
     if App.running: HorizontalLayout {
         spacing: Theme.sp8;

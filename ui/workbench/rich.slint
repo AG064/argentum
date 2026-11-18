@@ -23,6 +23,9 @@ component Paragraph inherits VerticalLayout {
     }
     if !block.rich: TextInput {
         text: block.text;
+        // On a phone a scroll must not start a selection, so reply text is
+        // fixed there; the message's Copy button copies it.
+        enabled: !App.touch_device;
         read-only: true;
         single-line: false;
         wrap: word-wrap;
@@ -62,6 +65,8 @@ component CodeBlock inherits Rectangle {
             padding: Theme.sp12;
             TextInput {
                 text: block.text;
+                // Fixed on a phone, like reply text. Copy code copies it.
+                enabled: !App.touch_device;
                 read-only: true;
                 single-line: false;
                 wrap: word-wrap;
