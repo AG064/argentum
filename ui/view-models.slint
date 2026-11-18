@@ -69,8 +69,18 @@ export struct MessageChangeView {
     removals: int,
 }
 
+// A note sent while a run works. The run and entry ids are for the app only.
+export struct SteerNoteView {
+    run_id: string,
+    entry_id: string,
+    text: string,
+    note: string,
+}
+
 export struct ConversationMessageView {
     role: string,
+    // Set on a user message that steered a running task: what became of it.
+    note: string,
     steps: string,
     steps_title: string,
     additions: int,
@@ -78,6 +88,8 @@ export struct ConversationMessageView {
     changes: [MessageChangeView],
     text: string,
     reasoning: string,
+    // The reasoning split by model step, one thinking block each.
+    reasoning_steps: [string],
     reasoning_available: bool,
     provider_label: string,
     model: string,

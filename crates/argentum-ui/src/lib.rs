@@ -59,12 +59,36 @@ const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 thread_local! {
     static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
+    /// Where wide tables sit on screen, by table text, for the swipe axis lock.
+    static WIDE_TABLES: RefCell<WideTables> = const { RefCell::new(WideTables(Vec::new())) };
     static DEFERRED: RefCell<DeferredCommands> = const {
         RefCell::new(DeferredCommands {
             dispatch: None,
             after_profile: Vec::new(),
         })
     };
+}
+
+/// Screen bands of the tables wider than their reply, so the chat's swipe
+/// handler can tell at once whether a swipe started on one.
+struct WideTables(Vec<(SharedString, f32, f32)>);
+
+impl WideTables {
+    fn report(&mut self, key: SharedString, top: f32, bottom: f32, wide: bool) {
+        // A table keeps its place while its text streams in, so a band at the
+        // same top is the same table with an older key.
+        self.0
+            .retain(|(old, old_top, _)| *old != key && (old_top - top).abs() >= 1.0);
+        if wide && bottom > top {
+            self.0.push((key, top, bottom));
+        }
+    }
+
+    fn at(&self, y: f32) -> bool {
+        self.0
+            .iter()
+            .any(|(_, top, bottom)| y >= *top && y < *bottom)
+    }
 }
 
 /// Commands that must wait for a provider profile to exist. The host runs
@@ -131,7 +155,14 @@ struct ProjectionState {
     /// covers the whole screen, so the app starts on the conversation and a
     /// panel opens only when asked.
     touch_layout_seen: bool,
+    /// A redraw of the streaming reply is already scheduled.
+    live_redraw_pending: bool,
 }
+
+/// How often a streaming reply is redrawn at most. Chunks in between only
+/// add text, so a fast model cannot queue more layout work than the screen
+/// can show, and touch input keeps its turn on the UI thread.
+const LIVE_REDRAW_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 
 impl UiHandle {
     pub fn new() -> Result<Self, slint::PlatformError> {
@@ -337,6 +368,7 @@ impl UiHandle {
             }
             AppEvent::SteeringChanged(status) => {
                 if self.run_targets_active_session(status.run_id) {
+                    update_live_steer(&self.window.global::<App>(), status);
                     self.window.global::<App>().set_steer_notice(
                         match status.lifecycle {
                             argentum_domain::SteeringLifecycle::Pending => {
@@ -413,7 +445,27 @@ impl UiHandle {
                         .set_conversation_messages(conversation_message_model_with_steps(
                             &snapshot.messages,
                             &steps,
+                            &snapshot.steering,
                         ));
+                    let app = self.window.global::<App>();
+                    if let Some(live) = app
+                        .get_live_steers()
+                        .as_any()
+                        .downcast_ref::<VecModel<SteerNoteView>>()
+                    {
+                        let stored = snapshot
+                            .steering
+                            .iter()
+                            .map(|note| note.entry_id.as_str())
+                            .collect::<std::collections::HashSet<_>>();
+                        let kept = live
+                            .iter()
+                            .filter(|note| !stored.contains(note.entry_id.as_str()))
+                            .collect::<Vec<_>>();
+                        if kept.len() != live.row_count() {
+                            live.set_vec(kept);
+                        }
+                    }
                     self.window
                         .global::<App>()
                         .set_session_tokens_used(saturating_i32_u64(session_tokens_used(
@@ -443,6 +495,10 @@ impl UiHandle {
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
+                sync_reasoning_steps(
+                    &self.window.global::<App>().get_current_reasoning_steps(),
+                    "",
+                );
                 self.window.set_current_reasoning_available(false);
                 self.window
                     .set_current_run_provider_label(SharedString::default());
@@ -709,6 +765,10 @@ impl UiHandle {
                 self.window.set_transcript(SharedString::default());
                 self.window.set_live_blocks(ModelRc::default());
                 self.window.set_current_reasoning(SharedString::default());
+                sync_reasoning_steps(
+                    &self.window.global::<App>().get_current_reasoning_steps(),
+                    "",
+                );
                 self.window.set_current_reasoning_available(false);
                 self.window
                     .set_current_run_provider_label(self.window.get_provider_label());
@@ -745,9 +805,9 @@ impl UiHandle {
                 self.window.set_active_run_id(run_id.to_string().into());
                 let mut transcript = self.window.get_transcript().to_string();
                 transcript.push_str(text);
-                self.window.set_live_blocks(markdown::model(&transcript));
                 self.window.set_transcript(transcript.into());
                 self.window.set_error_message(SharedString::default());
+                self.schedule_live_redraw();
             }
             AppEvent::AssistantReasoningDelta { run_id, text } => {
                 if !self.run_targets_active_session(*run_id) {
@@ -756,9 +816,10 @@ impl UiHandle {
                 self.window.set_active_run_id(run_id.to_string().into());
                 let mut reasoning = self.window.get_current_reasoning().to_string();
                 reasoning.push_str(text);
-                self.window
-                    .set_current_reasoning(without_reasoning_markers(&reasoning).into());
+                let reasoning = without_reasoning_markers(&reasoning);
+                self.window.set_current_reasoning(reasoning.into());
                 self.window.set_current_reasoning_available(true);
+                self.schedule_live_redraw();
                 self.window.set_error_message(SharedString::default());
             }
             AppEvent::ModelUsageUpdated {
@@ -1873,6 +1934,25 @@ impl UiHandle {
 
     pub fn apply_command_failure(&self, command: &AppCommand, message: &str) {
         match command {
+            AppCommand::SteerRun { run_id, .. } => {
+                // The runtime refused the note, so it never reached the run.
+                let app = self.window.global::<App>();
+                let model = app.get_live_steers();
+                if let Some(live) = model.as_any().downcast_ref::<VecModel<SteerNoteView>>() {
+                    let run_id = run_id.to_string();
+                    if let Some(row) = (0..live.row_count()).rev().find(|&row| {
+                        live.row_data(row).is_some_and(|note| {
+                            note.entry_id.is_empty() && note.run_id == run_id.as_str()
+                        })
+                    }) {
+                        if let Some(mut note) = live.row_data(row) {
+                            note.note = format!("Not added. {}", present_error(message)).into();
+                            live.set_row_data(row, note);
+                        }
+                    }
+                }
+                app.set_steer_notice(SharedString::default());
+            }
             AppCommand::SaveProviderBudget { .. } | AppCommand::ResetProviderBudget { .. } => {
                 self.window.set_provider_budget_pending(false);
                 self.window
@@ -2652,9 +2732,12 @@ impl UiHandle {
         }
         app.set_queue_paused(false);
         app.set_steer_notice(SharedString::default());
+        clear_live_steers(&app);
         // A table from the previous session no longer holds any part of the screen.
         app.set_scrolled_table_top(0.0);
         app.set_scrolled_table_bottom(0.0);
+        WIDE_TABLES.with(|tables| tables.borrow_mut().0.clear());
+        app.set_table_pan_active(false);
         self.window.set_user_prompt(SharedString::default());
         self.window
             .set_conversation_messages(empty_conversation_model());
@@ -2666,6 +2749,10 @@ impl UiHandle {
         self.window.set_transcript(SharedString::default());
         self.window.set_live_blocks(ModelRc::default());
         self.window.set_current_reasoning(SharedString::default());
+        sync_reasoning_steps(
+            &self.window.global::<App>().get_current_reasoning_steps(),
+            "",
+        );
         self.window.set_current_reasoning_available(false);
         self.window
             .set_current_run_provider_label(SharedString::default());
@@ -2956,6 +3043,10 @@ impl UiHandle {
 
     fn reset_current_model_context(&self) {
         self.window.set_current_reasoning(SharedString::default());
+        sync_reasoning_steps(
+            &self.window.global::<App>().get_current_reasoning_steps(),
+            "",
+        );
         self.window.set_current_reasoning_available(false);
         self.window
             .set_current_run_provider_label(SharedString::default());
@@ -3233,6 +3324,74 @@ impl UiHandle {
     }
 }
 
+impl UiHandle {
+    fn schedule_live_redraw(&self) {
+        {
+            let mut projection = self.projection();
+            if projection.live_redraw_pending {
+                return;
+            }
+            projection.live_redraw_pending = true;
+        }
+        let weak = WeakUiHandle {
+            window: self.window.as_weak(),
+            projection: self.projection.clone(),
+        };
+        slint::Timer::single_shot(LIVE_REDRAW_INTERVAL, move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.redraw_live();
+            }
+        });
+    }
+
+    /// Brings the streaming reply and its thinking blocks up to the text
+    /// received so far, rebuilding only the blocks that changed.
+    fn redraw_live(&self) {
+        self.projection().live_redraw_pending = false;
+        let blocks = markdown::parse(&self.window.get_transcript());
+        let current = self.window.get_live_blocks();
+        if let Some(rows) = current.as_any().downcast_ref::<VecModel<RichBlockView>>() {
+            sync_live_blocks(rows, blocks);
+        } else if !blocks.is_empty() {
+            self.window
+                .set_live_blocks(ModelRc::new(VecModel::from(blocks)));
+        }
+        sync_reasoning_steps(
+            &self.window.global::<App>().get_current_reasoning_steps(),
+            &self.window.get_current_reasoning(),
+        );
+    }
+}
+
+/// Two parses of a block are the same block when what it shows is the same.
+/// Nested models compare by identity, so whole structs never compare equal.
+fn same_block(left: &RichBlockView, right: &RichBlockView) -> bool {
+    left.kind == right.kind
+        && left.text == right.text
+        && left.depth == right.depth
+        && left.marker == right.marker
+        && left.lang == right.lang
+}
+
+fn sync_live_blocks(rows: &VecModel<RichBlockView>, blocks: Vec<RichBlockView>) {
+    if blocks.len() < rows.row_count() {
+        rows.set_vec(blocks);
+        return;
+    }
+    for (index, block) in blocks.into_iter().enumerate() {
+        if index < rows.row_count() {
+            if !rows
+                .row_data(index)
+                .is_some_and(|row| same_block(&row, &block))
+            {
+                rows.set_row_data(index, block);
+            }
+        } else {
+            rows.push(block);
+        }
+    }
+}
+
 impl WeakUiHandle {
     pub fn upgrade(&self) -> Option<UiHandle> {
         self.window.upgrade().map(|window| UiHandle {
@@ -3359,7 +3518,58 @@ pub fn conversation_message_model_for_tools(
 fn conversation_message_model(
     messages: &[argentum_domain::ConversationMessage],
 ) -> ModelRc<ConversationMessageView> {
-    conversation_message_model_with_steps(messages, &Default::default())
+    conversation_message_model_with_steps(messages, &Default::default(), &[])
+}
+
+const STEER_WAITING: &str = "Steering. Waiting for the model's next step.";
+const STEER_ADDED: &str = "Steering. Added to the run.";
+const STEER_STORED: &str = "Steered this run.";
+const STEER_NOT_ADDED: &str = "Not added. The run ended first, so send it as a new message.";
+
+fn clear_live_steers(app: &App<'_>) {
+    if let Some(live) = app
+        .get_live_steers()
+        .as_any()
+        .downcast_ref::<VecModel<SteerNoteView>>()
+    {
+        live.set_vec(Vec::new());
+    }
+}
+
+/// Moves a live steering note to the state the runtime reported. The first
+/// report for a note gives it its entry id; later ones find it by that id.
+fn update_live_steer(app: &App<'_>, status: &argentum_domain::SteeringStatus) {
+    let model = app.get_live_steers();
+    let Some(live) = model.as_any().downcast_ref::<VecModel<SteerNoteView>>() else {
+        return;
+    };
+    let run_id = status.run_id.to_string();
+    let entry_id = status.entry_id.to_string();
+    let row = (0..live.row_count())
+        .find(|&row| {
+            live.row_data(row)
+                .is_some_and(|note| note.entry_id == entry_id.as_str())
+        })
+        .or_else(|| {
+            (0..live.row_count()).find(|&row| {
+                live.row_data(row)
+                    .is_some_and(|note| note.entry_id.is_empty() && note.run_id == run_id.as_str())
+            })
+        });
+    let Some(row) = row else {
+        return;
+    };
+    let Some(mut note) = live.row_data(row) else {
+        return;
+    };
+    note.entry_id = entry_id.into();
+    note.note = match status.lifecycle {
+        argentum_domain::SteeringLifecycle::Pending => STEER_WAITING,
+        argentum_domain::SteeringLifecycle::Included => STEER_ADDED,
+        argentum_domain::SteeringLifecycle::NotApplied => STEER_NOT_ADDED,
+    }
+    .into();
+    live.set_row_data(row, note);
 }
 
 fn saturating_i32_u32(value: u32) -> i32 {
@@ -3418,13 +3628,62 @@ fn quoted_draft(kind: &str, selected: &str, existing: &str) -> String {
     }
 }
 
+/// A stored steering note as a user message in the chat.
+fn steering_message_view(note: &argentum_domain::SteeringNote) -> ConversationMessageView {
+    ConversationMessageView {
+        role: "user".into(),
+        note: STEER_STORED.into(),
+        blocks: markdown::model(""),
+        text: note.text.clone().into(),
+        state: "Complete".into(),
+        changes: ModelRc::new(VecModel::<MessageChangeView>::default()),
+        ..Default::default()
+    }
+}
+
 fn conversation_message_model_with_steps(
     messages: &[argentum_domain::ConversationMessage],
     steps: &std::collections::BTreeMap<RunId, activity::RunActivity>,
+    steering: &[argentum_domain::SteeringNote],
 ) -> ModelRc<ConversationMessageView> {
-    let rows = messages
-        .iter()
-        .map(|message| {
+    // Each run's notes go just before its reply, or after its prompt while
+    // the reply is still being written.
+    let mut pending =
+        std::collections::BTreeMap::<RunId, Vec<&argentum_domain::SteeringNote>>::new();
+    for note in steering {
+        pending.entry(note.run_id).or_default().push(note);
+    }
+    let mut rows = Vec::with_capacity(messages.len() + steering.len());
+    let mut open_run = None;
+    for message in messages {
+        if let Some(run) = open_run.take() {
+            if message.role != ConversationRole::Assistant || message.run_id != run {
+                if let Some(notes) = pending.remove(&run) {
+                    rows.extend(notes.into_iter().map(steering_message_view));
+                }
+            }
+        }
+        if message.role == ConversationRole::Assistant {
+            if let Some(notes) = pending.remove(&message.run_id) {
+                rows.extend(notes.into_iter().map(steering_message_view));
+            }
+        } else {
+            open_run = Some(message.run_id);
+        }
+        rows.push(conversation_message_view(message, steps));
+    }
+    if let Some(notes) = open_run.and_then(|run| pending.remove(&run)) {
+        rows.extend(notes.into_iter().map(steering_message_view));
+    }
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn conversation_message_view(
+    message: &argentum_domain::ConversationMessage,
+    steps: &std::collections::BTreeMap<RunId, activity::RunActivity>,
+) -> ConversationMessageView {
+    {
+        {
             let usage = message.usage.as_ref();
             let (text, tagged_reasoning) = match message.role {
                 ConversationRole::User => (message.text.clone(), String::new()),
@@ -3433,10 +3692,12 @@ fn conversation_message_model_with_steps(
             let mut reasoning = without_reasoning_markers(&message.reasoning);
             if !tagged_reasoning.is_empty() && !reasoning.contains(&tagged_reasoning) {
                 if !reasoning.is_empty() {
-                    reasoning.push_str("\n\n");
+                    reasoning.push_str(argentum_domain::REASONING_STEP_BREAK);
                 }
                 reasoning.push_str(&tagged_reasoning);
             }
+            let thoughts = reasoning_steps(&reasoning);
+            let reasoning = thoughts.join("\n\n");
             let empty = activity::RunActivity::default();
             let activity = if message.role == ConversationRole::Assistant {
                 steps.get(&message.run_id).unwrap_or(&empty)
@@ -3444,6 +3705,7 @@ fn conversation_message_model_with_steps(
                 &empty
             };
             ConversationMessageView {
+                note: SharedString::default(),
                 steps: activity.details().into(),
                 steps_title: activity.title().into(),
                 additions: saturating_i32_u32(activity.additions()),
@@ -3457,6 +3719,12 @@ fn conversation_message_model_with_steps(
                 blocks: markdown::model(&text),
                 text: text.into(),
                 reasoning: reasoning.clone().into(),
+                reasoning_steps: ModelRc::new(VecModel::from(
+                    thoughts
+                        .into_iter()
+                        .map(SharedString::from)
+                        .collect::<Vec<_>>(),
+                )),
                 reasoning_available: message.role == ConversationRole::Assistant
                     && !reasoning.is_empty(),
                 provider_label: message.profile_id.clone().into(),
@@ -3483,9 +3751,8 @@ fn conversation_message_model_with_steps(
                 }
                 .into(),
             }
-        })
-        .collect::<Vec<_>>();
-    ModelRc::new(VecModel::from(rows))
+        }
+    }
 }
 
 /// Tokens a turn used: every request summed when recorded, otherwise the
@@ -3553,6 +3820,42 @@ fn split_tagged_reasoning(text: &str) -> (String, String) {
     }
     visible.push_str(&remaining.replace(CLOSE, ""));
     (visible, reasoning)
+}
+
+/// Reasoning split at each model step, without empty steps.
+fn reasoning_steps(text: &str) -> Vec<String> {
+    text.split(argentum_domain::REASONING_STEP_MARK)
+        .map(str::trim)
+        .filter(|step| !step.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Brings the live thinking blocks up to date, touching only the blocks
+/// that changed, so a streaming step does not rebuild the earlier ones.
+fn sync_reasoning_steps(model: &ModelRc<SharedString>, text: &str) {
+    let Some(rows) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
+        return;
+    };
+    let steps = reasoning_steps(text);
+    if steps.len() < rows.row_count() {
+        rows.set_vec(
+            steps
+                .into_iter()
+                .map(SharedString::from)
+                .collect::<Vec<_>>(),
+        );
+        return;
+    }
+    for (index, step) in steps.into_iter().enumerate() {
+        if index < rows.row_count() {
+            if rows.row_data(index).is_some_and(|row| row != step.as_str()) {
+                rows.set_row_data(index, step.into());
+            }
+        } else {
+            rows.push(step.into());
+        }
+    }
 }
 
 fn without_reasoning_markers(text: &str) -> String {
@@ -4758,12 +5061,13 @@ where
         window
             .global::<App>()
             .set_steer_notice(SharedString::default());
+        clear_live_steers(&window.global::<App>());
         submit_dispatch(composer_submission(&window, prompt.to_string()));
     });
 
     let cancel_dispatch = dispatch.clone();
     window.global::<App>().on_cancel_run(move |run_id| {
-        let Ok(run_id) = run_id.to_string().parse() else {
+        let Ok(run_id) = run_id.to_string().parse::<RunId>() else {
             warn!("cancel requested without a valid run id");
             return;
         };
@@ -4777,17 +5081,35 @@ where
             return;
         };
         let text = text.trim().to_owned();
-        let Ok(run_id) = run_id.to_string().parse() else {
+        let Ok(run_id) = run_id.to_string().parse::<RunId>() else {
             return;
         };
         if text.is_empty() || !window.get_running() {
             return;
         }
-        window
-            .global::<App>()
-            .set_steer_notice("Adding your note to this run...".into());
+        let app = window.global::<App>();
+        app.set_steer_notice("Adding your note to this run...".into());
+        if let Some(live) = app
+            .get_live_steers()
+            .as_any()
+            .downcast_ref::<VecModel<SteerNoteView>>()
+        {
+            live.push(SteerNoteView {
+                run_id: run_id.to_string().into(),
+                entry_id: SharedString::default(),
+                text: text.clone().into(),
+                note: STEER_WAITING.into(),
+            });
+        }
         steer_dispatch(AppCommand::SteerRun { run_id, text });
     });
+
+    window
+        .global::<App>()
+        .set_live_steers(ModelRc::new(VecModel::<SteerNoteView>::default()));
+    window
+        .global::<App>()
+        .set_current_reasoning_steps(ModelRc::new(VecModel::<SharedString>::default()));
 
     // Follow-ups typed during a run wait here, in memory, and are sent in order.
     let queue = Rc::new(VecModel::<SharedString>::default());
@@ -4867,6 +5189,14 @@ where
     window
         .global::<App>()
         .on_selection_text(|text, start, end| selection_slice(&text, start, end).into());
+    window
+        .global::<App>()
+        .on_report_wide_table(|key, top, bottom, wide| {
+            WIDE_TABLES.with(|tables| tables.borrow_mut().report(key, top, bottom, wide));
+        });
+    window
+        .global::<App>()
+        .on_wide_table_at(|y| WIDE_TABLES.with(|tables| tables.borrow().at(y)));
     let quote_into_draft = |kind: &'static str| {
         let weak = window.as_weak();
         move |selected: SharedString| {
@@ -6895,6 +7225,7 @@ mod tests {
                 project_id,
                 session_id,
                 tool_traces: Vec::new(),
+                steering: Vec::new(),
                 messages,
             })
         };
@@ -7064,6 +7395,37 @@ mod tests {
             commands.borrow().last(),
             Some(AppCommand::SteerRun { run_id: id, text }) if *id == run_id && text == "Use the new API"
         ));
+        // The note shows in the chat at once and follows what the runtime reports.
+        let live = app.get_live_steers();
+        assert_eq!(live.row_count(), 1);
+        let note = live.row_data(0).expect("live note");
+        assert_eq!(note.text, "Use the new API");
+        assert_eq!(note.note, STEER_WAITING);
+        let mut status = argentum_domain::SteeringStatus {
+            version: 1,
+            entry_id: uuid::Uuid::new_v4(),
+            project_id: ProjectId::new_v4(),
+            session_id: SessionId::new_v4(),
+            run_id,
+            position: 1,
+            text_bytes: 15,
+            lifecycle: argentum_domain::SteeringLifecycle::Pending,
+            reason: None,
+        };
+        update_live_steer(&app, &status);
+        status.lifecycle = argentum_domain::SteeringLifecycle::Included;
+        update_live_steer(&app, &status);
+        let note = live.row_data(0).expect("live note");
+        assert_eq!(note.entry_id, status.entry_id.to_string().as_str());
+        assert_eq!(note.note, STEER_ADDED);
+        // A report for another run's note changes nothing here.
+        status.entry_id = uuid::Uuid::new_v4();
+        status.run_id = RunId::new_v4();
+        status.lifecycle = argentum_domain::SteeringLifecycle::NotApplied;
+        update_live_steer(&app, &status);
+        assert_eq!(live.row_data(0).expect("live note").note, STEER_ADDED);
+        clear_live_steers(&app);
+        assert_eq!(live.row_count(), 0);
         commands.borrow_mut().clear();
         app.invoke_queue_prompt("Run the tests".into());
         app.invoke_queue_prompt("Summarize".into());
@@ -7097,6 +7459,121 @@ mod tests {
         ui.window().set_draft(SharedString::default());
         app.set_steer_notice(SharedString::default());
         ui.window().set_submission_pending(false);
+    }
+
+    #[test]
+    fn live_blocks_follow_the_reply_and_keep_unchanged_rows() {
+        let rows = VecModel::<RichBlockView>::default();
+        sync_live_blocks(
+            &rows,
+            markdown::parse(
+                "First paragraph.
+
+Second",
+            ),
+        );
+        assert_eq!(rows.row_count(), 2);
+        let first = rows.row_data(0).expect("first block");
+        sync_live_blocks(
+            &rows,
+            markdown::parse(
+                "First paragraph.
+
+Second grows
+
+- item",
+            ),
+        );
+        assert_eq!(rows.row_count(), 3);
+        // The settled block is the same row, not a fresh copy.
+        assert!(rows
+            .row_data(0)
+            .is_some_and(|row| row.styled == first.styled));
+        assert_eq!(rows.row_data(1).expect("second").text, "Second grows");
+        // A reply that shrinks, as after a reset, drops the extra rows.
+        sync_live_blocks(&rows, markdown::parse("Only"));
+        assert_eq!(rows.row_count(), 1);
+        assert_eq!(rows.row_data(0).expect("only").text, "Only");
+    }
+
+    #[test]
+    fn wide_tables_are_found_by_screen_band() {
+        let mut tables = WideTables(Vec::new());
+        tables.report("| a |".into(), 100.0, 300.0, true);
+        assert!(tables.at(150.0));
+        assert!(!tables.at(300.0));
+        // The same table, grown by streaming, replaces its older key.
+        tables.report("| a | b |".into(), 100.0, 340.0, true);
+        assert_eq!(tables.0.len(), 1);
+        assert!(tables.at(320.0));
+        // Scrolled up by the chat, it moves its band.
+        tables.report("| a | b |".into(), 40.0, 280.0, true);
+        assert!(!tables.at(300.0));
+        // Narrow tables are not claimed.
+        tables.report("| a | b |".into(), 40.0, 280.0, false);
+        assert!(!tables.at(100.0));
+    }
+
+    #[test]
+    fn stored_steering_shows_before_the_reply_it_changed() {
+        let project_id = ProjectId::new_v4();
+        let session_id = SessionId::new_v4();
+        let message = |run_id: RunId, role: ConversationRole, text: &str| {
+            argentum_domain::ConversationMessage {
+                id: argentum_domain::MessageId::new_v4(),
+                project_id,
+                session_id,
+                run_id,
+                role,
+                text: text.into(),
+                reasoning: String::new(),
+                usage: None,
+                profile_id: String::new(),
+                model: String::new(),
+                status: ConversationMessageStatus::Complete,
+                created_at: time::OffsetDateTime::UNIX_EPOCH,
+            }
+        };
+        let note = |run_id: RunId, text: &str| argentum_domain::SteeringNote {
+            run_id,
+            entry_id: uuid::Uuid::new_v4().to_string(),
+            position: 1,
+            text: text.into(),
+        };
+        let (first, second) = (RunId::new_v4(), RunId::new_v4());
+        let messages = [
+            message(first, ConversationRole::User, "Write the doc"),
+            message(first, ConversationRole::Assistant, "Done"),
+            message(second, ConversationRole::User, "Now the tests"),
+        ];
+        let steering = [
+            note(first, "Use short lines"),
+            note(second, "Skip slow ones"),
+        ];
+        let model =
+            conversation_message_model_with_steps(&messages, &Default::default(), &steering);
+        let rows = (0..model.row_count())
+            .filter_map(|row| model.row_data(row))
+            .map(|row| {
+                (
+                    row.role.to_string(),
+                    row.text.to_string(),
+                    row.note.to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let steered = |text: &str| ("user".to_owned(), text.to_owned(), STEER_STORED.to_owned());
+        assert_eq!(
+            rows,
+            [
+                ("user".to_owned(), "Write the doc".to_owned(), String::new()),
+                steered("Use short lines"),
+                ("assistant".to_owned(), "Done".to_owned(), String::new()),
+                ("user".to_owned(), "Now the tests".to_owned(), String::new()),
+                // The second run has no reply yet, so its note follows the prompt.
+                steered("Skip slow ones"),
+            ]
+        );
     }
 
     #[test]
@@ -8007,6 +8484,7 @@ mod tests {
                 project_id,
                 session_id,
                 tool_traces: Vec::new(),
+                steering: Vec::new(),
                 messages: vec![
                     ConversationMessage {
                         id: "00000000-0000-0000-0000-0000000000b4"

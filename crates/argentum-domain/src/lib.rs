@@ -1126,6 +1126,12 @@ pub struct SessionListQuery {
 
 pub const SESSION_FORK_WARNING: &str =
     "This forks conversation context only. Workspace files are shared and are not restored or copied.";
+/// Separates the reasoning of one model step from the next in a run's shown
+/// reasoning, so each step gets its own thinking block. Only the shown copy
+/// carries it; reasoning sent back to a provider never does.
+pub const REASONING_STEP_BREAK: &str = "\n\n\u{2063}\n\n";
+pub const REASONING_STEP_MARK: char = '\u{2063}';
+
 pub const MAX_SESSION_FORK_SOURCES: usize = 128;
 pub const MAX_SESSION_FORK_MESSAGES: usize = 200;
 pub const MAX_SESSION_FORK_METADATA_BYTES: usize = 64 * 1024;
@@ -1664,6 +1670,19 @@ pub struct ConversationSnapshot {
     /// reopened later still shows what each run did.
     #[serde(default)]
     pub tool_traces: Vec<ToolTrace>,
+    /// Notes the user sent while these messages' runs were working and that
+    /// reached the model, oldest first, so the chat shows where steering went.
+    #[serde(default)]
+    pub steering: Vec<SteeringNote>,
+}
+
+/// A steering note that was added to a run's request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SteeringNote {
+    pub run_id: RunId,
+    pub entry_id: String,
+    pub position: u64,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

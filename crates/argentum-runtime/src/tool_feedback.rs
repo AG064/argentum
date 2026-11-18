@@ -6,6 +6,89 @@ use argentum_tools::ToolError;
 use argentum_workspaces::WorkspaceError;
 use serde::{Deserialize, Serialize};
 
+/// Why a command did not run or did not finish, as a category and a fixed
+/// sentence. Operating system messages are left out, since they can carry
+/// paths; only their kind is named.
+pub(super) fn process_failure(error: &ToolError) -> Option<String> {
+    use argentum_tools::ProcessError;
+    let ToolError::Process(error) = error else {
+        return None;
+    };
+    let (category, started, detail) = match error {
+        ProcessError::Security(argentum_security::SecurityError::UnsafeProcessArgument) => (
+            "policy",
+            false,
+            "The command was refused before it ran. It has a control character other than a line break or tab, is too long, or contains a credential-like argument such as token=, --password, or an authorization header.".to_owned(),
+        ),
+        ProcessError::Security(argentum_security::SecurityError::UnsafeEnvironmentName) => (
+            "policy",
+            false,
+            "The command was refused before it ran. An environment variable name is unsafe or looks like a secret.".to_owned(),
+        ),
+        ProcessError::Security(_) | ProcessError::InvalidEnvironment => (
+            "policy",
+            false,
+            "The command was refused by the workspace policy before it ran.".to_owned(),
+        ),
+        ProcessError::InvalidShellCommand => (
+            "invalid_command",
+            false,
+            "The shell command is empty, too long, or contains a null or control character other than a line break or tab.".to_owned(),
+        ),
+        ProcessError::InvalidProgram => (
+            "invalid_command",
+            false,
+            "The program name is empty, invalid, or too long.".to_owned(),
+        ),
+        ProcessError::InvalidArguments => (
+            "invalid_command",
+            false,
+            "There are too many arguments, or they are too long in total.".to_owned(),
+        ),
+        ProcessError::InvalidWorkingDirectory(_) => (
+            "invalid_command",
+            false,
+            "The working directory does not exist inside the workspace.".to_owned(),
+        ),
+        ProcessError::InvalidTimeout => (
+            "invalid_command",
+            false,
+            "The timeout must be from 1 millisecond through 10 minutes.".to_owned(),
+        ),
+        ProcessError::FixedExecutableUnavailable(name) => (
+            "shell_unavailable",
+            false,
+            format!("The system program {name} was not found, so the command could not start."),
+        ),
+        ProcessError::Spawn(io) => (
+            "spawn",
+            false,
+            format!("The program could not start ({:?}). Check that it exists and can run here.", io.kind()),
+        ),
+        ProcessError::ManagedShellNotAllowed => (
+            "invalid_command",
+            false,
+            "Background processes need a program and arguments, not a shell command.".to_owned(),
+        ),
+        _ => (
+            "internal",
+            true,
+            "The command started, but the host could not finish collecting its result.".to_owned(),
+        ),
+    };
+    Some(
+        serde_json::json!({
+            "success": false,
+            "executed": started,
+            "outcome": "process_failed",
+            "category": category,
+            "error": detail,
+            "effects_may_exist": started,
+        })
+        .to_string(),
+    )
+}
+
 pub(super) fn extension_failure(error: &ToolError) -> Option<String> {
     if let ToolError::ExtensionReportedFailure(detail) = error {
         return Some(serde_json::json!({"success":false,"outcome":"extension_failed","code":"external_tool_reported_failure",
@@ -23,6 +106,31 @@ pub(super) fn extension_failure(error: &ToolError) -> Option<String> {
         "effects_unknown":effects_unknown,"can_grant_authority":false,
         "recovery":if *effects_unknown { "Do not replay this call. Its connection is revoked; inspect effects and use the exact owner review path." } else { "Inspect the named failure. For a stale handle or catalog, submit fresh discovery; missing activation/dependencies require the normal local owner commands." }
     }).to_string())
+}
+
+#[cfg(test)]
+#[test]
+fn process_failures_name_their_category_without_os_text() {
+    use argentum_tools::ProcessError;
+    let feedback = |error: ProcessError| {
+        let text = process_failure(&ToolError::Process(error)).expect("process feedback");
+        serde_json::from_str::<serde_json::Value>(&text).expect("json")
+    };
+    let refused = feedback(ProcessError::Security(
+        argentum_security::SecurityError::UnsafeProcessArgument,
+    ));
+    assert_eq!(refused["category"], "policy");
+    assert_eq!(refused["executed"], false);
+    let missing = feedback(ProcessError::Spawn(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "C:\\private\\path",
+    )));
+    assert_eq!(missing["category"], "spawn");
+    assert!(!missing.to_string().contains("private"));
+    let lost = feedback(ProcessError::OutputTask("detail".into()));
+    assert_eq!(lost["category"], "internal");
+    assert_eq!(lost["effects_may_exist"], true);
+    assert!(process_failure(&ToolError::Cancelled).is_none());
 }
 
 #[cfg(test)]

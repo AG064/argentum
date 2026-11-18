@@ -21,12 +21,12 @@ use argentum_domain::{
 };
 pub use argentum_domain::{ToolInput, ToolRequest};
 pub use argentum_execution::{
-    default_revision_limits, rust_check_configuration_digest, ProcessJobOwner,
+    default_revision_limits, rust_check_configuration_digest, ProcessError, ProcessJobOwner,
 };
 use argentum_execution::{
-    project_verification_binding, verification_input_scope, GitError, GitExecutor, ProcessError,
-    ProcessJobError, ProcessJobManager, ProcessRunner, ProcessSpec, ProcessState,
-    VerificationError, VerificationRegistry, VerificationRunner,
+    project_verification_binding, verification_input_scope, GitError, GitExecutor, ProcessJobError,
+    ProcessJobManager, ProcessRunner, ProcessSpec, ProcessState, VerificationError,
+    VerificationRegistry, VerificationRunner,
 };
 use argentum_security::{ApprovalGrant, ScopedPath, SecurityError};
 use argentum_workspaces::{
@@ -2365,6 +2365,30 @@ fn process_tool_result(summary: &str, result: argentum_execution::ProcessResult)
         (false, false) => format!("stdout:\n{}\nstderr:\n{}", result.stdout, result.stderr),
         (true, true) => String::new(),
     };
+    // A failed run leads with how it ended, so the model can tell a nonzero
+    // exit from a timeout or a cancel without guessing from the output.
+    let ending = match (result.state, result.exit_code) {
+        (ProcessState::Exited, Some(0)) => None,
+        (ProcessState::Exited, Some(code)) => Some(format!("Exited with code {code}.")),
+        (ProcessState::Exited, None) => Some("Exited without an exit code.".to_owned()),
+        (ProcessState::TimedOut, _) => Some(format!(
+            "Timed out after {} ms and was stopped.",
+            result.duration_ms
+        )),
+        (ProcessState::Cancelled, _) => Some("Cancelled before it finished.".to_owned()),
+    };
+    let output = match ending {
+        None => output,
+        Some(ending) if output.is_empty() => format!("{ending} It printed nothing."),
+        Some(ending) => {
+            let cut = if result.stdout_truncated || result.stderr_truncated {
+                " Output was cut to its limit."
+            } else {
+                ""
+            };
+            format!("{ending}{cut}\n{output}")
+        }
+    };
     ToolResult {
         summary: summary.into(),
         output,
@@ -3286,7 +3310,7 @@ mod tests {
             )
             .await
             .expect("argv tool");
-        assert_eq!(process.output, "safe");
+        assert_eq!(process.output, "Exited with code 3.\nsafe");
         assert_eq!(process.evidence.exit_code, Some(3));
         assert_eq!(
             process

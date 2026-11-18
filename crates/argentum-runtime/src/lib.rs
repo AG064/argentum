@@ -5842,10 +5842,17 @@ impl RuntimeService {
                 }
             }
             ProviderEvent::ReasoningDelta(delta) if !round.completed => {
+                // A later model step starts its own thinking block in the chat.
+                let shown = if round.reasoning.is_empty() && !stream.assistant_reasoning.is_empty()
+                {
+                    format!("{}{delta}", argentum_domain::REASONING_STEP_BREAK)
+                } else {
+                    delta.clone()
+                };
                 append_bounded_fragment(
                     &mut stream.assistant_reasoning,
                     &mut stream.reasoning_bytes,
-                    &delta,
+                    &shown,
                     MAX_VISIBLE_REASONING_BYTES,
                     "provider reasoning exceeded the safety limit",
                 )?;
@@ -5853,7 +5860,7 @@ impl RuntimeService {
                 if publish_deltas {
                     self.publish_transient(AppEvent::AssistantReasoningDelta {
                         run_id: context.run_id,
-                        text: delta,
+                        text: shown,
                     });
                 }
             }
@@ -8433,7 +8440,10 @@ impl RuntimeService {
                 } else {
                     tool_feedback::invalid_input_feedback(&error, read_path.as_deref())
                 };
-                feedback.or_else(|| tool_feedback::extension_failure(&error)).unwrap_or_else(|| {
+                feedback
+                    .or_else(|| tool_feedback::process_failure(&error))
+                    .or_else(|| tool_feedback::extension_failure(&error))
+                    .unwrap_or_else(|| {
                     serde_json::json!({
                         "success": false,
                         "executed": true,
@@ -10317,9 +10327,14 @@ fn tool_target(input: &ToolInput) -> String {
             timeout_ms,
             environment,
         } => format!(
-            "program {}; {} argument(s); cwd {}; timeout {} ms; environment {}",
-            truncate_utf8_bytes(program.clone(), 256),
-            args.len(),
+            "{}\ncwd {}; timeout {} ms; environment {}",
+            approval_command_text(
+                &std::iter::once(program.as_str())
+                    .chain(args.iter().map(String::as_str))
+                    .map(quote_argument)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
             cwd.as_deref().unwrap_or("workspace root"),
             timeout_ms,
             environment_names(environment)
@@ -10330,8 +10345,8 @@ fn tool_target(input: &ToolInput) -> String {
             timeout_ms,
             environment,
         } => format!(
-            "explicit shell command ({} bytes); cwd {}; timeout {} ms; environment {}",
-            command.len(),
+            "{}\ncwd {}; timeout {} ms; environment {}",
+            approval_command_text(command),
             cwd.as_deref().unwrap_or("workspace root"),
             timeout_ms,
             environment_names(environment)
@@ -11341,6 +11356,59 @@ fn bounded_tool_result(result: ToolResult) -> String {
         return "Tool output exceeded the model-visible byte limit; no content returned. Request a smaller bounded result.".into();
     }
     result.output
+}
+
+/// The most of a command an approval prompt shows. Longer commands show this much
+/// and say how much is hidden; the approval still binds the whole command.
+const APPROVAL_COMMAND_LIMIT: usize = 2_000;
+
+/// The command exactly as it will run, for the person approving it. Control
+/// characters and Unicode direction overrides are written out as escapes, so a
+/// command cannot make the prompt show something other than what runs.
+fn approval_command_text(command: &str) -> String {
+    let mut shown = String::new();
+    let mut used = 0;
+    for character in command.chars() {
+        if used >= APPROVAL_COMMAND_LIMIT {
+            break;
+        }
+        let hidden = (character.is_control() && character != '\n' && character != '\t')
+            || matches!(
+                character,
+                '\u{061c}'
+                    | '\u{200b}'..='\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2060}'..='\u{2069}'
+                    | '\u{feff}'
+            );
+        if hidden {
+            shown.push_str(&format!("\\u{{{:04x}}}", u32::from(character)));
+        } else {
+            shown.push(character);
+        }
+        used += character.len_utf8();
+    }
+    if used < command.len() {
+        shown.push_str(&format!(
+            "\n[{} more bytes not shown]",
+            command.len() - used
+        ));
+    }
+    shown
+}
+
+/// One argument of a direct program call, quoted when a space or quote would
+/// otherwise hide where it begins and ends.
+fn quote_argument(argument: &str) -> String {
+    if !argument.is_empty()
+        && !argument
+            .chars()
+            .any(|character| character.is_whitespace() || matches!(character, '"' | '\''))
+    {
+        argument.to_owned()
+    } else {
+        format!("\"{}\"", argument.replace('"', "\\\""))
+    }
 }
 
 fn truncate_utf8_bytes(mut value: String, limit: usize) -> String {
@@ -12529,6 +12597,26 @@ mod tests {
         ] {
             assert_interface_patch_refused_without_prompt(arguments).await;
         }
+    }
+
+    #[test]
+    fn shell_approvals_show_the_command_that_runs() {
+        assert_eq!(
+            approval_command_text("cp a.md /sdcard/"),
+            "cp a.md /sdcard/"
+        );
+        // A direction override or a carriage return cannot disguise the command.
+        let sneaky = "echo safe\u{202e}fdr- mr\rrm -rf x";
+        let shown = approval_command_text(sneaky);
+        assert!(shown.contains("\\u{202e}"), "{shown}");
+        assert!(shown.contains("\\u{000d}"), "{shown}");
+        assert!(!shown.contains('\u{202e}') && !shown.contains('\r'));
+        let long = "x".repeat(APPROVAL_COMMAND_LIMIT + 500);
+        let shown = approval_command_text(&long);
+        assert!(shown.ends_with("[500 more bytes not shown]"), "{shown}");
+        assert_eq!(quote_argument("plain"), "plain");
+        assert_eq!(quote_argument("two words"), "\"two words\"");
+        assert_eq!(quote_argument(""), "\"\"");
     }
 
     #[tokio::test]

@@ -112,7 +112,26 @@ component TableView inherits Rectangle {
     private property <bool> scrolled: root.wide && grid-scroll.content-x < -1px;
     private property <length> screen-top: root.absolute-position.y;
     changed scrolled => { root.publish(); }
-    changed screen-top => { root.publish(); }
+    changed screen-top => { root.publish(); root.report(); }
+    changed wide => { root.report(); }
+    changed height => { root.report(); }
+    init => { root.report(); }
+    function report() {
+        if App.touch_device {
+            App.report_wide_table(block.text, root.screen-top, root.screen-top + root.height, root.wide);
+        }
+    }
+    // A sideways swipe that started on this table moves it by the same
+    // distance. The chat's handler decides the axis before anything scrolls.
+    private property <bool> panning: root.wide && App.table_pan_active && App.table_pan_y >= root.screen-top && App.table_pan_y < root.screen-top + root.height;
+    private property <length> pan-dx: App.table_pan_dx;
+    private property <length> last-dx: 0px;
+    changed pan-dx => {
+        if root.panning {
+            grid-scroll.content-x = clamp(grid-scroll.content-x + root.pan-dx - root.last-dx, min(0px, grid-scroll.width - grid-scroll.content-width), 0px);
+        }
+        root.last-dx = root.pan-dx;
+    }
     function publish() {
         if root.scrolled {
             App.scrolled_table_top = root.screen-top;
@@ -149,6 +168,9 @@ component TableView inherits Rectangle {
         max-width: 100000px;
         height: grid.preferred-height;
         grid-scroll := Flickable {
+            // On touch the chat's gesture handler scrolls the table, so a
+            // swipe moves along one axis only.
+            interactive: !App.touch_device;
             // Fixed bounds keep the columns from feeding their own width back.
             x: 0;
             y: 0;

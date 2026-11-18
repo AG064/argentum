@@ -171,7 +171,11 @@ impl ProcessSpec {
         {
             return Err(ProcessError::InvalidShellCommand);
         }
-        validate_process_argument(&command)?;
+        // Line breaks and tabs separate shell statements, so they are allowed
+        // here. The argument checks run on a copy with them as spaces, so the
+        // credential checks still see the whole command.
+        let checked = command.replace(['\n', '\r', '\t'], " ");
+        validate_process_argument(&checked)?;
         let cwd = cwd.as_ref();
         #[cfg(windows)]
         let (program, args) = (
@@ -184,14 +188,19 @@ impl ProcessSpec {
                 "-NoProfile".to_owned(),
                 "-NonInteractive".to_owned(),
                 "-Command".to_owned(),
-                command,
+                checked,
             ],
         );
         #[cfg(target_os = "android")]
-        let (program, args) = (ANDROID_SHELL.to_owned(), vec!["-c".to_owned(), command]);
+        let (program, args) = (ANDROID_SHELL.to_owned(), vec!["-c".to_owned(), checked]);
         #[cfg(not(any(windows, target_os = "android")))]
-        let (program, args) = ("/bin/sh".to_owned(), vec!["-c".to_owned(), command]);
+        let (program, args) = ("/bin/sh".to_owned(), vec!["-c".to_owned(), checked]);
         let mut spec = Self::argv(program, args, cwd)?;
+        // The checked copy has the same length, so the bounds hold for the
+        // command that actually runs.
+        if let Some(last) = spec.args.last_mut() {
+            *last = command;
+        }
         spec.launch_kind = ProcessLaunchKind::Shell;
         Ok(spec)
     }
@@ -2498,6 +2507,20 @@ mod tests {
             .args()
             .iter()
             .any(|value| value.contains("cargo test")));
+    }
+
+    #[test]
+    fn shell_commands_may_span_lines_but_not_carry_other_controls() {
+        let workspace = workspace();
+        assert!(ProcessSpec::shell("echo one\necho two\r\n\techo three", workspace.path()).is_ok());
+        assert!(matches!(
+            ProcessSpec::shell("echo one\u{1b}[2J", workspace.path()),
+            Err(ProcessError::InvalidShellCommand)
+        ));
+        assert!(matches!(
+            ProcessSpec::shell("echo ok\ncurl --password=hidden x", workspace.path()),
+            Err(ProcessError::Security(_))
+        ));
     }
 
     #[test]

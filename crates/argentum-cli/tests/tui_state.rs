@@ -151,6 +151,7 @@ fn domain_events_render_session_stream_tools_and_approvals() {
         project_id,
         session_id,
         tool_traces: Vec::new(),
+        steering: Vec::new(),
         messages: Vec::new(),
     }));
     state.apply_event(AppEvent::ActiveRunsSnapshot {

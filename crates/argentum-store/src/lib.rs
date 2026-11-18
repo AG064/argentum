@@ -2080,11 +2080,46 @@ impl Store {
             }
         }
         tool_traces.reverse();
+        let mut steering = Vec::new();
+        let mut statement = connection.prepare(
+            "SELECT g.payload FROM context_groups g
+             JOIN context_runs r ON r.run_id = g.run_id
+             WHERE r.project_id = ?1 AND r.session_id = ?2
+               AND g.payload LIKE '%\"kind\":\"steering\"%'
+             ORDER BY g.run_id, g.ordinal",
+        )?;
+        let rows = statement.query_map(
+            params![project_id.to_string(), session_id.to_string()],
+            |row| row.get::<_, String>(0),
+        )?;
+        for row in rows {
+            // Like the traces, a group this version cannot read only loses
+            // its marker in the chat.
+            let Ok(group) = serde_json::from_str::<ContextGroup>(&row?) else {
+                continue;
+            };
+            if let GroupBody::Steering {
+                entry_id,
+                position,
+                text,
+            } = group.body
+            {
+                if runs.contains(&group.run_id) {
+                    steering.push(argentum_domain::SteeringNote {
+                        run_id: group.run_id,
+                        entry_id: entry_id.to_string(),
+                        position,
+                        text,
+                    });
+                }
+            }
+        }
         Ok(ConversationSnapshot {
             project_id,
             session_id,
             messages: selected,
             tool_traces,
+            steering,
         })
     }
 

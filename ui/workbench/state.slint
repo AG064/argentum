@@ -2,13 +2,15 @@
 // Copyright (C) 2026 AG064
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, SteerNoteView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
     in-out property <string> run_state: "Ready";
     in-out property <string> transcript: "";
     in-out property <string> current_reasoning: "";
+    // The live reasoning split by model step, one thinking block each.
+    in-out property <[string]> current_reasoning_steps: [];
     in-out property <bool> current_reasoning_available: false;
     in-out property <string> current_run_provider_label: "";
     in-out property <string> current_run_model: "";
@@ -176,6 +178,16 @@ export global App {
     // opening the drawer. Empty (top == bottom) when no table is scrolled.
     in-out property <length> scrolled_table_top: 0px;
     in-out property <length> scrolled_table_bottom: 0px;
+    // Tables wider than the reply say where they are on screen, so a sideways
+    // swipe that starts on one scrolls that table and never the chat. The key
+    // is the table's text; the app keeps the places.
+    callback report_wide_table(string, length, length, bool);
+    pure callback wide_table_at(length) -> bool;
+    // A sideways swipe on a wide table, owned by the chat's gesture handler:
+    // where it started on screen and how far it has moved.
+    in-out property <bool> table_pan_active: false;
+    in-out property <length> table_pan_y: 0px;
+    in-out property <length> table_pan_dx: 0px;
     // Pairing with another device. The host owns the identity and the store;
     // the page only shows state and passes the owner's decisions.
     in-out property <string> device_fingerprint: "";
@@ -199,6 +211,9 @@ export global App {
     // Steering adds text to the running task at its next model request.
     callback steer_run(string, string);
     in-out property <string> steer_notice: "";
+    // Notes sent to the running task, shown in the chat until the stored
+    // history includes them.
+    in-out property <[SteerNoteView]> live_steers: [];
     // Follow-ups typed during a run, sent in order once it completes. A
     // failed or cancelled run pauses the queue until you send or clear it.
     in-out property <[string]> queued_prompts: [];
