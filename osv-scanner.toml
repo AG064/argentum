@@ -56,3 +56,18 @@ reason = "quinn-proto: listed in Cargo.lock only as an optional dependency of re
 id = "RUSTSEC-2026-0538"
 ignoreUntil = 2027-03-01
 reason = "quinn-udp: listed in Cargo.lock only as an optional dependency of reqwest's HTTP/3 support, which Argentum does not enable, so it is not compiled into any build. cargo tree finds no path to it on any target."
+
+[[IgnoredVulns]]
+id = "GHSA-53rm-773f-4q8c"
+ignoreUntil = 2027-03-01
+reason = "quinn-proto: the GitHub advisory for RUSTSEC-2026-0523. Not compiled into any build; see the RUSTSEC-2026-0523 entry above."
+
+[[IgnoredVulns]]
+id = "GHSA-wppq-2f6r-wfvm"
+ignoreUntil = 2027-03-01
+reason = "quinn-proto: the GitHub advisory for RUSTSEC-2026-0524. Not compiled into any build; see the RUSTSEC-2026-0524 entry above."
+
+[[IgnoredVulns]]
+id = "GHSA-6pp4-4cxf-xf88"
+ignoreUntil = 2027-03-01
+reason = "quinn-udp: the GitHub advisory for RUSTSEC-2026-0538. Not compiled into any build; see the RUSTSEC-2026-0538 entry above."
