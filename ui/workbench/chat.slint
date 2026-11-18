@@ -416,119 +416,131 @@ export component Conversation inherits Rectangle {
     }
     animate pull { duration: swipe.swiping ? 0ms : Theme.glide; easing: ease-out; }
 
-    swipe := SwipeGestureHandler {
-        enabled: App.touch_device;
-        // A swipe that starts on a table scrolled away from its left edge belongs
-        // to the table.
-        private property <length> press-y: root.absolute-position.y + self.pressed-position.y;
-        private property <bool> on-scrolled-table: self.press-y >= App.scrolled_table_top && self.press-y < App.scrolled_table_bottom;
-        // A swipe that starts on a wide table and moves more sideways than
-        // up or down scrolls the table, so the chat never takes it.
-        private property <bool> on-wide-table: App.wide_table_at(self.press-y);
-        handle-swipe-left: self.on-wide-table;
-        handle-swipe-right: (root.drawer-swipe && !self.on-scrolled-table) || self.on-wide-table;
-        handle-swipe-down: scroller.at-top;
-        private property <length> dx: self.current-position.x - self.pressed-position.x;
-        private property <length> dy: self.current-position.y - self.pressed-position.y;
-        moved => {
-            if self.swiping {
-                if root.gesture == "" {
-                    root.gesture = root.drawer-swipe && !self.on-scrolled-table && self.dx > 0px && (!scroller.at-top || self.dx >= self.dy) ? "drawer"
-                        : self.on-wide-table && abs(self.dx) >= abs(self.dy) ? "table" : "pull";
-                    if root.gesture == "table" {
-                        App.table_pan_y = self.press-y;
-                        App.table_pan_active = true;
+    // Only follows the finger. It sits above the swipe handler so its
+    // position is current when the handler asks whether to claim a swipe.
+    tracker := TouchArea {
+        mouse-cursor: default;
+        swipe := SwipeGestureHandler {
+            enabled: App.touch_device;
+            // A swipe that starts on a table scrolled away from its left edge belongs
+            // to the table.
+            private property <length> press-y: root.absolute-position.y + self.pressed-position.y;
+            private property <bool> on-scrolled-table: self.press-y >= App.scrolled_table_top && self.press-y < App.scrolled_table_bottom;
+            // A swipe that starts on a wide table and moves more sideways than
+            // up or down scrolls the table, so the chat never takes it.
+            private property <bool> on-wide-table: App.wide_table_at(self.press-y);
+            // Where the finger is now, read before this handler decides, so a
+            // swipe is claimed only once its direction is clear. Human scrolls
+            // drift sideways, so the drawer needs a long, mostly sideways swipe.
+            private property <length> live-dx: tracker.mouse-x - self.pressed-position.x;
+            private property <length> live-dy: tracker.mouse-y - self.pressed-position.y;
+            private property <bool> sideways: abs(self.live-dx) > abs(self.live-dy);
+            private property <bool> drawer-intent: self.live-dx > 48px && self.live-dx > 2.5 * abs(self.live-dy);
+            handle-swipe-left: self.on-wide-table && self.sideways;
+            handle-swipe-right: (root.drawer-swipe && !self.on-scrolled-table && self.drawer-intent) || (self.on-wide-table && self.sideways);
+            handle-swipe-down: scroller.at-top;
+            private property <length> dx: self.current-position.x - self.pressed-position.x;
+            private property <length> dy: self.current-position.y - self.pressed-position.y;
+            moved => {
+                if self.swiping {
+                    if root.gesture == "" {
+                        root.gesture = root.drawer-swipe && !self.on-scrolled-table && self.drawer-intent ? "drawer"
+                            : self.on-wide-table && abs(self.dx) >= abs(self.dy) ? "table" : "pull";
+                        if root.gesture == "table" {
+                            App.table_pan_y = self.press-y;
+                            App.table_pan_active = true;
+                        }
                     }
-                }
-                if root.gesture == "drawer" {
-                    root.drawer-dragged(self.dx);
-                } else if root.gesture == "table" {
-                    App.table_pan_dx = self.dx;
-                } else {
-                    root.pull = Theme.pull-reach * max(0px, self.dy) / (max(0px, self.dy) + 160px);
+                    if root.gesture == "drawer" {
+                        root.drawer-dragged(self.dx);
+                    } else if root.gesture == "table" {
+                        App.table_pan_dx = self.dx;
+                    } else {
+                        root.pull = Theme.pull-reach * max(0px, self.dy) / (max(0px, self.dy) + 160px);
+                    }
                 }
             }
-        }
-        swiped => {
-            if root.gesture == "drawer" { root.drawer-released(self.dx); }
-            root.end-table-pan();
-            root.gesture = "";
-            root.pull = 0px;
-        }
-        cancelled => {
-            if root.gesture == "drawer" { root.drawer-released(0px); }
-            root.end-table-pan();
-            root.gesture = "";
-            root.pull = 0px;
-        }
-
-        if root.pull > 0.5px: Rectangle {
-            x: 0;
-            y: 0;
-            width: root.width;
-            height: root.pull;
-            private property <float> amount: min(1, root.pull / (Theme.pull-reach * 0.6));
-            Icon {
-                name: "chevron-down";
-                size: 18px;
-                tint: Theme.text-3;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                opacity: parent.amount;
-                transform-scale: 0.6 + 0.4 * parent.amount;
+            swiped => {
+                if root.gesture == "drawer" { root.drawer-released(self.dx); }
+                root.end-table-pan();
+                root.gesture = "";
+                root.pull = 0px;
             }
-        }
+            cancelled => {
+                if root.gesture == "drawer" { root.drawer-released(0px); }
+                root.end-table-pan();
+                root.gesture = "";
+                root.pull = 0px;
+            }
 
-        scroller := Scroller {
-            x: 0;
-            y: root.pull;
-            width: root.width;
-            height: root.height;
-            follow-tail: true;
-            // Measured from where the last block ends. Slint 1.18 measures the
-            // column's preferred height differently from how it lays the blocks out,
-            // so wrapped replies ran past that height and their end was cut off.
-            content-height: col.y + max(col.preferred-height, tail.y) + 20px;
-            col := VerticalLayout {
-                height: self.preferred-height;
-                x: root.gutter;
-                y: 20px;
-                width: root.column;
-                spacing: Theme.sp22;
-                for message in App.conversation_messages: VerticalLayout {
-                    if message.role == "user": UserMessage { text: message.text; note: message.note; }
-                    if message.role != "user": AssistantMessage { message: message; }
+            if root.pull > 0.5px: Rectangle {
+                x: 0;
+                y: 0;
+                width: root.width;
+                height: root.pull;
+                private property <float> amount: min(1, root.pull / (Theme.pull-reach * 0.6));
+                Icon {
+                    name: "chevron-down";
+                    size: 18px;
+                    tint: Theme.text-3;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    opacity: parent.amount;
+                    transform-scale: 0.6 + 0.4 * parent.amount;
                 }
-                if App.user_prompt != "": UserMessage { text: App.user_prompt; enter: true; }
-                for steer in App.live_steers: UserMessage { text: steer.text; note: steer.note; enter: true; }
-                if App.running || App.submission_pending || App.live_blocks.length > 0: LiveTurn { }
-                // Placed by hand: a wrapped Text inside a HorizontalLayout is measured
-                // as one line, which cut long errors off on narrow screens.
-                if App.error_message != "": Rectangle {
-                    border-radius: Theme.r-md;
-                    background: Theme.diff-del-bg;
-                    border-width: Theme.hair;
-                    border-color: Theme.danger.with-alpha(0.35);
-                    height: max(error-text.preferred-height, Theme.icon-md) + 2 * Theme.sp11;
-                    Icon {
-                        x: Theme.sp11;
-                        y: Theme.sp11;
-                        name: "triangle-alert";
-                        size: Theme.icon-md;
-                        tint: Theme.danger;
+            }
+
+            scroller := Scroller {
+                x: 0;
+                y: root.pull;
+                width: root.width;
+                height: root.height;
+                follow-tail: true;
+                // Measured from where the last block ends. Slint 1.18 measures the
+                // column's preferred height differently from how it lays the blocks out,
+                // so wrapped replies ran past that height and their end was cut off.
+                content-height: col.y + max(col.preferred-height, tail.y) + 20px;
+                col := VerticalLayout {
+                    height: self.preferred-height;
+                    x: root.gutter;
+                    y: 20px;
+                    width: root.column;
+                    spacing: Theme.sp22;
+                    for message in App.conversation_messages: VerticalLayout {
+                        if message.role == "user": UserMessage { text: message.text; note: message.note; }
+                        if message.role != "user": AssistantMessage { message: message; }
                     }
-                    error-text := Text {
-                        x: Theme.sp11 + Theme.icon-md + Theme.sp9;
-                        y: Theme.sp11;
-                        width: parent.width - self.x - Theme.sp11;
-                        text: App.error_message;
-                        color: Theme.text;
-                        font-size: Theme.fs-sm;
-                        wrap: word-wrap;
+                    if App.user_prompt != "": UserMessage { text: App.user_prompt; enter: true; }
+                    for steer in App.live_steers: UserMessage { text: steer.text; note: steer.note; enter: true; }
+                    if App.running || App.submission_pending || App.live_blocks.length > 0: LiveTurn { }
+                    // Placed by hand: a wrapped Text inside a HorizontalLayout is measured
+                    // as one line, which cut long errors off on narrow screens.
+                    if App.error_message != "": Rectangle {
+                        border-radius: Theme.r-md;
+                        background: Theme.diff-del-bg;
+                        border-width: Theme.hair;
+                        border-color: Theme.danger.with-alpha(0.35);
+                        height: max(error-text.preferred-height, Theme.icon-md) + 2 * Theme.sp11;
+                        Icon {
+                            x: Theme.sp11;
+                            y: Theme.sp11;
+                            name: "triangle-alert";
+                            size: Theme.icon-md;
+                            tint: Theme.danger;
+                        }
+                        error-text := Text {
+                            x: Theme.sp11 + Theme.icon-md + Theme.sp9;
+                            y: Theme.sp11;
+                            width: parent.width - self.x - Theme.sp11;
+                            text: App.error_message;
+                            color: Theme.text;
+                            font-size: Theme.fs-sm;
+                            wrap: word-wrap;
+                        }
                     }
+                    // Marks where the last block really ends. See content-height.
+                    tail := Rectangle { height: 0px; }
                 }
-                // Marks where the last block really ends. See content-height.
-                tail := Rectangle { height: 0px; }
             }
         }
     }

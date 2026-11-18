@@ -538,7 +538,7 @@ export component Workbench inherits Rectangle {
         root.drawer-dragging = true;
         root.drawer-pos = clamp(from + dx / root.drawer-width, 0, 1);
     }
-    // A drag that covers a quarter of the drawer decides; a shorter one goes back.
+    // Opening takes a drag across half the drawer; a shorter one goes back.
     function drawer-settle(open: bool) {
         root.drawer-dragging = false;
         App.drawer_open = open;
@@ -686,7 +686,7 @@ export component Workbench inherits Rectangle {
                                 column: root.column;
                                 drawer-swipe: root.narrow && Mods.sessions && !App.drawer_open;
                                 drawer-dragged(dx) => { root.drawer-drag(0, dx); }
-                                drawer-released(dx) => { root.drawer-settle(dx > root.drawer-width / 4); }
+                                drawer-released(dx) => { root.drawer-settle(dx > root.drawer-width / 2); }
                             }
                             if Mods.goal && !root.empty: HorizontalLayout {
                                 alignment: center;
