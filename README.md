@@ -201,7 +201,7 @@ answer and the recorded changes, and the step list is gone.
 | 1. You ask | Your message and the project's instructions go to the model, inside a checked context budget |
 | 2. The model works in rounds | Each round is one model request, and it can make up to 8 tool calls |
 | 3. Policy decides | The saved project policy allows a tool, asks you first, or refuses it. Nothing the model says can change that |
-| 4. You see each step | Reads, searches, commands, and edits appear as they happen, and thinking streams above them |
+| 4. You see each step | Reads, searches, commands, and edits appear as they happen. The reply reads in order: each round's thinking, then the answer that round wrote |
 | 5. Changes are recorded | Each edit is checked against the source the agent read, and saved so you can review or restore it |
 | 6. It stops | A run ends with an answer, at Esc or `/stop`, at the limit of 120 rounds, or when the model asks for the same tool calls four rounds in a row. Long tasks can be continued, or run as a goal |
 
@@ -239,7 +239,7 @@ Every preset, with its address, default model, and key variable, is listed in
 [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 - **Thinking:** choose Off, Low, High, or Max from the composer, or with `/thinking`. Only the levels the model supports are offered.
-- **While it works:** type a follow-up and press Enter to queue it for when the run finishes, or press Steer to add a note the model reads at its next request. The terminal has the same with `/queue` and `/steer`.
+- **While it works:** type a follow-up and press Enter to queue it for when the run finishes, or press Steer to add a note the model reads at its next request. A steering note shows in the chat with its state: waiting, added to the run, or not added because the run ended first. The terminal has the same with `/queue` and `/steer`. On a phone, Enter starts a new line and the send button sends.
 - **Secure keys:** API keys go in the operating system's credential store, and each is only sent to its provider's own address.
 - **Tested and Testing tabs:** Settings > Providers lists tested providers first, and the rest on a Testing tab, so you know which have not been run against Argentum. First run shows only tested providers until you choose Show all.
 
@@ -297,7 +297,7 @@ CLI build leaves them out.
 - A run stops after 120 rounds, and earlier if the model repeats the same tool calls four rounds in a row.
 - The steps and diff list on each response last for the running session only.
 - Releases are built for Windows x64 and Android arm64. The CLI builds from source on Linux and macOS, without release files yet. See [Argentum on Android](docs/ANDROID_HOST.md).
-- Selecting part of a reply on Android places one cursor at a time. Copy takes the whole reply.
+- On Android, part of a reply cannot be selected yet. Copy under a reply takes the whole reply, and holding a message you sent copies it.
 
 ## Build from source
 

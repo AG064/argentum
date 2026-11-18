@@ -12,7 +12,11 @@ The first stable release, for Windows x64 and Android arm64:
 - more than 40 provider presets, local models and an optional local model add-on;
 - the project policy, approvals, guarded file changes, restore and recovery;
 - goals with limits, and context compaction;
-- pairing a phone with a computer to drive one from the other.
+- pairing a phone with a computer to drive one from the other;
+- replies that read in the order they were written, each step's thinking
+  followed by the answer it wrote;
+- steering notes that show in the chat with their state, approvals that show
+  the full command, and shell failures that report why they failed.
 
 ## Planned for 0.1.1
 
@@ -34,15 +38,30 @@ The first stable release, for Windows x64 and Android arm64:
 - **Phone text fields:** server addresses and model names are not
   auto-capitalized by the keyboard.
 - **Dependencies:** replace the unmaintained chrono crate, used for local reply
-  times, with jiff.
+  times, with jiff, and take the major updates of the crypto and encoding crates
+  (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review.
 - **Plan in the terminal:** the stages of the current task in `argentum chat`,
   as the Plan module shows them in the app.
+- **Changes panel:** every file a session changed, not only the latest run's.
+- **Phone touch:** larger touch targets, a clearer context meter, and fast
+  swipes that always scroll a long session.
+- **Run details for the agent:** the model that actually answered, why a run
+  stopped, and tool output that stays available after the turn that made it.
+- **Usage across restarts:** a session's context use and token totals kept when
+  the app closes and opens again.
+- **Execution environment:** a plain description, for the agent and for you, of
+  what the shell can reach on each platform.
 
 ## Planned for 0.2.0
 
 - **Marketplace:** browse and install add-ons, such as modules, themes, skills and
   MCP servers, and local models from inside the app, with each item's source,
   permissions and checksum shown before it installs.
+- **Selecting reply text on a phone:** pick part of a reply with two handles,
+  instead of copying the whole reply.
+- **Checks on the phone:** a way for the agent to run and verify its work on
+  Android, as it can on Windows.
+- **Undo for tools:** step back an action the agent took, beyond restoring files.
 
 ## Planned for future builds
 

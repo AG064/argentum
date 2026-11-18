@@ -96,6 +96,19 @@ Below 768 px the window is narrow: the sidebar becomes a drawer and `coarse` is
 on, so every control is at least 48 px. The side panel docks only at 980 px or
 wider.
 
+On touch devices, gestures in the conversation follow these rules:
+
+- The drawer opens only on a deliberate swipe: at least 48 px to the right and
+  2.5 times more sideways than vertical, and it stays open only after a drag
+  across half its width. A scroll that drifts sideways stays a scroll.
+- A swipe that starts on a table wider than the reply scrolls the table when it
+  moves more sideways than vertically, and the chat otherwise. A table scrolled
+  away from its left edge takes right swipes until it is back.
+- Text in the conversation is fixed, so a tap or a scroll selects nothing.
+  Replies, code blocks and tables have Copy buttons, and holding a message you
+  sent copies it.
+- Enter in the message box starts a new line; the send button sends.
+
 ## Motion
 
 `quick` 110 ms, `calm` 190 ms, `glide` 230 ms, `ripple` 250 ms. All are 0 when

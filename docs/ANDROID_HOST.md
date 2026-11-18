@@ -70,6 +70,11 @@ command gets:
 - the desktop timeout and output limits,
 - its own process group, killed on cancel, timeout or finish.
 
+A shell command may span several lines. The approval shows the whole command as
+it will run. When a command fails, the agent gets its exit code, a note that it
+timed out or was cancelled, or a category and reason when it could not start,
+such as a refused argument or a missing program.
+
 Only Android's built-in tools are available (toybox: `ls`, `cat`, `grep`, `sed`,
 `find`, `uname`, `getprop` and similar). Android does not let apps run binaries
 from their own storage, so a program saved in the workspace cannot run, though

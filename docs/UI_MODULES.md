@@ -11,8 +11,15 @@ The core is always present and has no switch:
 While a run works, the composer queues what you type and sends it when the run
 finishes, up to 16 follow-ups. A failed or stopped run pauses the queue until you
 choose Send next or Clear. Steer adds your text to the running task at its next
-model request instead. On a phone, the header shows when a run is working, a goal
-is paused, or an approval is waiting.
+model request instead. The note shows in the chat as your message with its state:
+waiting for the next step, added to the run, or not added because the run ended
+first. On a phone, the header shows when a run is working, a goal is paused, or an
+approval is waiting.
+
+A reply reads in the order it was written: each model step's thinking, collapsed,
+then the answer that step wrote, so a later correction appears after the answer it
+corrects. A shell approval shows the full command that will run, with control
+characters and direction overrides written out.
 
 Everything else is an optional module. New projects start in the Minimal profile,
 with only collapsed reasoning on, so the first screen is the provider chooser and
@@ -22,7 +29,7 @@ the next is a conversation. Modules are harness surfaces (`SurfaceId`).
 | --- | --- | --- |
 | `sessions` | Sidebar | Sessions for this workspace, new chat, workspace entry |
 | `context-meter` | Composer | Context use for the latest turn, when reported |
-| `reasoning` | Message | Provider reasoning, a one-line step summary, and changed files with diffs on each response |
+| `reasoning` | Message | Each step's provider reasoning in order with its answer, a one-line step summary, and changed files with diffs on each response |
 | `goal` | Above composer | Session objective, state, progress against limits, Pause, Resume and Clear. Composer tasks run toward an active goal |
 | `command-palette` | Overlay | Ctrl+K search over commands, modules, themes, sessions |
 | `status-bar` | Bottom | Workspace, run state, changed files, provider. Desktop only |
