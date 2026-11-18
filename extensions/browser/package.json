@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "license": "SEE LICENSE IN ../../LICENSE",
-  "dependencies": { "playwright": "1.64.0" },
+  "dependencies": { "playwright": "1.65.0" },
   "scripts": { "test": "node --test adapter.test.mjs" }
 }
