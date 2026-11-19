@@ -14749,7 +14749,11 @@ mod tests {
         let assistant = conversation.messages.last().expect("assistant message");
         assert_eq!(assistant.profile_id, "catalog");
         assert_eq!(assistant.model, "model-a");
-        assert_eq!(assistant.reasoning, "bounded reasoning");
+        // The shown copy also records how long the thinking took.
+        assert_eq!(
+            argentum_domain::reply_steps::plain_reasoning(&assistant.reasoning),
+            "bounded reasoning"
+        );
         assert_eq!(
             assistant
                 .usage
