@@ -54,6 +54,12 @@ The first stable release, for Windows x64 and Android arm64:
 - **Context breakdown:** what fills the context window, by part: messages,
   system prompt, tool descriptions, skills, project instructions and free
   space, with how much is left before compaction starts.
+- **Provider limits and balances:** each provider's own usage limits where it
+  reports them, such as requests and tokens per minute or a subscription's
+  usage window, with how much is left and when it resets; the account balance
+  for providers that report one, such as DeepSeek and OpenRouter; and a spend
+  limit you set for each provider, which warns as it gets close and stops new
+  requests when it is reached.
 - **Execution environment:** a plain description, for the agent and for you, of
   what the shell can reach on each platform.
 
