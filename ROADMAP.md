@@ -39,7 +39,9 @@ The first stable release, for Windows x64 and Android arm64:
   auto-capitalized by the keyboard.
 - **Dependencies:** replace the unmaintained chrono crate, used for local reply
   times, with jiff, and take the major updates of the crypto and encoding crates
-  (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review.
+  (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review,
+  and Android Gradle plugin 9.5 with Gradle 9.9, once their checksums are added
+  to the Android build's dependency verification.
 - **Plan in the terminal:** the stages of the current task in `argentum chat`,
   as the Plan module shows them in the app.
 - **Changes panel:** every file a session changed, not only the latest run's.
