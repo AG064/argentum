@@ -101,6 +101,7 @@ fn conversation_with_tools(
         }),
         profile_id: "lm-studio".into(),
         model: "qwen3-coder-next".into(),
+        created_at: id + time::Duration::seconds(125),
         ..user.clone()
     };
     let traces = tools
@@ -577,7 +578,7 @@ fn scenes() -> Vec<Scene> {
         s("54-phone-reply-steps", (360, 760), |ui| {
             ui.window().set_touch_device(true);
             modules(ui, "standard");
-            use argentum_domain::reply_steps::{step_start, tool_mark};
+            use argentum_domain::reply_steps::{step_start, thought_mark, tool_mark};
             let first = "I will check the import loop first.";
             let reply =
                 format!("{first}The loop opens one transaction per row. Batching them fixes it.");
@@ -587,12 +588,15 @@ fn scenes() -> Vec<Scene> {
                 uuid::Uuid::new_v4(),
             ];
             let reasoning = format!(
-                "The user reports slow imports. Look at the store first.{}{}{}Profile one import.{}{}The trace shows one fsync per row.",
+                "The user reports slow imports. Look at the store first.{}{}{}{}Profile one import.{}{}{}The trace shows one fsync per row.{}",
+                thought_mark(6_000),
                 tool_mark(first.len(), &ids[0].to_string()),
                 tool_mark(first.len(), &ids[1].to_string()),
                 step_start(first.len()),
+                thought_mark(3_000),
                 tool_mark(first.len(), &ids[2].to_string()),
                 step_start(first.len()),
+                thought_mark(9_000),
             );
             conversation_with_tools(
                 ui,

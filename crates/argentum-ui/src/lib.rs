@@ -476,6 +476,7 @@ impl UiHandle {
                     );
                 }
                 self.apply_live_activity(&activity::RunActivity::default());
+                self.set_live_status("");
                 // A run that failed before its message was stored would lose
                 // what the owner typed. Put it back in the empty composer.
                 let prompt = self.window.get_user_prompt();
@@ -800,6 +801,7 @@ impl UiHandle {
                 let mut transcript = self.window.get_transcript().to_string();
                 transcript.push_str(text);
                 self.window.set_transcript(transcript.into());
+                self.set_live_status("Writing");
                 self.window.set_error_message(SharedString::default());
                 self.schedule_live_redraw();
             }
@@ -812,6 +814,9 @@ impl UiHandle {
                 reasoning.push_str(text);
                 let reasoning = without_reasoning_markers(&reasoning);
                 self.window.set_current_reasoning(reasoning.into());
+                if !text.contains(argentum_domain::reply_steps::REASONING_STEP_ANCHOR) {
+                    self.set_live_status("Thinking");
+                }
                 self.window.set_current_reasoning_available(true);
                 self.schedule_live_redraw();
                 self.window.set_error_message(SharedString::default());
@@ -1393,6 +1398,7 @@ impl UiHandle {
                     .set_run_state(TaskLifecycle::Running.label().into());
                 self.window.set_running(true);
                 self.schedule_live_redraw();
+                self.set_live_status(tool_status(&trace.tool_id));
                 self.push_activity(
                     format!("{} started", tool_label(&trace.tool_id)),
                     trace.summary.clone(),
@@ -1417,6 +1423,7 @@ impl UiHandle {
                 };
                 self.apply_live_activity(&current);
                 self.schedule_live_redraw();
+                self.set_live_status("Thinking");
                 self.push_activity(title, trace.summary.clone(), state);
             }
             AppEvent::ApprovalRequested(request) => {
@@ -3184,6 +3191,14 @@ impl UiHandle {
         app.set_request_rows(ModelRc::new(VecModel::from(rows)));
     }
 
+    /// What the running turn is doing now, shown beside its time.
+    fn set_live_status(&self, status: &str) {
+        let app = self.window.global::<App>();
+        if app.get_live_status() != status {
+            app.set_live_status(status.into());
+        }
+    }
+
     fn apply_live_activity(&self, activity: &activity::RunActivity) {
         let app = self.window.global::<App>();
         // Calls the reply places in its own steps are not repeated above it.
@@ -3394,6 +3409,17 @@ struct StepRow {
     title: String,
     answer: String,
     tools: activity::ToolGroup,
+    thought_ms: Option<u64>,
+}
+
+/// A duration as a short label: "12s", "2m 5s", "1h 3m".
+fn duration_label(millis: u64) -> String {
+    let seconds = (millis / 1000).max(1);
+    match seconds {
+        0..=59 => format!("{seconds}s"),
+        60..=3599 => format!("{}m {}s", seconds / 60, seconds % 60),
+        _ => format!("{}h {}m", seconds / 3600, seconds / 60 % 60),
+    }
 }
 
 /// The tool calls a reply places at points of its own.
@@ -3433,6 +3459,7 @@ fn reply_step_rows(
         }
         pieces.push((&step.answer[from..], Vec::new()));
         let mut reasoning = Some(step.reasoning.clone());
+        let mut thought_ms = step.thought_ms;
         for (piece, ids) in pieces {
             let (answer, tagged) = split_tagged_reasoning(piece);
             let mut thinking = reasoning.take().unwrap_or_default();
@@ -3451,27 +3478,76 @@ fn reply_step_rows(
                 title: String::new(),
                 answer: answer.trim().to_owned(),
                 tools,
+                thought_ms: thought_ms.take(),
             };
             if !row.reasoning.is_empty() || !row.answer.is_empty() || !row.tools.title.is_empty() {
                 rows.push(row);
             }
         }
     }
-    let thinking = rows.iter().filter(|row| !row.reasoning.is_empty()).count();
-    let label = if live { "Thinking" } else { "Thought process" };
-    let mut number = 0;
-    for row in &mut rows {
+    // Thinking that has ended says how long it took. Thinking still going,
+    // or stored before times were kept, has a plain title.
+    let last = rows.len().saturating_sub(1);
+    for (index, row) in rows.iter_mut().enumerate() {
         if row.reasoning.is_empty() {
             continue;
         }
-        number += 1;
-        row.title = if thinking > 1 {
-            format!("{label}, step {number}")
-        } else {
-            label.to_owned()
+        row.title = match row.thought_ms {
+            Some(millis) => format!("Thought for {}", duration_label(millis)),
+            None if live && index == last => "Thinking".to_owned(),
+            None => "Thought process".to_owned(),
         };
     }
     rows
+}
+
+/// A finished reply, split into the work before the final answer and the
+/// final answer itself. `extra` is set when the reply has more to show in
+/// the work, such as changed files. A reply that only thought before it
+/// answered keeps that one thinking block in the open, with no work block.
+fn split_work(mut rows: Vec<StepRow>, extra: bool) -> (Vec<StepRow>, Vec<StepRow>) {
+    let mut last = rows.pop();
+    let mut finale = Vec::new();
+    if let Some(row) = last.as_mut() {
+        if row.tools.title.is_empty() && !row.answer.is_empty() {
+            finale.push(StepRow {
+                answer: std::mem::take(&mut row.answer),
+                ..StepRow::default()
+            });
+        }
+    }
+    if let Some(row) = last {
+        if !row.reasoning.is_empty() || !row.tools.title.is_empty() || !row.answer.is_empty() {
+            rows.push(row);
+        }
+    }
+    let only_thinking =
+        rows.len() == 1 && rows[0].answer.is_empty() && rows[0].tools.title.is_empty();
+    if !extra && (rows.is_empty() || only_thinking) {
+        rows.extend(finale);
+        return (Vec::new(), rows);
+    }
+    (rows, finale)
+}
+
+/// What a running tool call is doing, in a few words.
+fn tool_status(tool_id: &str) -> &'static str {
+    match tool_id {
+        "read_text" | "file_metadata" | "read_binary_metadata" => "Reading a file",
+        "list_directory" => "Listing a folder",
+        "search_text" | "search_filenames" => "Searching",
+        "execute_shell" | "execute_argv" => "Running a command",
+        "git_read" | "git_write" => "Using Git",
+        "write_text" | "edit_text" | "apply_patch" => "Editing a file",
+        "move_file" | "copy_file" | "delete_file" | "create_directory" => "Changing files",
+        _ => "Using a tool",
+    }
+}
+
+fn reply_step_model(rows: &[StepRow]) -> ModelRc<ReplyStepView> {
+    ModelRc::new(VecModel::from(
+        rows.iter().map(reply_step_view).collect::<Vec<_>>(),
+    ))
 }
 
 fn reply_step_view(row: &StepRow) -> ReplyStepView {
@@ -3833,6 +3909,7 @@ fn conversation_message_model_with_steps(
     }
     let mut rows = Vec::with_capacity(messages.len() + steering.len());
     let mut open_run = None;
+    let mut prompts = std::collections::HashMap::<RunId, time::OffsetDateTime>::new();
     for message in messages {
         if let Some(run) = open_run.take() {
             if message.role != ConversationRole::Assistant || message.run_id != run {
@@ -3848,7 +3925,15 @@ fn conversation_message_model_with_steps(
         } else {
             open_run = Some(message.run_id);
         }
-        rows.push(conversation_message_view(message, steps));
+        let worked = (message.role == ConversationRole::Assistant)
+            .then(|| prompts.get(&message.run_id))
+            .flatten()
+            .map(|asked| (message.created_at - *asked).whole_milliseconds())
+            .and_then(|millis| u64::try_from(millis).ok());
+        if message.role == ConversationRole::User {
+            prompts.insert(message.run_id, message.created_at);
+        }
+        rows.push(conversation_message_view(message, steps, worked));
     }
     if let Some(notes) = open_run.and_then(|run| pending.remove(&run)) {
         rows.extend(notes.into_iter().map(steering_message_view));
@@ -3859,6 +3944,7 @@ fn conversation_message_model_with_steps(
 fn conversation_message_view(
     message: &argentum_domain::ConversationMessage,
     steps: &std::collections::BTreeMap<RunId, activity::RunActivity>,
+    worked_ms: Option<u64>,
 ) -> ConversationMessageView {
     {
         {
@@ -3898,9 +3984,20 @@ fn conversation_message_view(
             } else {
                 std::collections::HashSet::new()
             };
+            let unplaced = activity.details_except(&placed);
+            let extra = !unplaced.is_empty() || !activity.files.is_empty();
+            let (work, shown) = split_work(rows, extra);
+            let work_title = if work.is_empty() {
+                String::new()
+            } else {
+                match worked_ms {
+                    Some(millis) => format!("Worked for {}", duration_label(millis)),
+                    None => "Worked".to_owned(),
+                }
+            };
             ConversationMessageView {
                 note: SharedString::default(),
-                steps: activity.details_except(&placed).into(),
+                steps: unplaced.into(),
                 steps_title: activity.title_except(&placed).into(),
                 additions: saturating_i32_u32(activity.additions()),
                 removals: saturating_i32_u32(activity.removals()),
@@ -3913,9 +4010,9 @@ fn conversation_message_view(
                 blocks: markdown::model(&text),
                 text: text.into(),
                 reasoning: reasoning.clone().into(),
-                segments: ModelRc::new(VecModel::from(
-                    rows.iter().map(reply_step_view).collect::<Vec<_>>(),
-                )),
+                segments: reply_step_model(&shown),
+                work: reply_step_model(&work),
+                work_title: work_title.into(),
                 reasoning_available: message.role == ConversationRole::Assistant
                     && !reasoning.is_empty(),
                 provider_label: message.profile_id.clone().into(),
@@ -7664,12 +7761,12 @@ Second grows
             rows,
             [
                 (
-                    "Thought process, step 1".to_owned(),
+                    "Thought process".to_owned(),
                     "First".to_owned(),
                     "Here is your answer.".to_owned()
                 ),
                 (
-                    "Thought process, step 2".to_owned(),
+                    "Thought process".to_owned(),
                     "Second".to_owned(),
                     "Actually, here is your answer.".to_owned()
                 ),
@@ -7731,6 +7828,44 @@ Second grows
     }
 
     #[test]
+    fn finished_work_folds_before_the_final_answer() {
+        use argentum_domain::reply_steps::{step_start, thought_mark};
+        let text = "Looking.Done.";
+        let reasoning = format!(
+            "Plan{}{}Check{}",
+            thought_mark(4_000),
+            step_start(8),
+            thought_mark(65_000)
+        );
+        let rows = reply_step_rows(&reasoning, text, false, None);
+        assert_eq!(rows[0].title, "Thought for 4s");
+        assert_eq!(rows[1].title, "Thought for 1m 5s");
+        let (work, shown) = split_work(rows, false);
+        let work = work
+            .iter()
+            .map(|row| (row.reasoning.as_str(), row.answer.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(work, [("Plan", "Looking."), ("Check", "")]);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(
+            (shown[0].reasoning.as_str(), shown[0].answer.as_str()),
+            ("", "Done.")
+        );
+        // A reply that only thought, then answered, has no work block.
+        let rows = reply_step_rows(&format!("Plan{}", thought_mark(900)), "Hi.", false, None);
+        let (work, shown) = split_work(rows, false);
+        assert!(work.is_empty());
+        assert_eq!(shown.len(), 2);
+        assert_eq!(shown[0].title, "Thought for 1s");
+        // Changed files are work, so the same reply folds.
+        let rows = reply_step_rows("Plan", "Hi.", false, None);
+        let (work, shown) = split_work(rows, true);
+        assert_eq!(work.len(), 1);
+        assert_eq!(shown[0].answer, "Hi.");
+        assert_eq!(duration_label(3_725_000), "1h 2m");
+    }
+
+    #[test]
     fn live_steps_keep_settled_rows() {
         use argentum_domain::reply_steps::step_start;
         let live: ModelRc<ReplyStepView> = ModelRc::new(VecModel::<ReplyStepView>::default());
@@ -7743,7 +7878,7 @@ Second grows
         // The first step kept its blocks model, so its blocks were not rebuilt.
         let still = live.row_data(0).expect("first step");
         assert!(still.blocks == first.blocks);
-        assert_eq!(still.title, "Thinking, step 1");
+        assert_eq!(still.title, "Thought process");
         assert_eq!(live.row_data(1).expect("second").reasoning, "Check");
         sync_live_segments(&live, Vec::new());
         assert_eq!(live.row_count(), 0);

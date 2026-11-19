@@ -28,6 +28,11 @@ pub fn tool_mark(offset: usize, call_id: &str) -> String {
     format!("\n{REASONING_STEP_ANCHOR}@{offset} {call_id}\n")
 }
 
+/// Records that the thinking just before it took `millis` milliseconds.
+pub fn thought_mark(millis: u64) -> String {
+    format!("\n{REASONING_STEP_ANCHOR}~{millis}\n")
+}
+
 /// The shown reasoning as plain text, for views that do not split a reply
 /// into steps: each step's thinking, separated by a blank line.
 pub fn plain_reasoning(reasoning: &str) -> String {
@@ -59,6 +64,8 @@ pub struct ReplyStep {
     pub reasoning: String,
     pub answer: String,
     pub tools: Vec<ToolPlace>,
+    /// How long the step thought, when that was recorded.
+    pub thought_ms: Option<u64>,
 }
 
 struct Section {
@@ -66,6 +73,7 @@ struct Section {
     body: String,
     /// Reply text offsets and call ids.
     tools: Vec<(usize, String)>,
+    thought_ms: Option<u64>,
 }
 
 fn parse(reasoning: &str) -> Vec<Section> {
@@ -74,7 +82,7 @@ fn parse(reasoning: &str) -> Vec<Section> {
         .map(|section| {
             let section = section.trim_start_matches(['\n', '\r', ' ']);
             let (anchor, rest) = match section.strip_prefix(REASONING_STEP_ANCHOR) {
-                Some(rest) if !rest.starts_with('@') => {
+                Some(rest) if rest.starts_with(|c: char| c.is_ascii_digit()) => {
                     let (number, body) = rest.split_once('\n').unwrap_or((rest, ""));
                     (number.trim().parse().ok(), body)
                 }
@@ -82,11 +90,16 @@ fn parse(reasoning: &str) -> Vec<Section> {
             };
             let mut tools = Vec::new();
             let mut kept = Vec::new();
+            let mut thought_ms = None::<u64>;
             for line in rest.split('\n') {
-                let mark = line
-                    .trim()
-                    .strip_prefix(REASONING_STEP_ANCHOR)
-                    .and_then(|mark| mark.strip_prefix('@'));
+                let marked = line.trim().strip_prefix(REASONING_STEP_ANCHOR);
+                if let Some(millis) = marked.and_then(|mark| mark.strip_prefix('~')) {
+                    if let Ok(millis) = millis.trim().parse::<u64>() {
+                        thought_ms = Some(thought_ms.unwrap_or(0).saturating_add(millis));
+                    }
+                    continue;
+                }
+                let mark = marked.and_then(|mark| mark.strip_prefix('@'));
                 match mark {
                     Some(mark) => {
                         let (offset, id) = mark.split_once(' ').unwrap_or((mark, ""));
@@ -101,6 +114,7 @@ fn parse(reasoning: &str) -> Vec<Section> {
                 anchor,
                 body: kept.join("\n").trim().to_owned(),
                 tools,
+                thought_ms,
             }
         })
         .collect()
@@ -122,6 +136,10 @@ pub fn reply_steps(reasoning: &str, text: &str) -> Vec<ReplyStep> {
         .iter()
         .all(|section| section.anchor.is_none() && section.tools.is_empty())
     {
+        let thought_ms = sections
+            .iter()
+            .filter_map(|section| section.thought_ms)
+            .reduce(u64::saturating_add);
         let reasoning = sections
             .into_iter()
             .map(|section| section.body)
@@ -132,6 +150,7 @@ pub fn reply_steps(reasoning: &str, text: &str) -> Vec<ReplyStep> {
             reasoning,
             answer: text.trim().to_owned(),
             tools: Vec::new(),
+            thought_ms,
         }];
     }
     let mut starts = Vec::with_capacity(sections.len());
@@ -166,6 +185,7 @@ pub fn reply_steps(reasoning: &str, text: &str) -> Vec<ReplyStep> {
                 reasoning: section.body,
                 answer: answer.to_owned(),
                 tools,
+                thought_ms: section.thought_ms,
             }
         })
         .filter(|step| {
@@ -211,6 +231,9 @@ pub fn remap_step_anchors(reasoning: &str, streamed: &str, saved: &str) -> Strin
         } else {
             out.push_str(&step_start(start));
             out.push_str(&section.body);
+        }
+        if let Some(millis) = section.thought_ms {
+            out.push_str(&thought_mark(millis));
         }
         for (offset, call_id) in &section.tools {
             let local = offset
@@ -350,6 +373,29 @@ more"
             ]
         );
         assert_eq!(plain_reasoning(&reasoning), "First\n\nSecond\n\nThird");
+    }
+
+    #[test]
+    fn thinking_time_is_kept_per_step() {
+        let reasoning = format!(
+            "One{}{}Two{}",
+            thought_mark(1200),
+            step_start(3),
+            thought_mark(800)
+        );
+        let parts = reply_steps(&reasoning, "abcdef");
+        assert_eq!(parts[0].thought_ms, Some(1200));
+        assert_eq!(parts[1].thought_ms, Some(800));
+        assert_eq!(parts[0].reasoning, "One");
+        assert_eq!(plain_reasoning(&reasoning), "One\n\nTwo");
+        let remapped = remap_step_anchors(&reasoning, "abcdef", "abc\n\ndef");
+        assert_eq!(
+            reply_steps(&remapped, "abc\n\ndef")[1].thought_ms,
+            Some(800)
+        );
+        // Without steps, the time still reaches the one step.
+        let single = format!("Only{}", thought_mark(50));
+        assert_eq!(reply_steps(&single, "x")[0].thought_ms, Some(50));
     }
 
     #[test]

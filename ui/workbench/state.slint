@@ -11,6 +11,8 @@ export global App {
     in-out property <string> current_reasoning: "";
     // The streaming reply by model step: each step's thinking, then its answer.
     in-out property <[ReplyStepView]> live_segments: [];
+    // What the running turn is doing now, such as "Running a command".
+    in-out property <string> live_status: "";
     in-out property <bool> current_reasoning_available: false;
     in-out property <string> current_run_provider_label: "";
     in-out property <string> current_run_model: "";

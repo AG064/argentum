@@ -7,7 +7,7 @@ import { App, Mods } from "state.slint";
 import { Btn, CopyBtn, Chip, Focus, Icon, IconBtn, Label, LiveDot, Ring, Ripple, Scroller, Spinner, Tooltip } from "kit.slint";
 import { BrandMark } from "../components/brand.slint";
 import { DiffView, RichBlocks } from "rich.slint";
-import { ConversationMessageView, MessageChangeView } from "../view-models.slint";
+import { ConversationMessageView, MessageChangeView, ReplyStepView } from "../view-models.slint";
 import { GoalCard } from "panels.slint";
 
 component UserMessage inherits Rectangle {
@@ -368,6 +368,87 @@ component SelectableReply inherits VerticalLayout {
     }
 }
 
+// One step of a reply: its thinking, its answer, then the tools it ran.
+component ReplyStep inherits VerticalLayout {
+    in property <ReplyStepView> step;
+    spacing: Theme.sp7;
+    if Mods.reasoning && step.reasoning != "": ReasoningDisclosure { text: step.reasoning; title: step.title; }
+    if step.blocks.length > 0: RichBlocks {
+        blocks: step.blocks;
+        link(url) => { App.open_link(url); }
+    }
+    if Mods.reasoning && step.tools-title != "": ReasoningDisclosure { text: step.tools; title: step.tools-title; }
+}
+
+// Everything a finished run did before its final answer, folded under one
+// line that says how long it worked: thinking, answers along the way, tool
+// calls and the files it changed, in the order they happened.
+component WorkBlock inherits VerticalLayout {
+    in property <ConversationMessageView> message;
+    private property <bool> open: false;
+    spacing: Theme.sp7;
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            height: 24px;
+            preferred-width: head.preferred-width;
+            border-radius: Theme.r-xs;
+            background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.quick; }
+            accessible-role: button;
+            accessible-label: root.message.work-title;
+            accessible-expanded: root.open;
+            accessible-action-default => { root.open = !root.open; }
+            head := HorizontalLayout {
+                padding-left: Theme.sp4;
+                padding-right: Theme.sp6;
+                spacing: Theme.sp4;
+                Icon {
+                    name: "chevron-right";
+                    size: 13px;
+                    tint: Theme.text-3;
+                    y: (parent.height - self.height) / 2;
+                    transform-rotation: root.open ? 90deg : 0deg;
+                    animate transform-rotation { duration: Theme.calm; easing: ease-out; }
+                }
+                Label { text: root.message.work-title; tone: "muted"; size: "sm"; }
+                if root.message.additions > 0: Text {
+                    text: "+" + root.message.additions;
+                    color: Theme.diff-add-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
+                }
+                if root.message.removals > 0: Text {
+                    text: "-" + root.message.removals;
+                    color: Theme.diff-del-text;
+                    font-size: Theme.fs-sm;
+                    font-family: Theme.font-mono;
+                    vertical-alignment: center;
+                }
+            }
+            Focus {
+                radius: Theme.r-xs;
+                activated => { root.open = !root.open; }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.open = !root.open; }
+            }
+        }
+    }
+    if root.open: VerticalLayout {
+        padding-left: Theme.sp12;
+        spacing: Theme.sp7;
+        if message.steps != "": ReasoningDisclosure {
+            text: message.steps;
+            title: message.steps-title != "" ? message.steps-title : "Steps";
+        }
+        for step in message.work: ReplyStep { step: step; }
+        if message.changes.length > 0: ChangedFiles { changes: message.changes; }
+    }
+}
+
 component AssistantMessage inherits Rectangle {
     in property <ConversationMessageView> message;
     private property <bool> selecting: false;
@@ -375,27 +456,19 @@ component AssistantMessage inherits Rectangle {
     hover := TouchArea { enabled: true; mouse-cursor: default; }
     VerticalLayout {
         spacing: Theme.sp7;
-        if Mods.reasoning && message.steps != "": ReasoningDisclosure {
+        // The work before the final answer, folded, then the final answer.
+        if Mods.reasoning && message.work-title != "": WorkBlock { message: message; }
+        if Mods.reasoning && message.work-title == "" && message.steps != "": ReasoningDisclosure {
             text: message.steps;
             title: message.steps-title != "" ? message.steps-title : "Steps";
             additions: message.additions;
             removals: message.removals;
         }
-        // In the order it was written: each step's thinking, its answer, and
-        // the tool calls it made, each where it ran.
+        if Mods.reasoning && message.work-title == "" && message.changes.length > 0: ChangedFiles { changes: message.changes; }
         if !root.selecting: VerticalLayout {
             spacing: Theme.sp7;
-            for step in message.segments: VerticalLayout {
-                spacing: Theme.sp7;
-                if Mods.reasoning && step.reasoning != "": ReasoningDisclosure { text: step.reasoning; title: step.title; }
-                if step.blocks.length > 0: RichBlocks {
-                    blocks: step.blocks;
-                    link(url) => { App.open_link(url); }
-                }
-                if Mods.reasoning && step.tools-title != "": ReasoningDisclosure { text: step.tools; title: step.tools-title; }
-            }
+            for step in message.segments: ReplyStep { step: step; }
         }
-        if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
         if root.selecting: SelectableReply { text: message.text; done => { root.selecting = false; } }
         if message.state == "Interrupted" || message.state == "Failed": Label {
             text: message.state == "Failed" ? "This response failed before it finished." : "This response was interrupted.";
@@ -432,7 +505,11 @@ component AssistantMessage inherits Rectangle {
 
 component LiveTurn inherits VerticalLayout {
     private property <float> shown: 0;
-    init => { root.shown = 1; }
+    // When the current run started, for the time shown beside its state.
+    private property <duration> started: 0ms;
+    private property <bool> running: App.running;
+    changed running => { if root.running { root.started = animation-tick(); } }
+    init => { root.shown = 1; root.started = animation-tick(); }
     animate shown { duration: Theme.calm; easing: ease-out; }
     opacity: root.shown;
     spacing: Theme.sp8;
@@ -476,7 +553,9 @@ component LiveTurn inherits VerticalLayout {
         // The state line breathes while the agent works, so a long wait still
         // reads as progress. Still when motion is reduced.
         Label {
-            text: App.run_state;
+            private property <int> seconds: floor(max(0ms, animation-tick() - root.started) / 1s);
+            text: (App.run_state == "Running" && App.live_status != "" ? App.live_status : App.run_state)
+                + "  " + (self.seconds >= 60 ? floor(self.seconds / 60) + "m " + mod(self.seconds, 60) + "s" : self.seconds + "s");
             tone: "muted";
             size: "sm";
             opacity: Theme.reduced-motion ? 1 : 0.72 + 0.28 * (1 + sin(360deg * mod(animation-tick() / 1ms, 2200) / 2200)) / 2;

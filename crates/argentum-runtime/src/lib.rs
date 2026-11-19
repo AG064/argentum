@@ -647,6 +647,9 @@ struct ModelRoundState {
     chatgpt_continuation: Option<Box<argentum_providers::ChatGptAssistantState>>,
     tool_calls: Vec<ModelToolCall>,
     usage_seen: bool,
+    /// When the model began the thinking now streaming, and whether any came.
+    thinking_since: Option<std::time::Instant>,
+    thought: bool,
 }
 
 #[derive(Debug, Default)]
@@ -5683,6 +5686,37 @@ impl RuntimeService {
         }
     }
 
+    /// Notes in the shown reasoning how long the thinking that just ended
+    /// took, from the request or the previous output to the first output
+    /// after it. A full reasoning record skips the note.
+    fn close_thinking(
+        &self,
+        run_id: RunId,
+        round: &mut ModelRoundState,
+        stream: &mut ModelStreamState,
+        publish: bool,
+    ) {
+        let since = round.thinking_since.replace(std::time::Instant::now());
+        if !std::mem::take(&mut round.thought) {
+            return;
+        }
+        let Some(since) = since else { return };
+        let millis = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let mark = argentum_domain::reply_steps::thought_mark(millis);
+        if append_bounded_fragment(
+            &mut stream.assistant_reasoning,
+            &mut stream.reasoning_bytes,
+            &mark,
+            MAX_VISIBLE_REASONING_BYTES,
+            "provider reasoning exceeded the safety limit",
+        )
+        .is_ok()
+            && publish
+        {
+            self.publish_transient(AppEvent::AssistantReasoningDelta { run_id, text: mark });
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn stream_model_round(
         &self,
@@ -5710,7 +5744,10 @@ impl RuntimeService {
         tokio::pin!(provider_future);
         let mut receiver_open = true;
         let mut cancellation_seen = false;
-        let mut round = ModelRoundState::default();
+        let mut round = ModelRoundState {
+            thinking_since: Some(std::time::Instant::now()),
+            ..ModelRoundState::default()
+        };
         // A later model step opens its own block in the chat: its thinking,
         // then the answer it writes, which starts where the text is now.
         // Only the shown reasoning carries this; providers never see it.
@@ -5881,6 +5918,9 @@ impl RuntimeService {
                 );
             }
             ProviderEvent::Delta(delta) if !round.completed => {
+                if !delta.trim().is_empty() {
+                    self.close_thinking(context.run_id, round, stream, publish_deltas);
+                }
                 append_visible_text(&mut stream.assistant_text, &delta)?;
                 round.text.push_str(&delta);
                 if publish_deltas {
@@ -5899,6 +5939,7 @@ impl RuntimeService {
                     "provider reasoning exceeded the safety limit",
                 )?;
                 round.reasoning.push_str(&delta);
+                round.thought |= !delta.trim().is_empty();
                 if publish_deltas {
                     self.publish_transient(AppEvent::AssistantReasoningDelta {
                         run_id: context.run_id,
@@ -5977,6 +6018,7 @@ impl RuntimeService {
                 stream.served_model = Some(model);
             }
             ProviderEvent::ToolCall(call) if !round.completed => {
+                self.close_thinking(context.run_id, round, stream, publish_deltas);
                 if round.tool_calls.len() >= MAX_MODEL_TOOL_CALLS_PER_ROUND {
                     return Err(ProviderError::InvalidResponse(
                         "provider returned too many tool calls".into(),
@@ -6011,7 +6053,10 @@ impl RuntimeService {
                     request_id,
                 )?));
             }
-            ProviderEvent::Completed if !round.completed => round.completed = true,
+            ProviderEvent::Completed if !round.completed => {
+                self.close_thinking(context.run_id, round, stream, publish_deltas);
+                round.completed = true;
+            }
             ProviderEvent::Delta(_)
             | ProviderEvent::ReasoningDelta(_)
             | ProviderEvent::ToolCall(_)

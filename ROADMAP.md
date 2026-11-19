@@ -14,7 +14,8 @@ The first stable release, for Windows x64 and Android arm64:
 - goals with limits, and context compaction;
 - pairing a phone with a computer to drive one from the other;
 - replies that read in the order they happened: each step's thinking, the
-  answer it wrote, then the tools it ran, each group at its own point;
+  answer it wrote, then the tools it ran, each group at its own point, folded
+  into a "Worked for" block above the final answer when the run finishes;
 - steering notes that show in the chat with their state, approvals that show
   the full command, and shell failures that report why they failed.
 

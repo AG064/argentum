@@ -201,7 +201,7 @@ answer and the recorded changes, and the step list is gone.
 | 1. You ask | Your message and the project's instructions go to the model, inside a checked context budget |
 | 2. The model works in rounds | Each round is one model request, and it can make up to 8 tool calls |
 | 3. Policy decides | The saved project policy allows a tool, asks you first, or refuses it. Nothing the model says can change that |
-| 4. You see each step | The reply reads in the order it happened: each round's thinking, the answer that round wrote, then the reads, searches, commands, and edits it ran, each group at its own point |
+| 4. You see each step | While it works, the reply reads in the order it happens: each round's thinking, the answer that round wrote, then the reads, searches, commands, and edits it ran, each group at its own point. When it finishes, the steps fold into one "Worked for" block above the final answer |
 | 5. Changes are recorded | Each edit is checked against the source the agent read, and saved so you can review or restore it |
 | 6. It stops | A run ends with an answer, at Esc or `/stop`, at the limit of 120 rounds, or when the model asks for the same tool calls four rounds in a row. Long tasks can be continued, or run as a goal |
 

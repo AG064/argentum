@@ -99,9 +99,13 @@ export struct ConversationMessageView {
     changes: [MessageChangeView],
     text: string,
     reasoning: string,
-    // The reply in the order it was written: each step's thinking, then
-    // that step's answer.
+    // What shows of the reply in the open, in the order it was written:
+    // usually just the final answer.
     segments: [ReplyStepView],
+    // The steps before the final answer, folded into one block titled by
+    // how long the run worked. Empty when there is nothing to fold.
+    work: [ReplyStepView],
+    work_title: string,
     reasoning_available: bool,
     provider_label: string,
     model: string,

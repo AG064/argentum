@@ -118,6 +118,13 @@ titled by what it did, such as "Read 2 files". Each answer is its own block.
 Nothing is gathered at the top of the reply, and new kinds of steps follow the
 same rule.
 
+The working block holds a finished run's timeline: every step before the final
+answer, folded under one line that says how long the run worked, such as
+"Worked for 2m 5s". The final answer is always the last thing in the reply.
+Thinking that has ended says how long it took, such as "Thought for 6s". While
+a run works, the line under it names what it is doing and the time so far, such
+as "Running a command  7m 6s". Single tool calls do not show their own times.
+
 ## Motion
 
 `quick` 110 ms, `calm` 190 ms, `glide` 230 ms, `ripple` 250 ms. All are 0 when
