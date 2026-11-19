@@ -109,6 +109,15 @@ On touch devices, gestures in the conversation follow these rules:
   sent copies it.
 - Enter in the message box starts a new line; the send button sends.
 
+## Reply order
+
+A reply is a timeline. Everything a run does shows at the point where it
+happened, in the order it happened: a step's thinking, the answer text it
+wrote, then the tool calls it made, each run of calls as one collapsed group
+titled by what it did, such as "Read 2 files". Each answer is its own block.
+Nothing is gathered at the top of the reply, and new kinds of steps follow the
+same rule.
+
 ## Motion
 
 `quick` 110 ms, `calm` 190 ms, `glide` 230 ms, `ripple` 250 ms. All are 0 when

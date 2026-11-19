@@ -16,9 +16,13 @@ waiting for the next step, added to the run, or not added because the run ended
 first. On a phone, the header shows when a run is working, a goal is paused, or an
 approval is waiting.
 
-A reply reads in the order it was written: each model step's thinking, collapsed,
-then the answer that step wrote, so a later correction appears after the answer it
-corrects. A shell approval shows the full command that will run, with control
+A reply reads in the order it happened: each model step's thinking, collapsed,
+then the answer that step wrote, then the tool calls it made, as one collapsed
+group such as "Read 2 files" at the point where they ran. A later correction
+appears after the answer it corrects, and each answer is its own block. Every
+new kind of step follows the same rule: it shows where it happened, never
+gathered at the top. Replies saved before 0.1.0 keep their tool calls in one
+list above the reply. A shell approval shows the full command that will run, with control
 characters and direction overrides written out.
 
 Everything else is an optional module. New projects start in the Minimal profile,

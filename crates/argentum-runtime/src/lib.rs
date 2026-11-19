@@ -5488,9 +5488,11 @@ impl RuntimeService {
                             call_id: call.id.clone(),
                             content: steering::not_executed_result(),
                         };
+                        let skipped_call_id = Uuid::new_v4();
+                        self.mark_tool_call(&mut stream, context.run_id, skipped_call_id);
                         self.emit_for_run(
                             AppEvent::ToolFinished(ToolTrace {
-                                id: Uuid::new_v4(),
+                                id: skipped_call_id,
                                 run_id: context.run_id,
                                 tool_id: call.name.clone(),
                                 summary: "Not executed: accepted steering requires a fresh model decision"
@@ -5512,6 +5514,7 @@ impl RuntimeService {
                         continue;
                     }
                     let runtime_call_id = Uuid::new_v4();
+                    self.mark_tool_call(&mut stream, context.run_id, runtime_call_id);
                     let mut step = Box::pin(
                         self.execute_model_tool_call(
                             ModelToolInvocation {
@@ -5657,6 +5660,27 @@ impl RuntimeService {
                 }),
             }
         })
+    }
+
+    /// Notes in the shown reasoning where the reply text was when a tool call
+    /// ran, so the chat shows the call at that point of the reply. A full
+    /// reasoning record skips the note rather than stop the run.
+    fn mark_tool_call(&self, stream: &mut ModelStreamState, run_id: RunId, call_id: Uuid) {
+        let mark = argentum_domain::reply_steps::tool_mark(
+            stream.assistant_text.len(),
+            &call_id.to_string(),
+        );
+        if append_bounded_fragment(
+            &mut stream.assistant_reasoning,
+            &mut stream.reasoning_bytes,
+            &mark,
+            MAX_VISIBLE_REASONING_BYTES,
+            "provider reasoning exceeded the safety limit",
+        )
+        .is_ok()
+        {
+            self.publish_transient(AppEvent::AssistantReasoningDelta { run_id, text: mark });
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

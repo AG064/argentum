@@ -57,6 +57,16 @@ fn conversation_with(ui: &UiHandle, reply: &str) {
 }
 
 fn conversation_full(ui: &UiHandle, reply: &str, reasoning: &str) {
+    conversation_with_tools(ui, reply, reasoning, &[]);
+}
+
+/// A finished reply whose tool calls ran with these ids, tools and lines.
+fn conversation_with_tools(
+    ui: &UiHandle,
+    reply: &str,
+    reasoning: &str,
+    tools: &[(uuid::Uuid, &str, &str)],
+) {
     use argentum_domain::{
         ConversationMessage, ConversationMessageStatus, ConversationRole, ModelUsage,
     };
@@ -93,10 +103,22 @@ fn conversation_full(ui: &UiHandle, reply: &str, reasoning: &str) {
         model: "qwen3-coder-next".into(),
         ..user.clone()
     };
+    let traces = tools
+        .iter()
+        .map(|(id, tool, line)| argentum_domain::ToolTrace {
+            id: *id,
+            run_id: assistant.run_id,
+            tool_id: (*tool).into(),
+            summary: (*line).into(),
+            result: argentum_domain::ToolResultState::Succeeded,
+            duration_ms: None,
+        })
+        .collect::<Vec<_>>();
     let window = ui.window();
-    window.set_conversation_messages(argentum_ui::conversation_message_model_for_tools(&[
-        user, assistant,
-    ]));
+    window.set_conversation_messages(argentum_ui::conversation_message_model_with_traces(
+        &[user, assistant],
+        &traces,
+    ));
     window.set_session_title("Slow session import".into());
     window.set_usage_reported(true);
     window.set_usage_total_tokens(41_810);
@@ -555,14 +577,37 @@ fn scenes() -> Vec<Scene> {
         s("54-phone-reply-steps", (360, 760), |ui| {
             ui.window().set_touch_device(true);
             modules(ui, "standard");
+            use argentum_domain::reply_steps::{step_start, tool_mark};
             let first = "I will check the import loop first.";
             let reply =
                 format!("{first}The loop opens one transaction per row. Batching them fixes it.");
+            let ids = [
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+            ];
             let reasoning = format!(
-                "The user reports slow imports. Look at the store first.{}The trace shows one fsync per row.",
-                argentum_domain::reply_steps::step_start(first.len())
+                "The user reports slow imports. Look at the store first.{}{}{}Profile one import.{}{}The trace shows one fsync per row.",
+                tool_mark(first.len(), &ids[0].to_string()),
+                tool_mark(first.len(), &ids[1].to_string()),
+                step_start(first.len()),
+                tool_mark(first.len(), &ids[2].to_string()),
+                step_start(first.len()),
             );
-            conversation_full(ui, &reply, &reasoning);
+            conversation_with_tools(
+                ui,
+                &reply,
+                &reasoning,
+                &[
+                    (ids[0], "read_text", "Read `store/import.rs`"),
+                    (ids[1], "read_text", "Read `store/session.rs`"),
+                    (
+                        ids[2],
+                        "execute_shell",
+                        "Ran `argentum import big.json --trace`",
+                    ),
+                ],
+            );
         }),
         s("09-git-blocked", D, |ui| {
             modules(ui, "review");

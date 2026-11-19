@@ -381,8 +381,8 @@ component AssistantMessage inherits Rectangle {
             additions: message.additions;
             removals: message.removals;
         }
-        if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
-        // In the order it was written: each step's thinking, then its answer.
+        // In the order it was written: each step's thinking, its answer, and
+        // the tool calls it made, each where it ran.
         if !root.selecting: VerticalLayout {
             spacing: Theme.sp7;
             for step in message.segments: VerticalLayout {
@@ -392,8 +392,10 @@ component AssistantMessage inherits Rectangle {
                     blocks: step.blocks;
                     link(url) => { App.open_link(url); }
                 }
+                if Mods.reasoning && step.tools-title != "": ReasoningDisclosure { text: step.tools; title: step.tools-title; }
             }
         }
+        if Mods.reasoning && message.changes.length > 0: ChangedFiles { changes: message.changes; }
         if root.selecting: SelectableReply { text: message.text; done => { root.selecting = false; } }
         if message.state == "Interrupted" || message.state == "Failed": Label {
             text: message.state == "Failed" ? "This response failed before it finished." : "This response was interrupted.";
@@ -442,16 +444,15 @@ component LiveTurn inherits VerticalLayout {
         additions: App.live_additions;
         removals: App.live_removals;
     }
-    if Mods.reasoning && App.live_changes.length > 0: ChangedFiles { changes: App.live_changes; }
-    // Each model step in turn: its thinking, then its answer. Only the newest
-    // thinking stays open while it streams.
+    // Each model step in turn: its thinking, its answer, then the tool calls
+    // it made. Only the newest thinking stays open while it streams.
     VerticalLayout {
         spacing: Theme.sp8;
         for step[index] in App.live_segments: VerticalLayout {
             spacing: Theme.sp8;
             if Mods.reasoning && step.reasoning != "": ReasoningDisclosure {
                 text: step.reasoning;
-                live: App.running && index == App.live_segments.length - 1;
+                live: App.running && index == App.live_segments.length - 1 && step.tools-title == "";
                 enter: true;
                 title: step.title;
             }
@@ -459,8 +460,14 @@ component LiveTurn inherits VerticalLayout {
                 blocks: step.blocks;
                 link(url) => { App.open_link(url); }
             }
+            if Mods.reasoning && step.tools-title != "": ReasoningDisclosure {
+                text: step.tools;
+                enter: true;
+                title: step.tools-title;
+            }
         }
     }
+    if Mods.reasoning && App.live_changes.length > 0: ChangedFiles { changes: App.live_changes; }
     if App.running: HorizontalLayout {
         spacing: Theme.sp8;
         alignment: start;

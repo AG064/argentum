@@ -709,7 +709,10 @@ impl TuiState {
                 }
                 // The app splits a reply into steps; the terminal shows the
                 // thinking as plain text.
-                let text = if text.contains(argentum_domain::REASONING_STEP_MARK) {
+                let text = if text.contains([
+                    argentum_domain::REASONING_STEP_MARK,
+                    argentum_domain::reply_steps::REASONING_STEP_ANCHOR,
+                ]) {
                     argentum_domain::reply_steps::plain_reasoning(&text)
                 } else {
                     text

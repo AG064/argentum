@@ -13,8 +13,8 @@ The first stable release, for Windows x64 and Android arm64:
 - the project policy, approvals, guarded file changes, restore and recovery;
 - goals with limits, and context compaction;
 - pairing a phone with a computer to drive one from the other;
-- replies that read in the order they were written, each step's thinking
-  followed by the answer it wrote;
+- replies that read in the order they happened: each step's thinking, the
+  answer it wrote, then the tools it ran, each group at its own point;
 - steering notes that show in the chat with their state, approvals that show
   the full command, and shell failures that report why they failed.
 
@@ -51,6 +51,9 @@ The first stable release, for Windows x64 and Android arm64:
   stopped, and tool output that stays available after the turn that made it.
 - **Usage across restarts:** a session's context use and token totals kept when
   the app closes and opens again.
+- **Context breakdown:** what fills the context window, by part: messages,
+  system prompt, tool descriptions, skills, project instructions and free
+  space, with how much is left before compaction starts.
 - **Execution environment:** a plain description, for the agent and for you, of
   what the shell can reach on each platform.
 

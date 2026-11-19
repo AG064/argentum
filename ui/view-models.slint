@@ -77,11 +77,15 @@ export struct SteerNoteView {
     note: string,
 }
 
-// One model step of a reply: its thinking, then the answer it wrote.
+// One part of a reply, in the order it was written: its thinking, then the
+// answer text, then the tool calls that ran next.
 export struct ReplyStepView {
     reasoning: string,
     title: string,
     blocks: [RichBlockView],
+    tools: string,
+    tools_title: string,
+    tools_running: bool,
 }
 
 export struct ConversationMessageView {
